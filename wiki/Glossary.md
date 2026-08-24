@@ -23,6 +23,13 @@ section).
 A piece of coursework in a classroom. May be individual or
 group, may include starter code, and may have a due date and autograding.
 
+#### Slug
+
+The short lowercase identifier of a classroom or an assignment, used in URLs
+and repository names. The web app derives it from the name (letters with
+diacritics transliterate to their base letters); the CLI calls a classroom's
+slug its **short-name**.
+
 #### Individual assignment
 
 Each student gets their own repository.
@@ -210,6 +217,13 @@ Assignment repositories are named:
 
 For a group assignment, `<username>` is the founder who created the shared
 repository.
+
+GitHub caps a repository name at 100 characters, so the classroom and
+assignment slugs share a budget that leaves room for any username. An
+assignment slug that predates the budget can be renamed once to fit; the old
+slug is recorded as `renamed_from` and stays permanently reserved, so
+GitHub's redirects from the old repository names keep working. See
+[`assignment rename`](gh-teacher#assignment-rename).
 
 ## Coming from GitHub Classroom?
 

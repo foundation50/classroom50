@@ -107,7 +107,10 @@ On **My classrooms**, click **Create classroom**:
 ![Create classroom form](images/web_create_classroom.png)
 
 - **Name** — the classroom's display name.
-- **Slug** — a unique identifier used in URLs and repository names.
+- **Slug** — a unique identifier used in URLs and repository names, auto-filled
+  from the name (letters with diacritics transliterate, so "Álgebra" becomes
+  "algebra"). At most 40 characters: the slug prefixes every student repository
+  name, and GitHub limits repository names to 100 characters.
 - **Term** (optional) — shown in various places to distinguish course
   offerings.
 
@@ -145,6 +148,13 @@ multi-teacher setups, see
 On the classroom page, click **+ Assignment**. Fill in:
 
 - **Name** — the assignment's name.
+- **Assignment slug** — the identifier used in student repository names,
+  auto-filled from the name (diacritics transliterate, the same as classroom
+  slugs). The classroom slug and the assignment slug together can spend at
+  most 59 characters, so `<CLASSROOM>-<ASSIGNMENT>-<USERNAME>` stays within
+  GitHub's 100-character repository-name limit for any username. If you edit
+  the slug, the form warns as you type when it is over that budget or collides
+  with an existing assignment.
 - **Description** (optional) — details for students.
 - **Due date** (optional) — a date and time in your local timezone. A due date
   marks later submissions **late** in the collected scores; it does not block pushes
@@ -159,9 +169,9 @@ How each student's repository is created:
 
 - **Start with a template** — **No template** or **Template repository**: a
   [template repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-template-repository)
-  used as each student's starting point. Enter `OWNER/REPOSITORY`, or
-  `REPOSITORY` alone if it's in this organization, replacing each with the
-  template's owner and name. See
+  used as each student's starting point. Search your organization's template
+  repositories by name, or paste `OWNER/REPOSITORY` (or a full GitHub
+  repository URL) for a template the search doesn't list. See
   [Assignment Templates](Assignment-Templates) for requirements.
 - **Add a README** (no-template assignments) — whether the repository starts
   with an initial commit. With it **off**, what students get depends on the
@@ -223,7 +233,9 @@ section — most assignments never need them:
   autograder** (preselected when you switch to Autograded) or **Do not use the
   built-in autograder**. Opting out means accept installs no autograding
   workflow at all: on a templated assignment your template's own CI workflows
-  run instead, and Classroom 50's score collection skips the assignment. Your
+  run instead. The submissions page still shows who submitted (collection
+  records submitters, but no scores), and the repository actions stay
+  available. Your
   choice sticks — leaving Autograded and coming back won't reset it. Can be
   changed after creation (edits only affect repositories accepted from now on;
   turning autograding off later makes already-accepted repositories' autograde
@@ -591,6 +603,30 @@ spreadsheet or external tool. The column-by-column reference is in
   creating one, pre-filled. The page also offers **Clean up invite data**, which
   clears the addresses held for email invitations that were never accepted. See
   [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
+### Updating an over-budget assignment slug
+
+An assignment whose slug can push student repository names past GitHub's
+100-character limit shows a **Slug too long** badge in the assignments list.
+This affects only assignments created before the limit was enforced, such as
+ones imported from GitHub Classroom with long names.
+
+1. Open the assignment, then **Assignment settings**.
+2. On the **Slug update needed** card above the form, click **Update slug**.
+3. In the **New slug** field, keep the suggested slug or enter your own. A
+   hint shows how many characters the classroom leaves room for.
+4. Click **Update**. One configuration change renames the assignment, then
+   every existing student repository is renamed to match, with per-repository
+   progress.
+
+GitHub redirects the old repository names, so existing clones keep working,
+and collected scores follow the new slug. You can update a slug only once:
+the old slug stays permanently reserved so the redirects survive. The
+assignment stays locked while repositories are renamed; if any repository
+fails, the card switches to **Slug update incomplete** and **Finish update**
+re-runs the renames until everything lands. Students run `git pull` once
+before their next submit. The CLI equivalent is
+[`assignment rename`](gh-teacher#assignment-rename).
 
 ### Changing the submission type later
 

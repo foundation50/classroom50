@@ -101,7 +101,9 @@ Then click **Manage collaborators**:
 
 ## View your submissions
 
-Open the assignment and click **My submission** in the left menu:
+Open the assignment and click **My submission** in the left menu. A callout at
+the top shows whether you've submitted and when; if you haven't, **Show me how
+to submit** walks you through your first submission.
 
 ![Assignment submission](images/web_assignment_submission_student.png)
 

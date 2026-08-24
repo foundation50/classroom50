@@ -20,7 +20,10 @@ or [CLI Teacher Guide](CLI-Teacher-Guide#3-set-up-the-organization)).
 `https://classroom50.org/YOUR-ORGANIZATION` and click
 **Import from GitHub Classroom**. Pick the classroom from the list of GitHub
 Classrooms your account administers, review the import summary, and confirm;
-nothing is created until you do.
+nothing is created until you do. Every assignment stays selectable: an item
+the preflight check would skip shows the reason inline with a link to fix it,
+and **Re-check** re-runs the checks once you have. Each import item's
+**Import as** field sets the slug the assignment imports under.
 
 **CLI:**
 
@@ -31,6 +34,21 @@ gh teacher classroom migrate --source cs50-legacy --target cs50-fall-2026
 `--dry-run` previews without changes. See
 [`gh teacher classroom migrate`](gh-teacher#classroom-migrate) for source
 resolution, naming flags, and the failure model.
+
+### Long names are shortened automatically
+
+GitHub Classroom allows longer assignment names than GitHub's repository-name
+limit leaves room for: student repositories are named
+`<classroom>-<assignment>-<username>`, and GitHub caps repository names at
+100 characters. A source slug that doesn't fit the new classroom's budget is
+shortened automatically (suffixed `-2`, `-3`, … past collisions in the same
+batch) instead of being skipped, and each mapping is called out before you
+confirm. To pick the slug yourself, edit the item's **Import as** field in
+the web app, or pass `--rename SOURCE-SLUG=NEW-SLUG` to the CLI (repeatable),
+replacing `SOURCE-SLUG` with the assignment's slug in GitHub Classroom and
+`NEW-SLUG` with the slug to import under. The classroom's own name is
+shortened to 40 characters when derived automatically; a longer explicit
+short-name is rejected before anything is created.
 
 ## What carries over, and what doesn't
 

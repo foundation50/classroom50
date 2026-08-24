@@ -34,6 +34,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | `staff add` / `remove <org> <classroom> <username>` | Manage staff teams (`--role teacher\|hta\|ta`). |
 | `assignment add <org> <classroom> <slug>` | Register/upsert an assignment. |
 | `assignment reuse <org> <slug> --from <src> --to <dst>` | Copy an assignment into another classroom. |
+| `assignment rename <org> <classroom> <old-slug> <new-slug>` | One-shot rename of an over-budget assignment slug and its student repos. |
 | `assignment remove <org> <classroom> <slug>` | Remove an assignment entry. |
 | `assignment list <org> <classroom>` | List assignment slugs. Flags: `--json`, `-q`. |
 | `assignment submission-mode <org> <classroom> <slug> --tag\|--every-push` | Change when the autograder fires and retrofit existing repos' shims. |
@@ -169,9 +170,12 @@ gh teacher classroom add <org> <short-name> [--name "<full name>"] [--term <term
 gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
-**Short-name rules:** `^[a-z0-9][a-z0-9-]{1,99}$` — 2–100 characters, lowercase
-letters/digits/hyphens, starting with a letter or digit. It becomes part of
-student repo names (`<short-name>-<assignment>-<username>`).
+**Short-name rules:** `^[a-z0-9][a-z0-9-]{1,99}$` — lowercase
+letters/digits/hyphens, starting with a letter or digit, and at most 40
+characters for a new classroom. The short-name flows into student repo names
+(`<short-name>-<assignment>-<username>`), which GitHub caps at 100 characters,
+so the 40-character cap leaves room for the assignment slug and any username.
+Existing classrooms with longer short-names stay readable and operable.
 
 `--unlisted` publishes the classroom's resources at an unguessable URL path
 segment (the web app's "Use an unlisted link" option — obscurity, not access
@@ -265,7 +269,19 @@ classrooms into one target organization by running this once per source.
 
 **Flags:** `--source <id-or-org>` (required), `--target <org>` (required),
 `--short-name`, `--term`, `--template-suffix` (escape target name collisions),
-`--include-archived`, `--dry-run`.
+`--rename <source-slug>=<new-slug>` (repeatable), `--include-archived`,
+`--dry-run`.
+
+**Slug handling:** assignment slugs import verbatim when they fit the
+repo-name budget (see `assignment add`). A slug that would push
+`<classroom>-<assignment>-<username>` past GitHub's 100-character limit is
+shortened automatically to the classroom's budget, suffixed `-2`, `-3`, … past
+collisions, and each mapping is reported (`--dry-run` annotates those rows
+with `renamed-from=<source>`). Pass `--rename <source-slug>=<new-slug>` to
+choose the imported slug yourself; explicit renames are validated against the
+slug pattern, the budget, and uniqueness within the batch before anything is
+created. An auto-derived short-name is truncated to 40 characters; an explicit
+`--short-name` past the cap fails before any template repos are created.
 
 **Not migrated:** roster, scores, accepted student repos, and GitHub Classroom's
 autograding config. Re-onboard students with `gh teacher roster add`/`import`
@@ -581,7 +597,13 @@ gh teacher assignment add cs50-fall-2026 cs-principles actions-lab --name "Actio
 
 Registers or upserts one assignment. Re-running with the same slug replaces the
 entry wholesale (dropping tests or a template you don't re-pass — the CLI warns).
-The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`.
+The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`, and a **new** slug must fit
+the repo-name budget: `<classroom>-<slug>` plus a worst-case 39-character
+username must stay within GitHub's 100-character repo-name limit, so the
+classroom short-name and the slug share 59 characters. A slug retired by
+`assignment rename` is permanently reserved. A same-slug replace of an
+existing over-budget entry stays allowed (the entry must remain editable);
+the CLI warns that students with long usernames can't accept it.
 
 **Required:** `--name`.
 
@@ -589,7 +611,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`.
 
 | Flag | Purpose |
 | --- | --- |
-| `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). Branch defaults to the template's default. |
+| `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). A `@branch` suffix is tolerated but ignored, with a warning — the assignment always copies the template's default branch. To use a different branch, change the template repository's default branch. |
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
 | `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control: students who already accepted always see it. |
@@ -623,7 +645,8 @@ of every shape is in
   accept commits the `.classroom50.yaml` marker and the template's content but
   no autograde workflow, so the template's own CI runs instead. Requires a
   template (it carries the workflows); keeps the Feedback PR. Score collection
-  and regrade skip it (no `submit/*` releases). Mutually exclusive with
+  records who submitted but no scores (there are no `submit/*` releases);
+  regrade skips it. Mutually exclusive with
   `empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
   (tests/allowed-files/release-assets/pass-threshold/submission-mode/
   submission-tag).
@@ -667,11 +690,55 @@ scriptable version of the web app's "reuse assignment". Every field is copied
 verbatim (including unknown/future ones); only slug and name can change. Student
 repos and scores are not copied.
 
-- A colliding slug auto-suffixes `-2`, `-3`, … unless you pass `--slug`
-  explicitly (which refuses a collision). Read the final slug from `--json`, not
-  the prose.
+- Without `--slug`, the copy keeps the source slug, trimmed to the target
+  classroom's repo-name budget and auto-suffixed `-2`, `-3`, … past collisions
+  (a trim is reported on stderr). An explicit `--slug` refuses a collision, an
+  over-budget value, or a reserved pre-rename slug. Read the final slug from
+  `--json`, not the prose — `auto_suffixed` is true for a collision suffix or
+  a budget trim.
 - Re-grants the target classroom's team read on a private in-org template.
   In-org only (v1). Refuses an archived target.
+
+### `assignment rename`
+
+```sh
+gh teacher assignment rename <org> <classroom> <old-slug> <new-slug> [--dry-run] [--yes]
+gh teacher assignment rename cs50-fall-2026 cs-principles problem-set-three-with-a-long-name ps3
+```
+
+One-shot remediation for an over-budget slug: when
+`<classroom>-<slug>-<username>` can exceed GitHub's 100-character repo-name
+limit, this renames the assignment **and every existing student repo** to
+match. It refuses a slug that already fits the budget, and it refuses a second
+rename: the old slug is recorded as `renamed_from` and permanently reserved,
+because a new repo at a renamed repo's old name would sever the automatic
+redirects student clones rely on.
+
+What happens, in order:
+
+1. One config commit: the slug changes, `renamed_from` records the old slug,
+   the `scores.json` bucket is re-keyed, a per-assignment `autograders/<slug>/`
+   directory moves, and the assignment is locked so nobody accepts mid-rename.
+2. Each student repo, matched by prefix and verified through its
+   `.classroom50.yaml` marker, has the marker's `assignment` field rewritten
+   (`[skip ci]`), then the repo is renamed. GitHub redirects git, web, and API
+   traffic from the old name indefinitely, so student clones keep working.
+3. The lock is restored to its pre-rename state.
+
+Confirmation requires typing the new slug (skip with `--yes` in scripted
+runs); `--dry-run` prints the plan without writing anything. Per-repo failures
+never abort the batch: re-running the same command resumes, skipping
+already-renamed repos and healing stragglers. The assignment stays locked
+while any repo is unrenamed — an accept would occupy the new repo name and
+strand the straggler's rename.
+
+Historical submissions keep their scores (collection accepts the pre-rename
+slug through `renamed_from`). Students run `git pull` once before their next
+`gh student submit`; plain pushes grade correctly immediately. Repos whose
+marker names a different assignment (a sibling slug sharing the prefix), or
+with no readable marker, are skipped untouched.
+
+**Flags:** `--dry-run`, `--yes`, `--quiet`.
 
 ### `assignment remove`
 

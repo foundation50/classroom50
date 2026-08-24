@@ -231,10 +231,12 @@ gh teacher classroom add <org> <short-name> --name "<full name>" --term <term>
 gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
-The `<short-name>` must match `^[a-z0-9][a-z0-9-]{1,99}$` (2–100 characters,
-lowercase letters/digits/hyphens, starting with a letter or digit), because it
-becomes part of student repo names like `<short-name>-<assignment>-<username>`.
-`--name` and `--term` are optional but recommended.
+The `<short-name>` must match `^[a-z0-9][a-z0-9-]{1,99}$` (lowercase
+letters/digits/hyphens, starting with a letter or digit) and, for a new
+classroom, is capped at 40 characters. It becomes part of student repository
+names like `<short-name>-<assignment>-<username>`, which GitHub limits to 100
+characters, so the cap leaves room for the assignment slug and any
+username. `--name` and `--term` are optional but recommended.
 
 This commits the four files and creates a **GitHub team** named
 `classroom50-<short-name>` that grants rostered students read access to in-org
@@ -536,13 +538,18 @@ gh teacher assignment add cs50-fall-2026 cs-principles reflection --name "Reflec
 
 **`--name` is required; `--template` is optional.** Omit `--template` for a
 template-less assignment (students get an initialized repository with a README
-and the autograding setup). The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`.
+and the autograding setup). The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`
+and fit the classroom's slug budget: the classroom short-name and the slug
+together can spend at most 59 characters, so
+`<classroom>-<slug>-<username>` stays within GitHub's 100-character
+repository-name limit for any username. The CLI names the exact budget when a
+slug is too long.
 
 **Optional flags:**
 
 | Flag | Purpose |
 | --- | --- |
-| `--template <owner>/<repo>[@branch]` | Starter-code repository (must be flagged as a template). Branch defaults to the template's default. |
+| `--template <owner>/<repo>[@branch]` | Starter-code repository (must be flagged as a template). A `@branch` suffix is ignored with a warning: the assignment always copies the template's default branch. |
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
 | `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
@@ -573,6 +580,23 @@ doesn't trigger grading. Hand-edited workflows are reported and left
 untouched. Tell students to `git pull` afterward. See
 [`assignment submission-mode`](gh-teacher#assignment-submission-mode) for
 `--user`, `--dry-run`, and the custom-autograder rules.
+
+**Rename an over-budget assignment slug:**
+
+```sh
+gh teacher assignment rename <org> <classroom> <old-slug> <new-slug>
+```
+
+Offered only when the current slug can push student repository names past
+GitHub's 100-character limit (for example, a slug imported from GitHub
+Classroom before the budget existed). One command renames the assignment and
+every student repository to match; GitHub redirects the old names, so
+existing clones keep working, and collected scores follow the new slug. A
+rename is one-shot — the old slug stays permanently reserved — and the
+assignment stays locked until every repository is renamed (re-run the same
+command to heal failures). Students run `git pull` once before their next
+`gh student submit`. See
+[`assignment rename`](gh-teacher#assignment-rename) for the full flow.
 
 **Remove an assignment:**
 
@@ -633,7 +657,11 @@ lighter on API rate limits for a large classroom — and is exactly what the web
 app's per-assignment **Sync now** button dispatches. Each collected
 assignment's bucket in `scores.json` gets a `collected_at` UTC timestamp, so
 you (and the web app's freshness strip) can tell when each assignment was last
-walked; a scoped run leaves sibling assignments' buckets untouched.
+walked; a scoped run leaves sibling assignments' buckets untouched. The
+staff-team access grant that rides along with collection is scoped the same
+way: an `assignment=` run grants the staff teams read on only that
+assignment's repositories and template, and staff teams with no members are
+skipped.
 
 Run collection from the Actions tab on `<org>/classroom50`, from your shell, or
 with the web app's per-assignment **Sync now** button. Scores refresh when you
