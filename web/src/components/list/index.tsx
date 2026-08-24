@@ -157,8 +157,10 @@ export function SkeletonRegion({
 
 // Placeholder card grid while a card-collection page loads. One `role="status"`
 // announcement for the whole collection (Primer: don't announce every
-// skeleton); tiles are decorative. Card shape/height is per page via
-// `cardClassName` (12-col grid spans).
+// skeleton); tiles are decorative. Tiles are structured like the loaded cards
+// (title/subtitle/action bars in a bordered card) rather than solid slabs, so
+// the skeleton reads as a vague representation of the content. Card span/height
+// is per page via `cardClassName` (12-col grid spans).
 export function CardGridSkeleton({
   cards = 3,
   cardClassName = "col-span-12 h-40 md:col-span-6 xl:col-span-4",
@@ -176,8 +178,15 @@ export function CardGridSkeleton({
         <div
           key={i}
           aria-hidden="true"
-          className={cx("skeleton skeleton-shimmer rounded-box", cardClassName)}
-        />
+          className={cx(
+            "flex flex-col rounded-box border border-base-300 bg-base-200 p-4",
+            cardClassName,
+          )}
+        >
+          <div className="skeleton skeleton-shimmer h-5 w-2/5" />
+          <div className="skeleton skeleton-shimmer mt-2 h-3 w-3/5" />
+          <div className="skeleton skeleton-shimmer mt-auto h-8 w-24 rounded-field" />
+        </div>
       ))}
     </div>
   )
