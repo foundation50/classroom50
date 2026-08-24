@@ -79,6 +79,24 @@ describe("triggerScoreCollection", () => {
     })
   })
 
+  // The classroom sweep: `assignment` must be absent, not empty — the workflow
+  // treats a present-but-blank input as "collect the whole classroom" too, but
+  // an org whose collect-scores.yaml predates the `assignment` input 422s on the
+  // key itself.
+  it("sends only the classroom input when the scope has no assignment", async () => {
+    const { client, request } = makeClient(() => ({}))
+
+    await triggerScoreCollection(client, "acme", { classroom: "cs50" })
+
+    const dispatchCall = request.mock.calls.find(([url]) =>
+      (url as string).endsWith("/dispatches"),
+    )
+    expect(
+      (dispatchCall?.[1] as { body: { inputs: Record<string, string> } }).body
+        .inputs,
+    ).toEqual({ classroom: "cs50" })
+  })
+
   it("maps a scoped 422 'unexpected inputs' to CollectInputsUnsupportedError", async () => {
     const { client } = makeClient(() => {
       throw unexpectedInputs422()

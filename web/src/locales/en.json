@@ -1111,6 +1111,10 @@
     "archivedNotice": "This classroom is archived — new assignments and student accepts are disabled. Unarchive it from <settingsLink>Classroom settings</settingsLink> to make changes.",
     "studentHeading": "Assignments",
     "studentViewAll": "View all assignments for the <classroom>{{classroom}}</classroom> classroom.",
+    "collect": {
+      "label": "Collect all",
+      "title": "Collect submissions for every assignment in this classroom"
+    },
     "discover": {
       "accept": "Accept assignment",
       "notAccepted": "Not accepted",

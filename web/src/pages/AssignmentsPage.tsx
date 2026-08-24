@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
+import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
@@ -156,13 +157,37 @@ export const TeacherAssignmentsView = ({
 
   // Right-aligned toolbar action: the New assignment split button for an author,
   // or the archived badge; null for a read-only viewer (TA).
-  const toolbarAction = archived ? (
+  const primaryAction = archived ? (
     <Badge tone="neutral" size="md">
       {t("assignments.archived")}
     </Badge>
   ) : canAuthor ? (
     <NewAssignmentButton org={org} classroom={classroom} />
   ) : null
+
+  // Classroom-wide collect, next to the primary action. Open to any staff
+  // viewer (a TA may collect, as on the submissions page — only authoring is
+  // author-gated). Hidden on an archived classroom and while the list is empty:
+  // there is no assignment to collect for.
+  const collectAction =
+    !archived && hasAssignments ? (
+      <ClassroomCollectButton
+        org={org}
+        classroom={classroom}
+        emptyRoster={emptyRoster.show}
+      />
+    ) : null
+
+  // Toolbar.Trailing already lays its children out (flex, wrap, gap), so this
+  // is a fragment — but it must collapse to null when both actions are absent,
+  // or the slot renders an empty bar.
+  const toolbarAction =
+    collectAction || primaryAction ? (
+      <>
+        {collectAction}
+        {primaryAction}
+      </>
+    ) : null
 
   return (
     <div className="flex flex-col gap-6">
