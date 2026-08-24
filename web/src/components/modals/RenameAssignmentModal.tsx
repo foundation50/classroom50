@@ -1,8 +1,15 @@
 import { useId, useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { PenLine } from "lucide-react"
 
-import { Alert, Button, FormField, Input, Modal } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  EmphasisLtr,
+  FormField,
+  Input,
+  Modal,
+} from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import { BulkResultSection } from "@/components/bulk/resultView"
 import { slugBudgetError } from "@/components/assignments/slugBudget"
@@ -173,12 +180,24 @@ export function RenameAssignmentModal({
               : t("assignments.rename.title")}
           </h3>
           <p className="mt-1 break-all text-sm text-base-content/70">
-            {finish
-              ? t("assignments.rename.finishSubtitle", {
-                  old: oldSlug,
-                  new: newSlug,
-                })
-              : t("assignments.rename.subtitle", { old: oldSlug })}
+            {finish ? (
+              <Trans
+                i18nKey="assignments.rename.finishSubtitle"
+                values={{ old: oldSlug, new: newSlug }}
+                components={{
+                  old: <EmphasisLtr className="font-mono font-bold" />,
+                  new: <EmphasisLtr className="font-mono font-bold" />,
+                }}
+              />
+            ) : (
+              <Trans
+                i18nKey="assignments.rename.subtitle"
+                values={{ old: oldSlug }}
+                components={{
+                  old: <EmphasisLtr className="font-mono font-bold" />,
+                }}
+              />
+            )}
           </p>
         </div>
       </div>
