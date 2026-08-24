@@ -7,7 +7,7 @@ import {
   ShieldCheckIcon,
 } from "@/components/ui/icons"
 
-import { Badge, Button, Modal, Spinner } from "@/components/ui"
+import { Badge, Button, Modal, Spinner, Heading } from "@/components/ui"
 import type { Assignment } from "@/types/classroom"
 import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -128,9 +128,9 @@ export const TemplateAccessModal = ({
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("assignments.template.accessModal.title")}
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-base-content/70">
             {t("assignments.template.accessModal.description")}
           </p>

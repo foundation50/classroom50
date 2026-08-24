@@ -2,7 +2,7 @@ import { LinkExternalIcon } from "@/components/ui/icons"
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal } from "@/components/ui"
+import { Button, Modal, Heading } from "@/components/ui"
 
 // Explains why a Free-plan org can't be set up and points the teacher at the
 // GitHub Education benefit that upgrades an org to Team for free. Opened from a
@@ -22,9 +22,9 @@ function FreePlanInfoModal({
 
   return (
     <Modal open={open} onClose={onClose} size="md" aria-labelledby={titleId}>
-      <h3 id={titleId} className="text-lg font-bold">
+      <Heading as="h3" id={titleId}>
         {t("orgs.newOrg.freePlanInfo.title")}
-      </h3>
+      </Heading>
       {orgLogin && (
         <p className="mt-1 font-mono text-sm text-base-content/60">
           {orgLogin}

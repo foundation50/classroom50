@@ -2,7 +2,7 @@ import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
-import { Badge, Button, Modal } from "@/components/ui"
+import { Badge, Button, Modal, Heading } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 import { getName, getInitials, firstGrapheme } from "@/util/students"
 
@@ -84,9 +84,9 @@ export const StudentProfileModal = ({
           </div>
         </div>
         <div className="min-w-0">
-          <h3 id={titleId} className="truncate text-lg font-bold">
+          <Heading as="h3" className="truncate" id={titleId}>
             {name}
-          </h3>
+          </Heading>
           {student.section?.trim() ? (
             <Badge ghost>{student.section.trim()}</Badge>
           ) : null}

@@ -14,6 +14,7 @@ import {
   Modal,
   RouterButton,
   rtlFlip,
+  Heading,
 } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
@@ -61,9 +62,7 @@ export function AcceptLinkModal({
           <LinkIcon aria-hidden="true" className="size-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="text-lg font-bold">
-            {t("submissions.accept.heading")}
-          </h3>
+          <Heading as="h3">{t("submissions.accept.heading")}</Heading>
           <p className="text-sm text-base-content/70">
             {t("submissions.accept.subheading")}
           </p>

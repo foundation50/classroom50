@@ -1,5 +1,5 @@
 import { ConfirmModal } from "@/components/modals"
-import { Button, Card, EmphasisLtr } from "@/components/ui"
+import { Button, Card, EmphasisLtr, Heading } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
@@ -554,7 +554,9 @@ export function ClassroomCard({
             />
           )}
         </div>
-        <h2 className="truncate text-xl font-semibold">{name}</h2>
+        <Heading as="h2" className="truncate">
+          {name}
+        </Heading>
         <ClassroomStats org={org} slug={summary.path} />
         {/* Side-by-side actions; each stretches (flex-1), so a student's
             single Assignments button still fills the row. Roster is

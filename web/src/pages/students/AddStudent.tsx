@@ -18,7 +18,14 @@ import { isValidEmail } from "@/util/orgMembership"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { ClassroomRole } from "@/authz"
-import { AnimatedAlert, Button, Input, Modal, Select } from "@/components/ui"
+import {
+  AnimatedAlert,
+  Button,
+  Input,
+  Modal,
+  Select,
+  Heading,
+} from "@/components/ui"
 
 // Roster "Add member" roles, in display order. Student (default) enrolls via the
 // student team; teacher/TA delegate to the staff-team backend.
@@ -208,9 +215,9 @@ const AddStudent = ({
     >
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("students.addTitle")}
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-base-content/70">
             {isStaffRole ? t("students.addStaffHint") : t("students.addHint")}
           </p>

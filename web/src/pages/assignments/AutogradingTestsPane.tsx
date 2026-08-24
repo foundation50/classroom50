@@ -14,6 +14,7 @@ import {
   Modal,
   Select,
   Textarea,
+  Heading,
 } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
@@ -118,9 +119,9 @@ const AutogradingTestModal = ({
       }}
     >
       <div className="mb-6">
-        <h3 id={titleId} className="text-lg font-bold">
+        <Heading as="h3" id={titleId}>
           {t("assignments.autograder.editTest", { number: editor.index + 1 })}
-        </h3>
+        </Heading>
         <p className="text-sm opacity-70">
           {t("assignments.autograder.editTestHint")}
         </p>

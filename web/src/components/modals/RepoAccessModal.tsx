@@ -17,6 +17,7 @@ import {
   Input,
   Modal,
   Select,
+  Heading,
 } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
@@ -400,9 +401,9 @@ export function RepoAccessModal({
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("components.modals.repoAccess.title")}
-          </h3>
+          </Heading>
           {repoName && (
             <a
               className="link mt-1 inline-flex items-center gap-1.5 text-sm"

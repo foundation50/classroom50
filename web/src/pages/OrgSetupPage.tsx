@@ -11,7 +11,15 @@ import { useTranslation } from "react-i18next"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card, RouterButton, cx, rtlFlip } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  Card,
+  RouterButton,
+  cx,
+  rtlFlip,
+  Heading,
+} from "@/components/ui"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
@@ -215,7 +223,7 @@ const OrgSteps = ({
               <CheckCircleIcon aria-hidden="true" className="size-9" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">{t("setup.allSetTitle")}</h2>
+              <Heading as="h2">{t("setup.allSetTitle")}</Heading>
               <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
                 {t("setup.allSetBody")}
               </p>

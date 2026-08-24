@@ -42,7 +42,14 @@ import {
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
 } from "@/util/classroomRoleUI"
-import { Badge, Button, EmphasisLtr, Modal, Select } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  EmphasisLtr,
+  Modal,
+  Select,
+  Heading,
+} from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -517,9 +524,9 @@ const RosterMemberModal = ({
       aria-labelledby={titleId}
     >
       <div className="flex items-start justify-between gap-4 border-b border-base-300 px-6 py-4">
-        <h2 id={titleId} className="text-lg font-bold">
+        <Heading as="h2" id={titleId}>
           {t("students.detailTitle")}
-        </h2>
+        </Heading>
         <Button
           variant="ghost"
           size="sm"

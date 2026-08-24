@@ -11,7 +11,14 @@ import {
 } from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card, Markdown, MonoLtr } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  Card,
+  Markdown,
+  MonoLtr,
+  Heading,
+} from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
@@ -163,9 +170,9 @@ const AssignmentNotFound = ({
               {t("accept.notFound.badge")}
             </span>
 
-            <h1 className="mt-6 text-2xl font-bold">
+            <Heading as="h1" variant="title-medium" className="mt-6">
               {t("accept.notFound.title")}
-            </h1>
+            </Heading>
 
             <p className="mt-2 text-base text-base-content/70">
               <Trans
@@ -247,9 +254,9 @@ const AssignmentLocked = ({
               {t("accept.locked.badge")}
             </span>
 
-            <h1 className="mt-6 text-2xl font-bold">
+            <Heading as="h1" variant="title-medium" className="mt-6">
               {t("accept.locked.title")}
-            </h1>
+            </Heading>
 
             <p className="mt-2 text-base text-base-content/70">
               <Trans
@@ -301,9 +308,9 @@ const AssignmentClosed = ({
               {t("accept.closed.badge")}
             </span>
 
-            <h1 className="mt-6 text-2xl font-bold">
+            <Heading as="h1" variant="title-medium" className="mt-6">
               {t("accept.closed.title")}
-            </h1>
+            </Heading>
 
             <p className="mt-2 text-base text-base-content/70">
               <Trans
@@ -353,9 +360,9 @@ const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
               {t("accept.notEnrolled.badge")}
             </span>
 
-            <h1 className="mt-6 text-2xl font-bold">
+            <Heading as="h1" variant="title-medium" className="mt-6">
               {t("accept.notEnrolled.title")}
-            </h1>
+            </Heading>
 
             <p className="mt-2 text-base text-base-content/70">
               {t("accept.notEnrolled.body")}
@@ -922,9 +929,9 @@ const AcceptAssignmentPage = () => {
                 : t("accept.noDueDate")}
             </span>
           </div>
-          <h1 className="text-2xl font-bold tracking-tight pt-2">
+          <Heading as="h1" variant="title-medium" className="pt-2">
             {assignmentData?.name}
-          </h1>
+          </Heading>
           <h2 className="text-lg">
             {repoExistsAlready
               ? t("accept.alreadyAcceptedHeading")

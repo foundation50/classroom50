@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { Heading } from "@/components/ui"
 
 // The dashboard page heading: a title, an optional subtitle line, and an
 // optional right-aligned action. `loading` swaps the title for the standard
@@ -23,7 +24,9 @@ export default function PageHeader({
         {loading ? (
           <div className="skeleton skeleton-shimmer h-8 w-48" />
         ) : (
-          <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
+          <Heading as="h1" variant="title-medium">
+            {title}
+          </Heading>
         )}
         {subtitle && (
           <div className="mt-1 text-sm text-base-content/70">{subtitle}</div>

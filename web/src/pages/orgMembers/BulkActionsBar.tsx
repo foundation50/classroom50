@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon, XIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Select, Toolbar } from "@/components/ui"
+import { Alert, Button, Modal, Select, Toolbar, Heading } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/domain/students"
@@ -420,7 +420,7 @@ const BulkActionsBar = ({
         aria-labelledby={titleId}
       >
         <div className="flex items-start justify-between gap-4">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {action === "remove"
               ? t("orgMembers.bulk.removeTitle", {
                   classroom: effectiveClassroom,
@@ -428,7 +428,7 @@ const BulkActionsBar = ({
               : t("orgMembers.bulk.addTitle", {
                   classroom: effectiveClassroom,
                 })}
-          </h3>
+          </Heading>
         </div>
 
         {phase === "working" && (

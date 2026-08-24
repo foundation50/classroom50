@@ -1,4 +1,9 @@
 @import "tailwindcss";
+/* Self-hosted GitHub Mona Sans (variable, wght 200-900, subsetted per
+   unicode-range). CJK text falls through to Noto Sans JP, still served from
+   Google Fonts (see index.html) since Mona Sans has no CJK coverage. */
+@import "@fontsource-variable/mona-sans";
+@import "@fontsource-variable/mona-sans/wght-italic.css";
 @plugin "daisyui/index.js" {
   themes: sumi --default;
 }
@@ -159,11 +164,24 @@
   }
 }
 
-/* Motion design tokens. One source of truth for animation timing shared by the
-   `.btn` press rule below and the JS variants in src/lib/motion.ts. Durations
-   are deliberately short (a productivity tool should feel responsive, not
-   theatrical); ease-out gives a fast start and gentle settle. */
+/* Design tokens: typography (Primer primitives) and motion. Motion timing is
+   the one source of truth shared by the `.btn` press rule below and the JS
+   variants in src/lib/motion.ts; durations are deliberately short (a
+   productivity tool should feel responsive, not theatrical). */
 @theme {
+  /* Typography primitives mirroring Primer (primer.style/product/primitives/
+     typography): Mona Sans leads the sans stack; the mono stack is Primer's
+     `fontStack-monospace` verbatim. `--text-code` is Primer's 13px code-block
+     size (no Tailwind step exists for it). */
+  --font-sans:
+    "Mona Sans Variable", "Noto Sans JP", "Noto Sans CJK JP", -apple-system,
+    BlinkMacSystemFont, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  --text-code: 0.8125rem;
+  --text-code--line-height: 1.5;
+
   --duration-fast: 100ms;
   --duration-base: 150ms;
   --duration-slow: 200ms;
@@ -172,8 +190,7 @@
 
 html,
 body {
-  font-family:
-    "Noto Sans", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* Theme cross-fade via the View Transitions API. `useTheme` wraps an explicit
@@ -521,7 +538,7 @@ textarea::placeholder {
   }
 
   .report-print .mono {
-    font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
   }
 
   .report-print table {

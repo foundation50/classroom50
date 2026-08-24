@@ -13,6 +13,7 @@ import {
   EmphasisLtr,
   RouterButton,
   rtlFlip,
+  Heading,
 } from "@/components/ui"
 import {
   MembershipError,
@@ -77,9 +78,9 @@ const NotInvited = ({
             <MailIcon aria-hidden="true" className="size-4" />
             {t("getStarted.badge")}
           </Badge>
-          <h1 className="mt-6 text-2xl font-bold">
+          <Heading as="h1" variant="title-medium" className="mt-6">
             {t("getStarted.notInvited.title")}
-          </h1>
+          </Heading>
           <p className="mt-2 text-base text-base-content/70">
             <Trans
               i18nKey="getStarted.notInvited.body"
@@ -139,9 +140,9 @@ const AllSet = ({
             <MailIcon aria-hidden="true" className="size-4" />
             {t("getStarted.badge")}
           </Badge>
-          <h1 className="mt-6 text-2xl font-bold">
+          <Heading as="h1" variant="title-medium" className="mt-6">
             {t("getStarted.active.title")}
-          </h1>
+          </Heading>
           {classroom && (
             <p className="mt-2 text-sm text-base-content/70">{classroom}</p>
           )}
@@ -272,9 +273,9 @@ const OnboardingPage = () => {
         <EnterDiv className="card-body items-center gap-6">
           <Spinner size="xl" label={t("getStarted.checking.title")} />
           <div className="text-center">
-            <h1 className="text-xl font-bold">
+            <Heading as="h1" variant="title-medium">
               {t("getStarted.checking.title")}
-            </h1>
+            </Heading>
             <p className="mt-2 text-sm text-base-content/70">
               {t("getStarted.checking.message", { org })}
             </p>

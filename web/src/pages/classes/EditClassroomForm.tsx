@@ -12,7 +12,14 @@ import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
-import { Button, Card, EmphasisLtr, FormField, Input } from "@/components/ui"
+import {
+  Button,
+  Card,
+  EmphasisLtr,
+  FormField,
+  Input,
+  Heading,
+} from "@/components/ui"
 
 export type EditClassroomFormValues = {
   name: string
@@ -323,7 +330,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       <Card.Body>
         <div className="flex justify-between">
           <div className="flex items-center gap-3 pb-4">
-            <h3 className="text-lg font-bold">{t("classes.form.basicInfo")}</h3>
+            <Heading as="h3">{t("classes.form.basicInfo")}</Heading>
             <GitHubLink
               href={classroomConfigTreeUrl(org, classroom)}
               label={t("classes.configRepo")}

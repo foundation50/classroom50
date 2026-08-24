@@ -3,7 +3,7 @@ import { AlertIcon, SyncIcon } from "@/components/ui/icons"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal } from "@/components/ui"
+import { Button, Modal, Heading } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { githubKeys } from "@/github-core/queries"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
@@ -166,9 +166,9 @@ export function ClassroomCollectButton({
             <AlertIcon className="size-4" aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <h3 id={confirmTitleId} className="text-lg font-bold">
+            <Heading as="h3" id={confirmTitleId}>
               {t("assignments.collect.confirmTitle")}
-            </h3>
+            </Heading>
             <p className="mt-3 text-sm text-base-content/80">
               {t("assignments.collect.confirmBody")}
             </p>

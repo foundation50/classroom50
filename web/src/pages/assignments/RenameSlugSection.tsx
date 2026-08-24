@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { AlertIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Card, EmphasisLtr } from "@/components/ui"
+import { Alert, Button, Card, EmphasisLtr, Heading } from "@/components/ui"
 import { RenameAssignmentModal } from "@/components/modals/RenameAssignmentModal"
 import { isRenameEligible, needsRenameFinish } from "@/domain/assignments"
 import { GITHUB_REPO_NAME_MAX_LEN } from "@/util/repoNameBudget"
@@ -38,12 +38,12 @@ export function RenameSlugSection({
   return (
     <Card bordered={false} className="mb-6 w-full border border-warning/40">
       <Card.Body className="gap-4">
-        <h2 className="card-title flex items-center gap-2 text-lg">
+        <Heading as="h2" className="flex items-center gap-2">
           <AlertIcon aria-hidden="true" className="size-4 text-warning" />
           {finish
             ? t("assignments.rename.sectionFinishTitle")
             : t("assignments.rename.sectionTitle")}
-        </h2>
+        </Heading>
         <Alert tone="warning" className="text-sm">
           <span className="break-all">
             {finish ? (

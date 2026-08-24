@@ -25,6 +25,7 @@
     "missing": "tsc -p tsconfig.app.json --pretty false 2>&1 | grep -E \"TS(2304|2305|2307|2503|2552)\""
   },
   "dependencies": {
+    "@fontsource-variable/mona-sans": "^5.3.0",
     "@primer/octicons-react": "^19.33.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tanstack/react-form": "^1.33.3",

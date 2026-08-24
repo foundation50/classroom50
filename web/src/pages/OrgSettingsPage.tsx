@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { Button, HelpTooltip, Input, Modal, cx } from "@/components/ui"
+import { Button, HelpTooltip, Input, Modal, cx, Heading } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -261,9 +261,7 @@ function SetTokenModal({
       closeDisabled={saveMutation.isPending}
     >
       <div className="pe-8">
-        <h3 className="text-lg font-semibold">
-          {t("orgSettings.serviceToken.setModalTitle")}
-        </h3>
+        <Heading as="h3">{t("orgSettings.serviceToken.setModalTitle")}</Heading>
         <p className="mt-1 text-sm text-base-content/70">
           {t("orgSettings.serviceToken.setModalSubtitle")}
         </p>

@@ -18,7 +18,7 @@ import {
   CLASSROOM_SHORT_NAME_MAX_LEN,
   GITHUB_REPO_NAME_MAX_LEN,
 } from "@/util/repoNameBudget"
-import { Button, Card, FormField, Input } from "@/components/ui"
+import { Button, Card, FormField, Input, Heading } from "@/components/ui"
 
 export type CreateClassroomFormValues = {
   name: string
@@ -134,9 +134,9 @@ const CreateClassroomForm = ({
       }}
     >
       <Card.Body>
-        <h3 className="text-lg font-bold pb-4">
+        <Heading as="h3" className="pb-4">
           {t("classes.form.basicInfo")}
-        </h3>
+        </Heading>
 
         <form.Field name="name">
           {(field) => (

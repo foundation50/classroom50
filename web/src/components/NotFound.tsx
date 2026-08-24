@@ -2,7 +2,7 @@ import { TelescopeIcon } from "@/components/ui/icons"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
-import { RouterButton } from "@/components/ui"
+import { RouterButton, Heading } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
 // Rendered by role/visibility-gated pages when the user can't access a resource.
@@ -29,9 +29,9 @@ const NotFound = ({ title, message }: { title?: string; message?: string }) => {
         <TelescopeIcon className="size-8" aria-hidden="true" />
       </div>
       <div>
-        <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
+        <Heading as="h1" variant="title-medium" ref={headingRef} tabIndex={-1}>
           {resolvedTitle}
-        </h1>
+        </Heading>
         <p className="mt-1 max-w-md text-base-content/70">{resolvedMessage}</p>
       </div>
       <RouterButton to="/" variant="primary" size="sm">

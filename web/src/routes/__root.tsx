@@ -8,7 +8,7 @@ import { AlertIcon } from "@/components/ui/icons"
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
-import { Button } from "@/components/ui"
+import { Button, Heading } from "@/components/ui"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_ROUTER } from "@/lib/logScopes"
 
@@ -45,7 +45,9 @@ const RootErrorComponent = ({ error }: { error: Error }) => {
         <AlertIcon aria-hidden="true" className="size-8" />
       </div>
       <div>
-        <h1 className="text-2xl font-bold">{t("error.title")}</h1>
+        <Heading as="h1" variant="title-medium">
+          {t("error.title")}
+        </Heading>
         <p className="mt-1 max-w-md text-base-content/70">
           {error?.message || t("error.unexpected")}
         </p>

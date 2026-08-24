@@ -35,7 +35,15 @@ import {
   ROLE_BADGE_TONE,
 } from "@/util/classroomRoleUI"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
-import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
+import {
+  Button,
+  Badge,
+  Card,
+  FormField,
+  Input,
+  Select,
+  Heading,
+} from "@/components/ui"
 
 // Manage a classroom's staff (teacher / head TA / TA), backed by the
 // per-classroom GitHub teams `classroom50-<classroom>-<role>`. The route gates
@@ -68,7 +76,7 @@ const ClassroomStaffSection = ({
               aria-hidden="true"
               className="size-4 text-base-content/70"
             />
-            <h3 className="text-lg font-bold">{t("classes.staff.heading")}</h3>
+            <Heading as="h3">{t("classes.staff.heading")}</Heading>
           </div>
           <GitHubLink
             href={`https://github.com/orgs/${org}/teams`}

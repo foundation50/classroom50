@@ -34,6 +34,8 @@ export type { TextareaProps } from "./Textarea"
 
 export { FormField, HelpTooltip } from "./FormField"
 export type { HelpTooltipPosition } from "./FormField"
+export { Heading, headingVariantClass } from "./Heading"
+export type { HeadingProps, HeadingVariant } from "./Heading"
 
 export { Modal } from "./Modal"
 export type { ModalProps, ModalSize } from "./Modal"

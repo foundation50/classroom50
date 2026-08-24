@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-import { Card } from "@/components/ui"
+import { Card, Heading } from "@/components/ui"
 import { ACCESSIBILITY_ISSUE_URL } from "@/version"
 
 import { useVpatReport } from "./data"
@@ -17,12 +17,9 @@ export function StatementSection() {
     <section aria-labelledby="statement-heading">
       <Card shadow={false}>
         <Card.Body className="max-w-2xl gap-6 p-6">
-          <h2
-            id="statement-heading"
-            className="text-2xl font-bold tracking-tight"
-          >
+          <Heading as="h2" variant="title-medium" id="statement-heading">
             {t("accessibility.statement.heading")}
-          </h2>
+          </Heading>
           <p className="text-base-content/80">
             {t("accessibility.statement.intro")}
           </p>

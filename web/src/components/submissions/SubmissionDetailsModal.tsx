@@ -2,7 +2,7 @@ import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { GitCommitIcon, MarkGithubIcon, TagIcon } from "@/components/ui/icons"
 
-import { Button, Modal, MonoLtr } from "@/components/ui"
+import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
 
 // One row in the submission-details list. `kind` picks the icon and action
 // label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
@@ -80,9 +80,9 @@ export function SubmissionDetailsModal({
       size="lg"
       aria-labelledby={titleId}
     >
-      <h3 id={titleId} className="truncate pe-8 text-lg font-bold">
+      <Heading as="h3" className="truncate pe-8" id={titleId}>
         {title}
-      </h3>
+      </Heading>
       {subtitle ? (
         <p className="mt-0.5 truncate text-sm text-base-content/60">
           {subtitle}

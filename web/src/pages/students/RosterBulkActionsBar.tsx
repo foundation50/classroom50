@@ -9,7 +9,7 @@ import {
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
-import { Alert, Button, Modal, Toolbar } from "@/components/ui"
+import { Alert, Button, Modal, Toolbar, Heading } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -585,13 +585,13 @@ const RosterBulkActionsBar = ({
         aria-labelledby={titleId}
       >
         <div className="flex items-start justify-between gap-4">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {action === "invite"
               ? t("students.bulk.inviteTitle")
               : action === "cancel"
                 ? t("students.bulk.cancelTitle")
                 : t("students.bulk.unenrollTitle")}
-          </h3>
+          </Heading>
         </div>
 
         {phase === "working" && (

@@ -9,6 +9,7 @@ import {
   FormField,
   Input,
   Modal,
+  Heading,
 } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import { BulkResultSection } from "@/components/bulk/resultView"
@@ -174,11 +175,11 @@ export function RenameAssignmentModal({
           <PencilIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {finish
               ? t("assignments.rename.finishTitle")
               : t("assignments.rename.title")}
-          </h3>
+          </Heading>
           <p className="mt-1 break-all text-sm text-base-content/70">
             {finish ? (
               <Trans

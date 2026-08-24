@@ -7,7 +7,7 @@ import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import { Spinner } from "@/components/Spinner"
-import { Alert, AnimatedAlert, Button, Card } from "@/components/ui"
+import { Alert, AnimatedAlert, Button, Card, Heading } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
@@ -117,7 +117,9 @@ const EditAssignmentFormStudent = ({
             </div>
 
             <div>
-              <h1 className="card-title text-xl">{assignmentData?.name}</h1>
+              <Heading as="h1" variant="title-medium">
+                {assignmentData?.name}
+              </Heading>
               <p className="text-sm font-medium text-base-content/70">
                 {t("assignmentSettings.groupMembers")}
               </p>

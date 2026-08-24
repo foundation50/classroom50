@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { CheckIcon, CopyIcon } from "@/components/ui/icons"
 
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import { Button, Input, Modal } from "@/components/ui"
+import { Button, Input, Modal, Heading } from "@/components/ui"
 
 // A single copyable link row (read-only input + copy button).
 const CopyLinkField = ({
@@ -84,9 +84,9 @@ const InviteLinksModal = ({
     <Modal open={open} onClose={onClose} size="lg" aria-labelledby={titleId}>
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("students.inviteStudents")}
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-base-content/70">
             {t("students.inviteLinksHint")}
           </p>

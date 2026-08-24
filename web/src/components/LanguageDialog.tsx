@@ -1,7 +1,7 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Modal } from "@/components/ui"
+import { Modal, Heading } from "@/components/ui"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 
 // Language-pack modal shown from the sidebar footer. Extracted alongside
@@ -28,9 +28,9 @@ export const LanguageDialog = forwardRef<
       boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
       aria-labelledby={titleId}
     >
-      <h3 id={titleId} className="text-lg font-bold">
+      <Heading as="h3" id={titleId}>
         {t("nav.languageDialogTitle")}
-      </h3>
+      </Heading>
       <p className="mt-1 mb-4 text-sm text-base-content/70">
         {t("nav.languageDialogDescription")}
       </p>

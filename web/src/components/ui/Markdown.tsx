@@ -31,20 +31,21 @@ const components: Components = {
     ) : (
       <span>{children}</span>
     ),
-  h1: ({ children }) => <h1 className="text-xl font-bold">{children}</h1>,
-  h2: ({ children }) => <h2 className="text-lg font-bold">{children}</h2>,
-  h3: ({ children }) => <h3 className="text-base font-semibold">{children}</h3>,
+  h1: ({ children }) => <h1 className="text-xl font-semibold">{children}</h1>,
+  h2: ({ children }) => <h2 className="text-base font-semibold">{children}</h2>,
+  h3: ({ children }) => <h3 className="text-sm font-semibold">{children}</h3>,
   ul: ({ children }) => <ul className="list-disc ps-5">{children}</ul>,
   ol: ({ children }) => <ol className="list-decimal ps-5">{children}</ol>,
   code: ({ children }) => (
     // base-300 tint reads as a code chip on both the white canvas and the
-    // muted gray cards this component renders inside.
-    <code className="rounded bg-base-300/50 px-1 py-0.5 text-sm">
+    // muted gray cards this component renders inside. text-code is Primer's
+    // 13px code-block size.
+    <code className="rounded bg-base-300/50 px-1 py-0.5 text-code">
       {children}
     </code>
   ),
   pre: ({ children }) => (
-    <pre className="overflow-x-auto rounded-field border border-base-300 bg-base-100 p-3 text-sm">
+    <pre className="overflow-x-auto rounded-field border border-base-300 bg-base-100 p-3 text-code">
       {children}
     </pre>
   ),

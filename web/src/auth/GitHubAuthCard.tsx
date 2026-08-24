@@ -15,7 +15,7 @@ import { GitHubPatPrompt } from "./GitHubPatPrompt"
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
 import { AppVersionBadge } from "@/components/AppVersionBadge"
 import { WIKI_URL } from "@/version"
-import { Alert, Button, Card, Spinner } from "@/components/ui"
+import { Alert, Button, Card, Spinner, Heading } from "@/components/ui"
 
 function LoadingScreen({ label }: { label: string }) {
   return (
@@ -62,9 +62,9 @@ export function GitHubAuthCard() {
             <MortarBoardIcon aria-hidden="true" className="size-6" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">
+            <Heading as="h1" variant="title-medium">
               {t("nav.appName")}
-            </h1>
+            </Heading>
             <p className="mt-1 text-sm text-base-content/70">
               {t("auth.signInSubtitle")}
             </p>

@@ -8,6 +8,7 @@ import {
   Select,
   Textarea,
   cx,
+  Heading,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import {
@@ -136,7 +137,9 @@ export default function AssessmentPage() {
   return (
     <main className="mx-auto max-w-3xl space-y-6 p-6">
       <header className="space-y-2">
-        <h1 className="text-2xl font-bold">Assessment mode — WCAG 2.2 AA</h1>
+        <Heading as="h1" variant="title-medium">
+          Assessment mode — WCAG 2.2 AA
+        </Heading>
         <p className="text-base-content/70">
           Record a verdict for each manually-assessed success criterion. Saving
           writes <code>vpatVerdicts.json</code>, which feeds the VPAT report.
@@ -158,7 +161,7 @@ export default function AssessmentPage() {
 
       {outstanding.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Outstanding</h2>
+          <Heading as="h2">Outstanding</Heading>
           <ol className="space-y-4">
             {outstanding.map((c) => (
               <EditableCriterionCard
@@ -175,7 +178,7 @@ export default function AssessmentPage() {
 
       {recorded.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">Recorded verdicts</h2>
+          <Heading as="h2">Recorded verdicts</Heading>
           <ol className="space-y-4">
             {recorded.map((c) => (
               <EditableCriterionCard
@@ -195,9 +198,7 @@ export default function AssessmentPage() {
 
       {readOnly.length > 0 && (
         <section className="space-y-4">
-          <h2 className="text-lg font-semibold">
-            Automated &amp; not-applicable (read-only)
-          </h2>
+          <Heading as="h2">Automated &amp; not-applicable (read-only)</Heading>
           <p className="text-sm text-base-content/70">
             Established by tooling or the client-side-only architecture. Shown
             for the full VPAT picture; not manually editable.
@@ -250,9 +251,9 @@ function EditableCriterionCard({
   return (
     <Card as="li" className={cx("p-4", recorded && "opacity-90")}>
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-base font-semibold">
+        <Heading as="h3">
           {criterion.id} {criterion.name}
-        </h3>
+        </Heading>
         <Badge tone="neutral" soft>
           {criterion.level}
         </Badge>
@@ -334,9 +335,9 @@ function ReadOnlyCriterionCard({ criterion }: { criterion: Criterion }) {
   return (
     <Card as="li" className="p-4">
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="text-base font-semibold">
+        <Heading as="h3">
           {criterion.id} {criterion.name}
-        </h3>
+        </Heading>
         <Badge tone="neutral" soft>
           {criterion.level}
         </Badge>

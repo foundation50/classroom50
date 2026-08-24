@@ -10,6 +10,7 @@ import {
   Button,
   Badge,
   EmphasisLtr,
+  Heading,
 } from "@/components/ui"
 import type { BadgeTone } from "@/components/ui"
 
@@ -174,7 +175,9 @@ export const MembershipError = ({
           <AlertIcon aria-hidden="true" className="size-4" />
           {t("membership.badge")}
         </Badge>
-        <h1 className="mt-6 text-2xl font-bold">{t(titleKey)}</h1>
+        <Heading as="h1" variant="title-medium" className="mt-6">
+          {t(titleKey)}
+        </Heading>
         <p className="mt-2 text-base text-base-content/70">
           {cause === "ssoWithUrl" || cause === "ssoUrlless" ? (
             <Trans

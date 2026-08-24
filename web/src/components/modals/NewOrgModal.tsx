@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import PlanBadge from "@/components/PlanBadge"
 import MissingOrgNotice from "@/components/MissingOrgNotice"
 import FreePlanInfoModal from "@/components/modals/FreePlanInfoModal"
-import { Badge, Button, Modal, Spinner, cx } from "@/components/ui"
+import { Badge, Button, Modal, Spinner, cx, Heading } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import useScrollFade from "@/hooks/useScrollFade"
@@ -185,9 +185,9 @@ function NewOrgModal({
       <Modal open={open} onClose={onClose} size="2xl" aria-labelledby={titleId}>
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h3 id={titleId} className="text-lg font-bold">
+            <Heading as="h3" id={titleId}>
               {t("orgs.newOrg.title")}
-            </h3>
+            </Heading>
             <p className="mt-1 text-sm text-base-content/70">
               {t("orgs.newOrg.description")}
             </p>

@@ -13,7 +13,7 @@ import {
   RepoLockedIcon,
 } from "@/components/ui/icons"
 
-import { Button, Card, Markdown, Modal } from "@/components/ui"
+import { Button, Card, Markdown, Modal, Heading } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
 import { assignmentDescription } from "@/types/classroom"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -74,18 +74,21 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 params={{ org, classroom, assignment }}
                 className="group inline-flex max-w-full items-center gap-1.5 transition-colors hover:text-primary"
               >
-                <h3 className="truncate text-base font-semibold leading-tight underline decoration-base-content/30 underline-offset-2 group-hover:decoration-primary">
+                <Heading
+                  as="h3"
+                  className="truncate underline decoration-base-content/30 underline-offset-2 group-hover:decoration-primary"
+                >
                   {title}
-                </h3>
+                </Heading>
                 <LinkIcon
                   aria-hidden="true"
                   className="size-4 shrink-0 text-base-content/40 group-hover:text-primary"
                 />
               </Link>
             ) : (
-              <h3 className="truncate text-base font-semibold leading-tight">
+              <Heading as="h3" className="truncate">
                 {title}
-              </h3>
+              </Heading>
             )}
             <div className="mt-1 flex flex-col gap-0.5 text-xs text-base-content/70">
               {classroom ? (
@@ -176,7 +179,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
             {t("classes.repo.descriptionModalTitle")}
           </p>
-          <h3 className="text-lg font-bold">{title}</h3>
+          <Heading as="h3">{title}</Heading>
         </div>
         {description ? (
           <Markdown
@@ -225,9 +228,7 @@ export const OrgRepos = ({
           />
         </div>
 
-        <h2 className="text-lg font-semibold">
-          {t("classes.repo.emptyTitle")}
-        </h2>
+        <Heading as="h2">{t("classes.repo.emptyTitle")}</Heading>
 
         <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
           {t("classes.repo.emptyBody")}

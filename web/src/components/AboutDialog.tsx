@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { CopyableDetails, Modal } from "@/components/ui"
+import { CopyableDetails, Modal, Heading } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import {
@@ -91,9 +91,9 @@ export const AboutDialog = forwardRef<
       boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
       aria-labelledby={titleId}
     >
-      <h3 id={titleId} className="text-lg font-bold">
+      <Heading as="h3" id={titleId}>
         {t("nav.aboutDialogTitle")}
-      </h3>
+      </Heading>
       <p className="mt-1 mb-4 text-sm text-base-content/70">
         {t("nav.aboutDialogDescription")}
       </p>

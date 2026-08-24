@@ -3,7 +3,14 @@ import { useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
 
-import { Button, FormField, Input, Modal, Textarea } from "@/components/ui"
+import {
+  Button,
+  FormField,
+  Input,
+  Modal,
+  Textarea,
+  Heading,
+} from "@/components/ui"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -154,9 +161,9 @@ function OrgDetailsModal({
         </div>
 
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="truncate text-lg font-bold">
+          <Heading as="h3" className="truncate" id={titleId}>
             {heading}
-          </h3>
+          </Heading>
           <p className="truncate font-mono text-xs text-base-content/50">
             {org.login}
           </p>

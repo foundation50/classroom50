@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
 import { RevokeAccessLink } from "./RevokeAccessLink"
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Heading } from "@/components/ui"
 
 // Re-auth for a signed-in teacher who needs to change their delete_repo access.
 // See auth/constants.ts for the base/elevated policy.
@@ -143,7 +143,7 @@ export function ElevatedAccessModal({
               <ShieldCheckIcon aria-hidden="true" className="size-6" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold">{title}</h2>
+              <Heading as="h2">{title}</Heading>
               <p className="mt-1 text-sm text-base-content/70">{body}</p>
             </div>
           </div>
