@@ -10,7 +10,7 @@ import type {
   RosterUploadContext,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Heading } from "@/components/ui"
 import {
   classifyRosterUpload,
   hasTeacherPromotion,
@@ -691,9 +691,9 @@ const UploadRoster = ({
       >
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h3 id={titleId} className="text-lg font-bold">
+            <Heading as="h3" id={titleId}>
               {t("students.uploadTitle")}
-            </h3>
+            </Heading>
             {fileName && (
               <p className="text-sm opacity-70 mt-1">
                 {t("students.fileLabel", { fileName })}

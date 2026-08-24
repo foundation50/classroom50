@@ -9,7 +9,14 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
-import { Badge, Card, Input, LabeledControl, Select } from "@/components/ui"
+import {
+  Badge,
+  Card,
+  Input,
+  LabeledControl,
+  Select,
+  Heading,
+} from "@/components/ui"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useListPrefsState } from "@/lib/listPrefs"
 import {
@@ -84,9 +91,9 @@ function StudentClassroomCard({
     >
       <Card.Body className="gap-4">
         <TermBadge term={summary.term} />
-        <h2 className="truncate text-xl font-semibold">
+        <Heading as="h2" className="truncate">
           {classroomTitle(summary)}
-        </h2>
+        </Heading>
         <AcceptedStat count={summary.acceptedCount} />
         <ViewAssignmentsLink
           org={org}

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-import { Modal, StatCard } from "@/components/ui"
+import { Modal, StatCard, Heading } from "@/components/ui"
 
 // The submission metrics, consolidated behind a single toolbar button so they
 // no longer push the roster down. Pure presentation: the page computes the
@@ -55,7 +55,7 @@ export function MetricsModal({
 
   return (
     <Modal open={open} onClose={onClose} size="2xl">
-      <h3 className="text-lg font-bold">{t("submissions.metrics.title")}</h3>
+      <Heading as="h3">{t("submissions.metrics.title")}</Heading>
       <div className="mt-4 grid grid-cols-2 gap-4">
         <StatCard
           label={

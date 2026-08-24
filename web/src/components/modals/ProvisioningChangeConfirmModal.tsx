@@ -2,7 +2,7 @@ import { useId } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Heading } from "@/components/ui"
 
 type ProvisioningChangeConfirmModalProps = {
   open: boolean
@@ -43,9 +43,9 @@ export function ProvisioningChangeConfirmModal({
           <AlertIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("assignmentSettings.provisioningConfirm.title")}
-          </h3>
+          </Heading>
           <Alert tone="warning" className="mt-3 text-sm">
             {t("assignmentSettings.provisioningConfirm.body", {
               count: acceptedCount,

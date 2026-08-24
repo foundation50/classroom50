@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { GitBranchIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Heading } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import {
   BulkResultSection,
@@ -258,9 +258,9 @@ export function BulkSubmissionTriggerModal({
           <GitBranchIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("submissions.bulkTrigger.title")}
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-base-content/70">
             {t("submissions.bulkTrigger.subtitle", {
               count: total,

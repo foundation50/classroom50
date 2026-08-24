@@ -2,7 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { ShieldXIcon } from "@/components/ui/icons"
 import { GitHubAPIError } from "@/github-core/errors"
-import { Alert, RouterButton } from "@/components/ui"
+import { Alert, RouterButton, Heading } from "@/components/ui"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("permission-error-boundary")
@@ -28,7 +28,9 @@ function PermissionDeniedMessage() {
         <ShieldXIcon aria-hidden="true" className="size-8" />
       </div>
       <Alert tone="warning" className="max-w-md flex-col text-center">
-        <h1 className="text-lg font-bold">{t("permissionDenied.title")}</h1>
+        <Heading as="h1" variant="title-medium">
+          {t("permissionDenied.title")}
+        </Heading>
         <p className="text-sm">{t("permissionDenied.message")}</p>
       </Alert>
       <RouterButton to="/" variant="primary" size="sm">

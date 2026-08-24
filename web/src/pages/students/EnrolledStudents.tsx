@@ -14,6 +14,7 @@ import {
   Button,
   Card,
   Toolbar,
+  Heading,
 } from "@/components/ui"
 import { ListSkeletonRows } from "@/components/list"
 import type { Student } from "@/types/classroom"
@@ -671,9 +672,7 @@ const EnrolledStudents = ({
           </div>
         ) : isEmpty ? (
           <div className="px-6 py-12 text-center">
-            <h3 className="text-base font-semibold">
-              {t("students.emptyTitle")}
-            </h3>
+            <Heading as="h3">{t("students.emptyTitle")}</Heading>
             <p className="mt-2 text-sm text-base-content/70">
               {t("students.emptyBody")}
             </p>

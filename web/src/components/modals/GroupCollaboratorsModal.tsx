@@ -17,6 +17,7 @@ import {
   Input,
   Modal,
   MonoLtr,
+  Heading,
 } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
@@ -365,9 +366,9 @@ export function GroupCollaboratorsModal({
         </div>
 
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {assignmentName || t("components.modals.groupCollaborators.title")}
-          </h3>
+          </Heading>
           {repoName && (
             <a
               className="link mt-1 inline-flex items-center gap-1.5 text-sm"

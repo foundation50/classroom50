@@ -64,7 +64,7 @@ export function MetricBar({
       />
       {showNumbers && (
         <div className="flex items-baseline justify-between gap-2 text-xs tabular-nums">
-          <span className="font-semibold">
+          <span>
             {value} / {max}
           </span>
           <span className="text-base-content/60">{pct}%</span>

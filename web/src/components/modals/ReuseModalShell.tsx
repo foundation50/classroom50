@@ -3,7 +3,7 @@ import { useEffect, useId, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
-import { AnimatedAlert, Button, Modal } from "@/components/ui"
+import { AnimatedAlert, Button, Modal, Heading } from "@/components/ui"
 
 // Shared chrome for the two reuse modals — close button, header, error/warning
 // alerts, Cancel/Reuse footer — so each supplies only its title, description,
@@ -57,9 +57,9 @@ export const ReuseModalShell = ({
           <CopyIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {title}
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-base-content/70">{description}</p>
         </div>
       </div>

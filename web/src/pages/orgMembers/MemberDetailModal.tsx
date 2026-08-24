@@ -10,7 +10,14 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  EmphasisLtr,
+  Modal,
+  rtlFlip,
+  Heading,
+} from "@/components/ui"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -140,9 +147,9 @@ const MemberDetailModal = ({
       aria-labelledby={titleId}
     >
       <div className="flex items-start justify-between gap-4 border-b border-base-300 px-6 py-4">
-        <h2 id={titleId} className="text-lg font-bold">
+        <Heading as="h2" id={titleId}>
           {t("orgMembers.detailTitle")}
-        </h2>
+        </Heading>
         <Button
           variant="ghost"
           size="sm"

@@ -1,7 +1,7 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal } from "@/components/ui"
+import { Button, Modal, Heading } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import { CheckIcon, CopyIcon } from "@/components/ui/icons"
@@ -33,9 +33,9 @@ export function DiagnosticsDialog({
       boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
       aria-labelledby={titleId}
     >
-      <h3 id={titleId} className="text-lg font-bold">
+      <Heading as="h3" id={titleId}>
         {t("orgActivity.diagnostics.title")}
-      </h3>
+      </Heading>
       <p className="mt-1 mb-4 text-sm text-base-content/70">
         {t("orgActivity.diagnostics.description")}
       </p>

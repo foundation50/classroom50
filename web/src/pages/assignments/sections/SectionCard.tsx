@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { UndoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
-import { Button, Card } from "@/components/ui"
+import { Button, Card, Heading } from "@/components/ui"
 
 // One card wrapper for every top-level section: a bold heading, an optional
 // per-section Reset control, an optional description, and the section body.
@@ -26,7 +26,7 @@ export function SectionCard({
     <Card bordered={false} className="w-full mb-6">
       <Card.Body>
         <div className="flex items-center justify-between gap-3 pb-1">
-          <h3 className="text-lg font-bold">{title}</h3>
+          <Heading as="h3">{title}</Heading>
           {onReset ? (
             <Button
               variant="ghost"

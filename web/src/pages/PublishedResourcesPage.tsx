@@ -17,7 +17,13 @@ import { enterExit, staggerTransition } from "@/lib/motion"
 
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
-import { Badge, Button, MonoLtr, type BadgeTone } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  MonoLtr,
+  type BadgeTone,
+  Heading,
+} from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireRole from "@/components/RequireRole"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -440,7 +446,7 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
             aria-hidden="true"
             className="size-4 text-base-content/70"
           />
-          <h2 className="text-lg font-bold">{t("published.orgLevel")}</h2>
+          <Heading as="h2">{t("published.orgLevel")}</Heading>
         </div>
         <p className="mt-1 text-sm text-base-content/70">
           <Trans
@@ -462,7 +468,7 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
             aria-hidden="true"
             className="size-4 text-base-content/70"
           />
-          <h2 className="text-lg font-bold">{t("published.perClassroom")}</h2>
+          <Heading as="h2">{t("published.perClassroom")}</Heading>
         </div>
         <p className="mt-1 text-sm text-base-content/70">
           {t("published.perClassroomDescription")}

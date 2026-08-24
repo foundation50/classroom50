@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { SlidersIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Select } from "@/components/ui"
+import { Alert, Button, Modal, Select, Heading } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import {
   BulkResultSection,
@@ -250,9 +250,9 @@ export function BulkRepoFeaturesModal({
           <SlidersIcon className="size-4" aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("submissions.bulkFeatures.title")}
-          </h3>
+          </Heading>
           <p className="mt-1 text-sm text-base-content/70">
             {t("submissions.bulkFeatures.subtitle", { count: total })}
           </p>

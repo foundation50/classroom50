@@ -8,6 +8,7 @@ import {
   Input,
   MonoLtr,
   type ButtonVariant,
+  Heading,
 } from "@/components/ui"
 
 type ConfirmModalProps = {
@@ -155,9 +156,9 @@ export function ConfirmModal({
           </div>
 
           <div className="min-w-0 flex-1">
-            <h3 id={titleId} className="text-lg font-bold">
+            <Heading as="h3" id={titleId}>
               {title}
-            </h3>
+            </Heading>
 
             {description ? (
               <div className="mt-2 text-sm leading-6 text-base-content/70">

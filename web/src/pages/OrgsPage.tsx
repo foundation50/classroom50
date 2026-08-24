@@ -41,7 +41,15 @@ import { AnimatePresence, motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { Alert, Badge, Button, Card, Toolbar, cx } from "@/components/ui"
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Toolbar,
+  cx,
+  Heading,
+} from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
@@ -79,7 +87,9 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
           />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h2 className="truncate text-lg font-bold">{org.login}</h2>
+              <Heading as="h2" className="truncate">
+                {org.login}
+              </Heading>
               <Badge tone="warning" size="sm">
                 {t("orgs.invites.pendingBadge")}
               </Badge>
@@ -354,7 +364,9 @@ function OrgCard({
           />
 
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-bold">{heading}</h2>
+            <Heading as="h2" className="truncate">
+              {heading}
+            </Heading>
 
             {org.description && (
               <p className="mt-1 line-clamp-2 text-sm text-base-content/70">

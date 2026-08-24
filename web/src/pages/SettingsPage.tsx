@@ -8,6 +8,8 @@ import {
   RouterButton,
   SectionAnchorHeading,
   cx,
+  Heading,
+  headingVariantClass,
 } from "@/components/ui"
 import { useTranslation } from "react-i18next"
 import { useMemo, useState } from "react"
@@ -286,7 +288,11 @@ function SettingsSectionCard({
       )}
     >
       <Card.Body>
-        <SectionAnchorHeading anchorId={id} as="h3" className="card-title">
+        <SectionAnchorHeading
+          anchorId={id}
+          as="h3"
+          className={headingVariantClass["title-small"]}
+        >
           {heading}
         </SectionAnchorHeading>
         <p className="text-sm text-base-content/70">{subheading}</p>
@@ -310,7 +316,7 @@ function SettingsGroup({
   return (
     <section className="flex flex-col gap-4">
       <div className="flex flex-col gap-0.5">
-        <h2 className="text-lg font-semibold">{heading}</h2>
+        <Heading as="h2">{heading}</Heading>
         <p className="text-sm text-base-content/60">{description}</p>
       </div>
       {children}

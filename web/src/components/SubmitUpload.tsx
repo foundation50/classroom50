@@ -8,6 +8,7 @@ import {
   FileDropzone,
   Modal,
   type PickedFile,
+  Heading,
 } from "@/components/ui"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -144,9 +145,9 @@ export function SubmitUpload({
       >
         <div className="flex items-center gap-2">
           <FileCheckIcon aria-hidden="true" className="size-4 text-primary" />
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {t("submissions.student.upload.title")}
-          </h3>
+          </Heading>
         </div>
         <p className="mt-1 text-sm text-base-content/70">
           {t("submissions.student.upload.intro")}

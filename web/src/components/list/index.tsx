@@ -5,7 +5,7 @@
 import { AppsIcon, ListUnorderedIcon } from "@/components/ui/icons"
 import type { ReactNode } from "react"
 
-import { Button } from "@/components/ui"
+import { Button, Heading } from "@/components/ui"
 
 export type ListViewMode = "grid" | "list"
 
@@ -68,7 +68,7 @@ export function EmptyState({
   return (
     <div className={className}>
       {icon}
-      <h2 className="text-lg font-semibold">{title}</h2>
+      <Heading as="h2">{title}</Heading>
       {body && (
         <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
           {body}

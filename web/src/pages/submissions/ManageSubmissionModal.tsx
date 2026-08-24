@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr } from "@/components/ui"
+import { Badge, Modal, MonoLtr, Heading } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
@@ -315,9 +315,9 @@ export const ManageSubmissionModal = ({
       boxClassName={subModalOpen ? "invisible" : undefined}
       aria-labelledby={titleId}
     >
-      <h3 id={titleId} className="truncate pe-8 text-lg font-bold">
+      <Heading as="h3" className="truncate pe-8" id={titleId}>
         {title}
-      </h3>
+      </Heading>
       {subtitle ? (
         <p className="mt-0.5 truncate text-sm text-base-content/60">
           {subtitle}

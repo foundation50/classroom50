@@ -2,7 +2,7 @@ import { useEffect, useId } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { FileZipIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Spinner } from "@/components/ui"
+import { Alert, Button, Modal, Spinner, Heading } from "@/components/ui"
 import useDownloadAllSubmissions from "@/hooks/mutations/useDownloadAllSubmissions"
 import {
   BULK_DOWNLOAD_WARN_THRESHOLD,
@@ -108,10 +108,10 @@ export function DownloadAllSubmissionsModal({
       size="md"
       aria-labelledby={titleId}
     >
-      <h3 id={titleId} className="flex items-center gap-2 text-lg font-bold">
+      <Heading as="h3" className="flex items-center gap-2" id={titleId}>
         <FileZipIcon aria-hidden="true" className="size-4" />
         {t("submissions.downloadAll.title")}
-      </h3>
+      </Heading>
 
       {error ? (
         <div className="mt-3 space-y-3">

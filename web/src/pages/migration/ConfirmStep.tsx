@@ -28,6 +28,7 @@ import {
   Modal,
   Spinner,
   Toolbar,
+  Heading,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import {
@@ -778,10 +779,10 @@ export const ConfirmStep = ({
         size="md"
         aria-label={t("migration.confirm.modalTitle")}
       >
-        <h3 className="flex items-center gap-2 text-lg font-bold">
+        <Heading as="h3" className="flex items-center gap-2">
           <AlertIcon aria-hidden="true" className="size-4 text-warning" />
           {t("migration.confirm.modalTitle")}
-        </h3>
+        </Heading>
         <p className="mt-2 text-sm text-base-content/80">
           {t("migration.confirm.modalSummary", {
             count: selectedCount,

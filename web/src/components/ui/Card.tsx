@@ -1,6 +1,7 @@
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from "react"
 
 import { cx } from "./cx"
+import { headingVariantClass } from "./Heading"
 
 // The canonical surface card. Wraps daisyUI `card` with one border/shadow/
 // radius recipe so the ~6 divergent inline recipes converge. Muted gray on the
@@ -63,7 +64,16 @@ export function CardTitle({
   ...props
 }: ComponentPropsWithoutRef<"h2">) {
   return (
-    <h2 className={cx("card-title", className)} {...props}>
+    // daisyUI `card-title` (18px/600) replaced by the Primer title-small
+    // recipe; keeps card-title's inline-flex layout for leading icons.
+    <h2
+      className={cx(
+        "flex items-center gap-2",
+        headingVariantClass["title-small"],
+        className,
+      )}
+      {...props}
+    >
       {children}
     </h2>
   )

@@ -66,7 +66,7 @@ describe("Card", () => {
       </Card>,
     )
     expect(screen.getByRole("heading", { name: "Title" }).className).toContain(
-      "card-title",
+      "font-semibold",
     )
     expect(
       screen.getByRole("button", { name: "Do" }).parentElement?.className,

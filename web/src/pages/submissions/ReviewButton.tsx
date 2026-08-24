@@ -2,7 +2,7 @@ import { CommentIcon } from "@/components/ui/icons"
 import { useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { Button, Modal, MonoLtr } from "@/components/ui"
+import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
@@ -130,18 +130,18 @@ export const ReviewButton = ({
       >
         {errorMsg ? (
           <>
-            <h3 id={titleId} className="text-lg font-bold">
+            <Heading as="h3" id={titleId}>
               {t("submissions.reviewModal.errorTitle")}
-            </h3>
+            </Heading>
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
               {errorMsg}
             </p>
           </>
         ) : (
           <>
-            <h3 id={titleId} className="text-lg font-bold">
+            <Heading as="h3" id={titleId}>
               {t("submissions.reviewModal.emptyTitle")}
-            </h3>
+            </Heading>
             <p className="mt-2 text-sm leading-6 text-base-content/70">
               <Trans
                 i18nKey="submissions.reviewModal.emptyBody"

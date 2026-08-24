@@ -8,6 +8,7 @@ import {
   Input,
   Modal,
   Spinner,
+  Heading,
 } from "@/components/ui"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { useSetScoreOverride } from "@/hooks/mutations/useSetScoreOverride"
@@ -210,9 +211,9 @@ export function ScoreOverrideModal({
     >
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h3 id={titleId} className="text-lg font-bold">
+          <Heading as="h3" id={titleId}>
             {title}
-          </h3>
+          </Heading>
           <p className="text-sm text-base-content/70">{description}</p>
         </div>
 
