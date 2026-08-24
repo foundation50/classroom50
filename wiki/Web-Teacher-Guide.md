@@ -505,7 +505,8 @@ are **scoped to the current assignment** — they walk only this assignment's
 repositories, so a sync is fast even in a large classroom and doesn't rebuild
 other assignments' scores. The strip shows when this assignment's data was
 last synced (a per-assignment `collected_at` stamp in `scores.json`). Click
-**View workflow** to see the Actions run.
+**View workflow** to see the Actions run. To refresh every assignment in one
+run instead, see [Collect the whole classroom](#collect-the-whole-classroom).
 
 The top of the page shows:
 
@@ -525,6 +526,27 @@ and links to the repository, the commit, the feedback pull request
 result lives — per-test breakdowns, past attempts, grading a specific commit,
 and who submitted — see
 [Reading results](Autograding-Basics#reading-results) in Autograding Basics.
+
+### Collect the whole classroom
+
+The classroom's assignments list refreshes all scores in one run. Above the
+table, a freshness line shows when the classroom's submission data was last
+synced, next to a **Collect all** button. Clicking it dispatches a single
+`collect-scores.yaml` run scoped to the classroom, so one run walks every
+assignment and rebuilds all of the classroom's collected scores; the table's
+per-assignment submission counts refresh when the run finishes.
+
+Because the run walks every assignment's repositories, it takes longer than a
+single-assignment sync and uses more GitHub Actions minutes, so **Collect all**
+asks you to confirm before dispatching. To refresh one assignment while
+grading, prefer **Sync now** on that assignment's submissions page.
+
+Any staff member can collect, the same as the per-assignment sync. The button
+is hidden on an archived classroom and while the classroom has no assignments,
+and disabled while the roster is empty. Once dispatched, the run appears in
+the banner at the top of the app as **Collecting scores**, which keeps
+tracking the run if you navigate away and links to the Actions run
+(**View run**).
 
 ### Scores and overrides
 

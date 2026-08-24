@@ -67,11 +67,28 @@ vi.mock("@/components/OrgRepoCreationNotice", async () => {
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
   useClassroomRoleContext: () => ({ role: "teacher" }),
 }))
-// Stub the heavy children so the test targets only the header subtitle.
+// Stub the heavy children so the test targets only the page's own wiring. The
+// toolbar mock exposes its slots so the collect-action gating is observable;
+// the collect button itself is covered in ClassroomCollectButton.test.tsx.
 vi.mock("@/pages/assignments/AssignmentsTable", () => ({ default: () => null }))
 vi.mock("@/pages/assignments/AssignmentsToolbar", () => ({
-  default: () => null,
+  default: ({
+    leading,
+    trailing,
+  }: {
+    leading?: ReactNode
+    trailing?: ReactNode
+  }) => (
+    <div>
+      <div data-testid="toolbar-leading">{leading}</div>
+      <div data-testid="toolbar-trailing">{trailing}</div>
+    </div>
+  ),
 }))
+vi.mock("@/pages/assignments/ClassroomCollectButton", () => {
+  const stub = () => <div data-testid="collect-all" />
+  return { ClassroomCollectButton: stub, default: stub }
+})
 
 import { TeacherAssignmentsView } from "./AssignmentsPage"
 
@@ -155,5 +172,49 @@ describe("Assignments org repo-creation warning", () => {
     expect(
       screen.queryByText("components.notices.orgRepoCreation.private"),
     ).toBeNull()
+  })
+})
+
+// The classroom-wide collect's page-level gating: the component's own tests
+// exercise it with props already supplied, so the show/hide decisions live
+// here — visible for staff once assignments exist, gone when archived or
+// while the list is empty (nothing to collect for).
+describe("Classroom-wide collect visibility", () => {
+  const assignments = [{ slug: "hw1", type: "individual" }]
+  const renderView = () => {
+    studentCount.mockReturnValue({
+      studentCount: 1,
+      isLoading: false,
+      isError: false,
+    })
+    render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
+  }
+
+  it("leads the toolbar once assignments exist", () => {
+    getAssignments.mockReturnValue({
+      data: { assignments },
+      isLoading: false,
+    })
+    renderView()
+    const leading = screen.getByTestId("toolbar-leading")
+    expect(leading.querySelector('[data-testid="collect-all"]')).not.toBeNull()
+  })
+
+  it("is absent while the classroom has no assignments", () => {
+    renderView()
+    expect(screen.queryByTestId("collect-all")).toBeNull()
+  })
+
+  it("is absent on an archived classroom", () => {
+    getClassroom.mockReturnValue({
+      data: { name: "CS 101", active: false },
+      isLoading: false,
+    })
+    getAssignments.mockReturnValue({
+      data: { assignments },
+      isLoading: false,
+    })
+    renderView()
+    expect(screen.queryByTestId("collect-all")).toBeNull()
   })
 })

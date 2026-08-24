@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
+import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
@@ -156,13 +157,28 @@ export const TeacherAssignmentsView = ({
 
   // Right-aligned toolbar action: the New assignment split button for an author,
   // or the archived badge; null for a read-only viewer (TA).
-  const toolbarAction = archived ? (
+  const primaryAction = archived ? (
     <Badge tone="neutral" size="md">
       {t("assignments.archived")}
     </Badge>
   ) : canAuthor ? (
     <NewAssignmentButton org={org} classroom={classroom} />
   ) : null
+
+  // Classroom-wide collect, left-aligned in the toolbar (the `leading` slot),
+  // mirroring the submissions toolbar where the DataFreshness/Sync widget
+  // leads and search + filters sit on the right. Open to any staff viewer (a
+  // TA may collect, as on the submissions page — only authoring is
+  // author-gated). Hidden on an archived classroom and while the list is
+  // empty: there is no assignment to collect for.
+  const collectAction =
+    !archived && hasAssignments ? (
+      <ClassroomCollectButton
+        org={org}
+        classroom={classroom}
+        emptyRoster={emptyRoster.show}
+      />
+    ) : null
 
   return (
     <div className="flex flex-col gap-6">
@@ -222,7 +238,8 @@ export const TeacherAssignmentsView = ({
           sort={sort}
           onSortChange={setSort}
           actionsOnly={!hasAssignments}
-          trailing={toolbarAction}
+          leading={collectAction}
+          trailing={primaryAction}
         />
       )}
       {showNoResults ? (
