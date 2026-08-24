@@ -1113,7 +1113,10 @@
     "studentViewAll": "View all assignments for the <classroom>{{classroom}}</classroom> classroom.",
     "collect": {
       "label": "Collect all",
-      "title": "Collect submissions for every assignment in this classroom"
+      "title": "Collect scores for every assignment in this classroom. This rebuilds the submission data behind the table's counts.",
+      "confirmTitle": "Collect scores for all assignments?",
+      "confirmBody": "This starts one workflow run that collects scores for every assignment in this classroom. The run takes longer for a large classroom and uses more GitHub Actions minutes than collecting a single assignment.",
+      "confirmAction": "Collect all"
     },
     "discover": {
       "accept": "Accept assignment",

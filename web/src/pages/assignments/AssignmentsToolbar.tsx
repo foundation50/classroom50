@@ -11,11 +11,13 @@ import {
 
 // Search + type/due filters + sort for the teacher assignments table.
 // Controlled by TeacherAssignmentsView; emits query/filter/sort changes.
-// `trailing` hosts right-aligned actions (the New assignment split button or the
-// archived badge), mirroring the submissions toolbar so the primary action sits
-// in the bar, not the page header. When `actionsOnly` is set (no assignments
-// exist yet) only the trailing actions render — the search/filter/sort controls
-// would have nothing to act on.
+// Mirrors the submissions toolbar layout: `leading` hosts the left-aligned
+// classroom-wide action (Collect all), while search + filters + sort + the
+// trailing actions (the New assignment split button or the archived badge)
+// sit on the right — so the primary action lives in the bar, not the page
+// header. When `actionsOnly` is set (no assignments exist yet) only the
+// leading/trailing actions render — the search/filter/sort controls would
+// have nothing to act on.
 const AssignmentsToolbar = ({
   query,
   onQueryChange,
@@ -24,6 +26,7 @@ const AssignmentsToolbar = ({
   sort,
   onSortChange,
   actionsOnly = false,
+  leading,
   trailing,
 }: {
   query: string
@@ -33,6 +36,10 @@ const AssignmentsToolbar = ({
   sort: AssignmentSort
   onSortChange: (sort: AssignmentSort) => void
   actionsOnly?: boolean
+  // Left-aligned lead content (the Collect all button), as on the submissions
+  // toolbar where DataFreshness leads. Search + filters + sort + actions sit
+  // on the right.
+  leading?: ReactNode
   trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
@@ -45,8 +52,9 @@ const AssignmentsToolbar = ({
   }
 
   if (actionsOnly) {
-    return trailing ? (
+    return leading || trailing ? (
       <Toolbar>
+        {leading}
         <Toolbar.Trailing>{trailing}</Toolbar.Trailing>
       </Toolbar>
     ) : null
@@ -54,54 +62,56 @@ const AssignmentsToolbar = ({
 
   return (
     <Toolbar>
-      <Toolbar.Search
-        placeholder={t("assignments.toolbar.searchPlaceholder")}
-        value={query}
-        onChange={onQueryChange}
-        ariaLabel={t("assignments.toolbar.searchAria")}
-        onClear={clearAll}
-        clearActive={hasActiveFilter}
-        hasFilterActive={hasFilterActive}
-      />
-
-      <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
-        active={filters.type !== "all"}
-        value={filters.type}
-        onChange={(e) =>
-          onFiltersChange({
-            ...filters,
-            type: e.target.value as AssignmentFilters["type"],
-          })
-        }
-        aria-label={t("assignments.toolbar.typeAria")}
-      >
-        <option value="all">{t("assignments.toolbar.typeAll")}</option>
-        <option value="individual">
-          {t("assignments.toolbar.typeIndividual")}
-        </option>
-        <option value="group">{t("assignments.toolbar.typeGroup")}</option>
-      </Toolbar.FilterSelect>
-
-      <Toolbar.FilterSelect
-        icon={<ListFilter aria-hidden="true" className="size-4" />}
-        active={filters.due !== "all"}
-        value={filters.due}
-        onChange={(e) =>
-          onFiltersChange({
-            ...filters,
-            due: e.target.value as AssignmentFilters["due"],
-          })
-        }
-        aria-label={t("assignments.toolbar.dueAria")}
-      >
-        <option value="all">{t("assignments.toolbar.dueAll")}</option>
-        <option value="has-due">{t("assignments.toolbar.dueHas")}</option>
-        <option value="no-due">{t("assignments.toolbar.dueNone")}</option>
-        <option value="overdue">{t("assignments.toolbar.dueOverdue")}</option>
-      </Toolbar.FilterSelect>
+      {leading}
 
       <Toolbar.Trailing>
+        <Toolbar.Search
+          placeholder={t("assignments.toolbar.searchPlaceholder")}
+          value={query}
+          onChange={onQueryChange}
+          ariaLabel={t("assignments.toolbar.searchAria")}
+          onClear={clearAll}
+          clearActive={hasActiveFilter}
+          hasFilterActive={hasFilterActive}
+        />
+
+        <Toolbar.FilterSelect
+          icon={<ListFilter aria-hidden="true" className="size-4" />}
+          active={filters.type !== "all"}
+          value={filters.type}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              type: e.target.value as AssignmentFilters["type"],
+            })
+          }
+          aria-label={t("assignments.toolbar.typeAria")}
+        >
+          <option value="all">{t("assignments.toolbar.typeAll")}</option>
+          <option value="individual">
+            {t("assignments.toolbar.typeIndividual")}
+          </option>
+          <option value="group">{t("assignments.toolbar.typeGroup")}</option>
+        </Toolbar.FilterSelect>
+
+        <Toolbar.FilterSelect
+          icon={<ListFilter aria-hidden="true" className="size-4" />}
+          active={filters.due !== "all"}
+          value={filters.due}
+          onChange={(e) =>
+            onFiltersChange({
+              ...filters,
+              due: e.target.value as AssignmentFilters["due"],
+            })
+          }
+          aria-label={t("assignments.toolbar.dueAria")}
+        >
+          <option value="all">{t("assignments.toolbar.dueAll")}</option>
+          <option value="has-due">{t("assignments.toolbar.dueHas")}</option>
+          <option value="no-due">{t("assignments.toolbar.dueNone")}</option>
+          <option value="overdue">{t("assignments.toolbar.dueOverdue")}</option>
+        </Toolbar.FilterSelect>
+
         <Toolbar.FilterSelect
           icon={<ArrowUpDown aria-hidden="true" className="size-4" />}
           value={sort}

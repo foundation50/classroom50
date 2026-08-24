@@ -165,10 +165,12 @@ export const TeacherAssignmentsView = ({
     <NewAssignmentButton org={org} classroom={classroom} />
   ) : null
 
-  // Classroom-wide collect, next to the primary action. Open to any staff
-  // viewer (a TA may collect, as on the submissions page — only authoring is
-  // author-gated). Hidden on an archived classroom and while the list is empty:
-  // there is no assignment to collect for.
+  // Classroom-wide collect, left-aligned in the toolbar (the `leading` slot),
+  // mirroring the submissions toolbar where the DataFreshness/Sync widget
+  // leads and search + filters sit on the right. Open to any staff viewer (a
+  // TA may collect, as on the submissions page — only authoring is
+  // author-gated). Hidden on an archived classroom and while the list is
+  // empty: there is no assignment to collect for.
   const collectAction =
     !archived && hasAssignments ? (
       <ClassroomCollectButton
@@ -176,17 +178,6 @@ export const TeacherAssignmentsView = ({
         classroom={classroom}
         emptyRoster={emptyRoster.show}
       />
-    ) : null
-
-  // Toolbar.Trailing already lays its children out (flex, wrap, gap), so this
-  // is a fragment — but it must collapse to null when both actions are absent,
-  // or the slot renders an empty bar.
-  const toolbarAction =
-    collectAction || primaryAction ? (
-      <>
-        {collectAction}
-        {primaryAction}
-      </>
     ) : null
 
   return (
@@ -247,7 +238,8 @@ export const TeacherAssignmentsView = ({
           sort={sort}
           onSortChange={setSort}
           actionsOnly={!hasAssignments}
-          trailing={toolbarAction}
+          leading={collectAction}
+          trailing={primaryAction}
         />
       )}
       {showNoResults ? (
