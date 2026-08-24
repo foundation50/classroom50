@@ -8,6 +8,7 @@
 // enforce the same facts, every rendering reflects guaranteed-green state.
 
 import {
+  ENHANCED_FLOOR,
   evaluateAll,
   MARGIN_TARGET,
   SPEC_FLOOR,
@@ -28,6 +29,8 @@ export type ContrastAuditRow = {
   status: ContrastStatus
   /** Clears the WCAG floor (a Pass) but sits below the recommended margin. */
   withinMargin: boolean
+  /** Also clears the AAA 1.4.6 floor (reported only; never enforced). */
+  meetsEnhanced: boolean
   /** Displayed foreground (fg composited over the opaque surface), sRGB hex. */
   fgHex: string
   /** Opaque surface behind the text, sRGB hex. */
@@ -47,11 +50,17 @@ export type ContrastAuditJson = {
   generated: string
   thresholds: typeof SPEC_FLOOR
   margins: typeof MARGIN_TARGET
+  /** The AAA 1.4.6 text floors the audit also scores against (never enforced). */
+  enhancedThresholds: typeof ENHANCED_FLOOR
   summary: {
     total: number
     failures: number
     marginMisses: number
     allPass: boolean
+    /** Pairs that clear their AA floor but not the AAA 1.4.6 one. */
+    enhancedMisses: number
+    /** True when every enforced pair also clears AAA — what 1.4.6 derives from. */
+    allPassEnhanced: boolean
   }
   themes: ContrastAuditTheme[]
 }
@@ -76,6 +85,9 @@ export function buildContrastAudit(now = new Date()): ContrastAuditJson {
   const marginMisses = rows.filter(
     (r) => !r.exempt && r.passesFloor && !r.passesMargin,
   ).length
+  const enhancedMisses = rows.filter(
+    (r) => !r.exempt && r.passesFloor && !r.passesEnhanced,
+  ).length
 
   const themes: ContrastAuditTheme[] = (["sumi", "sumi-dark"] as const).map(
     (theme) => ({
@@ -93,6 +105,7 @@ export function buildContrastAudit(now = new Date()): ContrastAuditJson {
           margin: r.margin,
           status: statusOf(r.exempt, r.passesFloor),
           withinMargin: !r.exempt && r.passesFloor && !r.passesMargin,
+          meetsEnhanced: r.passesEnhanced,
           fgHex: r.fgHex,
           bgHex: r.bgHex,
         })),
@@ -105,11 +118,14 @@ export function buildContrastAudit(now = new Date()): ContrastAuditJson {
     generated: now.toISOString().slice(0, 10),
     thresholds: SPEC_FLOOR,
     margins: MARGIN_TARGET,
+    enhancedThresholds: ENHANCED_FLOOR,
     summary: {
       total: rows.length,
       failures,
       marginMisses,
       allPass: failures === 0,
+      enhancedMisses,
+      allPassEnhanced: failures === 0 && enhancedMisses === 0,
     },
     themes,
   }
@@ -133,7 +149,7 @@ function statusCell(row: ContrastAuditRow): string {
 /** Render the Markdown report — derived from the same structured audit. */
 export function renderContrastReport(now = new Date()): string {
   const audit = buildContrastAudit(now)
-  const { thresholds: t, margins: m, summary } = audit
+  const { thresholds: t, margins: m, enhancedThresholds: e, summary } = audit
 
   const out: string[] = []
   out.push("# WCAG 2.2 Contrast Audit — Classroom50 web app")
@@ -147,14 +163,20 @@ export function renderContrastReport(now = new Date()): string {
   out.push("")
   out.push(`- **Generated:** ${audit.generated}`)
   out.push(
-    "- **Standard:** WCAG 2.2 — 1.4.6 Contrast (Enhanced, AAA) for text, " +
-      "1.4.11 Non-text Contrast (AA; no AAA tier exists) for UI components.",
+    "- **Standard:** WCAG 2.2 — 1.4.3 Contrast (Minimum, AA) for text, " +
+      "1.4.11 Non-text Contrast (AA) for UI components. The palette is GitHub " +
+      "Primer verbatim, and Primer's primitives are tuned to AA, so AA is the " +
+      "enforced target; 1.4.6 (Enhanced, AAA) is scored below but not required.",
   )
   out.push(
     `- **Thresholds:** body text ≥ ${t.body}:1, large text ≥ ${t.large}:1, non-text ≥ ${t.nonText}:1.`,
   )
   out.push(
     `- **Recommended safety margin (above the WCAG minimum):** body ≥ ${m.body}:1, large ≥ ${m.large}:1, non-text ≥ ${m.nonText}:1. Extra headroom for anti-aliasing, sub-pixel rendering, and future palette tweaks; not required for conformance.`,
+  )
+  out.push(
+    `- **Enhanced (1.4.6 AAA, reported only):** body ≥ ${e.body}:1, large ≥ ${e.large}:1.` +
+      ` ${summary.enhancedMisses === 0 ? "**Every audited pair also clears AAA.**" : `${summary.enhancedMisses} pair(s) meet AA but not AAA.`}`,
   )
   out.push(
     `- **Result:** ${summary.allPass ? "**All audited pairs meet their WCAG floor.**" : `**${summary.failures} pair(s) below the WCAG floor.**`}` +
@@ -174,13 +196,15 @@ export function renderContrastReport(now = new Date()): string {
     out.push(`## ${theme.label}`)
     out.push("")
     out.push(
-      "| Pair | Foreground / surface | Colors | Size | Ratio | Floor | Status |",
+      "| Pair | Foreground / surface | Colors | Size | Ratio | Floor | Status | AAA |",
     )
-    out.push("| --- | --- | --- | --- | ---: | ---: | --- |")
+    out.push("| --- | --- | --- | --- | ---: | ---: | --- | --- |")
     for (const r of theme.rows) {
       const colors = `text \`${r.fgHex}\` on \`${r.bgHex}\``
+      const enhanced =
+        r.status === "exempt" ? "—" : r.meetsEnhanced ? "✅" : "—"
       out.push(
-        `| \`${r.id}\` | ${r.label} | ${colors} | ${r.size} | ${r.ratio.toFixed(2)}:1 | ${r.floor}:1 | ${statusCell(r)} |`,
+        `| \`${r.id}\` | ${r.label} | ${colors} | ${r.size} | ${r.ratio.toFixed(2)}:1 | ${r.floor}:1 | ${statusCell(r)} | ${enhanced} |`,
       )
     }
     out.push("")
@@ -194,6 +218,10 @@ export function renderContrastReport(now = new Date()): string {
       "(see the safety-margin bullet above) — still a pass, just less headroom.",
   )
   out.push("- ❌ FAIL — below the WCAG floor.")
+  out.push(
+    "- AAA — the pair also clears the stricter 1.4.6 Enhanced floor. Informational: " +
+      "the palette targets AA, so a blank cell here is not a finding.",
+  )
   out.push(
     "- — exempt — outside WCAG scope (logotypes, disabled/inactive controls, " +
       "structural dividers that are not the sole means of identifying a component).",

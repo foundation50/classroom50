@@ -5,13 +5,16 @@ import { evaluateAll, type Evaluated } from "./contrastModel"
 // The WCAG 2.2 contrast regression guard. Runs in `npm run check`.
 //
 // Enforcement strictness (a deliberate decision): the guard HARD-FAILS at the
-// WCAG spec floor — 7:1 body text and 4.5:1 large text (1.4.6 AAA), 3:1
-// non-text (1.4.11) — so any future palette edit that drops a real pair below
-// the standard breaks CI. The extra design-safety margin (7.5 / 5 / 3.5) is
-// REPORTED but NON-BLOCKING, so a spec-compliant brand tweak that dips into the
-// margin band doesn't fail the build. Exempt pairs (logotypes, disabled/inactive
-// controls, structural dividers outside 1.4.11's "required to identify" scope)
-// are skipped.
+// WCAG spec floor — 4.5:1 body text and 3:1 large text (1.4.3 AA), 3:1 non-text
+// (1.4.11) — so any future palette edit that drops a real pair below the standard
+// breaks CI. AA is the enforced target because the palette is GitHub Primer
+// verbatim and Primer's primitives are tuned to AA; the stricter 1.4.6 (AAA)
+// floors are still scored per pair and reported (the VPAT's 1.4.6 row derives
+// from that tally), just never enforced. The extra design-safety margin (5 / 3.5)
+// is likewise REPORTED but NON-BLOCKING, so a spec-compliant brand tweak that
+// dips into the margin band doesn't fail the build. Exempt pairs (logotypes,
+// disabled/inactive controls, structural dividers outside 1.4.11's "required to
+// identify" scope) are skipped.
 //
 // This is a hermetic computation (no browser); its color-space + alpha math is
 // pinned against known/browser-computed values in contrast.test.ts.

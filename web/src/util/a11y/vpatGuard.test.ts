@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildContrastAudit } from "./contrastReport"
-import { CONTRAST_CRITERION_IDS } from "./vpatModel"
+import { CONTRAST_CRITERION_IDS, ENHANCED_CRITERION_ID } from "./vpatModel"
 import { buildVpatReport } from "./vpatReport"
 
 // The VPAT integrity guard. Runs in `npm run check`.
@@ -35,16 +35,18 @@ describe("VPAT integrity guard", () => {
   )
 
   it("derives the contrast criteria from the live contrast audit (not hand-set)", () => {
-    const allPass = buildContrastAudit().summary.allPass
-    const expected = allPass ? "supports" : "partially"
+    const summary = buildContrastAudit().summary
     for (const id of CONTRAST_CRITERION_IDS) {
+      // 1.4.6 is the AAA tier: same audit, stricter floors, own verdict.
+      const allPass =
+        id === ENHANCED_CRITERION_ID ? summary.allPassEnhanced : summary.allPass
       const c = report.criteria.find((x) => x.id === id)
       expect(c, `contrast criterion ${id} present`).toBeDefined()
       expect(c?.evidence).toBe("contrast")
       expect(
         c?.status,
         `${id} must reflect the contrast audit (allPass=${allPass})`,
-      ).toBe(expected)
+      ).toBe(allPass ? "supports" : "partially")
     }
   })
 

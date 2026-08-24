@@ -14,6 +14,7 @@ import {
   CONFORMANCE_LABEL,
   CONTRAST_CRITERION_IDS,
   CRITERIA,
+  ENHANCED_CRITERION_ID,
   PRINCIPLE_ORDER,
   type ConformanceLevel,
   type Criterion,
@@ -56,7 +57,7 @@ function contrastStatus(
       status: "supports",
       remark:
         "Verified by the automated contrast audit: every audited text and " +
-        "UI-component pair meets its WCAG floor (text at the AAA 7:1 / 4.5:1 " +
+        "UI-component pair meets its WCAG floor (text at the AA 4.5:1 / 3:1 " +
         "level). See the live report at /accessibility. Guarded in CI.",
     }
   }
@@ -69,27 +70,70 @@ function contrastStatus(
   }
 }
 
+/**
+ * Derive 1.4.6 (Enhanced, AAA) from the same audit's AAA tally. The palette is
+ * GitHub Primer verbatim and Primer's primitives are tuned to AA, so this row is
+ * expected to be Partially Supports — but it stays DERIVED rather than hand-set,
+ * so the claim always matches the measured palette.
+ */
+function enhancedStatus(
+  allPassEnhanced: boolean,
+  enhancedMisses: number,
+): {
+  status: ConformanceLevel
+  remark: string
+} {
+  if (allPassEnhanced) {
+    return {
+      status: "supports",
+      remark:
+        "Verified by the automated contrast audit: every audited pair also " +
+        "clears the Enhanced 7:1 / 4.5:1 floors. See /accessibility.",
+    }
+  }
+  const pairs = enhancedMisses === 1 ? "pair" : "pairs"
+  return {
+    status: "partially",
+    remark:
+      "The palette follows GitHub's Primer primitives, which target Level AA; " +
+      `${enhancedMisses} audited ${pairs} therefore meet 1.4.3 (AA) but not the ` +
+      "Enhanced 7:1 / 4.5:1 floors. The per-pair AAA column at /accessibility " +
+      "shows which. AA is the product's stated conformance target.",
+  }
+}
+
 /** The canonical structured VPAT. Deterministic for a given model + date. */
 export function buildVpatReport(
   now = new Date(),
-  contrast: { allPass: boolean; failures: number } = (() => {
+  contrast: {
+    allPass: boolean
+    failures: number
+    allPassEnhanced: boolean
+    enhancedMisses: number
+  } = (() => {
     const s = buildContrastAudit(now).summary
-    return { allPass: s.allPass, failures: s.failures }
+    return {
+      allPass: s.allPass,
+      failures: s.failures,
+      allPassEnhanced: s.allPassEnhanced,
+      enhancedMisses: s.enhancedMisses,
+    }
   })(),
 ): VpatReportJson {
   const derived = contrastStatus(contrast.allPass, contrast.failures)
+  // 1.4.6 is the AAA tier: same audit, stricter floors, so it gets its own
+  // derivation rather than inheriting the AA verdict.
+  const derivedEnhanced = enhancedStatus(
+    contrast.allPassEnhanced,
+    contrast.enhancedMisses,
+  )
   const contrastIds = new Set<string>(CONTRAST_CRITERION_IDS)
 
-  const criteria: Criterion[] = CRITERIA.map((c) =>
-    contrastIds.has(c.id)
-      ? {
-          ...c,
-          status: derived.status,
-          evidence: "contrast",
-          remark: derived.remark,
-        }
-      : { ...c },
-  )
+  const criteria: Criterion[] = CRITERIA.map((c) => {
+    if (!contrastIds.has(c.id)) return { ...c }
+    const d = c.id === ENHANCED_CRITERION_ID ? derivedEnhanced : derived
+    return { ...c, status: d.status, evidence: "contrast", remark: d.remark }
+  })
 
   const byStatus = criteria.reduce(
     (acc, c) => {

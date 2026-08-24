@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { CONTRAST_CRITERION_IDS } from "./vpatModel"
+import { CONTRAST_CRITERION_IDS, ENHANCED_CRITERION_ID } from "./vpatModel"
 import {
   buildVpatReport,
   renderCombinedReport,
@@ -35,7 +35,12 @@ describe("buildVpatReport (JSON source of truth)", () => {
   })
 
   it("derives the contrast criteria from the audit — passing → Supports", () => {
-    const passing = buildVpatReport(FIXED, { allPass: true, failures: 0 })
+    const passing = buildVpatReport(FIXED, {
+      allPass: true,
+      failures: 0,
+      allPassEnhanced: true,
+      enhancedMisses: 0,
+    })
     for (const id of CONTRAST_CRITERION_IDS) {
       const c = passing.criteria.find((x) => x.id === id)
       expect(c?.status, `${id} on passing audit`).toBe("supports")
@@ -43,18 +48,47 @@ describe("buildVpatReport (JSON source of truth)", () => {
     }
   })
 
+  it("derives 1.4.6 from the AAA tally, independently of the AA verdict", () => {
+    // The shipped case: AA clean, AAA short — the AA rows Support while the
+    // Enhanced row Partially Supports and names the AAA-miss count.
+    const aaOnly = buildVpatReport(FIXED, {
+      allPass: true,
+      failures: 0,
+      allPassEnhanced: false,
+      enhancedMisses: 3,
+    })
+    const enhanced = aaOnly.criteria.find((x) => x.id === ENHANCED_CRITERION_ID)
+    expect(enhanced?.status).toBe("partially")
+    expect(enhanced?.remark).toContain("3 audited pairs")
+    for (const id of CONTRAST_CRITERION_IDS) {
+      if (id === ENHANCED_CRITERION_ID) continue
+      expect(aaOnly.criteria.find((x) => x.id === id)?.status).toBe("supports")
+    }
+  })
+
   it("flips the contrast criteria when the audit fails (proves KTD4 wiring)", () => {
-    const failing = buildVpatReport(FIXED, { allPass: false, failures: 2 })
+    const failing = buildVpatReport(FIXED, {
+      allPass: false,
+      failures: 2,
+      allPassEnhanced: false,
+      enhancedMisses: 2,
+    })
     for (const id of CONTRAST_CRITERION_IDS) {
       const c = failing.criteria.find((x) => x.id === id)
       expect(c?.status, `${id} on failing audit`).toBe("partially")
+      if (id === ENHANCED_CRITERION_ID) continue
       expect(c?.remark, `${id} names the failing count`).toContain("2 pairs")
     }
     // A non-contrast criterion is unaffected by the audit result: its status is
     // identical whether the contrast audit passes or fails (only the contrast
     // rows are audit-derived). Asserted as an invariant so it survives the
     // manual assessment filling in non-contrast verdicts over time.
-    const passing = buildVpatReport(FIXED, { allPass: true, failures: 0 })
+    const passing = buildVpatReport(FIXED, {
+      allPass: true,
+      failures: 0,
+      allPassEnhanced: true,
+      enhancedMisses: 0,
+    })
     const nonContrastId = "2.4.6" // not a contrast criterion; audit-independent
     expect(CONTRAST_CRITERION_IDS).not.toContain(nonContrastId)
     const failingStatus = failing.criteria.find(

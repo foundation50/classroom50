@@ -303,6 +303,17 @@ export function ContrastSection() {
               </div>
               <div>
                 <p className="font-medium text-base-content">
+                  {t("accessibility.criteria.enhancedHeading")}
+                </p>
+                <p className="mt-1">
+                  {t("accessibility.criteria.enhancedWhy", {
+                    body: audit.enhancedThresholds.body,
+                    large: audit.enhancedThresholds.large,
+                  })}
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-base-content">
                   {t("accessibility.legend.heading")}
                 </p>
                 <div className="mt-1 flex flex-col gap-1">
