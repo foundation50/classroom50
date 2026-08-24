@@ -53,6 +53,8 @@ import {
   CardGridSkeleton,
   EmptyState,
   NoSearchResults,
+  SkeletonRegion,
+  ToolbarSkeleton,
   ViewToggle,
 } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
@@ -593,11 +595,19 @@ const OrgsPage = () => {
     <>
       <PageShell>
         {isLoading ? (
-          <CardGridSkeleton
-            cards={4}
-            cardClassName="col-span-12 h-36 md:col-span-6"
-            label={t("orgs.loadingTitle")}
-          />
+          <>
+            <PageHeader title={t("orgs.headingCl50")} />
+            <SkeletonRegion
+              label={t("orgs.loadingTitle")}
+              className="space-y-4"
+            >
+              <ToolbarSkeleton controls={3} />
+              <CardGridSkeleton
+                cards={4}
+                cardClassName="col-span-12 h-36 md:col-span-6"
+              />
+            </SkeletonRegion>
+          </>
         ) : (
           <>
             <PageHeader title={t("orgs.headingCl50")} />

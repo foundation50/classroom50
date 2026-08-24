@@ -12,6 +12,8 @@ import {
   CardGridSkeleton,
   EmptyState,
   NoSearchResults,
+  SkeletonRegion,
+  ToolbarSkeleton,
   ViewToggle,
 } from "@/components/list"
 import {
@@ -141,7 +143,12 @@ function StudentClassroomRow({
 }
 
 function ClassroomsSkeleton() {
-  return <CardGridSkeleton />
+  return (
+    <SkeletonRegion className="space-y-4">
+      <ToolbarSkeleton />
+      <CardGridSkeleton />
+    </SkeletonRegion>
+  )
 }
 
 // The student "My Classrooms" list: a search + sort + grid/list toolbar over the
