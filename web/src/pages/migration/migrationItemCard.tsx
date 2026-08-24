@@ -387,13 +387,19 @@ export const MigrationItemCard = ({
               inputSize="sm"
               className="max-w-xs font-mono"
               invalid={Boolean(slugError)}
+              aria-describedby={
+                slugError ? `import-slug-${assignment.slug}-error` : undefined
+              }
               value={slugEditValue ?? assignment.slug}
               onChange={(e) => onSlugEdit(e.target.value)}
-              aria-label={t("migration.item.importAsLabel")}
             />
           </label>
           {slugError && (
-            <p className="mt-1 text-sm text-error" role="alert">
+            <p
+              id={`import-slug-${assignment.slug}-error`}
+              className="mt-1 text-sm text-error"
+              role="alert"
+            >
               {slugError}
             </p>
           )}

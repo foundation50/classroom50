@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui"
-import { ToggleRow } from "../AdvancedRuntimeFields"
+import { ToggleField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import { SectionCard } from "./SectionCard"
 
@@ -38,7 +38,7 @@ export function ScheduleSection({
         <form.Field name="available_from_date">
           {(field) => (
             <div>
-              <ToggleRow
+              <ToggleField
                 id={`${field.name}-enabled`}
                 checked={availableFromEnabled}
                 onChange={(checked) => {
@@ -79,7 +79,7 @@ export function ScheduleSection({
         <form.Field name="due_date">
           {(field) => (
             <div>
-              <ToggleRow
+              <ToggleField
                 id={`${field.name}-enabled`}
                 checked={dueDateEnabled}
                 onChange={(checked) => {

@@ -170,34 +170,29 @@ function ManualMaxPointsField({ form }: { form: AssignmentForm }) {
       {(field) => {
         const error = field.state.meta.errors[0] as string | undefined
         return (
-          <div>
-            <FormField
-              htmlFor={field.name}
-              label={t("assignments.form.grading.maxPoints.label")}
-              help={t("assignments.form.grading.maxPoints.help")}
-            >
-              {({ id, describedById }) => (
-                <Input
-                  id={id}
-                  name={field.name}
-                  type="number"
-                  inputMode="numeric"
-                  min={GRADING_MAX_POINTS_MIN}
-                  step={1}
-                  className="w-28"
-                  aria-describedby={describedById}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(Number(e.target.value))}
-                />
-              )}
-            </FormField>
-            {error ? (
-              <p role="alert" className="mt-1.5 text-sm text-error">
-                {error}
-              </p>
-            ) : null}
-          </div>
+          <FormField
+            htmlFor={field.name}
+            label={t("assignments.form.grading.maxPoints.label")}
+            help={t("assignments.form.grading.maxPoints.help")}
+            error={error}
+          >
+            {({ id, describedById, invalid }) => (
+              <Input
+                id={id}
+                name={field.name}
+                type="number"
+                inputMode="numeric"
+                min={GRADING_MAX_POINTS_MIN}
+                step={1}
+                className="w-28"
+                aria-describedby={describedById}
+                invalid={invalid}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(Number(e.target.value))}
+              />
+            )}
+          </FormField>
         )
       }}
     </form.Field>

@@ -1,6 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlertIcon } from "@/components/ui/icons"
-import { Input, Textarea } from "@/components/ui"
+import { FormField, Input, Textarea } from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets } from "@/util/releaseAssets"
 import { RUNTIME_LANGUAGES } from "@/util/runtime"
@@ -10,7 +9,6 @@ import {
   TEST_TIMEOUT_MAX_SECONDS,
 } from "@/util/assignmentTests"
 import {
-  FieldLabel,
   HelpTooltip,
   RunnerField,
   LanguageVersionField,
@@ -101,10 +99,16 @@ export const AdvancedSection = ({
           return (
             <>
               <div className="mt-4">
-                <FieldLabel
-                  label={t("assignments.form.runtime.languagesHeading")}
-                  help={t("assignments.form.runtime.languagesTip")}
-                />
+                <div className="mb-1.5 flex items-center gap-1.5">
+                  {/* Group heading, not a form label — it has no single
+                      control to point at. */}
+                  <span className="label font-bold">
+                    {t("assignments.form.runtime.languagesHeading")}
+                  </span>
+                  <HelpTooltip
+                    help={t("assignments.form.runtime.languagesTip")}
+                  />
+                </div>
                 {selfHosted && (
                   <p className="mb-3 text-sm text-warning">
                     {t("assignments.form.runtime.selfHostedDisabled")}
@@ -153,81 +157,71 @@ export const AdvancedSection = ({
                     )
                     return (
                       <>
-                        <div>
-                          <FieldLabel
-                            htmlFor={commandField.name}
-                            label={t("assignments.form.setupCommand")}
-                            help={t("assignments.form.setupCommandTip")}
-                          />
-                          <Input
-                            id={commandField.name}
-                            name={commandField.name}
-                            placeholder={t(
-                              "assignments.form.setupCommandPlaceholder",
-                            )}
-                            value={commandField.state.value}
-                            onBlur={normalizeOnBlur(commandField)}
-                            onChange={(e) =>
-                              commandField.handleChange(e.target.value)
-                            }
-                          />
-                        </div>
+                        <FormField
+                          htmlFor={commandField.name}
+                          label={t("assignments.form.setupCommand")}
+                          help={t("assignments.form.setupCommandTip")}
+                        >
+                          {({ id, describedById, invalid }) => (
+                            <Input
+                              id={id}
+                              name={commandField.name}
+                              placeholder={t(
+                                "assignments.form.setupCommandPlaceholder",
+                              )}
+                              aria-describedby={describedById}
+                              invalid={invalid}
+                              value={commandField.state.value}
+                              onBlur={normalizeOnBlur(commandField)}
+                              onChange={(e) =>
+                                commandField.handleChange(e.target.value)
+                              }
+                            />
+                          )}
+                        </FormField>
 
                         <form.Field name="setup_timeout">
                           {(field) => {
                             const error = field.state.meta.errors[0] as
                               string | undefined
                             return (
-                              <div>
-                                <FieldLabel
-                                  htmlFor={field.name}
-                                  label={t("assignments.form.setupTimeout")}
-                                  help={t("assignments.form.setupTimeoutTip", {
-                                    default: DEFAULT_SETUP_TIMEOUT_SECONDS,
-                                    max: TEST_TIMEOUT_MAX_SECONDS,
-                                  })}
-                                  // Opens left: this field sits in the narrow
-                                  // right column, so a bottom bubble would spill
-                                  // past the form's right edge and shift the page.
-                                  helpPosition="left"
-                                />
-                                <Input
-                                  id={field.name}
-                                  name={field.name}
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={0}
-                                  max={TEST_TIMEOUT_MAX_SECONDS}
-                                  step={1}
-                                  value={field.state.value}
-                                  disabled={!hasSetupCommand}
-                                  onBlur={field.handleBlur}
-                                  onChange={(e) =>
-                                    field.handleChange(
-                                      e.target.value === ""
-                                        ? 0
-                                        : e.target.valueAsNumber,
-                                    )
-                                  }
-                                  invalid={!!error}
-                                  aria-describedby={
-                                    error ? `${field.name}-error` : undefined
-                                  }
-                                />
-                                {error ? (
-                                  <p
-                                    id={`${field.name}-error`}
-                                    role="alert"
-                                    className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
-                                  >
-                                    <AlertIcon
-                                      aria-hidden="true"
-                                      className="size-4 shrink-0"
-                                    />
-                                    {error}
-                                  </p>
-                                ) : null}
-                              </div>
+                              <FormField
+                                htmlFor={field.name}
+                                label={t("assignments.form.setupTimeout")}
+                                help={t("assignments.form.setupTimeoutTip", {
+                                  default: DEFAULT_SETUP_TIMEOUT_SECONDS,
+                                  max: TEST_TIMEOUT_MAX_SECONDS,
+                                })}
+                                // Opens left: this field sits in the narrow
+                                // right column, so a bottom bubble would spill
+                                // past the form's right edge and shift the page.
+                                helpPosition="left"
+                                error={error}
+                              >
+                                {({ id, describedById, invalid }) => (
+                                  <Input
+                                    id={id}
+                                    name={field.name}
+                                    type="number"
+                                    inputMode="numeric"
+                                    min={0}
+                                    max={TEST_TIMEOUT_MAX_SECONDS}
+                                    step={1}
+                                    value={field.state.value}
+                                    disabled={!hasSetupCommand}
+                                    onBlur={field.handleBlur}
+                                    onChange={(e) =>
+                                      field.handleChange(
+                                        e.target.value === ""
+                                          ? 0
+                                          : e.target.valueAsNumber,
+                                      )
+                                    }
+                                    invalid={invalid}
+                                    aria-describedby={describedById}
+                                  />
+                                )}
+                              </FormField>
                             )
                           }}
                         </form.Field>
@@ -242,50 +236,42 @@ export const AdvancedSection = ({
                   const patterns = parseAllowedFiles(field.state.value)
                   const error = field.state.meta.errors[0] as string | undefined
                   return (
-                    <div className="mt-4">
-                      <FieldLabel
-                        htmlFor={field.name}
-                        label={t("assignments.form.allowedFiles")}
-                        help={t("assignments.form.allowedFilesTip", {
-                          gitignore: ".gitignore",
-                          bang: "!",
-                          star: "*",
-                          example: "!hello.py",
-                          result: "hello.py",
-                        })}
-                      />
-                      <Textarea
-                        id={field.name}
-                        name={field.name}
-                        className="font-mono"
-                        rows={4}
-                        spellCheck={false}
-                        placeholder={"*\n!hello.py"}
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                      {error ? (
-                        <p
-                          role="alert"
-                          className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
-                        >
-                          <AlertIcon
-                            aria-hidden="true"
-                            className="size-4 shrink-0"
-                          />
-                          {error}
-                        </p>
-                      ) : (
-                        patterns.length > 0 && (
-                          <p className="mt-1.5 text-xs text-base-content/70">
-                            {t("assignments.form.patternCount", {
+                    <FormField
+                      className="mt-4"
+                      htmlFor={field.name}
+                      label={t("assignments.form.allowedFiles")}
+                      help={t("assignments.form.allowedFilesTip", {
+                        gitignore: ".gitignore",
+                        bang: "!",
+                        star: "*",
+                        example: "!hello.py",
+                        result: "hello.py",
+                      })}
+                      error={error}
+                      hint={
+                        patterns.length > 0
+                          ? t("assignments.form.patternCount", {
                               count: patterns.length,
-                            })}
-                          </p>
-                        )
+                            })
+                          : undefined
+                      }
+                    >
+                      {({ id, describedById, invalid }) => (
+                        <Textarea
+                          id={id}
+                          name={field.name}
+                          className="font-mono"
+                          rows={4}
+                          spellCheck={false}
+                          placeholder={"*\n!hello.py"}
+                          aria-describedby={describedById}
+                          invalid={invalid}
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
                       )}
-                    </div>
+                    </FormField>
                   )
                 }}
               </form.Field>
@@ -295,48 +281,40 @@ export const AdvancedSection = ({
                   const paths = parseReleaseAssets(field.state.value)
                   const error = field.state.meta.errors[0] as string | undefined
                   return (
-                    <div className="mt-4">
-                      <FieldLabel
-                        htmlFor={field.name}
-                        label={t("assignments.form.releaseAssets")}
-                        help={t("assignments.form.releaseAssetsTip")}
-                      />
-                      <Textarea
-                        id={field.name}
-                        name={field.name}
-                        className="font-mono"
-                        rows={3}
-                        spellCheck={false}
-                        placeholder={t(
-                          "assignments.form.releaseAssetsPlaceholder",
-                        )}
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(event) =>
-                          field.handleChange(event.target.value)
-                        }
-                      />
-                      {error ? (
-                        <p
-                          role="alert"
-                          className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
-                        >
-                          <AlertIcon
-                            aria-hidden="true"
-                            className="size-4 shrink-0"
-                          />
-                          {error}
-                        </p>
-                      ) : (
-                        paths.length > 0 && (
-                          <p className="mt-1.5 text-xs text-base-content/70">
-                            {t("assignments.form.releaseAssetCount", {
+                    <FormField
+                      className="mt-4"
+                      htmlFor={field.name}
+                      label={t("assignments.form.releaseAssets")}
+                      help={t("assignments.form.releaseAssetsTip")}
+                      error={error}
+                      hint={
+                        paths.length > 0
+                          ? t("assignments.form.releaseAssetCount", {
                               count: paths.length,
-                            })}
-                          </p>
-                        )
+                            })
+                          : undefined
+                      }
+                    >
+                      {({ id, describedById, invalid }) => (
+                        <Textarea
+                          id={id}
+                          name={field.name}
+                          className="font-mono"
+                          rows={3}
+                          spellCheck={false}
+                          placeholder={t(
+                            "assignments.form.releaseAssetsPlaceholder",
+                          )}
+                          aria-describedby={describedById}
+                          invalid={invalid}
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(event) =>
+                            field.handleChange(event.target.value)
+                          }
+                        />
                       )}
-                    </div>
+                    </FormField>
                   )
                 }}
               </form.Field>
@@ -369,6 +347,10 @@ export const AdvancedSection = ({
                           return (
                             <div className="mt-3">
                               <div className="flex items-center gap-2">
+                                {/* Nested progressively-disclosed control: the
+                                    toggle above provides visual context, so
+                                    the input carries a hidden accessible name
+                                    (Primer nested form controls). */}
                                 <Input
                                   id={field.name}
                                   name={field.name}
@@ -378,6 +360,13 @@ export const AdvancedSection = ({
                                   max={PASS_THRESHOLD_MAX}
                                   step={1}
                                   className="w-28"
+                                  aria-label={t(
+                                    "assignments.form.passThresholdToggle",
+                                  )}
+                                  invalid={Boolean(error)}
+                                  aria-describedby={
+                                    error ? `${field.name}-error` : undefined
+                                  }
                                   value={field.state.value}
                                   onBlur={field.handleBlur}
                                   onChange={(e) =>
@@ -390,13 +379,10 @@ export const AdvancedSection = ({
                               </div>
                               {error ? (
                                 <p
+                                  id={`${field.name}-error`}
                                   role="alert"
-                                  className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                                  className="mt-1.5 text-sm text-error"
                                 >
-                                  <AlertIcon
-                                    aria-hidden="true"
-                                    className="size-4 shrink-0"
-                                  />
                                   {error}
                                 </p>
                               ) : null}

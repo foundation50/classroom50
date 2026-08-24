@@ -9,7 +9,7 @@ import { getRepo } from "@/github-core/repoReads"
 import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
 import { REPO_PERMISSIONS, defaultStudentPermission } from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
-import { ToggleRow } from "../AdvancedRuntimeFields"
+import { ToggleField } from "@/components/ui"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import type { FormShape } from "../formShape"
@@ -137,7 +137,7 @@ export function RepositorySetupSection({
                         Only shown for a template source; default off. */}
                     <form.Field name="include_all_branches">
                       {(branchesField) => (
-                        <ToggleRow
+                        <ToggleField
                           id={branchesField.name}
                           checked={branchesField.state.value}
                           onChange={(checked) =>
@@ -153,7 +153,7 @@ export function RepositorySetupSection({
                 ) : shape.showAddReadme ? (
                   <form.Field name="add_readme">
                     {(readmeField) => (
-                      <ToggleRow
+                      <ToggleField
                         id={readmeField.name}
                         checked={readmeField.state.value}
                         onChange={(checked) =>
@@ -185,7 +185,7 @@ export function RepositorySetupSection({
                       }
                       aria-disabled={!shape.feedbackPrEnabled}
                     >
-                      <ToggleRow
+                      <ToggleField
                         id={field.name}
                         checked={
                           shape.feedbackPrEnabled ? field.state.value : false
@@ -248,7 +248,7 @@ function RepositoryAdvancedFields({
         <>
           <form.Field name="copy_about">
             {(field) => (
-              <ToggleRow
+              <ToggleField
                 id={field.name}
                 checked={field.state.value}
                 onChange={(checked) => field.handleChange(checked)}
@@ -261,7 +261,7 @@ function RepositoryAdvancedFields({
 
           <form.Field name="copy_topics">
             {(field) => (
-              <ToggleRow
+              <ToggleField
                 id={field.name}
                 checked={field.state.value}
                 onChange={(checked) => field.handleChange(checked)}
@@ -504,7 +504,7 @@ export const FeedbackPrTemplateToggle = ({
           className={feedbackPrEnabled ? "" : "pointer-events-none opacity-50"}
           aria-disabled={!feedbackPrEnabled}
         >
-          <ToggleRow
+          <ToggleField
             id={field.name}
             checked={feedbackPrEnabled ? field.state.value : false}
             onChange={(checked) => {

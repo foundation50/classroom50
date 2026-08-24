@@ -38,65 +38,27 @@ import type { AssignmentForm } from "./assignmentFormModel"
 // here so existing importers (CreateAssignmentForm) keep working.
 export { HelpTooltip }
 
-// A bold field label with an optional help affordance: a question-mark icon
-// that reveals detailed guidance on hover/focus (DaisyUI tooltip, theme-aware).
-// Keeps the label short so the form stays scannable while the "why/how" moves
-// into the tooltip. `help` is the tooltip text; `htmlFor` ties the label to its
-// control.
+// A bold field label with an optional help affordance, for COMPOSITE controls
+// (version dropdowns, verified inputs) whose custom anatomy doesn't fit
+// FormField's render-prop shape. Simple label+control+error fields use
+// FormField instead — it also owns error/hint wiring this recipe lacks.
 export const FieldLabel = ({
   htmlFor,
   label,
   help,
   helpPosition,
-  required,
 }: {
   htmlFor?: string
   label: string
   help?: string
   helpPosition?: HelpTooltipPosition
-  required?: boolean
 }) => (
   <div className="mb-1.5 flex items-center gap-1.5">
     <label htmlFor={htmlFor} className="label font-bold">
       {label}
-      {required ? <span className="text-error">*</span> : null}
     </label>
     {help ? <HelpTooltip help={help} position={helpPosition} /> : null}
   </div>
-)
-
-// A boolean toggle rendered as a DaisyUI switch with a bold label and an
-// optional `?` help affordance — the single source for the settings-toggle
-// recipe shared by the Feedback PR and "Set a due date" controls (the label
-// itself states the intent; the tooltip carries the "why/how"). `onBlur` is
-// optional because a picker-revealing toggle (due date) syncs its own state.
-export const ToggleRow = ({
-  id,
-  checked,
-  onChange,
-  onBlur,
-  label,
-  help,
-}: {
-  id: string
-  checked: boolean
-  onChange: (checked: boolean) => void
-  onBlur?: () => void
-  label: string
-  help?: string
-}) => (
-  <label htmlFor={id} className="flex cursor-pointer items-center gap-3">
-    <input
-      id={id}
-      type="checkbox"
-      className="toggle toggle-primary"
-      checked={checked}
-      onBlur={onBlur}
-      onChange={(e) => onChange(e.target.checked)}
-    />
-    <span className="label font-bold">{label}</span>
-    {help ? <HelpTooltip help={help} /> : null}
-  </label>
 )
 
 // A language toolchain version input (python/node/java/go/rust). A themed combobox:
@@ -139,6 +101,8 @@ export const LanguageVersionField = ({
                   autoComplete="off"
                   spellCheck={false}
                   disabled={disabled}
+                  invalid={Boolean(error)}
+                  aria-describedby={error ? `${field.name}-error` : undefined}
                   className="join-item w-full"
                   placeholder={t(
                     "assignments.form.runtime.versionPlaceholder",
@@ -199,10 +163,10 @@ export const LanguageVersionField = ({
             </div>
             {error ? (
               <p
+                id={`${field.name}-error`}
                 role="alert"
-                className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                className="mt-1.5 text-sm text-error"
               >
-                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 {error}
               </p>
             ) : null}
@@ -374,6 +338,8 @@ export const AptField = ({
               autoComplete="off"
               spellCheck={false}
               disabled={disabled}
+              invalid={Boolean(error)}
+              aria-describedby={error ? `${field.name}-error` : undefined}
               placeholder={t("assignments.form.runtime.aptPlaceholder")}
               value={field.state.value}
               onBlur={normalizeOnBlur(field, (value) =>
@@ -383,10 +349,10 @@ export const AptField = ({
             />
             {error ? (
               <p
+                id={`${field.name}-error`}
                 role="alert"
-                className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                className="mt-1.5 text-sm text-error"
               >
-                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 {error}
               </p>
             ) : (

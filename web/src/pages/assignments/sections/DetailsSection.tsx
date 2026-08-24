@@ -3,7 +3,6 @@ import { nextAvailableSlug, slugify } from "@/util/slug"
 import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import { Alert, FormField, Input, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
-import { FieldLabel } from "../AdvancedRuntimeFields"
 import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
@@ -65,6 +64,7 @@ export function DetailsSection({
                   <Input
                     id={id}
                     name={field.name}
+                    required
                     aria-required="true"
                     invalid={invalid}
                     aria-describedby={describedById}
@@ -270,45 +270,49 @@ export function DetailsSection({
           showGroupSize ? (
             <form.Field name="max_group_size">
               {(field) => (
-                <div className="mt-4 border-s-2 border-base-300 ps-4">
-                  <FieldLabel
-                    htmlFor={field.name}
-                    label={t("assignments.form.maxGroupSize")}
-                  />
-                  <Input
-                    id={field.name}
-                    name={field.name}
-                    type="number"
-                    className="validator w-full sm:max-w-[8rem]"
-                    placeholder="#"
-                    min={GROUP_SIZE_MIN}
-                    max={GROUP_SIZE_MAX}
-                    step="1"
-                    title={t("assignments.form.maxGroupSizeTitle", {
-                      min: GROUP_SIZE_MIN,
-                      max: GROUP_SIZE_MAX,
-                    })}
-                    value={
-                      Number.isFinite(field.state.value)
-                        ? field.state.value
-                        : ""
-                    }
-                    onBlur={() => {
-                      // Snap to a valid whole number on blur so the CLI never
-                      // sees a non-integer or out-of-range size.
-                      const raw = field.state.value
-                      const next = Number.isFinite(raw)
-                        ? Math.min(
-                            Math.max(Math.floor(raw), GROUP_SIZE_MIN),
-                            GROUP_SIZE_MAX,
-                          )
-                        : GROUP_SIZE_MIN
-                      if (next !== raw) field.handleChange(next)
-                      field.handleBlur()
-                    }}
-                    onChange={(e) => field.handleChange(e.target.valueAsNumber)}
-                  />
-                </div>
+                <FormField
+                  className="mt-4 border-s-2 border-base-300 ps-4"
+                  htmlFor={field.name}
+                  label={t("assignments.form.maxGroupSize")}
+                >
+                  {({ id }) => (
+                    <Input
+                      id={id}
+                      name={field.name}
+                      type="number"
+                      className="validator w-full sm:max-w-[8rem]"
+                      placeholder="#"
+                      min={GROUP_SIZE_MIN}
+                      max={GROUP_SIZE_MAX}
+                      step="1"
+                      title={t("assignments.form.maxGroupSizeTitle", {
+                        min: GROUP_SIZE_MIN,
+                        max: GROUP_SIZE_MAX,
+                      })}
+                      value={
+                        Number.isFinite(field.state.value)
+                          ? field.state.value
+                          : ""
+                      }
+                      onBlur={() => {
+                        // Snap to a valid whole number on blur so the CLI never
+                        // sees a non-integer or out-of-range size.
+                        const raw = field.state.value
+                        const next = Number.isFinite(raw)
+                          ? Math.min(
+                              Math.max(Math.floor(raw), GROUP_SIZE_MIN),
+                              GROUP_SIZE_MAX,
+                            )
+                          : GROUP_SIZE_MIN
+                        if (next !== raw) field.handleChange(next)
+                        field.handleBlur()
+                      }}
+                      onChange={(e) =>
+                        field.handleChange(e.target.valueAsNumber)
+                      }
+                    />
+                  )}
+                </FormField>
               )}
             </form.Field>
           ) : null

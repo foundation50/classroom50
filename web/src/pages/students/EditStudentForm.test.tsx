@@ -241,10 +241,7 @@ describe("EditStudentForm lockEmail (pending email invite)", () => {
     // programmatic reset or an autofill quirk could produce.
     fireEvent.change(email, { target: { value: "" } })
 
-    await user.type(
-      screen.getByLabelText("students.firstNamePlaceholder"),
-      "Ada",
-    )
+    await user.type(screen.getByLabelText("students.firstNameLabel"), "Ada")
     await user.click(screen.getByRole("button", { name: /saveChanges|saving/ }))
 
     await waitFor(() =>
