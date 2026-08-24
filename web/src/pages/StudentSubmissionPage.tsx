@@ -256,22 +256,24 @@ const SubmissionBody = ({
   // No repo means the student hasn't accepted yet.
   if (!studentRepo) {
     return (
-      <EnterDiv className="alert alert-info alert-soft">
-        <div>
-          <Trans
-            i18nKey="submissions.student.notAccepted"
-            components={{
-              acceptLink: (
-                <Link
-                  className="underline"
-                  to="/$org/$classroom/assignments/$assignment/accept"
-                  params={{ org, classroom, assignment }}
-                  search={secret ? { k: secret } : undefined}
-                />
-              ),
-            }}
-          />
-        </div>
+      <EnterDiv>
+        <Alert tone="info">
+          <div>
+            <Trans
+              i18nKey="submissions.student.notAccepted"
+              components={{
+                acceptLink: (
+                  <Link
+                    className="underline"
+                    to="/$org/$classroom/assignments/$assignment/accept"
+                    params={{ org, classroom, assignment }}
+                    search={secret ? { k: secret } : undefined}
+                  />
+                ),
+              }}
+            />
+          </div>
+        </Alert>
       </EnterDiv>
     )
   }
@@ -513,8 +515,10 @@ const StudentSubmissionPage = () => {
           // here, so guard this read too.
           <Alert tone="error">{t("submissions.student.loadError")}</Alert>
         ) : assignmentData?.locked ? (
-          <EnterDiv className="alert alert-warning alert-soft">
-            <div>{t("submissions.student.locked")}</div>
+          <EnterDiv>
+            <Alert tone="warning">
+              <div>{t("submissions.student.locked")}</div>
+            </Alert>
           </EnterDiv>
         ) : (
           <SubmissionBody

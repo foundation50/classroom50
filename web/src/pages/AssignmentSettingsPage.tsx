@@ -65,21 +65,23 @@ const EditAssignmentFormStudent = ({
 
   if (!assignmentRepo) {
     return (
-      <EnterDiv className="alert alert-info alert-soft mt-6">
-        <div>
-          <Trans
-            i18nKey="assignmentSettings.notAccepted"
-            components={{
-              acceptLink: (
-                <Link
-                  className="underline"
-                  to="/$org/$classroom/assignments/$assignment/accept"
-                  params={{ org, classroom, assignment }}
-                />
-              ),
-            }}
-          />
-        </div>
+      <EnterDiv className="mt-6">
+        <Alert tone="info">
+          <div>
+            <Trans
+              i18nKey="assignmentSettings.notAccepted"
+              components={{
+                acceptLink: (
+                  <Link
+                    className="underline"
+                    to="/$org/$classroom/assignments/$assignment/accept"
+                    params={{ org, classroom, assignment }}
+                  />
+                ),
+              }}
+            />
+          </div>
+        </Alert>
       </EnterDiv>
     )
   }

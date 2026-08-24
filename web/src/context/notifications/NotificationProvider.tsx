@@ -12,7 +12,12 @@ import { XIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "motion/react"
 import { toastVariants } from "@/lib/motion"
-import { Button, alertToneClass } from "@/components/ui"
+import {
+  Button,
+  ALERT_TONE_ICON,
+  alertToneClass,
+  alertToneRole,
+} from "@/components/ui"
 import { recordErrorToast } from "@/lib/activity/activityStore"
 import { logger } from "@/lib/logger"
 
@@ -33,7 +38,8 @@ export type Toast = {
   tone: ToastTone
   message: React.ReactNode
   action?: ToastAction
-  // Auto-dismiss after this many ms; 0/undefined means it stays until dismissed.
+  // Auto-dismiss after this many ms. Unset defaults per tone (errors persist,
+  // the rest auto-dismiss after DEFAULT_TOAST_MS); pass 0 to persist explicitly.
   durationMs?: number
 }
 
@@ -62,6 +68,14 @@ const NotificationContext = createContext<NotificationContextValue | null>(null)
 
 let toastSeq = 0
 const nextId = () => `toast-${++toastSeq}`
+
+// Default auto-dismiss for non-error toasts. Errors persist until dismissed
+// (auto-dismissing an error can hide it before assistive tech users act on
+// it); any caller can override either way, with 0 meaning "persist".
+export const DEFAULT_TOAST_MS = 6000
+
+// Newest toasts win; a taller stack buries the page under transient noise.
+const MAX_TOASTS = 5
 
 // App-wide toast surface. Lives above the router so a toast survives the
 // component that fired it unmounting (archiving removes the card, reuse
@@ -118,16 +132,18 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       const id = key ?? nextId()
       clearTimer(id)
 
+      const resolvedDuration =
+        durationMs ?? (tone === "error" ? 0 : DEFAULT_TOAST_MS)
       const toast: Toast = { id, tone, message, action, durationMs }
       setToasts((prev) => {
         const without = prev.filter((t) => t.id !== id)
-        return [...without, toast]
+        return [...without, toast].slice(-MAX_TOASTS)
       })
 
-      if (durationMs && durationMs > 0) {
+      if (resolvedDuration > 0) {
         timers.current.set(
           id,
-          setTimeout(() => dismiss(id), durationMs),
+          setTimeout(() => dismiss(id), resolvedDuration),
         )
       }
       return id
@@ -167,42 +183,50 @@ const ToastViewport = ({
   return (
     <div className="toast toast-end toast-bottom z-50">
       <AnimatePresence>
-        {toasts.map((toast) => (
-          <motion.div
-            key={toast.id}
-            layout
-            variants={toastVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            role="alert"
-            aria-live={toast.tone === "error" ? "assertive" : "polite"}
-            className={`${alertToneClass(toast.tone)} max-w-sm`}
-          >
-            <span className="text-sm">{toast.message}</span>
-            {toast.action && (
+        {toasts.map((toast) => {
+          const ToneIcon = ALERT_TONE_ICON[toast.tone]
+          return (
+            <motion.div
+              key={toast.id}
+              layout
+              variants={toastVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              // App-wide messaging ARIA convention: assertive role="alert"
+              // only for errors, polite role="status" otherwise. The explicit
+              // aria-live restates each role's implicit politeness for
+              // assistive tech that needs it spelled out.
+              role={alertToneRole(toast.tone)}
+              aria-live={toast.tone === "error" ? "assertive" : "polite"}
+              className={`${alertToneClass(toast.tone)} max-w-sm`}
+            >
+              <ToneIcon aria-hidden="true" className="size-4 shrink-0" />
+              <span className="text-sm">{toast.message}</span>
+              {toast.action && (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  className="font-semibold"
+                  onClick={() => {
+                    toast.action?.onClick()
+                    onDismiss(toast.id)
+                  }}
+                >
+                  {toast.action.label}
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="xs"
-                className="font-semibold"
-                onClick={() => {
-                  toast.action?.onClick()
-                  onDismiss(toast.id)
-                }}
+                aria-label={t("common.dismissNotification")}
+                onClick={() => onDismiss(toast.id)}
               >
-                {toast.action.label}
+                <XIcon aria-hidden="true" className="size-4" />
               </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="xs"
-              aria-label={t("common.dismissNotification")}
-              onClick={() => onDismiss(toast.id)}
-            >
-              <XIcon aria-hidden="true" className="size-4" />
-            </Button>
-          </motion.div>
-        ))}
+            </motion.div>
+          )
+        })}
       </AnimatePresence>
     </div>
   )

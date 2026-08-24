@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "motion/react"
-import { Button } from "@/components/ui"
+import { Alert, Button } from "@/components/ui"
 import { collapseVariants } from "@/lib/motion"
 
 // Per-row action warnings (keyed by row.key so one action's warning can't
@@ -33,12 +33,12 @@ export const RosterWarnings = ({
             exit="exit"
             className="overflow-hidden"
           >
-            <div role="alert" className="alert alert-warning alert-soft">
+            <Alert tone="warning">
               <span className="text-sm">{warning}</span>
               <Button variant="ghost" size="xs" onClick={() => onDismiss(key)}>
                 {t("students.dismiss")}
               </Button>
-            </div>
+            </Alert>
           </motion.div>
         ))}
       </AnimatePresence>

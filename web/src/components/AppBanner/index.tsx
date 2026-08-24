@@ -52,7 +52,7 @@ export const AppBanner = ({
     // dismiss button, neither of which paints outside the bar.
     // eslint-disable-next-line no-restricted-syntax
     <motion.div
-      role="alert"
+      role={tone === "error" ? "alert" : "status"}
       variants={collapseVariants}
       initial="initial"
       animate="animate"

@@ -425,7 +425,7 @@ export function ActionsBanner() {
               y: -bannerHeight,
               transition: { duration: DURATION.base, ease: EASE_OUT },
             }}
-            role="status"
+            role={anyFailed ? "alert" : "status"}
             aria-live={anyFailed ? "assertive" : "polite"}
             className={`pointer-events-auto w-full border-b shadow-sm ${tone}`}
           >

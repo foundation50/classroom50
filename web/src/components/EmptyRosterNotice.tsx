@@ -1,7 +1,7 @@
 import { InfoIcon, PersonAddIcon } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
 
-import { EmphasisLtr, RouterButton } from "@/components/ui"
+import { Alert, EmphasisLtr, RouterButton } from "@/components/ui"
 
 // Empty/unenrolled-roster notice. Owns the daisyUI alert shell + ARIA so the
 // assignments list and create pages can't drift in markup; copy adapts to
@@ -21,9 +21,10 @@ export const EmptyRosterNotice = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <div
-      role="alert"
-      className={`alert alert-info alert-soft flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
+    <Alert
+      tone="info"
+      icon={null}
+      className={`flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
       <div className="flex items-start gap-2">
         <InfoIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
@@ -51,7 +52,7 @@ export const EmptyRosterNotice = ({
           ? t("components.notices.emptyRoster.manageRoster")
           : t("components.notices.emptyRoster.addStudents")}
       </RouterButton>
-    </div>
+    </Alert>
   )
 }
 

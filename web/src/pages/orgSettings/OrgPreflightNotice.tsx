@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertIcon, XCircleIcon } from "@/components/ui/icons"
+import { ALERT_TONE_ICON, alertToneClass } from "@/components/ui"
 
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import useGetOrgAudit from "@/hooks/useGetOrgAudit"
@@ -41,8 +41,8 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
   if (failing.length > 0) {
     const categories = failing.join(", ")
     return (
-      <CalloutDiv role="alert" className="alert alert-error alert-soft mb-6">
-        <XCircleIcon aria-hidden="true" className="size-4" />
+      <CalloutDiv role="alert" className={`${alertToneClass("error")} mb-6`}>
+        <ALERT_TONE_ICON.error aria-hidden="true" className="size-4" />
         <div className="text-sm">
           <p className="font-semibold">{t("orgSettings.preflight.title")}</p>
           <p className="mt-0.5 text-base-content/70">
@@ -74,8 +74,8 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
   )
   if (budgetUnverified) {
     return (
-      <CalloutDiv role="status" className="alert alert-warning alert-soft mb-6">
-        <AlertIcon aria-hidden="true" className="size-4" />
+      <CalloutDiv role="status" className={`${alertToneClass("warning")} mb-6`}>
+        <ALERT_TONE_ICON.warning aria-hidden="true" className="size-4" />
         <div className="text-sm">
           <p className="font-semibold">
             {t("orgSettings.preflight.unverifiedTitle")}

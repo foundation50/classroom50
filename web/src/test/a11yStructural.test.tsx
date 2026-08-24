@@ -89,10 +89,10 @@ function FireToast({ tone }: { tone: ToastTone }) {
   )
 }
 
-// 4.1.3 Status Messages: the toast viewport is a live region — role="alert" with
-// aria-live tone-mapped (assertive for errors, polite otherwise), so assistive
-// tech announces a status change without moving focus. Structure only (KTD3): no
-// timing or visibility is asserted.
+// 4.1.3 Status Messages: the toast viewport is a live region — errors are
+// assertive role="alert", other tones polite role="status" — so assistive
+// tech announces a status change without moving focus. Structure only (KTD3):
+// no timing or visibility is asserted.
 describe("structural a11y — 4.1.3 status-message live region", () => {
   it("an error toast is an assertive alert", async () => {
     render(
@@ -106,7 +106,7 @@ describe("structural a11y — 4.1.3 status-message live region", () => {
   })
 
   it.each(["info", "success", "warning"] as const)(
-    "a %s toast is a polite alert",
+    "a %s toast is a polite status message",
     async (tone) => {
       render(
         <NotificationProvider>
@@ -114,8 +114,8 @@ describe("structural a11y — 4.1.3 status-message live region", () => {
         </NotificationProvider>,
       )
       await userEvent.click(screen.getByText("fire"))
-      const alert = screen.getByRole("alert")
-      expect(alert.getAttribute("aria-live")).toBe("polite")
+      const status = screen.getByRole("status")
+      expect(status.getAttribute("aria-live")).toBe("polite")
     },
   )
 

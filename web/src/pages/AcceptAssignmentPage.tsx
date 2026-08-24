@@ -976,7 +976,6 @@ const AcceptAssignmentPage = () => {
 
             {acceptMutation.isError && (
               <Alert tone="error" className="items-start">
-                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 <div>
                   <div className="font-bold">{t("accept.errorTitle")}</div>
                   <div className="mt-1 whitespace-pre-wrap text-sm">

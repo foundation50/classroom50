@@ -17,6 +17,8 @@ vi.mock("react-i18next", async (importOriginal) => {
 // a RouterProvider just to assert which notice shows.
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  // The ui barrel pulls RouterButton, which calls createLink at module scope.
+  createLink: (component: unknown) => component,
 }))
 
 import type { OrgAuditReport } from "@/orgPolicy/audit"

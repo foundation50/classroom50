@@ -24,7 +24,6 @@ import {
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
-  AlertIcon,
   ChevronDownIcon,
   EyeClosedIcon,
   InfoIcon,
@@ -654,7 +653,6 @@ const OrgsPage = () => {
 
             {attentionCount > 0 && (
               <Alert tone="warning" role="status" className="text-sm">
-                <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
                 <span>
                   {t("serviceTokenHealth.summary", {
                     count: attentionCount,

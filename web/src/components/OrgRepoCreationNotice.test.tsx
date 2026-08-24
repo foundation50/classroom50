@@ -85,7 +85,7 @@ describe("OrgRepoCreationNotice", () => {
     )
     renderInRouter(<OrgRepoCreationNotice org="acme" />)
 
-    const alert = await screen.findByRole("alert")
+    const alert = await screen.findByRole("status")
     expect(alert.textContent).toMatch(MASTER)
     expect(alert.textContent).not.toMatch(PRIVATE)
 
@@ -103,7 +103,7 @@ describe("OrgRepoCreationNotice", () => {
     )
     renderInRouter(<OrgRepoCreationNotice org="acme" />)
 
-    const alert = await screen.findByRole("alert")
+    const alert = await screen.findByRole("status")
     expect(alert.textContent).toMatch(PRIVATE)
     expect(alert.textContent).toContain("private (not public)")
     expect(alert.textContent).toContain("enterprise")

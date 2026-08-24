@@ -40,7 +40,7 @@ export type { HeadingProps, HeadingVariant } from "./Heading"
 export { Modal } from "./Modal"
 export type { ModalProps, ModalSize } from "./Modal"
 
-export { Alert, alertToneClass } from "./Alert"
+export { Alert, ALERT_TONE_ICON, alertToneClass, alertToneRole } from "./Alert"
 export type { AlertProps, AlertTone } from "./Alert"
 
 export { InlineMessage } from "./InlineMessage"
