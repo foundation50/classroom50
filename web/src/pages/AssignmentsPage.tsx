@@ -260,6 +260,8 @@ export const TeacherAssignmentsView = ({
         <AssignmentsTable
           org={org}
           classroom={classroom}
+          secret={classroomData?.secret}
+          secretPending={classroomLoading}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
           studentCount={studentCount}
