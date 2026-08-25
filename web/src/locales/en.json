@@ -1487,6 +1487,7 @@
       "copyLinkAria": "Copy the accept link for {{name}}",
       "copyLinkPending": "Checking whether this classroom needs an access key…",
       "linkCopied": "Accept link copied",
+      "cloneAria": "Clone all submissions for {{name}}",
       "openSubmissionsAria": "Open {{name}} submissions",
       "deleteAria": "Delete {{name}}",
       "deleteTitle": "Delete assignment?",
@@ -1512,6 +1513,20 @@
       "lockCancel": "Cancel",
       "lockSuccess": "Locked {{name}}.",
       "unlockSuccess": "Unlocked {{name}}."
+    },
+    "manageModal": {
+      "open": "Manage assignment",
+      "openAria": "Manage {{name}}",
+      "editDescription": "Edit the assignment's settings and autograder",
+      "viewDescription": "View the assignment's settings and autograder",
+      "acceptLinkDescription": "Copy the invitation link students use to accept",
+      "cloneDescription": "Clone every student repository with the CLI",
+      "templateAccessDescription": "Review which teams can read the template repository",
+      "reuseDescription": "Duplicate this assignment into another classroom",
+      "lockDescription": "Close the assignment to every student",
+      "unlockDescription": "Reopen the assignment to students",
+      "delete": "Delete assignment",
+      "deleteDescription": "Remove the assignment; student repositories are kept"
     },
     "toolbar": {
       "searchPlaceholder": "Search assignments…",
