@@ -6,6 +6,7 @@ import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import type { AssignmentForm } from "./assignmentFormModel"
 
 import {
+  FormField,
   Badge,
   Button,
   Collapse,
@@ -43,13 +44,6 @@ const TYPE_OPTIONS = [
 ] as const
 
 type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
-
-const FieldError = ({ error, id }: { error?: string; id?: string }) =>
-  error ? (
-    <p id={id} className="text-error text-sm mt-1" role="alert">
-      {error}
-    </p>
-  ) : null
 
 // Editor works on a local copy; nothing reaches the form's `tests` until commit.
 // `mode` routes commit (append vs overwrite at `index`); `baseline` is the
@@ -128,22 +122,22 @@ const AutogradingTestModal = ({
       </div>
 
       <div className="space-y-5">
-        <div>
-          <label htmlFor={field("name")} className="label font-bold">
-            {t("assignments.autograder.testName")}
-          </label>
-          <Input
-            id={field("name")}
-            value={draft.name}
-            onChange={(e) => set("name", e.target.value)}
-            placeholder={t("assignments.autograder.testNamePlaceholder")}
-            invalid={!!errors.name}
-            aria-describedby={
-              errors.name ? `${field("name")}-error` : undefined
-            }
-          />
-          <FieldError error={errors.name} id={`${field("name")}-error`} />
-        </div>
+        <FormField
+          htmlFor={field("name")}
+          label={t("assignments.autograder.testName")}
+          error={errors.name}
+        >
+          {({ id, describedById, invalid }) => (
+            <Input
+              id={id}
+              value={draft.name}
+              onChange={(e) => set("name", e.target.value)}
+              placeholder={t("assignments.autograder.testNamePlaceholder")}
+              invalid={invalid}
+              aria-describedby={describedById}
+            />
+          )}
+        </FormField>
 
         <fieldset>
           <legend className="label font-bold">
@@ -172,133 +166,136 @@ const AutogradingTestModal = ({
           </p>
         </fieldset>
 
-        <div>
-          <label htmlFor={field("setup")} className="label font-bold">
-            {t("assignments.autograder.setupCommand")}
-          </label>
-          <Input
-            id={field("setup")}
-            className="font-mono"
-            value={draft.setup}
-            onChange={(e) => set("setup", e.target.value)}
-            placeholder={t("assignments.autograder.setupCommandPlaceholder")}
-          />
-        </div>
+        <FormField
+          htmlFor={field("setup")}
+          label={t("assignments.autograder.setupCommand")}
+        >
+          {({ id }) => (
+            <Input
+              id={id}
+              className="font-mono"
+              value={draft.setup}
+              onChange={(e) => set("setup", e.target.value)}
+              placeholder={t("assignments.autograder.setupCommandPlaceholder")}
+            />
+          )}
+        </FormField>
 
-        <div>
-          <label htmlFor={field("run")} className="label font-bold">
-            {t("assignments.autograder.runCommand")}
-          </label>
-          <Input
-            id={field("run")}
-            className="font-mono"
-            value={draft.run}
-            onChange={(e) => set("run", e.target.value)}
-            placeholder={t("assignments.autograder.runCommandPlaceholder")}
-            invalid={!!errors.run}
-            aria-describedby={errors.run ? `${field("run")}-error` : undefined}
-          />
-          <FieldError error={errors.run} id={`${field("run")}-error`} />
-        </div>
+        <FormField
+          htmlFor={field("run")}
+          label={t("assignments.autograder.runCommand")}
+          error={errors.run}
+        >
+          {({ id, describedById, invalid }) => (
+            <Input
+              id={id}
+              className="font-mono"
+              value={draft.run}
+              onChange={(e) => set("run", e.target.value)}
+              placeholder={t("assignments.autograder.runCommandPlaceholder")}
+              invalid={invalid}
+              aria-describedby={describedById}
+            />
+          )}
+        </FormField>
 
         {draft.type === "io" && (
           <>
-            <div>
-              <label htmlFor={field("input")} className="label font-bold">
-                {t("assignments.autograder.input")}
-              </label>
-              <Textarea
-                id={field("input")}
-                className="font-mono"
-                value={draft.input}
-                onChange={(e) => set("input", e.target.value)}
-                placeholder={t("assignments.autograder.inputPlaceholder")}
-                rows={3}
-              />
-            </div>
+            <FormField
+              htmlFor={field("input")}
+              label={t("assignments.autograder.input")}
+            >
+              {({ id }) => (
+                <Textarea
+                  id={id}
+                  className="font-mono"
+                  value={draft.input}
+                  onChange={(e) => set("input", e.target.value)}
+                  placeholder={t("assignments.autograder.inputPlaceholder")}
+                  rows={3}
+                />
+              )}
+            </FormField>
 
-            <div>
-              <label htmlFor={field("expected")} className="label font-bold">
-                {t("assignments.autograder.expectedOutput")}
-              </label>
-              <Textarea
-                id={field("expected")}
-                className="font-mono"
-                value={draft.expected}
-                onChange={(e) => set("expected", e.target.value)}
-                placeholder={t(
-                  "assignments.autograder.expectedOutputPlaceholder",
-                )}
-                rows={5}
-                invalid={!!errors.expected}
-                aria-describedby={
-                  errors.expected ? `${field("expected")}-error` : undefined
-                }
-              />
-              <FieldError
-                error={errors.expected}
-                id={`${field("expected")}-error`}
-              />
-            </div>
+            <FormField
+              htmlFor={field("expected")}
+              label={t("assignments.autograder.expectedOutput")}
+              error={errors.expected}
+            >
+              {({ id, describedById, invalid }) => (
+                <Textarea
+                  id={id}
+                  className="font-mono"
+                  value={draft.expected}
+                  onChange={(e) => set("expected", e.target.value)}
+                  placeholder={t(
+                    "assignments.autograder.expectedOutputPlaceholder",
+                  )}
+                  rows={5}
+                  invalid={invalid}
+                  aria-describedby={describedById}
+                />
+              )}
+            </FormField>
 
-            <div>
-              <label htmlFor={field("comparison")} className="label font-bold">
-                {t("assignments.autograder.comparison")}
-              </label>
-              <Select
-                id={field("comparison")}
-                value={draft.comparison}
-                onChange={(e) =>
-                  set("comparison", e.target.value as AssignmentTestComparison)
-                }
-              >
-                <option value="included">
-                  {t("assignments.autograder.comparisonIncluded")}
-                </option>
-                <option value="exact">
-                  {t("assignments.autograder.comparisonExact")}
-                </option>
-                <option value="regex">
-                  {t("assignments.autograder.comparisonRegex")}
-                </option>
-              </Select>
-            </div>
+            <FormField
+              htmlFor={field("comparison")}
+              label={t("assignments.autograder.comparison")}
+            >
+              {({ id }) => (
+                <Select
+                  id={id}
+                  value={draft.comparison}
+                  onChange={(e) =>
+                    set(
+                      "comparison",
+                      e.target.value as AssignmentTestComparison,
+                    )
+                  }
+                >
+                  <option value="included">
+                    {t("assignments.autograder.comparisonIncluded")}
+                  </option>
+                  <option value="exact">
+                    {t("assignments.autograder.comparisonExact")}
+                  </option>
+                  <option value="regex">
+                    {t("assignments.autograder.comparisonRegex")}
+                  </option>
+                </Select>
+              )}
+            </FormField>
           </>
         )}
 
         {draft.type === "run" && (
-          <div className="flex flex-col">
-            <label htmlFor={field("exitCode")} className="label font-bold">
-              {t("assignments.autograder.exitCode")}
-            </label>
-            <Input
-              id={field("exitCode")}
-              className="w-32"
-              type="number"
-              min={0}
-              max={255}
-              step={1}
-              value={draft.exitCode}
-              onChange={(e) =>
-                set(
-                  "exitCode",
-                  e.target.value === "" ? "" : e.target.valueAsNumber,
-                )
-              }
-              placeholder="0"
-              invalid={!!errors.exitCode}
-              aria-describedby={
-                errors.exitCode ? `${field("exitCode")}-error` : undefined
-              }
-            />
-            <p className="text-sm pt-1 text-base-content/70">
-              {t("assignments.autograder.exitCodeHint")}
-            </p>
-            <FieldError
-              error={errors.exitCode}
-              id={`${field("exitCode")}-error`}
-            />
-          </div>
+          <FormField
+            htmlFor={field("exitCode")}
+            label={t("assignments.autograder.exitCode")}
+            error={errors.exitCode}
+            hint={t("assignments.autograder.exitCodeHint")}
+          >
+            {({ id, describedById, invalid }) => (
+              <Input
+                id={id}
+                className="w-32"
+                type="number"
+                min={0}
+                max={255}
+                step={1}
+                value={draft.exitCode}
+                onChange={(e) =>
+                  set(
+                    "exitCode",
+                    e.target.value === "" ? "" : e.target.valueAsNumber,
+                  )
+                }
+                placeholder="0"
+                invalid={invalid}
+                aria-describedby={describedById}
+              />
+            )}
+          </FormField>
         )}
 
         {draft.type === "python" && (
@@ -311,63 +308,58 @@ const AutogradingTestModal = ({
         )}
 
         <div className="flex gap-8">
-          <div className="flex flex-col">
-            <label htmlFor={field("timeout")} className="label font-bold">
-              {t("assignments.autograder.timeout")}
-            </label>
-            <Input
-              id={field("timeout")}
-              className="w-32"
-              type="number"
-              min={0}
-              max={TEST_TIMEOUT_MAX_SECONDS}
-              step={1}
-              value={draft.timeout}
-              onChange={(e) =>
-                set(
-                  "timeout",
-                  e.target.value === "" ? 0 : e.target.valueAsNumber,
-                )
-              }
-              invalid={!!errors.timeout}
-              aria-describedby={
-                errors.timeout ? `${field("timeout")}-error` : undefined
-              }
-            />
-            <p className="text-sm pt-1 text-base-content/70">
-              {t("assignments.autograder.timeoutHint")}
-            </p>
-            <FieldError
-              error={errors.timeout}
-              id={`${field("timeout")}-error`}
-            />
-          </div>
+          <FormField
+            htmlFor={field("timeout")}
+            label={t("assignments.autograder.timeout")}
+            error={errors.timeout}
+            hint={t("assignments.autograder.timeoutHint")}
+          >
+            {({ id, describedById, invalid }) => (
+              <Input
+                id={id}
+                className="w-32"
+                type="number"
+                min={0}
+                max={TEST_TIMEOUT_MAX_SECONDS}
+                step={1}
+                value={draft.timeout}
+                onChange={(e) =>
+                  set(
+                    "timeout",
+                    e.target.value === "" ? 0 : e.target.valueAsNumber,
+                  )
+                }
+                invalid={invalid}
+                aria-describedby={describedById}
+              />
+            )}
+          </FormField>
 
-          <div className="flex flex-col">
-            <label htmlFor={field("points")} className="label font-bold">
-              {t("assignments.autograder.points")}
-            </label>
-            <Input
-              id={field("points")}
-              className="w-32"
-              type="number"
-              min={0}
-              max={1000}
-              step={1}
-              value={draft.points}
-              onChange={(e) =>
-                set(
-                  "points",
-                  e.target.value === "" ? 0 : e.target.valueAsNumber,
-                )
-              }
-              invalid={!!errors.points}
-              aria-describedby={
-                errors.points ? `${field("points")}-error` : undefined
-              }
-            />
-            <FieldError error={errors.points} id={`${field("points")}-error`} />
-          </div>
+          <FormField
+            htmlFor={field("points")}
+            label={t("assignments.autograder.points")}
+            error={errors.points}
+          >
+            {({ id, describedById, invalid }) => (
+              <Input
+                id={id}
+                className="w-32"
+                type="number"
+                min={0}
+                max={1000}
+                step={1}
+                value={draft.points}
+                onChange={(e) =>
+                  set(
+                    "points",
+                    e.target.value === "" ? 0 : e.target.valueAsNumber,
+                  )
+                }
+                invalid={invalid}
+                aria-describedby={describedById}
+              />
+            )}
+          </FormField>
         </div>
       </div>
 

@@ -155,6 +155,29 @@ export function SkeletonRegion({
   )
 }
 
+// Placeholder for a settings/detail form while its data loads: label + input
+// bar pairs and an action button, so the loaded form doesn't jump into a
+// layout a centered spinner never hinted at.
+export function FormSkeleton({
+  fields = 4,
+  label,
+}: {
+  fields?: number
+  label?: string
+}) {
+  return (
+    <SkeletonRegion label={label} className="max-w-xl space-y-5">
+      {Array.from({ length: fields }, (_, i) => (
+        <div key={i} className="space-y-1.5">
+          <div className="skeleton skeleton-shimmer h-4 w-28" />
+          <div className="skeleton skeleton-shimmer h-10 w-full rounded-field" />
+        </div>
+      ))}
+      <div className="skeleton skeleton-shimmer h-10 w-28 rounded-field" />
+    </SkeletonRegion>
+  )
+}
+
 // Decorative toolbar placeholder mirroring the list-page Toolbar recipe: a
 // search-box bar on the start side, control pills (selects/toggles/buttons)
 // on the end side. Render inside a SkeletonRegion, which carries the

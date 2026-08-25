@@ -177,7 +177,7 @@ export function ConcernRow({
             className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
           >
             {t("orgSettings.audit.viewOnGitHub")}
-            <LinkExternalIcon aria-hidden="true" className="size-3" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </a>
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -223,7 +223,7 @@ export function ConcernRow({
               className="link inline-flex items-center gap-0.5"
             >
               {t("orgSettings.audit.gitHub")}
-              <LinkExternalIcon aria-hidden="true" className="size-3" />
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
             </a>
             {showFix ? t("orgSettings.audit.orUseFixIt") : ""}:
           </p>
@@ -269,7 +269,7 @@ function RecommendationRow({
           className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
         >
           {t("orgSettings.audit.viewOnGitHub")}
-          <LinkExternalIcon aria-hidden="true" className="size-3" />
+          <LinkExternalIcon aria-hidden="true" className="size-4" />
         </a>
       </div>
       <div className="flex shrink-0 items-center gap-2">
@@ -401,7 +401,7 @@ function AuditBody({
                     className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
                   >
                     {t("orgSettings.audit.viewOnGitHub")}
-                    <LinkExternalIcon aria-hidden="true" className="size-3" />
+                    <LinkExternalIcon aria-hidden="true" className="size-4" />
                   </a>
                 </div>
                 <Badge tone="warning" className="shrink-0">

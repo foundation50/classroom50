@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { FormSkeleton } from "@/components/list"
 import { Link, useParams, useRouter } from "@tanstack/react-router"
 import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
 import Breadcrumb from "@/components/breadcrumb"
@@ -6,7 +7,6 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
-import { Spinner } from "@/components/Spinner"
 import { Alert, AnimatedAlert, Button, Card, Heading } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -56,11 +56,7 @@ const EditAssignmentFormStudent = ({
   const assignmentMode = assignmentData?.mode
 
   if (loadingPublic || loadingRepo) {
-    return (
-      <div className="flex">
-        <Spinner className="m-auto" label={t("assignmentSettings.loading")} />
-      </div>
-    )
+    return <FormSkeleton fields={3} label={t("assignmentSettings.loading")} />
   }
 
   if (!assignmentRepo) {
