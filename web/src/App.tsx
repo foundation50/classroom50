@@ -8,7 +8,7 @@ import { Button } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useGitHubHealth } from "@/lib/githubHealth"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
-import { BASE_PATH, isAuthedPath } from "@/auth/authedPath"
+import { BASE_PATH, isAuthedPath, loginRedirectSearch } from "@/auth/authedPath"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("app")
@@ -22,6 +22,7 @@ export function App() {
     isValidatingStuck,
     retryUserValidation,
     signOut,
+    signedOutDeliberately,
   } = useGithubAuth()
   const { t } = useTranslation()
   const {
@@ -41,22 +42,37 @@ export function App() {
     router,
     select: (s) => s.location.pathname,
   })
+  const searchStr = useRouterState({
+    router,
+    select: (s) => s.location.searchStr,
+  })
   // Redirect eagerly rather than waiting for invalidate(): unmounts the authed
-  // subtree synchronously, closing the null-client crash window. No ?redirect=
-  // — sign-out is deliberate.
+  // subtree synchronously, closing the null-client crash window. On a cold load
+  // this fires before the _authed guard can, so it carries the ?redirect= deep
+  // link itself (#748).
   const sessionEndedOnAuthedRoute =
     status === "unauthenticated" && isAuthedPath(pathname)
 
   useEffect(() => {
     if (!sessionEndedOnAuthedRoute) return
-    log.info("session ended on authed route, redirecting to /login")
-    // Hard-redirect fallback: a rejected navigate() would leave the spinner up
-    // forever (the effect won't re-run — its only dep is unchanged).
-    router.navigate({ to: "/login" }).catch(() => {
-      log.warn("navigate to /login failed, hard-redirecting", { record: true })
-      window.location.assign(`${BASE_PATH}/login`)
+    const search = loginRedirectSearch({
+      pathname,
+      searchStr,
+      signedOutDeliberately,
     })
-  }, [sessionEndedOnAuthedRoute])
+    log.info("session ended on authed route, redirecting to /login", {
+      carriesRedirect: Boolean(search),
+    })
+    // Hard-redirect fallback: a rejected navigate() would leave the spinner up
+    // forever while the guard condition holds.
+    router.navigate({ to: "/login", search }).catch(() => {
+      log.warn("navigate to /login failed, hard-redirecting", { record: true })
+      const query = search
+        ? `?redirect=${encodeURIComponent(search.redirect)}`
+        : ""
+      window.location.assign(`${BASE_PATH}/login${query}`)
+    })
+  }, [sessionEndedOnAuthedRoute, pathname, searchStr, signedOutDeliberately])
 
   if (status === "loading" || sessionEndedOnAuthedRoute) {
     // A settled, persistent validation failure would otherwise spin forever

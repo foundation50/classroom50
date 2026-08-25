@@ -295,6 +295,9 @@ function useGithubAuthState() {
   // /login can explain why the user was signed out. A deliberate signOut()
   // clears it.
   const [sessionExpired, setSessionExpired] = useState(false)
+  // True only after a deliberate signOut(): the one case where App's /login
+  // redirect drops the ?redirect= carry (#748).
+  const [signedOutDeliberately, setSignedOutDeliberately] = useState(false)
 
   useEffect(() => {
     tokenRef.current = token
@@ -356,6 +359,7 @@ function useGithubAuthState() {
       setTokenScope(data.scope || "")
       setAuthMethod(data.authMethod)
       setSessionExpired(false)
+      setSignedOutDeliberately(false)
       setDevice(null)
       setScreen("authed")
 
@@ -901,6 +905,7 @@ function useGithubAuthState() {
       setError(null)
       setScreen("config")
       setSessionExpired(expired)
+      setSignedOutDeliberately(!expired)
       // Cancel in-flight ["github"] requests before evicting them so they don't
       // resolve into removed cache state after teardown.
       void queryClient.cancelQueries({ queryKey: ["github"] })
@@ -1049,6 +1054,7 @@ function useGithubAuthState() {
     signOut,
     expireSession,
     sessionExpired,
+    signedOutDeliberately,
     status,
     isValidatingStuck,
     retryUserValidation,
