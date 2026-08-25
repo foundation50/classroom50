@@ -16,6 +16,7 @@ import {
   buildScoresCsvRows,
   buildSectionLookup,
   classAverage,
+  classroomSnapshotIsStale,
   computeStats,
   displayItemOwner,
   displayPageOwners,
@@ -1329,6 +1330,187 @@ describe("latestAssignmentPush / snapshotIsStale", () => {
   it("is never stale when there is no push", () => {
     expect(snapshotIsStale(null, null)).toBe(false)
     expect(snapshotIsStale(null, "2026-06-20T10:00:00Z")).toBe(false)
+  })
+})
+
+describe("classroomSnapshotIsStale", () => {
+  const repo = (name: string, pushed_at?: string): GitHubRepo =>
+    ({ name, pushed_at }) as GitHubRepo
+
+  const repos = [
+    repo("cs101-hw1-alice", "2026-06-20T10:00:00Z"),
+    repo("cs101-hw2-bob", "2026-06-24T10:00:00Z"),
+  ]
+  const slugs = ["hw1", "hw2"]
+
+  it("is stale when any one assignment was pushed after ITS own collect", () => {
+    // hw1 collected after its push, hw2 collected before its push.
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {
+          hw1: "2026-06-21T10:00:00Z",
+          hw2: "2026-06-23T10:00:00Z",
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it("is not stale when every assignment was collected after its push", () => {
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {
+          hw1: "2026-06-21T10:00:00Z",
+          hw2: "2026-06-25T10:00:00Z",
+        },
+      }),
+    ).toBe(false)
+  })
+
+  it("doesn't let a freshly collected assignment mask a stale sibling", () => {
+    // The regression a classroom-wide max-vs-max comparison would produce: the
+    // newest stamp (hw1) is newer than the newest push (hw2), yet hw2's own
+    // bucket predates its push.
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {
+          hw1: "2026-06-26T10:00:00Z",
+          hw2: "2026-06-23T10:00:00Z",
+        },
+      }),
+    ).toBe(true)
+  })
+
+  it("treats a bucket with no stamp as never collected", () => {
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {
+          hw1: "2026-06-21T10:00:00Z",
+        },
+      }),
+    ).toBe(true)
+  })
+
+  // effectiveCollectedAt's rule 2: once ANY bucket is stamped the collector is
+  // stamp-aware, so a missing bucket means never collected and must not borrow
+  // the org-wide run stamp (that run may have swept a different classroom).
+  it("ignores the run fallback once any bucket carries a stamp", () => {
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: { hw1: "2026-06-26T10:00:00Z" },
+        runCollectedAt: "2026-06-26T10:00:00Z",
+      }),
+    ).toBe(true)
+  })
+
+  it("falls back to the org-wide run stamp for a wholly unstamped file", () => {
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {},
+        runCollectedAt: "2026-06-25T10:00:00Z",
+      }),
+    ).toBe(false)
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {},
+        runCollectedAt: "2026-06-22T10:00:00Z",
+      }),
+    ).toBe(true)
+  })
+
+  it("applies the sibling-slug guard, so hw1 doesn't absorb hw1-bonus", () => {
+    const withSibling = [
+      repo("cs101-hw1-alice", "2026-06-20T10:00:00Z"),
+      repo("cs101-hw1-bonus-bob", "2026-09-01T10:00:00Z"),
+    ]
+    // hw1's own repos were collected after their push; only hw1-bonus is behind.
+    expect(
+      classroomSnapshotIsStale({
+        repos: withSibling,
+        classroom: "cs101",
+        measuredSlugs: ["hw1", "hw1-bonus"],
+        collectedAt: {
+          hw1: "2026-06-21T10:00:00Z",
+          "hw1-bonus": "2026-09-02T10:00:00Z",
+        },
+      }),
+    ).toBe(false)
+  })
+
+  // An excluded slug (empty_repo) still has to shadow a slug-extending
+  // sibling, so the guard list stays complete while the measured list shrinks.
+  it("keeps the sibling guard complete when a slug is excluded", () => {
+    const withSibling = [
+      repo("cs101-hw1-alice", "2026-06-20T10:00:00Z"),
+      repo("cs101-hw1-bonus-bob", "2026-09-01T10:00:00Z"),
+    ]
+    expect(
+      classroomSnapshotIsStale({
+        repos: withSibling,
+        classroom: "cs101",
+        measuredSlugs: ["hw1"], // hw1-bonus excluded from the question...
+        collectedAt: { hw1: "2026-06-21T10:00:00Z" },
+        allSlugs: ["hw1", "hw1-bonus"], // ...but still guarding hw1's prefix
+      }),
+    ).toBe(false)
+  })
+
+  it("is not stale without a repo list or without assignments", () => {
+    expect(
+      classroomSnapshotIsStale({
+        repos: null,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {},
+      }),
+    ).toBe(false)
+    expect(
+      classroomSnapshotIsStale({
+        repos: undefined,
+        classroom: "cs101",
+        measuredSlugs: slugs,
+        collectedAt: {},
+      }),
+    ).toBe(false)
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: [],
+        collectedAt: {},
+      }),
+    ).toBe(false)
+  })
+
+  it("is not stale for an assignment nobody has accepted (no repos)", () => {
+    expect(
+      classroomSnapshotIsStale({
+        repos,
+        classroom: "cs101",
+        measuredSlugs: ["hw3"],
+        collectedAt: {},
+      }),
+    ).toBe(false)
   })
 })
 
