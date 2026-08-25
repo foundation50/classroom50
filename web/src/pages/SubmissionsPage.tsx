@@ -205,9 +205,9 @@ const SubmissionsPageContent = () => {
   const isClosedAssignment = assignmentInfo?.closed === true
   // Org repo list drives repo-existence signals (individual acceptance below,
   // group-repo enumeration, the staff-acceptance gate, and the pushed_at
-  // staleness heuristic). `refetch` is wired to Sync + collect-completion so
+  // staleness heuristic). `refetch` is wired to Collect now + collect-completion so
   // `latestPush` isn't frozen at page load (else a push after load never flips
-  // the freshness line to "out of sync").
+  // the freshness line to "Out of date").
   const {
     data: orgRepos,
     isLoading: orgReposLoading,
@@ -818,7 +818,7 @@ const SubmissionsPageContent = () => {
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
 
   // Scope the manual collect to this assignment: the workflow serializes runs
-  // per scope and the Python side collects only the matching slug, so "Sync
+  // per scope and the Python side collects only the matching slug, so "Collect
   // now" here doesn't rebuild every classroom's gradebook.
   const collectScores = useTriggerScoreCollection(
     org,
@@ -1245,7 +1245,7 @@ const SubmissionsPageContent = () => {
                   collecting || emptyRoster.show
                     ? undefined
                     : () => {
-                        // Sync = re-collect (rebuild scores.json). Re-read the org
+                        // Collect now = re-collect (rebuild scores.json). Re-read the org
                         // repo list too so the staleness line re-derives against the
                         // newest pushes (latestPush would otherwise stay frozen at
                         // page load), and re-run the live fan-out for a live-capable

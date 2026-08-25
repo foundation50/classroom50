@@ -26,7 +26,7 @@ see [Managing Actions cost](Managing-Actions-Cost).
    **View grade** link opens the Release.
 5. The **score-collection** workflow gathers the **collected scores**
    (`scores.json` in your `classroom50` repository) — on demand with
-   **Sync now** on the submissions page, or **Collect all** on the classroom's
+   **Collect now** on the submissions page, or **Collect all** on the classroom's
    assignments list to refresh every assignment in one run. That's what the
    web app's submissions
    page and both CSV exports read. See [Reading results](#reading-results).
@@ -350,7 +350,7 @@ Every graded submission produces the same three records:
 | **Collected score** | `scores.json` in the `classroom50` repository, after collection | What the submissions page and the CSV exports read: score, submission time, links, late flag, and full attempt history. |
 
 Releases and statuses appear the moment grading finishes. The collected scores
-lag until **collection** runs — on demand with **Sync now** on the
+lag until **collection** runs — on demand with **Collect now** on the
 submissions page, **Collect all** on the classroom's assignments list
 (every assignment in one run), or `gh workflow run collect-scores.yaml` from
 the shell. If a

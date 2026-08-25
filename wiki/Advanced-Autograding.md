@@ -224,7 +224,7 @@ one repository's record: `owner` (the stable key), `submissions` (full history, 
 first), and — for a group — `member_usernames` (credited members). Each bucket
 also carries a `collected_at` UTC timestamp stamped whenever a collection run
 walks that assignment (even if nothing changed), so per-assignment freshness is
-knowable — the web app's "Submission data synced" strip reads it.
+knowable — the web app's "Submission data collected" strip reads it.
 
 </details>
 

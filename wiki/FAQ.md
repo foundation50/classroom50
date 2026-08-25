@@ -237,7 +237,7 @@ GitHub's side.
 
 A few common reasons:
 
-- **Scores haven't been collected yet.** Click **Sync now** on the submissions
+- **Scores haven't been collected yet.** Click **Collect now** on the submissions
   page to pull this assignment's latest results (the sync is scoped to the
   assignment you're viewing, so it's fast even in a big classroom).
 - **GitHub Pages is still deploying.** Right after a config change, published

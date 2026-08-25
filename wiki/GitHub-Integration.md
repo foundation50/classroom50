@@ -164,7 +164,7 @@ gh api -X PUT /repos/<org>/classroom50/actions/permissions/access \
 Trigger the `collect-scores.yaml` workflow from the Actions tab, optionally
 scoped to one classroom or a single assignment (the same scoped runs the web
 app dispatches: **Collect all** on a classroom's assignments list sends the
-classroom-only scope, and the per-assignment **Sync now** sends both inputs):
+classroom-only scope, and the per-assignment **Collect now** sends both inputs):
 
 ```sh
 gh workflow run collect-scores.yaml --repo <org>/classroom50

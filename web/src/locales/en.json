@@ -2531,17 +2531,15 @@
       "unlockSuccess": "Assignment unlocked."
     },
     "freshness": {
-      "collected": "Submission data synced {{when}}",
-      "neverCollected": "Submission data not synced yet",
-      "sync": "Sync now",
-      "syncHelp": "New pushes to assignment repos since the last collection. Run Collect Scores to rebuild scores.json and grade the newest work.",
-      "refresh": "Refresh submissions",
-      "refreshing": "Collecting…",
-      "refreshHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"
+      "collected": "Submission data collected {{when}}",
+      "neverCollected": "Submission data not collected yet",
+      "stale": "Out of date",
+      "staleHelp": "New pushes to assignment repos since the last collection. Collect now to rebuild scores.json and grade the newest work.",
+      "collectHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"
     },
     "live": {
-      "incomplete_one": "{{count}} repo couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\".",
-      "incomplete_other": "{{count}} repos couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\"."
+      "incomplete_one": "{{count}} repo couldn't be read, so live submission status may be incomplete. Retry, or run \"Collect now\".",
+      "incomplete_other": "{{count}} repos couldn't be read, so live submission status may be incomplete. Retry, or run \"Collect now\"."
     },
     "menu": {
       "actions": "Actions",

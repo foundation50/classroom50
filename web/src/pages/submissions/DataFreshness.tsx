@@ -1,17 +1,23 @@
 import { SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, cx } from "@/components/ui"
+import { Alert, Badge, Button, cx } from "@/components/ui"
 
 // One passive freshness surface for the submissions dashboard. The table always
 // shows the collected scores.json snapshot; this line states when the submission
 // data was last collected and offers a single re-collect button. When an
 // assignment repo has been pushed since the last collect (staleness derived from
 // the org repo list's `pushed_at` — no extra fetch, so it works for every
-// viewer, not just owners), the button turns red (error) and reads "Sync now"
-// to flag that the snapshot is out of date; otherwise it's a quiet "Refresh
-// submissions". Following data-freshness UX guidance: never let
-// stale data look authoritative, and give the user a direct way to refresh it.
+// viewer, not just owners), a warning "Out of date" badge joins the line.
+// Following data-freshness UX guidance: never let stale data look
+// authoritative, and give the user a direct way to refresh it.
+//
+// The button reads "Collect now" in every state — the same string the Manage
+// hub's collect action uses, because it is the same dispatch. Staleness is
+// carried by the badge, not by the button's variant: the collect is additive
+// and re-runnable, so a danger-toned button would promise a destructive action
+// it doesn't perform.
+//
 // A bare empty_repo assignment has no collect at all — the page omits this
 // component and the header's grading badge explains why. A no_autograder
 // assignment IS collected (its submissions are detected rather than graded), so
@@ -21,7 +27,7 @@ export type DataFreshnessProps = {
   // data was produced org-wide. Null when never collected.
   lastCollectedLabel: string | null
   // An assignment repo was pushed after the last collect, so the snapshot is
-  // (probably) out of date — turns the button into the warning "Sync now" CTA.
+  // (probably) out of date — surfaces the "Out of date" badge.
   stale: boolean
   // A collect is in flight (dispatching/running) — disables the button and spins.
   collecting: boolean
@@ -54,22 +60,28 @@ export function DataFreshness({
       >
         <span>{collectedLine}</span>
 
+        {/* Stale carries its own chip so the out-of-date state is legible
+            without recolouring the action beside it. */}
+        {stale && (
+          <Badge tone="warning" title={t("submissions.freshness.staleHelp")}>
+            {t("submissions.freshness.stale")}
+          </Badge>
+        )}
+
         {onRefresh && (
-          // Stale: a red "Sync now" flags the out-of-date snapshot and
-          // re-collects on click. In sync: a quiet ghost "Refresh" so the
-          // freshness line doesn't outshout the search/filter controls beside
-          // it in the toolbar.
+          // A quiet ghost button in both states, so the freshness line doesn't
+          // outshout the search/filter controls beside it in the toolbar.
           <Button
-            variant={stale ? "error" : "ghost"}
+            variant="ghost"
             size="sm"
             disabled={collecting}
             onClick={onRefresh}
             aria-live="polite"
-            className={stale ? undefined : "text-base-content/70"}
+            className="text-base-content/70"
             title={
               stale
-                ? t("submissions.freshness.syncHelp")
-                : t("submissions.freshness.refreshHelp")
+                ? t("submissions.freshness.staleHelp")
+                : t("submissions.freshness.collectHelp")
             }
           >
             <SyncIcon
@@ -77,10 +89,8 @@ export function DataFreshness({
               className={cx("size-4", collecting && "animate-spin")}
             />
             {collecting
-              ? t("submissions.freshness.refreshing")
-              : stale
-                ? t("submissions.freshness.sync")
-                : t("submissions.freshness.refresh")}
+              ? t("submissions.collect.active")
+              : t("submissions.collect.label")}
           </Button>
         )}
       </div>

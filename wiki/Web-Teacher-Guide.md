@@ -498,7 +498,7 @@ aggregates those results into the classroom's scores.
 
 ![Assignment with submissions](images/web_viewing_assignment_submissions.png)
 
-Scores update when collection runs: click **Sync now** in the freshness strip
+Scores update when collection runs: click **Collect now** in the freshness strip
 at the top
 of the submissions page (also **Collect now** in the **Actions** menu). Both
 are **scoped to the current assignment** — they walk only this assignment's
@@ -539,7 +539,7 @@ per-assignment submission counts refresh when the run finishes.
 Because the run walks every assignment's repositories, it takes longer than a
 single-assignment sync and uses more GitHub Actions minutes, so **Collect all**
 asks you to confirm before dispatching. To refresh one assignment while
-grading, prefer **Sync now** on that assignment's submissions page.
+grading, prefer **Collect now** on that assignment's submissions page.
 
 Any staff member can collect, the same as the per-assignment sync. The button
 is hidden on an archived classroom and while the classroom has no assignments,
