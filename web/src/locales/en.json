@@ -2806,6 +2806,16 @@
       "failedTitle": "These submissions couldn't be downloaded:",
       "failedHint": "This is often a transient GitHub error — run the action again to retry."
     },
+    "cloneAll": {
+      "buttonTitle": "Clone all submissions with the CLI",
+      "heading": "Clone all submissions",
+      "subheading": "Run this command in your terminal to clone every student repository for this assignment into a local folder.",
+      "copyCli": "Copy CLI command",
+      "copied": "Copied",
+      "needCli": "Need the teacher CLI?",
+      "installHint": "Install the GitHub CLI, then add the teacher extension:",
+      "copyInstall": "Copy install command"
+    },
     "bulkAccess": {
       "menuLabel": "Update student repo access",
       "menuTitle": "Change every student's role on their own repository",
