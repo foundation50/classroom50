@@ -1284,6 +1284,19 @@ const SubmissionsPageContent = () => {
           }
           trailing={
             <>
+              {/* Clone submissions (CLI) — icon-only so the toolbar stays
+                  compact; opens a modal with the `gh teacher download`
+                  command. See https://github.com/foundation50/classroom50/issues/724. */}
+              <Button
+                variant="outline"
+                size="sm"
+                shape="square"
+                title={t("submissions.cloneAll.buttonTitle")}
+                aria-label={t("submissions.cloneAll.buttonTitle")}
+                onClick={() => setCloneCliOpen(true)}
+              >
+                <DownloadIcon aria-hidden="true" className="size-4" />
+              </Button>
               <SubmissionsActionsMenu
                 collecting={collecting}
                 regrading={regrading}
@@ -1402,19 +1415,6 @@ const SubmissionsPageContent = () => {
                     : undefined
                 }
               />
-              {/* Clone submissions (CLI) — icon-only so the toolbar stays
-                  compact; opens a modal with the `gh teacher download`
-                  command. See https://github.com/foundation50/classroom50/issues/724. */}
-              <Button
-                variant="outline"
-                size="sm"
-                shape="square"
-                title={t("submissions.cloneAll.buttonTitle")}
-                aria-label={t("submissions.cloneAll.buttonTitle")}
-                onClick={() => setCloneCliOpen(true)}
-              >
-                <DownloadIcon aria-hidden="true" className="size-4" />
-              </Button>
             </>
           }
         />
