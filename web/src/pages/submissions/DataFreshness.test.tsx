@@ -60,6 +60,20 @@ describe("DataFreshness", () => {
     expect(btn.className).not.toContain("btn-error")
   })
 
+  it("switches the help tooltip with staleness, on the button and the badge", () => {
+    const { rerender } = render(<DataFreshness {...base} stale={false} />)
+    const button = () =>
+      screen
+        .getByText("submissions.collect.label")
+        .closest("button") as HTMLButtonElement
+    expect(button().title).toBe("submissions.freshness.collectHelp")
+    rerender(<DataFreshness {...base} stale />)
+    expect(button().title).toBe("submissions.freshness.staleHelp")
+    expect(screen.getByText("submissions.freshness.stale").title).toBe(
+      "submissions.freshness.staleHelp",
+    )
+  })
+
   it("triggers collect when the button is clicked (in sync or out of sync)", async () => {
     const onRefresh = vi.fn()
     const { rerender } = render(

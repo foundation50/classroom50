@@ -14,7 +14,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { formatRelativeToNow } from "@/util/formatDate"
 
 // Classroom-wide "Collect all", presented as the assignments toolbar's
-// freshness widget — a passive "Submission data synced x ago" line plus the
+// freshness widget — a passive "Submission data collected x ago" line plus the
 // action, mirroring the submissions page's DataFreshness pairing so the button
 // carries its own context: the table's submission counts come from the
 // scores.json snapshot this button rebuilds. The line reuses the shared
@@ -121,8 +121,8 @@ export function ClassroomCollectButton({
 
   return (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      {/* Silent while scores.json loads so the line doesn't flash "not synced
-          yet" before the cached snapshot arrives. */}
+      {/* Silent while scores.json loads so the line doesn't flash "not
+          collected yet" before the cached snapshot arrives. */}
       {!scoresLoading && (
         <span role="status" className="text-sm text-base-content/70">
           {lastCollectedLabel

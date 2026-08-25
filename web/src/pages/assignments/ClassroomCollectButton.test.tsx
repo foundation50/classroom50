@@ -202,7 +202,7 @@ describe("ClassroomCollectButton", () => {
 
   // The i18n mock returns bare keys, so the assertions match keys, not copy.
   describe("freshness line", () => {
-    it("reads never-synced when there is no scores.json", () => {
+    it("reads never-collected when there is no scores.json", () => {
       const { wrapper } = setup()
       render(<ClassroomCollectButton org="acme" classroom="cs50" />, {
         wrapper,
@@ -213,7 +213,7 @@ describe("ClassroomCollectButton", () => {
       ).toBeTruthy()
     })
 
-    it("reads synced from the buckets' collected_at stamps", () => {
+    it("reads collected from the buckets' collected_at stamps", () => {
       scoresResult = {
         data: {
           submissions: {},
