@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -26,8 +26,9 @@ vi.mock("@/hooks/useGetRepo", () => ({
 vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => ({ data: undefined, isLoading: false, isError: false }),
 }))
+const feedbackRefetch = vi.fn()
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
-  default: () => ({ refetch: vi.fn() }),
+  default: () => ({ refetch: feedbackRefetch }),
 }))
 vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
   default: () => ({ mutate: vi.fn(), isPending: false }),
@@ -94,9 +95,14 @@ beforeEach(() => {
   collaborators.mockReset()
   collaborators.mockReturnValue({ data: undefined })
   downloadSubmission.mockReset()
+  feedbackRefetch.mockReset()
+  vi.stubGlobal("open", vi.fn())
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 const baseProps = {
   scores: [],
@@ -173,6 +179,111 @@ describe("SubmissionsTable non-submitter repo links", () => {
         enabled: false,
       },
     )
+  })
+})
+
+describe("SubmissionsTable per-row feedback PR shortcut", () => {
+  it("resolves the Feedback PR on click and opens it (no eager per-row fetch)", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    // The /pulls lookup is deferred until the shortcut is clicked.
+    expect(feedbackRefetch).not.toHaveBeenCalled()
+    feedbackRefetch.mockResolvedValueOnce({
+      data: { html_url: "https://github.com/acme/cs101-hw1-alice/pull/1" },
+      error: null,
+    })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.table.openFeedbackPrLabel:cs101-hw1-alice",
+      }),
+    )
+    await waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(
+        "https://github.com/acme/cs101-hw1-alice/pull/1",
+        "_blank",
+        "noopener,noreferrer",
+      ),
+    )
+  })
+
+  it("offers the repair modal when no Feedback PR exists yet", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    feedbackRefetch.mockResolvedValueOnce({ data: null, error: null })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.table.openFeedbackPrLabel:cs101-hw1-alice",
+      }),
+    )
+    expect(
+      await screen.findByText("submissions.reviewModal.emptyTitle"),
+    ).toBeTruthy()
+    expect(screen.getByText("submissions.repairPr.repair")).toBeTruthy()
+    expect(window.open).not.toHaveBeenCalled()
+  })
+
+  it("renders an inert shortcut for a never-accepted non-submitter", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set()}
+      />,
+    )
+    // Present (row alignment + explanatory tooltip) but not clickable.
+    const shortcut = screen.getByLabelText(
+      "submissions.table.openFeedbackPrLabel:cs101-hw1-alice",
+    )
+    expect(shortcut.getAttribute("aria-disabled")).toBe("true")
+    expect(shortcut.getAttribute("href")).toBeNull()
+    expect(feedbackRefetch).not.toHaveBeenCalled()
+  })
+
+  it("omits the shortcut entirely for an empty_repo assignment", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        skipsGrading
+        emptyRepoAssignment
+      />,
+    )
+    expect(
+      screen.queryByLabelText(
+        "submissions.table.openFeedbackPrLabel:cs101-hw1-alice",
+      ),
+    ).toBeNull()
+  })
+
+  it("offers the shortcut on an unsubmitted group repo row", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        unsubmittedGroupRepos={[
+          { owner: "team-rocket", repoName: "cs101-hw1-team-rocket" },
+        ]}
+      />,
+    )
+    expect(
+      screen.getByRole("button", {
+        name: "submissions.table.openFeedbackPrLabel:cs101-hw1-team-rocket",
+      }),
+    ).toBeTruthy()
   })
 })
 

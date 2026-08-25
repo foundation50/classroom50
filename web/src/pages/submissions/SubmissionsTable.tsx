@@ -49,6 +49,7 @@ import {
   IndividualRowHeader,
   RepoRowActions,
 } from "@/pages/submissions/SubmissionsRowActions"
+import { FeedbackPrIconButton } from "@/pages/submissions/ReviewButton"
 import { ManageSubmissionModal } from "@/pages/submissions/ManageSubmissionModal"
 import { ScoreBadge as SharedScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
@@ -443,6 +444,19 @@ const SubmissionsTable = ({
   const showPager =
     !initialLoading && !nonSubmittersLoading && displayItems.length > pageSize
 
+  // The per-row Feedback-PR shortcut (issue #741), shared by every row family.
+  // An empty_repo assignment has no Feedback PR, so the shortcut is omitted
+  // entirely — mirrors the hub's Review gate.
+  const feedbackPrShortcut = (repo: string, hasRepo: boolean) =>
+    emptyRepoAssignment ? undefined : (
+      <FeedbackPrIconButton
+        org={org}
+        repo={repo}
+        mode={isGroup ? "group" : "individual"}
+        hasRepo={hasRepo}
+      />
+    )
+
   // One submitted/pending row. Extracted so the paginated sequence can render
   // it inline alongside non-submitter and group-repo rows without duplicating
   // this markup. Keyed by owner by the caller.
@@ -644,6 +658,7 @@ const SubmissionsTable = ({
                 release={rest.release}
                 skipsGrading={skipsGrading}
                 header={<GroupActionControls repo={repo} repoHref={repoHref} />}
+                feedbackPr={feedbackPrShortcut(repo, true)}
                 onManage={openManage}
               />
             ) : (
@@ -658,6 +673,7 @@ const SubmissionsTable = ({
                     hasRepo
                   />
                 }
+                feedbackPr={feedbackPrShortcut(repo, true)}
                 onManage={openManage}
               />
             )}
@@ -857,6 +873,7 @@ const SubmissionsTable = ({
                         hasRepo={accepted}
                       />
                     }
+                    feedbackPr={feedbackPrShortcut(repoName, accepted)}
                     onManage={openManage}
                   />
                 )
@@ -926,6 +943,7 @@ const SubmissionsTable = ({
                         repoHref={groupRepoHref}
                       />
                     }
+                    feedbackPr={feedbackPrShortcut(repoName, true)}
                     onManage={openManage}
                   />
                 }

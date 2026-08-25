@@ -2687,6 +2687,8 @@
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repo",
+      "openFeedbackPrLabel": "Open feedback pull request for {{repo}}",
+      "viewFeedbackPr": "View feedback PR",
       "manageAccess": "Manage repository access",
       "manageAccessAria": "Manage repository access for {{owner}}",
       "viewCommit": "View latest commit",
