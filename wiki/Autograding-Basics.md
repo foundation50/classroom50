@@ -354,7 +354,7 @@ lag until **collection** runs — on demand with **Collect now** on the
 submissions page, **Collect all** on the classroom's assignments list
 (every assignment in one run), or `gh workflow run collect-scores.yaml` from
 the shell. If a
-student says "I submitted" and you see no score, sync first.
+student says "I submitted" and you see no score, collect first.
 
 On the submissions page, each row shows the student's (or group's) current
 score with links to the repository, the graded **commit**, the Release

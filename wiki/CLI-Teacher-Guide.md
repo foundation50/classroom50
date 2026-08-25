@@ -664,8 +664,8 @@ assignment's repositories and template, and staff teams with no members are
 skipped.
 
 Run collection from the Actions tab on `<org>/classroom50`, from your shell, or
-with the web app's per-assignment **Collect now** button. Scores refresh when you
-(or Collect now) trigger a run.
+with the web app's per-assignment **Collect now** button. Scores refresh only
+once one of those triggers a run.
 
 <details>
 <summary>What each collection run does</summary>
