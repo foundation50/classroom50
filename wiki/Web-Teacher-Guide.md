@@ -482,8 +482,11 @@ organization.
 ![Assignment with no submissions](images/web_viewing_assignment.png)
 
 Once an assignment exists, share its accept link with students: expand the
-**How students accept** panel and copy the URL. When a student opens it, they're
-taken to the accept page:
+**How students accept** panel and copy the URL. To grab the same link without
+opening the assignment, use the link icon in the assignment's row on the
+**Assignments** page — it copies the accept URL straight to the clipboard,
+including the access key when the classroom uses an unlisted URL. When a student
+opens the link, they're taken to the accept page:
 
 ![Accepting an assignment](images/web_accept_assignment.png)
 

@@ -121,6 +121,7 @@ import {
   dueDeadlineInstant,
 } from "@/util/formatDate"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
+import { acceptLinkCli, acceptLinkUrl } from "@/util/acceptLink"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubLink } from "@/components/GitHubLink"
 
@@ -303,13 +304,18 @@ const SubmissionsPageContent = () => {
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
 
-  const assignmentSubmitUrl =
-    `${window.location.origin}/${org}/${classroom}/assignments/${assignment}/accept` +
-    (secret ? `?k=${secret}` : "")
-  // CLI equivalent of the browser accept link, for students who prefer it.
-  const assignmentSubmitCli =
-    `gh student accept ${org} ${classroom} ${assignment}` +
-    (secret ? ` --key ${secret}` : "")
+  const assignmentSubmitUrl = acceptLinkUrl(
+    org ?? "",
+    classroom ?? "",
+    assignment ?? "",
+    secret,
+  )
+  const assignmentSubmitCli = acceptLinkCli(
+    org ?? "",
+    classroom ?? "",
+    assignment ?? "",
+    secret,
+  )
   // Clones every student repo for this assignment — the git-friendly
   // counterpart of the in-browser zip download (see CloneSubmissionsModal).
   const cloneSubmissionsCli = `gh teacher download ${org} ${classroom} ${assignment}`
