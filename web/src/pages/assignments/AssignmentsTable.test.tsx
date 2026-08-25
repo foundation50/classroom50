@@ -65,6 +65,10 @@ const assignment = (over: Partial<Assignment> = {}): Assignment =>
 
 const inOrgTemplate = { owner: "acme", repo: "tmpl", branch: "main" }
 const ACCESS_ARIA = "assignments.template.accessModal.triggerAria"
+const MANAGE_ARIA = "assignments.manageModal.openAria"
+
+// Opens the assignment hub for the first (only) rendered row.
+const openHub = () => fireEvent.click(screen.getByLabelText(MANAGE_ARIA))
 
 // Table-wide text (the bars' "value / max" ratios, percentages, fallback
 // strings).
@@ -235,8 +239,8 @@ describe("AssignmentsTable submission denominator", () => {
   })
 })
 
-describe("AssignmentsTable — Template access button", () => {
-  it("renders the trigger for an in-org templated assignment", () => {
+describe("AssignmentsTable — Template access action (in the hub)", () => {
+  it("shows the action in the hub for an in-org templated assignment", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -245,10 +249,13 @@ describe("AssignmentsTable — Template access button", () => {
         studentCount={0}
       />,
     )
+    // Not a quick action anymore — it lives behind the Manage trigger.
+    expect(screen.queryByLabelText(ACCESS_ARIA)).toBeNull()
+    openHub()
     expect(screen.queryByLabelText(ACCESS_ARIA)).toBeTruthy()
   })
 
-  it("renders the trigger for an out-of-org template too (review + link)", () => {
+  it("shows it for an out-of-org template too (review + link)", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -259,10 +266,11 @@ describe("AssignmentsTable — Template access button", () => {
         studentCount={0}
       />,
     )
+    openHub()
     expect(screen.queryByLabelText(ACCESS_ARIA)).toBeTruthy()
   })
 
-  it("does not render it for a template-less assignment", () => {
+  it("does not show it for a template-less assignment", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -271,10 +279,11 @@ describe("AssignmentsTable — Template access button", () => {
         studentCount={0}
       />,
     )
+    openHub()
     expect(screen.queryByLabelText(ACCESS_ARIA)).toBeNull()
   })
 
-  it("still renders it when archived (viewing stays available)", () => {
+  it("still shows it when archived (viewing stays available)", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -284,10 +293,11 @@ describe("AssignmentsTable — Template access button", () => {
         archived
       />,
     )
+    openHub()
     expect(screen.queryByLabelText(ACCESS_ARIA)).toBeTruthy()
   })
 
-  it("opens the template-access modal on click", () => {
+  it("opens the template-access modal from the hub", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -296,9 +306,77 @@ describe("AssignmentsTable — Template access button", () => {
         studentCount={0}
       />,
     )
+    openHub()
     expect(screen.queryByTestId("template-access-modal")).toBeNull()
     fireEvent.click(screen.getByLabelText(ACCESS_ARIA))
     expect(screen.getByTestId("template-access-modal").textContent).toBe("hw1")
+  })
+})
+
+describe("AssignmentsTable — assignment hub", () => {
+  it("keeps only the quick actions on the row; the rest live in the hub", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ template: inOrgTemplate })]}
+        studentCount={0}
+        canAuthor
+      />,
+    )
+    // Quick actions: accept link, clone CLI, edit (a router link whose title
+    // the Link mock drops — covered by the hub assertions below), lock, plus
+    // the trigger.
+    expect(screen.getByLabelText("assignments.table.copyLinkAria")).toBeTruthy()
+    expect(screen.getByLabelText("assignments.table.cloneAria")).toBeTruthy()
+    expect(screen.getByLabelText("assignments.table.lockAria")).toBeTruthy()
+    // Consolidated actions are not on the row.
+    expect(screen.queryByLabelText(ACCESS_ARIA)).toBeNull()
+    expect(screen.queryByLabelText("assignments.table.reuseAria")).toBeNull()
+    expect(screen.queryByLabelText("assignments.table.deleteAria")).toBeNull()
+  })
+
+  it("consolidates every action (quick ones included) for an author", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ template: inOrgTemplate })]}
+        studentCount={0}
+        canAuthor
+      />,
+    )
+    openHub()
+    expect(screen.getByText("assignments.table.editAssignment")).toBeTruthy()
+    // Quick actions repeat inside the hub (row + hub = 2 matches each).
+    expect(
+      screen.getAllByLabelText("assignments.table.copyLinkAria").length,
+    ).toBe(2)
+    expect(screen.getAllByLabelText("assignments.table.cloneAria").length).toBe(
+      2,
+    )
+    expect(screen.getAllByLabelText("assignments.table.lockAria").length).toBe(
+      2,
+    )
+    expect(screen.getByLabelText(ACCESS_ARIA)).toBeTruthy()
+    expect(screen.getByLabelText("assignments.table.reuseAria")).toBeTruthy()
+    expect(screen.getByLabelText("assignments.table.deleteAria")).toBeTruthy()
+  })
+
+  it("hides the mutating rows for a read-only viewer", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        studentCount={0}
+      />,
+    )
+    openHub()
+    expect(screen.getByText("assignments.table.viewAssignment")).toBeTruthy()
+    expect(screen.queryByLabelText("assignments.table.reuseAria")).toBeNull()
+    expect(screen.queryByLabelText("assignments.table.lockAria")).toBeNull()
+    expect(screen.queryByLabelText("assignments.table.deleteAria")).toBeNull()
   })
 })
 
