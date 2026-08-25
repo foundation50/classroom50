@@ -17,6 +17,8 @@ export type TableShellProps = {
   // Scale-up entrance; disable when an ancestor already animates the block
   // (nesting two entrances reads as a double pop).
   animate?: boolean
+  // Rendered inside the frame before the table (e.g. a bulk-selection bar).
+  header?: ReactNode
   // Rendered inside the frame after the table (e.g. a pagination bar).
   footer?: ReactNode
   className?: string
@@ -27,6 +29,7 @@ export function TableShell({
   ariaBusy,
   padded = false,
   animate = true,
+  header,
   footer,
   className,
 }: TableShellProps) {
@@ -47,6 +50,7 @@ export function TableShell({
   if (!animate) {
     return (
       <div className={frameClass}>
+        {header}
         {table}
         {footer}
       </div>
@@ -54,6 +58,7 @@ export function TableShell({
   }
   return (
     <EnterDiv className={frameClass}>
+      {header}
       {table}
       {footer}
     </EnterDiv>

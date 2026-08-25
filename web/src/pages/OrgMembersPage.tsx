@@ -15,12 +15,12 @@ import {
   AnimatedAlert,
   Badge,
   Button,
-  Card,
   Input,
   Select,
+  SkeletonRows,
+  TableShell,
   rtlFlip,
 } from "@/components/ui"
-import { ListSkeletonRows } from "@/components/list"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -39,8 +39,8 @@ import type { StudentCsvRow } from "@/domain/students"
 import type { GitHubUser } from "@/github-core/types"
 import { isSameGitHubUser } from "@/util/students"
 import { motion } from "motion/react"
-import { enterExit } from "@/lib/motion"
-import { ClickableRow } from "@/lib/motionComponents"
+import { blockEnter } from "@/lib/motion"
+import { ClickableTr } from "@/lib/motionComponents"
 import BulkActionsBar from "@/pages/orgMembers/BulkActionsBar"
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
 import {
@@ -67,6 +67,17 @@ const CSV_RECONCILE_DELAY_MS = 4000
 // Sentinel classroom-filter value for "members on no roster". A real classroom
 // path can't collide (paths don't contain a leading colon).
 const NO_CLASSROOM_FILTER = ":none:"
+
+// One bar recipe per column: select, member, classrooms, status, actions.
+const SKELETON_BARS = [
+  "size-5",
+  "h-4 w-40",
+  "h-4 w-24",
+  "h-6 w-28",
+  "ms-auto h-4 w-4",
+]
+
+const MEMBERS_COL_COUNT = SKELETON_BARS.length
 
 const OrgMembersPage = () => {
   const { t } = useTranslation()
@@ -456,35 +467,17 @@ const OrgMembersPage = () => {
             </Select>
           </div>
 
-          <Card
-            className="mt-4 w-full overflow-hidden"
-            aria-busy={isLoading || undefined}
-          >
-            {isLoading ? (
-              <ListSkeletonRows rows={6} />
-            ) : isError ? (
-              <div className="px-6 py-10 text-center text-sm text-error">
-                {t("orgMembers.loadError")}
-              </div>
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                variant="bare"
-                body={
-                  classroomFilter === NO_CLASSROOM_FILTER
-                    ? t("orgMembers.noMembersNoClassroom")
-                    : classroomFilter
-                      ? t("orgMembers.noMembersInClassroom", {
-                          classroom:
-                            classroomOptions.find(
-                              (c) => c.path === classroomFilter,
-                            )?.name ?? classroomFilter,
-                        })
-                      : t("orgMembers.noMatch")
-                }
-              />
-            ) : (
-              <>
-                {org ? (
+          {/* Primer DataTable treatment (matching the assignments/submissions
+              tables): the shared TableShell frame, labeled columns, and rows as
+              real <tr>s. The bulk-selection bar renders inside the frame above
+              the header row, keeping select-all adjacent to the rows it acts on. */}
+          <div className="mt-4">
+            <TableShell
+              animate={false}
+              padded
+              ariaBusy={isLoading}
+              header={
+                org && !isLoading && !isError && filtered.length > 0 ? (
                   <BulkActionsBar
                     org={org}
                     client={client}
@@ -498,43 +491,106 @@ const OrgMembersPage = () => {
                     onClearSelection={() => setSelectedKeys(new Set())}
                     onDone={handleBulkDone}
                   />
-                ) : null}
-                <motion.ul
-                  className="divide-y divide-base-300"
-                  variants={enterExit}
-                  initial="initial"
-                  animate="animate"
-                >
-                  {filtered.map((row) => (
-                    <ClickableRow
+                ) : undefined
+              }
+            >
+              <caption className="sr-only">
+                {t("orgMembers.table.caption")}
+              </caption>
+              <thead>
+                <tr>
+                  <th scope="col" className="w-0">
+                    <span className="sr-only">
+                      {t("orgMembers.table.colSelect")}
+                    </span>
+                  </th>
+                  <th scope="col">{t("orgMembers.table.colMember")}</th>
+                  <th scope="col" className="hidden sm:table-cell">
+                    {t("orgMembers.table.colClassrooms")}
+                  </th>
+                  <th scope="col">{t("orgMembers.table.colStatus")}</th>
+                  <th scope="col" className="w-0">
+                    <span className="sr-only">
+                      {t("orgMembers.table.colActions")}
+                    </span>
+                  </th>
+                </tr>
+              </thead>
+              {/* Same recipe as the assignments table: the body enters as one
+                  block and replays on data arrival / classroom-filter changes
+                  (not per search keystroke). */}
+              <motion.tbody
+                key={`${isLoading}:${classroomFilter}`}
+                variants={blockEnter}
+                initial="initial"
+                animate="animate"
+              >
+                {isLoading && <SkeletonRows rows={6} bars={SKELETON_BARS} />}
+                {!isLoading && isError && (
+                  <tr>
+                    <td
+                      colSpan={MEMBERS_COL_COUNT}
+                      className="py-10 text-center text-sm text-error"
+                    >
+                      {t("orgMembers.loadError")}
+                    </td>
+                  </tr>
+                )}
+                {!isLoading && !isError && filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={MEMBERS_COL_COUNT}>
+                      <EmptyState
+                        variant="bare"
+                        body={
+                          classroomFilter === NO_CLASSROOM_FILTER
+                            ? t("orgMembers.noMembersNoClassroom")
+                            : classroomFilter
+                              ? t("orgMembers.noMembersInClassroom", {
+                                  classroom:
+                                    classroomOptions.find(
+                                      (c) => c.path === classroomFilter,
+                                    )?.name ?? classroomFilter,
+                                })
+                              : t("orgMembers.noMatch")
+                        }
+                      />
+                    </td>
+                  </tr>
+                )}
+                {!isLoading &&
+                  !isError &&
+                  filtered.map((row) => (
+                    <ClickableTr
                       key={row.key}
-                      className="group/row flex items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
+                      className="group/row hover:bg-base-200"
                       onClick={() => setSelectedKey(row.key)}
                     >
-                      <input
-                        type="checkbox"
-                        className="checkbox checkbox-sm size-6 shrink-0"
-                        aria-label={
-                          isSelf(row)
-                            ? t("orgMembers.bulk.selfNotSelectable")
-                            : t("orgMembers.bulk.selectRow", {
-                                label: row.username || row.email || row.name,
-                              })
-                        }
-                        disabled={isSelf(row)}
-                        title={
-                          isSelf(row)
-                            ? t("orgMembers.bulk.selfNotSelectable")
-                            : undefined
-                        }
-                        checked={selectedKeys.has(row.key)}
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleRowCheckboxClick(e, row.key)
-                        }}
-                        onChange={() => handleToggleRow(row.key)}
-                      />
-                      <div className="min-w-0 flex-1">
+                      <td className="w-0">
+                        <input
+                          type="checkbox"
+                          className="checkbox checkbox-sm size-6"
+                          aria-label={
+                            isSelf(row)
+                              ? t("orgMembers.bulk.selfNotSelectable")
+                              : t("orgMembers.bulk.selectRow", {
+                                  label: row.username || row.email || row.name,
+                                })
+                          }
+                          disabled={isSelf(row)}
+                          title={
+                            isSelf(row)
+                              ? t("orgMembers.bulk.selfNotSelectable")
+                              : undefined
+                          }
+                          checked={selectedKeys.has(row.key)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRowCheckboxClick(e, row.key)
+                          }}
+                          onChange={() => handleToggleRow(row.key)}
+                        />
+                      </td>
+                      <td className="min-w-0">
                         <Avatar
                           name={row.name || row.username || row.email}
                           github={row.username}
@@ -542,61 +598,72 @@ const OrgMembersPage = () => {
                           subtitle={<GitHubIdentity row={row} />}
                           onClick={() => setSelectedKey(row.key)}
                         />
-                      </div>
-                      <div className="flex shrink-0 items-center gap-3">
-                        {row.classification === "on-roster-not-member" &&
-                        row.github_id ? (
-                          <Button
-                            variant="primary"
-                            size="xs"
-                            loading={invitingKey === row.key}
-                            disabled={invitingKey === row.key}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              void handleQuickInvite(row)
-                            }}
-                          >
-                            {invitingKey === row.key ? null : (
-                              <>
-                                <PersonAddIcon
-                                  aria-hidden="true"
-                                  className="size-4"
-                                />
-                                {t("orgMembers.invite")}
-                              </>
-                            )}
-                          </Button>
-                        ) : null}
-                        <span className="hidden text-xs text-base-content/70 sm:inline">
-                          {t("orgMembers.classroomCount", {
-                            count: row.classrooms.length,
-                          })}
-                        </span>
-                        {row.unprovisionedClassrooms.length > 0 ? (
-                          <Badge
-                            tone="warning"
-                            className="gap-1"
-                            title={t("orgMembers.unprovisionedTitle", {
-                              classrooms:
-                                row.unprovisionedClassrooms.join(", "),
-                            })}
-                          >
-                            <AlertIcon aria-hidden="true" className="size-3" />
-                            {t("orgMembers.unprovisionedBadge")}
-                          </Badge>
-                        ) : null}
-                        <ClassificationBadge row={row} isOwner={isOwner(row)} />
-                        <ChevronRightIcon
-                          aria-hidden="true"
-                          className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70 ${rtlFlip}`}
-                        />
-                      </div>
-                    </ClickableRow>
+                      </td>
+                      <td className="hidden whitespace-nowrap text-xs text-base-content/70 sm:table-cell">
+                        {t("orgMembers.classroomCount", {
+                          count: row.classrooms.length,
+                        })}
+                      </td>
+                      <td>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {row.unprovisionedClassrooms.length > 0 ? (
+                            <Badge
+                              tone="warning"
+                              className="gap-1"
+                              title={t("orgMembers.unprovisionedTitle", {
+                                classrooms:
+                                  row.unprovisionedClassrooms.join(", "),
+                              })}
+                            >
+                              <AlertIcon
+                                aria-hidden="true"
+                                className="size-3"
+                              />
+                              {t("orgMembers.unprovisionedBadge")}
+                            </Badge>
+                          ) : null}
+                          <ClassificationBadge
+                            row={row}
+                            isOwner={isOwner(row)}
+                          />
+                        </div>
+                      </td>
+                      <td className="w-0 ps-2">
+                        <div className="flex items-center justify-end gap-3">
+                          {row.classification === "on-roster-not-member" &&
+                          row.github_id ? (
+                            <Button
+                              variant="primary"
+                              size="xs"
+                              loading={invitingKey === row.key}
+                              disabled={invitingKey === row.key}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                void handleQuickInvite(row)
+                              }}
+                            >
+                              {invitingKey === row.key ? null : (
+                                <>
+                                  <PersonAddIcon
+                                    aria-hidden="true"
+                                    className="size-4"
+                                  />
+                                  {t("orgMembers.invite")}
+                                </>
+                              )}
+                            </Button>
+                          ) : null}
+                          <ChevronRightIcon
+                            aria-hidden="true"
+                            className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70 ${rtlFlip}`}
+                          />
+                        </div>
+                      </td>
+                    </ClickableTr>
                   ))}
-                </motion.ul>
-              </>
-            )}
-          </Card>
+              </motion.tbody>
+            </TableShell>
+          </div>
         </RequireRole>
       </PageShell>
 
