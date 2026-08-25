@@ -474,7 +474,11 @@ const AssignmentsTable = ({
           />
           <th scope="col">{t("assignments.table.colAccepted")}</th>
           <th scope="col">{t("assignments.table.colSubmitted")}</th>
-          <th scope="col">
+          {/* w-0: auto table layout hands surplus width to every column,
+              which stretched this fixed-width button strip. Zero width makes
+              the browser fall back to min-content here and give the slack to
+              the text columns instead. */}
+          <th scope="col" className="w-0">
             <span className="sr-only">{t("assignments.table.colActions")}</span>
           </th>
         </tr>
@@ -737,76 +741,78 @@ const AssignmentsTable = ({
                   )
                 })()}
               </td>
-              <td>
-                <Link
-                  className="btn btn-circle btn-sm btn-ghost"
-                  to="/$org/$classroom/assignments/$assignment/settings"
-                  params={{
-                    org,
-                    classroom,
-                    assignment: assignment.slug,
-                  }}
-                  title={
-                    canMutate
-                      ? t("assignments.table.editAssignment")
-                      : t("assignments.table.viewAssignment")
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation()
-                  }}
-                >
-                  {canMutate ? (
-                    <PencilIcon aria-hidden="true" className="size-4" />
-                  ) : (
-                    <EyeIcon aria-hidden="true" className="size-4" />
-                  )}
-                </Link>
-                {!canMutate ? (
-                  // Read-only rows (archived, or viewer can't author): reviewing
-                  // template access (and reaching the source repo) stays
-                  // available; the modal itself owner-gates the re-grant.
-                  assignment.template && (
-                    <TemplateAccessButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                  )
-                ) : (
-                  <>
-                    <ReuseAssignmentButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                    {assignment.template && (
+              <td className="w-0 py-2! pl-2">
+                <div className="flex items-center justify-end gap-1">
+                  <Link
+                    className="btn btn-circle btn-sm btn-ghost"
+                    to="/$org/$classroom/assignments/$assignment/settings"
+                    params={{
+                      org,
+                      classroom,
+                      assignment: assignment.slug,
+                    }}
+                    title={
+                      canMutate
+                        ? t("assignments.table.editAssignment")
+                        : t("assignments.table.viewAssignment")
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation()
+                    }}
+                  >
+                    {canMutate ? (
+                      <PencilIcon aria-hidden="true" className="size-4" />
+                    ) : (
+                      <EyeIcon aria-hidden="true" className="size-4" />
+                    )}
+                  </Link>
+                  {!canMutate ? (
+                    // Read-only rows (archived, or viewer can't author): reviewing
+                    // template access (and reaching the source repo) stays
+                    // available; the modal itself owner-gates the re-grant.
+                    assignment.template && (
                       <TemplateAccessButton
                         org={org}
                         classroom={classroom}
                         assignment={assignment}
                       />
-                    )}
-                    <LockAssignmentButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                    <DeleteAssignmentButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                      onDeleteAssignment={() =>
-                        queryClient.invalidateQueries({
-                          queryKey: githubKeys.jsonFile(
-                            org,
-                            CONFIG_REPO,
-                            `${classroom}/assignments.json`,
-                          ),
-                        })
-                      }
-                    />
-                  </>
-                )}
+                    )
+                  ) : (
+                    <>
+                      <ReuseAssignmentButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                      />
+                      {assignment.template && (
+                        <TemplateAccessButton
+                          org={org}
+                          classroom={classroom}
+                          assignment={assignment}
+                        />
+                      )}
+                      <LockAssignmentButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                      />
+                      <DeleteAssignmentButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                        onDeleteAssignment={() =>
+                          queryClient.invalidateQueries({
+                            queryKey: githubKeys.jsonFile(
+                              org,
+                              CONFIG_REPO,
+                              `${classroom}/assignments.json`,
+                            ),
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                </div>
               </td>
             </ClickableTr>
           ))}
