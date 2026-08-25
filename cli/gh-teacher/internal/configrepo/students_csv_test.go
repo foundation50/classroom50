@@ -893,9 +893,9 @@ func TestParseImportCSV_StripsUTF8BOM(t *testing.T) {
 }
 
 func TestNormalizeTeacherText(t *testing.T) {
-	// "ÆØÅæøå" in Windows-1252 single bytes — Excel's plain "CSV" export on a
-	// Western-locale Windows box (issue #742).
-	win1252Name := []byte{0xC6, 0xD8, 0xC5, 0xE6, 0xF8, 0xE5}
+	// "Bjørn Ægir" in Windows-1252 single bytes (ø=0xF8, Æ=0xC6) — what Excel's
+	// plain "CSV" export produces on a Western-locale Windows box (issue #742).
+	win1252Name := []byte{0x42, 0x6A, 0xF8, 0x72, 0x6E, 0x20, 0xC6, 0x67, 0x69, 0x72}
 
 	cases := []struct {
 		name           string
@@ -904,9 +904,9 @@ func TestNormalizeTeacherText(t *testing.T) {
 		wantTranscoded bool
 	}{
 		{"ascii passthrough", []byte("username\nalice\n"), "username\nalice\n", false},
-		{"utf-8 passthrough", []byte("first_name\nÆØÅæøå\n"), "first_name\nÆØÅæøå\n", false},
+		{"utf-8 passthrough", []byte("first_name\nBjørn Ægir\n"), "first_name\nBjørn Ægir\n", false},
 		{"utf-8 BOM stripped", append([]byte{0xEF, 0xBB, 0xBF}, "username\nalice\n"...), "username\nalice\n", false},
-		{"windows-1252 transcoded", append([]byte("first_name\n"), append(win1252Name, '\n')...), "first_name\nÆØÅæøå\n", true},
+		{"windows-1252 transcoded", append([]byte("first_name\n"), append(win1252Name, '\n')...), "first_name\nBjørn Ægir\n", true},
 		{"empty", nil, "", false},
 	}
 	for _, tc := range cases {
@@ -927,7 +927,7 @@ func TestParseImportCSV_Windows1252ViaNormalize(t *testing.T) {
 	// before parsing, so the name survives instead of landing invalid bytes
 	// in roster.csv (which the web then renders as U+FFFD).
 	in := append([]byte("username,first_name,last_name,email,section\nalice,"),
-		0xC6, 0xD8, 0xC5, 0xE6, 0xF8, 0xE5)
+		0x42, 0x6A, 0xF8, 0x72, 0x6E) // "Bjørn" in Windows-1252
 	in = append(in, []byte(",A,,s\n")...)
 	normalized, transcoded := NormalizeTeacherText(in)
 	if !transcoded {
@@ -937,8 +937,8 @@ func TestParseImportCSV_Windows1252ViaNormalize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseImportCSV after normalize: %v", err)
 	}
-	if len(rows) != 1 || rows[0].FirstName != "ÆØÅæøå" {
-		t.Fatalf("expected first_name ÆØÅæøå, got %#v", rows)
+	if len(rows) != 1 || rows[0].FirstName != "Bjørn" {
+		t.Fatalf("expected first_name Bjørn, got %#v", rows)
 	}
 }
 

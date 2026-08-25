@@ -42,9 +42,11 @@ describe("decodeTextFile", () => {
     new File([new Uint8Array(bytes)], "roster.csv")
 
   it("decodes valid UTF-8 without the fallback", async () => {
-    const file = fileOf(new TextEncoder().encode("Name,Email\nÆØÅæøå,a@x.no\n"))
+    const file = fileOf(
+      new TextEncoder().encode("Name,Email\nBjørn Ægir,b@x.no\n"),
+    )
     expect(await decodeTextFile(file)).toEqual({
-      text: "Name,Email\nÆØÅæøå,a@x.no\n",
+      text: "Name,Email\nBjørn Ægir,b@x.no\n",
       fallbackUsed: false,
     })
   })
@@ -58,25 +60,28 @@ describe("decodeTextFile", () => {
     })
   })
 
-  // The issue #742 repro: Excel's plain "CSV" export on Windows is
-  // Windows-1252, which File.text() would decode to a run of U+FFFD.
-  it("decodes a Windows-1252 file (æøå) via the fallback", async () => {
-    // "ÆØÅæøå" in Windows-1252 single bytes.
-    const name = [0xc6, 0xd8, 0xc5, 0xe6, 0xf8, 0xe5]
+  // Issue #742: Excel's plain "CSV" export on Windows is Windows-1252, which
+  // File.text() would decode to a run of U+FFFD.
+  it("decodes a Windows-1252 file via the fallback", async () => {
+    // "Bjørn Håkonsen" in Windows-1252 single bytes (ø=0xF8, å=0xE5).
+    const name = [
+      0x42, 0x6a, 0xf8, 0x72, 0x6e, 0x20, 0x48, 0xe5, 0x6b, 0x6f, 0x6e, 0x73,
+      0x65, 0x6e,
+    ]
     const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0))
     const file = fileOf([
       ...ascii("Name,Email\n"),
       ...name,
-      ...ascii(",mail@example.org\n"),
+      ...ascii(",b@x.no\n"),
     ])
     expect(await decodeTextFile(file)).toEqual({
-      text: "Name,Email\nÆØÅæøå,mail@example.org\n",
+      text: "Name,Email\nBjørn Håkonsen,b@x.no\n",
       fallbackUsed: true,
     })
   })
 
   it("decodes UTF-16LE with a BOM", async () => {
-    const text = "username\nÆØÅ\n"
+    const text = "username\nBjørn\n"
     const bytes = new Uint8Array(2 + text.length * 2)
     bytes[0] = 0xff
     bytes[1] = 0xfe

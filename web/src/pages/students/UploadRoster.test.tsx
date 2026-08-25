@@ -1061,17 +1061,16 @@ describe("UploadRoster legacy-encoding fallback", () => {
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
     )
 
-    // "email,first_name\nada@x.no,ÆØÅæøå\n" with the name in Windows-1252
-    // single bytes — File.text() would have read six U+FFFDs here.
+    // "email,first_name\nada@x.no,Bjørn\n" with the name in Windows-1252
+    // single bytes (ø=0xF8) — File.text() would have read U+FFFD here.
     const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0))
     const bytes = new Uint8Array([
       ...ascii("email,first_name\nada@x.no,"),
-      0xc6,
-      0xd8,
-      0xc5,
-      0xe6,
+      0x42,
+      0x6a,
       0xf8,
-      0xe5,
+      0x72,
+      0x6e,
       ...ascii("\n"),
     ])
     await uploadFile(user, new File([bytes], "roster.csv"))
@@ -1085,7 +1084,7 @@ describe("UploadRoster legacy-encoding fallback", () => {
     await user.click(
       await waitFor(() => screen.getByText("students.summaryViewDetails")),
     )
-    await waitFor(() => expect(screen.getByText(/ÆØÅæøå/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/Bjørn/)).toBeTruthy())
     expect(screen.queryByText(/\uFFFD/)).toBeNull()
   })
 
@@ -1097,13 +1096,13 @@ describe("UploadRoster legacy-encoding fallback", () => {
 
     await uploadFile(
       user,
-      file("roster.csv", "email,first_name\nada@x.no,ÆØÅæøå\n"),
+      file("roster.csv", "email,first_name\nada@x.no,Bjørn\n"),
     )
 
     await user.click(
       await waitFor(() => screen.getByText("students.summaryViewDetails")),
     )
-    await waitFor(() => expect(screen.getByText(/ÆØÅæøå/)).toBeTruthy())
+    await waitFor(() => expect(screen.getByText(/Bjørn/)).toBeTruthy())
     expect(
       screen.queryByText("students.uploadEncodingFallbackNotice"),
     ).toBeNull()
