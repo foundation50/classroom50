@@ -515,10 +515,13 @@ describe("AssignmentsTable copy accept link", () => {
 
   it("waits for the classroom read rather than copying a keyless link", () => {
     // An unresolved secret reads the same as "unprotected", so copying is held
-    // until classroom.json settles.
+    // until classroom.json settles — whether it is still loading or the read
+    // failed, which the page collapses into this one flag.
     renderRow({ secretPending: true })
     fireEvent.click(screen.getByLabelText(COPY_ARIA))
     expect(writeText).not.toHaveBeenCalled()
+    // The disabled state says why, rather than looking like a dead button.
+    expect(screen.getByTitle("assignments.table.copyLinkPending")).toBeTruthy()
   })
 
   it("stays available on read-only rows (archived or non-author)", () => {

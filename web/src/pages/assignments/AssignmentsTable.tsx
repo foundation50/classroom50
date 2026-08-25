@@ -124,9 +124,10 @@ const DeleteAssignmentButton = ({
 // page's share modal costs four clicks per assignment (issue #731). Copying
 // mutates nothing, so it stays on archived and TA rows too.
 //
-// Disabled until the classroom read settles: an unresolved `secret` is
-// indistinguishable from "unprotected", and copying a protected classroom's
-// link without its `?k=` would hand students a silent 404.
+// Disabled while the classroom read is unresolved — still loading, or failed:
+// either way `secret` is undefined, indistinguishable from "unprotected", and
+// copying a protected classroom's link without its `?k=` would hand students a
+// silent 404.
 const CopyAcceptLinkButton = ({
   org,
   classroom,
@@ -153,9 +154,11 @@ const CopyAcceptLinkButton = ({
       shape="circle"
       disabled={secretPending}
       title={
-        copied
-          ? t("assignments.table.linkCopied")
-          : t("assignments.table.copyLinkTitle")
+        secretPending
+          ? t("assignments.table.copyLinkPending")
+          : copied
+            ? t("assignments.table.linkCopied")
+            : t("assignments.table.copyLinkTitle")
       }
       aria-label={t("assignments.table.copyLinkAria", {
         name: name(assignment),
@@ -438,8 +441,8 @@ const AssignmentsTable = ({
   // undefined for the unprotected default — and indistinguishable from "not
   // loaded yet", which is what `secretPending` separates.
   secret?: string
-  // Whether that classroom read is still in flight, so the copy action can wait
-  // rather than hand out a keyless link for a protected classroom.
+  // Whether that classroom read is unresolved (in flight or failed), so the copy
+  // action waits rather than hand out a keyless link for a protected classroom.
   secretPending?: boolean
   assignments?: Assignment[]
   // The UNFILTERED assignment list, for the sibling-slug repo-attribution
