@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.34.0](https://github.com/foundation50/classroom50/compare/cli-v1.33.0...cli-v1.34.0) (2026-08-25)
+
+
+### Bug Fixes
+
+* stop corrupting non-ASCII names in uploaded roster CSVs ([#746](https://github.com/foundation50/classroom50/issues/746)) ([c85ed9c](https://github.com/foundation50/classroom50/commit/c85ed9cfdb9cfccf0346471284f1ba5fbc29aea1))
+
 ## [1.33.0](https://github.com/foundation50/classroom50/compare/cli-v1.32.0...cli-v1.33.0) (2026-08-24)
 
 

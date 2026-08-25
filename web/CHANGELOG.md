@@ -17,6 +17,36 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.34.0](https://github.com/foundation50/classroom50/compare/web-v1.33.0...web-v1.34.0) (2026-08-25)
+
+
+### Features
+
+* **web:** add clone-submissions CLI command dialog to gradebook ([#740](https://github.com/foundation50/classroom50/issues/740)) ([f973681](https://github.com/foundation50/classroom50/commit/f9736813078f38e55dc8696257aa6edf88ed89d0))
+* **web:** adopt Primer typography with Mona Sans and title scale ([#725](https://github.com/foundation50/classroom50/issues/725)) ([656dd5f](https://github.com/foundation50/classroom50/commit/656dd5fd6e24e2bca7f49fe206ebb8cb2b7d58d3))
+* **web:** align empty states with Primer's Blankslate pattern ([#727](https://github.com/foundation50/classroom50/issues/727)) ([c0e42cd](https://github.com/foundation50/classroom50/commit/c0e42cdcca37b527ebe0ce3032c4f67b8a99a987))
+* **web:** align forms with Primer's form pattern ([#730](https://github.com/foundation50/classroom50/issues/730)) ([565c301](https://github.com/foundation50/classroom50/commit/565c3016027aab8878c21cb369aff3adc969a6bb))
+* **web:** align loading states with Primer's loading pattern ([#729](https://github.com/foundation50/classroom50/issues/729)) ([30b3d5a](https://github.com/foundation50/classroom50/commit/30b3d5a2cc68a0078cebcb748215f50530102706))
+* **web:** align notification messaging with Primer's pattern ([#728](https://github.com/foundation50/classroom50/issues/728)) ([afa53d8](https://github.com/foundation50/classroom50/commit/afa53d87d19db1e7cfed44ac65409404c27cee3d))
+* **web:** align radii and focus ring with Primer size primitives ([#726](https://github.com/foundation50/classroom50/issues/726)) ([3103973](https://github.com/foundation50/classroom50/commit/31039733e967d902966b6e63187f5d111a86ce80))
+* **web:** collect scores for a whole classroom ([#720](https://github.com/foundation50/classroom50/issues/720)) ([c1012a2](https://github.com/foundation50/classroom50/commit/c1012a2258a789441321a9558dc43d78ad376a3b))
+* **web:** consolidate assignment row actions into a manage modal ([#745](https://github.com/foundation50/classroom50/issues/745)) ([5e19ac6](https://github.com/foundation50/classroom50/commit/5e19ac6f35bd021a98abffe96ffde7e9284c086a))
+* **web:** copy an assignment's accept link from the list ([#732](https://github.com/foundation50/classroom50/issues/732)) ([8a93e5c](https://github.com/foundation50/classroom50/commit/8a93e5cbcb18baafb712dc749bbba05c455fbf82))
+* **web:** finish Primer alignment follow-ups ([#739](https://github.com/foundation50/classroom50/issues/739)) ([3cca81c](https://github.com/foundation50/classroom50/commit/3cca81c4463b40cd0881b87bb9567b2839c94ead))
+* **web:** flag an out-of-date classroom on the assignments page ([#738](https://github.com/foundation50/classroom50/issues/738)) ([2705489](https://github.com/foundation50/classroom50/commit/27054890dac429b3e1f3efcde8cf0142c0aac1f8))
+* **web:** link the feedback PR directly from submission rows ([#743](https://github.com/foundation50/classroom50/issues/743)) ([1d1e32b](https://github.com/foundation50/classroom50/commit/1d1e32b20b5189c2f1f85df6e0d896fb113733cd))
+* **web:** migrate icons from lucide to Primer Octicons ([#723](https://github.com/foundation50/classroom50/issues/723)) ([cc607db](https://github.com/foundation50/classroom50/commit/cc607db3930b31d59ca91ae49a3dac748e85ff0a))
+* **web:** unify the collect label and drop its danger variant ([#734](https://github.com/foundation50/classroom50/issues/734)) ([584f4f7](https://github.com/foundation50/classroom50/commit/584f4f75a292774f24661e30f44ad8236cbdf0cd))
+
+
+### Bug Fixes
+
+* stop corrupting non-ASCII names in uploaded roster CSVs ([#746](https://github.com/foundation50/classroom50/issues/746)) ([c85ed9c](https://github.com/foundation50/classroom50/commit/c85ed9cfdb9cfccf0346471284f1ba5fbc29aea1))
+* **web:** align members and roster rows with the shared table style ([#750](https://github.com/foundation50/classroom50/issues/750)) ([b24b18f](https://github.com/foundation50/classroom50/commit/b24b18fe31d7ab3767e1629caae8f03255143021))
+* **web:** carry the accept link through first-time sign-in ([#749](https://github.com/foundation50/classroom50/issues/749)) ([bef3419](https://github.com/foundation50/classroom50/commit/bef34199e12e5f479e80b271fec67f5a609c1076))
+* **web:** move clone submissions button left of the actions menu ([#744](https://github.com/foundation50/classroom50/issues/744)) ([b4e6ac9](https://github.com/foundation50/classroom50/commit/b4e6ac93c6231d9c55d8f18cf4e9732a7ff805f4))
+* **web:** stop the assignments action column from stretching ([#736](https://github.com/foundation50/classroom50/issues/736)) ([997ddd4](https://github.com/foundation50/classroom50/commit/997ddd4b05ce01d3662d181245af7ecd670cf641))
+
 ## [1.33.0](https://github.com/foundation50/classroom50/compare/web-v1.32.0...web-v1.33.0) (2026-08-24)
 
 
