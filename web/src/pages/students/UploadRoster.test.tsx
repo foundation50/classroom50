@@ -1050,3 +1050,62 @@ describe("UploadRoster identity mismatch gate", () => {
     expect(importButton()?.disabled).toBe(false)
   })
 })
+
+// Issue #742: a Windows-1252 roster (Excel's plain "CSV" export on Windows)
+// must decode to the real characters, not U+FFFD, and the preview must say the
+// fallback ran so the teacher checks the names.
+describe("UploadRoster legacy-encoding fallback", () => {
+  it("decodes a Windows-1252 file and shows the encoding notice", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // "email,first_name\nada@x.no,ÆØÅæøå\n" with the name in Windows-1252
+    // single bytes — File.text() would have read six U+FFFDs here.
+    const ascii = (s: string) => Array.from(s, (c) => c.charCodeAt(0))
+    const bytes = new Uint8Array([
+      ...ascii("email,first_name\nada@x.no,"),
+      0xc6,
+      0xd8,
+      0xc5,
+      0xe6,
+      0xf8,
+      0xe5,
+      ...ascii("\n"),
+    ])
+    await uploadFile(user, new File([bytes], "roster.csv"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("students.uploadEncodingFallbackNotice"),
+      ).toBeTruthy(),
+    )
+    // The row table is collapsed behind the summary's details toggle.
+    await user.click(
+      await waitFor(() => screen.getByText("students.summaryViewDetails")),
+    )
+    await waitFor(() => expect(screen.getByText(/ÆØÅæøå/)).toBeTruthy())
+    expect(screen.queryByText(/\uFFFD/)).toBeNull()
+  })
+
+  it("shows no notice for a UTF-8 file", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "email,first_name\nada@x.no,ÆØÅæøå\n"),
+    )
+
+    await user.click(
+      await waitFor(() => screen.getByText("students.summaryViewDetails")),
+    )
+    await waitFor(() => expect(screen.getByText(/ÆØÅæøå/)).toBeTruthy())
+    expect(
+      screen.queryByText("students.uploadEncodingFallbackNotice"),
+    ).toBeNull()
+  })
+})

@@ -10,6 +10,9 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
+
+	"golang.org/x/text/encoding/charmap"
 )
 
 // RosterColumns: canonical required column order. github_id is tool-managed —
@@ -59,6 +62,25 @@ var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 // in an editor but makes the first line of the file unparseable.
 func TrimUTF8BOM(data []byte) []byte {
 	return bytes.TrimPrefix(data, utf8BOM)
+}
+
+// NormalizeTeacherText converts a teacher-supplied local file to UTF-8. Bytes
+// that already validate as UTF-8 (after BOM strip) pass through; anything else
+// is decoded as Windows-1252 — Excel's plain "CSV" export on a Western-locale
+// Windows box — which accepts every byte sequence, matching the web app's
+// fallback. transcoded reports the fallback ran, so a caller can tell the
+// teacher to double-check non-ASCII names.
+func NormalizeTeacherText(data []byte) (out []byte, transcoded bool) {
+	data = TrimUTF8BOM(data)
+	if utf8.Valid(data) {
+		return data, false
+	}
+	decoded, err := charmap.Windows1252.NewDecoder().Bytes(data)
+	if err != nil {
+		// Windows-1252 decodes every byte sequence; unreachable in practice.
+		return data, false
+	}
+	return decoded, true
 }
 
 // RosterRow is one student in the roster. GitHubID == 0 means unresolved — a

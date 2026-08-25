@@ -122,7 +122,7 @@ func rosterInviteCmd() *cobra.Command {
 			var data []byte
 			if path != "" {
 				var err error
-				if _, data, err = readTeacherFile(path, "--file path"); err != nil {
+				if _, data, err = readTeacherFile(cmd.ErrOrStderr(), path, "--file path"); err != nil {
 					return err
 				}
 			}
@@ -147,9 +147,11 @@ func rosterInviteCmd() *cobra.Command {
 
 // readTeacherFile reads a local file a teacher passed on the command line,
 // returning the resolved absolute path alongside the bytes so callers name the
-// file they actually opened. `what` labels the argument in a resolve error
-// (e.g. "--file path", "import path").
-func readTeacherFile(path, what string) (string, []byte, error) {
+// file they actually opened. Content is normalized to UTF-8 (see
+// NormalizeTeacherText), with a stderr notice when the Windows-1252 fallback
+// ran. `what` labels the argument in a resolve error (e.g. "--file path",
+// "import path").
+func readTeacherFile(errOut io.Writer, path, what string) (string, []byte, error) {
 	abs, err := filepath.Abs(path)
 	if err != nil {
 		return "", nil, fmt.Errorf("resolve %s: %w", what, err)
@@ -158,7 +160,11 @@ func readTeacherFile(path, what string) (string, []byte, error) {
 	if err != nil {
 		return "", nil, fmt.Errorf("read %s: %w", abs, err)
 	}
-	return abs, data, nil
+	normalized, transcoded := configrepo.NormalizeTeacherText(data)
+	if transcoded {
+		_, _ = fmt.Fprintf(errOut, "Notice: %s is not UTF-8 encoded and was read as Windows-1252 — double-check any non-ASCII names\n", abs)
+	}
+	return abs, normalized, nil
 }
 
 // errClassroomTeamUnusable refuses a send when classroom.json records no usable
