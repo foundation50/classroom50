@@ -58,7 +58,7 @@ describe("FormField", () => {
     const input = screen.getByLabelText("Name")
     expect(input.getAttribute("aria-describedby")).toBe(alert.id)
     expect(input.getAttribute("aria-invalid")).toBe("true")
-    // The invalid field renders a decorative error marker (lucide svg) in the
+    // The invalid field renders a decorative error marker icon in the
     // label row; the alert text carries the accessible announcement.
     expect(
       document.querySelector("svg.text-error[aria-hidden='true']"),

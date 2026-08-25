@@ -132,8 +132,9 @@ gh teacher assignment reuse cs50-fall-2026 hello --from cs-principles --to cs-pr
 Every field is copied (template, tests, runtime, due date included; update
 the due date after copying). Student repositories and scores are not copied,
 and the target classroom's team is re-granted read access to a private
-template inside the organization. The web app offers the same action on an
-assignment. See
+template inside the organization. The web app offers the same action as
+**Reuse in another classroom**, in the assignment row's **Manage assignment**
+dialog. See
 [`gh teacher assignment reuse`](gh-teacher#assignment-reuse).
 
 ## Resetting an organization (destructive)

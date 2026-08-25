@@ -359,7 +359,8 @@ student says "I submitted" and you see no score, collect first.
 On the submissions page, each row shows the student's (or group's) current
 score with links to the repository, the graded **commit**, the Release
 (**View autograder details**), the full **review** diff (starter code → graded
-commit), and the Feedback PR (**Review**).
+commit), and the Feedback PR (**View feedback PR** on the row, or **Review**
+in its manage dialog).
 
 ### Latest score versus history
 

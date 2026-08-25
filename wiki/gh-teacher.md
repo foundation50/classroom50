@@ -506,7 +506,9 @@ Bulk upsert. Accepts three header shapes: the stored roster shape
 (`username,first_name,last_name,email,section,github_id,role`), the same without
 `role`, and the first five columns alone, so a `roster.csv` exported from a
 web-managed classroom imports verbatim. The field reference is in
-[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+[Roster CSV fields](Web-Teacher-Guide#roster-csv-fields). A file that isn't
+UTF-8 is read as Windows-1252 (Excel's plain "CSV" export), with a notice to
+double-check non-ASCII names.
 
 Each row is routed by what identifies it:
 

@@ -376,7 +376,10 @@ is imported.
 Each row needs at least one column that identifies a student: `github_id`,
 `username`, or `email`. Every other column is optional. Headers are matched
 case-insensitively, and any unrecognized column is ignored, so a CSV exported
-from your SIS or gradebook usually works unchanged.
+from your SIS or gradebook usually works unchanged. Save the file as UTF-8
+when you can (Excel's **CSV UTF-8** export); a file that isn't is read as
+Windows-1252 — Excel's plain "CSV" export — and the upload shows a notice so
+you can check that accented names survived.
 
 When a row has more than one, they're used in that order — `github_id` first,
 then `username`, then `email`:
@@ -507,7 +510,9 @@ strip at the top of the submissions page (the **Actions** menu carries the same
 only this assignment's repositories, so a collection is fast even in a large
 classroom and doesn't rebuild other assignments' scores. The strip shows when
 this assignment's data was last collected (a per-assignment `collected_at`
-stamp in `scores.json`). Click
+stamp in `scores.json`), and an **Out of date** badge appears beside it when
+students have pushed since that collection — collect to grade and score the
+newest work. Click
 **View workflow** to see the Actions run. To refresh every assignment in one
 run instead, see [Collect the whole classroom](#collect-the-whole-classroom).
 
@@ -525,7 +530,8 @@ The top of the page shows:
 Each row shows a student's (or group's) latest submission plus its full history
 (newest first). For each submission you can view the score, the submission date,
 and links to the repository, the commit, the feedback pull request
-(**Review**), and the Release (**View autograder details**). For where every
+(**View feedback PR** on the row; its manage dialog carries the same link as
+**Review**), and the Release (**View autograder details**). For where every
 result lives — per-test breakdowns, past attempts, grading a specific commit,
 and who submitted — see
 [Reading results](Autograding-Basics#reading-results) in Autograding Basics.
@@ -534,7 +540,11 @@ and who submitted — see
 
 The classroom's assignments list refreshes all scores in one run. Above the
 table, a freshness line shows when the classroom's submission data was last
-collected, next to a **Collect all** button. Clicking it dispatches a single
+collected, next to a **Collect all** button. The same **Out of date** badge
+appears there when any assignment's repositories have pushes newer than that
+assignment's last collection — each assignment is judged against its own
+stamp, so one freshly collected assignment can't mask a sibling that was
+never collected. Clicking **Collect all** dispatches a single
 `collect-scores.yaml` run scoped to the classroom, so one run walks every
 assignment and rebuilds all of the classroom's collected scores; the table's
 per-assignment submission counts refresh when the run finishes.
@@ -610,7 +620,10 @@ assignment:
   bundled into a single zip (built in the browser, one repository at a time;
   for very large classrooms prefer `gh teacher download`, which clones every repository
   and writes a `scores.csv` — see the
-  [CLI Teacher Guide](CLI-Teacher-Guide#10-download-submissions)).
+  [CLI Teacher Guide](CLI-Teacher-Guide#10-download-submissions)). The **Clone
+  all submissions** button next to the **Actions** menu — and the download
+  icon in an assignment's row on the **Assignments** page — opens a dialog
+  with that CLI command filled in for the assignment, ready to copy.
 
 ### Download scores
 
@@ -620,6 +633,13 @@ spreadsheet or external tool. The column-by-column reference is in
 
 ## Edit assignments and classrooms
 
+- **Manage an assignment from the list** — each row on the **Assignments**
+  page keeps four quick actions (copy accept link, clone submissions, edit,
+  lock) plus **Manage assignment**, a dialog gathering every per-assignment
+  action in one place: the quick four, **Template access** (review which
+  teams can read the template, and re-grant the classroom teams' read),
+  **Reuse in another classroom**, and **Delete assignment** (which asks you
+  to type the slug to confirm; student repositories are kept).
 - **Edit an assignment** — open the assignment, then **Assignment settings**.
   Same form as creating one, pre-filled. Provisioning settings (repository
   source, built-in autograder, grading mode) are editable; a change only affects

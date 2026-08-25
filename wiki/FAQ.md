@@ -287,7 +287,9 @@ Download scores as a CSV from the submissions page
 in the same **Actions** menu bundles every repository's latest submission into
 a single zip (built in your browser). For real clones, to run your own
 tooling locally, `gh teacher download` clones every submission repository and also
-writes a `scores.csv` summary at the destination root. The raw score data also
+writes a `scores.csv` summary at the destination root (the submissions page's
+**Clone all submissions** button hands you that command ready to copy). The
+raw score data also
 lives in `scores.json` in your `classroom50` repository, so you can build your own
 automations against it. The column-by-column reference for both CSVs is in
 [Score exports](Autograding-Basics#score-exports) in Autograding Basics.
