@@ -23,3 +23,15 @@ export function isAuthedPath(pathname: string): boolean {
     path !== "/accessibility/"
   )
 }
+
+// Search for App's eager /login redirect: carry the destination through the
+// login round-trip (#71, #748) unless the sign-out was deliberate. "/" is
+// skipped — it's the post-login default (mirrors the _authed guard's isRoot).
+export function loginRedirectSearch(input: {
+  pathname: string
+  searchStr: string
+  signedOutDeliberately: boolean
+}): { redirect: string } | undefined {
+  if (input.signedOutDeliberately || input.pathname === "/") return undefined
+  return { redirect: input.pathname + input.searchStr }
+}

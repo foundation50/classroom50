@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { isAuthedPath } from "./authedPath"
+import { isAuthedPath, loginRedirectSearch } from "./authedPath"
 
 // App gates the session-end /login redirect on isAuthedPath: the public auth
 // screens ("/login", "/auth", "/auth/") and the public accessibility report
@@ -46,5 +46,50 @@ describe("isAuthedPath", () => {
     expect(scoped("/classroom50/login")).toBe(false)
     expect(scoped("/classroom50/")).toBe(true)
     expect(scoped("/classroom50/acme")).toBe(true)
+  })
+})
+
+// #748: App's eager /login redirect fires before the _authed guard can on a
+// cold unauthenticated load, so it must carry the deep link itself; only a
+// deliberate sign-out lands on a plain /login.
+describe("loginRedirectSearch", () => {
+  it("carries a cold-load deep link, query included (the shared accept link)", () => {
+    expect(
+      loginRedirectSearch({
+        pathname: "/acme/cs101/assignments/a1/accept",
+        searchStr: "?k=SECRET",
+        signedOutDeliberately: false,
+      }),
+    ).toEqual({ redirect: "/acme/cs101/assignments/a1/accept?k=SECRET" })
+  })
+
+  it("carries a query-less destination (e.g. after a 401 session expiry)", () => {
+    expect(
+      loginRedirectSearch({
+        pathname: "/acme/cs101/assignments",
+        searchStr: "",
+        signedOutDeliberately: false,
+      }),
+    ).toEqual({ redirect: "/acme/cs101/assignments" })
+  })
+
+  it("drops the carry after a deliberate sign-out", () => {
+    expect(
+      loginRedirectSearch({
+        pathname: "/acme/cs101/assignments/a1/accept",
+        searchStr: "?k=SECRET",
+        signedOutDeliberately: true,
+      }),
+    ).toBeUndefined()
+  })
+
+  it("skips '/' — the post-login default — to avoid a noisy ?redirect=%2F", () => {
+    expect(
+      loginRedirectSearch({
+        pathname: "/",
+        searchStr: "",
+        signedOutDeliberately: false,
+      }),
+    ).toBeUndefined()
   })
 })
