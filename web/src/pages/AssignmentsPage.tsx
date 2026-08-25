@@ -123,10 +123,11 @@ export const TeacherAssignmentsView = ({
     isLoading: studentsLoading,
     isError: studentCountError,
   } = useStudentCount(org, classroom)
-  const { data: classroomData, isLoading: classroomLoading } = useGetClassroom(
-    org,
-    classroom,
-  )
+  const {
+    data: classroomData,
+    isLoading: classroomLoading,
+    isError: classroomError,
+  } = useGetClassroom(org, classroom)
   const { role: myRole } = useClassroomRoleContext()
   const myRoleLabelKey = roleLabelKey(myRole)
   const myRoleLabel = myRoleLabelKey ? t(myRoleLabelKey) : null
@@ -260,6 +261,11 @@ export const TeacherAssignmentsView = ({
         <AssignmentsTable
           org={org}
           classroom={classroom}
+          secret={classroomData?.secret}
+          // A failed read leaves `secret` undefined just like a pending one, so
+          // both count as unresolved — else a transient error would re-enable
+          // the copy action and hand out a keyless link.
+          secretPending={classroomLoading || classroomError}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
           studentCount={studentCount}

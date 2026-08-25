@@ -100,7 +100,7 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
               {item.label}
               <LinkExternalIcon
                 aria-hidden="true"
-                className="size-3 opacity-60"
+                className="size-4 opacity-60"
               />
             </a>
           ) : (

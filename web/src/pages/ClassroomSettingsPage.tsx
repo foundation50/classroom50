@@ -1,9 +1,9 @@
 import Breadcrumb from "@/components/breadcrumb"
+import { FormSkeleton } from "@/components/list"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { Spinner } from "@/components/Spinner"
 import { useParams } from "@tanstack/react-router"
 import EditClassroomForm from "./classes/EditClassroomForm"
 import ClassroomStaffSection from "./classes/ClassroomStaffSection"
@@ -48,11 +48,7 @@ const EditClassroomContent = ({
   return (
     <LoadingSwap
       loading={loadingClassroom}
-      fallback={
-        <div className="flex">
-          <Spinner className="m-auto" label={t("classes.loadingClassroom")} />
-        </div>
-      }
+      fallback={<FormSkeleton label={t("classes.loadingClassroom")} />}
     >
       {!cl ? (
         <Alert tone="error">{t("classes.couldNotLoad")}</Alert>

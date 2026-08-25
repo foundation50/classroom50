@@ -560,7 +560,7 @@ const RosterMemberModal = ({
                     className="size-4 opacity-70"
                   />
                   <span className="font-mono">@{row.username}</span>
-                  <LinkExternalIcon aria-hidden="true" className="size-3" />
+                  <LinkExternalIcon aria-hidden="true" className="size-4" />
                 </a>
               ) : row.email ? (
                 <span className="text-sm text-base-content/70">
