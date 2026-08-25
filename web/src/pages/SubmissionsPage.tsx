@@ -912,7 +912,7 @@ const SubmissionsPageContent = () => {
 
   // Gating trackedCompletedAt on phase "completed" means conclusion ===
   // "success" (see useGitHubOperation), so a failed/timed-out run never
-  // relaxes the button. Both the freshness label and the staleness color read
+  // relaxes the button. Both the freshness label and the staleness badge read
   // the one effectiveCollectedAt value so they can't disagree; that helper
   // owns the bucket-stamp vs run-timestamp precedence.
   const lastRunCompletedAt =
