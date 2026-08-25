@@ -26,6 +26,13 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
 }))
 
+// The author-tier rows mount the lock action, which reads the toast context;
+// the table test doesn't exercise notifications, so stub the hook rather than
+// wrapping every render in a provider.
+vi.mock("@/context/notifications/NotificationProvider", () => ({
+  useToast: () => ({ notify: () => {} }),
+}))
+
 // The modal is exercised in its own test; here we stub it to a marker so the
 // table test asserts only that the trigger renders and opens it.
 vi.mock("@/components/modals/TemplateAccessModal", () => ({
@@ -459,5 +466,69 @@ describe("AssignmentsTable — assignments that skip grading", () => {
       />,
     )
     expect(screen.getByText("assignments.table.groupsSubmitted")).toBeTruthy()
+  })
+})
+
+describe("AssignmentsTable copy accept link", () => {
+  const writeText = vi.fn<(text: string) => Promise<void>>()
+  const COPY_ARIA = "assignments.table.copyLinkAria"
+  const acceptLink = (query = "") =>
+    `${window.location.origin}/acme/cs101/assignments/hw1/accept${query}`
+
+  // One author-tier row; each test overrides only the prop it exercises.
+  const renderRow = (over: Record<string, unknown> = {}) =>
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        canAuthor
+        {...over}
+      />,
+    )
+
+  Object.defineProperty(navigator, "clipboard", {
+    value: { writeText },
+    configurable: true,
+  })
+
+  beforeEach(() => {
+    writeText.mockReset()
+    writeText.mockResolvedValue(undefined)
+  })
+
+  it("copies the student accept link for the row", async () => {
+    renderRow()
+    fireEvent.click(screen.getByLabelText(COPY_ARIA))
+    expect(writeText).toHaveBeenCalledWith(acceptLink())
+    // The copied state flips only after the clipboard write resolves.
+    expect(
+      await screen.findByTitle("assignments.table.linkCopied"),
+    ).toBeTruthy()
+  })
+
+  it("carries a protected classroom's secret so the link doesn't 404", () => {
+    renderRow({ secret: "ab12cd34" })
+    fireEvent.click(screen.getByLabelText(COPY_ARIA))
+    expect(writeText).toHaveBeenCalledWith(acceptLink("?k=ab12cd34"))
+  })
+
+  it("waits for the classroom read rather than copying a keyless link", () => {
+    // An unresolved secret reads the same as "unprotected", so copying is held
+    // until classroom.json settles — whether it is still loading or the read
+    // failed, which the page collapses into this one flag.
+    renderRow({ secretPending: true })
+    fireEvent.click(screen.getByLabelText(COPY_ARIA))
+    expect(writeText).not.toHaveBeenCalled()
+    // The disabled state says why, rather than looking like a dead button.
+    expect(screen.getByTitle("assignments.table.copyLinkPending")).toBeTruthy()
+  })
+
+  it("stays available on read-only rows (archived or non-author)", () => {
+    // Copying a link mutates nothing, so it survives the same gate that hides
+    // reuse/lock/delete.
+    renderRow({ canAuthor: false, archived: true })
+    expect(screen.getByLabelText(COPY_ARIA)).toBeTruthy()
+    expect(screen.queryByLabelText("assignments.table.deleteAria")).toBeNull()
   })
 })

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react"
+import { FormSkeleton } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import CreateAssignmentForm, {
   assignmentToFormValues,
@@ -18,7 +19,6 @@ import useGetStudents from "@/hooks/useGetStudents"
 import { assignmentRepoNames } from "@/pages/submissions/dashboard"
 import { ProvisioningChangeConfirmModal } from "@/components/modals/ProvisioningChangeConfirmModal"
 import { LoadingSwap } from "@/lib/LoadingSwap"
-import { Spinner } from "@/components/Spinner"
 import { parseSubmissionTags } from "@/util/submissionTags"
 
 const EditAssignmentForm = ({
@@ -116,9 +116,7 @@ const EditAssignmentForm = ({
     <LoadingSwap
       loading={!defaultData}
       fallback={
-        <div className="flex">
-          <Spinner className="m-auto" label={t("assignmentSettings.loading")} />
-        </div>
+        <FormSkeleton fields={6} label={t("assignmentSettings.loading")} />
       }
     >
       {defaultData ? (

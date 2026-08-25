@@ -1483,6 +1483,10 @@
       "notCollectedYet": "Not collected yet",
       "editAssignment": "Edit assignment",
       "viewAssignment": "View assignment",
+      "copyLinkTitle": "Copy accept link",
+      "copyLinkAria": "Copy the accept link for {{name}}",
+      "copyLinkPending": "Checking whether this classroom needs an access key…",
+      "linkCopied": "Accept link copied",
       "openSubmissionsAria": "Open {{name}} submissions",
       "deleteAria": "Delete {{name}}",
       "deleteTitle": "Delete assignment?",
@@ -2803,6 +2807,16 @@
       "emptyHint": "The student accepted the assignment but hasn't pushed any work yet, so there's no submission to include.",
       "failedTitle": "These submissions couldn't be downloaded:",
       "failedHint": "This is often a transient GitHub error — run the action again to retry."
+    },
+    "cloneAll": {
+      "buttonTitle": "Clone all submissions with the CLI",
+      "heading": "Clone all submissions",
+      "subheading": "Run this command in your terminal to clone every student repository for this assignment into a local folder.",
+      "copyCli": "Copy CLI command",
+      "copied": "Copied",
+      "needCli": "Need the teacher CLI?",
+      "installHint": "Install the GitHub CLI, then add the teacher extension:",
+      "copyInstall": "Copy install command"
     },
     "bulkAccess": {
       "menuLabel": "Update student repo access",

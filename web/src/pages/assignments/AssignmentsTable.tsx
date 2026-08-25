@@ -3,8 +3,10 @@ import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import {
   AlertIcon,
+  CheckIcon,
   CopyIcon,
   EyeIcon,
+  LinkIcon,
   LockIcon,
   PencilIcon,
   ShieldCheckIcon,
@@ -13,6 +15,8 @@ import {
 } from "@/components/ui/icons"
 
 import useGetScores from "@/hooks/useGetScores"
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { acceptLinkUrl } from "@/util/acceptLink"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { existingGroupRepos } from "@/pages/submissions/dashboard"
 import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
@@ -113,6 +117,63 @@ const DeleteAssignmentButton = ({
         onClose={() => setOpen(false)}
       />
     </>
+  )
+}
+
+// Per-row "Copy accept link" — reaching the same link through the submissions
+// page's share modal costs four clicks per assignment (issue #731). Copying
+// mutates nothing, so it stays on archived and TA rows too.
+//
+// Disabled while the classroom read is unresolved — still loading, or failed:
+// either way `secret` is undefined, indistinguishable from "unprotected", and
+// copying a protected classroom's link without its `?k=` would hand students a
+// silent 404.
+const CopyAcceptLinkButton = ({
+  org,
+  classroom,
+  assignment,
+  secret,
+  secretPending = false,
+}: {
+  org: string
+  classroom: string
+  assignment: Assignment
+  secret?: string
+  secretPending?: boolean
+}) => {
+  const { t } = useTranslation()
+  const { copied, copy } = useCopyToClipboard(
+    acceptLinkUrl(org, classroom, assignment.slug, secret),
+    1500,
+  )
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      shape="circle"
+      disabled={secretPending}
+      title={
+        secretPending
+          ? t("assignments.table.copyLinkPending")
+          : copied
+            ? t("assignments.table.linkCopied")
+            : t("assignments.table.copyLinkTitle")
+      }
+      aria-label={t("assignments.table.copyLinkAria", {
+        name: name(assignment),
+      })}
+      onClick={(e) => {
+        e.stopPropagation()
+        void copy()
+      }}
+    >
+      {copied ? (
+        <CheckIcon aria-hidden="true" className="size-4 text-success" />
+      ) : (
+        <LinkIcon aria-hidden="true" className="size-4" />
+      )}
+    </Button>
   )
 }
 
@@ -360,6 +421,8 @@ const SKELETON_BARS = [
 const AssignmentsTable = ({
   org,
   classroom,
+  secret,
+  secretPending,
   assignments,
   allAssignments,
   studentCount,
@@ -372,6 +435,15 @@ const AssignmentsTable = ({
 }: {
   org: string
   classroom: string
+  // The classroom's capability-URL secret (classroom.json `secret`), read off
+  // the same classroom.json the page already loads for `archived`. Threaded in
+  // so each row's copied accept link carries `?k=` for a protected classroom;
+  // undefined for the unprotected default — and indistinguishable from "not
+  // loaded yet", which is what `secretPending` separates.
+  secret?: string
+  // Whether that classroom read is unresolved (in flight or failed), so the copy
+  // action waits rather than hand out a keyless link for a protected classroom.
+  secretPending?: boolean
   assignments?: Assignment[]
   // The UNFILTERED assignment list, for the sibling-slug repo-attribution
   // guard. `assignments` is the visible (searched/filtered) set — deriving
@@ -474,7 +546,11 @@ const AssignmentsTable = ({
           />
           <th scope="col">{t("assignments.table.colAccepted")}</th>
           <th scope="col">{t("assignments.table.colSubmitted")}</th>
-          <th scope="col">
+          {/* w-0: auto table layout hands surplus width to every column,
+              which stretched this fixed-width button strip. Zero width makes
+              the browser fall back to min-content here and give the slack to
+              the text columns instead. */}
+          <th scope="col" className="w-0">
             <span className="sr-only">{t("assignments.table.colActions")}</span>
           </th>
         </tr>
@@ -737,76 +813,77 @@ const AssignmentsTable = ({
                   )
                 })()}
               </td>
-              <td>
-                <Link
-                  className="btn btn-circle btn-sm btn-ghost"
-                  to="/$org/$classroom/assignments/$assignment/settings"
-                  params={{
-                    org,
-                    classroom,
-                    assignment: assignment.slug,
-                  }}
-                  title={
-                    canMutate
-                      ? t("assignments.table.editAssignment")
-                      : t("assignments.table.viewAssignment")
-                  }
-                  onClick={(event) => {
-                    event.stopPropagation()
-                  }}
-                >
-                  {canMutate ? (
-                    <PencilIcon aria-hidden="true" className="size-4" />
-                  ) : (
-                    <EyeIcon aria-hidden="true" className="size-4" />
-                  )}
-                </Link>
-                {!canMutate ? (
-                  // Read-only rows (archived, or viewer can't author): reviewing
-                  // template access (and reaching the source repo) stays
-                  // available; the modal itself owner-gates the re-grant.
-                  assignment.template && (
-                    <TemplateAccessButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                  )
-                ) : (
-                  <>
-                    <ReuseAssignmentButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                    {assignment.template && (
-                      <TemplateAccessButton
+              <td className="w-0 py-2! ps-2">
+                <div className="flex items-center justify-end gap-1">
+                  <Link
+                    className="btn btn-circle btn-sm btn-ghost"
+                    to="/$org/$classroom/assignments/$assignment/settings"
+                    params={{
+                      org,
+                      classroom,
+                      assignment: assignment.slug,
+                    }}
+                    title={
+                      canMutate
+                        ? t("assignments.table.editAssignment")
+                        : t("assignments.table.viewAssignment")
+                    }
+                    onClick={(event) => {
+                      event.stopPropagation()
+                    }}
+                  >
+                    {canMutate ? (
+                      <PencilIcon aria-hidden="true" className="size-4" />
+                    ) : (
+                      <EyeIcon aria-hidden="true" className="size-4" />
+                    )}
+                  </Link>
+                  {/* Read-only actions, so they survive the archived /
+                      can't-author gate below: copying a link mutates nothing, and
+                      reviewing template access (or reaching the source repo)
+                      stays available because the modal owner-gates its re-grant.
+                      TemplateAccessButton renders nothing without a template. */}
+                  <CopyAcceptLinkButton
+                    org={org}
+                    classroom={classroom}
+                    assignment={assignment}
+                    secret={secret}
+                    secretPending={secretPending}
+                  />
+                  <TemplateAccessButton
+                    org={org}
+                    classroom={classroom}
+                    assignment={assignment}
+                  />
+                  {canMutate && (
+                    <>
+                      <ReuseAssignmentButton
                         org={org}
                         classroom={classroom}
                         assignment={assignment}
                       />
-                    )}
-                    <LockAssignmentButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                    <DeleteAssignmentButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                      onDeleteAssignment={() =>
-                        queryClient.invalidateQueries({
-                          queryKey: githubKeys.jsonFile(
-                            org,
-                            CONFIG_REPO,
-                            `${classroom}/assignments.json`,
-                          ),
-                        })
-                      }
-                    />
-                  </>
-                )}
+                      <LockAssignmentButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                      />
+                      <DeleteAssignmentButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                        onDeleteAssignment={() =>
+                          queryClient.invalidateQueries({
+                            queryKey: githubKeys.jsonFile(
+                              org,
+                              CONFIG_REPO,
+                              `${classroom}/assignments.json`,
+                            ),
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                </div>
               </td>
             </ClickableTr>
           ))}

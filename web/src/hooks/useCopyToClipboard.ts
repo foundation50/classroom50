@@ -8,13 +8,16 @@ export function useCopyToClipboard(text: string, resetMs = 2000) {
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const mountedRef = useRef(true)
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    // Re-arm on every effect pass: StrictMode's dev-only mount→cleanup→mount
+    // runs on the same instance, so a cleanup-only flag would stay false and
+    // permanently suppress the copied state in development.
+    mountedRef.current = true
+    return () => {
       mountedRef.current = false
       if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
-    },
-    [],
-  )
+    }
+  }, [])
 
   const copy = async () => {
     try {

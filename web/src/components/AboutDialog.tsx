@@ -109,7 +109,7 @@ export const AboutDialog = forwardRef<
               rel="noreferrer"
             >
               v{appVersion.version}
-              <LinkExternalIcon aria-hidden="true" className="size-3" />
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
             </a>
           ) : (
             <>v{appVersion.version}</>
@@ -125,7 +125,7 @@ export const AboutDialog = forwardRef<
             rel="noreferrer"
           >
             {shortCommit()}
-            <LinkExternalIcon aria-hidden="true" className="size-3" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </a>
           <span className="ms-1 text-base-content/60">
             ({formatBuildDate()})

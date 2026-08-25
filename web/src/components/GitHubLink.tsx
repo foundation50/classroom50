@@ -24,7 +24,7 @@ export const GitHubLink = ({
   >
     {showLogo && <MarkGithubIcon className="size-4" aria-hidden="true" />}
     {label}
-    <LinkExternalIcon className="size-3" aria-hidden="true" />
+    <LinkExternalIcon className="size-4" aria-hidden="true" />
   </a>
 )
 
