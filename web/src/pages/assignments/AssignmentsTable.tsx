@@ -741,7 +741,7 @@ const AssignmentsTable = ({
                   )
                 })()}
               </td>
-              <td className="w-0 py-2! pl-2">
+              <td className="w-0 py-2! ps-2">
                 <div className="flex items-center justify-end gap-1">
                   <Link
                     className="btn btn-circle btn-sm btn-ghost"
