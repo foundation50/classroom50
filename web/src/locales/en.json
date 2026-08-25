@@ -801,6 +801,7 @@
     "uploadInviteNotice_one": "This will send {{count}} GitHub organization invitation to students who aren't members yet.",
     "uploadInviteNotice_other": "This will send {{count}} GitHub organization invitations to students who aren't members yet.",
     "uploadTeacherOwnerNotice": "Rows marked Teacher will be invited as organization OWNERS, granting full control of the organization. Only assign the teacher role to people you trust with owner access.",
+    "uploadEncodingFallbackNotice": "This file isn't UTF-8 encoded, so it was read as Windows-1252. Check that names and accents look right below — for best results, export from Excel as \"CSV UTF-8\".",
     "roleWritebackMalformed": "Invitations were sent, but the assigned roles couldn't be written because roster.csv is malformed. Fix the flagged lines on the roster, then re-check — roles will converge on the next sync.",
     "roleWritebackFailed": "Invitations were sent, but writing the assigned roles to roster.csv failed. The roles will converge on the next sync, or re-run the import to retry.",
     "metadataWritebackMalformed": "The import completed, but student details couldn't be updated because roster.csv is malformed. Fix the flagged lines on the roster, then re-check.",

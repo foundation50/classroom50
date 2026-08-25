@@ -17,6 +17,7 @@ import {
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
 import { logger } from "@/lib/logger"
+import { decodeTextFile } from "@/util/fileBytes"
 import { isTeacherRole } from "@/authz"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
@@ -106,6 +107,9 @@ const UploadRoster = ({
   // always the initial one — its parser handles all three shapes — so the other
   // two exist only as the teacher's explicit override.
   const [fileText, setFileText] = useState("")
+  // True when the file wasn't UTF-8 and was decoded as Windows-1252 — worth a
+  // notice so the teacher checks the preview for garbled names (issue #742).
+  const [encodingFallback, setEncodingFallback] = useState(false)
   const [uploadKind, setUploadKind] = useState<UploadKind>(DEFAULT_UPLOAD_KIND)
   // Rows as parsed, before identity resolution, plus the lines the parse could
   // not address to anyone. `parseId` increments on every parse so the resolution
@@ -173,6 +177,7 @@ const UploadRoster = ({
     setPhase("idle")
     setFileName("")
     setFileText("")
+    setEncodingFallback(false)
     setUploadKind(DEFAULT_UPLOAD_KIND)
     setParsedRows([])
     setDroppedRows([])
@@ -552,10 +557,11 @@ const UploadRoster = ({
   const ingestFile = async (file: File) => {
     const token = ++ingestToken.current
     try {
-      const text = await file.text()
+      const { text, fallbackUsed } = await decodeTextFile(file)
       if (ingestToken.current !== token) return
       setFileName(file.name)
       setFileText(text)
+      setEncodingFallback(fallbackUsed)
       applyKind(text, DEFAULT_UPLOAD_KIND)
       setResult(null)
       setEmailResult(null)
@@ -746,6 +752,15 @@ const UploadRoster = ({
 
         {phase === "preview" && (
           <div className="mt-6">
+            {/* Legacy-encoding fallback: the bytes weren't UTF-8, so they were
+                read as Windows-1252. Right for Excel's Western "ANSI" CSV
+                export; a rarer code page shows garbled names the teacher can
+                catch here before importing. */}
+            {encodingFallback ? (
+              <Alert tone="info" className="mb-4">
+                <span>{t("students.uploadEncodingFallbackNotice")}</span>
+              </Alert>
+            ) : null}
             {/* How the file is being read, with an override. Roster CSV is always
                 the initial choice; the other two are assertions about every line
                 that the same parser honours. */}

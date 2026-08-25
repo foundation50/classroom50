@@ -892,6 +892,56 @@ func TestParseImportCSV_StripsUTF8BOM(t *testing.T) {
 	}
 }
 
+func TestNormalizeTeacherText(t *testing.T) {
+	// "Bjørn Ægir" in Windows-1252 single bytes (ø=0xF8, Æ=0xC6) — what Excel's
+	// plain "CSV" export produces on a Western-locale Windows box (issue #742).
+	win1252Name := []byte{0x42, 0x6A, 0xF8, 0x72, 0x6E, 0x20, 0xC6, 0x67, 0x69, 0x72}
+
+	cases := []struct {
+		name           string
+		in             []byte
+		want           string
+		wantTranscoded bool
+	}{
+		{"ascii passthrough", []byte("username\nalice\n"), "username\nalice\n", false},
+		{"utf-8 passthrough", []byte("first_name\nBjørn Ægir\n"), "first_name\nBjørn Ægir\n", false},
+		{"utf-8 BOM stripped", append([]byte{0xEF, 0xBB, 0xBF}, "username\nalice\n"...), "username\nalice\n", false},
+		{"windows-1252 transcoded", append([]byte("first_name\n"), append(win1252Name, '\n')...), "first_name\nBjørn Ægir\n", true},
+		{"empty", nil, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out, transcoded := NormalizeTeacherText(tc.in)
+			if string(out) != tc.want {
+				t.Fatalf("NormalizeTeacherText = %q, want %q", out, tc.want)
+			}
+			if transcoded != tc.wantTranscoded {
+				t.Fatalf("transcoded = %v, want %v", transcoded, tc.wantTranscoded)
+			}
+		})
+	}
+}
+
+func TestParseImportCSV_Windows1252ViaNormalize(t *testing.T) {
+	// The readTeacherFile path: a Windows-1252 import normalizes to UTF-8
+	// before parsing, so the name survives instead of landing invalid bytes
+	// in roster.csv (which the web then renders as U+FFFD).
+	in := append([]byte("username,first_name,last_name,email,section\nalice,"),
+		0x42, 0x6A, 0xF8, 0x72, 0x6E) // "Bjørn" in Windows-1252
+	in = append(in, []byte(",A,,s\n")...)
+	normalized, transcoded := NormalizeTeacherText(in)
+	if !transcoded {
+		t.Fatal("expected the Windows-1252 fallback to run")
+	}
+	rows, err := ParseImportCSV(normalized)
+	if err != nil {
+		t.Fatalf("ParseImportCSV after normalize: %v", err)
+	}
+	if len(rows) != 1 || rows[0].FirstName != "Bjørn" {
+		t.Fatalf("expected first_name Bjørn, got %#v", rows)
+	}
+}
+
 func TestParseImportCSV_RejectsWidenedExportWithGuidance(t *testing.T) {
 	// A roster CSV widened past the canonical role column (legacy web exports
 	// carried enrollment bookkeeping columns) is still rejected: import

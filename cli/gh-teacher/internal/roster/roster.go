@@ -654,7 +654,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		return err
 	}
 
-	abs, data, err := readTeacherFile(csvPath, "import path")
+	abs, data, err := readTeacherFile(errOut, csvPath, "import path")
 	if err != nil {
 		return err
 	}
