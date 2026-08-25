@@ -1,23 +1,29 @@
-import { useQueryClient } from "@tanstack/react-query"
 import { AlertIcon, SyncIcon } from "@/components/ui/icons"
-import { useEffect, useId, useState } from "react"
+import { useEffect, useId, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button, Modal, Heading } from "@/components/ui"
+import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { githubKeys } from "@/github-core/queries"
+import { GitHubAPIError } from "@/github-core/errors"
+import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
+import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useGetScores from "@/hooks/useGetScores"
+import useInvalidateAfterCollect from "@/hooks/useInvalidateAfterCollect"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
-import { latestCollectedAt } from "@/pages/submissions/dashboard"
-import { CONFIG_REPO } from "@/util/configRepo"
+import {
+  classroomSnapshotIsStale,
+  latestCollectedAt,
+} from "@/pages/submissions/dashboard"
 import { formatRelativeToNow } from "@/util/formatDate"
 
 // Classroom-wide "Collect all", presented as the assignments toolbar's
-// freshness widget — a passive "Submission data collected x ago" line plus the
-// action, mirroring the submissions page's DataFreshness pairing so the button
-// carries its own context: the table's submission counts come from the
-// scores.json snapshot this button rebuilds. The line reuses the shared
+// freshness widget — a passive "Submission data collected x ago" line, an
+// "Out of date" badge when the snapshot has fallen behind, and the action.
+// Mirrors the submissions page's DataFreshness pairing so the button carries
+// its own context: the table's submission counts come from the scores.json
+// snapshot this button rebuilds. The line and the badge reuse the shared
 // submissions.freshness strings (one wording, no duplicate translation keys).
 //
 // Dispatches collect-scores with only the `classroom` input, so the workflow
@@ -48,7 +54,6 @@ export function ClassroomCollectButton({
 }) {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const queryClient = useQueryClient()
   const collect = useTriggerScoreCollection(org, { classroom })
   const busy = collect.phase === "dispatching" || collect.phase === "running"
   // A sweep is a heavier dispatch than the per-assignment collect (it walks
@@ -65,43 +70,114 @@ export function ClassroomCollectButton({
   // classroom); a wholly unstamped file predates the stamping collector, when
   // every run was org-wide, so the run fallback is sound there — the same
   // precedence the submissions page's effectiveCollectedAt applies per bucket.
-  const { data: scoresData, isLoading: scoresLoading } = useGetScores(
-    org,
-    classroom,
-  )
+  const {
+    data: scoresData,
+    isLoading: scoresLoading,
+    error: scoresError,
+  } = useGetScores(org, classroom)
+  // A missing scores.json 404s — that IS the never-collected state, and the
+  // badge may speak to it. Any other failure (rate limit, network) answered
+  // nothing, so claiming "Out of date" from it would be a false claim.
+  const scoresReadFailed =
+    scoresError != null &&
+    !(scoresError instanceof GitHubAPIError && scoresError.isNotFound)
   const { data: lastRun } = useGetLastCollectScoresRun(org)
   const bucketStamps = Object.values(scoresData?.collectedAt ?? {})
   const newestStamp = bucketStamps.reduce<string | null>(
     latestCollectedAt,
     null,
   )
-  const lastCollectedAt =
+  // A just-finished tracked sweep outranks the lagging completed-run query
+  // (phase "completed" means conclusion success — see useGitHubOperation),
+  // mirroring the submissions page's trackedCompletedAt: without it, a legacy
+  // unstamped file's badge would relight off the PRIOR run the invalidated
+  // refetch can still return right after a successful collect.
+  const trackedCompletedAt =
+    collect.phase === "completed" ? (collect.run?.created_at ?? null) : null
+  const lastCollectedAt = latestCollectedAt(
     newestStamp ??
-    (scoresData && bucketStamps.length === 0 && lastRun?.status === "completed"
-      ? lastRun.created_at
-      : null)
+      (scoresData &&
+      bucketStamps.length === 0 &&
+      lastRun?.status === "completed"
+        ? lastRun.created_at
+        : null),
+    trackedCompletedAt,
+  )
   const lastCollectedLabel = lastCollectedAt
     ? formatRelativeToNow(new Date(lastCollectedAt))
     : null
 
-  // A finished sweep rewrote every bucket in this classroom's scores.json, so
-  // drop the cached gradebook and the last-run stamp; the table's submission
-  // counts re-derive on the refetch. `timeout` is only this client giving up on
-  // the poll — the run itself usually lands, so refresh there too rather than
-  // leaving the page on stale counts.
-  useEffect(() => {
-    if (collect.phase !== "completed" && collect.phase !== "timeout") return
-    queryClient.invalidateQueries({
-      queryKey: githubKeys.jsonFile(
-        org,
-        CONFIG_REPO,
-        `${classroom}/scores.json`,
-      ),
-    })
-    queryClient.invalidateQueries({
-      queryKey: githubKeys.lastCollectScoresRun(org),
-    })
-  }, [collect.phase, classroom, org, queryClient])
+  // Classroom-wide staleness, the same signal the submissions page shows per
+  // assignment: a repo pushed after the collect that last walked ITS bucket.
+  // Both reads are already in the query cache on this page — the table renders
+  // from the same assignment list and holds the same `orgRepos` query key — so
+  // this adds no request; deliberately left ungated for that reason, since one
+  // ungated observer (the table's) decides the fetch for every observer
+  // anyway. While either read is unavailable no badge shows, which is the same
+  // quiet default the submissions page falls back to.
+  const { data: assignmentsData } = useGetClassroomAssignments(org, classroom)
+  const assignments = useMemo(
+    () => assignmentsData?.assignments ?? [],
+    [assignmentsData],
+  )
+  // Every slug in the classroom — the sibling-slug guard needs the COMPLETE
+  // list, or "hw1" starts absorbing "hw1-bonus"'s repos.
+  const assignmentSlugs = useMemo(
+    () => assignments.map((a) => a.slug),
+    [assignments],
+  )
+  // ...but only the collectable ones are asked whether they are behind. A bare
+  // empty_repo assignment is skipped by collect_scores.py outright, so its
+  // bucket is never written and never stamped, while its student repos exist
+  // and carry a push from accept time. Measured against a stamp that can never
+  // arrive it would read as stale forever — a badge no collect could clear.
+  // (no_autograder is NOT excluded: the collector does write its bucket, from
+  // detected submissions rather than grades, so it stamps like any other.
+  // Known edge: a pre-#694 collector never stamps no_autograder buckets, so on
+  // such an org the badge latches for them until the workflows are updated —
+  // accepted, because the skeleton-drift banner is already telling that org's
+  // teachers to update, and updating is the actual fix.)
+  const collectableSlugs = useMemo(
+    () => assignments.filter((a) => a.empty_repo !== true).map((a) => a.slug),
+    [assignments],
+  )
+  const { data: orgRepos } = useGetOrgRepos(org)
+  const stale = useMemo(
+    () =>
+      // Gated on the scores read for the same reason the collected line is:
+      // before scores.json lands every bucket looks unstamped, and claiming
+      // "Out of date" in that window is the false claim the silent line
+      // avoids. A failed (non-404) read gets the same silence — it answered
+      // nothing, so there is nothing truthful to claim.
+      !scoresLoading &&
+      !scoresReadFailed &&
+      classroomSnapshotIsStale({
+        repos: orgRepos,
+        classroom,
+        measuredSlugs: collectableSlugs,
+        collectedAt: scoresData?.collectedAt,
+        runCollectedAt: lastCollectedAt,
+        allSlugs: assignmentSlugs,
+      }),
+    [
+      scoresLoading,
+      scoresReadFailed,
+      orgRepos,
+      classroom,
+      collectableSlugs,
+      assignmentSlugs,
+      scoresData?.collectedAt,
+      lastCollectedAt,
+    ],
+  )
+
+  // A finished sweep rewrote this classroom's scores.json, so drop the reads it
+  // invalidated (gradebook, last-run stamp, org repo list) — the table's counts
+  // and the badge re-derive on the refetch. Note the org-repo re-read unfreezes
+  // `pushed_at` from page load; it cannot see a push the sweep itself missed
+  // (the collector stamps after its walk), so a push landing mid-sweep reads as
+  // collected until the next push or collect.
+  useInvalidateAfterCollect(org, classroom, collect.phase)
 
   useEffect(() => {
     if (collect.phase !== "failed" || collect.failure !== "dispatch") return
@@ -120,41 +196,40 @@ export function ClassroomCollectButton({
   }, [collect.phase, collect.failure, collect.error, classroom, notify, t])
 
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-      {/* Silent while scores.json loads so the line doesn't flash "not
-          collected yet" before the cached snapshot arrives. */}
-      {!scoresLoading && (
-        <span role="status" className="text-sm text-base-content/70">
-          {lastCollectedLabel
-            ? t("submissions.freshness.collected", {
-                when: lastCollectedLabel,
-              })
-            : t("submissions.freshness.neverCollected")}
-        </span>
-      )}
-      <Button
-        variant="ghost"
-        size="sm"
-        loading={busy}
-        loadingLabel={t("submissions.collect.active")}
-        disabled={emptyRoster}
-        title={
-          emptyRoster
-            ? t("submissions.collect.titleEmptyRoster")
-            : t("assignments.collect.title")
-        }
-        onClick={() => setConfirmOpen(true)}
+    <>
+      <SubmissionFreshnessLine
+        lastCollectedLabel={lastCollectedLabel}
+        stale={stale}
+        // Silent while scores.json loads so the line doesn't flash "not
+        // collected yet" before the cached snapshot arrives.
+        showCollectedLine={!scoresLoading}
       >
-        {busy ? (
-          t("submissions.collect.active")
-        ) : (
-          <>
-            <SyncIcon aria-hidden="true" className="size-4" />
-            {t("assignments.collect.label")}
-          </>
-        )}
-      </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          loading={busy}
+          loadingLabel={t("submissions.collect.active")}
+          disabled={emptyRoster}
+          title={
+            emptyRoster
+              ? t("submissions.collect.titleEmptyRoster")
+              : t("assignments.collect.title")
+          }
+          onClick={() => setConfirmOpen(true)}
+        >
+          {busy ? (
+            t("submissions.collect.active")
+          ) : (
+            <>
+              <SyncIcon aria-hidden="true" className="size-4" />
+              {t("assignments.collect.label")}
+            </>
+          )}
+        </Button>
+      </SubmissionFreshnessLine>
 
+      {/* Sibling, not child: the strip is a role="status" live region, and a
+          dialog nested inside it gets re-announced as a status update. */}
       <Modal
         open={confirmOpen}
         onClose={() => setConfirmOpen(false)}
@@ -190,7 +265,7 @@ export function ClassroomCollectButton({
           </Button>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }
 

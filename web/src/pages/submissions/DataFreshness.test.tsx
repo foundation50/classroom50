@@ -60,7 +60,7 @@ describe("DataFreshness", () => {
     expect(btn.className).not.toContain("btn-error")
   })
 
-  it("switches the help tooltip with staleness, on the button and the badge", () => {
+  it("keeps the button tooltip constant; the badge carries the stale help", () => {
     const { rerender } = render(<DataFreshness {...base} stale={false} />)
     const button = () =>
       screen
@@ -68,7 +68,7 @@ describe("DataFreshness", () => {
         .closest("button") as HTMLButtonElement
     expect(button().title).toBe("submissions.freshness.collectHelp")
     rerender(<DataFreshness {...base} stale />)
-    expect(button().title).toBe("submissions.freshness.staleHelp")
+    expect(button().title).toBe("submissions.freshness.collectHelp")
     expect(screen.getByText("submissions.freshness.stale").title).toBe(
       "submissions.freshness.staleHelp",
     )

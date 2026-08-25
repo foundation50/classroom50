@@ -1,22 +1,21 @@
 import { SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Badge, Button, cx } from "@/components/ui"
+import { Alert, Button, cx } from "@/components/ui"
+import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 
-// One passive freshness surface for the submissions dashboard. The table always
-// shows the collected scores.json snapshot; this line states when the submission
-// data was last collected and offers a single re-collect button. When an
-// assignment repo has been pushed since the last collect (staleness derived from
-// the org repo list's `pushed_at` — no extra fetch, so it works for every
-// viewer, not just owners), a warning "Out of date" badge joins the line.
-// Following data-freshness UX guidance: never let stale data look
-// authoritative, and give the user a direct way to refresh it.
+// The submissions dashboard's freshness surface: the shared freshness strip
+// (last collected + "Out of date" badge, see SubmissionFreshnessLine) carrying
+// this page's per-assignment collect, plus the degraded-read warning that only
+// this page can raise.
+//
+// The table always shows the collected scores.json snapshot. Staleness comes
+// from the org repo list's `pushed_at` — no extra fetch, so it works for every
+// viewer, not just owners. Following data-freshness UX guidance: never let
+// stale data look authoritative, and give the user a direct way to refresh it.
 //
 // The button reads "Collect now" in every state — the same string the Manage
-// hub's collect action uses, because it is the same dispatch. Staleness is
-// carried by the badge, not by the button's variant: the collect is additive
-// and re-runnable, so a danger-toned button would promise a destructive action
-// it doesn't perform.
+// hub's collect action uses, because it is the same dispatch.
 //
 // A bare empty_repo assignment has no collect at all — the page omits this
 // component and the header's grading badge explains why. A no_autograder
@@ -48,26 +47,12 @@ export function DataFreshness({
 }: DataFreshnessProps) {
   const { t } = useTranslation()
 
-  const collectedLine = lastCollectedLabel
-    ? t("submissions.freshness.collected", { when: lastCollectedLabel })
-    : t("submissions.freshness.neverCollected")
-
   return (
     <div className="flex flex-col items-start gap-1">
-      <div
-        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70"
-        role="status"
+      <SubmissionFreshnessLine
+        lastCollectedLabel={lastCollectedLabel}
+        stale={stale}
       >
-        <span>{collectedLine}</span>
-
-        {/* Stale carries its own chip so the out-of-date state is legible
-            without recolouring the action beside it. */}
-        {stale && (
-          <Badge tone="warning" title={t("submissions.freshness.staleHelp")}>
-            {t("submissions.freshness.stale")}
-          </Badge>
-        )}
-
         {onRefresh && (
           // A quiet ghost button in both states, so the freshness line doesn't
           // outshout the search/filter controls beside it in the toolbar.
@@ -78,11 +63,7 @@ export function DataFreshness({
             onClick={onRefresh}
             aria-live="polite"
             className="text-base-content/70"
-            title={
-              stale
-                ? t("submissions.freshness.staleHelp")
-                : t("submissions.freshness.collectHelp")
-            }
+            title={t("submissions.freshness.collectHelp")}
           >
             <SyncIcon
               aria-hidden="true"
@@ -93,7 +74,7 @@ export function DataFreshness({
               : t("submissions.collect.label")}
           </Button>
         )}
-      </div>
+      </SubmissionFreshnessLine>
 
       {/* Degraded live read: some repos couldn't be read, so live status is
           provisional. Say so rather than showing an incomplete view as

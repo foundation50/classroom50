@@ -371,6 +371,61 @@ export function snapshotIsStale(
   return pushMs > collectMs
 }
 
+// Whether ANY assignment in the classroom has a snapshot that is (probably)
+// stale — the classroom-wide counterpart of snapshotIsStale, for the
+// assignments page's freshness line.
+//
+// Compared PER ASSIGNMENT rather than "newest push in the classroom vs newest
+// stamp in the file", which would hide the case this signal exists for: hw1
+// collected a minute ago and hw2 pushed last week but never collected would
+// read as fresh, because hw1's stamp is newer than hw2's push. One assignment
+// out of date makes the classroom's data out of date.
+//
+// `collectedAt` is scores.json's per-bucket stamp map (slug -> ISO), and the
+// per-slug stamp follows the same precedence effectiveCollectedAt documents:
+// once ANY bucket carries a stamp the collector is stamp-aware, so a slug
+// missing from the map was genuinely never collected and must not borrow a
+// sibling's stamp — the org-wide `runCollectedAt` fallback applies only to a
+// wholly unstamped file, written before the collector stamped buckets, where
+// every run was org-wide and the run timestamp is the only signal there is.
+// Borrowing per missing slug instead would resurrect the masking this function
+// exists to prevent. Repo selection runs through latestAssignmentPush, so the
+// sibling-slug guard ("hw1-bonus" under "hw1") applies here too.
+//
+// An options object, like effectiveCollectedAt below: the two slug lists share
+// a type, and positional args let a transposition compile clean while silently
+// re-latching the empty_repo badge this exclusion exists to prevent.
+export function classroomSnapshotIsStale({
+  repos,
+  classroom,
+  measuredSlugs,
+  collectedAt,
+  runCollectedAt = null,
+  allSlugs = measuredSlugs,
+}: {
+  repos: GitHubRepo[] | null | undefined
+  classroom: string
+  // The slugs asked whether they are behind — collectable assignments only.
+  measuredSlugs: string[]
+  collectedAt: Record<string, string> | undefined
+  runCollectedAt?: string | null
+  // Every slug in the classroom, when that differs from the slugs being
+  // measured: the sibling guard needs the complete list even where a slug is
+  // excluded from the question (an empty_repo assignment is never collected,
+  // so it has no stamp to compare against, but its repos still shadow a
+  // slug-extending sibling). Defaults to the measured slugs.
+  allSlugs?: string[]
+}): boolean {
+  if (!repos || measuredSlugs.length === 0) return false
+  const collectorStampsBuckets = Object.keys(collectedAt ?? {}).length > 0
+  return measuredSlugs.some((slug) =>
+    snapshotIsStale(
+      latestAssignmentPush(repos, classroom, slug, allSlugs),
+      collectedAt?.[slug] ?? (collectorStampsBuckets ? null : runCollectedAt),
+    ),
+  )
+}
+
 // Newer of two ISO "last collected" timestamps. Lets the freshness view prefer a
 // just-finished tracked run over the lagging status=completed query, which can
 // still report the prior run while GitHub's Actions list catches up. Null-safe;
