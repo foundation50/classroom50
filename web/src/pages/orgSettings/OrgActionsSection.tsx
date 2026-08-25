@@ -107,7 +107,7 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
             className="inline-flex items-center gap-0.5 text-base-content/60 hover:text-primary"
           >
             {t("orgSettings.actions.budgetManage")}
-            <LinkExternalIcon aria-hidden="true" className="size-3" />
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
           </a>
         </p>
       )}
@@ -188,7 +188,7 @@ const OrgActionsSection = ({
           className="inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
         >
           {t("orgSettings.actions.openSettings")}
-          <LinkExternalIcon aria-hidden="true" className="size-3" />
+          <LinkExternalIcon aria-hidden="true" className="size-4" />
         </a>
       }
     >
