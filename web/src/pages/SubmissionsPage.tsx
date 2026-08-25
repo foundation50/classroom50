@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertIcon, CalendarIcon } from "@/components/ui/icons"
+import { AlertIcon, CalendarIcon, DownloadIcon } from "@/components/ui/icons"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
@@ -10,7 +10,14 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Badge, HelpTooltip, MetricBar, Spinner } from "@/components/ui"
+import {
+  Alert,
+  Badge,
+  Button,
+  HelpTooltip,
+  MetricBar,
+  Spinner,
+} from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -19,6 +26,7 @@ import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
 import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
+import { CloneSubmissionsModal } from "@/pages/submissions/CloneSubmissionsModal"
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { CloseSubmissionModal } from "@/components/modals/CloseSubmissionModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
@@ -302,6 +310,9 @@ const SubmissionsPageContent = () => {
   const assignmentSubmitCli =
     `gh student accept ${org} ${classroom} ${assignment}` +
     (secret ? ` --key ${secret}` : "")
+  // Clones every student repo for this assignment — the git-friendly
+  // counterpart of the in-browser zip download (see CloneSubmissionsModal).
+  const cloneSubmissionsCli = `gh teacher download ${org} ${classroom} ${assignment}`
 
   // Toolbar modals: metrics + accept-link are consolidated behind buttons so
   // the roster surfaces near the top instead of below stat cards and the
@@ -310,6 +321,7 @@ const SubmissionsPageContent = () => {
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
   const [downloadAllOpen, setDownloadAllOpen] = useState(false)
+  const [cloneCliOpen, setCloneCliOpen] = useState(false)
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
   const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
@@ -1265,124 +1277,139 @@ const SubmissionsPageContent = () => {
             )
           }
           trailing={
-            <SubmissionsActionsMenu
-              collecting={collecting}
-              regrading={regrading}
-              regradeAllActive={regradeAllActive}
-              canRegradeAll={canRegradeAll}
-              emptyRoster={emptyRoster.show}
-              skipsGrading={skipsGrading}
-              // Metrics summarizes the GRADED snapshot, and computeStats skips
-              // every `pending` row — so hide it whenever an overlay is adding
-              // those rows, live or detection. Keying this on liveCapable alone
-              // left it reachable for a no_autograder assignment, where detection
-              // supplies every row: the modal would report 0 submitted while the
-              // table listed detected submitters right next to it.
-              onMetrics={
-                overlayCapable ? undefined : () => setMetricsOpen(true)
-              }
-              onCollect={() => collectScores.collect()}
-              onRegradeAll={() => setRegradeConfirmOpen(true)}
-              // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
-              // like the live reads), never for empty_repo (no PRs). A
-              // no_autograder repo is templated and PERMITS the Feedback PR, so
-              // it is gated on empty_repo only, not on skipsGrading.
-              onOpenAllPrs={
-                isOwner &&
-                !isEmptyRepoAssignment &&
-                allAssignmentRepos.length > 0
-                  ? () => setOpenAllPrsOpen(true)
-                  : undefined
-              }
-              viewHref={viewRun?.html_url || viewWorkflowUrl}
-              viewLabel={viewLabel}
-              onDownloadCsv={downloadScoresCsv}
-              downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
-              onDownloadAll={() => setDownloadAllOpen(true)}
-              downloadAllDisabled={downloadableOwners.length === 0}
-              // Bulk set student repo access: owner-only (needs admin on every
-              // repo), individual assignments only (a group repo's membership is
-              // founder-managed), never empty_repo, and only when repos exist.
-              onBulkAccess={
-                isOwner &&
-                !isGroupAssignment &&
-                !isEmptyRepoAssignment &&
-                acceptedSet.size > 0
-                  ? () => setBulkAccessOpen(true)
-                  : undefined
-              }
-              // Bulk set repo features: same gate as bulk access. Reconciles
-              // existing repos with the assignment's repo_features (which apply at
-              // accept-time only).
-              onBulkFeatures={
-                isOwner &&
-                !isGroupAssignment &&
-                !isEmptyRepoAssignment &&
-                acceptedSet.size > 0
-                  ? () => setBulkFeaturesOpen(true)
-                  : undefined
-              }
-              // Bulk retrofit autograding triggers: same gate as bulk features
-              // plus default-autograder only — teacher-authored (custom) shims
-              // are never rewritten, and a no_autograder assignment has no shim
-              // to retrofit (skipsGrading). Reconciles existing repos with the
-              // assignment's submission_mode (baked into shims at accept time).
-              // Requires a resolved entry — see assignmentResolved.
-              onBulkTrigger={
-                isOwner &&
-                !isGroupAssignment &&
-                !skipsGrading &&
-                assignmentResolved &&
-                isDefaultAutograder(assignmentInfo.autograder) &&
-                acceptedSet.size > 0
-                  ? () => setBulkTriggerOpen(true)
-                  : undefined
-              }
-              // Pause / Resume autograding across every accepted repo — flips each
-              // autograde workflow's Actions state (no file edit). Same gate as
-              // the trigger retrofit (owner + individual + resolved default
-              // autograder + accepted repos exist).
-              onBulkPause={
-                isOwner &&
-                !isGroupAssignment &&
-                !skipsGrading &&
-                assignmentResolved &&
-                isDefaultAutograder(assignmentInfo.autograder) &&
-                acceptedSet.size > 0
-                  ? () => setBulkPauseOpen(true)
-                  : undefined
-              }
-              onBulkResume={
-                isOwner &&
-                !isGroupAssignment &&
-                !skipsGrading &&
-                assignmentResolved &&
-                isDefaultAutograder(assignmentInfo.autograder) &&
-                acceptedSet.size > 0
-                  ? () => setBulkResumeOpen(true)
-                  : undefined
-              }
-              locked={isLockedAssignment}
-              lockPending={setLock.isPending}
-              // Lock/unlock is an authoring-tier action (teacher|hta), same gate
-              // as Regrade all; a plain TA doesn't see it (GitHub 403s them too).
-              onLockToggle={
-                canRegradeAll ? () => setLockConfirmOpen(true) : undefined
-              }
-              closed={isClosedAssignment}
-              // Close/reopen submission: authoring tier + individual, non-empty
-              // repo shape (a group repo's membership is founder-managed). Unlike
-              // bulk access it does NOT require acceptedSet.size > 0 — closing
-              // still blocks future accepts when no one has accepted yet.
-              onCloseToggle={
-                canRegradeAll &&
-                isOwner &&
-                !isGroupAssignment &&
-                !isEmptyRepoAssignment
-                  ? () => setCloseSubmissionOpen(true)
-                  : undefined
-              }
-            />
+            <>
+              <SubmissionsActionsMenu
+                collecting={collecting}
+                regrading={regrading}
+                regradeAllActive={regradeAllActive}
+                canRegradeAll={canRegradeAll}
+                emptyRoster={emptyRoster.show}
+                skipsGrading={skipsGrading}
+                // Metrics summarizes the GRADED snapshot, and computeStats skips
+                // every `pending` row — so hide it whenever an overlay is adding
+                // those rows, live or detection. Keying this on liveCapable alone
+                // left it reachable for a no_autograder assignment, where detection
+                // supplies every row: the modal would report 0 submitted while the
+                // table listed detected submitters right next to it.
+                onMetrics={
+                  overlayCapable ? undefined : () => setMetricsOpen(true)
+                }
+                onCollect={() => collectScores.collect()}
+                onRegradeAll={() => setRegradeConfirmOpen(true)}
+                // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
+                // like the live reads), never for empty_repo (no PRs). A
+                // no_autograder repo is templated and PERMITS the Feedback PR, so
+                // it is gated on empty_repo only, not on skipsGrading.
+                onOpenAllPrs={
+                  isOwner &&
+                  !isEmptyRepoAssignment &&
+                  allAssignmentRepos.length > 0
+                    ? () => setOpenAllPrsOpen(true)
+                    : undefined
+                }
+                viewHref={viewRun?.html_url || viewWorkflowUrl}
+                viewLabel={viewLabel}
+                onDownloadCsv={downloadScoresCsv}
+                downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+                onDownloadAll={() => setDownloadAllOpen(true)}
+                downloadAllDisabled={downloadableOwners.length === 0}
+                // Bulk set student repo access: owner-only (needs admin on every
+                // repo), individual assignments only (a group repo's membership is
+                // founder-managed), never empty_repo, and only when repos exist.
+                onBulkAccess={
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !isEmptyRepoAssignment &&
+                  acceptedSet.size > 0
+                    ? () => setBulkAccessOpen(true)
+                    : undefined
+                }
+                // Bulk set repo features: same gate as bulk access. Reconciles
+                // existing repos with the assignment's repo_features (which apply at
+                // accept-time only).
+                onBulkFeatures={
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !isEmptyRepoAssignment &&
+                  acceptedSet.size > 0
+                    ? () => setBulkFeaturesOpen(true)
+                    : undefined
+                }
+                // Bulk retrofit autograding triggers: same gate as bulk features
+                // plus default-autograder only — teacher-authored (custom) shims
+                // are never rewritten, and a no_autograder assignment has no shim
+                // to retrofit (skipsGrading). Reconciles existing repos with the
+                // assignment's submission_mode (baked into shims at accept time).
+                // Requires a resolved entry — see assignmentResolved.
+                onBulkTrigger={
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !skipsGrading &&
+                  assignmentResolved &&
+                  isDefaultAutograder(assignmentInfo.autograder) &&
+                  acceptedSet.size > 0
+                    ? () => setBulkTriggerOpen(true)
+                    : undefined
+                }
+                // Pause / Resume autograding across every accepted repo — flips each
+                // autograde workflow's Actions state (no file edit). Same gate as
+                // the trigger retrofit (owner + individual + resolved default
+                // autograder + accepted repos exist).
+                onBulkPause={
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !skipsGrading &&
+                  assignmentResolved &&
+                  isDefaultAutograder(assignmentInfo.autograder) &&
+                  acceptedSet.size > 0
+                    ? () => setBulkPauseOpen(true)
+                    : undefined
+                }
+                onBulkResume={
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !skipsGrading &&
+                  assignmentResolved &&
+                  isDefaultAutograder(assignmentInfo.autograder) &&
+                  acceptedSet.size > 0
+                    ? () => setBulkResumeOpen(true)
+                    : undefined
+                }
+                locked={isLockedAssignment}
+                lockPending={setLock.isPending}
+                // Lock/unlock is an authoring-tier action (teacher|hta), same gate
+                // as Regrade all; a plain TA doesn't see it (GitHub 403s them too).
+                onLockToggle={
+                  canRegradeAll ? () => setLockConfirmOpen(true) : undefined
+                }
+                closed={isClosedAssignment}
+                // Close/reopen submission: authoring tier + individual, non-empty
+                // repo shape (a group repo's membership is founder-managed). Unlike
+                // bulk access it does NOT require acceptedSet.size > 0 — closing
+                // still blocks future accepts when no one has accepted yet.
+                onCloseToggle={
+                  canRegradeAll &&
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !isEmptyRepoAssignment
+                    ? () => setCloseSubmissionOpen(true)
+                    : undefined
+                }
+              />
+              {/* Clone submissions (CLI) — icon-only so the toolbar stays
+                  compact; opens a modal with the `gh teacher download`
+                  command. See https://github.com/foundation50/classroom50/issues/724. */}
+              <Button
+                variant="outline"
+                size="sm"
+                shape="square"
+                title={t("submissions.cloneAll.buttonTitle")}
+                aria-label={t("submissions.cloneAll.buttonTitle")}
+                onClick={() => setCloneCliOpen(true)}
+              >
+                <DownloadIcon aria-hidden="true" className="size-4" />
+              </Button>
+            </>
           }
         />
         <SubmissionsTable
@@ -1602,6 +1629,11 @@ const SubmissionsPageContent = () => {
         assignment={assignment}
         assignmentName={assignmentInfo?.name ?? assignment}
         owners={downloadableOwners}
+      />
+      <CloneSubmissionsModal
+        open={cloneCliOpen}
+        onClose={() => setCloneCliOpen(false)}
+        cli={cloneSubmissionsCli}
       />
       <BulkRepoAccessModal
         open={bulkAccessOpen}
