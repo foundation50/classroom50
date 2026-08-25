@@ -1,6 +1,11 @@
 import { useEffect, useId, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { GitCommitIcon, MarkGithubIcon, TagIcon } from "@/components/ui/icons"
+import {
+  GitCommitIcon,
+  MarkGithubIcon,
+  RepoIcon,
+  TagIcon,
+} from "@/components/ui/icons"
 
 import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
 
@@ -96,12 +101,12 @@ export function SubmissionDetailsModal({
           rel="noreferrer"
           title={t("submissions.details.viewRepository")}
         >
-          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
+          <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </a>
       ) : (
         <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
-          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
+          <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </p>
       )}

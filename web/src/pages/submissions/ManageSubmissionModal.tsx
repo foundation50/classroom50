@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { MarkGithubIcon, PeopleIcon } from "@/components/ui/icons"
+import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
 import { Badge, Modal, MonoLtr, Heading } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"
@@ -331,12 +331,12 @@ export const ManageSubmissionModal = ({
           rel="noreferrer"
           title={t("submissions.table.viewRepo")}
         >
-          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
+          <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </a>
       ) : (
         <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
-          <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
+          <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
         </p>
       )}

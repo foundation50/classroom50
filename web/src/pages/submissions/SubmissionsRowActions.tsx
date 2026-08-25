@@ -3,9 +3,9 @@ import {
   GitBranchIcon,
   GitCommitIcon,
   LogIcon,
-  MarkGithubIcon,
   PauseIcon,
   PlayIcon,
+  RepoIcon,
   ShieldCheckIcon,
   SlidersIcon,
   SyncIcon,
@@ -238,6 +238,7 @@ export const DownloadButton = ({
 export const RepoRowActions = ({
   owner,
   header,
+  feedbackPr,
   release,
   skipsGrading = false,
   onManage,
@@ -246,6 +247,10 @@ export const RepoRowActions = ({
   // The leading affordance for this row family (Open-repo link for individuals,
   // repo link for groups).
   header: React.ReactNode
+  // The direct Feedback-PR shortcut (FeedbackPrIconButton), rendered right
+  // after the repo link (issue #741). Omitted for empty_repo assignments,
+  // which have no Feedback PR — mirrors the hub's Review gate.
+  feedbackPr?: React.ReactNode
   // The submission's latest release page (autograder result). When present, a
   // direct "View autograder details" shortcut links it (skipping the hub). The
   // shortcut is hidden when there's no result to view — before a submission
@@ -262,6 +267,7 @@ export const RepoRowActions = ({
   return (
     <>
       {header}
+      {feedbackPr}
       {releaseHref && (
         <ActionIconLink
           href={releaseHref}
@@ -619,7 +625,7 @@ export const IndividualRowHeader = ({
   return (
     <ActionIconLink
       href={hasRepo ? repoHref : null}
-      icon={MarkGithubIcon}
+      icon={RepoIcon}
       label={t("submissions.table.openRepoLabel", { repo })}
       title={t("submissions.table.viewRepo")}
       emptyLabel={t("submissions.table.openRepoLabel", { repo })}

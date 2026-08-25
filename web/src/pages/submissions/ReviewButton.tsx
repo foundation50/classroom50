@@ -1,5 +1,5 @@
-import { CommentIcon } from "@/components/ui/icons"
-import { useId, useRef, useState } from "react"
+import { CodeReviewIcon } from "@/components/ui/icons"
+import { useId, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
@@ -9,31 +9,42 @@ import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
 import type { AssignmentMode } from "@/types/classroom"
 
-// Review action: links to the open Feedback PR (opened at accept time, or by
-// the autograde runner) when one exists; when none does, offers a teacher-side
-// Repair that re-runs the same idempotent ensure flow with the teacher's token
-// (issue #347 — recovers a PR a student's accept-time attempt failed to open).
-// The PR is the source of truth. The /pulls lookup is deferred until Review is
-// clicked (an eager per-row query would fan out to one request per repo on
-// mount); on click we refetch.
-export const ReviewButton = ({
+// The Feedback-PR action: links to the open Feedback PR (opened at accept
+// time, or by the autograde runner) when one exists; when none does, offers a
+// teacher-side Repair that re-runs the same idempotent ensure flow with the
+// teacher's token (issue #347 — recovers a PR a student's accept-time attempt
+// failed to open). The PR is the source of truth. The /pulls lookup is
+// deferred until the trigger is clicked (an eager per-row query would fan out
+// to one request per repo on mount); on click we refetch.
+//
+// The trigger rendering is a render prop so the hub's Review row and the
+// table's per-row icon (issue #741) share one resolve/repair flow.
+export const FeedbackPrAction = ({
   org,
   repo,
   mode,
   noRepo = false,
+  trigger,
 }: {
   org: string
   repo: string
   mode: AssignmentMode
   // No assignment repo exists yet (never-accepted non-submitter): there can be
-  // no Feedback PR to review or repair, so render the row disabled.
+  // no Feedback PR to review or repair, so the trigger renders disabled.
   noRepo?: boolean
+  trigger: (props: {
+    onClick: () => void
+    resolving: boolean
+  }) => React.ReactNode
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const [resolving, setResolving] = useState(false)
+  // The empty/error modal is mounted on demand (controlled `open`), not per
+  // trigger: the table renders one action per row, and a hidden <dialog> per
+  // row would be dead DOM weight on large rosters.
+  const [modalOpen, setModalOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   // enabled: false — driven by refetch() on click, never on mount.
   const { refetch } = useGetFeedbackPr(org, repo, false)
@@ -48,12 +59,12 @@ export const ReviewButton = ({
       const { data: pr, error } = await refetch()
       if (error) {
         setErrorMsg(error instanceof Error ? error.message : String(error))
-        dialogRef.current?.showModal()
+        setModalOpen(true)
       } else if (pr) {
         window.open(pr.html_url, "_blank", "noopener,noreferrer")
       } else {
         setErrorMsg(null)
-        dialogRef.current?.showModal()
+        setModalOpen(true)
       }
     } finally {
       setResolving(false)
@@ -95,7 +106,7 @@ export const ReviewButton = ({
                 ? t("submissions.repairPr.created", { repo })
                 : t("submissions.repairPr.alreadyExists", { repo }),
             })
-            dialogRef.current?.close()
+            setModalOpen(false)
             // The PR now exists (created or adopted): resolve and open it.
             const { data: pr } = await refetch()
             if (pr) window.open(pr.html_url, "_blank", "noopener,noreferrer")
@@ -112,78 +123,175 @@ export const ReviewButton = ({
 
   return (
     <>
-      <ActionListRow
-        icon={CommentIcon}
-        title={t("submissions.table.review")}
-        description={t("submissions.manageModal.reviewDescription")}
-        onClick={handleReview}
-        disabled={noRepo}
-        loading={resolving}
-        loadingLabel={t("submissions.table.review")}
-        ariaLabel={t("submissions.table.reviewAria")}
-      />
-      <Modal
-        dialogRef={dialogRef}
-        size="md"
-        hideCloseButton
-        aria-labelledby={titleId}
-      >
-        {errorMsg ? (
-          <>
-            <Heading as="h3" id={titleId}>
-              {t("submissions.reviewModal.errorTitle")}
-            </Heading>
-            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
-              {errorMsg}
-            </p>
-          </>
-        ) : (
-          <>
-            <Heading as="h3" id={titleId}>
-              {t("submissions.reviewModal.emptyTitle")}
-            </Heading>
-            <p className="mt-2 text-sm leading-6 text-base-content/70">
-              <Trans
-                i18nKey="submissions.reviewModal.emptyBody"
-                values={{ repo }}
-                components={{ repo: <MonoLtr /> }}
-              />
-            </p>
-            <p className="mt-3 text-sm leading-6 text-base-content/70">
-              {t("submissions.repairPr.hint")}
-            </p>
-          </>
-        )}
-        <div className="modal-action">
-          <a
-            className="btn btn-ghost btn-sm"
-            href={`https://github.com/${org}/${repo}/pulls`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("submissions.reviewModal.openRepoPrs")}
-          </a>
-          {!errorMsg && (
-            <Button
-              size="sm"
-              loading={repair.isPending}
-              loadingLabel={t("submissions.repairPr.repairing")}
-              onClick={handleRepair}
-            >
-              {t("submissions.repairPr.repair")}
-            </Button>
+      {trigger({ onClick: () => void handleReview(), resolving })}
+      {modalOpen && (
+        <Modal
+          open
+          onClose={() => setModalOpen(false)}
+          size="md"
+          hideCloseButton
+          aria-labelledby={titleId}
+        >
+          {errorMsg ? (
+            <>
+              <Heading as="h3" id={titleId}>
+                {t("submissions.reviewModal.errorTitle")}
+              </Heading>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
+                {errorMsg}
+              </p>
+            </>
+          ) : (
+            <>
+              <Heading as="h3" id={titleId}>
+                {t("submissions.reviewModal.emptyTitle")}
+              </Heading>
+              <p className="mt-2 text-sm leading-6 text-base-content/70">
+                <Trans
+                  i18nKey="submissions.reviewModal.emptyBody"
+                  values={{ repo }}
+                  components={{ repo: <MonoLtr /> }}
+                />
+              </p>
+              <p className="mt-3 text-sm leading-6 text-base-content/70">
+                {t("submissions.repairPr.hint")}
+              </p>
+            </>
           )}
-          <Button
-            variant={errorMsg ? undefined : "ghost"}
-            size="sm"
-            disabled={repair.isPending}
-            onClick={() => dialogRef.current?.close()}
-          >
-            {t("common.close")}
-          </Button>
-        </div>
-      </Modal>
+          <div className="modal-action">
+            <a
+              className="btn btn-ghost btn-sm"
+              href={`https://github.com/${org}/${repo}/pulls`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("submissions.reviewModal.openRepoPrs")}
+            </a>
+            {!errorMsg && (
+              <Button
+                size="sm"
+                loading={repair.isPending}
+                loadingLabel={t("submissions.repairPr.repairing")}
+                onClick={handleRepair}
+              >
+                {t("submissions.repairPr.repair")}
+              </Button>
+            )}
+            <Button
+              variant={errorMsg ? undefined : "ghost"}
+              size="sm"
+              disabled={repair.isPending}
+              onClick={() => setModalOpen(false)}
+            >
+              {t("common.close")}
+            </Button>
+          </div>
+        </Modal>
+      )}
     </>
+  )
+}
+
+// The submission hub's Review row: the labeled-list rendering of the shared
+// Feedback-PR action.
+export const ReviewButton = ({
+  org,
+  repo,
+  mode,
+  noRepo = false,
+}: {
+  org: string
+  repo: string
+  mode: AssignmentMode
+  noRepo?: boolean
+}) => {
+  const { t } = useTranslation()
+  return (
+    <FeedbackPrAction
+      org={org}
+      repo={repo}
+      mode={mode}
+      noRepo={noRepo}
+      trigger={({ onClick, resolving }) => (
+        <ActionListRow
+          icon={CodeReviewIcon}
+          title={t("submissions.table.review")}
+          description={t("submissions.manageModal.reviewDescription")}
+          onClick={onClick}
+          disabled={noRepo}
+          loading={resolving}
+          loadingLabel={t("submissions.table.review")}
+          ariaLabel={t("submissions.table.reviewAria")}
+        />
+      )}
+    />
+  )
+}
+
+// Per-row Feedback-PR shortcut (issue #741): one click from the submissions
+// table to the student's Feedback PR, matching the old classroom's direct
+// link. A never-accepted student (`noRepo`) renders an inert dimmed icon and
+// deliberately skips the action's hook/modal machinery, like RegradeButton.
+export const FeedbackPrIconButton = ({
+  org,
+  repo,
+  mode,
+  hasRepo,
+}: {
+  org: string
+  repo: string
+  mode: AssignmentMode
+  hasRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  if (!hasRepo) {
+    // Inert anchor rather than a disabled button, mirroring ActionIconLink's
+    // empty branch: daisyUI suppresses the explanatory tooltip on :disabled
+    // buttons.
+    return (
+      <Button
+        as="a"
+        variant="ghost"
+        size="sm"
+        shape="square"
+        className="cursor-not-allowed text-base-content/30 hover:bg-transparent"
+        disabled
+        aria-label={t("submissions.table.openFeedbackPrLabel", { repo })}
+        title={t("submissions.table.noRepoYetTitle")}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <CodeReviewIcon className="size-4 opacity-50" />
+      </Button>
+    )
+  }
+  return (
+    <FeedbackPrAction
+      org={org}
+      repo={repo}
+      mode={mode}
+      trigger={({ onClick, resolving }) => (
+        <Button
+          variant="ghost"
+          size="sm"
+          shape="square"
+          className="text-base-content/70"
+          loading={resolving}
+          loadingLabel={t("submissions.table.viewFeedbackPr")}
+          aria-label={t("submissions.table.openFeedbackPrLabel", { repo })}
+          title={t("submissions.table.viewFeedbackPr")}
+          // The row behind this button opens the manage modal on click; never
+          // let this click double as a row click.
+          onClick={(event) => {
+            event.stopPropagation()
+            onClick()
+          }}
+        >
+          {!resolving && (
+            <CodeReviewIcon aria-hidden="true" className="size-4" />
+          )}
+        </Button>
+      )}
+    />
   )
 }
 

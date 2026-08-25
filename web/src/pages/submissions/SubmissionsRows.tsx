@@ -1,4 +1,4 @@
-import { MarkGithubIcon } from "@/components/ui/icons"
+import { RepoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { getName, getDisplayName, getInitials } from "@/util/students"
@@ -181,7 +181,7 @@ export const GroupMembers = ({
         rel="noreferrer"
         title={t("submissions.table.openGroupRepo")}
       >
-        <MarkGithubIcon aria-hidden="true" className="size-4 shrink-0" />
+        <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
         <span className="font-mono text-sm">{repoLabel}</span>
       </a>
 
@@ -233,7 +233,7 @@ export const GroupActionControls = ({
   return (
     <ActionIconLink
       href={repoHref}
-      icon={MarkGithubIcon}
+      icon={RepoIcon}
       label={t("submissions.table.openRepoLabel", { repo })}
       title={t("submissions.table.viewRepo")}
       emptyLabel={t("submissions.table.openRepoLabel", { repo })}
