@@ -13,10 +13,11 @@ import {
   AnimatedAlert,
   Badge,
   Button,
-  Card,
+  SkeletonRows,
+  TableShell,
   Toolbar,
 } from "@/components/ui"
-import { EmptyState, ListSkeletonRows } from "@/components/list"
+import { EmptyState } from "@/components/list"
 import type { Student } from "@/types/classroom"
 import { useQueryClient } from "@tanstack/react-query"
 import type { RosterCsvProblem } from "@/domain/students"
@@ -69,7 +70,7 @@ import RosterBulkActionsBar, {
 } from "@/pages/students/RosterBulkActionsBar"
 import type { StudentCsvRow } from "@/domain/students"
 import { motion } from "motion/react"
-import { enterExit } from "@/lib/motion"
+import { blockEnter } from "@/lib/motion"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -82,6 +83,17 @@ import { RosterRow } from "./RosterRow"
 import { FailedInvitationsList } from "./FailedInvitationsList"
 import { RosterParseProblems } from "./RosterParseProblems"
 import { RosterWarnings } from "./RosterWarnings"
+
+// One bar recipe per column: select, member, roles, status, actions. Loading
+// starts with no rows, so the Section column (present only when some row has a
+// section) is never part of the skeleton.
+const SKELETON_BARS = [
+  "size-5",
+  "h-4 w-40",
+  "h-6 w-20",
+  "h-6 w-24",
+  "ms-auto h-4 w-4",
+]
 
 const EnrolledStudents = ({
   students = [],
@@ -459,6 +471,12 @@ const EnrolledStudents = ({
       suppressedLogins.remember(removed.map((r) => r.username))
   }
 
+  // The Section column exists only when some row carries a section label —
+  // derived from the status-independent sectionOptions so toggling a filter
+  // can't add/remove a column mid-view.
+  const showSection = sectionOptions.length > 0
+  const colCount = showSection ? 6 : 5
+
   const renderRow = (row: TeamRosterRow) => (
     <RosterRow
       key={row.key}
@@ -469,6 +487,7 @@ const EnrolledStudents = ({
       onOpen={setSelectedKey}
       onCheckboxClick={handleRowCheckboxClick}
       onToggle={handleToggleRow}
+      showSection={showSection}
     />
   )
 
@@ -651,61 +670,15 @@ const EnrolledStudents = ({
         </Toolbar>
       ) : null}
 
-      {/* The list card. */}
-      <Card
-        className="w-full overflow-hidden"
-        aria-busy={isLoading || undefined}
-      >
-        {isLoading ? (
-          // Skeleton rows shaped like the roster rows, so content fades into
-          // place instead of jumping in to replace a centered spinner.
-          <ListSkeletonRows className="divide-y divide-base-300" />
-        ) : isError ? (
-          <div
-            role="alert"
-            className="flex flex-col items-center gap-3 px-6 py-10 text-center"
-          >
-            <span className="flex items-center gap-2 text-sm text-error">
-              <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
-              {t("students.rosterLoadError")}
-            </span>
-            <Button variant="ghost" size="sm" onClick={() => refetchRoster()}>
-              {t("students.rosterRetry")}
-            </Button>
-          </div>
-        ) : isEmpty ? (
-          <EmptyState
-            variant="bare"
-            className="py-12"
-            icon={PeopleIcon}
-            titleAs="h3"
-            title={t("students.emptyTitle")}
-            body={t("students.emptyBody")}
-            action={
-              addActions ? (
-                <div className="flex justify-center gap-2">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    onClick={addActions.onAddStudent}
-                  >
-                    <PlusIcon aria-hidden="true" className="size-4" />
-                    {t("students.addTitle")}
-                  </Button>
-                  <Button size="sm" onClick={addActions.onUploadRoster}>
-                    <UploadIcon aria-hidden="true" className="size-4" />
-                    {t("students.uploadTitle")}
-                  </Button>
-                  <Button size="sm" onClick={addActions.onInviteLinks}>
-                    <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                    {t("students.inviteStudents")}
-                  </Button>
-                </div>
-              ) : null
-            }
-          />
-        ) : (
-          <>
+      {/* The roster table: Primer DataTable treatment via the shared
+          TableShell frame (matching the assignments/submissions tables), with
+          the bulk-selection bar inside the frame above the header row. */}
+      <TableShell
+        animate={false}
+        padded
+        ariaBusy={isLoading}
+        header={
+          !isLoading && !isError && !isEmpty ? (
             <RosterBulkActionsBar
               org={org}
               classroom={classroom}
@@ -722,62 +695,157 @@ const EnrolledStudents = ({
               onGroupBySectionChange={setGroupBySection}
               canGroupBySection={hasSectionsInFiltered}
             />
-            {filtered.length === 0 ? (
-              <EmptyState
-                variant="bare"
-                body={
-                  query.trim()
-                    ? t("students.noMatch")
-                    : effectiveSection !== "all" && statusFilter === "all"
-                      ? t("students.noneInSection", {
-                          section:
-                            effectiveSection === NO_SECTION
-                              ? t("students.noSection")
-                              : effectiveSection,
-                        })
-                      : t("students.noneWithStatus", {
-                          status:
-                            statusOptions.find((o) => o.value === statusFilter)
-                              ?.label ?? statusFilter,
-                        })
-                }
-              />
-            ) : groupBySection && hasSectionsInFiltered ? (
-              <div className="divide-y divide-base-300">
-                {filteredBySection.map(({ section, students: group }) => (
-                  <div key={section}>
-                    <div className="flex items-center justify-between bg-base-200/60 px-6 py-2">
-                      <h3 className="text-sm font-semibold text-base-content/70">
-                        {section === NO_SECTION
-                          ? t("students.noSection")
-                          : section}
-                      </h3>
-                      <Badge ghost>{group.length}</Badge>
-                    </div>
-                    <motion.ul
-                      className="divide-y divide-base-300"
-                      variants={enterExit}
-                      initial="initial"
-                      animate="animate"
-                    >
-                      {group.map((row) => renderRow(row))}
-                    </motion.ul>
+          ) : undefined
+        }
+      >
+        <caption className="sr-only">{t("students.table.caption")}</caption>
+        <thead>
+          <tr>
+            <th scope="col" className="w-0">
+              <span className="sr-only">{t("students.table.colSelect")}</span>
+            </th>
+            <th scope="col">{t("students.table.colMember")}</th>
+            <th scope="col">{t("students.table.colRoles")}</th>
+            {showSection ? (
+              <th scope="col">{t("students.table.colSection")}</th>
+            ) : null}
+            <th scope="col">{t("students.table.colStatus")}</th>
+            <th scope="col" className="w-0">
+              <span className="sr-only">{t("students.table.colActions")}</span>
+            </th>
+          </tr>
+        </thead>
+        {isLoading ? (
+          // Skeleton rows shaped like the loaded columns, so content fades
+          // into place instead of jumping in to replace a centered spinner.
+          <tbody>
+            <SkeletonRows rows={5} bars={SKELETON_BARS} />
+          </tbody>
+        ) : isError ? (
+          <tbody>
+            <tr>
+              <td colSpan={colCount} className="px-6 py-10 text-center">
+                <span
+                  role="alert"
+                  className="inline-flex items-center gap-2 text-sm text-error"
+                >
+                  <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
+                  {t("students.rosterLoadError")}
+                </span>
+                <div className="mt-3">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => refetchRoster()}
+                  >
+                    {t("students.rosterRetry")}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        ) : isEmpty ? (
+          <tbody>
+            <tr>
+              <td colSpan={colCount}>
+                <EmptyState
+                  variant="bare"
+                  className="py-12"
+                  icon={PeopleIcon}
+                  titleAs="h3"
+                  title={t("students.emptyTitle")}
+                  body={t("students.emptyBody")}
+                  action={
+                    addActions ? (
+                      <div className="flex justify-center gap-2">
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={addActions.onAddStudent}
+                        >
+                          <PlusIcon aria-hidden="true" className="size-4" />
+                          {t("students.addTitle")}
+                        </Button>
+                        <Button size="sm" onClick={addActions.onUploadRoster}>
+                          <UploadIcon aria-hidden="true" className="size-4" />
+                          {t("students.uploadTitle")}
+                        </Button>
+                        <Button size="sm" onClick={addActions.onInviteLinks}>
+                          <PaperAirplaneIcon
+                            aria-hidden="true"
+                            className="size-4"
+                          />
+                          {t("students.inviteStudents")}
+                        </Button>
+                      </div>
+                    ) : null
+                  }
+                />
+              </td>
+            </tr>
+          </tbody>
+        ) : filtered.length === 0 ? (
+          <tbody>
+            <tr>
+              <td colSpan={colCount}>
+                <EmptyState
+                  variant="bare"
+                  body={
+                    query.trim()
+                      ? t("students.noMatch")
+                      : effectiveSection !== "all" && statusFilter === "all"
+                        ? t("students.noneInSection", {
+                            section:
+                              effectiveSection === NO_SECTION
+                                ? t("students.noSection")
+                                : effectiveSection,
+                          })
+                        : t("students.noneWithStatus", {
+                            status:
+                              statusOptions.find(
+                                (o) => o.value === statusFilter,
+                              )?.label ?? statusFilter,
+                          })
+                  }
+                />
+              </td>
+            </tr>
+          </tbody>
+        ) : groupBySection && hasSectionsInFiltered ? (
+          // One <tbody> per section, opened by a full-width rowgroup header —
+          // the table equivalent of the old section-divider list headers.
+          filteredBySection.map(({ section, students: group }) => (
+            <motion.tbody
+              key={section}
+              variants={blockEnter}
+              initial="initial"
+              animate="animate"
+            >
+              <tr className="bg-base-200/60">
+                <th
+                  scope="rowgroup"
+                  colSpan={colCount}
+                  className="py-2 text-sm font-semibold text-base-content/70"
+                >
+                  <div className="flex items-center justify-between">
+                    {section === NO_SECTION ? t("students.noSection") : section}
+                    <Badge ghost>{group.length}</Badge>
                   </div>
-                ))}
-              </div>
-            ) : (
-              <motion.ul
-                className="divide-y divide-base-300"
-                variants={enterExit}
-                initial="initial"
-                animate="animate"
-              >
-                {filtered.map((row) => renderRow(row))}
-              </motion.ul>
-            )}
-          </>
+                </th>
+              </tr>
+              {group.map((row) => renderRow(row))}
+            </motion.tbody>
+          ))
+        ) : (
+          <motion.tbody
+            variants={blockEnter}
+            initial="initial"
+            animate="animate"
+          >
+            {filtered.map((row) => renderRow(row))}
+          </motion.tbody>
         )}
-      </Card>
+      </TableShell>
 
       <RosterMemberModal
         open={Boolean(selected)}

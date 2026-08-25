@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { ChevronRightIcon, PencilIcon, TrashIcon } from "@/components/ui/icons"
+import { EmptyState } from "@/components/list"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import type { AssignmentForm } from "./assignmentFormModel"
 
@@ -14,6 +15,7 @@ import {
   Input,
   Modal,
   Select,
+  TableShell,
   Textarea,
   Heading,
 } from "@/components/ui"
@@ -509,8 +511,13 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 </Button>
               </div>
             </div>
-            <Collapse open={expanded} bodyRef={bodyRef}>
-              <table className="table">
+            {/* Gap between the header row and the table lives on the animating
+                element (padding, not a child margin) so the collapse height
+                accounts for it. */}
+            <Collapse open={expanded} bodyRef={bodyRef} className="pt-4">
+              {/* Same TableShell frame as the app's other data tables, so the
+                  tests list can't drift from the house table treatment. */}
+              <TableShell animate={false} padded>
                 <caption className="sr-only">
                   {t("assignments.autograder.heading")}
                 </caption>
@@ -522,7 +529,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                       {t("assignments.autograder.runCommand")}
                     </th>
                     <th scope="col">{t("assignments.autograder.points")}</th>
-                    <th scope="col" className="w-28">
+                    <th scope="col" className="w-0">
                       <span className="sr-only">
                         {t("assignments.autograder.colActions")}
                       </span>
@@ -533,9 +540,11 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                   {field.state.value.length === 0 ? (
                     <tr>
                       <td colSpan={5}>
-                        <div className="rounded-box border border-dashed p-4 text-sm opacity-70">
-                          {t("assignments.autograder.empty")}
-                        </div>
+                        <EmptyState
+                          variant="bare"
+                          className="py-6"
+                          body={t("assignments.autograder.empty")}
+                        />
                       </td>
                     </tr>
                   ) : (
@@ -565,11 +574,12 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                             <Badge tone="primary">{test.points}</Badge>
                           </td>
 
-                          <td>
-                            <div className="flex justify-end gap-2">
+                          <td className="w-0 ps-2">
+                            <div className="flex items-center justify-end gap-1">
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                shape="square"
                                 onClick={() => openEditEditor(index)}
                                 aria-label={t(
                                   "assignments.autograder.editTest",
@@ -587,6 +597,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                               <Button
                                 variant="ghost"
                                 size="sm"
+                                shape="square"
                                 className="text-error"
                                 onClick={() => field.removeValue(index)}
                                 aria-label={t(
@@ -606,7 +617,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                     )
                   )}
                 </tbody>
-              </table>
+              </TableShell>
             </Collapse>
 
             {editor && (

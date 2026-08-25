@@ -658,6 +658,15 @@
     "noMatch": "No members match your search.",
     "noneWithStatus": "No {{status}} members.",
     "noneInSection": "No members in {{section}}.",
+    "table": {
+      "caption": "Classroom roster",
+      "colSelect": "Select",
+      "colMember": "Member",
+      "colRoles": "Role",
+      "colSection": "Section",
+      "colStatus": "Status",
+      "colActions": "Actions"
+    },
     "bulk": {
       "selectAll": "Select all students",
       "selectRow": "Select {{label}}",
@@ -3174,6 +3183,14 @@
     "invite": "Invite",
     "classroomCount_one": "{{count}} classroom",
     "classroomCount_other": "{{count}} classrooms",
+    "table": {
+      "caption": "Organization members",
+      "colSelect": "Select",
+      "colMember": "Member",
+      "colClassrooms": "Classrooms",
+      "colStatus": "Status",
+      "colActions": "Actions"
+    },
     "badgeNotMember": "Not an org member",
     "badgeInvitePending": "Invitation pending",
     "badgeNoClassroom": "No classroom",
