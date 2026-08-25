@@ -76,7 +76,7 @@ it records the students who accepted an email invitation, fills in a missing
 `github_id`, drops the pending rows nothing backs, and retires the invite teams
 that are done. Nothing runs on its own: the web app runs a sync when a teacher
 opens a classroom or its roster, and `gh teacher roster sync` runs one on demand.
-This is not **Sync now**, which collects scores. See
+This is not **Collect now**, which collects scores. See
 [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 #### Organization (org)

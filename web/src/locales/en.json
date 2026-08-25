@@ -2535,17 +2535,15 @@
       "unlockSuccess": "Assignment unlocked."
     },
     "freshness": {
-      "collected": "Submission data synced {{when}}",
-      "neverCollected": "Submission data not synced yet",
-      "sync": "Sync now",
-      "syncHelp": "New pushes to assignment repos since the last collection. Run Collect Scores to rebuild scores.json and grade the newest work.",
-      "refresh": "Refresh submissions",
-      "refreshing": "Collecting…",
-      "refreshHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"
+      "collected": "Submission data collected {{when}}",
+      "neverCollected": "Submission data not collected yet",
+      "stale": "Out of date",
+      "staleHelp": "New pushes to assignment repos since the last collection. Collect now to rebuild scores.json and grade the newest work.",
+      "collectHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"
     },
     "live": {
-      "incomplete_one": "{{count}} repo couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\".",
-      "incomplete_other": "{{count}} repos couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\"."
+      "incomplete_one": "{{count}} repo couldn't be read, so live submission status may be incomplete. Retry, or run \"Collect now\".",
+      "incomplete_other": "{{count}} repos couldn't be read, so live submission status may be incomplete. Retry, or run \"Collect now\"."
     },
     "menu": {
       "actions": "Actions",
@@ -2677,15 +2675,15 @@
       "viewSubmissionsTitleEveryPush": "Commits on the default branch count as submissions. Click to view.",
       "viewSubmissionsTitleTag": "Tagged releases count as submissions. Click to view.",
       "staleCount": "New",
-      "staleCountTitle": "This student has pushed more submissions than have been graded. Run \"Sync submissions now\" to grade and score the newest.",
+      "staleCountTitle": "This student has pushed more submissions than have been graded. Run \"Collect now\" to grade and score the newest.",
       "late": "Late",
       "lateRowTitle": "The latest submission was pushed after the due date.",
       "gradedAt": "Graded {{date}}",
       "gradedAtTitle": "When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time.",
       "liveLatest": "Latest push {{date}} · not yet graded",
-      "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Sync submissions now\" to grade and score it.",
+      "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Collect now\" to grade and score it.",
       "notCollectedYet": "Not yet collected",
-      "notCollectedYetTitle": "This student has pushed work that hasn't been collected yet, so there's no recorded submission time. Run \"Sync submissions now\" to collect it.",
+      "notCollectedYetTitle": "This student has pushed work that hasn't been collected yet, so there's no recorded submission time. Run \"Collect now\" to collect it.",
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repo",
@@ -2698,7 +2696,7 @@
       "noGradingTitle": "Autograding is disabled for this assignment",
       "resolvingNonSubmitters": "Checking who hasn't submitted yet…",
       "pendingGrade": "Pending",
-      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" to collect it.",
+      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Collect now\" to collect it.",
       "overridden": "Manual",
       "overriddenTitle": "This score was set by hand and won't be changed by autograding until the override is cleared.",
       "notSubmitted": "Not submitted",

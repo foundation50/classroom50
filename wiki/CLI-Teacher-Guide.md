@@ -654,7 +654,7 @@ gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=cs-pri
 
 An `assignment=` run walks only that assignment's repos — much faster and
 lighter on API rate limits for a large classroom — and is exactly what the web
-app's per-assignment **Sync now** button dispatches. Each collected
+app's per-assignment **Collect now** button dispatches. Each collected
 assignment's bucket in `scores.json` gets a `collected_at` UTC timestamp, so
 you (and the web app's freshness strip) can tell when each assignment was last
 walked; a scoped run leaves sibling assignments' buckets untouched. The
@@ -664,8 +664,8 @@ assignment's repositories and template, and staff teams with no members are
 skipped.
 
 Run collection from the Actions tab on `<org>/classroom50`, from your shell, or
-with the web app's per-assignment **Sync now** button. Scores refresh when you
-(or Sync now) trigger a run.
+with the web app's per-assignment **Collect now** button. Scores refresh only
+once one of those triggers a run.
 
 <details>
 <summary>What each collection run does</summary>

@@ -72,14 +72,14 @@ read it:
   `classroom50` repository and GitHub teams immediately, but only for the thing they
   change — they don't run the web app's broader sync.
 - **Scores** refresh only when collection runs: on demand with
-  **Sync now** (one assignment), **Collect all** (a whole classroom), or
+  **Collect now** (one assignment), **Collect all** (a whole classroom), or
   `collect-scores.yaml`.
 
 `gh teacher roster sync <org> <classroom> --write` is the one CLI command that
 syncs rather than reading or writing a single thing: it catches the roster up with
 the classroom's GitHub state, chiefly the email invitations students have accepted.
 Opening the classroom in the web app as an owner does the same on its own. Without
-`--write`, `roster sync` reports and changes nothing. **Sync now** and
+`--write`, `roster sync` reports and changes nothing. **Collect now** and
 **Collect all** cover scores.
 See [What triggers a sync](#what-triggers-a-sync).
 
