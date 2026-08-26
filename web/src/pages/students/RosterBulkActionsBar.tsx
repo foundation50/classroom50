@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   PaperAirplaneIcon,
@@ -9,6 +9,7 @@ import {
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
+import { useDeferredRun } from "@/hooks/useDeferredRun"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
@@ -172,19 +173,7 @@ const RosterBulkActionsBar = ({
   // (close-animation note in ui/Modal); each run resets them anyway.
   const [isOpen, setModalOpen] = useState(false)
 
-  // The confirm-close -> run handoff defers one macrotask so the progress
-  // dialog doesn't stack over the still-closing confirm; tracked so an unmount
-  // can't fire a stray fan-out.
-  const runTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(
-    () => () => {
-      if (runTimerRef.current) clearTimeout(runTimerRef.current)
-    },
-    [],
-  )
-  const deferRun = (fn: () => Promise<void>) => {
-    runTimerRef.current = setTimeout(() => void fn(), 0)
-  }
+  const deferRun = useDeferredRun()
 
   const closeModal = () => {
     if (phase === "working") return

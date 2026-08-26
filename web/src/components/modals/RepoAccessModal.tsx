@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
+import { ViewRepositoryLink } from "@/components/modals/ViewRepositoryLink"
 import {
   Alert,
   AnimatedAlert,
@@ -427,22 +428,16 @@ export function RepoAccessModal({
         </>
       }
     >
-      {/* In the body, not the `subtitle` slot: an interactive link as the
-          dialog's aria-describedby reads poorly for AT users. */}
       {repoName && (
-        <a
-          className="link mt-3 inline-flex w-fit items-center gap-1.5 text-sm"
+        <ViewRepositoryLink
           href={repoUrl || `https://github.com/${org}/${repoName}`}
-          target="_blank"
-          rel="noreferrer"
         >
-          <MarkGithubIcon aria-hidden="true" className="size-4" />
           {assignmentName
             ? t("components.modals.repoAccess.viewRepoNamed", {
                 name: assignmentName,
               })
             : t("components.modals.groupCollaborators.viewRepository")}
-        </a>
+        </ViewRepositoryLink>
       )}
       {loadingCollaborators ? (
         <div className="flex py-10">
