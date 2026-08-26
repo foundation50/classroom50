@@ -6,6 +6,8 @@ import {
   validateAssignmentForm,
   toSubmitValues,
   formValuesToRepoFeatures,
+  formValuesToTestDefaults,
+  testFailureDetailsChoice,
   shouldSeedBuiltInAutograder,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
@@ -31,6 +33,8 @@ const draft = (
   timeout: 30,
   exitCode: "",
   points: 10,
+  failureDetails: "",
+  showOutput: "",
   ...over,
 })
 
@@ -78,6 +82,8 @@ const base: CreateAssignmentFormValues = {
   repo_feature_projects: "inherit",
   repo_feature_pull_requests: "inherit",
   tests: [],
+  test_failure_details: "",
+  test_show_output: false,
 }
 
 describe("validateAssignmentForm — happy paths", () => {
@@ -1178,5 +1184,80 @@ describe("shouldSeedBuiltInAutograder", () => {
         autogradingState: "built-in",
       }),
     ).toBe(false)
+  })
+})
+
+describe("test_defaults form mapping (failure-details / show-output)", () => {
+  it("collapses the grader defaults to an omitted block", () => {
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "",
+        test_show_output: false,
+      }),
+    ).toBeUndefined()
+  })
+
+  it("writes only the non-default values", () => {
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "none",
+        test_show_output: false,
+      }),
+    ).toEqual({ "failure-details": "none" })
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "",
+        test_show_output: true,
+      }),
+    ).toEqual({ "show-output": true })
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "actual-only",
+        test_show_output: true,
+      }),
+    ).toEqual({ "failure-details": "actual-only", "show-output": true })
+  })
+
+  it("reads a stored explicit 'full' as the default choice", () => {
+    // Round-trip normalization: an explicit assignment-level "full" equals
+    // the grader default, so re-saving drops the redundant key.
+    expect(testFailureDetailsChoice("full")).toBe("")
+    expect(testFailureDetailsChoice(undefined)).toBe("")
+    expect(testFailureDetailsChoice("none")).toBe("none")
+    expect(testFailureDetailsChoice("actual-only")).toBe("actual-only")
+  })
+
+  it("assignmentToFormValues seeds the defaults controls from the entry", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "HW1",
+      mode: "individual",
+      autograder: "default",
+      tests: [{ name: "t", type: "run", run: "true", points: 1 }],
+      test_defaults: { "failure-details": "none", "show-output": true },
+    })
+    expect(values.test_failure_details).toBe("none")
+    expect(values.test_show_output).toBe(true)
+  })
+
+  it("toSubmitValues clears the defaults without the built-in autograder", () => {
+    const submitted = toSubmitValues({
+      ...base,
+      autograding_state: "none",
+      test_failure_details: "none",
+      test_show_output: true,
+    })
+    expect(submitted.test_failure_details).toBe("")
+    expect(submitted.test_show_output).toBe(false)
+  })
+
+  it("toSubmitValues keeps the defaults with the built-in autograder", () => {
+    const submitted = toSubmitValues({
+      ...base,
+      test_failure_details: "actual-only",
+      test_show_output: true,
+    })
+    expect(submitted.test_failure_details).toBe("actual-only")
+    expect(submitted.test_show_output).toBe(true)
   })
 })

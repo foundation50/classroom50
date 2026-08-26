@@ -76,6 +76,35 @@ class TestSchemaAccepts:
         tests = [{"name": "t", "type": "run", "run": "x", "exit-code": 42, "points": 1}]
         assert _errors(_manifest(_entry(tests=tests))) == []
 
+    def test_reporting_options_accepted(self):
+        # Per-test failure-details / show-output plus the assignment-level
+        # test_defaults block (issues #612/#764/#765). An explicit
+        # show-output: false is legal — it overrides a true default.
+        tests = [
+            {"name": "a", "type": "run", "run": "x", "points": 1,
+             "failure-details": "actual-only", "show-output": True},
+            {"name": "b", "type": "run", "run": "x", "points": 1,
+             "failure-details": "none", "show-output": False},
+            {"name": "c", "type": "run", "run": "x", "points": 1,
+             "failure-details": "full"},
+        ]
+        entry = _entry(tests=tests)
+        entry["test_defaults"] = {"failure-details": "none", "show-output": True}
+        assert _errors(_manifest(entry)) == []
+
+    def test_bad_reporting_options_rejected(self):
+        tests = [{"name": "a", "type": "run", "run": "x", "points": 1,
+                  "failure-details": "loud"}]
+        assert _errors(_manifest(_entry(tests=tests))) != []
+        tests = [{"name": "a", "type": "run", "run": "x", "points": 1,
+                  "show-output": "yes"}]
+        assert _errors(_manifest(_entry(tests=tests))) != []
+        entry = _entry()
+        entry["test_defaults"] = {"failure-details": "loud"}
+        assert _errors(_manifest(entry)) != []
+        entry["test_defaults"] = {"unknown-key": True}
+        assert _errors(_manifest(entry)) != []
+
     def test_feedback_pr_flag_accepted(self):
         # feedback_pr is a CLI-written boolean (gh teacher assignment add
         # --feedback-pr); the schema must accept it given the assignment

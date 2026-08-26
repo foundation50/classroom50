@@ -51,6 +51,8 @@ const defaults: CreateAssignmentFormValues = {
   repo_feature_projects: "inherit",
   repo_feature_pull_requests: "inherit",
   tests: [],
+  test_failure_details: "",
+  test_show_output: false,
 }
 
 describe("sectionIsConfigured", () => {
@@ -106,6 +108,16 @@ describe("sectionIsConfigured", () => {
     expect(sectionIsConfigured("submission", manual, defaults)).toBe(true)
     const maxChanged = { ...defaults, grading_max_points: 42 }
     expect(sectionIsConfigured("submission", maxChanged, defaults)).toBe(true)
+  })
+
+  it("attributes the report defaults to the submission section", () => {
+    // The test_defaults controls live in the autograder pane, so changing only
+    // them must surface the submission section's Reset (and reset with it).
+    const details = { ...defaults, test_failure_details: "none" as const }
+    expect(sectionIsConfigured("submission", details, defaults)).toBe(true)
+    const output = { ...defaults, test_show_output: true }
+    expect(sectionIsConfigured("submission", output, defaults)).toBe(true)
+    expect(sectionIsConfigured("details", output, defaults)).toBe(false)
   })
 })
 

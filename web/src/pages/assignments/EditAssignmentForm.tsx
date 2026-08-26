@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import CreateAssignmentForm, {
   assignmentToFormValues,
   formValuesToRepoFeatures,
+  formValuesToTestDefaults,
 } from "./CreateAssignmentForm"
 import { deriveFormShape } from "./formShape"
 import {
@@ -179,6 +180,7 @@ const EditAssignmentForm = ({
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,
+                test_defaults: formValuesToTestDefaults(values),
                 slug: assignment,
               }
 

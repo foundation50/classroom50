@@ -326,6 +326,11 @@ export type Assignment = {
   // RepoFeatures struct (`repo_features`, closed object).
   repo_features?: RepoFeatures
   tests?: AssignmentTest[]
+  // Assignment-level defaults for the per-test reporting options
+  // (failure-details / show-output); per-test values override. Only
+  // meaningful alongside `tests`. In lockstep with the CLI's assignments-v1
+  // schema (`test_defaults`) and the Go TestDefaults struct.
+  test_defaults?: AssignmentTestDefaults
   // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
   migrated_from?: MigratedFrom
   // The assignment's PREVIOUS slug, from the one-shot slug rename (a single
@@ -386,6 +391,18 @@ export type DueMeta = {
 export type AssignmentTestType = "io" | "run" | "python"
 export type AssignmentTestComparison = "included" | "exact" | "regex"
 
+// How much of a failing test's captured output students see. Absent = the
+// assignment default, then the grader default "full". In lockstep with the
+// CLI's assignments-v1/tests-v1 schema enum and tests.go's
+// failureDetailsLevels (parity-tested by a vitest).
+export const TEST_FAILURE_DETAILS_LEVELS = [
+  "full",
+  "actual-only",
+  "none",
+] as const
+export type AssignmentTestFailureDetails =
+  (typeof TEST_FAILURE_DETAILS_LEVELS)[number]
+
 // One declarative autograding test (v1 testSpec, kebab-case wire keys).
 // `io` compares stdout, `run` checks the exit code, `python` runs pytest.
 export type AssignmentTest = {
@@ -401,6 +418,23 @@ export type AssignmentTest = {
   timeout?: number
   "exit-code"?: number
   points: number
+  // How much failure detail students see (absent = the assignment default,
+  // then the grader default `full`). In lockstep with the assignments-v1
+  // schema and the Go TestSpec.
+  "failure-details"?: AssignmentTestFailureDetails
+  // Include captured setup/run output in the report even on a pass. An
+  // explicit false overrides a test_defaults show-output=true, so absent and
+  // false are distinct on the wire.
+  "show-output"?: boolean
+}
+
+// Assignment-level defaults for the per-test reporting options; a test's own
+// value overrides. A CLOSED sub-object like `runtime`: a new key must ship in
+// lockstep across the assignments-v1 schema, the Go TestDefaults struct, and
+// this type in the same release.
+export type AssignmentTestDefaults = {
+  "failure-details"?: AssignmentTestFailureDetails
+  "show-output"?: boolean
 }
 
 // The roster's identity/metadata columns — the classroom GitHub team is the

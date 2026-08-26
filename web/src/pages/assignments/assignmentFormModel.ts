@@ -51,6 +51,8 @@ import { deriveFormShape } from "./formShape"
 import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import type {
   Assignment,
+  AssignmentTestDefaults,
+  AssignmentTestFailureDetails,
   RepoPermission,
   RepoFeatures,
   SubmissionMode,
@@ -200,6 +202,13 @@ export type CreateAssignmentFormValues = {
   repo_feature_projects: RepoFeatureChoice
   repo_feature_pull_requests: RepoFeatureChoice
   tests: AssignmentTestDraft[]
+  // Assignment-level defaults for the per-test reporting options; a test's own
+  // value overrides. "" = the grader default (full failure details). Maps to
+  // the wire test_defaults["failure-details"], omitted when "".
+  test_failure_details: AssignmentTestFailureDetails | ""
+  // Assignment-level default for including passing-test output in the report.
+  // Maps to test_defaults["show-output"], omitted when false.
+  test_show_output: boolean
 }
 
 // A single repo-feature control's value. "inherit" is the default and omits the
@@ -242,6 +251,35 @@ export function formValuesToRepoFeatures(
   apply(value.repo_feature_projects, "projects")
   apply(value.repo_feature_pull_requests, "pull_requests")
   return Object.keys(result).length > 0 ? result : undefined
+}
+
+// Write mapping: the two defaults controls -> the wire test_defaults object,
+// omitting the grader-default values ("" failure details, show-output off).
+// Returns undefined when both are default so the caller omits the block
+// entirely (matching buildAssignmentEntry's omit-when-empty rule).
+export function formValuesToTestDefaults(
+  value: Pick<
+    CreateAssignmentFormValues,
+    "test_failure_details" | "test_show_output"
+  >,
+): AssignmentTestDefaults | undefined {
+  const result: AssignmentTestDefaults = {}
+  if (value.test_failure_details !== "") {
+    result["failure-details"] = value.test_failure_details
+  }
+  if (value.test_show_output) {
+    result["show-output"] = true
+  }
+  return Object.keys(result).length > 0 ? result : undefined
+}
+
+// Read mapping: a stored failure-details default -> the form choice. An
+// explicit "full" reads as "" (the grader default), so a round-trip normalizes
+// it away rather than persisting a redundant key.
+export function testFailureDetailsChoice(
+  value: AssignmentTestFailureDetails | undefined,
+): AssignmentTestFailureDetails | "" {
+  return value === undefined || value === "full" ? "" : value
 }
 
 // Create-only: slug uniqueness is not validated in edit mode (no rename).
@@ -641,6 +679,10 @@ export function toSubmitValues(
     repo_feature_projects: value.repo_feature_projects,
     repo_feature_pull_requests: value.repo_feature_pull_requests,
     tests: isEmptyRepo ? [] : value.tests,
+    // Grading-adjacent like the built-in-only fields: without the built-in
+    // autograder no report is rendered, so clear stale defaults on submit.
+    test_failure_details: noBuiltIn ? "" : value.test_failure_details,
+    test_show_output: noBuiltIn ? false : value.test_show_output,
   }
 }
 
@@ -714,6 +756,8 @@ export const useAssignmentForm = (
       repo_feature_pull_requests:
         defaultValues?.repo_feature_pull_requests ?? "inherit",
       tests: defaultValues?.tests || [],
+      test_failure_details: defaultValues?.test_failure_details ?? "",
+      test_show_output: defaultValues?.test_show_output ?? false,
     } satisfies CreateAssignmentFormValues,
     validators: {
       onSubmit: ({ value }) => {
@@ -837,5 +881,9 @@ export const assignmentToFormValues = (
     allowed_files: allowedFilesToText(assignment.allowed_files),
     release_assets: releaseAssetsToText(assignment.release_assets),
     tests,
+    test_failure_details: testFailureDetailsChoice(
+      assignment.test_defaults?.["failure-details"],
+    ),
+    test_show_output: assignment.test_defaults?.["show-output"] ?? false,
   }
 }

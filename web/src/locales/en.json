@@ -1447,6 +1447,26 @@
       "timeout": "Timeout (seconds)",
       "timeoutHint": "0 = default (10s)",
       "points": "Points",
+      "failureDetails": "Failure details shown to students",
+      "failureDetailsHint": "How much of a failing run students see in the submission report and workflow log.",
+      "failureDetailsFull": "Full: diff or expected and actual output",
+      "failureDetailsActualOnly": "Student output only (never the expected output)",
+      "failureDetailsNone": "Failure type only (no output)",
+      "showOutput": "Output when passing",
+      "showOutputHint": "Include the captured setup/run output in the report even when the test passes, inside a collapsed section.",
+      "showOutputOn": "Include output",
+      "showOutputOff": "Discard output",
+      "defaultOption": "{{label}} (default)",
+      "reportOptions": "Report options",
+      "reportOptionsHint": "What the submission report shows for this test. Both options start at the assignment's report defaults; pick another value to override it for this test only.",
+      "defaults": {
+        "heading": "Report defaults",
+        "hint": "Defaults for every test; a test's own report options override them.",
+        "failureDetails": "Default failure details",
+        "failureDetailsFull": "Full: diff or expected and actual output",
+        "showOutput": "Include passing test output",
+        "showOutputHelp": "Adds each passing test's captured setup/run output to the submission report and workflow log, collapsed by default. Useful when authoring or debugging an autograder."
+      },
       "type": {
         "io": {
           "label": "Input/Output",

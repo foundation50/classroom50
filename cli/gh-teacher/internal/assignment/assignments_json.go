@@ -165,6 +165,7 @@ type AssignmentEntry struct {
 	MaxGroupSize       int              `json:"max_group_size,omitempty"`
 	Runtime            *RuntimeRef      `json:"runtime,omitempty"`
 	Tests              []TestSpec       `json:"tests,omitempty"`
+	TestDefaults       *TestDefaults    `json:"test_defaults,omitempty"`
 	FeedbackPR         bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo          bool             `json:"empty_repo,omitempty"`
 	NoAutograder       bool             `json:"no_autograder,omitempty"`
@@ -204,7 +205,8 @@ var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
-	"locked": {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
+	"test_defaults": {},
+	"locked":        {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"renamed_from":       {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
@@ -980,6 +982,11 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 			return err
 		}
 	}
+	if entry.TestDefaults != nil {
+		if err := ValidateTestDefaults(*entry.TestDefaults); err != nil {
+			return err
+		}
+	}
 	if err := ValidateAllowedFiles(entry.AllowedFiles); err != nil {
 		return err
 	}
@@ -1220,6 +1227,11 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 	}
 	if len(entry.Tests) > 0 {
 		if err := ValidateTests(entry.Tests); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
+	}
+	if entry.TestDefaults != nil {
+		if err := ValidateTestDefaults(*entry.TestDefaults); err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Slug, err)
 		}
 	}

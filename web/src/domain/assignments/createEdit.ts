@@ -9,6 +9,7 @@ import {
   SUBMISSION_MODES,
   GRADING_MODES,
   GRADING_MAX_POINTS_MIN,
+  TEST_FAILURE_DETAILS_LEVELS,
   assertAssignmentMode,
   defaultStudentPermission,
 } from "@/types/classroom"
@@ -135,6 +136,9 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   grading: "classroom50-owned",
   repo_features: "classroom50-owned",
   tests: "classroom50-owned",
+  // Rebuilt from input alongside tests; a clearing edit (back to the grader
+  // defaults) must win over the stale stored block.
+  test_defaults: "classroom50-owned",
   // Written only by the CLI's `migrate`; the form never rebuilds it, so it must
   // ride through a GUI edit untouched.
   migrated_from: "preserved",
@@ -760,6 +764,27 @@ async function buildAssignmentEntry(
 
   if (tests.length > 0) {
     entry.tests = tests
+  }
+
+  // test_defaults: assignment-level defaults for the per-test reporting
+  // options. Only meaningful with tests (the materializer folds it into
+  // tests.json), so omit it otherwise; also omit when every value is the
+  // grader default (the caller already collapses those away).
+  if (
+    tests.length > 0 &&
+    input.test_defaults &&
+    Object.keys(input.test_defaults).length > 0
+  ) {
+    const failureDetails = input.test_defaults["failure-details"]
+    if (
+      failureDetails !== undefined &&
+      !TEST_FAILURE_DETAILS_LEVELS.includes(failureDetails)
+    ) {
+      throw new Error(
+        `test_defaults.failure-details: must be one of ${TEST_FAILURE_DETAILS_LEVELS.join(", ")} (got "${String(failureDetails)}").`,
+      )
+    }
+    entry.test_defaults = { ...input.test_defaults }
   }
 
   // pass_threshold: opt-in integer percentage [0,100]. Absent means the teacher

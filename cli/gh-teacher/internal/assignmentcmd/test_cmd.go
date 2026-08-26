@@ -45,18 +45,20 @@ func assignmentTestCmd() *cobra.Command {
 
 func assignmentTestAddCmd() *cobra.Command {
 	var (
-		name         string
-		ttype        string
-		setup        string
-		run          string
-		input        string
-		inputFile    string
-		expected     string
-		expectedFile string
-		comparison   string
-		timeout      int
-		exitCode     int
-		points       int
+		name           string
+		ttype          string
+		setup          string
+		run            string
+		input          string
+		inputFile      string
+		expected       string
+		expectedFile   string
+		comparison     string
+		timeout        int
+		exitCode       int
+		points         int
+		failureDetails string
+		showOutput     bool
 	)
 
 	cmd := &cobra.Command{
@@ -100,23 +102,30 @@ func assignmentTestAddCmd() *cobra.Command {
 			}
 
 			spec := assignment.TestSpec{
-				Name:         strings.TrimSpace(name),
-				Type:         strings.TrimSpace(ttype),
-				Setup:        setup,
-				Run:          run,
-				Input:        input,
-				InputFile:    strings.TrimSpace(inputFile),
-				Expected:     expected,
-				ExpectedFile: strings.TrimSpace(expectedFile),
-				Comparison:   strings.TrimSpace(comparison),
-				Timeout:      timeout,
-				Points:       points,
+				Name:           strings.TrimSpace(name),
+				Type:           strings.TrimSpace(ttype),
+				Setup:          setup,
+				Run:            run,
+				Input:          input,
+				InputFile:      strings.TrimSpace(inputFile),
+				Expected:       expected,
+				ExpectedFile:   strings.TrimSpace(expectedFile),
+				Comparison:     strings.TrimSpace(comparison),
+				Timeout:        timeout,
+				Points:         points,
+				FailureDetails: strings.TrimSpace(failureDetails),
 			}
 			// ExitCode is a pointer so "unset" stays distinct from
 			// "explicitly require 0"; set it only when the flag was passed.
 			if cmd.Flags().Changed("exit-code") {
 				ec := exitCode
 				spec.ExitCode = &ec
+			}
+			// ShowOutput is a pointer too: an explicit --show-output=false
+			// must survive to override a test_defaults show-output=true.
+			if cmd.Flags().Changed("show-output") {
+				so := showOutput
+				spec.ShowOutput = &so
 			}
 			if err := assignment.ValidateTestSpec(spec); err != nil {
 				return err
@@ -142,6 +151,8 @@ func assignmentTestAddCmd() *cobra.Command {
 	cmd.Flags().IntVar(&timeout, "timeout", 0, "Seconds before the test fails (0 = default of 10s)")
 	cmd.Flags().IntVar(&exitCode, "exit-code", 0, "run only: required exit code (default 0); pass to require a specific code")
 	cmd.Flags().IntVar(&points, "points", 0, "Points the test is worth")
+	cmd.Flags().StringVar(&failureDetails, "failure-details", "", "How much failure detail students see: full | actual-only | none (empty = the assignment default)")
+	cmd.Flags().BoolVar(&showOutput, "show-output", false, "Include captured setup/run output in the report even when the test passes")
 	return cmd
 }
 

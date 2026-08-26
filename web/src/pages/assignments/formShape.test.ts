@@ -47,6 +47,8 @@ const base: CreateAssignmentFormValues = {
   repo_feature_projects: "inherit",
   repo_feature_pull_requests: "inherit",
   tests: [],
+  test_failure_details: "",
+  test_show_output: false,
 }
 
 describe("deriveFormShape — repository source", () => {
