@@ -3,7 +3,7 @@ import { describe, expect, it, afterEach, vi, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 import { createRef } from "react"
 
-import { Modal } from "./Modal"
+import { Modal, ModalFooterPortal } from "./Modal"
 
 // happy-dom doesn't implement <dialog> showModal/close; stub them so the
 // open-sync effect can run without throwing.
@@ -233,6 +233,47 @@ describe("Modal", () => {
     const action = container.querySelector(".modal-action")
     expect(action).not.toBeNull()
     expect(action?.textContent).toContain("Save")
+  })
+
+  it("portals body-owned buttons into the same footer row", () => {
+    const { container } = render(
+      <Modal open title="t">
+        <p>step body</p>
+        <ModalFooterPortal>
+          <button type="button">Apply</button>
+        </ModalFooterPortal>
+      </Modal>,
+    )
+    const action = container.querySelector(".modal-action")
+    expect(action?.textContent).toContain("Apply")
+    // The portal moved the button out of the body flow into the footer row.
+    expect(screen.getByText("Apply").parentElement).toBe(action)
+  })
+
+  it("composes the footer prop with portal content in one row", () => {
+    const { container } = render(
+      <Modal open title="t" footer={<button type="button">Close</button>}>
+        <ModalFooterPortal>
+          <button type="button">Apply</button>
+        </ModalFooterPortal>
+      </Modal>,
+    )
+    const actions = container.querySelectorAll(".modal-action")
+    expect(actions).toHaveLength(1)
+    expect(actions[0].textContent).toContain("Close")
+    expect(actions[0].textContent).toContain("Apply")
+  })
+
+  it("keeps the empty footer row hidden when neither prop nor portal fills it", () => {
+    const { container } = render(
+      <Modal open title="t">
+        body
+      </Modal>,
+    )
+    const action = container.querySelector(".modal-action") as HTMLElement
+    expect(action.childNodes).toHaveLength(0)
+    // empty:hidden removes the row (and its top margin) from layout.
+    expect(action.className).toContain("empty:hidden")
   })
 
   it("passes role through for confirmation dialogs", () => {
