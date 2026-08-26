@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type {
   BulkImportResult,
@@ -104,7 +104,6 @@ export const RosterImportResult = ({
   roleChangeOutcome,
   emailResult = null,
   emailError = null,
-  onDone,
 }: {
   result: BulkImportResult
   inviteError: string | null
@@ -112,7 +111,6 @@ export const RosterImportResult = ({
   roleChangeOutcome: RoleChangeOutcome | null
   emailResult?: BulkInviteByEmailResult | null
   emailError?: string | null
-  onDone: () => void
 }) => {
   const { t } = useTranslation()
   const emailInvitedCount = emailResult?.invited.length ?? 0
@@ -251,12 +249,6 @@ export const RosterImportResult = ({
             <ImportResultSection key={section.title} {...section} />
           ))
         : null}
-
-      <div className="modal-action">
-        <Button variant="primary" onClick={onDone}>
-          {t("students.done")}
-        </Button>
-      </div>
     </div>
   )
 }

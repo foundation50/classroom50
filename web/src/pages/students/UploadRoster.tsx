@@ -57,6 +57,7 @@ import { classifyImportProblems } from "./importProblems"
 import {
   ImportBlockedReport,
   ImportSkippedReport,
+  onlyTransientBlockers,
 } from "./ImportProblemsReport"
 
 // Preserve the module's original public surface: the pure parse helpers live in
@@ -693,7 +694,21 @@ const UploadRoster = ({
         title={t("students.uploadTitle")}
         subtitle={fileName ? t("students.fileLabel", { fileName }) : undefined}
         footer={
-          phase === "preview" && !blocked ? (
+          phase === "preview" && blocked ? (
+            <>
+              <Button variant="ghost" onClick={resetToDropZone}>
+                {t("common.cancel")}
+              </Button>
+              {onlyTransientBlockers(problems) && (
+                <Button
+                  variant="primary"
+                  onClick={() => applyKind(fileText, uploadKind)}
+                >
+                  {t("students.importRetryLookup")}
+                </Button>
+              )}
+            </>
+          ) : phase === "preview" ? (
             <>
               <Button variant="ghost" onClick={resetToDropZone}>
                 {t("common.cancel")}
@@ -706,6 +721,10 @@ const UploadRoster = ({
                 {rosterPrimaryLabel}
               </Button>
             </>
+          ) : phase === "complete" ? (
+            <Button variant="primary" onClick={handleClose}>
+              {t("students.done")}
+            </Button>
           ) : phase === "error" ? (
             <>
               <Button variant="ghost" onClick={handleClose}>
@@ -787,11 +806,7 @@ const UploadRoster = ({
         {/* Resolution still runs underneath a blocked file, so an unusable
             github_id joins the list rather than waiting for the next upload. */}
         {phase === "preview" && blocked && (
-          <ImportBlockedReport
-            problems={problems}
-            onRetry={() => applyKind(fileText, uploadKind)}
-            onCancel={resetToDropZone}
-          />
+          <ImportBlockedReport problems={problems} />
         )}
 
         {phase === "preview" && !blocked && (
@@ -964,7 +979,6 @@ const UploadRoster = ({
             roleChangeOutcome={roleChangeOutcome}
             emailResult={emailResult}
             emailError={emailError}
-            onDone={handleClose}
           />
         )}
 
