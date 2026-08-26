@@ -3,9 +3,10 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { SlidersIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, ModalIcon, Select } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
+import { Alert, Modal, ModalIcon, Select } from "@/components/ui"
 import {
+  BulkPhaseFooter,
+  BulkProgressBlock,
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
@@ -228,13 +229,6 @@ export function BulkRepoFeaturesModal({
   }
 
   const busy = phase === "working"
-  const pct = useMemo(
-    () =>
-      progress.total > 0
-        ? Math.round((progress.processed / progress.total) * 100)
-        : 0,
-    [progress],
-  )
 
   return (
     <Modal
@@ -250,26 +244,15 @@ export function BulkRepoFeaturesModal({
         </ModalIcon>
       }
       footer={
-        phase === "complete" || phase === "error" ? (
-          <Button variant="primary" onClick={() => onClose()}>
-            {t("common.done")}
-          </Button>
-        ) : (
-          <>
-            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-              {t("common.cancel")}
-            </Button>
-            {phase === "idle" && total > 0 && (
-              <Button
-                variant="primary"
-                disabled={nothingSelected}
-                onClick={() => void run()}
-              >
-                {t("submissions.bulkFeatures.apply")}
-              </Button>
-            )}
-          </>
-        )
+        <BulkPhaseFooter
+          phase={phase}
+          busy={busy}
+          showApply={total > 0}
+          applyDisabled={nothingSelected}
+          applyLabel={t("submissions.bulkFeatures.apply")}
+          onApply={() => void run()}
+          onClose={onClose}
+        />
       }
     >
       {phase === "idle" && (
@@ -318,20 +301,14 @@ export function BulkRepoFeaturesModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("submissions.bulkFeatures.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            value={pct}
-            max={100}
-          />
-          <p className="text-sm text-base-content/70">
-            {t("submissions.bulkFeatures.progress", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
-          </p>
-        </div>
+        <BulkProgressBlock
+          workingLabel={t("submissions.bulkFeatures.working")}
+          progress={progress}
+          caption={t("submissions.bulkFeatures.progress", {
+            processed: progress.processed,
+            total: progress.total,
+          })}
+        />
       )}
 
       {(phase === "complete" || phase === "error") && result && (

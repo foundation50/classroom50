@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ShieldCheckIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, ModalIcon, Select } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
+import { Alert, Modal, ModalIcon, Select } from "@/components/ui"
 import {
+  BulkPhaseFooter,
+  BulkProgressBlock,
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
@@ -166,13 +167,6 @@ export function BulkRepoAccessModal({
   }
 
   const busy = phase === "working"
-  const pct = useMemo(
-    () =>
-      progress.total > 0
-        ? Math.round((progress.processed / progress.total) * 100)
-        : 0,
-    [progress],
-  )
 
   return (
     <Modal
@@ -188,22 +182,14 @@ export function BulkRepoAccessModal({
         </ModalIcon>
       }
       footer={
-        phase === "complete" || phase === "error" ? (
-          <Button variant="primary" onClick={() => onClose()}>
-            {t("common.done")}
-          </Button>
-        ) : (
-          <>
-            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-              {t("common.cancel")}
-            </Button>
-            {phase === "idle" && total > 0 && (
-              <Button variant="primary" onClick={() => void run()}>
-                {t("submissions.bulkAccess.apply")}
-              </Button>
-            )}
-          </>
-        )
+        <BulkPhaseFooter
+          phase={phase}
+          busy={busy}
+          showApply={total > 0}
+          applyLabel={t("submissions.bulkAccess.apply")}
+          onApply={() => void run()}
+          onClose={onClose}
+        />
       }
     >
       {phase === "idle" && (
@@ -244,24 +230,19 @@ export function BulkRepoAccessModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("submissions.bulkAccess.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            // Indeterminate until the first repo completes, so a slow write
-            // animates instead of sitting at 0%.
-            {...(progress.processed > 0 ? { value: pct } : {})}
-            max={100}
-          />
-          <p className="text-sm text-base-content/70">
-            {progress.processed > 0
+        <BulkProgressBlock
+          workingLabel={t("submissions.bulkAccess.working")}
+          indeterminateUntilFirst
+          progress={progress}
+          caption={
+            progress.processed > 0
               ? t("submissions.bulkAccess.progress", {
                   processed: progress.processed,
                   total: progress.total,
                 })
-              : t("submissions.bulkAccess.working")}
-          </p>
-        </div>
+              : t("submissions.bulkAccess.working")
+          }
+        />
       )}
 
       {(phase === "complete" || phase === "error") && result && (
