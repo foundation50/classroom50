@@ -203,20 +203,22 @@ const BulkActionsBar = ({
   const effectiveClassroom =
     classroom || (classrooms.length > 0 ? classrooms[0].path : "")
 
-  const isOpen = phase !== "idle"
+  // The progress dialog's visibility is its own flag, decoupled from `phase`:
+  // closing must not reset phase/result/action, or the fading dialog would
+  // collapse to just its title mid-animation. Each run resets them anyway.
+  const [modalOpen, setModalOpen] = useState(false)
+  const isOpen = modalOpen
 
   const closeModal = () => {
     if (phase === "working") return
-    setPhase("idle")
-    setResult(null)
-    setError(null)
-    setAction(null)
+    setModalOpen(false)
   }
 
   const run = async (which: "add" | "remove") => {
     if (!effectiveClassroom || selectedRows.length === 0) return
     setAction(which)
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     setProgress({

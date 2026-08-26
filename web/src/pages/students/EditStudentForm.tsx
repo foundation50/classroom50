@@ -19,7 +19,6 @@ import {
   AnimatedAlert,
   Button,
   Input,
-  modalActionClass,
   MonoLtr,
 } from "@/components/ui"
 
@@ -304,7 +303,7 @@ const EditStudentForm = ({
         {error}
       </AnimatedAlert>
 
-      <div className={modalActionClass}>
+      <div className="modal-action">
         <Button
           type="button"
           variant="ghost"

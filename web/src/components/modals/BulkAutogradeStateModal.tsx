@@ -81,12 +81,11 @@ export function BulkAutogradeStateModal({
   const [result, setResult] = useState<BulkResultView | null>(null)
 
   useEffect(() => {
-    if (!open) {
-      runningRef.current = false
-      setPhase("idle")
-      setResult(null)
-      setProgress({ processed: 0, total: 0, message: "" })
-    }
+    if (!open) return
+    runningRef.current = false
+    setPhase("idle")
+    setResult(null)
+    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length

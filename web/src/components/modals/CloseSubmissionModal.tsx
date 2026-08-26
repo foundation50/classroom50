@@ -77,14 +77,13 @@ export function CloseSubmissionModal({
   const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
 
   useEffect(() => {
-    if (!open) {
-      runningRef.current = false
-      setPhase("idle")
-      setResult(null)
-      setFlagError(false)
-      setFanOutIncomplete(false)
-      setProgress({ processed: 0, total: 0, message: "" })
-    }
+    if (!open) return
+    runningRef.current = false
+    setPhase("idle")
+    setResult(null)
+    setFlagError(false)
+    setFanOutIncomplete(false)
+    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length

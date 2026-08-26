@@ -168,20 +168,22 @@ const RosterBulkActionsBar = ({
   // the writer silently report the pending ones as "already removed".
   const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
 
-  const isOpen = phase !== "idle"
+  // The progress dialog's visibility is its own flag, decoupled from `phase`:
+  // closing must not reset phase/result/action, or the fading dialog would
+  // collapse to just its title mid-animation. Each run resets them anyway.
+  const [modalOpen, setModalOpen] = useState(false)
+  const isOpen = modalOpen
 
   const closeModal = () => {
     if (phase === "working") return
-    setPhase("idle")
-    setResult(null)
-    setError(null)
-    setAction(null)
+    setModalOpen(false)
   }
 
   const runUnenroll = async () => {
     if (unenrollableSelected.length === 0) return
     setAction("unenroll")
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     setProgress({
@@ -222,6 +224,7 @@ const RosterBulkActionsBar = ({
     if (invitableSelected === 0) return
     setAction("invite")
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     setProgress({
@@ -320,6 +323,7 @@ const RosterBulkActionsBar = ({
     if (cancellableSelected.length === 0) return
     setAction("cancel")
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     const total = cancellableSelected.length

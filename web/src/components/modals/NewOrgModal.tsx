@@ -1,6 +1,6 @@
 import { useNavigate } from "@tanstack/react-router"
 import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import PlanBadge from "@/components/PlanBadge"
@@ -9,6 +9,7 @@ import FreePlanInfoModal from "@/components/modals/FreePlanInfoModal"
 import { Badge, Button, Modal, Spinner, cx } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
+import { useLingeringOpen } from "@/hooks/useLingeringOpen"
 import useScrollFade from "@/hooks/useScrollFade"
 import { classifyPlan } from "@/lib/orgPlan"
 
@@ -174,6 +175,19 @@ function NewOrgModal({
   const navigate = useNavigate()
   const [freePlanOrg, setFreePlanOrg] = useState<string | null>(null)
 
+  // Keep the body mounted through the dialog's close animation (unmounting on
+  // `open` alone collapses the fading box to its header), while still
+  // remounting it per open: the notice's defaultOpen and the picker's
+  // seenOnOpen snapshot are open-time latches, so each open gets a fresh mount
+  // via the sequence key.
+  const contentMounted = useLingeringOpen(open)
+  const [openSeq, setOpenSeq] = useState(0)
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setOpenSeq((n) => n + 1)
+  }
+
   const handleSelect = (login: string) => {
     onClose()
     void navigate({ to: "/$org/setup", params: { org: login } })
@@ -201,8 +215,8 @@ function NewOrgModal({
           </Button>
         }
       >
-        {open && (
-          <>
+        {contentMounted && (
+          <Fragment key={openSeq}>
             <div className="mt-6">
               <MissingOrgNotice
                 onRefresh={onRefresh}
@@ -219,7 +233,7 @@ function NewOrgModal({
               onSelect={handleSelect}
               onFreePlan={setFreePlanOrg}
             />
-          </>
+          </Fragment>
         )}
       </Modal>
 

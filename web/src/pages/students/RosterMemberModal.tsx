@@ -139,14 +139,21 @@ const RosterMemberModal = ({
 
   const handleClose = () => {
     if (busy) return
+    onClose()
+  }
+
+  // Reset transient confirm/edit state when OPENING — a close-time reset would
+  // collapse an open confirm panel under the dialog's fade-out; the reopened
+  // modal still never shows a stale panel.
+  useEffect(() => {
+    if (!open) return
     setConfirmingUnenroll(false)
     setConfirmingResend(false)
     setConfirmingCancel(false)
     setPendingRole(null)
     setRoleOwnerConfirmed(false)
     setEditingProfile(false)
-    onClose()
-  }
+  }, [open])
 
   // Retain the last non-null row so the modal keeps rendering its real content
   // through the close animation. Without this, clearing the selection swaps in a

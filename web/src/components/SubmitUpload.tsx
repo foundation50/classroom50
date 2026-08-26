@@ -107,7 +107,14 @@ export function SubmitUpload({
   const closeModal = () => {
     if (submitting) return
     setOpen(false)
+  }
+
+  // The picked list is cleared when OPENING, not on close: clearing at close
+  // would swap the file table back to the empty dropzone under the dialog's
+  // fade-out.
+  const openModal = () => {
     setPicked([])
+    setOpen(true)
   }
 
   const submit = () =>
@@ -115,7 +122,6 @@ export function SubmitUpload({
       await mutation.mutateAsync(
         picked.map(({ path, file }) => ({ path, file })),
       )
-      setPicked([])
       setOpen(false)
       notify({
         tone: "success",
@@ -129,7 +135,7 @@ export function SubmitUpload({
 
   return (
     <>
-      <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="primary" size="sm" onClick={openModal}>
         <UploadIcon aria-hidden="true" className="size-4" />
         {t("submissions.student.upload.open")}
       </Button>

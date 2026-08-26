@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import {
@@ -10,6 +10,7 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
+import { GitHubLink } from "@/components/GitHubLink"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -26,7 +27,7 @@ import type { OrgMemberRow } from "@/util/orgMembers"
 const MemberDetailModal = ({
   open,
   org,
-  row,
+  row: rowProp,
   isSelf,
   isOwner,
   onClose,
@@ -55,19 +56,33 @@ const MemberDetailModal = ({
   const [working, setWorking] = useState(false)
   const [inviting, setInviting] = useState(false)
 
-  // Close and reset transient confirm/in-flight state in one place. Every close
-  // path (X, backdrop, Escape via onCancel) routes here, so a reopened modal
-  // never shows a stale "confirm remove" panel — no reset-in-effect needed.
-  const handleClose = () => {
-    if (working) return
+  // Retain the last non-null row so the modal keeps rendering its real content
+  // through the close animation. Without this, clearing the selection swaps in
+  // a structurally-empty <Modal> for the frames the dialog is still fading out,
+  // collapsing it to just the title. `open` still drives the actual close.
+  const [lastRow, setLastRow] = useState<OrgMemberRow | null>(null)
+  useEffect(() => {
+    if (rowProp) setLastRow(rowProp)
+  }, [rowProp])
+  const row = rowProp ?? lastRow
+
+  // Reset transient confirm/in-flight state when OPENING (a close-time reset
+  // would collapse an open confirm panel under the dialog's fade-out), so a
+  // reopened modal never shows a stale "confirm remove" panel.
+  useEffect(() => {
+    if (!open) return
     setConfirming(false)
     setConfirmingInvite(false)
     setInviting(false)
+  }, [open])
+
+  const handleClose = () => {
+    if (working) return
     onClose()
   }
 
   if (!row) {
-    // Still mounted (empty) so the close animation can run.
+    // Never had a row (initial mount, closed): nothing to show.
     return (
       <Modal
         open={open}
@@ -133,6 +148,10 @@ const MemberDetailModal = ({
     }
   }
 
+  // The destructive trigger lives in the footer; the inline confirm panel it
+  // opens stays in the body (a nested <dialog> can't stack on an open one).
+  const canRemove = !isSelf && row.isMember
+
   return (
     <Modal
       open={open}
@@ -140,15 +159,35 @@ const MemberDetailModal = ({
       closeDisabled={working}
       size="lg"
       title={t("orgMembers.detailTitle")}
+      footer={
+        <>
+          <GitHubLink
+            href={`https://github.com/orgs/${org}/people${
+              row.username ? `?query=${encodeURIComponent(row.username)}` : ""
+            }`}
+            label={t("orgMembers.manageOnGitHub")}
+            className="me-auto self-center"
+          />
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            {t("common.close")}
+          </Button>
+          {canRemove && (
+            <Button
+              variant="error"
+              size="sm"
+              disabled={working || confirming}
+              onClick={() => setConfirming(true)}
+            >
+              {t("orgMembers.removeFromOrg")}
+            </Button>
+          )}
+        </>
+      }
     >
       <div className="mt-4 flex flex-col gap-4">
-        <MemberDetailHeader row={row} org={org} />
-
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <MemberDetailHeader row={row} />
           <ClassificationBadge row={row} isOwner={isOwner} />
-          {row.email ? (
-            <span className="text-sm text-base-content/70">{row.email}</span>
-          ) : null}
         </div>
 
         <div>
@@ -329,16 +368,7 @@ const MemberDetailModal = ({
               </Button>
             </div>
           </div>
-        ) : (
-          <Button
-            variant="error"
-            size="sm"
-            className="self-start"
-            onClick={() => setConfirming(true)}
-          >
-            {t("orgMembers.removeFromOrg")}
-          </Button>
-        )}
+        ) : null}
       </div>
     </Modal>
   )

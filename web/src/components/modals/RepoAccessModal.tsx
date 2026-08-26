@@ -182,13 +182,12 @@ export function RepoAccessModal({
   }, [open, repoName, loadingCollaborators, initialEntries])
 
   useEffect(() => {
-    if (!open) {
-      setNewCollaborator("")
-      setNewPermission("push")
-      setSubmitError(null)
-      setSaved(false)
-      setInvalidLogins(new Set())
-    }
+    if (!open) return
+    setNewCollaborator("")
+    setNewPermission("push")
+    setSubmitError(null)
+    setSaved(false)
+    setInvalidLogins(new Set())
   }, [open])
 
   useEffect(

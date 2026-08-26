@@ -64,14 +64,15 @@ export function BulkRepoAccessModal({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
 
+  // Reset when OPENING, not on close — a close-time reset would swap the
+  // result view back to the idle form under the dialog's fade-out.
   useEffect(() => {
-    if (!open) {
-      runningRef.current = false
-      setPermission("push")
-      setPhase("idle")
-      setResult(null)
-      setProgress({ processed: 0, total: 0, message: "" })
-    }
+    if (!open) return
+    runningRef.current = false
+    setPermission("push")
+    setPhase("idle")
+    setResult(null)
+    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length

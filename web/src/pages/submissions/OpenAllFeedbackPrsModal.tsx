@@ -1,3 +1,4 @@
+import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitPullRequestIcon } from "@/components/ui/icons"
 
@@ -71,11 +72,16 @@ export function OpenAllFeedbackPrsModal({
   const count = repos.length
   const running = isPending
 
+  // Clear the prior run when OPENING so the dialog starts at the confirm state
+  // — resetting on close would swap the summary back to the confirm view under
+  // the fade-out.
+  useEffect(() => {
+    if (open) reset()
+  }, [open, reset])
+
   const handleClose = () => {
     if (running) return
     onClose()
-    // Clear the prior run so reopening starts at the confirm state.
-    reset()
   }
 
   const handleRun = () => {

@@ -139,12 +139,11 @@ export function GroupCollaboratorsModal({
   }, [open, repoName, loadingCollaborators, initialCollaborators])
 
   useEffect(() => {
-    if (!open) {
-      setNewCollaborator("")
-      setSubmitError(null)
-      setSaved(false)
-      setInvalidCollaborators(new Set())
-    }
+    if (!open) return
+    setNewCollaborator("")
+    setSubmitError(null)
+    setSaved(false)
+    setInvalidCollaborators(new Set())
   }, [open])
 
   useEffect(

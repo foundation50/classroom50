@@ -81,6 +81,12 @@ export function DownloadAllSubmissionsModal({
   // anything else is an unexpected batch error.
   const assemblyError = error instanceof ZipAssemblyError
 
+  // Clear the prior run when OPENING (not on close, which would swap the
+  // summary back to the confirm view under the fade-out).
+  useEffect(() => {
+    if (open) reset()
+  }, [open, reset])
+
   // Picker dismissed before anything ran — close quietly, no empty summary.
   useEffect(() => {
     if (outcome?.status === "cancelled") {
@@ -93,7 +99,6 @@ export function DownloadAllSubmissionsModal({
     // Closing mid-run cancels the in-flight batch rather than trapping the user.
     if (running) cancel()
     onClose()
-    reset()
   }
 
   const handleRun = () => {

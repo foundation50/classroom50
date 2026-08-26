@@ -1,5 +1,5 @@
 import { PencilIcon } from "@/components/ui/icons"
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
 
@@ -119,8 +119,13 @@ function OrgDetailsModal({
     setEditing(false)
   }
 
+  // Leave edit mode when OPENING, not at close — flipping at close would swap
+  // the form back to the read-only view under the dialog's fade-out.
+  useEffect(() => {
+    if (open) setEditing(false)
+  }, [open])
+
   const handleClose = () => {
-    setEditing(false)
     onClose()
   }
 
