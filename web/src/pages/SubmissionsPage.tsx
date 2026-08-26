@@ -4,7 +4,12 @@ import { AlertIcon, CalendarIcon, DownloadIcon } from "@/components/ui/icons"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
-import { useParams, useSearch, Navigate } from "@tanstack/react-router"
+import {
+  useParams,
+  useSearch,
+  Navigate,
+  useNavigate,
+} from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
@@ -14,6 +19,7 @@ import {
   Alert,
   Badge,
   Button,
+  EmphasisLtr,
   HelpTooltip,
   MetricBar,
   Spinner,
@@ -92,6 +98,7 @@ import { studentRepoName } from "@/util/studentRepo"
 import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
+import { isClassroomArchived } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
@@ -101,6 +108,7 @@ import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
+import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
@@ -134,6 +142,7 @@ const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
   const queryClient = useQueryClient()
+  const navigate = useNavigate()
   // Regrade-all is a config-repo-write tier action (teacher|hta); Collect and
   // per-row regrade stay all-staff (the page already gates entry on
   // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
@@ -303,6 +312,8 @@ const SubmissionsPageContent = () => {
   // must carry the key as `?k=<secret>`, else students hit "not found".
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
+  // An archived classroom refuses config-repo writes, so delete hides.
+  const classroomArchived = isClassroomArchived(classroomMeta ?? {})
 
   const assignmentSubmitUrl = acceptLinkUrl(
     org ?? "",
@@ -614,6 +625,8 @@ const SubmissionsPageContent = () => {
   const [regradeConfirmOpen, setRegradeConfirmOpen] = useState(false)
   // Drives the lock/unlock confirmation modal (opened from the actions menu).
   const [lockConfirmOpen, setLockConfirmOpen] = useState(false)
+  // Drives the delete-assignment confirmation modal (also menu-opened).
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false)
 
   // Whether a search/filter is narrowing the set — drives the table's
   // "filters hide everything" vs "nothing collected yet" empty state, and its
@@ -859,6 +872,9 @@ const SubmissionsPageContent = () => {
         : t("submissions.lock.unlockSuccess"),
     })
   })
+  // Same delete mechanism as the assignments table's manage hub (removes the
+  // assignments.json entry; student repos are kept).
+  const deleteAssignmentMutation = useDeleteAssignment()
   // `anyRegrading` covers the whole-assignment regrade AND every per-row
   // regrade (via the page coordinator), so collect/regrade controls disable
   // while any regrade is in flight.
@@ -1414,6 +1430,13 @@ const SubmissionsPageContent = () => {
                     ? () => setCloseSubmissionOpen(true)
                     : undefined
                 }
+                // Delete: same gate as the assignments table's mutating row
+                // actions (author + unarchived classroom).
+                onDelete={
+                  canRegradeAll && !classroomArchived
+                    ? () => setDeleteConfirmOpen(true)
+                    : undefined
+                }
               />
             </>
           }
@@ -1587,6 +1610,49 @@ const SubmissionsPageContent = () => {
           })
         }}
         onClose={() => setLockConfirmOpen(false)}
+      />
+      {/* Delete-assignment confirm: the assignments table's typed-slug flow. */}
+      <ConfirmModal
+        open={deleteConfirmOpen}
+        title={t("assignments.table.deleteTitle")}
+        description={
+          <Trans
+            i18nKey="assignments.table.deleteDescription"
+            values={{
+              assignment: assignmentInfo?.name ?? assignment,
+              classroom: `${org}/${classroom}`,
+            }}
+            components={{
+              assignment: <EmphasisLtr className="text-base-content" />,
+              classroom: <EmphasisLtr className="text-base-content" />,
+            }}
+          />
+        }
+        confirmText={assignment}
+        confirmLabel={t("assignments.table.deleteConfirm")}
+        cancelLabel={t("assignments.table.deleteCancel")}
+        dangerous
+        onConfirm={async () => {
+          await deleteAssignmentMutation.mutateAsync({
+            org,
+            classroom,
+            assignment,
+          })
+          // Refresh the assignments list we're about to land on (not awaited —
+          // this page is going away anyway).
+          void queryClient.invalidateQueries({
+            queryKey: githubKeys.jsonFile(
+              org,
+              CONFIG_REPO,
+              `${classroom}/assignments.json`,
+            ),
+          })
+          await navigate({
+            to: "/$org/$classroom/assignments",
+            params: { org, classroom },
+          })
+        }}
+        onClose={() => setDeleteConfirmOpen(false)}
       />
       <MetricsModal
         open={metricsOpen && !overlayCapable}

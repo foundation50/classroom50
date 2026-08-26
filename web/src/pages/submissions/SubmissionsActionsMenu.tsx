@@ -13,6 +13,7 @@ import {
   ShieldCheckIcon,
   SlidersIcon,
   SyncIcon,
+  TrashIcon,
   UnlockIcon,
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
@@ -52,6 +53,7 @@ export function SubmissionsActionsMenu({
   onLockToggle,
   closed = false,
   onCloseToggle,
+  onDelete,
 }: {
   collecting: boolean
   regrading: boolean
@@ -115,6 +117,9 @@ export function SubmissionsActionsMenu({
   // individual, non-empty repo shape) plus authoring tier; omitted otherwise.
   // The page owns the modal and the closed-flag mutation.
   onCloseToggle?: () => void
+  // Opens the delete-assignment confirm. Omitted (item hidden) unless the
+  // viewer can author on an unarchived classroom; the page owns the mutation.
+  onDelete?: () => void
 }) {
   const { t } = useTranslation()
   const busy = collecting || regrading
@@ -497,6 +502,30 @@ export function SubmissionsActionsMenu({
             {t("submissions.downloadAll.menuLabel")}
           </button>
         </li>
+        {/* Delete assignment — destructive, so deliberately last and in its
+            own group. */}
+        {onDelete && (
+          <>
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
+            />
+            <li>
+              <button
+                type="button"
+                className="text-error"
+                title={t("submissions.deleteAssignment.menuTitle")}
+                onClick={() => {
+                  closeMenu()
+                  onDelete()
+                }}
+              >
+                <TrashIcon aria-hidden="true" className="size-4" />
+                {t("submissions.deleteAssignment.menuLabel")}
+              </button>
+            </li>
+          </>
+        )}
       </DropdownMenu>
     </div>
   )
