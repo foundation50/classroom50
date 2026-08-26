@@ -197,4 +197,74 @@ describe("Modal", () => {
     dialog.close()
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it("wires title to aria-labelledby and subtitle to aria-describedby automatically", () => {
+    const { container } = render(
+      <Modal open title="My dialog" subtitle="More context">
+        body
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+
+    const heading = screen.getByRole("heading", { name: "My dialog" })
+    expect(heading.tagName).toBe("H3")
+    expect(dialog.getAttribute("aria-labelledby")).toBe(heading.id)
+
+    const subtitle = screen.getByText("More context")
+    expect(dialog.getAttribute("aria-describedby")).toBe(subtitle.id)
+  })
+
+  it("lets an explicit aria-labelledby win over the title wiring", () => {
+    const { container } = render(
+      <Modal open title="My dialog" aria-labelledby="external-id">
+        body
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+    expect(dialog.getAttribute("aria-labelledby")).toBe("external-id")
+  })
+
+  it("renders the footer slot inside the canonical modal-action row", () => {
+    const { container } = render(
+      <Modal open title="t" footer={<button type="button">Save</button>}>
+        body
+      </Modal>,
+    )
+    const action = container.querySelector(".modal-action")
+    expect(action).not.toBeNull()
+    expect(action?.textContent).toContain("Save")
+  })
+
+  it("passes role through for confirmation dialogs", () => {
+    const { container } = render(
+      <Modal open title="t" role="alertdialog">
+        body
+      </Modal>,
+    )
+    expect(container.querySelector("dialog")?.getAttribute("role")).toBe(
+      "alertdialog",
+    )
+  })
+
+  it("tolerates block-level subtitle content (ConfirmModal descriptions)", () => {
+    render(
+      <Modal
+        open
+        title="t"
+        subtitle={
+          <div>
+            <ul>
+              <li>consequence</li>
+            </ul>
+          </div>
+        }
+      >
+        body
+      </Modal>,
+    )
+    // The subtitle wrapper is a <div>, so the block content stays inside the
+    // described-by element instead of being split out of an auto-closed <p>.
+    const item = screen.getByText("consequence")
+    expect(item.closest("[id]")?.textContent).toContain("consequence")
+  })
 })

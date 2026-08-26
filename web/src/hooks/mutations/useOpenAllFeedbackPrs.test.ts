@@ -108,4 +108,28 @@ describe("useOpenAllFeedbackPrs", () => {
       }),
     )
   })
+
+  it("keeps reset referentially stable across renders so a reset-on-open effect can't re-fire mid-run", async () => {
+    openAllFeedbackPullRequests.mockResolvedValue(summary())
+    const queryClient = freshClient()
+    const { result, rerender } = renderHook(() => useOpenAllFeedbackPrs(), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    const firstReset = result.current.reset
+    rerender()
+    expect(result.current.reset).toBe(firstReset)
+
+    // A run's own re-renders (isPending/progress flips) must not mint a new
+    // reset either — the modal keys `if (open) reset()` on this identity, and
+    // an unstable one wiped the in-flight run.
+    result.current.mutate({ org: ORG, repos: ["a"], mode: "individual" })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(result.current.reset).toBe(firstReset)
+
+    // The stable reset still clears both the mutation and progress.
+    result.current.reset()
+    await waitFor(() => expect(result.current.isIdle).toBe(true))
+    expect(result.current.progress).toBeNull()
+  })
 })

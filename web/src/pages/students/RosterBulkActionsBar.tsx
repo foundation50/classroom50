@@ -170,8 +170,7 @@ const RosterBulkActionsBar = ({
 
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
-  const [modalOpen, setModalOpen] = useState(false)
-  const isOpen = modalOpen
+  const [isOpen, setModalOpen] = useState(false)
 
   const closeModal = () => {
     if (phase === "working") return

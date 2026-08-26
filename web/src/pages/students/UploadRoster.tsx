@@ -204,14 +204,12 @@ const UploadRoster = ({
     }
   }
 
-  // Clear internal state after the modal has actually closed (open -> false),
-  // so a programmatic close doesn't flash the idle drop-zone mid-close.
-  const wasOpenRef = useRef(false)
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  // `open !== true` keeps the uncontrolled mode (open undefined) untouched,
+  // which never reset here either.
   useEffect(() => {
-    if (wasOpenRef.current && open === false) {
-      resetToDropZone()
-    }
-    wasOpenRef.current = Boolean(open)
+    if (open !== true) return
+    resetToDropZone()
   }, [open])
 
   const handleClose = () => {

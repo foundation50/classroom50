@@ -205,8 +205,7 @@ const BulkActionsBar = ({
 
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
-  const [modalOpen, setModalOpen] = useState(false)
-  const isOpen = modalOpen
+  const [isOpen, setModalOpen] = useState(false)
 
   const closeModal = () => {
     if (phase === "working") return
@@ -383,10 +382,9 @@ const BulkActionsBar = ({
         })}
         confirmLabel={t("orgMembers.bulk.remove")}
         onConfirm={async () => {
-          // Close the confirm dialog first, then start the run next tick: two
-          // open <dialog showModal> at once is invalid (the second throws), so
-          // let the confirm close settle before run() opens the progress dialog.
-          // Not awaited — run() drives its own dialog.
+          // Close the confirm dialog first, then start the run next tick, so
+          // the progress dialog doesn't stack its box and backdrop over the
+          // still-closing confirm. Not awaited — run() drives its own dialog.
           setConfirmingRemove(false)
           setTimeout(() => void run("remove"), 0)
         }}

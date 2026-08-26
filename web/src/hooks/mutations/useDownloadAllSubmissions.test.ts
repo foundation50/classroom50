@@ -225,4 +225,54 @@ describe("useDownloadAllSubmissions", () => {
     expect(streamSubmissionsToDirectory).not.toHaveBeenCalled()
     expect(downloadAllSubmissions).not.toHaveBeenCalled()
   })
+
+  it("reports an aborted run as cancelled, not as an error", async () => {
+    downloadAllSubmissions.mockRejectedValue(
+      new DOMException("Aborted", "AbortError"),
+    )
+    const queryClient = freshClient()
+    const { result: hook } = renderHook(() => useDownloadAllSubmissions(), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    hook.current.mutate({
+      org: ORG,
+      classroom: "cs101",
+      assignment: "hw1",
+      owners: ["alice"],
+    })
+    await waitFor(() => expect(hook.current.isSuccess).toBe(true))
+
+    expect(hook.current.data).toEqual({ status: "cancelled" })
+    expect(hook.current.isError).toBe(false)
+  })
+
+  it("keeps reset referentially stable across renders so a reset-on-open effect can't re-fire mid-run", async () => {
+    downloadAllSubmissions.mockResolvedValue(result())
+    const queryClient = freshClient()
+    const { result: hook, rerender } = renderHook(
+      () => useDownloadAllSubmissions(),
+      { wrapper: wrapperWith(queryClient) },
+    )
+
+    const firstReset = hook.current.reset
+    rerender()
+    expect(hook.current.reset).toBe(firstReset)
+
+    // A run's own re-renders (isPending/progress flips) must not mint a new
+    // reset either — the modal keys `if (open) reset()` on this identity, and
+    // an unstable one wiped the in-flight run and neutered cancel.
+    hook.current.mutate({
+      org: ORG,
+      classroom: "cs101",
+      assignment: "hw1",
+      owners: ["alice"],
+    })
+    await waitFor(() => expect(hook.current.isSuccess).toBe(true))
+    expect(hook.current.reset).toBe(firstReset)
+
+    hook.current.reset()
+    await waitFor(() => expect(hook.current.isIdle).toBe(true))
+    expect(hook.current.progress).toBeNull()
+  })
 })

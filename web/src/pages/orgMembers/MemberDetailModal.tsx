@@ -72,6 +72,17 @@ const MemberDetailModal = ({
     setInviting(false)
   }, [open])
 
+  // Disarm the confirm panels during render when the row identity changes
+  // without an intervening close (RosterMemberModal's draftRowKey pattern), so
+  // an armed "remove from org" can never carry onto a re-pointed member.
+  const rowKey = rowProp ? rowProp.username || rowProp.email : null
+  const [draftRowKey, setDraftRowKey] = useState<string | null>(rowKey)
+  if (rowKey !== null && rowKey !== draftRowKey) {
+    setDraftRowKey(rowKey)
+    setConfirming(false)
+    setConfirmingInvite(false)
+  }
+
   const handleClose = () => {
     if (working) return
     onClose()

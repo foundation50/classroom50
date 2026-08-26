@@ -123,14 +123,10 @@ function OrgDetailsModal({
     if (open) setEditing(false)
   }, [open])
 
-  const handleClose = () => {
-    onClose()
-  }
-
   return (
     <Modal
       open={open}
-      onClose={handleClose}
+      onClose={onClose}
       size="2xl"
       title={<span className="block truncate">{heading}</span>}
       subtitle={
@@ -193,7 +189,7 @@ function OrgDetailsModal({
                 className="me-auto self-center"
               />
             )}
-            <Button variant="ghost" size="sm" onClick={handleClose}>
+            <Button variant="ghost" size="sm" onClick={onClose}>
               {t("orgs.detailsModal.close")}
             </Button>
             {isOwner && (

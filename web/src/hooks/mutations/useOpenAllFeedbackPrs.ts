@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { openAllFeedbackPullRequests } from "@/domain/assignments"
@@ -55,14 +55,20 @@ export function useOpenAllFeedbackPrs() {
     },
   })
 
+  // Stable identity: callers key reset-on-open effects on this function, so a
+  // per-render closure would re-fire the effect on every render while open and
+  // reset the mutation mid-run (RQ v5's mutation.reset is already stable).
+  const mutationReset = mutation.reset
+  const reset = useCallback(() => {
+    setProgress(null)
+    mutationReset()
+  }, [mutationReset])
+
   return {
     ...mutation,
     progress,
     // Clear progress + result when reopening the modal for a fresh run.
-    reset: () => {
-      setProgress(null)
-      mutation.reset()
-    },
+    reset,
   }
 }
 

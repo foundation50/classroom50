@@ -181,12 +181,15 @@ export function Modal({
                 {title}
               </Heading>
               {subtitle !== undefined && (
-                <p
+                // A div, not <p>: ConfirmModal forwards arbitrary description
+                // nodes here, and block content inside <p> is invalid HTML the
+                // parser splits apart.
+                <div
                   id={subtitleId}
                   className="mt-1 text-sm text-base-content/70"
                 >
                   {subtitle}
-                </p>
+                </div>
               )}
             </div>
           </div>
