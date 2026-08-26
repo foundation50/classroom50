@@ -1,6 +1,6 @@
 import { MarkGithubIcon } from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { useUpdateStudent } from "@/hooks/mutations/useUpdateStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -14,6 +14,7 @@ import {
   AnimatedAlert,
   Button,
   Input,
+  ModalFooterPortal,
   MonoLtr,
 } from "@/components/ui"
 
@@ -60,6 +61,8 @@ const EditStudentForm = ({
   lockEmail?: boolean
 }) => {
   const runSave = useSafeSubmit()
+  // Ties the portaled footer submit button to this form element.
+  const formId = useId()
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
@@ -151,6 +154,7 @@ const EditStudentForm = ({
 
   return (
     <form
+      id={formId}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -274,7 +278,9 @@ const EditStudentForm = ({
         {error}
       </AnimatedAlert>
 
-      <div className="modal-action">
+      {/* The buttons render in the host modal's footer row; `form={formId}`
+          keeps the portaled submit wired to this form element. */}
+      <ModalFooterPortal>
         <Button
           type="button"
           variant="ghost"
@@ -289,6 +295,7 @@ const EditStudentForm = ({
           {([canSubmit, isSubmitting]) => (
             <Button
               type="submit"
+              form={formId}
               variant="primary"
               loading={isSubmitting}
               loadingLabel={t("students.saving")}
@@ -298,7 +305,7 @@ const EditStudentForm = ({
             </Button>
           )}
         </form.Subscribe>
-      </div>
+      </ModalFooterPortal>
     </form>
   )
 }

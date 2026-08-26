@@ -16,6 +16,7 @@ import {
   type BulkRemoveFromClassroomResult,
 } from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import { ConfirmModal } from "@/components/modals"
+import { useDeferredRun } from "@/hooks/useDeferredRun"
 import { logger } from "@/lib/logger"
 import {
   BulkResultSection,
@@ -207,6 +208,8 @@ const BulkActionsBar = ({
   // (close-animation note in ui/Modal); each run resets them anyway.
   const [isOpen, setModalOpen] = useState(false)
 
+  const deferRun = useDeferredRun()
+
   const closeModal = () => {
     if (phase === "working") return
     setModalOpen(false)
@@ -386,7 +389,7 @@ const BulkActionsBar = ({
           // the progress dialog doesn't stack its box and backdrop over the
           // still-closing confirm. Not awaited — run() drives its own dialog.
           setConfirmingRemove(false)
-          setTimeout(() => void run("remove"), 0)
+          deferRun(() => run("remove"))
         }}
         onClose={() => setConfirmingRemove(false)}
       />
@@ -406,7 +409,7 @@ const BulkActionsBar = ({
         confirmLabel={t("orgMembers.bulk.add")}
         onConfirm={async () => {
           setConfirmingAdd(false)
-          setTimeout(() => void run("add"), 0)
+          deferRun(() => run("add"))
         }}
         onClose={() => setConfirmingAdd(false)}
       />

@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CalendarIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
 import {
+  BulkProgressBlock,
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
@@ -204,13 +204,6 @@ export function CloseSubmissionModal({
   }
 
   const busy = phase === "working"
-  const pct = useMemo(
-    () =>
-      progress.total > 0
-        ? Math.round((progress.processed / progress.total) * 100)
-        : 0,
-    [progress],
-  )
 
   return (
     <Modal
@@ -292,25 +285,19 @@ export function CloseSubmissionModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("submissions.closeSubmission.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            // Omit `value` until the first repo completes so the bar animates
-            // as an indeterminate track instead of sitting at 0% while a slow
-            // write is in flight; once something lands it reflects real pct.
-            {...(progress.processed > 0 ? { value: pct } : {})}
-            max={100}
-          />
-          <p className="text-sm text-base-content/70">
-            {progress.processed > 0
+        <BulkProgressBlock
+          workingLabel={t("submissions.closeSubmission.working")}
+          indeterminateUntilFirst
+          progress={progress}
+          caption={
+            progress.processed > 0
               ? t("submissions.closeSubmission.progress", {
                   processed: progress.processed,
                   total: progress.total,
                 })
-              : t("submissions.closeSubmission.working")}
-          </p>
-        </div>
+              : t("submissions.closeSubmission.working")
+          }
+        />
       )}
 
       {phase === "error" && flagError && (

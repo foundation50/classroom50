@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import {
   render,
   screen,
@@ -10,6 +10,18 @@ import {
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ReactElement } from "react"
+
+// happy-dom doesn't implement <dialog> showModal/close; stub them so the host
+// Modal can open (a closed dialog hides its content from role queries).
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true
+  }
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false
+    this.dispatchEvent(new Event("close"))
+  }
+})
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -30,6 +42,7 @@ vi.mock("@/domain/students", () => ({
 }))
 
 import EditStudentForm from "./EditStudentForm"
+import { Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 
 afterEach(() => {
@@ -47,9 +60,15 @@ const student: Student = {
   role: "student",
 }
 
+// Host the form inside an OPEN Modal so its ModalFooterPortal buttons mount
+// into the footer row and stay visible to role queries, like in the app.
 const renderForm = (ui: ReactElement) =>
   render(
-    <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+      <Modal open aria-label="host">
+        {ui}
+      </Modal>
+    </QueryClientProvider>,
   )
 
 // #: a successful save unmounts the form (parent leaves edit mode) while
@@ -172,7 +191,9 @@ describe("EditStudentForm in-flight Save button", () => {
     const client = new QueryClient()
     const { rerender } = render(
       <QueryClientProvider client={client}>
-        <EditStudentForm {...props} student={{ ...student }} />
+        <Modal open aria-label="host">
+          <EditStudentForm {...props} student={{ ...student }} />
+        </Modal>
       </QueryClientProvider>,
     )
 
@@ -187,7 +208,9 @@ describe("EditStudentForm in-flight Save button", () => {
     // modal does on every render. The button must stay disabled.
     rerender(
       <QueryClientProvider client={client}>
-        <EditStudentForm {...props} student={{ ...student }} />
+        <Modal open aria-label="host">
+          <EditStudentForm {...props} student={{ ...student }} />
+        </Modal>
       </QueryClientProvider>,
     )
     expect(button.disabled).toBe(true)

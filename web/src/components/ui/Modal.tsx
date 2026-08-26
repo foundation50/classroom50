@@ -1,12 +1,16 @@
 import { XIcon } from "./icons"
 import {
+  createContext,
+  useContext,
   useEffect,
   useId,
   useRef,
+  useState,
   type ReactNode,
   type Ref,
   type RefObject,
 } from "react"
+import { createPortal } from "react-dom"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "./Button"
@@ -28,11 +32,18 @@ import { Heading } from "./Heading"
 // modal-box itself scrolls), and a right-aligned `footer` action row. Passing
 // `title` wires aria-labelledby automatically; `subtitle` wires
 // aria-describedby. Prefer these slots over hand-rolling a header/footer.
+// Body content whose buttons are wired to state the `footer` prop can't reach
+// (a form instance, a phase-local handler) renders them through
+// <ModalFooterPortal> into the same canonical row instead.
 //
 // Close-animation invariant: the dialog keeps painting through its ~200ms
 // fade-out, so callers must not mutate content at close — reset transient
 // state when OPENING, retain cleared row data through the fade, and gate
 // open-only content with useLingeringOpen.
+
+// The footer container element, provided per Modal instance so
+// ModalFooterPortal can target the canonical action row.
+const ModalFooterContext = createContext<HTMLDivElement | null>(null)
 
 export type ModalSize =
   "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl"
@@ -110,6 +121,9 @@ export function Modal({
   const closeId = useId()
   const titleId = useId()
   const subtitleId = useId()
+  // The footer container as state (not a ref) so ModalFooterPortal consumers
+  // re-render once the element exists.
+  const [footerEl, setFooterEl] = useState<HTMLDivElement | null>(null)
 
   const labelledBy =
     aria["aria-labelledby"] ?? (title !== undefined ? titleId : undefined)
@@ -197,8 +211,15 @@ export function Modal({
             </div>
           </div>
         )}
-        {children}
-        {footer !== undefined && <div className="modal-action">{footer}</div>}
+        <ModalFooterContext.Provider value={footerEl}>
+          {children}
+        </ModalFooterContext.Provider>
+        {/* Always mounted so ModalFooterPortal can target it; empty:hidden
+            keeps the row (and its top margin) from painting when neither the
+            prop nor a portal fills it. */}
+        <div ref={setFooterEl} className="modal-action empty:hidden">
+          {footer}
+        </div>
       </div>
 
       {/* DaisyUI's click-outside-to-close backdrop. The button is a mouse
@@ -215,6 +236,15 @@ export function Modal({
 }
 
 export default Modal
+
+// Renders body-owned action buttons into the Modal's canonical footer row.
+// For content whose buttons need state the `footer` prop can't reach (a form
+// instance, a phase-local handler); renders nothing outside a Modal.
+export function ModalFooterPortal({ children }: { children: ReactNode }) {
+  const container = useContext(ModalFooterContext)
+  if (!container) return null
+  return createPortal(children, container)
+}
 
 // Single source for the header icon chip used as `headerVisual` — callers must
 // not hand-roll the size/tone recipe.

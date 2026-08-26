@@ -29,6 +29,8 @@ type ConfirmModalProps = {
 // Primer-style ConfirmationDialog built on the shared Modal primitive
 // (role="alertdialog", exactly two footer buttons: ghost Cancel left,
 // error/warning/primary confirm right).
+// `onClose` must be idempotent: a successful confirm and the dialog's native
+// close event both fire it.
 export function ConfirmModal({
   open,
   title,

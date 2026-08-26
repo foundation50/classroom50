@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
+import { ViewRepositoryLink } from "@/components/modals/ViewRepositoryLink"
 import {
   Alert,
   AnimatedAlert,
@@ -394,23 +395,6 @@ export function RepoAccessModal({
       closeDisabled={isSaving}
       size="xl"
       title={t("components.modals.repoAccess.title")}
-      subtitle={
-        repoName ? (
-          <a
-            className="link inline-flex items-center gap-1.5"
-            href={repoUrl || `https://github.com/${org}/${repoName}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <MarkGithubIcon aria-hidden="true" className="size-4" />
-            {assignmentName
-              ? t("components.modals.repoAccess.viewRepoNamed", {
-                  name: assignmentName,
-                })
-              : t("components.modals.groupCollaborators.viewRepository")}
-          </a>
-        ) : undefined
-      }
       headerVisual={
         <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
@@ -444,6 +428,17 @@ export function RepoAccessModal({
         </>
       }
     >
+      {repoName && (
+        <ViewRepositoryLink
+          href={repoUrl || `https://github.com/${org}/${repoName}`}
+        >
+          {assignmentName
+            ? t("components.modals.repoAccess.viewRepoNamed", {
+                name: assignmentName,
+              })
+            : t("components.modals.groupCollaborators.viewRepository")}
+        </ViewRepositoryLink>
+      )}
       {loadingCollaborators ? (
         <div className="flex py-10">
           <Spinner

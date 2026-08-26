@@ -9,6 +9,7 @@ import {
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
+import { useDeferredRun } from "@/hooks/useDeferredRun"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
@@ -171,6 +172,8 @@ const RosterBulkActionsBar = ({
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
   const [isOpen, setModalOpen] = useState(false)
+
+  const deferRun = useDeferredRun()
 
   const closeModal = () => {
     if (phase === "working") return
@@ -537,7 +540,7 @@ const RosterBulkActionsBar = ({
         confirmLabel={t("students.bulk.unenroll")}
         onConfirm={async () => {
           setConfirmingUnenroll(false)
-          setTimeout(() => void runUnenroll(), 0)
+          deferRun(runUnenroll)
         }}
         onClose={() => setConfirmingUnenroll(false)}
       />
@@ -555,7 +558,7 @@ const RosterBulkActionsBar = ({
         confirmLabel={t("students.bulk.invite")}
         onConfirm={async () => {
           setConfirmingInvite(false)
-          setTimeout(() => void runInvite(), 0)
+          deferRun(runInvite)
         }}
         onClose={() => setConfirmingInvite(false)}
       />
@@ -573,7 +576,7 @@ const RosterBulkActionsBar = ({
         confirmLabel={t("students.bulk.cancelInvite")}
         onConfirm={async () => {
           setConfirmingCancel(false)
-          setTimeout(() => void runCancel(), 0)
+          deferRun(runCancel)
         }}
         onClose={() => setConfirmingCancel(false)}
       />

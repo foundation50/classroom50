@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { PauseIcon, PlayIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
+import { Alert, Modal, ModalIcon } from "@/components/ui"
 import {
+  BulkPhaseFooter,
+  BulkProgressBlock,
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
@@ -200,13 +201,6 @@ export function BulkAutogradeStateModal({
   }
 
   const busy = phase === "working"
-  const pct = useMemo(
-    () =>
-      progress.total > 0
-        ? Math.round((progress.processed / progress.total) * 100)
-        : 0,
-    [progress],
-  )
 
   return (
     <Modal
@@ -235,26 +229,18 @@ export function BulkAutogradeStateModal({
         </ModalIcon>
       }
       footer={
-        phase === "complete" || phase === "error" ? (
-          <Button variant="primary" onClick={() => onClose()}>
-            {t("common.done")}
-          </Button>
-        ) : (
-          <>
-            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-              {t("common.cancel")}
-            </Button>
-            {phase === "idle" && total > 0 && (
-              <Button variant="primary" onClick={() => void run()}>
-                {t(
-                  isPause
-                    ? "submissions.bulkAutograde.pauseApply"
-                    : "submissions.bulkAutograde.resumeApply",
-                )}
-              </Button>
-            )}
-          </>
-        )
+        <BulkPhaseFooter
+          phase={phase}
+          busy={busy}
+          showApply={total > 0}
+          applyLabel={t(
+            isPause
+              ? "submissions.bulkAutograde.pauseApply"
+              : "submissions.bulkAutograde.resumeApply",
+          )}
+          onApply={() => void run()}
+          onClose={onClose}
+        />
       }
     >
       {phase === "idle" && (
@@ -277,20 +263,14 @@ export function BulkAutogradeStateModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("submissions.bulkAutograde.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            value={pct}
-            max={100}
-          />
-          <p className="text-sm text-base-content/70">
-            {t("submissions.bulkAutograde.progress", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
-          </p>
-        </div>
+        <BulkProgressBlock
+          workingLabel={t("submissions.bulkAutograde.working")}
+          progress={progress}
+          caption={t("submissions.bulkAutograde.progress", {
+            processed: progress.processed,
+            total: progress.total,
+          })}
+        />
       )}
 
       {(phase === "complete" || phase === "error") && result && (
