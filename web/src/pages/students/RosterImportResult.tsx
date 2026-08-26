@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert, Button, modalActionClass } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type {
   BulkImportResult,
@@ -252,7 +252,7 @@ export const RosterImportResult = ({
           ))
         : null}
 
-      <div className="modal-action">
+      <div className={modalActionClass}>
         <Button variant="primary" onClick={onDone}>
           {t("students.done")}
         </Button>

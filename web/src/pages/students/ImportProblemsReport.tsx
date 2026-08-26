@@ -1,5 +1,5 @@
 import { Trans, useTranslation } from "react-i18next"
-import { Alert, Button, MonoLtr } from "@/components/ui"
+import { Alert, Button, modalActionClass, MonoLtr } from "@/components/ui"
 import type { ImportProblem } from "@/pages/students/importProblems"
 
 // The per-line list both report variants share. Each explanation is ONE
@@ -53,7 +53,7 @@ export const ImportBlockedReport = ({
           )}
         </div>
       </Alert>
-      <div className="modal-action">
+      <div className={modalActionClass}>
         <Button variant="ghost" onClick={onCancel}>
           {t("common.cancel")}
         </Button>

@@ -43,6 +43,13 @@ const SIZE_CLASS: Record<ModalSize, string> = {
   "5xl": "max-w-5xl",
 }
 
+// The canonical footer row, with a full-bleed top divider mirroring the header
+// divider (Primer Dialog anatomy). Exported for the few in-body action rows
+// (multi-step modal content) that can't use the `footer` slot, so the recipe
+// stays single-sourced.
+export const modalActionClass =
+  "modal-action -mx-6 border-t border-base-300 px-6 pt-4"
+
 export type ModalProps = {
   open?: boolean
   onClose?: () => void
@@ -164,7 +171,13 @@ export function Modal({
         )}
         {title !== undefined && (
           <div
-            className={cx("flex items-start gap-4", !hideCloseButton && "pe-8")}
+            className={cx(
+              // Full-bleed divider under the header (Primer Dialog anatomy):
+              // -mx-6/ps-6 counteract the modal-box padding so the 1px border
+              // spans edge to edge; pe-14 keeps the title clear of the close X.
+              "-mx-6 flex items-start gap-4 border-b border-base-300 ps-6 pb-4",
+              hideCloseButton ? "pe-6" : "pe-14",
+            )}
           >
             {headerVisual}
             <div className="min-w-0 flex-1">
@@ -183,7 +196,9 @@ export function Modal({
           </div>
         )}
         {children}
-        {footer !== undefined && <div className="modal-action">{footer}</div>}
+        {footer !== undefined && (
+          <div className={modalActionClass}>{footer}</div>
+        )}
       </div>
 
       {/* DaisyUI's click-outside-to-close backdrop. The button is a mouse
