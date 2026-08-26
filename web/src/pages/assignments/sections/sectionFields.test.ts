@@ -109,6 +109,16 @@ describe("sectionIsConfigured", () => {
     const maxChanged = { ...defaults, grading_max_points: 42 }
     expect(sectionIsConfigured("submission", maxChanged, defaults)).toBe(true)
   })
+
+  it("attributes the report defaults to the submission section", () => {
+    // The test_defaults controls live in the autograder pane, so changing only
+    // them must surface the submission section's Reset (and reset with it).
+    const details = { ...defaults, test_failure_details: "none" as const }
+    expect(sectionIsConfigured("submission", details, defaults)).toBe(true)
+    const output = { ...defaults, test_show_output: true }
+    expect(sectionIsConfigured("submission", output, defaults)).toBe(true)
+    expect(sectionIsConfigured("details", output, defaults)).toBe(false)
+  })
 })
 
 describe("errorKeyMatchesField", () => {
