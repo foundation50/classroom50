@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.34.1](https://github.com/foundation50/classroom50/compare/web-v1.34.0...web-v1.34.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **web:** standardize modals on Primer dialog anatomy ([#752](https://github.com/foundation50/classroom50/issues/752)) ([cc85110](https://github.com/foundation50/classroom50/commit/cc851102b0f242146f4d6f3a6d6652097d3f7f8f))
+
 ## [1.34.0](https://github.com/foundation50/classroom50/compare/web-v1.33.0...web-v1.34.0) (2026-08-25)
 
 
