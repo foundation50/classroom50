@@ -175,11 +175,9 @@ function NewOrgModal({
   const navigate = useNavigate()
   const [freePlanOrg, setFreePlanOrg] = useState<string | null>(null)
 
-  // Keep the body mounted through the dialog's close animation (unmounting on
-  // `open` alone collapses the fading box to its header), while still
-  // remounting it per open: the notice's defaultOpen and the picker's
-  // seenOnOpen snapshot are open-time latches, so each open gets a fresh mount
-  // via the sequence key.
+  // Body stays mounted through the close fade (useLingeringOpen) but remounts
+  // per open via the sequence key: the notice's defaultOpen and the picker's
+  // seenOnOpen snapshot are open-time latches.
   const contentMounted = useLingeringOpen(open)
   const [openSeq, setOpenSeq] = useState(0)
   const [wasOpen, setWasOpen] = useState(open)

@@ -168,9 +168,8 @@ const RosterBulkActionsBar = ({
   // the writer silently report the pending ones as "already removed".
   const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
 
-  // The progress dialog's visibility is its own flag, decoupled from `phase`:
-  // closing must not reset phase/result/action, or the fading dialog would
-  // collapse to just its title mid-animation. Each run resets them anyway.
+  // Visibility is its own flag: closing must not reset phase/result/action
+  // (close-animation note in ui/Modal); each run resets them anyway.
   const [modalOpen, setModalOpen] = useState(false)
   const isOpen = modalOpen
 

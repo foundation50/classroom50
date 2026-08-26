@@ -56,19 +56,15 @@ const MemberDetailModal = ({
   const [working, setWorking] = useState(false)
   const [inviting, setInviting] = useState(false)
 
-  // Retain the last non-null row so the modal keeps rendering its real content
-  // through the close animation. Without this, clearing the selection swaps in
-  // a structurally-empty <Modal> for the frames the dialog is still fading out,
-  // collapsing it to just the title. `open` still drives the actual close.
+  // Retain the last non-null row so the fading dialog keeps its content after
+  // the parent clears the selection (close-animation note in ui/Modal).
   const [lastRow, setLastRow] = useState<OrgMemberRow | null>(null)
   useEffect(() => {
     if (rowProp) setLastRow(rowProp)
   }, [rowProp])
   const row = rowProp ?? lastRow
 
-  // Reset transient confirm/in-flight state when OPENING (a close-time reset
-  // would collapse an open confirm panel under the dialog's fade-out), so a
-  // reopened modal never shows a stale "confirm remove" panel.
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     setConfirming(false)

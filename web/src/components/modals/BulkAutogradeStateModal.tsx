@@ -80,6 +80,7 @@ export function BulkAutogradeStateModal({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     runningRef.current = false

@@ -181,6 +181,7 @@ export function RepoAccessModal({
     setDraft(initialEntries)
   }, [open, repoName, loadingCollaborators, initialEntries])
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     setNewCollaborator("")

@@ -28,6 +28,11 @@ import { Heading } from "./Heading"
 // modal-box itself scrolls), and a right-aligned `footer` action row. Passing
 // `title` wires aria-labelledby automatically; `subtitle` wires
 // aria-describedby. Prefer these slots over hand-rolling a header/footer.
+//
+// Close-animation invariant: the dialog keeps painting through its ~200ms
+// fade-out, so callers must not mutate content at close — reset transient
+// state when OPENING, retain cleared row data through the fade, and gate
+// open-only content with useLingeringOpen.
 
 export type ModalSize =
   "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl"
@@ -136,8 +141,7 @@ export function Modal({
       onKeyDown={onKeyDown}
       onCancel={(event) => {
         // Esc triggers `cancel` before `close`. When dismissal is blocked
-        // (e.g., a submit is in flight), veto it so the dialog stays open —
-        // matching the hand-rolled modals' Esc guard.
+        // (e.g., a submit is in flight), veto it so the dialog stays open.
         if (closeDisabled) event.preventDefault()
       }}
       role={role}
@@ -165,9 +169,8 @@ export function Modal({
         {title !== undefined && (
           <div
             className={cx(
-              // Full-bleed divider under the header (Primer Dialog anatomy):
-              // -mx-6/ps-6 counteract the modal-box padding so the 1px border
-              // spans edge to edge; pe-14 keeps the title clear of the close X.
+              // Full-bleed header divider: -mx-6/ps-6 counteract the modal-box
+              // padding; pe-14 keeps the title clear of the close X.
               "-mx-6 flex items-start gap-4 border-b border-base-300 ps-6 pb-4",
               hideCloseButton ? "pe-6" : "pe-14",
             )}

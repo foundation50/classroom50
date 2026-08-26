@@ -70,10 +70,7 @@ export function ConfirmModal({
     if (hasAcknowledged) confirmInputRef.current?.focus()
   }, [hasAcknowledged])
 
-  // Reset transient state when OPENING, not on close: a close-time reset would
-  // repaint the previous step/error under the dialog's fade-out. The stale
-  // content from the last run is invisible while closed and replaced before
-  // the reopen paints.
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     setHasAcknowledged(false)

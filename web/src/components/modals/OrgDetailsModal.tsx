@@ -51,8 +51,7 @@ function OrgDetailsModal({
 }) {
   const { t } = useTranslation()
   const { notify } = useToast()
-  // Ties the footer's submit button (outside the <form> element) to the edit
-  // form via the button's `form` attribute.
+  // Ties the footer's submit button (outside the <form> element) to the form.
   const formId = useId()
   const { org, membership } = summary
   const [editing, setEditing] = useState(false)
@@ -119,8 +118,7 @@ function OrgDetailsModal({
     setEditing(false)
   }
 
-  // Leave edit mode when OPENING, not at close — flipping at close would swap
-  // the form back to the read-only view under the dialog's fade-out.
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (open) setEditing(false)
   }, [open])

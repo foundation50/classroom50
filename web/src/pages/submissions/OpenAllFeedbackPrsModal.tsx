@@ -72,9 +72,7 @@ export function OpenAllFeedbackPrsModal({
   const count = repos.length
   const running = isPending
 
-  // Clear the prior run when OPENING so the dialog starts at the confirm state
-  // — resetting on close would swap the summary back to the confirm view under
-  // the fade-out.
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (open) reset()
   }, [open, reset])

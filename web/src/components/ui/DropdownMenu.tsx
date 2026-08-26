@@ -2,10 +2,9 @@ import type { ComponentPropsWithRef } from "react"
 
 import { cx } from "./cx"
 
-// Single source for the DaisyUI dropdown menu surface (`dropdown-content menu`
-// recipe) so the popover chrome can't drift across call sites. Callers keep
-// owning the `dropdown` wrapper and its trigger button; pass sizing utilities
-// (width, max-height, overflow) via className.
+// Single source for the DaisyUI dropdown menu surface so the popover chrome
+// can't drift. Callers own the `dropdown` wrapper and trigger; pass sizing
+// utilities (width, max-height, overflow) via className.
 export type DropdownMenuProps = ComponentPropsWithRef<"ul">
 
 export function DropdownMenu({

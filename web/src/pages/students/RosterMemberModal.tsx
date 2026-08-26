@@ -142,9 +142,7 @@ const RosterMemberModal = ({
     onClose()
   }
 
-  // Reset transient confirm/edit state when OPENING — a close-time reset would
-  // collapse an open confirm panel under the dialog's fade-out; the reopened
-  // modal still never shows a stale panel.
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     setConfirmingUnenroll(false)
@@ -155,11 +153,8 @@ const RosterMemberModal = ({
     setEditingProfile(false)
   }, [open])
 
-  // Retain the last non-null row so the modal keeps rendering its real content
-  // through the close animation. Without this, clearing the selection swaps in a
-  // structurally-empty <Modal> for the frames the dialog is still fading out,
-  // flashing a tiny empty box. `open` (from the parent's Boolean(selected)) still
-  // drives the actual close.
+  // Retain the last non-null row so the fading dialog keeps its content after
+  // the parent clears the selection (close-animation note in ui/Modal).
   const [lastRow, setLastRow] = useState<TeamRosterRow | null>(null)
   useEffect(() => {
     if (rowProp) setLastRow(rowProp)

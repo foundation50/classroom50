@@ -81,8 +81,7 @@ export function DownloadAllSubmissionsModal({
   // anything else is an unexpected batch error.
   const assemblyError = error instanceof ZipAssemblyError
 
-  // Clear the prior run when OPENING (not on close, which would swap the
-  // summary back to the confirm view under the fade-out).
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (open) reset()
   }, [open, reset])

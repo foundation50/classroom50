@@ -76,6 +76,7 @@ export function CloseSubmissionModal({
   // closing" affordance so a throttled close isn't stuck offering only Reopen.
   const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     runningRef.current = false

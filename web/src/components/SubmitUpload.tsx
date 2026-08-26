@@ -109,9 +109,7 @@ export function SubmitUpload({
     setOpen(false)
   }
 
-  // The picked list is cleared when OPENING, not on close: clearing at close
-  // would swap the file table back to the empty dropzone under the dialog's
-  // fade-out.
+  // Cleared on open, never at close — see the close-animation note in ui/Modal.
   const openModal = () => {
     setPicked([])
     setOpen(true)

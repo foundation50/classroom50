@@ -187,8 +187,7 @@ const AddStudent = ({
 
   const submitting = form.state.isSubmitting || addStaffMutation.isPending
 
-  // Reset transient state whenever the modal opens (Modal owns the open/close
-  // sync now).
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     setWarning("")

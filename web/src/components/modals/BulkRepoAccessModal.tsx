@@ -64,8 +64,7 @@ export function BulkRepoAccessModal({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
 
-  // Reset when OPENING, not on close — a close-time reset would swap the
-  // result view back to the idle form under the dialog's fade-out.
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     runningRef.current = false
