@@ -1,9 +1,4 @@
-import {
-  MailIcon,
-  MarkGithubIcon,
-  PeopleIcon,
-  PersonIcon,
-} from "@/components/ui/icons"
+import { MarkGithubIcon } from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useCallback, useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -170,22 +165,16 @@ const EditStudentForm = ({
               label={t("students.firstNameLabel")}
             >
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <PersonIcon
-                    className="me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    placeholder={t("students.firstNamePlaceholder")}
-                    aria-describedby={describedById}
-                    invalid={invalid}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  placeholder={t("students.firstNamePlaceholder")}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -195,22 +184,16 @@ const EditStudentForm = ({
           {(field) => (
             <FormField htmlFor={field.name} label={t("students.lastNameLabel")}>
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <PersonIcon
-                    className="me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    placeholder={t("students.lastNamePlaceholder")}
-                    aria-describedby={describedById}
-                    invalid={invalid}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  placeholder={t("students.lastNamePlaceholder")}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -229,28 +212,22 @@ const EditStudentForm = ({
               hint={lockEmail ? t("students.inviteEmailLocked") : undefined}
             >
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <MailIcon
-                    className="size-6 me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    type="email"
-                    placeholder={t("students.editEmailPlaceholder")}
-                    readOnly={lockEmail}
-                    disabled={lockEmail}
-                    title={
-                      lockEmail ? t("students.inviteEmailLocked") : undefined
-                    }
-                    invalid={invalid}
-                    aria-describedby={describedById}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  type="email"
+                  placeholder={t("students.editEmailPlaceholder")}
+                  readOnly={lockEmail}
+                  disabled={lockEmail}
+                  title={
+                    lockEmail ? t("students.inviteEmailLocked") : undefined
+                  }
+                  invalid={invalid}
+                  aria-describedby={describedById}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -260,22 +237,16 @@ const EditStudentForm = ({
           {(field) => (
             <FormField htmlFor={field.name} label={t("students.sectionLabel")}>
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <PeopleIcon
-                    className="me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    placeholder={t("students.editSectionPlaceholder")}
-                    aria-describedby={describedById}
-                    invalid={invalid}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  placeholder={t("students.editSectionPlaceholder")}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}

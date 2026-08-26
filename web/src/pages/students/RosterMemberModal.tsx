@@ -522,7 +522,7 @@ const RosterMemberModal = ({
       open={open}
       onClose={handleClose}
       closeDisabled={busy}
-      size="lg"
+      size="2xl"
       title={t("students.detailTitle")}
     >
       <div className="mt-4 flex flex-col gap-5">

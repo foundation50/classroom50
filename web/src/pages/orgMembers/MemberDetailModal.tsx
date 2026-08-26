@@ -157,7 +157,7 @@ const MemberDetailModal = ({
       open={open}
       onClose={handleClose}
       closeDisabled={working}
-      size="lg"
+      size="2xl"
       title={t("orgMembers.detailTitle")}
       footer={
         <>
