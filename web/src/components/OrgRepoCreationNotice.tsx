@@ -31,6 +31,9 @@ export const OrgRepoCreationNotice = ({
   return (
     <Alert
       tone="warning"
+      // Icon opted out and re-rendered inline: the stacked responsive layout
+      // lays the icon out with the text (the EmptyRosterNotice pattern).
+      icon={null}
       className={cx(
         "flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between",
         className,

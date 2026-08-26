@@ -142,6 +142,10 @@ function AcceptShareSummaryNotice({
     return (
       <Alert
         tone="warning"
+        // The default tone icon is opted out: this alert stacks its text and
+        // action responsively, so the icon is laid out inline with the text
+        // (the EmptyRosterNotice pattern).
+        icon={null}
         className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex items-start gap-2">

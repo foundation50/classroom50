@@ -1,4 +1,4 @@
-import { AlertIcon, CopyIcon } from "@/components/ui/icons"
+import { CopyIcon } from "@/components/ui/icons"
 import { useEffect, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
@@ -97,7 +97,6 @@ export const ReuseModalShell = ({
         show={!!warning}
         className="mt-4 items-start text-sm"
       >
-        <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
         <span>{warning}</span>
       </AnimatedAlert>
     </Modal>

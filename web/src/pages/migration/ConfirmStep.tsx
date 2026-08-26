@@ -9,12 +9,7 @@ import { useMemo, useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import {
-  AlertIcon,
-  CheckCircleIcon,
-  LinkExternalIcon,
-  SyncIcon,
-} from "@/components/ui/icons"
+import { AlertIcon, LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubOAuthGrantUrl, githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -703,12 +698,6 @@ export const ConfirmStep = ({
                 tone={hadSkips ? "warning" : "success"}
                 className="mt-6 items-start"
               >
-                {!hadSkips && (
-                  <CheckCircleIcon
-                    aria-hidden="true"
-                    className="size-4 shrink-0"
-                  />
-                )}
                 <div>
                   <p className="font-medium">
                     {hadSkips
