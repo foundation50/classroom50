@@ -2459,6 +2459,10 @@
       "body": "Ask your teacher if you think this is a mistake.",
       "error": "This assignment isn't available to you. Ask your teacher if you think this is a mistake."
     },
+    "publicRepo": {
+      "title": "This repository will be public",
+      "body": "Your teacher configured this assignment to create public repositories: anyone on the internet will be able to see your work, including your code, commits, and name. If your organization doesn't allow you to create public repositories, a private one is created instead."
+    },
     "steps": {
       "account": "Checking your GitHub account",
       "membership": "Confirming your classroom membership",
@@ -2477,6 +2481,7 @@
       "autograderDisabled": "Autograding is disabled for this assignment",
       "repo": "Created {{org}}/{{repo}}",
       "repoExists": "Repository already exists: {{org}}/{{repo}}",
+      "repoVisibilityFellBack": "Created {{org}}/{{repo}} as private — the organization doesn't let you create public repositories; your teacher can make it public later",
       "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
       "access": "Set your repository access",
       "setup": "Autograding configured",

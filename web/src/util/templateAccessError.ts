@@ -1,4 +1,4 @@
-import { GitHubAPIError } from "@/github-core/errors"
+import { GitHubAPIError, githubErrorMentions } from "@/github-core/errors"
 import {
   describeLocalizedMessage,
   type LocalizedMessage,
@@ -152,6 +152,24 @@ export function isOrgRepoCreationDenied(err: GitHubAPIError): boolean {
   if (!err.isForbidden) return false
   if (err.isRateLimited || err.isSsoRequired || err.isScopeGap) return false
   return err.message.toLowerCase().includes(ORG_REPO_CREATION_DENIED_SIGNATURE)
+}
+
+// A 403/422 that is the destination org refusing to let a MEMBER create a
+// PUBLIC repo (org policy restricts members to private repos). GitHub words
+// the refusal differently per endpoint/policy, so this keys on "visibility" or
+// "public repositor…" in either message slot; header-derived 403 causes (rate
+// limit, SSO, scope) are excluded like isOrgRepoCreationDenied. The accept
+// flow uses it to retry the create as private — the repo_visibility contract
+// is best-effort/fail-private — so a false negative fails the accept loudly,
+// never silently flips visibility. Mirrors gh-student's
+// isPublicRepoCreationDenied.
+export function isPublicRepoCreationDenied(err: GitHubAPIError): boolean {
+  if (err.status !== 403 && err.status !== 422) return false
+  if (err.isRateLimited || err.isSsoRequired || err.isScopeGap) return false
+  return (
+    githubErrorMentions(err, "visibility") ||
+    githubErrorMentions(err, "public repositor")
+  )
 }
 
 // The destination-org refusal (#413). `org` is the classroom org the repo was
