@@ -17,7 +17,7 @@ import {
   SkeletonRegion,
   ToolbarSkeleton,
 } from "@/components/list"
-import { Alert, Button, Card, EmphasisLtr } from "@/components/ui"
+import { Alert, Button, Card, DropdownMenu, EmphasisLtr } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
@@ -59,11 +59,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
         >
           <ChevronDownIcon aria-hidden="true" className="size-4" />
         </Button>
-        <ul
-          tabIndex={0}
-          role="menu"
-          className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-300 bg-base-100 p-1 shadow"
-        >
+        <DropdownMenu className="w-max">
           {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
           <li>
             <Link to="/$org/import" params={{ org }}>
@@ -71,7 +67,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
               {t("migration.entryButton")}
             </Link>
           </li>
-        </ul>
+        </DropdownMenu>
       </div>
     </div>
   )

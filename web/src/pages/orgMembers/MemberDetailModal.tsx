@@ -1,23 +1,15 @@
-import { useId, useState } from "react"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import {
   AlertIcon,
   ChevronRightIcon,
   PersonAddIcon,
-  XIcon,
 } from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import {
-  Badge,
-  Button,
-  EmphasisLtr,
-  Modal,
-  rtlFlip,
-  Heading,
-} from "@/components/ui"
+import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -58,7 +50,6 @@ const MemberDetailModal = ({
   const { t } = useTranslation()
   const client = useGitHubClient()
   const { notify } = useToast()
-  const titleId = useId()
   const [confirming, setConfirming] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [working, setWorking] = useState(false)
@@ -77,7 +68,13 @@ const MemberDetailModal = ({
 
   if (!row) {
     // Still mounted (empty) so the close animation can run.
-    return <Modal open={open} onClose={handleClose} aria-labelledby={titleId} />
+    return (
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title={t("orgMembers.detailTitle")}
+      />
+    )
   }
 
   const label = row.username || row.email
@@ -141,28 +138,10 @@ const MemberDetailModal = ({
       open={open}
       onClose={handleClose}
       closeDisabled={working}
-      hideCloseButton
       size="lg"
-      boxClassName="p-0"
-      aria-labelledby={titleId}
+      title={t("orgMembers.detailTitle")}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-base-300 px-6 py-4">
-        <Heading as="h2" id={titleId}>
-          {t("orgMembers.detailTitle")}
-        </Heading>
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="square"
-          onClick={handleClose}
-          disabled={working}
-          aria-label={t("common.close")}
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-4 px-6 py-5">
+      <div className="mt-4 flex flex-col gap-4">
         <MemberDetailHeader row={row} org={org} />
 
         <div className="flex flex-wrap items-center gap-2">
@@ -352,9 +331,9 @@ const MemberDetailModal = ({
           </div>
         ) : (
           <Button
-            variant="outline"
+            variant="error"
             size="sm"
-            className="btn-error self-start"
+            className="self-start"
             onClick={() => setConfirming(true)}
           >
             {t("orgMembers.removeFromOrg")}

@@ -1,9 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { PauseIcon, PlayIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import {
   BulkResultSection,
@@ -60,7 +60,6 @@ export function BulkAutogradeStateModal({
   owners,
   students = [],
 }: BulkAutogradeStateModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const client = useGitHubClient()
   const runningRef = useRef(false)
@@ -215,35 +214,49 @@ export function BulkAutogradeStateModal({
       onClose={onClose}
       closeDisabled={busy}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t(
+        isPause
+          ? "submissions.bulkAutograde.pauseTitle"
+          : "submissions.bulkAutograde.resumeTitle",
+      )}
+      subtitle={t(
+        isPause
+          ? "submissions.bulkAutograde.pauseSubtitle"
+          : "submissions.bulkAutograde.resumeSubtitle",
+        { count: total },
+      )}
+      headerVisual={
+        <ModalIcon>
           {isPause ? (
             <PauseIcon className="size-4" aria-hidden="true" />
           ) : (
             <PlayIcon className="size-4" aria-hidden="true" />
           )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t(
-              isPause
-                ? "submissions.bulkAutograde.pauseTitle"
-                : "submissions.bulkAutograde.resumeTitle",
+        </ModalIcon>
+      }
+      footer={
+        phase === "complete" || phase === "error" ? (
+          <Button variant="primary" onClick={() => onClose()}>
+            {t("common.done")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.cancel")}
+            </Button>
+            {phase === "idle" && total > 0 && (
+              <Button variant="primary" onClick={() => void run()}>
+                {t(
+                  isPause
+                    ? "submissions.bulkAutograde.pauseApply"
+                    : "submissions.bulkAutograde.resumeApply",
+                )}
+              </Button>
             )}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t(
-              isPause
-                ? "submissions.bulkAutograde.pauseSubtitle"
-                : "submissions.bulkAutograde.resumeSubtitle",
-              { count: total },
-            )}
-          </p>
-        </div>
-      </div>
-
+          </>
+        )
+      }
+    >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
           {total === 0 ? (
@@ -297,23 +310,6 @@ export function BulkAutogradeStateModal({
           ))}
         </div>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {phase === "complete" || phase === "error"
-            ? t("common.close")
-            : t("common.cancel")}
-        </Button>
-        {phase === "idle" && total > 0 && (
-          <Button variant="primary" onClick={() => void run()}>
-            {t(
-              isPause
-                ? "submissions.bulkAutograde.pauseApply"
-                : "submissions.bulkAutograde.resumeApply",
-            )}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

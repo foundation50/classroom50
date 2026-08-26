@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui"
+import { Button, DropdownMenu } from "@/components/ui"
 
 // Consolidates the workflow actions (Collect now / Regrade all / View workflow)
 // plus the CSV export and Metrics into one dropdown so the toolbar stays
@@ -154,11 +154,7 @@ export function SubmissionsActionsMenu({
           : t("submissions.menu.actions")}
         {!busy && <ChevronDownIcon aria-hidden="true" className="size-4" />}
       </Button>
-      <ul
-        tabIndex={0}
-        role="menu"
-        className="dropdown-content menu z-10 mt-1 w-64 rounded-box border border-base-300 bg-base-100 p-1 shadow"
-      >
+      <DropdownMenu className="w-64">
         {/* Metrics — graded-snapshot stats; hidden in live view (onMetrics
             omitted there). */}
         {onMetrics && (
@@ -501,7 +497,7 @@ export function SubmissionsActionsMenu({
             {t("submissions.downloadAll.menuLabel")}
           </button>
         </li>
-      </ul>
+      </DropdownMenu>
     </div>
   )
 }

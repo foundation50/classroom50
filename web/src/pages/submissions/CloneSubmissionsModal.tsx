@@ -1,7 +1,7 @@
 import { ChevronRightIcon, TerminalIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { CopyableCode, Heading, Modal, rtlFlip } from "@/components/ui"
+import { CopyableCode, Modal, ModalIcon, rtlFlip } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
 // Published extension repo (see CONTRIBUTING.md "Distribution"), where
@@ -29,19 +29,18 @@ export function CloneSubmissionsModal({
   )
 
   return (
-    <Modal open={open} onClose={onClose} size="2xl">
-      <div className="flex items-start gap-3">
-        <div className="rounded-box bg-primary/10 p-2.5 text-primary">
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="2xl"
+      title={t("submissions.cloneAll.heading")}
+      subtitle={t("submissions.cloneAll.subheading")}
+      headerVisual={
+        <ModalIcon>
           <TerminalIcon aria-hidden="true" className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3">{t("submissions.cloneAll.heading")}</Heading>
-          <p className="text-sm text-base-content/70">
-            {t("submissions.cloneAll.subheading")}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+    >
       <div className="mt-4 flex flex-col gap-4">
         <CopyableCode
           value={cli}

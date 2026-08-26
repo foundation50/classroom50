@@ -1,7 +1,6 @@
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal, Heading } from "@/components/ui"
+import { Button, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import { CheckIcon, CopyIcon } from "@/components/ui/icons"
@@ -21,7 +20,6 @@ export function DiagnosticsDialog({
   planName?: string
 }) {
   const { t } = useTranslation()
-  const titleId = useId()
   const text = buildDiagnostics({ org, planName })
   const { copied, copy } = useCopyToClipboard(text)
 
@@ -31,20 +29,9 @@ export function DiagnosticsDialog({
       onClose={onClose}
       size="2xl"
       boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
-      aria-labelledby={titleId}
-    >
-      <Heading as="h3" id={titleId}>
-        {t("orgActivity.diagnostics.title")}
-      </Heading>
-      <p className="mt-1 mb-4 text-sm text-base-content/70">
-        {t("orgActivity.diagnostics.description")}
-      </p>
-
-      <pre className="overflow-auto rounded-field bg-base-100 p-3 text-xs whitespace-pre-wrap">
-        {text}
-      </pre>
-
-      <div className="mt-4 flex justify-end">
+      title={t("orgActivity.diagnostics.title")}
+      subtitle={t("orgActivity.diagnostics.description")}
+      footer={
         <Button variant="outline" size="sm" onClick={() => void copy()}>
           {copied ? (
             <CheckIcon aria-hidden="true" className="size-4" />
@@ -55,7 +42,11 @@ export function DiagnosticsDialog({
             ? t("orgActivity.diagnostics.copied")
             : t("orgActivity.diagnostics.copy")}
         </Button>
-      </div>
+      }
+    >
+      <pre className="mt-4 overflow-auto rounded-field bg-base-100 p-3 text-xs whitespace-pre-wrap">
+        {text}
+      </pre>
     </Modal>
   )
 }

@@ -1,9 +1,9 @@
 import { AlertIcon, CopyIcon } from "@/components/ui/icons"
-import { useEffect, useId, type ReactNode, type RefObject } from "react"
+import { useEffect, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
-import { AnimatedAlert, Button, Modal, Heading } from "@/components/ui"
+import { AnimatedAlert, Button, Modal, ModalIcon } from "@/components/ui"
 
 // Shared chrome for the two reuse modals — close button, header, error/warning
 // alerts, Cancel/Reuse footer — so each supplies only its title, description,
@@ -42,7 +42,6 @@ export const ReuseModalShell = ({
   }, [dialogRef])
 
   const closeDialog = () => dialogRef.current?.close()
-  const titleId = useId()
   const { t } = useTranslation()
 
   return (
@@ -50,20 +49,39 @@ export const ReuseModalShell = ({
       dialogRef={dialogRef}
       onClose={onClose}
       closeDisabled={isPending}
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={title}
+      subtitle={description}
+      headerVisual={
+        <ModalIcon>
           <CopyIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {title}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">{description}</p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        <>
+          <Button variant="ghost" disabled={isPending} onClick={closeDialog}>
+            {warning ? t("common.done") : t("common.cancel")}
+          </Button>
+          {showSubmit && !warning ? (
+            <Button
+              variant="primary"
+              disabled={!canSubmit}
+              loading={isPending}
+              loadingLabel={t("components.modals.reuseShell.copying")}
+              onClick={onSubmit}
+            >
+              {isPending ? (
+                t("components.modals.reuseShell.copying")
+              ) : (
+                <>
+                  <CopyIcon aria-hidden="true" className="size-4" />{" "}
+                  {t("components.modals.reuseShell.reuseAssignment")}
+                </>
+              )}
+            </Button>
+          ) : null}
+        </>
+      }
+    >
       {children}
 
       <AnimatedAlert
@@ -82,30 +100,6 @@ export const ReuseModalShell = ({
         <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
         <span>{warning}</span>
       </AnimatedAlert>
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={isPending} onClick={closeDialog}>
-          {warning ? t("common.done") : t("common.cancel")}
-        </Button>
-        {showSubmit && !warning ? (
-          <Button
-            variant="primary"
-            disabled={!canSubmit}
-            loading={isPending}
-            loadingLabel={t("components.modals.reuseShell.copying")}
-            onClick={onSubmit}
-          >
-            {isPending ? (
-              t("components.modals.reuseShell.copying")
-            ) : (
-              <>
-                <CopyIcon aria-hidden="true" className="size-4" />{" "}
-                {t("components.modals.reuseShell.reuseAssignment")}
-              </>
-            )}
-          </Button>
-        ) : null}
-      </div>
     </Modal>
   )
 }

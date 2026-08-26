@@ -28,7 +28,6 @@ import {
   Modal,
   Spinner,
   Toolbar,
-  Heading,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import {
@@ -776,12 +775,28 @@ export const ConfirmStep = ({
         open={showConfirm}
         onClose={() => setShowConfirm(false)}
         size="md"
-        aria-label={t("migration.confirm.modalTitle")}
+        role="alertdialog"
+        title={
+          <span className="flex items-center gap-2">
+            <AlertIcon aria-hidden="true" className="size-4 text-warning" />
+            {t("migration.confirm.modalTitle")}
+          </span>
+        }
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setShowConfirm(false)}>
+              {t("migration.confirm.modalCancel")}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!canImport}
+              onClick={startImport}
+            >
+              {t("migration.confirm.modalConfirm")}
+            </Button>
+          </>
+        }
       >
-        <Heading as="h3" className="flex items-center gap-2">
-          <AlertIcon aria-hidden="true" className="size-4 text-warning" />
-          {t("migration.confirm.modalTitle")}
-        </Heading>
         <p className="mt-2 text-sm text-base-content/80">
           {t("migration.confirm.modalSummary", {
             count: selectedCount,
@@ -806,14 +821,6 @@ export const ConfirmStep = ({
         <p className="mt-3 text-sm font-medium text-base-content/80">
           {t("migration.confirm.modalConfirmQuestion")}
         </p>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => setShowConfirm(false)}>
-            {t("migration.confirm.modalCancel")}
-          </Button>
-          <Button variant="primary" disabled={!canImport} onClick={startImport}>
-            {t("migration.confirm.modalConfirm")}
-          </Button>
-        </div>
       </Modal>
     </Card>
   )

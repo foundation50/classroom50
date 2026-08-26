@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr, Heading } from "@/components/ui"
+import { Badge, Modal, MonoLtr } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
@@ -271,7 +271,6 @@ export const ManageSubmissionModal = ({
   }
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
   const { t } = useTranslation()
 
   // Lifted here (not in SubmissionDetails) so the repo's default-branch tip can
@@ -313,16 +312,15 @@ export const ManageSubmissionModal = ({
       // the two modal boxes don't visibly layer. The editor renders its own
       // backdrop on top; dismissing it un-hides this box.
       boxClassName={subModalOpen ? "invisible" : undefined}
-      aria-labelledby={titleId}
+      title={<span className="block truncate">{title}</span>}
+      subtitle={
+        subtitle ? (
+          <span className="block truncate text-base-content/60">
+            {subtitle}
+          </span>
+        ) : undefined
+      }
     >
-      <Heading as="h3" className="truncate pe-8" id={titleId}>
-        {title}
-      </Heading>
-      {subtitle ? (
-        <p className="mt-0.5 truncate text-sm text-base-content/60">
-          {subtitle}
-        </p>
-      ) : null}
       {repoHref ? (
         <a
           className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"

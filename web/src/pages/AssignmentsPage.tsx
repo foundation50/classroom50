@@ -13,7 +13,7 @@ import {
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-import { Badge, Button, EmphasisLtr } from "@/components/ui"
+import { Badge, Button, DropdownMenu, EmphasisLtr } from "@/components/ui"
 import {
   NoSearchResults,
   SkeletonRegion,
@@ -71,11 +71,7 @@ const NewAssignmentButton = ({
           >
             <ChevronDownIcon aria-hidden="true" className="size-4" />
           </Button>
-          <ul
-            tabIndex={0}
-            role="menu"
-            className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-300 bg-base-100 p-1 shadow"
-          >
+          <DropdownMenu className="w-max">
             <li>
               <button
                 type="button"
@@ -90,7 +86,7 @@ const NewAssignmentButton = ({
                 {t("assignments.newButton.reuse")}
               </button>
             </li>
-          </ul>
+          </DropdownMenu>
         </div>
       </div>
 

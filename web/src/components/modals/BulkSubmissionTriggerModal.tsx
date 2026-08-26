@@ -1,9 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { GitBranchIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import {
   BulkResultSection,
@@ -68,7 +68,6 @@ export function BulkSubmissionTriggerModal({
   owners,
   students = [],
 }: BulkSubmissionTriggerModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const client = useGitHubClient()
   const runningRef = useRef(false)
@@ -251,25 +250,35 @@ export function BulkSubmissionTriggerModal({
       onClose={onClose}
       closeDisabled={busy}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t("submissions.bulkTrigger.title")}
+      subtitle={t("submissions.bulkTrigger.subtitle", {
+        count: total,
+        mode: modeLabel,
+      })}
+      headerVisual={
+        <ModalIcon>
           <GitBranchIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("submissions.bulkTrigger.title")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("submissions.bulkTrigger.subtitle", {
-              count: total,
-              mode: modeLabel,
-            })}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        phase === "complete" || phase === "error" ? (
+          <Button variant="primary" onClick={() => onClose()}>
+            {t("common.done")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.cancel")}
+            </Button>
+            {phase === "idle" && total > 0 && (
+              <Button variant="primary" onClick={() => void run()}>
+                {t("submissions.bulkTrigger.apply")}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
           {total === 0 ? (
@@ -321,19 +330,6 @@ export function BulkSubmissionTriggerModal({
           ))}
         </div>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {phase === "complete" || phase === "error"
-            ? t("common.close")
-            : t("common.cancel")}
-        </Button>
-        {phase === "idle" && total > 0 && (
-          <Button variant="primary" onClick={() => void run()}>
-            {t("submissions.bulkTrigger.apply")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

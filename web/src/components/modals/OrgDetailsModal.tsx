@@ -3,14 +3,7 @@ import { useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
 
-import {
-  Button,
-  FormField,
-  Input,
-  Modal,
-  Textarea,
-  Heading,
-} from "@/components/ui"
+import { Button, FormField, Input, Modal, Textarea } from "@/components/ui"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -58,7 +51,9 @@ function OrgDetailsModal({
 }) {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const titleId = useId()
+  // Ties the footer's submit button (outside the <form> element) to the edit
+  // form via the button's `form` attribute.
+  const formId = useId()
   const { org, membership } = summary
   const [editing, setEditing] = useState(false)
 
@@ -134,12 +129,15 @@ function OrgDetailsModal({
       open={open}
       onClose={handleClose}
       size="2xl"
-      aria-labelledby={titleId}
-    >
-      {/* Header: avatar + name, with an owner-only pencil badge on the avatar
-          in edit mode (links to GitHub settings — the REST API can't set an org
-          avatar). pe-8 keeps the row clear of the Modal's close X. */}
-      <div className="flex items-center gap-3 pe-8">
+      title={<span className="block truncate">{heading}</span>}
+      subtitle={
+        <span className="block truncate font-mono text-xs text-base-content/50">
+          {org.login}
+        </span>
+      }
+      headerVisual={
+        // Avatar with an owner-only pencil badge in edit mode (links to GitHub
+        // settings — the REST API can't set an org avatar).
         <div className="relative shrink-0">
           <img
             src={org.avatar_url}
@@ -159,19 +157,55 @@ function OrgDetailsModal({
             </a>
           )}
         </div>
-
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" className="truncate" id={titleId}>
-            {heading}
-          </Heading>
-          <p className="truncate font-mono text-xs text-base-content/50">
-            {org.login}
-          </p>
-        </div>
-      </div>
-
+      }
+      footer={
+        editing ? (
+          <>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={stopEditing}
+              disabled={updateProfile.isPending}
+            >
+              {t("orgs.detailsModal.cancel")}
+            </Button>
+            <Button
+              type="submit"
+              form={formId}
+              variant="primary"
+              size="sm"
+              loading={updateProfile.isPending}
+              loadingLabel={t("orgs.detailsModal.saving")}
+            >
+              {t("orgs.detailsModal.save")}
+            </Button>
+          </>
+        ) : (
+          <>
+            {isOwner && (
+              <GitHubLink
+                href={githubOrgSettingsUrl(org.login)}
+                label={t("orgs.detailsModal.manageOnGitHub")}
+                className="me-auto self-center"
+              />
+            )}
+            <Button variant="ghost" size="sm" onClick={handleClose}>
+              {t("orgs.detailsModal.close")}
+            </Button>
+            {isOwner && (
+              <Button variant="primary" size="sm" onClick={startEditing}>
+                <PencilIcon aria-hidden="true" className="size-4" />
+                {t("orgs.detailsModal.edit")}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
       {editing ? (
         <form
+          id={formId}
           className="mt-5 flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault()
@@ -305,125 +339,79 @@ function OrgDetailsModal({
               )}
             </form.Field>
           </div>
-
-          <div className="modal-action">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={stopEditing}
-              disabled={updateProfile.isPending}
-            >
-              {t("orgs.detailsModal.cancel")}
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              size="sm"
-              loading={updateProfile.isPending}
-              loadingLabel={t("orgs.detailsModal.saving")}
-            >
-              {t("orgs.detailsModal.save")}
-            </Button>
-          </div>
         </form>
       ) : (
-        <>
-          <div className="mt-5 flex flex-col gap-3">
-            {/* Description spans full width; Website + Email follow as a pair. */}
-            <InfoRow
-              label={t("orgs.detailsModal.description")}
-              value={details?.description}
-            />
+        <div className="mt-5 flex flex-col gap-3">
+          {/* Description spans full width; Website + Email follow as a pair. */}
+          <InfoRow
+            label={t("orgs.detailsModal.description")}
+            value={details?.description}
+          />
 
-            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-              <InfoRow
-                label={t("orgs.detailsModal.website")}
-                value={
-                  websiteHref ? (
-                    <a
-                      href={websiteHref}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-primary hover:underline"
-                    >
-                      {details?.blog}
-                    </a>
-                  ) : (
-                    details?.blog
-                  )
-                }
-              />
-              <InfoRow
-                label={t("orgs.detailsModal.email")}
-                value={
-                  details?.email ? (
-                    <a
-                      href={`mailto:${encodeURIComponent(details.email)}`}
-                      className="text-primary hover:underline"
-                    >
-                      {details.email}
-                    </a>
-                  ) : null
-                }
-              />
-              <InfoRow
-                label={t("orgs.detailsModal.location")}
-                value={details?.location}
-              />
-              <InfoRow
-                label={t("orgs.detailsModal.school")}
-                value={details?.company}
-              />
-              {/* Plan and org ID are owner-facing details. Plan is only
+          <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+            <InfoRow
+              label={t("orgs.detailsModal.website")}
+              value={
+                websiteHref ? (
+                  <a
+                    href={websiteHref}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-primary hover:underline"
+                  >
+                    {details?.blog}
+                  </a>
+                ) : (
+                  details?.blog
+                )
+              }
+            />
+            <InfoRow
+              label={t("orgs.detailsModal.email")}
+              value={
+                details?.email ? (
+                  <a
+                    href={`mailto:${encodeURIComponent(details.email)}`}
+                    className="text-primary hover:underline"
+                  >
+                    {details.email}
+                  </a>
+                ) : null
+              }
+            />
+            <InfoRow
+              label={t("orgs.detailsModal.location")}
+              value={details?.location}
+            />
+            <InfoRow
+              label={t("orgs.detailsModal.school")}
+              value={details?.company}
+            />
+            {/* Plan and org ID are owner-facing details. Plan is only
                   returned to owners anyway; org ID is hidden from members to
                   keep the member view focused on the public profile. */}
-              {isOwner && (
-                <InfoRow
-                  label={t("orgs.detailsModal.plan")}
-                  value={details?.plan?.name}
-                />
-              )}
-              {isOwner && (
-                <InfoRow
-                  label={t("orgs.detailsModal.orgId")}
-                  value={String(org.id)}
-                />
-              )}
+            {isOwner && (
               <InfoRow
-                label={t("orgs.detailsModal.role")}
-                value={
-                  isOwner
-                    ? t("orgs.detailsModal.roleAdmin")
-                    : t("orgs.detailsModal.roleMember")
-                }
+                label={t("orgs.detailsModal.plan")}
+                value={details?.plan?.name}
               />
-            </dl>
-          </div>
-
-          <div className="modal-action items-center justify-between">
-            {isOwner ? (
-              <GitHubLink
-                href={githubOrgSettingsUrl(org.login)}
-                label={t("orgs.detailsModal.manageOnGitHub")}
-              />
-            ) : (
-              // Keep the buttons right-aligned when the manage link is hidden.
-              <span />
             )}
-            <div className="flex items-center gap-2">
-              <Button variant="ghost" size="sm" onClick={handleClose}>
-                {t("orgs.detailsModal.close")}
-              </Button>
-              {isOwner && (
-                <Button variant="primary" size="sm" onClick={startEditing}>
-                  <PencilIcon aria-hidden="true" className="size-4" />
-                  {t("orgs.detailsModal.edit")}
-                </Button>
-              )}
-            </div>
-          </div>
-        </>
+            {isOwner && (
+              <InfoRow
+                label={t("orgs.detailsModal.orgId")}
+                value={String(org.id)}
+              />
+            )}
+            <InfoRow
+              label={t("orgs.detailsModal.role")}
+              value={
+                isOwner
+                  ? t("orgs.detailsModal.roleAdmin")
+                  : t("orgs.detailsModal.roleMember")
+              }
+            />
+          </dl>
+        </div>
       )}
     </Modal>
   )

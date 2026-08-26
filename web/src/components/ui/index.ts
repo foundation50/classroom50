@@ -38,8 +38,11 @@ export type { HelpTooltipPosition } from "./FormField"
 export { Heading, headingVariantClass } from "./Heading"
 export type { HeadingProps, HeadingVariant } from "./Heading"
 
-export { Modal } from "./Modal"
-export type { ModalProps, ModalSize } from "./Modal"
+export { Modal, ModalIcon } from "./Modal"
+export type { ModalProps, ModalSize, ModalIconTone } from "./Modal"
+
+export { DropdownMenu } from "./DropdownMenu"
+export type { DropdownMenuProps } from "./DropdownMenu"
 
 export { Alert, ALERT_TONE_ICON, alertToneClass, alertToneRole } from "./Alert"
 export type { AlertProps, AlertTone } from "./Alert"

@@ -25,7 +25,7 @@ import type { GitHubUser } from "@/github-core/types"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { useAcceptAssignment } from "@/hooks/mutations/useAcceptAssignment"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { useId, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
@@ -70,7 +70,6 @@ const initialsFor = (user: GitHubUser | null) => {
 const AcceptNavbar = () => {
   const { t } = useTranslation()
   const langDialogRef = useRef<HTMLDialogElement>(null)
-  const langDialogTitleId = useId()
   return (
     <div className="navbar bg-base-100 shadow-sm">
       <div className="flex-1">
@@ -92,7 +91,7 @@ const AcceptNavbar = () => {
           <span className="hidden sm:inline">{t("nav.language")}</span>
         </Button>
       </div>
-      <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />
+      <LanguageDialog ref={langDialogRef} />
     </div>
   )
 }

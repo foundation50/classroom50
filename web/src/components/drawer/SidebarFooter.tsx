@@ -19,7 +19,7 @@ import {
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
-import { type MouseEvent, useId, useRef, useState } from "react"
+import { type MouseEvent, useRef, useState } from "react"
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import duck from "@/assets/duck.png"
@@ -205,9 +205,7 @@ function PublicSidebarFooter() {
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
   const langDialogRef = useRef<HTMLDialogElement | null>(null)
-  const langDialogTitleId = useId()
   const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
-  const aboutDialogTitleId = useId()
 
   return (
     <div className="mt-auto border-t border-neutral-content/20 py-2">
@@ -223,8 +221,8 @@ function PublicSidebarFooter() {
 
       {createPortal(
         <>
-          <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />
-          <AboutDialog ref={aboutDialogRef} titleId={aboutDialogTitleId} />
+          <LanguageDialog ref={langDialogRef} />
+          <AboutDialog ref={aboutDialogRef} />
         </>,
         document.body,
       )}
@@ -331,9 +329,7 @@ const AuthedSidebarFooter = () => {
   const [menuOpen, setMenuOpen] = useState(false)
   const footerRef = useRef<HTMLDivElement | null>(null)
   const langDialogRef = useRef<HTMLDialogElement | null>(null)
-  const langDialogTitleId = useId()
   const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
-  const aboutDialogTitleId = useId()
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
@@ -528,15 +524,11 @@ const AuthedSidebarFooter = () => {
         </button>
       </div>
 
-      {createPortal(
-        <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />,
-        document.body,
-      )}
+      {createPortal(<LanguageDialog ref={langDialogRef} />, document.body)}
 
       {createPortal(
         <AboutDialog
           ref={aboutDialogRef}
-          titleId={aboutDialogTitleId}
           org={org}
           planName={orgPlanDetails?.plan?.name}
         />,

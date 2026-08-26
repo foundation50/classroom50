@@ -25,7 +25,6 @@ import {
   Input,
   Modal,
   Select,
-  Heading,
 } from "@/components/ui"
 
 // Roster "Add member" roles, in display order. Student (default) enrolls via the
@@ -66,7 +65,8 @@ const AddStudent = ({
   const { team } = useEnsureTeam(org, classroom)
   const { t } = useTranslation()
   const { notify } = useToast()
-  const titleId = useId()
+  // Ties the footer's submit button (outside the <form> element) to the form.
+  const formId = useId()
   const roleId = useId()
   const [warning, setWarning] = useState("")
   const [success, setSuccess] = useState("")
@@ -212,20 +212,41 @@ const AddStudent = ({
       onClose={closeDialog}
       closeDisabled={submitting}
       size="lg"
-      aria-labelledby={titleId}
+      title={t("students.addTitle")}
+      subtitle={
+        isStaffRole ? t("students.addStaffHint") : t("students.addHint")
+      }
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={submitting}
+            onClick={closeDialog}
+          >
+            {t("common.close")}
+          </Button>
+          <form.Subscribe
+            selector={(state) => [state.canSubmit, state.isSubmitting]}
+          >
+            {([canSubmit, isSubmitting]) => (
+              <Button
+                type="submit"
+                form={formId}
+                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
+                variant="primary"
+              >
+                {!isSubmitting
+                  ? t("students.addButton")
+                  : t("students.submitting")}
+              </Button>
+            )}
+          </form.Subscribe>
+        </>
+      }
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Heading as="h3" id={titleId}>
-            {t("students.addTitle")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {isStaffRole ? t("students.addStaffHint") : t("students.addHint")}
-          </p>
-        </div>
-      </div>
-
       <form
+        id={formId}
         onSubmit={(e) => {
           e.preventDefault()
           e.stopPropagation()
@@ -387,32 +408,6 @@ const AddStudent = ({
               )}
             </form.Field>
           )}
-        </div>
-
-        <div className="modal-action">
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={submitting}
-            onClick={closeDialog}
-          >
-            {t("common.close")}
-          </Button>
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => (
-              <Button
-                type="submit"
-                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
-                variant="primary"
-              >
-                {!isSubmitting
-                  ? t("students.addButton")
-                  : t("students.submitting")}
-              </Button>
-            )}
-          </form.Subscribe>
         </div>
       </form>
     </Modal>

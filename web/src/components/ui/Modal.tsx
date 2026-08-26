@@ -11,6 +11,7 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "./Button"
 import { cx } from "./cx"
+import { Heading } from "./Heading"
 
 // The canonical dialog. Wraps the native `<dialog className="modal">` idiom the
 // app uses everywhere: it owns the `modal-box` (sized via `size`), the top-right
@@ -21,6 +22,12 @@ import { cx } from "./cx"
 //   - ref-driven: pass a `dialogRef` you open imperatively (e.g., a hook that
 //     needs the element). `open` may be omitted.
 // `onClose` fires on the native dialog close (Esc, backdrop, close button).
+//
+// Anatomy follows Primer's Dialog (primer.style/product/components/dialog):
+// header (title + optional subtitle + close X), body (`children` — the
+// modal-box itself scrolls), and a right-aligned `footer` action row. Passing
+// `title` wires aria-labelledby automatically; `subtitle` wires
+// aria-describedby. Prefer these slots over hand-rolling a header/footer.
 
 export type ModalSize =
   "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl"
@@ -40,6 +47,21 @@ export type ModalProps = {
   open?: boolean
   onClose?: () => void
   size?: ModalSize
+  // Header slot: rendered as the dialog's h3 title and auto-wired to
+  // aria-labelledby. Callers with a `title` must not pass aria props by hand.
+  title?: ReactNode
+  // Rendered below the title in smaller, lower-contrast type; auto-wired to
+  // aria-describedby (Primer Dialog subtitle).
+  subtitle?: ReactNode
+  // Leading visual for the header (an icon chip). Decorative — mark icons
+  // aria-hidden.
+  headerVisual?: ReactNode
+  // Footer action row, rendered inside the canonical `modal-action`
+  // (right-aligned). Convention: ghost Cancel/Close left, primary/confirm
+  // rightmost; destructive confirms use variant="error".
+  footer?: ReactNode
+  // Confirmation dialogs interrupting the user should pass "alertdialog".
+  role?: "dialog" | "alertdialog"
   // Hide the built-in top-right close X (some modals render their own header
   // affordance or must block dismissal while submitting).
   hideCloseButton?: boolean
@@ -47,6 +69,7 @@ export type ModalProps = {
   // close, vetoes Esc (see the onCancel guard below), and holds the dialog open
   // against a controlled `open=false` transition (see the open-sync effect).
   closeDisabled?: boolean
+  // Legacy escape hatches — prefer `title`, which wires labeling automatically.
   "aria-labelledby"?: string
   "aria-label"?: string
   // Forwarded to the dialog element. Lets a caller repurpose keys (e.g. Enter)
@@ -63,6 +86,11 @@ export function Modal({
   open,
   onClose,
   size = "lg",
+  title,
+  subtitle,
+  headerVisual,
+  footer,
+  role,
   hideCloseButton = false,
   closeDisabled = false,
   boxClassName,
@@ -75,6 +103,12 @@ export function Modal({
   const { t } = useTranslation()
   const internalRef = useRef<HTMLDialogElement | null>(null)
   const closeId = useId()
+  const titleId = useId()
+  const subtitleId = useId()
+
+  const labelledBy =
+    aria["aria-labelledby"] ?? (title !== undefined ? titleId : undefined)
+  const describedBy = subtitle !== undefined ? subtitleId : undefined
 
   // Keep the native dialog in sync with `open` (controlled mode). Skipped when
   // the caller drives the dialog through `dialogRef` and never passes `open`.
@@ -106,7 +140,10 @@ export function Modal({
         // matching the hand-rolled modals' Esc guard.
         if (closeDisabled) event.preventDefault()
       }}
-      {...aria}
+      role={role}
+      aria-label={aria["aria-label"]}
+      aria-labelledby={labelledBy}
+      aria-describedby={describedBy}
     >
       <div className={cx("modal-box", SIZE_CLASS[size], boxClassName)}>
         {!hideCloseButton && (
@@ -125,7 +162,28 @@ export function Modal({
             </Button>
           </form>
         )}
+        {title !== undefined && (
+          <div
+            className={cx("flex items-start gap-4", !hideCloseButton && "pe-8")}
+          >
+            {headerVisual}
+            <div className="min-w-0 flex-1">
+              <Heading as="h3" id={titleId}>
+                {title}
+              </Heading>
+              {subtitle !== undefined && (
+                <p
+                  id={subtitleId}
+                  className="mt-1 text-sm text-base-content/70"
+                >
+                  {subtitle}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
         {children}
+        {footer !== undefined && <div className="modal-action">{footer}</div>}
       </div>
 
       {/* DaisyUI's click-outside-to-close backdrop. The button is a mouse
@@ -142,3 +200,32 @@ export function Modal({
 }
 
 export default Modal
+
+// Single source for the header icon chip used as `headerVisual` — callers must
+// not hand-roll the size/tone recipe.
+export type ModalIconTone = "primary" | "warning" | "error"
+
+const MODAL_ICON_TONE_CLASS: Record<ModalIconTone, string> = {
+  primary: "bg-primary/10 text-primary",
+  warning: "bg-warning/10 text-warning",
+  error: "bg-error/10 text-error",
+}
+
+export function ModalIcon({
+  tone = "primary",
+  children,
+}: {
+  tone?: ModalIconTone
+  children?: ReactNode
+}) {
+  return (
+    <div
+      className={cx(
+        "flex size-11 shrink-0 items-center justify-center rounded-box",
+        MODAL_ICON_TONE_CLASS[tone],
+      )}
+    >
+      {children}
+    </div>
+  )
+}

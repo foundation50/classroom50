@@ -7,7 +7,6 @@ import {
   Input,
   Modal,
   cx,
-  Heading,
 } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
@@ -265,16 +264,10 @@ function SetTokenModal({
       open={open}
       onClose={onClose}
       size="2xl"
-      aria-label={t("orgSettings.serviceToken.setModalTitle")}
+      title={t("orgSettings.serviceToken.setModalTitle")}
+      subtitle={t("orgSettings.serviceToken.setModalSubtitle")}
       closeDisabled={saveMutation.isPending}
     >
-      <div className="pe-8">
-        <Heading as="h3">{t("orgSettings.serviceToken.setModalTitle")}</Heading>
-        <p className="mt-1 text-sm text-base-content/70">
-          {t("orgSettings.serviceToken.setModalSubtitle")}
-        </p>
-      </div>
-
       <form
         className="mt-6 flex flex-col gap-6"
         onSubmit={(e) => {

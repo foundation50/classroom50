@@ -1,11 +1,10 @@
-import { useEffect, useId, useState } from "react"
+import { useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
   LinkExternalIcon,
   MarkGithubIcon,
   PaperAirplaneIcon,
   PersonAddIcon,
-  XIcon,
 } from "@/components/ui/icons"
 
 import Avatar from "@/components/avatar"
@@ -42,14 +41,7 @@ import {
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
 } from "@/util/classroomRoleUI"
-import {
-  Badge,
-  Button,
-  EmphasisLtr,
-  Modal,
-  Select,
-  Heading,
-} from "@/components/ui"
+import { Badge, Button, EmphasisLtr, Modal, Select } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -115,7 +107,6 @@ const RosterMemberModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  const titleId = useId()
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
@@ -190,7 +181,13 @@ const RosterMemberModal = ({
 
   if (!row) {
     // Never had a row (initial mount, closed): nothing to show.
-    return <Modal open={open} onClose={handleClose} aria-labelledby={titleId} />
+    return (
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title={t("students.detailTitle")}
+      />
+    )
   }
 
   const student = rowToStudent(row)
@@ -518,28 +515,10 @@ const RosterMemberModal = ({
       open={open}
       onClose={handleClose}
       closeDisabled={busy}
-      hideCloseButton
       size="lg"
-      boxClassName="p-0"
-      aria-labelledby={titleId}
+      title={t("students.detailTitle")}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-base-300 px-6 py-4">
-        <Heading as="h2" id={titleId}>
-          {t("students.detailTitle")}
-        </Heading>
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="square"
-          onClick={handleClose}
-          disabled={busy}
-          aria-label={t("common.close")}
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-5 px-6 py-5">
+      <div className="mt-4 flex flex-col gap-5">
         {/* Identity with the enrollment actions as icons on the right — the
               GitHub username itself links to the profile. */}
         <div className="flex items-start justify-between gap-4">

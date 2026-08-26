@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ShieldCheckIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Select, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon, Select } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import {
   BulkResultSection,
@@ -40,7 +40,6 @@ export function BulkRepoAccessModal({
   owners,
   students = [],
 }: BulkRepoAccessModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const addCollaboratorMutation = useAddRepoCollaborator()
   const runningRef = useRef(false)
@@ -181,22 +180,32 @@ export function BulkRepoAccessModal({
       onClose={onClose}
       closeDisabled={busy}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t("submissions.bulkAccess.title")}
+      subtitle={t("submissions.bulkAccess.subtitle", { count: total })}
+      headerVisual={
+        <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("submissions.bulkAccess.title")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("submissions.bulkAccess.subtitle", { count: total })}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        phase === "complete" || phase === "error" ? (
+          <Button variant="primary" onClick={() => onClose()}>
+            {t("common.done")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.cancel")}
+            </Button>
+            {phase === "idle" && total > 0 && (
+              <Button variant="primary" onClick={() => void run()}>
+                {t("submissions.bulkAccess.apply")}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
           {total === 0 ? (
@@ -272,19 +281,6 @@ export function BulkRepoAccessModal({
           ))}
         </div>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {phase === "complete" || phase === "error"
-            ? t("common.close")
-            : t("common.cancel")}
-        </Button>
-        {phase === "idle" && total > 0 && (
-          <Button variant="primary" onClick={() => void run()}>
-            {t("submissions.bulkAccess.apply")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { PencilIcon } from "@/components/ui/icons"
 
@@ -9,7 +9,7 @@ import {
   FormField,
   Input,
   Modal,
-  Heading,
+  ModalIcon,
 } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import { BulkResultSection } from "@/components/bulk/resultView"
@@ -59,7 +59,6 @@ export function RenameAssignmentModal({
   assignments,
   mode,
 }: RenameAssignmentModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const finish = mode === "finish"
   const oldSlug = finish ? (assignment.renamed_from ?? "") : assignment.slug
@@ -168,41 +167,76 @@ export function RenameAssignmentModal({
       onClose={onClose}
       closeDisabled={busy}
       size="2xl"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
+      title={
+        finish
+          ? t("assignments.rename.finishTitle")
+          : t("assignments.rename.title")
+      }
+      subtitle={
+        <span className="break-all">
+          {finish ? (
+            <Trans
+              i18nKey="assignments.rename.finishSubtitle"
+              values={{ old: oldSlug, new: newSlug }}
+              components={{
+                old: <EmphasisLtr className="font-mono font-bold" />,
+                new: <EmphasisLtr className="font-mono font-bold" />,
+              }}
+            />
+          ) : (
+            <Trans
+              i18nKey="assignments.rename.subtitle"
+              values={{ old: oldSlug }}
+              components={{
+                old: <EmphasisLtr className="font-mono font-bold" />,
+              }}
+            />
+          )}
+        </span>
+      }
+      headerVisual={
+        <ModalIcon tone="warning">
           <PencilIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {finish
-              ? t("assignments.rename.finishTitle")
-              : t("assignments.rename.title")}
-          </Heading>
-          <p className="mt-1 break-all text-sm text-base-content/70">
-            {finish ? (
-              <Trans
-                i18nKey="assignments.rename.finishSubtitle"
-                values={{ old: oldSlug, new: newSlug }}
-                components={{
-                  old: <EmphasisLtr className="font-mono font-bold" />,
-                  new: <EmphasisLtr className="font-mono font-bold" />,
-                }}
-              />
-            ) : (
-              <Trans
-                i18nKey="assignments.rename.subtitle"
-                values={{ old: oldSlug }}
-                components={{
-                  old: <EmphasisLtr className="font-mono font-bold" />,
-                }}
-              />
+        </ModalIcon>
+      }
+      footer={
+        summary !== null && summary.failed > 0 ? (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.close")}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={busy}
+              onClick={() => void run()}
+            >
+              {t("assignments.rename.finishApply")}
+            </Button>
+          </>
+        ) : done ? (
+          <Button variant="primary" onClick={() => onClose()}>
+            {t("common.done")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.cancel")}
+            </Button>
+            {!busy && (
+              <Button
+                variant="primary"
+                disabled={!canRun}
+                onClick={() => void run()}
+              >
+                {finish
+                  ? t("assignments.rename.finishApply")
+                  : t("assignments.rename.apply")}
+              </Button>
             )}
-          </p>
-        </div>
-      </div>
-
+          </>
+        )
+      }
+    >
       {!busy && !done && (
         <div className="mt-4 flex flex-col gap-4">
           {!finish && (
@@ -275,28 +309,6 @@ export function RenameAssignmentModal({
       )}
 
       {summary && <RenameResult summary={summary} newSlug={newSlug} />}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {done ? t("common.close") : t("common.cancel")}
-        </Button>
-        {!busy && !done && (
-          <Button
-            variant="primary"
-            disabled={!canRun}
-            onClick={() => void run()}
-          >
-            {finish
-              ? t("assignments.rename.finishApply")
-              : t("assignments.rename.apply")}
-          </Button>
-        )}
-        {!busy && summary !== null && summary.failed > 0 && (
-          <Button variant="primary" onClick={() => void run()}>
-            {t("assignments.rename.finishApply")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

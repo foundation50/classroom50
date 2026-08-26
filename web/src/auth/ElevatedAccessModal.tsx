@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
 import { RevokeAccessLink } from "./RevokeAccessLink"
-import { Alert, Button, Modal, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 
 // Re-auth for a signed-in teacher who needs to change their delete_repo access.
 // See auth/constants.ts for the base/elevated policy.
@@ -127,7 +127,23 @@ export function ElevatedAccessModal({
   }
 
   return (
-    <Modal open={open} onClose={dismiss} size="lg" aria-label={title}>
+    <Modal
+      open={open}
+      onClose={dismiss}
+      size="lg"
+      // The device prompt renders its own heading, so the shared header only
+      // applies to the sign-in choice state; the dialog stays named either way.
+      title={showingDevice ? undefined : title}
+      subtitle={showingDevice ? undefined : body}
+      headerVisual={
+        showingDevice ? undefined : (
+          <ModalIcon>
+            <ShieldCheckIcon aria-hidden="true" className="size-6" />
+          </ModalIcon>
+        )
+      }
+      aria-label={showingDevice ? title : undefined}
+    >
       {showingDevice ? (
         <GitHubDevicePrompt
           device={device}
@@ -137,17 +153,7 @@ export function ElevatedAccessModal({
           onVerificationOpened={markVerificationOpened}
         />
       ) : (
-        <div className="space-y-5">
-          <div className="flex gap-4 border-b border-base-200 pb-5">
-            <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
-              <ShieldCheckIcon aria-hidden="true" className="size-6" />
-            </div>
-            <div className="min-w-0">
-              <Heading as="h2">{title}</Heading>
-              <p className="mt-1 text-sm text-base-content/70">{body}</p>
-            </div>
-          </div>
-
+        <div className="mt-5 space-y-5">
           {error ? (
             <Alert tone="error" className="items-start text-sm">
               <span>{error}</span>

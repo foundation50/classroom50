@@ -1,8 +1,8 @@
-import { useEffect, useId } from "react"
+import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { FileZipIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Spinner, Heading } from "@/components/ui"
+import { Alert, Button, Modal, Spinner } from "@/components/ui"
 import useDownloadAllSubmissions from "@/hooks/mutations/useDownloadAllSubmissions"
 import {
   BULK_DOWNLOAD_WARN_THRESHOLD,
@@ -62,7 +62,6 @@ export function DownloadAllSubmissionsModal({
   owners: string[]
 }) {
   const { t } = useTranslation()
-  const titleId = useId()
   const {
     mutate,
     isPending,
@@ -106,13 +105,38 @@ export function DownloadAllSubmissionsModal({
       open={open}
       onClose={handleClose}
       size="md"
-      aria-labelledby={titleId}
+      title={
+        <span className="flex items-center gap-2">
+          <FileZipIcon aria-hidden="true" className="size-4" />
+          {t("submissions.downloadAll.title")}
+        </span>
+      }
+      footer={
+        summary || error ? (
+          <Button variant="primary" size="sm" onClick={handleClose}>
+            {t("common.done")}
+          </Button>
+        ) : running ? (
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            {t("common.cancel")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" size="sm" onClick={handleClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={count === 0}
+              onClick={handleRun}
+            >
+              {t("submissions.downloadAll.confirmLabel", { count })}
+            </Button>
+          </>
+        )
+      }
     >
-      <Heading as="h3" className="flex items-center gap-2" id={titleId}>
-        <FileZipIcon aria-hidden="true" className="size-4" />
-        {t("submissions.downloadAll.title")}
-      </Heading>
-
       {error ? (
         <div className="mt-3 space-y-3">
           <Alert tone="error">
@@ -209,32 +233,6 @@ export function DownloadAllSubmissionsModal({
           )}
         </div>
       )}
-
-      <div className="modal-action">
-        {summary || error ? (
-          <Button size="sm" onClick={handleClose}>
-            {t("common.close")}
-          </Button>
-        ) : running ? (
-          <Button variant="ghost" size="sm" onClick={handleClose}>
-            {t("common.cancel")}
-          </Button>
-        ) : (
-          <>
-            <Button variant="ghost" size="sm" onClick={handleClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={count === 0}
-              onClick={handleRun}
-            >
-              {t("submissions.downloadAll.confirmLabel", { count })}
-            </Button>
-          </>
-        )}
-      </div>
     </Modal>
   )
 }

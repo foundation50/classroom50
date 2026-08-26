@@ -1,9 +1,9 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate } from "@tanstack/react-router"
 import { EyeIcon, LockIcon, PencilIcon } from "@/components/ui/icons"
 
-import { Badge, Heading, Modal, MonoLtr } from "@/components/ui"
+import { Badge, Modal, MonoLtr } from "@/components/ui"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
 import {
   assignmentName,
@@ -48,7 +48,6 @@ export const ManageAssignmentModal = ({
   onDeleteAssignment: () => void
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [subModalOpen, setSubModalOpen] = useState(false)
@@ -66,26 +65,26 @@ export const ManageAssignmentModal = ({
       // so the two modal boxes don't visibly layer. The sub-modal renders its
       // own backdrop on top; dismissing it un-hides this box.
       boxClassName={subModalOpen ? "invisible" : undefined}
-      aria-labelledby={titleId}
+      title={
+        <span className="block truncate">{assignmentName(assignment)}</span>
+      }
+      subtitle={
+        <span className="flex items-center gap-2">
+          <MonoLtr className="truncate">{assignment.slug}</MonoLtr>
+          {assignment.locked && (
+            <Badge
+              tone="warning"
+              size="sm"
+              className="gap-1 whitespace-nowrap"
+              title={t("assignments.table.lockedBadgeTitle")}
+            >
+              <LockIcon aria-hidden="true" className="size-3" />
+              {t("assignments.table.lockedBadge")}
+            </Badge>
+          )}
+        </span>
+      }
     >
-      <Heading as="h3" className="truncate pe-8" id={titleId}>
-        {assignmentName(assignment)}
-      </Heading>
-      <p className="mt-0.5 flex items-center gap-2 text-sm text-base-content/60">
-        <MonoLtr className="truncate">{assignment.slug}</MonoLtr>
-        {assignment.locked && (
-          <Badge
-            tone="warning"
-            size="sm"
-            className="gap-1 whitespace-nowrap"
-            title={t("assignments.table.lockedBadgeTitle")}
-          >
-            <LockIcon aria-hidden="true" className="size-3" />
-            {t("assignments.table.lockedBadge")}
-          </Badge>
-        )}
-      </p>
-
       <div className="mt-4 flex flex-col">
         <ActionListRow
           icon={canMutate ? PencilIcon : EyeIcon}
