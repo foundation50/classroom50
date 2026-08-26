@@ -129,6 +129,19 @@ type Entry struct {
 	// affects the templated path; the bare/template-less paths never generate.
 	// Absent reads as false (teacher CLI omits it when false).
 	IncludeAllBranches bool `json:"include_all_branches,omitempty"`
+
+	// RepoVisibility is the visibility the student repo is CREATED with:
+	// absent/"private" (the wire default) keeps today's private repos;
+	// "public" creates the repo public — accept warns the student upfront
+	// that their work will be publicly visible. Best-effort fail-private:
+	// if org policy blocks a member's public create, accept retries private.
+	RepoVisibility string `json:"repo_visibility,omitempty"`
+}
+
+// IsPublicRepoVisibility reports whether accept should create the repo public.
+// Centralized so the accept paths share the absent-means-private default.
+func (e Entry) IsPublicRepoVisibility() bool {
+	return e.RepoVisibility == contract.RepoVisibilityPublic
 }
 
 // IsTagSubmissionMode reports whether the entry grades only on submit/* tag

@@ -100,6 +100,12 @@ export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
 export const SUBMISSION_MODES = ["every-push", "tag"] as const
 export type SubmissionMode = (typeof SUBMISSION_MODES)[number]
 
+// The visibility each student repo is CREATED with at accept time. Absent =
+// "private" (today's behavior). In lockstep with the CLI's assignments-v1
+// schema enum and contract.RepoVisibilities (parity-tested).
+export const REPO_VISIBILITIES = ["private", "public"] as const
+export type RepoVisibility = (typeof REPO_VISIBILITIES)[number]
+
 // The teacher's grading intent. Absent reads as "auto" (today's behavior). In
 // lockstep with the CLI's assignments-v1 schema enum and contract.GradingModes
 // (parity-tested by a vitest). Orthogonal to the autograding tri-state and to
@@ -310,6 +316,16 @@ export type Assignment = {
   // page detection definition. In lockstep with the CLI's assignments-v1 schema
   // (`submission_tags`); validation in @/util/submissionTags.
   submission_tags?: string[]
+  // The visibility each student repo is CREATED with at accept time. Absent or
+  // "private" (the wire default — writers omit it): private repos, today's
+  // behavior. "public": accept creates the repo public (peer review, portfolio,
+  // showcase) and the accept surfaces tell the student upfront. Accept-time
+  // only, not retrofitted: changing it affects only repos created from then on
+  // (flip existing ones with the gradebook visibility actions). Best-effort
+  // fail-private on accept — org policy can block a member's public create, in
+  // which case accept retries private and tells the student. In lockstep with
+  // the CLI's assignments-v1 schema enum (`repo_visibility`).
+  repo_visibility?: RepoVisibility
   // The teacher's grading intent (off / auto / manual), a first-class GUI
   // choice. Absent reads as "auto" (today's behavior). Manual carries
   // max_points (>= 1). Orthogonal to the autograding tri-state and to

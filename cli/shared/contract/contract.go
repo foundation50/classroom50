@@ -100,6 +100,16 @@ const (
 	SubmissionModeEveryPush = "every-push"
 	SubmissionModeTag       = "tag"
 
+	// RepoVisibilityPrivate and RepoVisibilityPublic are the assignment
+	// repo_visibility values: the visibility each student repo is CREATED with
+	// at accept time. private is the wire default — writers omit it, and
+	// readers resolve an absent field to private. Accept-time only: changing it
+	// later affects only repos created from then on. Mirrored in the
+	// assignments-v1 schema enum and the web REPO_VISIBILITIES; pinned by
+	// contract_test.go and the schema-parity tests.
+	RepoVisibilityPrivate = "private"
+	RepoVisibilityPublic  = "public"
+
 	// GradingModeOff, GradingModeAuto, and GradingModeManual are the assignment
 	// grading.mode values — the teacher's grading intent as a first-class GUI
 	// choice. auto = autograded (ABSENT reads as auto, so existing files are
@@ -425,6 +435,21 @@ var SubmissionModes = []string{SubmissionModeEveryPush, SubmissionModeTag}
 func IsValidSubmissionMode(m string) bool {
 	for _, allowed := range SubmissionModes {
 		if m == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// RepoVisibilities is every valid assignments.json repo_visibility value.
+// Single-sources the allow-list; the schema enum in assignments-v1.schema.json
+// and the web REPO_VISIBILITIES mirror it (parity-tested on both sides).
+var RepoVisibilities = []string{RepoVisibilityPrivate, RepoVisibilityPublic}
+
+// IsValidRepoVisibility reports whether v is one of the RepoVisibilities.
+func IsValidRepoVisibility(v string) bool {
+	for _, allowed := range RepoVisibilities {
+		if v == allowed {
 			return true
 		}
 	}

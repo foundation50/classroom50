@@ -144,6 +144,13 @@ class TestSchemaAccepts:
         assert _errors(_manifest(_entry(submission_mode="tag"))) == []
         assert _errors(_manifest(_entry(submission_mode="every-push"))) == []
 
+    def test_repo_visibility_accepted(self):
+        # Both enum values are legal: writers omit private (the wire
+        # default) but other clients may write it explicitly, and readers
+        # must accept it. Absent is covered by test_minimal_manifest.
+        assert _errors(_manifest(_entry(repo_visibility="public"))) == []
+        assert _errors(_manifest(_entry(repo_visibility="private"))) == []
+
     def test_submission_tags_accepted(self):
         # Milestone tag patterns: literal names and the supported glob
         # characters. Absent is covered by test_minimal_manifest.
@@ -414,6 +421,15 @@ class TestSchemaRejects:
         # nothing here (unlike autograder), so clients must write exact
         # values. Mirrors contract.SubmissionModes.
         assert _errors(_manifest(_entry(submission_mode=submission_mode))) != []
+
+    @pytest.mark.parametrize(
+        "repo_visibility", ["Public", "internal", "", None, True]
+    )
+    def test_bad_repo_visibility(self, repo_visibility):
+        # Only the two enum values are legal (no GitHub "internal" —
+        # student repos are private or public). Mirrors
+        # contract.RepoVisibilities.
+        assert _errors(_manifest(_entry(repo_visibility=repo_visibility))) != []
 
     @pytest.mark.parametrize(
         "submission_tags",

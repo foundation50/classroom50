@@ -72,6 +72,19 @@ func ValidateSubmissionMode(m string) error {
 	return nil
 }
 
+// ValidateRepoVisibility accepts "" (the wire default, private) or one of
+// contract.RepoVisibilities. An explicit "private" is legal on read (other
+// writers may emit it) even though this CLI normalizes it to absent on write.
+func ValidateRepoVisibility(v string) error {
+	if v == "" {
+		return nil
+	}
+	if !contract.IsValidRepoVisibility(v) {
+		return fmt.Errorf("invalid repo_visibility %q: must be one of %v", v, contract.RepoVisibilities)
+	}
+	return nil
+}
+
 // LargeAssignmentsWarnBytes is the encoded-size threshold above which
 // `assignment add` warns on stderr. Set well below GitHub's ~1 MiB
 // contents-API limit (past which encoding flips to "none", wedging every
@@ -151,6 +164,14 @@ type AssignmentsJSON struct {
 // assignment submission-mode`). Permitted on every repo shape, including
 // EmptyRepo / NoAutograder: with no shim it carries no trigger, but it still
 // defines what the submissions page counts as a submission.
+//
+// RepoVisibility is the visibility each student repo is CREATED with at accept
+// time: "" or contract.RepoVisibilityPrivate (the wire default — writers omit
+// it) keeps today's private repos; contract.RepoVisibilityPublic creates them
+// public. Accept-time only, not retrofitted: changing it affects only repos
+// created from then on. Best-effort fail-private on the accept side — org
+// policy can block a member's public create, in which case accept retries as
+// private and tells the student the teacher can flip it later.
 type AssignmentEntry struct {
 	Slug               string           `json:"slug"`
 	Name               string           `json:"name"`
@@ -180,6 +201,7 @@ type AssignmentEntry struct {
 	StudentPermission  string           `json:"student_permission,omitempty"`
 	SubmissionMode     string           `json:"submission_mode,omitempty"`
 	SubmissionTags     []string         `json:"submission_tags,omitempty"`
+	RepoVisibility     string           `json:"repo_visibility,omitempty"`
 	RepoFeatures       *RepoFeatures    `json:"repo_features,omitempty"`
 	MigratedFrom       *MigratedFromRef `json:"migrated_from,omitempty"`
 
@@ -210,6 +232,7 @@ var knownEntryKeys = map[string]struct{}{
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"renamed_from":       {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
+	"repo_visibility":      {},
 	"no_autograder":        {},
 	"init_shim":            {},
 	"include_all_branches": {},
@@ -1005,6 +1028,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateSubmissionMode(entry.SubmissionMode); err != nil {
 		return err
 	}
+	if err := ValidateRepoVisibility(entry.RepoVisibility); err != nil {
+		return err
+	}
 	if err := ValidateSubmissionTags(entry.SubmissionTags); err != nil {
 		return err
 	}
@@ -1251,6 +1277,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateSubmissionMode(entry.SubmissionMode); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateRepoVisibility(entry.RepoVisibility); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateSubmissionTags(entry.SubmissionTags); err != nil {

@@ -63,6 +63,12 @@ func TestContractLiterals(t *testing.T) {
 		// and the runner's inline validator. Update every copy in lockstep.
 		{"SubmissionModeEveryPush", SubmissionModeEveryPush, "every-push"},
 		{"SubmissionModeTag", SubmissionModeTag, "tag"},
+		// RepoVisibility values are mirrored, with NO compile-time link, in the
+		// assignments-v1 schema enum (parity-pinned by
+		// TestRepoVisibilityEnumParity in gh-teacher) and the web
+		// REPO_VISIBILITIES. Update every copy in lockstep.
+		{"RepoVisibilityPrivate", RepoVisibilityPrivate, "private"},
+		{"RepoVisibilityPublic", RepoVisibilityPublic, "public"},
 		// SubmitTagPrefix is mirrored, with NO compile-time link, in runner.py /
 		// collect_scores.py / regrade_repos.py (SUBMIT_TAG_PREFIX), the
 		// autograde-runner.yaml tag step, and the web SUBMISSION_TAG_PREFIX

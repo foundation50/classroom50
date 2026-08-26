@@ -84,6 +84,7 @@ func assignmentAddCmd() *cobra.Command {
 		studentPerm    string
 		submissionMd   string
 		submissionTags []string
+		repoVisibility string
 	)
 
 	cmd := &cobra.Command{
@@ -230,6 +231,15 @@ func assignmentAddCmd() *cobra.Command {
 					return errors.New("--empty-repo is mutually exclusive with --submission-tag: a bare repo has no autograde shim to trigger")
 				}
 			}
+			// Normalize the wire default away so a private assignment's entry
+			// stays byte-identical to one written before the field existed.
+			repoVisibilityVal := strings.TrimSpace(repoVisibility)
+			if repoVisibilityVal == contract.RepoVisibilityPrivate {
+				repoVisibilityVal = ""
+			}
+			if err := assignment.ValidateRepoVisibility(repoVisibilityVal); err != nil {
+				return err
+			}
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
 			}
@@ -299,6 +309,8 @@ func assignmentAddCmd() *cobra.Command {
 					SubmissionModeChanged: cmd.Flags().Changed("submission-mode"),
 					SubmissionTags:        submissionTags,
 					SubmissionTagsChanged: cmd.Flags().Changed("submission-tag"),
+					RepoVisibility:        repoVisibilityVal,
+					RepoVisibilityChanged: cmd.Flags().Changed("repo-visibility"),
 				})
 		},
 	}
@@ -320,6 +332,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin lets the student manage the repo's settings and collaborators; the org lockdown from `gh teacher init` still blocks members from changing repo visibility (verify with `gh teacher audit`).")
 	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
 	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that ALSO triggers grading — e.g. --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo.")
+	cmd.Flags().StringVar(&repoVisibility, "repo-visibility", contract.RepoVisibilityPrivate, "Visibility each student repo is CREATED with at accept time: `private` (default) or `public` (for peer-review, portfolio, or showcase assignments — students are told upfront their work will be publicly visible). Applies to students who accept from now on; existing repos are unchanged (flip those from the gradebook's visibility actions). Caution with public: student work — names, emails, commit history — is visible to anyone on the internet from the moment the repo is created. If org policy blocks members from creating public repos, accept falls back to a private repo and tells the student.")
 	return cmd
 }
 
@@ -606,6 +619,11 @@ type addAssignmentParams struct {
 	// flag carries a prior entry's patterns forward (deployed shims were
 	// rendered with them); passing the flag replaces the set.
 	SubmissionTagsChanged bool
+	RepoVisibility        string
+	// Same omitted-vs-explicit distinction for --repo-visibility: an omitted
+	// flag carries a prior entry's visibility forward (often GUI-authored);
+	// an explicit --repo-visibility private is a deliberate reset.
+	RepoVisibilityChanged bool
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -690,6 +708,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		StudentPermission: p.StudentPermission,
 		SubmissionMode:    p.SubmissionMode,
 		SubmissionTags:    p.SubmissionTags,
+		RepoVisibility:    p.RepoVisibility,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -909,6 +928,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			// silently drop them (milestone tags would stop grading).
 			if !p.SubmissionTagsChanged {
 				attemptEntry.SubmissionTags = append([]string(nil), previous.SubmissionTags...)
+			}
+			// repo_visibility is carried forward when --repo-visibility was
+			// omitted: it's often GUI-authored, and a silent reset to private
+			// would surprise a showcase assignment's future accepters.
+			if !p.RepoVisibilityChanged {
+				attemptEntry.RepoVisibility = previous.RepoVisibility
 			}
 		}
 		committedLocked = attemptEntry.Locked

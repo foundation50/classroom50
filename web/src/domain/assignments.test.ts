@@ -33,7 +33,7 @@ import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
-import { REPO_PERMISSIONS, SUBMISSION_MODES } from "@/types/classroom"
+import { REPO_PERMISSIONS, REPO_VISIBILITIES, SUBMISSION_MODES } from "@/types/classroom"
 import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
 
@@ -3305,6 +3305,29 @@ describe("SUBMISSION_MODES parity with assignments-v1 schema", () => {
   it("matches the schema submission_mode enum exactly and in order", () => {
     const schemaEnum = schema.$defs.assignment.properties.submission_mode.enum
     expect(schemaEnum).toEqual([...SUBMISSION_MODES])
+  })
+})
+
+// The web half of the repo_visibility enum lockstep guard: REPO_VISIBILITIES
+// must equal the schema's repo_visibility enum (the declared source of truth).
+// The Go half (contract.RepoVisibilities vs the same enum) is pinned by
+// TestRepoVisibilityEnumParity.
+describe("REPO_VISIBILITIES parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      assignment: {
+        properties: { repo_visibility: { enum: string[] } }
+      }
+    }
+  }
+
+  it("matches the schema repo_visibility enum exactly and in order", () => {
+    const schemaEnum = schema.$defs.assignment.properties.repo_visibility.enum
+    expect(schemaEnum).toEqual([...REPO_VISIBILITIES])
   })
 })
 
