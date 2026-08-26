@@ -1258,6 +1258,16 @@
           "admin": "Admin"
         }
       },
+      "repoVisibility": {
+        "label": "Repository visibility",
+        "help": "The visibility each student repository is created with at accept time. Private is the default. Choose Public for peer-review, portfolio, or showcase assignments — students are warned before accepting.",
+        "publicWarning": "Anyone on the internet will be able to see each student's work — code, commits, and name. If the organization doesn't allow students to create public repositories, their repository is created private instead and you can make it public from the submissions page.",
+        "editHelp": "This applies to repositories created from now on; use the submissions page to change the visibility of existing ones.",
+        "levels": {
+          "private": "Private",
+          "public": "Public"
+        }
+      },
       "autograding": {
         "modeLabel": "Built-in autograder",
         "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup, so you'll need to update the existing repositories yourself.",
@@ -1404,6 +1414,7 @@
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
+        "repoVisibilityInvalid": "Repository visibility must be \"private\" or \"public\".",
         "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
         "gradingModeInvalid": "Grading must be \"off\", \"auto\", or \"manual\".",
         "gradingMaxPointsInvalid": "Max points must be a whole number of at least {{min}}.",

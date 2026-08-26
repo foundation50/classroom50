@@ -4,6 +4,7 @@ import type {
   AssignmentTestDefaults,
   RepoPermission,
   RepoFeatures,
+  RepoVisibility,
   SubmissionMode,
   Grading,
 } from "@/types/classroom"
@@ -454,6 +455,11 @@ export type CreateAssignmentInput = {
   // the mode default (push individual / admin group). buildAssignmentEntry
   // omits it when it equals the default and clamps group up to admin.
   student_permission?: RepoPermission
+  // The visibility each student repo is created with at accept time.
+  // Undefined or "private" = the wire default (buildAssignmentEntry omits
+  // it); "public" = repos are created public, with an upfront student
+  // warning. Mirrors the CLI's --repo-visibility.
+  repo_visibility?: RepoVisibility
   // When the autograder fires. Undefined or "every-push" = the wire default
   // (buildAssignmentEntry omits it); "tag" = the shim grades only submit/* tag
   // pushes. Mirrors the CLI's --submission-mode.
