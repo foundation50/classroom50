@@ -1,14 +1,15 @@
 import { useNavigate } from "@tanstack/react-router"
 import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
-import { useId, useState } from "react"
+import { Fragment, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import PlanBadge from "@/components/PlanBadge"
 import MissingOrgNotice from "@/components/MissingOrgNotice"
 import FreePlanInfoModal from "@/components/modals/FreePlanInfoModal"
-import { Badge, Button, Modal, Spinner, cx, Heading } from "@/components/ui"
+import { Badge, Button, Modal, Spinner, cx } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
+import { useLingeringOpen } from "@/hooks/useLingeringOpen"
 import useScrollFade from "@/hooks/useScrollFade"
 import { classifyPlan } from "@/lib/orgPlan"
 
@@ -172,8 +173,18 @@ function NewOrgModal({
 }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
-  const titleId = useId()
   const [freePlanOrg, setFreePlanOrg] = useState<string | null>(null)
+
+  // Body stays mounted through the close fade (useLingeringOpen) but remounts
+  // per open via the sequence key: the notice's defaultOpen and the picker's
+  // seenOnOpen snapshot are open-time latches.
+  const contentMounted = useLingeringOpen(open)
+  const [openSeq, setOpenSeq] = useState(0)
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setOpenSeq((n) => n + 1)
+  }
 
   const handleSelect = (login: string) => {
     onClose()
@@ -182,20 +193,28 @@ function NewOrgModal({
 
   return (
     <>
-      <Modal open={open} onClose={onClose} size="2xl" aria-labelledby={titleId}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <Heading as="h3" id={titleId}>
-              {t("orgs.newOrg.title")}
-            </Heading>
-            <p className="mt-1 text-sm text-base-content/70">
-              {t("orgs.newOrg.description")}
-            </p>
-          </div>
-        </div>
-
-        {open && (
-          <>
+      <Modal
+        open={open}
+        onClose={onClose}
+        size="2xl"
+        title={t("orgs.newOrg.title")}
+        subtitle={t("orgs.newOrg.description")}
+        footer={
+          <Button
+            as="a"
+            href="https://github.com/organizations/new"
+            target="_blank"
+            rel="noreferrer"
+            variant="ghost"
+            size="sm"
+          >
+            {t("orgs.newOrg.createOnGitHub")}
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
+          </Button>
+        }
+      >
+        {contentMounted && (
+          <Fragment key={openSeq}>
             <div className="mt-6">
               <MissingOrgNotice
                 onRefresh={onRefresh}
@@ -212,22 +231,8 @@ function NewOrgModal({
               onSelect={handleSelect}
               onFreePlan={setFreePlanOrg}
             />
-          </>
+          </Fragment>
         )}
-
-        <div className="modal-action">
-          <Button
-            as="a"
-            href="https://github.com/organizations/new"
-            target="_blank"
-            rel="noreferrer"
-            variant="ghost"
-            size="sm"
-          >
-            {t("orgs.newOrg.createOnGitHub")}
-            <LinkExternalIcon aria-hidden="true" className="size-4" />
-          </Button>
-        </div>
       </Modal>
 
       <FreePlanInfoModal

@@ -1,4 +1,4 @@
-import { useRef, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { useMutation } from "@tanstack/react-query"
 
 import {
@@ -51,45 +51,61 @@ export function useDownloadAllSubmissions() {
       abortRef.current = controller
       setProgress({ done: 0, total: owners.length })
 
-      if (directory) {
-        const summary = await streamSubmissionsToDirectory({
+      // A close-time cancel aborts the batch; report it as a cancelled outcome
+      // rather than an error, so a late-settling rejection can't surface a
+      // stale error banner after the modal was reopened.
+      try {
+        if (directory) {
+          const summary = await streamSubmissionsToDirectory({
+            client,
+            org,
+            classroom,
+            assignment,
+            owners,
+            directory,
+            onProgress: setProgress,
+            signal: controller.signal,
+          })
+          return { status: "done", summary, toDirectory: true }
+        }
+
+        const { blob, summary } = await downloadAllSubmissions({
           client,
           org,
           classroom,
           assignment,
           owners,
-          directory,
           onProgress: setProgress,
           signal: controller.signal,
         })
-        return { status: "done", summary, toDirectory: true }
+        if (summary.fetched > 0) {
+          downloadBlob(blob, `${classroom}-${assignment}-submissions.zip`)
+        }
+        return { status: "done", summary, toDirectory: false }
+      } catch (err) {
+        if (err instanceof DOMException && err.name === "AbortError") {
+          return { status: "cancelled" }
+        }
+        throw err
       }
-
-      const { blob, summary } = await downloadAllSubmissions({
-        client,
-        org,
-        classroom,
-        assignment,
-        owners,
-        onProgress: setProgress,
-        signal: controller.signal,
-      })
-      if (summary.fetched > 0) {
-        downloadBlob(blob, `${classroom}-${assignment}-submissions.zip`)
-      }
-      return { status: "done", summary, toDirectory: false }
     },
   })
+
+  // Stable identity: callers key reset-on-open effects on this function, so a
+  // per-render closure would re-fire the effect on every render while open and
+  // reset the mutation mid-run (RQ v5's mutation.reset is already stable).
+  const mutationReset = mutation.reset
+  const reset = useCallback(() => {
+    abortRef.current = null
+    setProgress(null)
+    mutationReset()
+  }, [mutationReset])
 
   return {
     ...mutation,
     progress,
     cancel: () => abortRef.current?.abort(),
-    reset: () => {
-      abortRef.current = null
-      setProgress(null)
-      mutation.reset()
-    },
+    reset,
   }
 }
 

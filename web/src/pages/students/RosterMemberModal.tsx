@@ -1,11 +1,10 @@
-import { useEffect, useId, useState } from "react"
+import { useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
   LinkExternalIcon,
   MarkGithubIcon,
   PaperAirplaneIcon,
   PersonAddIcon,
-  XIcon,
 } from "@/components/ui/icons"
 
 import Avatar from "@/components/avatar"
@@ -42,14 +41,7 @@ import {
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
 } from "@/util/classroomRoleUI"
-import {
-  Badge,
-  Button,
-  EmphasisLtr,
-  Modal,
-  Select,
-  Heading,
-} from "@/components/ui"
+import { Badge, Button, EmphasisLtr, Modal, Select } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -115,7 +107,6 @@ const RosterMemberModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  const titleId = useId()
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
@@ -148,20 +139,22 @@ const RosterMemberModal = ({
 
   const handleClose = () => {
     if (busy) return
+    onClose()
+  }
+
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  useEffect(() => {
+    if (!open) return
     setConfirmingUnenroll(false)
     setConfirmingResend(false)
     setConfirmingCancel(false)
     setPendingRole(null)
     setRoleOwnerConfirmed(false)
     setEditingProfile(false)
-    onClose()
-  }
+  }, [open])
 
-  // Retain the last non-null row so the modal keeps rendering its real content
-  // through the close animation. Without this, clearing the selection swaps in a
-  // structurally-empty <Modal> for the frames the dialog is still fading out,
-  // flashing a tiny empty box. `open` (from the parent's Boolean(selected)) still
-  // drives the actual close.
+  // Retain the last non-null row so the fading dialog keeps its content after
+  // the parent clears the selection (close-animation note in ui/Modal).
   const [lastRow, setLastRow] = useState<TeamRosterRow | null>(null)
   useEffect(() => {
     if (rowProp) setLastRow(rowProp)
@@ -190,7 +183,13 @@ const RosterMemberModal = ({
 
   if (!row) {
     // Never had a row (initial mount, closed): nothing to show.
-    return <Modal open={open} onClose={handleClose} aria-labelledby={titleId} />
+    return (
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title={t("students.detailTitle")}
+      />
+    )
   }
 
   const student = rowToStudent(row)
@@ -518,28 +517,10 @@ const RosterMemberModal = ({
       open={open}
       onClose={handleClose}
       closeDisabled={busy}
-      hideCloseButton
-      size="lg"
-      boxClassName="p-0"
-      aria-labelledby={titleId}
+      size="2xl"
+      title={t("students.detailTitle")}
     >
-      <div className="flex items-start justify-between gap-4 border-b border-base-300 px-6 py-4">
-        <Heading as="h2" id={titleId}>
-          {t("students.detailTitle")}
-        </Heading>
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="square"
-          onClick={handleClose}
-          disabled={busy}
-          aria-label={t("common.close")}
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-5 px-6 py-5">
+      <div className="mt-4 flex flex-col gap-5">
         {/* Identity with the enrollment actions as icons on the right — the
               GitHub username itself links to the profile. */}
         <div className="flex items-start justify-between gap-4">

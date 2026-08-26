@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { UploadIcon } from "@/components/ui/icons"
 
@@ -10,7 +10,7 @@ import type {
   RosterUploadContext,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
-import { Alert, Button, Modal, Heading } from "@/components/ui"
+import { Alert, Button, Modal } from "@/components/ui"
 import {
   classifyRosterUpload,
   hasTeacherPromotion,
@@ -97,7 +97,6 @@ const UploadRoster = ({
   onOpenChange,
 }: UploadRosterProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const titleId = useId()
   const { t } = useTranslation()
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
@@ -205,14 +204,12 @@ const UploadRoster = ({
     }
   }
 
-  // Clear internal state after the modal has actually closed (open -> false),
-  // so a programmatic close doesn't flash the idle drop-zone mid-close.
-  const wasOpenRef = useRef(false)
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  // `open !== true` keeps the uncontrolled mode (open undefined) untouched,
+  // which never reset here either.
   useEffect(() => {
-    if (wasOpenRef.current && open === false) {
-      resetToDropZone()
-    }
-    wasOpenRef.current = Boolean(open)
+    if (open !== true) return
+    resetToDropZone()
   }, [open])
 
   const handleClose = () => {
@@ -693,21 +690,37 @@ const UploadRoster = ({
         onClose={handleClose}
         closeDisabled={phase === "importing"}
         size="5xl"
-        aria-labelledby={titleId}
+        title={t("students.uploadTitle")}
+        subtitle={fileName ? t("students.fileLabel", { fileName }) : undefined}
+        footer={
+          phase === "preview" && !blocked ? (
+            <>
+              <Button variant="ghost" onClick={resetToDropZone}>
+                {t("common.cancel")}
+              </Button>
+              <Button
+                variant="primary"
+                disabled={!canProcess}
+                onClick={startImport}
+              >
+                {rosterPrimaryLabel}
+              </Button>
+            </>
+          ) : phase === "error" ? (
+            <>
+              <Button variant="ghost" onClick={handleClose}>
+                {t("common.close")}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {t("students.chooseAnotherFile")}
+              </Button>
+            </>
+          ) : undefined
+        }
       >
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <Heading as="h3" id={titleId}>
-              {t("students.uploadTitle")}
-            </Heading>
-            {fileName && (
-              <p className="text-sm opacity-70 mt-1">
-                {t("students.fileLabel", { fileName })}
-              </p>
-            )}
-          </div>
-        </div>
-
         {phase === "idle" && (
           <div className="mt-6">
             {/* Drop zone + click-to-pick. One entry for all three formats; the
@@ -909,20 +922,6 @@ const UploadRoster = ({
                 )}
               </Alert>
             )}
-
-            <div className="modal-action">
-              <Button variant="ghost" onClick={resetToDropZone}>
-                {t("common.cancel")}
-              </Button>
-
-              <Button
-                variant="primary"
-                disabled={!canProcess}
-                onClick={startImport}
-              >
-                {rosterPrimaryLabel}
-              </Button>
-            </div>
           </div>
         )}
 
@@ -974,19 +973,6 @@ const UploadRoster = ({
             <Alert tone="error">
               <span>{error ?? t("students.somethingWentWrong")}</span>
             </Alert>
-
-            <div className="modal-action">
-              <Button variant="ghost" onClick={handleClose}>
-                {t("common.close")}
-              </Button>
-
-              <Button
-                variant="primary"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                {t("students.chooseAnotherFile")}
-              </Button>
-            </div>
           </div>
         )}
       </Modal>

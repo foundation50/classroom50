@@ -45,6 +45,7 @@ import {
   Badge,
   Button,
   Card,
+  DropdownMenu,
   Toolbar,
   cx,
   Heading,
@@ -261,11 +262,7 @@ function HideOrgMenu({
         >
           <KebabHorizontalIcon aria-hidden="true" className="size-4" />
         </Button>
-        <ul
-          tabIndex={0}
-          role="menu"
-          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-300 bg-base-100 p-1 shadow"
-        >
+        <DropdownMenu className="w-48">
           {canManageToken && (
             <li>
               <Link
@@ -297,7 +294,7 @@ function HideOrgMenu({
               {t("orgs.card.hide")}
             </button>
           </li>
-        </ul>
+        </DropdownMenu>
       </div>
 
       <OrgDetailsModal

@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   PaperAirplaneIcon,
@@ -9,7 +9,7 @@ import {
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
-import { Alert, Button, Modal, Toolbar, Heading } from "@/components/ui"
+import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -137,7 +137,6 @@ const RosterBulkActionsBar = ({
   canGroupBySection?: boolean
 }) => {
   const { t } = useTranslation()
-  const titleId = useId()
 
   const [action, setAction] = useState<"unenroll" | "invite" | "cancel" | null>(
     null,
@@ -169,20 +168,20 @@ const RosterBulkActionsBar = ({
   // the writer silently report the pending ones as "already removed".
   const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
 
-  const isOpen = phase !== "idle"
+  // Visibility is its own flag: closing must not reset phase/result/action
+  // (close-animation note in ui/Modal); each run resets them anyway.
+  const [isOpen, setModalOpen] = useState(false)
 
   const closeModal = () => {
     if (phase === "working") return
-    setPhase("idle")
-    setResult(null)
-    setError(null)
-    setAction(null)
+    setModalOpen(false)
   }
 
   const runUnenroll = async () => {
     if (unenrollableSelected.length === 0) return
     setAction("unenroll")
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     setProgress({
@@ -223,6 +222,7 @@ const RosterBulkActionsBar = ({
     if (invitableSelected === 0) return
     setAction("invite")
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     setProgress({
@@ -321,6 +321,7 @@ const RosterBulkActionsBar = ({
     if (cancellableSelected.length === 0) return
     setAction("cancel")
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     const total = cancellableSelected.length
@@ -582,18 +583,25 @@ const RosterBulkActionsBar = ({
         onClose={closeModal}
         closeDisabled={phase === "working"}
         size="2xl"
-        aria-labelledby={titleId}
+        title={
+          action === "invite"
+            ? t("students.bulk.inviteTitle")
+            : action === "cancel"
+              ? t("students.bulk.cancelTitle")
+              : t("students.bulk.unenrollTitle")
+        }
+        footer={
+          phase === "complete" ? (
+            <Button variant="primary" onClick={closeModal}>
+              {t("students.bulk.done")}
+            </Button>
+          ) : phase === "error" ? (
+            <Button variant="primary" onClick={closeModal}>
+              {t("common.done")}
+            </Button>
+          ) : undefined
+        }
       >
-        <div className="flex items-start justify-between gap-4">
-          <Heading as="h3" id={titleId}>
-            {action === "invite"
-              ? t("students.bulk.inviteTitle")
-              : action === "cancel"
-                ? t("students.bulk.cancelTitle")
-                : t("students.bulk.unenrollTitle")}
-          </Heading>
-        </div>
-
         {phase === "working" && (
           <div className="mt-6">
             <p className="mb-2 font-medium">{progress.message}</p>
@@ -629,11 +637,6 @@ const RosterBulkActionsBar = ({
                 rows={section.rows}
               />
             ))}
-            <div className="modal-action">
-              <Button variant="primary" onClick={closeModal}>
-                {t("students.bulk.done")}
-              </Button>
-            </div>
           </div>
         )}
 
@@ -642,11 +645,6 @@ const RosterBulkActionsBar = ({
             <Alert tone="error">
               <span>{error ?? t("students.somethingWentWrong")}</span>
             </Alert>
-            <div className="modal-action">
-              <Button variant="ghost" onClick={closeModal}>
-                {t("common.close")}
-              </Button>
-            </div>
           </div>
         )}
       </Modal>

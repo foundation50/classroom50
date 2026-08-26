@@ -1,9 +1,9 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { SlidersIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Select, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon, Select } from "@/components/ui"
 import { Spinner } from "@/components/Spinner"
 import {
   BulkResultSection,
@@ -84,7 +84,6 @@ export function BulkRepoFeaturesModal({
   owners,
   students = [],
 }: BulkRepoFeaturesModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const setFeaturesMutation = useSetRepoFeatures()
   const runningRef = useRef(false)
@@ -108,19 +107,19 @@ export function BulkRepoFeaturesModal({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      runningRef.current = false
-      setChoices({
-        issues: "keep",
-        wiki: "keep",
-        projects: "keep",
-        pull_requests: "keep",
-      })
-      setPhase("idle")
-      setResult(null)
-      setProgress({ processed: 0, total: 0, message: "" })
-    }
+    if (!open) return
+    runningRef.current = false
+    setChoices({
+      issues: "keep",
+      wiki: "keep",
+      projects: "keep",
+      pull_requests: "keep",
+    })
+    setPhase("idle")
+    setResult(null)
+    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length
@@ -243,22 +242,36 @@ export function BulkRepoFeaturesModal({
       onClose={onClose}
       closeDisabled={busy}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t("submissions.bulkFeatures.title")}
+      subtitle={t("submissions.bulkFeatures.subtitle", { count: total })}
+      headerVisual={
+        <ModalIcon>
           <SlidersIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("submissions.bulkFeatures.title")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("submissions.bulkFeatures.subtitle", { count: total })}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        phase === "complete" || phase === "error" ? (
+          <Button variant="primary" onClick={() => onClose()}>
+            {t("common.done")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.cancel")}
+            </Button>
+            {phase === "idle" && total > 0 && (
+              <Button
+                variant="primary"
+                disabled={nothingSelected}
+                onClick={() => void run()}
+              >
+                {t("submissions.bulkFeatures.apply")}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
           {total === 0 ? (
@@ -338,23 +351,6 @@ export function BulkRepoFeaturesModal({
           ))}
         </div>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {phase === "complete" || phase === "error"
-            ? t("common.close")
-            : t("common.cancel")}
-        </Button>
-        {phase === "idle" && total > 0 && (
-          <Button
-            variant="primary"
-            disabled={nothingSelected}
-            onClick={() => void run()}
-          >
-            {t("submissions.bulkFeatures.apply")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

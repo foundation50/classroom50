@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
@@ -16,8 +16,8 @@ import {
   Button,
   Input,
   Modal,
+  ModalIcon,
   Select,
-  Heading,
 } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
@@ -112,7 +112,6 @@ export function RepoAccessModal({
   assignmentName,
   students = [],
 }: RepoAccessModalProps) {
-  const titleId = useId()
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
   const { user } = useGithubAuth()
@@ -182,14 +181,14 @@ export function RepoAccessModal({
     setDraft(initialEntries)
   }, [open, repoName, loadingCollaborators, initialEntries])
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      setNewCollaborator("")
-      setNewPermission("push")
-      setSubmitError(null)
-      setSaved(false)
-      setInvalidLogins(new Set())
-    }
+    if (!open) return
+    setNewCollaborator("")
+    setNewPermission("push")
+    setSubmitError(null)
+    setSaved(false)
+    setInvalidLogins(new Set())
   }, [open])
 
   useEffect(
@@ -394,34 +393,57 @@ export function RepoAccessModal({
       onClose={onClose}
       closeDisabled={isSaving}
       size="xl"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t("components.modals.repoAccess.title")}
+      subtitle={
+        repoName ? (
+          <a
+            className="link inline-flex items-center gap-1.5"
+            href={repoUrl || `https://github.com/${org}/${repoName}`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <MarkGithubIcon aria-hidden="true" className="size-4" />
+            {assignmentName
+              ? t("components.modals.repoAccess.viewRepoNamed", {
+                  name: assignmentName,
+                })
+              : t("components.modals.groupCollaborators.viewRepository")}
+          </a>
+        ) : undefined
+      }
+      headerVisual={
+        <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("components.modals.repoAccess.title")}
-          </Heading>
-          {repoName && (
-            <a
-              className="link mt-1 inline-flex items-center gap-1.5 text-sm"
-              href={repoUrl || `https://github.com/${org}/${repoName}`}
-              target="_blank"
-              rel="noreferrer"
+        </ModalIcon>
+      }
+      footer={
+        <>
+          <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
+            {t("common.cancel")}
+          </Button>
+          {canManage && hasChanges && (
+            <Button
+              variant="ghost"
+              disabled={isSaving}
+              onClick={discardChanges}
             >
-              <MarkGithubIcon aria-hidden="true" className="size-4" />
-              {assignmentName
-                ? t("components.modals.repoAccess.viewRepoNamed", {
-                    name: assignmentName,
-                  })
-                : t("components.modals.groupCollaborators.viewRepository")}
-            </a>
+              {t("components.modals.groupCollaborators.discardChanges")}
+            </Button>
           )}
-        </div>
-      </div>
-
+          {canManage && (
+            <Button
+              variant="primary"
+              disabled={loadingCollaborators || isSaving || !hasChanges}
+              loading={isSaving}
+              loadingLabel={t("components.modals.repoAccess.save")}
+              onClick={() => void handleSave()}
+            >
+              {t("components.modals.repoAccess.save")}
+            </Button>
+          )}
+        </>
+      }
+    >
       {loadingCollaborators ? (
         <div className="flex py-10">
           <Spinner
@@ -595,28 +617,6 @@ export function RepoAccessModal({
           )}
         </>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
-          {t("common.cancel")}
-        </Button>
-        {canManage && hasChanges && (
-          <Button variant="ghost" disabled={isSaving} onClick={discardChanges}>
-            {t("components.modals.groupCollaborators.discardChanges")}
-          </Button>
-        )}
-        {canManage && (
-          <Button
-            variant="primary"
-            disabled={loadingCollaborators || isSaving || !hasChanges}
-            loading={isSaving}
-            loadingLabel={t("components.modals.repoAccess.save")}
-            onClick={() => void handleSave()}
-          >
-            {t("components.modals.repoAccess.save")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

@@ -1,9 +1,8 @@
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 import { CheckIcon, CopyIcon } from "@/components/ui/icons"
 
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import { Button, Input, Modal, Heading } from "@/components/ui"
+import { Button, Input, Modal } from "@/components/ui"
 
 // A single copyable link row (read-only input + copy button).
 const CopyLinkField = ({
@@ -75,24 +74,23 @@ const InviteLinksModal = ({
   onClose: () => void
 }) => {
   const { t } = useTranslation()
-  const titleId = useId()
 
   const onboardUrl = `${window.location.origin}/${org}/${classroom}/onboard`
   const inviteUrl = `https://github.com/orgs/${org}/invitation`
 
   return (
-    <Modal open={open} onClose={onClose} size="lg" aria-labelledby={titleId}>
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Heading as="h3" id={titleId}>
-            {t("students.inviteStudents")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("students.inviteLinksHint")}
-          </p>
-        </div>
-      </div>
-
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="lg"
+      title={t("students.inviteStudents")}
+      subtitle={t("students.inviteLinksHint")}
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          {t("common.close")}
+        </Button>
+      }
+    >
       <div className="mt-5 flex flex-col gap-5">
         <CopyLinkField
           label={t("students.onboardingLinkLabel")}
@@ -108,12 +106,6 @@ const InviteLinksModal = ({
           ariaLabel={t("students.studentInviteLinkAria")}
           copyAriaLabel={t("students.copyInviteLinkAria")}
         />
-      </div>
-
-      <div className="modal-action">
-        <Button variant="ghost" onClick={onClose}>
-          {t("common.close")}
-        </Button>
       </div>
     </Modal>
   )

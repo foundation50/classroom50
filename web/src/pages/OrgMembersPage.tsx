@@ -431,7 +431,6 @@ const OrgMembersPage = () => {
             className="mt-6 text-sm"
             role="status"
           >
-            <AlertIcon className="size-4" aria-hidden="true" />
             <span>
               {t("orgMembers.discrepancy", { count: discrepancyCount })}
             </span>

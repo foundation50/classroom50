@@ -1,23 +1,16 @@
-import { useId, useState } from "react"
+import { useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import {
   AlertIcon,
   ChevronRightIcon,
   PersonAddIcon,
-  XIcon,
 } from "@/components/ui/icons"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import {
-  Badge,
-  Button,
-  EmphasisLtr,
-  Modal,
-  rtlFlip,
-  Heading,
-} from "@/components/ui"
+import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
+import { GitHubLink } from "@/components/GitHubLink"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -34,7 +27,7 @@ import type { OrgMemberRow } from "@/util/orgMembers"
 const MemberDetailModal = ({
   open,
   org,
-  row,
+  row: rowProp,
   isSelf,
   isOwner,
   onClose,
@@ -58,26 +51,52 @@ const MemberDetailModal = ({
   const { t } = useTranslation()
   const client = useGitHubClient()
   const { notify } = useToast()
-  const titleId = useId()
   const [confirming, setConfirming] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [working, setWorking] = useState(false)
   const [inviting, setInviting] = useState(false)
 
-  // Close and reset transient confirm/in-flight state in one place. Every close
-  // path (X, backdrop, Escape via onCancel) routes here, so a reopened modal
-  // never shows a stale "confirm remove" panel — no reset-in-effect needed.
-  const handleClose = () => {
-    if (working) return
+  // Retain the last non-null row so the fading dialog keeps its content after
+  // the parent clears the selection (close-animation note in ui/Modal).
+  const [lastRow, setLastRow] = useState<OrgMemberRow | null>(null)
+  useEffect(() => {
+    if (rowProp) setLastRow(rowProp)
+  }, [rowProp])
+  const row = rowProp ?? lastRow
+
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  useEffect(() => {
+    if (!open) return
     setConfirming(false)
     setConfirmingInvite(false)
     setInviting(false)
+  }, [open])
+
+  // Disarm the confirm panels during render when the row identity changes
+  // without an intervening close (RosterMemberModal's draftRowKey pattern), so
+  // an armed "remove from org" can never carry onto a re-pointed member.
+  const rowKey = rowProp ? rowProp.username || rowProp.email : null
+  const [draftRowKey, setDraftRowKey] = useState<string | null>(rowKey)
+  if (rowKey !== null && rowKey !== draftRowKey) {
+    setDraftRowKey(rowKey)
+    setConfirming(false)
+    setConfirmingInvite(false)
+  }
+
+  const handleClose = () => {
+    if (working) return
     onClose()
   }
 
   if (!row) {
-    // Still mounted (empty) so the close animation can run.
-    return <Modal open={open} onClose={handleClose} aria-labelledby={titleId} />
+    // Never had a row (initial mount, closed): nothing to show.
+    return (
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title={t("orgMembers.detailTitle")}
+      />
+    )
   }
 
   const label = row.username || row.email
@@ -136,40 +155,46 @@ const MemberDetailModal = ({
     }
   }
 
+  // The destructive trigger lives in the footer; the inline confirm panel it
+  // opens stays in the body (a nested <dialog> can't stack on an open one).
+  const canRemove = !isSelf && row.isMember
+
   return (
     <Modal
       open={open}
       onClose={handleClose}
       closeDisabled={working}
-      hideCloseButton
-      size="lg"
-      boxClassName="p-0"
-      aria-labelledby={titleId}
+      size="2xl"
+      title={t("orgMembers.detailTitle")}
+      footer={
+        <>
+          <GitHubLink
+            href={`https://github.com/orgs/${org}/people${
+              row.username ? `?query=${encodeURIComponent(row.username)}` : ""
+            }`}
+            label={t("orgMembers.manageOnGitHub")}
+            className="me-auto self-center"
+          />
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            {t("common.close")}
+          </Button>
+          {canRemove && (
+            <Button
+              variant="error"
+              size="sm"
+              disabled={working || confirming}
+              onClick={() => setConfirming(true)}
+            >
+              {t("orgMembers.removeFromOrg")}
+            </Button>
+          )}
+        </>
+      }
     >
-      <div className="flex items-start justify-between gap-4 border-b border-base-300 px-6 py-4">
-        <Heading as="h2" id={titleId}>
-          {t("orgMembers.detailTitle")}
-        </Heading>
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="square"
-          onClick={handleClose}
-          disabled={working}
-          aria-label={t("common.close")}
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-4 px-6 py-5">
-        <MemberDetailHeader row={row} org={org} />
-
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex flex-col gap-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <MemberDetailHeader row={row} />
           <ClassificationBadge row={row} isOwner={isOwner} />
-          {row.email ? (
-            <span className="text-sm text-base-content/70">{row.email}</span>
-          ) : null}
         </div>
 
         <div>
@@ -350,16 +375,7 @@ const MemberDetailModal = ({
               </Button>
             </div>
           </div>
-        ) : (
-          <Button
-            variant="outline"
-            size="sm"
-            className="btn-error self-start"
-            onClick={() => setConfirming(true)}
-          >
-            {t("orgMembers.removeFromOrg")}
-          </Button>
-        )}
+        ) : null}
       </div>
     </Modal>
   )

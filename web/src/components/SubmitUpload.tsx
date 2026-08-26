@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { FileCheckIcon, UploadIcon, XIcon } from "@/components/ui/icons"
 
@@ -7,8 +7,8 @@ import {
   Button,
   FileDropzone,
   Modal,
+  ModalIcon,
   type PickedFile,
-  Heading,
 } from "@/components/ui"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -62,7 +62,6 @@ export function SubmitUpload({
 
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Picked[]>([])
-  const titleId = useId()
   const submitting = mutation.isPending
 
   const addFiles = (files: PickedFile[]) => {
@@ -109,7 +108,12 @@ export function SubmitUpload({
   const closeModal = () => {
     if (submitting) return
     setOpen(false)
+  }
+
+  // Cleared on open, never at close — see the close-animation note in ui/Modal.
+  const openModal = () => {
     setPicked([])
+    setOpen(true)
   }
 
   const submit = () =>
@@ -117,7 +121,6 @@ export function SubmitUpload({
       await mutation.mutateAsync(
         picked.map(({ path, file }) => ({ path, file })),
       )
-      setPicked([])
       setOpen(false)
       notify({
         tone: "success",
@@ -131,7 +134,7 @@ export function SubmitUpload({
 
   return (
     <>
-      <Button variant="primary" size="sm" onClick={() => setOpen(true)}>
+      <Button variant="primary" size="sm" onClick={openModal}>
         <UploadIcon aria-hidden="true" className="size-4" />
         {t("submissions.student.upload.open")}
       </Button>
@@ -141,18 +144,39 @@ export function SubmitUpload({
         onClose={closeModal}
         closeDisabled={submitting}
         size="2xl"
-        aria-labelledby={titleId}
+        title={t("submissions.student.upload.title")}
+        headerVisual={
+          <ModalIcon>
+            <FileCheckIcon aria-hidden="true" className="size-4" />
+          </ModalIcon>
+        }
+        subtitle={t("submissions.student.upload.intro")}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={submitting}
+              onClick={closeModal}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={submitting}
+              loadingLabel={t("submissions.student.upload.submitting")}
+              disabled={submitting || !hasFiles}
+              onClick={() => void submit()}
+            >
+              {!submitting && (
+                <UploadIcon aria-hidden="true" className="size-4" />
+              )}
+              {t("submissions.student.upload.confirmSubmit")}
+            </Button>
+          </>
+        }
       >
-        <div className="flex items-center gap-2">
-          <FileCheckIcon aria-hidden="true" className="size-4 text-primary" />
-          <Heading as="h3" id={titleId}>
-            {t("submissions.student.upload.title")}
-          </Heading>
-        </div>
-        <p className="mt-1 text-sm text-base-content/70">
-          {t("submissions.student.upload.intro")}
-        </p>
-
         <div className="mt-4 space-y-3">
           {hasFiles ? (
             <>
@@ -254,25 +278,6 @@ export function SubmitUpload({
               </div>
             </Alert>
           )}
-        </div>
-
-        <div className="mt-6 flex flex-wrap items-center justify-end gap-2">
-          <Button size="sm" disabled={submitting} onClick={closeModal}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            loading={submitting}
-            loadingLabel={t("submissions.student.upload.submitting")}
-            disabled={submitting || !hasFiles}
-            onClick={() => void submit()}
-          >
-            {!submitting && (
-              <UploadIcon aria-hidden="true" className="size-4" />
-            )}
-            {t("submissions.student.upload.confirmSubmit")}
-          </Button>
         </div>
       </Modal>
     </>

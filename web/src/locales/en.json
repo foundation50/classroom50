@@ -526,7 +526,6 @@
     "addHint": "Enter a GitHub username to add a student with their details, or an email to send an organization invite. An email invite keeps the name and section you enter on a pending roster row until the student accepts.",
     "addRoleLabel": "Role",
     "addStaffHint": "Teachers, head TAs, and TAs are added by GitHub username. Teachers and head TAs get write access to the classroom50 repository; TAs get read-only. A teacher is granted organization owner.",
-    "namePlaceholder": "Ada Lovelace",
     "usernamePlaceholder": "github-username",
     "emailPlaceholder": "student@university.edu",
     "sectionPlaceholder": "e.g. Period 3",
@@ -867,7 +866,6 @@
     "resultRoleChangeFailures": "Role changes failed",
     "done": "Done",
     "chooseAnotherFile": "Choose another file",
-    "nameLabel": "Name",
     "usernameLabel": "GitHub username",
     "firstNameLabel": "First name",
     "lastNameLabel": "Last name"

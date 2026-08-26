@@ -1,8 +1,8 @@
-import { useId } from "react"
+import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitPullRequestIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Spinner, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon, Spinner } from "@/components/ui"
 import useOpenAllFeedbackPrs from "@/hooks/mutations/useOpenAllFeedbackPrs"
 import type { OpenAllRepoResult } from "@/domain/assignments"
 import type { AssignmentMode } from "@/types/classroom"
@@ -61,7 +61,6 @@ export function OpenAllFeedbackPrsModal({
   repos: string[]
 }) {
   const { t } = useTranslation()
-  const titleId = useId()
   const {
     mutate,
     isPending,
@@ -73,11 +72,14 @@ export function OpenAllFeedbackPrsModal({
   const count = repos.length
   const running = isPending
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  useEffect(() => {
+    if (open) reset()
+  }, [open, reset])
+
   const handleClose = () => {
     if (running) return
     onClose()
-    // Clear the prior run so reopening starts at the confirm state.
-    reset()
   }
 
   const handleRun = () => {
@@ -90,13 +92,44 @@ export function OpenAllFeedbackPrsModal({
       onClose={handleClose}
       size="md"
       closeDisabled={running}
-      aria-labelledby={titleId}
+      title={t("submissions.openAllPrs.title")}
+      headerVisual={
+        <ModalIcon>
+          <GitPullRequestIcon aria-hidden="true" className="size-4" />
+        </ModalIcon>
+      }
+      footer={
+        summary ? (
+          <Button variant="primary" size="sm" onClick={handleClose}>
+            {t("common.done")}
+          </Button>
+        ) : (
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={running}
+              onClick={handleClose}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={running}
+              loadingLabel={t("submissions.openAllPrs.running", {
+                done: progress?.done ?? 0,
+                total: progress?.total ?? count,
+              })}
+              disabled={running || count === 0}
+              onClick={handleRun}
+            >
+              {t("submissions.openAllPrs.confirmLabel", { count })}
+            </Button>
+          </>
+        )
+      }
     >
-      <Heading as="h3" className="flex items-center gap-2" id={titleId}>
-        <GitPullRequestIcon aria-hidden="true" className="size-4" />
-        {t("submissions.openAllPrs.title")}
-      </Heading>
-
       {/* Summary — the run finished. */}
       {summary ? (
         <div className="mt-3 space-y-3">
@@ -187,38 +220,6 @@ export function OpenAllFeedbackPrsModal({
           <p>{t("submissions.openAllPrs.confirmHint")}</p>
         </div>
       )}
-
-      <div className="modal-action">
-        {summary ? (
-          <Button size="sm" onClick={handleClose}>
-            {t("common.close")}
-          </Button>
-        ) : (
-          <>
-            <Button
-              variant="ghost"
-              size="sm"
-              disabled={running}
-              onClick={handleClose}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              loading={running}
-              loadingLabel={t("submissions.openAllPrs.running", {
-                done: progress?.done ?? 0,
-                total: progress?.total ?? count,
-              })}
-              disabled={running || count === 0}
-              onClick={handleRun}
-            >
-              {t("submissions.openAllPrs.confirmLabel", { count })}
-            </Button>
-          </>
-        )}
-      </div>
     </Modal>
   )
 }

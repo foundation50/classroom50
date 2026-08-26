@@ -1,8 +1,7 @@
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 
 type ProvisioningChangeConfirmModalProps = {
   open: boolean
@@ -27,7 +26,6 @@ export function ProvisioningChangeConfirmModal({
   acceptedCount,
   saving = false,
 }: ProvisioningChangeConfirmModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
 
   return (
@@ -36,37 +34,34 @@ export function ProvisioningChangeConfirmModal({
       onClose={onClose}
       closeDisabled={saving}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
+      role="alertdialog"
+      title={t("assignmentSettings.provisioningConfirm.title")}
+      headerVisual={
+        <ModalIcon tone="warning">
           <AlertIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("assignmentSettings.provisioningConfirm.title")}
-          </Heading>
-          <Alert tone="warning" className="mt-3 text-sm">
-            {t("assignmentSettings.provisioningConfirm.body", {
-              count: acceptedCount,
-            })}
-          </Alert>
-        </div>
-      </div>
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={saving} onClick={onClose}>
-          {t("assignmentSettings.provisioningConfirm.cancel")}
-        </Button>
-        <Button
-          variant="warning"
-          loading={saving}
-          disabled={saving}
-          onClick={onConfirm}
-        >
-          {t("assignmentSettings.provisioningConfirm.confirm")}
-        </Button>
-      </div>
+        </ModalIcon>
+      }
+      footer={
+        <>
+          <Button variant="ghost" disabled={saving} onClick={onClose}>
+            {t("assignmentSettings.provisioningConfirm.cancel")}
+          </Button>
+          <Button
+            variant="warning"
+            loading={saving}
+            disabled={saving}
+            onClick={onConfirm}
+          >
+            {t("assignmentSettings.provisioningConfirm.confirm")}
+          </Button>
+        </>
+      }
+    >
+      <Alert tone="warning" className="mt-4 text-sm">
+        {t("assignmentSettings.provisioningConfirm.body", {
+          count: acceptedCount,
+        })}
+      </Alert>
     </Modal>
   )
 }

@@ -12,9 +12,9 @@ import {
   CopyableCode,
   EmphasisLtr,
   Modal,
+  ModalIcon,
   RouterButton,
   rtlFlip,
-  Heading,
 } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
@@ -56,19 +56,18 @@ export function AcceptLinkModal({
   const { copied: copiedCli, copy: copyCli } = useCopyToClipboard(cli, 1500)
 
   return (
-    <Modal open={open} onClose={onClose} size="2xl">
-      <div className="flex items-start gap-3">
-        <div className="rounded-box bg-primary/10 p-2.5 text-primary">
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="2xl"
+      title={t("submissions.accept.heading")}
+      subtitle={t("submissions.accept.subheading")}
+      headerVisual={
+        <ModalIcon>
           <LinkIcon aria-hidden="true" className="size-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3">{t("submissions.accept.heading")}</Heading>
-          <p className="text-sm text-base-content/70">
-            {t("submissions.accept.subheading")}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+    >
       <div className="mt-4 flex flex-col gap-4">
         <AcceptShareSummaryNotice
           summary={summary}
@@ -143,6 +142,9 @@ function AcceptShareSummaryNotice({
     return (
       <Alert
         tone="warning"
+        // icon={null} + inline icon: the stacked responsive layout lays the
+        // icon out with the text (the EmptyRosterNotice pattern).
+        icon={null}
         className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"
       >
         <div className="flex items-start gap-2">

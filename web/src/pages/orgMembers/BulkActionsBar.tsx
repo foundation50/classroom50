@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon, XIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Select, Toolbar, Heading } from "@/components/ui"
+import { Alert, Button, Modal, Select, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/domain/students"
@@ -178,7 +178,7 @@ const BulkActionsBar = ({
   }) => void
 }) => {
   const { t } = useTranslation()
-  const titleId = useId()
+  const pickerId = useId()
 
   const [classroom, setClassroom] = useState("")
   const [action, setAction] = useState<"add" | "remove" | null>(null)
@@ -203,20 +203,20 @@ const BulkActionsBar = ({
   const effectiveClassroom =
     classroom || (classrooms.length > 0 ? classrooms[0].path : "")
 
-  const isOpen = phase !== "idle"
+  // Visibility is its own flag: closing must not reset phase/result/action
+  // (close-animation note in ui/Modal); each run resets them anyway.
+  const [isOpen, setModalOpen] = useState(false)
 
   const closeModal = () => {
     if (phase === "working") return
-    setPhase("idle")
-    setResult(null)
-    setError(null)
-    setAction(null)
+    setModalOpen(false)
   }
 
   const run = async (which: "add" | "remove") => {
     if (!effectiveClassroom || selectedRows.length === 0) return
     setAction(which)
     setPhase("working")
+    setModalOpen(true)
     setError(null)
     setResult(null)
     setProgress({
@@ -295,13 +295,13 @@ const BulkActionsBar = ({
           {hasSelection ? (
             <>
               <label
-                htmlFor={`${titleId}-picker`}
+                htmlFor={`${pickerId}-picker`}
                 className="text-sm text-base-content/60"
               >
                 {t("orgMembers.bulk.classroomLabel")}
               </label>
               <Select
-                id={`${titleId}-picker`}
+                id={`${pickerId}-picker`}
                 selectSize="sm"
                 className="max-w-[12rem] w-auto"
                 value={effectiveClassroom}
@@ -382,10 +382,9 @@ const BulkActionsBar = ({
         })}
         confirmLabel={t("orgMembers.bulk.remove")}
         onConfirm={async () => {
-          // Close the confirm dialog first, then start the run next tick: two
-          // open <dialog showModal> at once is invalid (the second throws), so
-          // let the confirm close settle before run() opens the progress dialog.
-          // Not awaited — run() drives its own dialog.
+          // Close the confirm dialog first, then start the run next tick, so
+          // the progress dialog doesn't stack its box and backdrop over the
+          // still-closing confirm. Not awaited — run() drives its own dialog.
           setConfirmingRemove(false)
           setTimeout(() => void run("remove"), 0)
         }}
@@ -417,20 +416,27 @@ const BulkActionsBar = ({
         onClose={closeModal}
         closeDisabled={phase === "working"}
         size="2xl"
-        aria-labelledby={titleId}
+        title={
+          action === "remove"
+            ? t("orgMembers.bulk.removeTitle", {
+                classroom: effectiveClassroom,
+              })
+            : t("orgMembers.bulk.addTitle", {
+                classroom: effectiveClassroom,
+              })
+        }
+        footer={
+          phase === "complete" ? (
+            <Button variant="primary" onClick={closeModal}>
+              {t("orgMembers.bulk.done")}
+            </Button>
+          ) : phase === "error" ? (
+            <Button variant="primary" onClick={closeModal}>
+              {t("common.done")}
+            </Button>
+          ) : undefined
+        }
       >
-        <div className="flex items-start justify-between gap-4">
-          <Heading as="h3" id={titleId}>
-            {action === "remove"
-              ? t("orgMembers.bulk.removeTitle", {
-                  classroom: effectiveClassroom,
-                })
-              : t("orgMembers.bulk.addTitle", {
-                  classroom: effectiveClassroom,
-                })}
-          </Heading>
-        </div>
-
         {phase === "working" && (
           <div className="mt-6">
             <p className="mb-2 font-medium">{progress.message}</p>
@@ -466,11 +472,6 @@ const BulkActionsBar = ({
                 rows={section.rows}
               />
             ))}
-            <div className="modal-action">
-              <Button variant="primary" onClick={closeModal}>
-                {t("orgMembers.bulk.done")}
-              </Button>
-            </div>
           </div>
         )}
 
@@ -479,11 +480,6 @@ const BulkActionsBar = ({
             <Alert tone="error">
               <span>{error ?? t("orgMembers.somethingWrong")}</span>
             </Alert>
-            <div className="modal-action">
-              <Button variant="ghost" onClick={closeModal}>
-                {t("common.close")}
-              </Button>
-            </div>
           </div>
         )}
       </Modal>

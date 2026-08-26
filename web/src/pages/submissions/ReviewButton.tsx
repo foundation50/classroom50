@@ -1,8 +1,8 @@
 import { CodeReviewIcon } from "@/components/ui/icons"
-import { useId, useState } from "react"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
+import { Button, Modal, MonoLtr } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
@@ -39,7 +39,6 @@ export const FeedbackPrAction = ({
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const titleId = useId()
   const [resolving, setResolving] = useState(false)
   // The empty/error modal is mounted on demand (controlled `open`), not per
   // trigger: the table renders one action per row, and a hidden <dialog> per
@@ -129,23 +128,51 @@ export const FeedbackPrAction = ({
           open
           onClose={() => setModalOpen(false)}
           size="md"
-          hideCloseButton
-          aria-labelledby={titleId}
+          title={
+            errorMsg
+              ? t("submissions.reviewModal.errorTitle")
+              : t("submissions.reviewModal.emptyTitle")
+          }
+          footer={
+            <>
+              <Button
+                as="a"
+                variant="ghost"
+                size="sm"
+                href={`https://github.com/${org}/${repo}/pulls`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("submissions.reviewModal.openRepoPrs")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={repair.isPending}
+                onClick={() => setModalOpen(false)}
+              >
+                {t("common.close")}
+              </Button>
+              {!errorMsg && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={repair.isPending}
+                  loadingLabel={t("submissions.repairPr.repairing")}
+                  onClick={handleRepair}
+                >
+                  {t("submissions.repairPr.repair")}
+                </Button>
+              )}
+            </>
+          }
         >
           {errorMsg ? (
-            <>
-              <Heading as="h3" id={titleId}>
-                {t("submissions.reviewModal.errorTitle")}
-              </Heading>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
-                {errorMsg}
-              </p>
-            </>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
+              {errorMsg}
+            </p>
           ) : (
             <>
-              <Heading as="h3" id={titleId}>
-                {t("submissions.reviewModal.emptyTitle")}
-              </Heading>
               <p className="mt-2 text-sm leading-6 text-base-content/70">
                 <Trans
                   i18nKey="submissions.reviewModal.emptyBody"
@@ -158,34 +185,6 @@ export const FeedbackPrAction = ({
               </p>
             </>
           )}
-          <div className="modal-action">
-            <a
-              className="btn btn-ghost btn-sm"
-              href={`https://github.com/${org}/${repo}/pulls`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("submissions.reviewModal.openRepoPrs")}
-            </a>
-            {!errorMsg && (
-              <Button
-                size="sm"
-                loading={repair.isPending}
-                loadingLabel={t("submissions.repairPr.repairing")}
-                onClick={handleRepair}
-              >
-                {t("submissions.repairPr.repair")}
-              </Button>
-            )}
-            <Button
-              variant={errorMsg ? undefined : "ghost"}
-              size="sm"
-              disabled={repair.isPending}
-              onClick={() => setModalOpen(false)}
-            >
-              {t("common.close")}
-            </Button>
-          </div>
         </Modal>
       )}
     </>

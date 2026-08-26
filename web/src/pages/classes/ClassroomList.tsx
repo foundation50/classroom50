@@ -11,7 +11,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
-import { Button, cx, Input, LabeledControl, Select } from "@/components/ui"
+import {
+  Button,
+  cx,
+  DropdownMenu,
+  Input,
+  LabeledControl,
+  Select,
+} from "@/components/ui"
 import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
@@ -271,11 +278,7 @@ const ClassroomList = ({
             >
               <ChevronDownIcon aria-hidden="true" className="size-4" />
             </Button>
-            <ul
-              tabIndex={0}
-              role="menu"
-              className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-300 bg-base-100 p-1 shadow"
-            >
+            <DropdownMenu className="w-max">
               {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
               <li>
                 <Link to="/$org/import" params={{ org }}>
@@ -283,7 +286,7 @@ const ClassroomList = ({
                   {t("migration.entryButton")}
                 </Link>
               </li>
-            </ul>
+            </DropdownMenu>
           </div>
         </div>
       </div>

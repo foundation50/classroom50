@@ -174,18 +174,13 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         open={descriptionOpen && Boolean(description)}
         onClose={() => setDescriptionOpen(false)}
         size="2xl"
-        aria-label={t("classes.repo.descriptionModalTitle")}
+        title={title}
+        subtitle={t("classes.repo.descriptionModalTitle")}
       >
-        <div className="mb-4 pe-8">
-          <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-            {t("classes.repo.descriptionModalTitle")}
-          </p>
-          <Heading as="h3">{title}</Heading>
-        </div>
         {description ? (
           <Markdown
             content={description}
-            className="max-h-[70vh] overflow-y-auto pe-1"
+            className="mt-4 max-h-[70vh] overflow-y-auto pe-1"
           />
         ) : null}
       </Modal>

@@ -87,13 +87,14 @@ function PairDetailModal({ row, onClose }: { row: Row; onClose: () => void }) {
   }, [])
 
   return (
-    <Modal dialogRef={dialogRef} onClose={onClose} size="lg">
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="font-mono text-sm font-semibold">{row.id}</h3>
-          <p className="text-sm text-base-content/70">{row.label}</p>
-        </div>
-
+    <Modal
+      dialogRef={dialogRef}
+      onClose={onClose}
+      size="lg"
+      title={<span className="font-mono">{row.id}</span>}
+      subtitle={row.label}
+    >
+      <div className="mt-4 flex flex-col gap-4">
         {/* The combined sample: real foreground on the real surface — the way
             WebAIM and other contrast tools preview a pair, because contrast is
             a property of the combination, not two isolated swatches. */}

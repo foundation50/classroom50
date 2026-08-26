@@ -17,7 +17,6 @@ import {
   Select,
   TableShell,
   Textarea,
-  Heading,
 } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
@@ -72,7 +71,6 @@ const AutogradingTestModal = ({
   onCommit,
 }: AutogradingTestModalProps) => {
   const { t } = useTranslation()
-  const titleId = useId()
   const fieldId = useId()
   const [draft, setDraft] = useState<AssignmentTestDraft>(editor.baseline)
   const [errors, setErrors] = useState<TestErrors>({})
@@ -97,7 +95,20 @@ const AutogradingTestModal = ({
       dialogRef={dialogRef}
       size="3xl"
       boxClassName="max-h-[90vh]"
-      aria-labelledby={titleId}
+      title={t("assignments.autograder.editTest", { number: editor.index + 1 })}
+      subtitle={t("assignments.autograder.editTestHint")}
+      footer={
+        <>
+          <Button variant="ghost" onClick={onCancel}>
+            {t("common.cancel")}
+          </Button>
+          <Button variant="primary" onClick={handleCommit} disabled={!dirty}>
+            {editor.mode === "new"
+              ? t("assignments.autograder.addTest")
+              : t("common.save")}
+          </Button>
+        </>
+      }
       onClose={onCancel}
       onKeyDown={(e) => {
         // Enter inside a modal input would implicitly submit the surrounding
@@ -114,16 +125,7 @@ const AutogradingTestModal = ({
         }
       }}
     >
-      <div className="mb-6">
-        <Heading as="h3" id={titleId}>
-          {t("assignments.autograder.editTest", { number: editor.index + 1 })}
-        </Heading>
-        <p className="text-sm opacity-70">
-          {t("assignments.autograder.editTestHint")}
-        </p>
-      </div>
-
-      <div className="space-y-5">
+      <div className="mt-6 space-y-5">
         <FormField
           htmlFor={field("name")}
           label={t("assignments.autograder.testName")}
@@ -363,17 +365,6 @@ const AutogradingTestModal = ({
             )}
           </FormField>
         </div>
-      </div>
-
-      <div className="modal-action">
-        <Button variant="ghost" onClick={onCancel}>
-          {t("common.cancel")}
-        </Button>
-        <Button variant="primary" onClick={handleCommit} disabled={!dirty}>
-          {editor.mode === "new"
-            ? t("assignments.autograder.addTest")
-            : t("common.save")}
-        </Button>
       </div>
     </Modal>
   )

@@ -7,12 +7,13 @@ import {
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
 import { enrollStudentInClassroom, inviteByEmail } from "@/domain/students"
-import { splitName, toStudent } from "@/util/roster"
+import { toStudent } from "@/util/roster"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { rosterPath } from "@/util/rosterPath"
 
 export type EnrollOrInviteFormValues = {
-  name: string
+  first_name: string
+  last_name: string
   username: string
   email: string
   section: string
@@ -41,7 +42,8 @@ export function useEnrollOrInviteStudent(
 
   return useMutation({
     mutationFn: async (value: EnrollOrInviteFormValues) => {
-      const { first_name, last_name } = splitName(value.name)
+      const first_name = value.first_name.trim()
+      const last_name = value.last_name.trim()
       const username = value.username.trim()
       const email = value.email.trim()
       const section = value.section.trim()

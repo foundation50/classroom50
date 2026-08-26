@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import {
   GitCommitIcon,
@@ -7,7 +7,7 @@ import {
   TagIcon,
 } from "@/components/ui/icons"
 
-import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
+import { Button, Modal, MonoLtr } from "@/components/ui"
 
 // One row in the submission-details list. `kind` picks the icon and action
 // label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
@@ -71,7 +71,6 @@ export function SubmissionDetailsModal({
   emptyLinkHref?: string
 }) {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -83,16 +82,15 @@ export function SubmissionDetailsModal({
       dialogRef={dialogRef}
       onClose={onClose}
       size="lg"
-      aria-labelledby={titleId}
+      title={<span className="block truncate">{title}</span>}
+      subtitle={
+        subtitle ? (
+          <span className="block truncate text-base-content/60">
+            {subtitle}
+          </span>
+        ) : undefined
+      }
     >
-      <Heading as="h3" className="truncate pe-8" id={titleId}>
-        {title}
-      </Heading>
-      {subtitle ? (
-        <p className="mt-0.5 truncate text-sm text-base-content/60">
-          {subtitle}
-        </p>
-      ) : null}
       {repoHref ? (
         <a
           className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"

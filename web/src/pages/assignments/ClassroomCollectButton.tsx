@@ -1,8 +1,9 @@
-import { AlertIcon, SyncIcon } from "@/components/ui/icons"
-import { useEffect, useId, useMemo, useState } from "react"
+import { SyncIcon } from "@/components/ui/icons"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal, Heading } from "@/components/ui"
+import { Button } from "@/components/ui"
+import { ConfirmModal } from "@/components/modals"
 import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -60,7 +61,6 @@ export function ClassroomCollectButton({
   // every assignment, and Actions minutes scale with the classroom), so the
   // click confirms before dispatching instead of firing straight away.
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const confirmTitleId = useId()
 
   // Classroom-level freshness: the newest per-bucket collected_at stamp — any
   // collect that walked this classroom moved at least one. scores.json is
@@ -230,41 +230,19 @@ export function ClassroomCollectButton({
 
       {/* Sibling, not child: the strip is a role="status" live region, and a
           dialog nested inside it gets re-announced as a status update. */}
-      <Modal
+      <ConfirmModal
         open={confirmOpen}
+        title={t("assignments.collect.confirmTitle")}
+        description={t("assignments.collect.confirmBody")}
+        confirmLabel={t("assignments.collect.confirmAction")}
+        cancelLabel={t("common.cancel")}
+        dangerous={false}
+        needsConfirm={false}
+        onConfirm={async () => {
+          collect.collect()
+        }}
         onClose={() => setConfirmOpen(false)}
-        size="lg"
-        aria-labelledby={confirmTitleId}
-      >
-        <div className="flex items-start gap-4">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
-            <AlertIcon className="size-4" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Heading as="h3" id={confirmTitleId}>
-              {t("assignments.collect.confirmTitle")}
-            </Heading>
-            <p className="mt-3 text-sm text-base-content/80">
-              {t("assignments.collect.confirmBody")}
-            </p>
-          </div>
-        </div>
-
-        <div className="modal-action">
-          <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => {
-              setConfirmOpen(false)
-              collect.collect()
-            }}
-          >
-            {t("assignments.collect.confirmAction")}
-          </Button>
-        </div>
-      </Modal>
+      />
     </>
   )
 }
