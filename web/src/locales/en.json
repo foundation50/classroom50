@@ -1457,6 +1457,8 @@
       "showOutputOn": "Include output",
       "showOutputOff": "Discard output",
       "defaultOption": "{{label}} (default)",
+      "reportOptions": "Report options",
+      "reportOptionsHint": "What the submission report shows for this test. Both options start at the assignment's report defaults; pick another value to override it for this test only.",
       "defaults": {
         "heading": "Report defaults",
         "hint": "Defaults for every test; a test's own report options override them.",
