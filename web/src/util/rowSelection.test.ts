@@ -8,7 +8,7 @@ import {
   shouldWarnNoneSelectable,
   toggleRow,
   toggleSelectAll,
-} from "./selection"
+} from "@/util/rowSelection"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 const row = (key: string, over: Partial<OrgMemberRow> = {}): OrgMemberRow => ({
@@ -37,20 +37,24 @@ describe("selection helpers", () => {
 
   it("selectAllState reports all/some over the selectable-filtered set only", () => {
     const selectable = [row("a"), row("b")]
-    expect(selectAllState(selectable, new Set(["a", "b"]))).toEqual({
+    expect(
+      selectAllState(selectable, new Set(["a", "b"]), (r) => r.key),
+    ).toEqual({
       allSelected: true,
       someSelected: true,
     })
-    expect(selectAllState(selectable, new Set(["a"]))).toEqual({
+    expect(selectAllState(selectable, new Set(["a"]), (r) => r.key)).toEqual({
       allSelected: false,
       someSelected: true,
     })
-    expect(selectAllState(selectable, new Set())).toEqual({
+    expect(selectAllState(selectable, new Set(), (r) => r.key)).toEqual({
       allSelected: false,
       someSelected: false,
     })
     // Empty selectable set is never "all selected".
-    expect(selectAllState([], new Set(["x"]))).toEqual({
+    expect(
+      selectAllState<OrgMemberRow>([], new Set(["x"]), (r) => r.key),
+    ).toEqual({
       allSelected: false,
       someSelected: false,
     })
@@ -59,12 +63,20 @@ describe("selection helpers", () => {
   it("toggleSelectAll selects the filtered set and leaves out-of-filter selections intact", () => {
     // Selection already holds "z" (hidden by the filter). Select-all over [a, b]
     // adds them without disturbing "z".
-    const next = toggleSelectAll([row("a"), row("b")], new Set(["z"]))
+    const next = toggleSelectAll(
+      [row("a"), row("b")],
+      new Set(["z"]),
+      (r) => r.key,
+    )
     expect([...next].sort()).toEqual(["a", "b", "z"])
   })
 
   it("toggleSelectAll deselects exactly the filtered set when all are already selected", () => {
-    const next = toggleSelectAll([row("a"), row("b")], new Set(["a", "b", "z"]))
+    const next = toggleSelectAll(
+      [row("a"), row("b")],
+      new Set(["a", "b", "z"]),
+      (r) => r.key,
+    )
     // a, b removed; the out-of-filter "z" survives.
     expect([...next]).toEqual(["z"])
   })
@@ -85,6 +97,7 @@ describe("selection helpers", () => {
       all,
       new Set(["a", "self", "hidden"]),
       notSelf("self"),
+      (r) => r.key,
     )
     expect(resolved.map((r) => r.key).sort()).toEqual(["a", "hidden"])
   })
@@ -93,29 +106,64 @@ describe("selection helpers", () => {
     const order = [row("a"), row("b"), row("self"), row("c"), row("d")]
 
     it("fills the inclusive span in rendered order, skipping the non-selectable row", () => {
-      const next = selectRange(order, "a", "c", new Set(), notSelf("self"))
+      const next = selectRange(
+        order,
+        "a",
+        "c",
+        new Set(),
+        notSelf("self"),
+        (r) => r.key,
+      )
       expect([...next].sort()).toEqual(["a", "b", "c"])
     })
 
     it("fills the span regardless of click direction (target before anchor)", () => {
-      const next = selectRange(order, "d", "b", new Set(), notSelf("self"))
+      const next = selectRange(
+        order,
+        "d",
+        "b",
+        new Set(),
+        notSelf("self"),
+        (r) => r.key,
+      )
       expect([...next].sort()).toEqual(["b", "c", "d"])
     })
 
     it("only adds to the selection (never deselects) and preserves existing keys", () => {
-      const next = selectRange(order, "a", "b", new Set(["z"]), notSelf("self"))
+      const next = selectRange(
+        order,
+        "a",
+        "b",
+        new Set(["z"]),
+        notSelf("self"),
+        (r) => r.key,
+      )
       expect([...next].sort()).toEqual(["a", "b", "z"])
     })
 
     it("respects the actual rendered order it is given (reordered view)", () => {
       // Group-by-section reorders rows: c and d render before a and b.
       const reordered = [row("c"), row("d"), row("a"), row("b")]
-      const next = selectRange(reordered, "d", "b", new Set(), () => true)
+      const next = selectRange(
+        reordered,
+        "d",
+        "b",
+        new Set(),
+        () => true,
+        (r) => r.key,
+      )
       expect([...next].sort()).toEqual(["a", "b", "d"])
     })
 
     it("selects only the anchor when anchor equals target", () => {
-      const next = selectRange(order, "b", "b", new Set(), notSelf("self"))
+      const next = selectRange(
+        order,
+        "b",
+        "b",
+        new Set(),
+        notSelf("self"),
+        (r) => r.key,
+      )
       expect([...next]).toEqual(["b"])
     })
 
@@ -126,6 +174,7 @@ describe("selection helpers", () => {
         "c",
         new Set(["a"]),
         () => true,
+        (r) => r.key,
       )
       expect([...gone]).toEqual(["a"])
     })

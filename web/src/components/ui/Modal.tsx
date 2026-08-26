@@ -163,7 +163,19 @@ export function Modal({
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
     >
-      <div className={cx("modal-box", SIZE_CLASS[size], boxClassName)}>
+      {/* whitespace-normal resets an INHERITED nowrap: a dialog inherits from
+          wherever its trigger is mounted, and daisyUI sets
+          `.table :where(thead,tfoot){white-space:nowrap}` — so a modal opened
+          from a table header would render every paragraph on one line and the
+          box would clip it. break-words covers the other half: one child that
+          cannot wrap widens the content box and cuts every sibling with it. */}
+      <div
+        className={cx(
+          "modal-box break-words whitespace-normal",
+          SIZE_CLASS[size],
+          boxClassName,
+        )}
+      >
         {!hideCloseButton && (
           <form method="dialog">
             <Button

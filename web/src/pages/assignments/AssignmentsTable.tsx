@@ -1,3 +1,5 @@
+import { useState, type ReactNode } from "react"
+import { selectAllState } from "@/util/rowSelection"
 import { useNavigate } from "@tanstack/react-router"
 import { EmptyState } from "@/components/list"
 import { useTranslation } from "react-i18next"
@@ -16,7 +18,6 @@ import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"
-import { useState } from "react"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
@@ -97,6 +98,17 @@ const SKELETON_BARS = [
   "ms-auto h-8 w-16",
 ]
 
+// Data columns excluding the selection checkbox: assignment, type, release,
+// due, accepted, submitted, actions. Kept as one constant so the head's
+// takeover colSpan and the empty row's colSpan can't drift apart.
+const DATA_COLUMNS = 7
+
+// Stable empty set so selectAllState isn't handed a fresh one each render.
+const EMPTY_SELECTION: ReadonlySet<string> = new Set()
+// Stable empty list for the views with no checkbox column, so select-all state
+// isn't derived from a fresh array each render.
+const EMPTY_ROWS: Assignment[] = []
+
 const AssignmentsTable = ({
   org,
   classroom,
@@ -104,10 +116,16 @@ const AssignmentsTable = ({
   secretPending,
   assignments,
   allAssignments,
+  empty,
   studentCount,
   loading = false,
   archived = false,
   canAuthor = false,
+  selectedSlugs,
+  onToggleRow,
+  onToggleSelectAll,
+  onRowCheckboxClick,
+  bulkActions,
   sort,
   onSortChange,
   viewSignature = "",
@@ -129,6 +147,12 @@ const AssignmentsTable = ({
   // siblings from it would drop a hidden slug-extending sibling and
   // mis-attribute its repos. Falls back to `assignments` when omitted.
   allAssignments?: Assignment[]
+  // What the empty row renders when there is nothing to show. The page passes
+  // its no-results panel here when a live selection keeps the table mounted
+  // over a filtered-to-zero view — same panel, same Clear filters button as
+  // when it replaces the table outright. Defaults to the "nothing created yet"
+  // state, which would be a false statement about a merely filtered view.
+  empty?: ReactNode
   // Authoritative student-role count (from useStudentCount), the denominator for
   // the submission ratio. undefined while the count is still resolving.
   studentCount?: number
@@ -141,6 +165,21 @@ const AssignmentsTable = ({
   // shape as the archived case. GitHub also 403s a TA's config-repo write, so
   // this is the UX guard, not the enforcer.
   canAuthor?: boolean
+  // Bulk selection, owned by the page. Absent (undefined) turns the whole
+  // column off — a read-only viewer has no bulk action to reach.
+  selectedSlugs?: ReadonlySet<string>
+  onToggleRow?: (slug: string) => void
+  // Shift-click fills the range; see useRangeSelection for why this is a
+  // separate onClick and not read off the change event.
+  onRowCheckboxClick?: (
+    event: React.MouseEvent<HTMLInputElement>,
+    slug: string,
+  ) => void
+  onToggleSelectAll?: () => void
+  // Rendered in the head row beside the select-all box once something is
+  // selected, replacing the column titles — one row owns the selection, its
+  // count, and what can be done with it.
+  bulkActions?: ReactNode
   // Column-header sorting (Assignment toggles name asc/desc, Due date toggles
   // due asc/desc), sharing the toolbar select's sort state. Omitted, headers
   // render as static text.
@@ -196,6 +235,20 @@ const AssignmentsTable = ({
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
+  // The column renders only when the page handed in selection state; a viewer
+  // who cannot author has no bulk action to reach, so it stays off for them.
+  const selectable = Boolean(selectedSlugs && onToggleRow && onToggleSelectAll)
+  // The header box describes the VIEW ("is everything I can see ticked"),
+  // through the same helper the roster and members tables use.
+  const { allSelected, someSelected } = selectAllState(
+    selectable ? (assignments ?? []) : EMPTY_ROWS,
+    selectedSlugs ?? EMPTY_SELECTION,
+    (a) => a.slug,
+  )
+  // The takeover follows the SELECTION, not the view: a row hidden by the
+  // search is still selected and still acted on, so the row that says so — and
+  // offers Clear selection — must not vanish with it.
+  const hasSelection = selectable && (selectedSlugs?.size ?? 0) > 0
   // The row whose assignment hub (ManageAssignmentModal) is open. Stored as a
   // slug and re-resolved against the live list on every render, so the hub
   // reflects a lock flip after assignments.json refetches and unmounts itself
@@ -222,35 +275,74 @@ const AssignmentsTable = ({
         <caption className="sr-only">{t("assignments.table.caption")}</caption>
         <thead>
           <tr>
-            <SortableTh
-              label={t("assignments.table.colAssignment")}
-              sort={sort}
-              asc="name-asc"
-              desc="name-desc"
-              onSortChange={onSortChange}
-              title={t("assignments.table.sortByName")}
-            />
-            <th scope="col">{t("assignments.table.colType")}</th>
-            <th scope="col">{t("assignments.table.colReleaseDate")}</th>
-            <SortableTh
-              label={t("assignments.table.colDueDate")}
-              sort={sort}
-              asc="due-asc"
-              desc="due-desc"
-              onSortChange={onSortChange}
-              title={t("assignments.table.sortByDue")}
-            />
-            <th scope="col">{t("assignments.table.colAccepted")}</th>
-            <th scope="col">{t("assignments.table.colSubmitted")}</th>
-            {/* w-0: auto table layout hands surplus width to every column,
-              which stretched this fixed-width button strip. Zero width makes
-              the browser fall back to min-content here and give the slack to
-              the text columns instead. */}
-            <th scope="col" className="w-0">
-              <span className="sr-only">
-                {t("assignments.table.colActions")}
-              </span>
-            </th>
+            {selectable && (
+              // w-0 for the same reason as the actions column: a fixed-width
+              // control must not be handed the table's surplus width.
+              <th scope="col" className="w-0">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm align-middle"
+                  aria-label={t("assignments.bulk.selectAll")}
+                  // Nothing in view to select or deselect — a live selection
+                  // from outside the filter is the bar's business, not this
+                  // box's, so it would otherwise sit unchecked and inert.
+                  disabled={!assignments?.length}
+                  checked={allSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = someSelected && !allSelected
+                  }}
+                  onChange={onToggleSelectAll}
+                />
+              </th>
+            )}
+            {/* Selection takes over the REST of the head row — the checkbox
+                above stays put, so there is exactly one select-all control
+                either way. The column titles say nothing useful while the
+                question is "what do I do with these four?".
+                normal-case/font-normal because the head cell's own type
+                styling is for column titles and would otherwise reshape the
+                buttons sitting in it. */}
+            {hasSelection ? (
+              <th
+                scope="col"
+                colSpan={DATA_COLUMNS}
+                className="py-2 font-normal normal-case"
+              >
+                {bulkActions}
+              </th>
+            ) : (
+              <>
+                <SortableTh
+                  label={t("assignments.table.colAssignment")}
+                  sort={sort}
+                  asc="name-asc"
+                  desc="name-desc"
+                  onSortChange={onSortChange}
+                  title={t("assignments.table.sortByName")}
+                />
+                <th scope="col">{t("assignments.table.colType")}</th>
+                <th scope="col">{t("assignments.table.colReleaseDate")}</th>
+                <SortableTh
+                  label={t("assignments.table.colDueDate")}
+                  sort={sort}
+                  asc="due-asc"
+                  desc="due-desc"
+                  onSortChange={onSortChange}
+                  title={t("assignments.table.sortByDue")}
+                />
+                <th scope="col">{t("assignments.table.colAccepted")}</th>
+                <th scope="col">{t("assignments.table.colSubmitted")}</th>
+                {/* w-0: auto table layout hands surplus width to every column,
+                    which stretched this fixed-width button strip. Zero width
+                    makes the browser fall back to min-content here and give
+                    the slack to the text columns instead. */}
+                <th scope="col" className="w-0">
+                  <span className="sr-only">
+                    {t("assignments.table.colActions")}
+                  </span>
+                </th>
+              </>
+            )}
           </tr>
         </thead>
         {/* Same recipe as the submissions table: the body enters as one block
@@ -265,17 +357,40 @@ const AssignmentsTable = ({
           {loading && <SkeletonRows bars={SKELETON_BARS} />}
           {!loading && !assignments?.length && (
             <tr>
-              <td colSpan={7}>
-                <EmptyState
-                  variant="bare"
-                  body={t("assignments.table.empty")}
-                />
+              <td colSpan={selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS}>
+                {empty ?? (
+                  <EmptyState
+                    variant="bare"
+                    body={t("assignments.table.empty")}
+                  />
+                )}
               </td>
             </tr>
           )}
           {!loading &&
             assignments?.map((assignment) => (
               <ClickableTr key={assignment.slug} className="hover:bg-base-200">
+                {selectable && (
+                  <td
+                    className="w-0"
+                    // The row navigates on click; the checkbox cell must not,
+                    // or ticking a box would leave the page.
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <input
+                      type="checkbox"
+                      className="checkbox checkbox-sm size-6 align-middle"
+                      aria-label={t("assignments.bulk.selectRow", {
+                        assignment: name(assignment),
+                      })}
+                      checked={selectedSlugs?.has(assignment.slug) ?? false}
+                      onClick={(event) =>
+                        onRowCheckboxClick?.(event, assignment.slug)
+                      }
+                      onChange={() => onToggleRow?.(assignment.slug)}
+                    />
+                  </td>
+                )}
                 <td
                   onClick={() =>
                     navigate({

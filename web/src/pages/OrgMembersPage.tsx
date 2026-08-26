@@ -48,8 +48,8 @@ import {
   selectableRows,
   selectAllState,
   toggleSelectAll,
-} from "@/pages/orgMembers/selection"
-import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
+} from "@/util/rowSelection"
+import { useRangeSelection } from "@/hooks/useRangeSelection"
 import {
   ClassificationBadge,
   GitHubIdentity,
@@ -347,7 +347,7 @@ const OrgMembersPage = () => {
   // Rows backing the current selection, across the full set (a selected row
   // hidden by search is still acted on), self always excluded.
   const selectedRows = useMemo(
-    () => resolveSelectedRows(rows, selectedKeys, isSelectable),
+    () => resolveSelectedRows(rows, selectedKeys, isSelectable, (r) => r.key),
     // isSelf/isSelectable depend on viewer; recompute when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, selectedKeys, viewer],
@@ -359,6 +359,7 @@ const OrgMembersPage = () => {
     filtered,
     isSelectable,
     setSelectedKeys,
+    (r) => r.key,
   )
 
   // Select-all targets the currently-filtered SELECTABLE rows (self excluded),
@@ -371,9 +372,11 @@ const OrgMembersPage = () => {
   const {
     allSelected: allFilteredSelected,
     someSelected: someFilteredSelected,
-  } = selectAllState(selectableFiltered, selectedKeys)
+  } = selectAllState(selectableFiltered, selectedKeys, (r) => r.key)
   const handleToggleSelectAll = () =>
-    setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
+    setSelectedKeys((prev) =>
+      toggleSelectAll(selectableFiltered, prev, (r) => r.key),
+    )
 
   const classroomOptions = useMemo(
     () => classes.map((c) => ({ name: c.name, path: c.path })),

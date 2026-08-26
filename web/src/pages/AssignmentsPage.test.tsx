@@ -71,6 +71,11 @@ vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
 // toolbar mock exposes its slots so the collect-action gating is observable;
 // the collect button itself is covered in ClassroomCollectButton.test.tsx.
 vi.mock("@/pages/assignments/AssignmentsTable", () => ({ default: () => null }))
+// Same treatment as the other children: the bar reaches for the toast
+// context, which this page test does not mount.
+vi.mock("@/pages/assignments/AssignmentsBulkBar", () => ({
+  default: () => null,
+}))
 vi.mock("@/pages/assignments/AssignmentsToolbar", () => ({
   default: ({
     leading,

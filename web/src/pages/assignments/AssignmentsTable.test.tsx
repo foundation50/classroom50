@@ -610,3 +610,98 @@ describe("AssignmentsTable copy accept link", () => {
     expect(screen.queryByLabelText("assignments.table.deleteAria")).toBeNull()
   })
 })
+
+describe("AssignmentsTable selection head", () => {
+  const rows = [assignment(), assignment({ slug: "hw2", name: "HW 2" })]
+  const selectionProps = (selected: string[]) => ({
+    selectedSlugs: new Set(selected),
+    onToggleRow: () => {},
+    onToggleSelectAll: () => {},
+    bulkActions: <span data-testid="bulk-actions">actions</span>,
+  })
+
+  it("shows the column titles while nothing is selected", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs50"
+        assignments={rows}
+        canAuthor
+        {...selectionProps([])}
+      />,
+    )
+
+    expect(screen.getByText("assignments.table.colType")).toBeTruthy()
+    expect(screen.queryByTestId("bulk-actions")).toBeNull()
+  })
+
+  // One row owns the selection, its count and its actions — a separate bar
+  // above the table would carry a second select-all box for the same state.
+  it("hands the head row over to the bulk actions once a row is selected", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs50"
+        assignments={rows}
+        canAuthor
+        {...selectionProps(["hw1"])}
+      />,
+    )
+
+    expect(screen.getByTestId("bulk-actions")).toBeTruthy()
+    expect(screen.queryByText("assignments.table.colType")).toBeNull()
+    // The select-all box survives the takeover — it is the one control the
+    // head row must keep.
+    expect(screen.getByLabelText("assignments.bulk.selectAll")).toBeTruthy()
+  })
+
+  // A selection made before the search narrowed the view keeps the head row
+  // (and its count) alive over zero rows.
+  it("disables select-all when the view holds no rows to select", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs50"
+        assignments={[]}
+        allAssignments={rows}
+        canAuthor
+        {...selectionProps(["hw1"])}
+      />,
+    )
+
+    expect(screen.getByLabelText("assignments.bulk.selectAll")).toHaveProperty(
+      "disabled",
+      true,
+    )
+  })
+
+  it("renders the caller's empty state instead of the default", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs50"
+        assignments={[]}
+        allAssignments={rows}
+        empty={<p>no matches</p>}
+        canAuthor
+        {...selectionProps(["hw1"])}
+      />,
+    )
+
+    expect(screen.getByText("no matches")).toBeTruthy()
+    expect(screen.queryByText("assignments.table.empty")).toBeNull()
+  })
+
+  it("renders no checkbox column at all without selection wiring", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs50"
+        assignments={rows}
+        canAuthor
+      />,
+    )
+
+    expect(screen.queryByLabelText("assignments.bulk.selectAll")).toBeNull()
+  })
+})

@@ -1392,7 +1392,7 @@ export async function setAssignmentLock(
 // student-team grant to change; public/absent/out-of-org is a UX-gate-only
 // lock. Never throws (the flag flip already committed): a probe or reconcile
 // failure downgrades to a non-fatal warning the caller surfaces.
-async function reconcileLockTemplateAccess(
+export async function reconcileLockTemplateAccess(
   client: GitHubClient,
   org: string,
   classroom: string,
