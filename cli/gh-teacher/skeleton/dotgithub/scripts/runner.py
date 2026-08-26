@@ -92,6 +92,22 @@ DEFAULT_TEST_TIMEOUT = 10
 # bloat the published release.
 MAX_CAPTURED_CHARS = 2000
 
+# Far roomier cap for the Actions log, where long failure output (a LaTeX
+# build log, a compiler spew) is the whole point (#612) — the log viewer
+# handles megabytes, the release body must stay skimmable.
+MAX_LOG_CAPTURED_CHARS = 100_000
+
+# Per-test failure-detail levels -- mirror tests.go / tests-v1.schema.json.
+# full: diff (exact) or expected+actual blocks, plus stderr (the default).
+# actual-only: the student's own output, never the expected side or a diff.
+# none: just the failure-kind summary line.
+FAILURE_DETAILS_FULL = "full"
+FAILURE_DETAILS_ACTUAL_ONLY = "actual-only"
+FAILURE_DETAILS_NONE = "none"
+FAILURE_DETAILS_LEVELS = (
+    FAILURE_DETAILS_FULL, FAILURE_DETAILS_ACTUAL_ONLY, FAILURE_DETAILS_NONE,
+)
+
 # ANSI codes for the log report -- the Actions log viewer renders these, the
 # release body (Markdown) must never see them, so color is applied only at
 # render time in render_log_report.
@@ -1520,11 +1536,12 @@ def compare_output(actual: str, expected: str, mode: str) -> bool:
     raise ValueError(f"unknown comparison mode {mode!r}")
 
 
-def _clip(text: str | None) -> str:
-    """Truncate captured output for the release body."""
+def _clip(text: str | None, limit: int = MAX_CAPTURED_CHARS) -> str:
+    """Truncate captured output for a rendering surface (release body by
+    default; the log report passes its own, larger limit)."""
     text = text or ""
-    if len(text) > MAX_CAPTURED_CHARS:
-        return text[:MAX_CAPTURED_CHARS] + "\n... (truncated)"
+    if len(text) > limit:
+        return text[:limit] + "\n... (truncated)"
     return text
 
 
@@ -1533,12 +1550,13 @@ def _unified_diff(expected: str, actual: str) -> str:
     io test. A diff pinpoints the divergent line; the raw side-by-side blocks
     it replaces made students eyeball-compare up to 2000 chars each. Inputs
     are stripped to mirror compare_output's exact semantics, so the diff never
-    flags leading/trailing whitespace the comparison ignores."""
+    flags leading/trailing whitespace the comparison ignores. Returned raw --
+    each renderer clips it to its own surface limit."""
     lines = difflib.unified_diff(
         expected.strip().splitlines(), actual.strip().splitlines(),
         fromfile="expected", tofile="actual stdout", lineterm="",
     )
-    return _clip("\n".join(lines))
+    return "\n".join(lines)
 
 
 def _fence(text: str) -> str:
@@ -1550,9 +1568,13 @@ def _fence(text: str) -> str:
 
 
 def _make_outcome(name: str, points: int, passed: bool, detail: str,
-                  *, score: int | None = None) -> dict[str, Any]:
-    """One test's outcome. Carries the v1 result-row fields plus a `detail`
-    string used only for the release body (stripped before result.json)."""
+                  *, score: int | None = None,
+                  capture: dict[str, str] | None = None) -> dict[str, Any]:
+    """One test's outcome. Carries the v1 result-row fields plus rendering-only
+    fields stripped before result.json: a `detail` summary line (the failure
+    kind -- safe under every failure-details level) and a `capture` dict of raw
+    streams (stdout/stderr/setup-stdout/setup-stderr/expected) that the
+    renderers clip and policy-filter per surface."""
     if score is None:
         score = points if passed else 0
     return {
@@ -1561,6 +1583,7 @@ def _make_outcome(name: str, points: int, passed: bool, detail: str,
         "score": score,
         "max-score": points,
         "detail": detail,
+        "capture": {k: v for k, v in (capture or {}).items() if v},
     }
 
 
@@ -1609,18 +1632,21 @@ def _run_command(command: str, cwd: pathlib.Path, timeout: int,
     )
 
 
-def _run_setup(setup: str, cwd: pathlib.Path, timeout: int) -> str | None:
-    """Run a test's setup command. Returns an error string if it times out or
-    exits non-zero, else None."""
+def _run_setup(setup: str, cwd: pathlib.Path,
+               timeout: int) -> tuple[str | None, subprocess.CompletedProcess[str] | None]:
+    """Run a test's setup command. Returns (error-summary, process): the
+    summary is None on success; the process is None when the command never
+    produced one (timeout / failed start). Captured streams travel back raw so
+    the renderers can clip and policy-filter them per surface."""
     try:
         sp = _run_command(setup, cwd, timeout)
     except subprocess.TimeoutExpired:
-        return f"setup timed out after {timeout}s"
+        return f"setup timed out after {timeout}s", None
     except OSError as exc:
-        return f"setup failed to start: {exc}"
+        return f"setup failed to start: {exc}", None
     if sp.returncode != 0:
-        return f"setup exited {sp.returncode}\n{_clip(sp.stderr or sp.stdout)}"
-    return None
+        return f"setup exited {sp.returncode}", sp
+    return None, sp
 
 
 # import name -> pip package for the pytest deps bare setup-python omits (#212).
@@ -1690,38 +1716,65 @@ def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
         if not passed:
             score = min(score, max(0, points - 1))
         detail = f"pytest: {passed_n}/{total_n} cases passed"
-        if not passed:
-            detail += "\n" + _clip(rp.stdout or rp.stderr)
-        return _make_outcome(name, points, passed, detail, score=score)
+        return _make_outcome(name, points, passed, detail, score=score,
+                             capture={"stdout": rp.stdout, "stderr": rp.stderr})
 
     # Fallback: no parseable report -> all-or-nothing on the exit code
     # (e.g., an offline runner couldn't load pytest-json-report).
     passed = rp.returncode == 0
     detail = (f"pytest exit {rp.returncode} "
               f"(no JSON report from pytest-json-report; scored on exit code)")
-    if not passed:
-        detail += "\n" + _clip(rp.stdout or rp.stderr)
-    return _make_outcome(name, points, passed, detail)
+    return _make_outcome(name, points, passed, detail,
+                         capture={"stdout": rp.stdout, "stderr": rp.stderr})
 
 
 def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
                  fixtures_dir: pathlib.Path) -> dict[str, Any]:
     """Run one declarative test and return its outcome dict. Never raises for a
     test failure -- a timeout, crash, bad fixture, or bad regex all map to a
-    failing outcome with a diagnostic `detail`."""
+    failing outcome with a diagnostic `detail`. The outcome carries raw
+    captured streams plus the test's effective reporting options; the
+    renderers apply clipping and the failure-details policy per surface."""
     name = spec["name"]
     points = int(spec.get("points") or 0)
-    ttype = spec["type"]
     timeout = int(spec.get("timeout") or 0) or DEFAULT_TEST_TIMEOUT
 
+    outcome = None
+    setup_capture: dict[str, str] = {}
     setup = spec.get("setup") or ""
     if setup:
-        err = _run_setup(setup, cwd, timeout)
+        err, sp = _run_setup(setup, cwd, timeout)
+        if sp is not None:
+            setup_capture = {k: v for k, v in
+                             (("setup-stdout", sp.stdout), ("setup-stderr", sp.stderr)) if v}
         if err:
-            return _make_outcome(name, points, False, err)
+            outcome = _make_outcome(name, points, False, err)
+            outcome["failure-kind"] = "setup"
+    if outcome is None:
+        outcome = _execute_spec(spec, cwd=cwd, fixtures_dir=fixtures_dir,
+                                name=name, points=points, timeout=timeout)
 
+    # Setup streams ride every outcome: a setup failure's details show them,
+    # and show-output includes them even on a pass (#764).
+    outcome["capture"] = {**setup_capture, **outcome.get("capture", {})}
+    outcome["type"] = spec["type"]
+    if spec["type"] == TEST_TYPE_IO:
+        outcome["comparison"] = spec.get("comparison")
+    outcome["failure-details"] = spec.get("failure-details") or FAILURE_DETAILS_FULL
+    outcome["show-output"] = bool(spec.get("show-output"))
+    return outcome
+
+
+def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
+                  fixtures_dir: pathlib.Path, name: str, points: int,
+                  timeout: int) -> dict[str, Any]:
+    """Run the spec's `run` phase (setup already done) and grade it."""
+    ttype = spec["type"]
     if ttype == TEST_TYPE_PYTHON:
-        return _grade_python(spec, cwd, timeout, points, name)
+        outcome = _grade_python(spec, cwd, timeout, points, name)
+        if not outcome["passed"]:
+            outcome.setdefault("failure-kind", "cases")
+        return outcome
 
     try:
         stdin = _resolve_stdin(spec, fixtures_dir)
@@ -1735,14 +1788,18 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
     except OSError as exc:
         return _make_outcome(name, points, False, f"failed to start: {exc}")
 
+    capture = {"stdout": rp.stdout, "stderr": rp.stderr}
+
     if ttype == TEST_TYPE_RUN:
         want = spec.get("exit-code")
         want = 0 if want is None else int(want)
         passed = rp.returncode == want
-        detail = f"exit {rp.returncode} (wanted {want})"
+        outcome = _make_outcome(name, points, passed,
+                                f"exit {rp.returncode} (wanted {want})",
+                                capture=capture)
         if not passed:
-            detail += "\n" + _clip(rp.stderr or rp.stdout)
-        return _make_outcome(name, points, passed, detail)
+            outcome["failure-kind"] = "exit"
+        return outcome
 
     # io test.
     try:
@@ -1754,24 +1811,14 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
         passed = compare_output(rp.stdout, expected, comparison)
     except re.error as exc:
         return _make_outcome(name, points, False, f"invalid regex in expected: {exc}")
-    detail = f"exit {rp.returncode}; comparison={comparison}"
     if not passed:
-        # A line diff only makes sense against a full expected output, and only
-        # for exact: for included/regex the expectation is a fragment or
-        # pattern, so those keep the verbatim expected/actual blocks. The exact
-        # comparison also sees separator characters splitlines() folds away
-        # (\x0c, \x85, \u2028, a literal \r in an inline expected), so a failing
-        # exact test can yield an empty diff — fall back to the same verbatim
-        # blocks rather than show FAIL with no explanation.
-        diff = _unified_diff(expected, rp.stdout) if comparison == COMPARISON_EXACT else ""
-        if diff:
-            detail += f"\n{diff}"
-        else:
-            detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
-                       f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
-        if rp.stderr.strip():
-            detail += f"\n--- stderr ---\n{_clip(rp.stderr)}"
-    return _make_outcome(name, points, passed, detail)
+        capture["expected"] = expected
+    outcome = _make_outcome(name, points, passed,
+                            f"exit {rp.returncode}; comparison={comparison}",
+                            capture=capture)
+    if not passed:
+        outcome["failure-kind"] = "output"
+    return outcome
 
 
 def _validate_test_spec(t: Any) -> str | None:
@@ -1809,12 +1856,34 @@ def _validate_test_spec(t: Any) -> str | None:
     exit_code = t.get("exit-code")
     if exit_code is not None and (isinstance(exit_code, bool) or not isinstance(exit_code, int)):
         return "exit-code must be an integer"
+    fd = t.get("failure-details")
+    if fd is not None and fd not in FAILURE_DETAILS_LEVELS:
+        return f"failure-details must be one of {list(FAILURE_DETAILS_LEVELS)}"
+    so = t.get("show-output")
+    if so is not None and not isinstance(so, bool):
+        return "show-output must be a boolean"
+    return None
+
+
+def _validate_test_defaults(d: Any) -> str | None:
+    """Validate the envelope's `defaults` block (assignment-level values for
+    the per-test reporting options)."""
+    if not isinstance(d, dict):
+        return "not an object"
+    fd = d.get("failure-details")
+    if fd is not None and fd not in FAILURE_DETAILS_LEVELS:
+        return f"failure-details must be one of {list(FAILURE_DETAILS_LEVELS)}"
+    so = d.get("show-output")
+    if so is not None and not isinstance(so, bool):
+        return "show-output must be a boolean"
     return None
 
 
 def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
-    """Parse + re-validate a materialized tests.json. Raises TestsConfigError
-    on any structural problem."""
+    """Parse + re-validate a materialized tests.json, folding the envelope's
+    `defaults` (assignment-level failure-details / show-output) into each spec
+    that doesn't set its own. Raises TestsConfigError on any structural
+    problem."""
     data = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(data, dict):
         raise TestsConfigError(f"{TESTS_FILENAME} is not a JSON object")
@@ -1824,6 +1893,13 @@ def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
     tests = data.get("tests")
     if not isinstance(tests, list) or not tests:
         raise TestsConfigError(f"{TESTS_FILENAME} 'tests' must be a non-empty list")
+    defaults = data.get("defaults")
+    if defaults is not None:
+        err = _validate_test_defaults(defaults)
+        if err:
+            raise TestsConfigError(f"{TESTS_FILENAME} defaults: {err}")
+    else:
+        defaults = {}
     seen = set()
     for i, t in enumerate(tests):
         err = _validate_test_spec(t)
@@ -1834,14 +1910,87 @@ def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
         if t["name"] in seen:
             raise TestsConfigError(f"{TESTS_FILENAME} tests[{i}]: duplicate test name {t['name']!r}")
         seen.add(t["name"])
+        for key in ("failure-details", "show-output"):
+            if key not in t and key in defaults:
+                t[key] = defaults[key]
     return tests
+
+
+def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) -> str:
+    """Failure text for one failing outcome, clipped to the surface's limit
+    and honoring the test's failure-details level: `none` stops at the
+    failure-kind summary line, `actual-only` adds only the student's own
+    streams, and `full` (the default) also shows the expected side."""
+    level = outcome.get("failure-details") or FAILURE_DETAILS_FULL
+    detail = (outcome.get("detail") or "").rstrip()
+    if level == FAILURE_DETAILS_NONE:
+        return detail
+    cap = outcome.get("capture") or {}
+    kind = outcome.get("failure-kind")
+    if kind == "setup":
+        out = cap.get("setup-stderr") or cap.get("setup-stdout") or ""
+        return detail + (f"\n{_clip(out, limit)}" if out else "")
+    if kind == "cases":
+        out = cap.get("stdout") or cap.get("stderr") or ""
+        return detail + (f"\n{_clip(out, limit)}" if out else "")
+    if kind == "exit":
+        out = cap.get("stderr") or cap.get("stdout") or ""
+        return detail + (f"\n{_clip(out, limit)}" if out else "")
+    if kind == "output":
+        comparison = outcome.get("comparison") or ""
+        stdout = cap.get("stdout") or ""
+        if level == FAILURE_DETAILS_FULL:
+            # A line diff only makes sense against a full expected output, and
+            # only for exact: for included/regex the expectation is a fragment
+            # or pattern, so those keep the verbatim expected/actual blocks.
+            # The exact comparison also sees separator characters splitlines()
+            # folds away (\x0c, \x85, \u2028, a literal \r in an inline
+            # expected), so a failing exact test can yield an empty diff —
+            # fall back to the same verbatim blocks rather than show FAIL with
+            # no explanation.
+            diff = (_unified_diff(cap.get("expected") or "", stdout)
+                    if comparison == COMPARISON_EXACT else "")
+            if diff:
+                detail += f"\n{_clip(diff, limit)}"
+            else:
+                detail += (f"\n--- expected ({comparison}) ---"
+                           f"\n{_clip(cap.get('expected'), limit)}"
+                           f"\n--- actual stdout ---\n{_clip(stdout, limit)}")
+        else:
+            # actual-only: the diff and the expected block would both reveal
+            # the answer, so only the student's own stdout is shown.
+            detail += f"\n--- actual stdout ---\n{_clip(stdout, limit)}"
+        stderr = cap.get("stderr") or ""
+        if stderr.strip():
+            detail += f"\n--- stderr ---\n{_clip(stderr, limit)}"
+        return detail
+    # timeout / failed start / bad fixture / bad regex: the summary is all
+    # there is (no process output was captured).
+    return detail
+
+
+def compose_output(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) -> str:
+    """Captured setup/run streams of one outcome for the opt-in show-output
+    section (#764) -- rendered for passing tests, since failing ones already
+    surface their output through the failure details."""
+    cap = outcome.get("capture") or {}
+    parts = []
+    for key, label in (("setup-stdout", "setup stdout"),
+                       ("setup-stderr", "setup stderr"),
+                       ("stdout", "stdout"),
+                       ("stderr", "stderr")):
+        text = cap.get(key) or ""
+        if text.strip():
+            parts.append(f"--- {label} ---\n{_clip(text, limit)}")
+    return "\n".join(parts) or "(no output captured)"
 
 
 def render_declarative_body(result: dict[str, Any], outcomes: list[dict[str, Any]],
                             summary: str) -> str:
     """Release-body Markdown for a declaratively-graded submission: the score
-    line, a per-test table, and a collapsible failure-detail section with
-    captured output for any failing test."""
+    line, a per-test table, a collapsible failure-detail section with captured
+    output for any failing test, and a collapsible output section for passing
+    tests that opted in via show-output."""
     lines = [f"### classroom50 autograde: {result['score']}/{result['max-score']}", ""]
     lines.append("| Test | Result | Score |")
     lines.append("|---|---|---|")
@@ -1856,12 +2005,28 @@ def render_declarative_body(result: dict[str, Any], outcomes: list[dict[str, Any
         lines.append("<details><summary>Failure details</summary>")
         lines.append("")
         for o in failed:
-            detail = (o.get("detail") or "").rstrip()
+            detail = compose_detail(o).rstrip()
             fence = _fence(detail)
             lines.append(f"**{o['test-name']}**")
             lines.append("")
             lines.append(fence)
             lines.append(detail)
+            lines.append(fence)
+            lines.append("")
+        lines.append("</details>")
+        lines.append("")
+
+    showing = [o for o in outcomes if o["passed"] and o.get("show-output")]
+    if showing:
+        lines.append("<details><summary>Test output</summary>")
+        lines.append("")
+        for o in showing:
+            output = compose_output(o).rstrip()
+            fence = _fence(output)
+            lines.append(f"**{o['test-name']}**")
+            lines.append("")
+            lines.append(fence)
+            lines.append(output)
             lines.append(fence)
             lines.append("")
         lines.append("</details>")
@@ -1887,10 +2052,13 @@ def _strip_control_chars(text: str) -> str:
 
 def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
     """Per-test report for the workflow log: a PASS/FAIL line per test, then
-    one collapsible ::group:: per failing test with its captured detail.
-    Failures only get groups — folding every passing test would bury the red
-    ones. The release body carries the same data as Markdown; this is the
-    log-surface rendering (ANSI is fine here, Markdown tables are not).
+    one collapsible ::group:: per failing test with its captured detail, then
+    one per passing show-output test. Only those get groups — folding every
+    passing test would bury the red ones. The release body carries the same
+    data as Markdown; this is the log-surface rendering (ANSI is fine here,
+    Markdown tables are not). The log clips at MAX_LOG_CAPTURED_CHARS, far
+    above the release body's cap, so long failure output is debuggable here
+    (#612) without bloating the published release.
 
     Detail lines are indented two spaces: detail carries student-controlled
     program output, and GitHub only interprets workflow commands (::error::,
@@ -1915,13 +2083,23 @@ def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
         # inject a workflow command even if it reached this renderer some other
         # way (mirrors the two-space indent that defends the detail lines).
         lines.append(f"::group::FAIL: {_strip_control_chars(o['test-name'])}")
-        for dl in (o.get("detail") or "").rstrip().splitlines():
+        detail = compose_detail(o, limit=MAX_LOG_CAPTURED_CHARS)
+        for dl in detail.rstrip().splitlines():
             if dl.startswith("+"):
                 dl = _colorize(dl, ANSI_GREEN, color=color)
             elif dl.startswith("-"):
                 dl = _colorize(dl, ANSI_RED, color=color)
             elif dl.startswith("@@"):
                 dl = _colorize(dl, ANSI_CYAN, color=color)
+            lines.append(f"  {dl}")
+        lines.append("::endgroup::")
+
+    for o in outcomes:
+        if not (o["passed"] and o.get("show-output")):
+            continue
+        lines.append(f"::group::OUTPUT: {_strip_control_chars(o['test-name'])}")
+        output = compose_output(o, limit=MAX_LOG_CAPTURED_CHARS)
+        for dl in output.rstrip().splitlines():
             lines.append(f"  {dl}")
         lines.append("::endgroup::")
     return "\n".join(lines) + "\n"

@@ -125,15 +125,16 @@ class TestExecuteIO:
                 "expected": "one\ntwo", "comparison": "exact", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"]
-        assert "--- expected" in o["detail"]
-        assert "+++ actual stdout" in o["detail"]
-        assert "-two" in o["detail"] and "+nope" in o["detail"]
+        detail = ag.compose_detail(o)
+        assert "--- expected" in detail
+        assert "+++ actual stdout" in detail
+        assert "-two" in detail and "+nope" in detail
         # The matching line is context, not a change.
-        assert "-one" not in o["detail"] and "+one" not in o["detail"]
+        assert "-one" not in detail and "+one" not in detail
         # A non-empty diff replaces the verbatim blocks — never both (a
         # both-emitted regression would otherwise pass).
-        assert "--- expected (exact) ---" not in o["detail"]
-        assert "--- actual stdout ---" not in o["detail"]
+        assert "--- expected (exact) ---" not in detail
+        assert "--- actual stdout ---" not in detail
 
     def test_included_fail_keeps_expected_and_actual_blocks(self, tmp_path):
         # A line diff against a substring expectation is noise; included and
@@ -142,9 +143,10 @@ class TestExecuteIO:
                 "expected": "yes", "comparison": "included", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"]
-        assert "--- expected (included) ---" in o["detail"]
-        assert "--- actual stdout ---" in o["detail"]
-        assert "+++" not in o["detail"]
+        detail = ag.compose_detail(o)
+        assert "--- expected (included) ---" in detail
+        assert "--- actual stdout ---" in detail
+        assert "+++" not in detail
 
     def test_exact_fail_with_empty_diff_falls_back_to_blocks(self, tmp_path):
         # Separator characters splitlines() folds away (here \x0c) fail the
@@ -154,15 +156,17 @@ class TestExecuteIO:
                 "expected": "one\ntwo", "comparison": "exact", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"]
-        assert "--- expected (exact) ---" in o["detail"]
-        assert "--- actual stdout ---" in o["detail"]
+        detail = ag.compose_detail(o)
+        assert "--- expected (exact) ---" in detail
+        assert "--- actual stdout ---" in detail
 
     def test_fail_includes_stderr_block(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo warn >&2; echo nope",
                 "expected": "yes", "comparison": "exact", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"]
-        assert "--- stderr ---" in o["detail"] and "warn" in o["detail"]
+        detail = ag.compose_detail(o)
+        assert "--- stderr ---" in detail and "warn" in detail
 
     def test_invalid_regex_fails_with_message(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo x",
@@ -346,6 +350,9 @@ class TestLoadTests:
         {"name": "a", "type": "io", "run": "cat", "comparison": "exact", "expected": "x", "input": 5},
         {"name": "a", "type": "io", "run": "cat", "comparison": "exact", "expected": "x", "input-file": 123},
         {"name": "a", "type": "run", "run": "true", "points": 1, "setup": 123},
+        {"name": "a", "type": "run", "run": "true", "points": 1, "failure-details": "loud"},
+        {"name": "a", "type": "run", "run": "true", "points": 1, "failure-details": 3},
+        {"name": "a", "type": "run", "run": "true", "points": 1, "show-output": "yes"},
     ])
     def test_rejects_wrongly_typed_optional_fields(self, tmp_path, bad_field):
         # These fields aren't checked by the schema sentinel but are
@@ -354,6 +361,137 @@ class TestLoadTests:
         p = self._write(tmp_path, {"schema": "classroom50/tests/v1", "tests": [bad_field]})
         with pytest.raises(ag.TestsConfigError):
             ag.load_tests(p)
+
+    def test_defaults_fold_into_specs(self, tmp_path):
+        # The envelope's `defaults` supply assignment-level failure-details /
+        # show-output; a spec's own value (including an explicit false) wins.
+        p = self._write(tmp_path, {
+            "schema": "classroom50/tests/v1",
+            "defaults": {"failure-details": "none", "show-output": True},
+            "tests": [
+                {"name": "inherits", "type": "run", "run": "true", "points": 1},
+                {"name": "overrides", "type": "run", "run": "true", "points": 1,
+                 "failure-details": "full", "show-output": False},
+            ],
+        })
+        tests = ag.load_tests(p)
+        assert tests[0]["failure-details"] == "none"
+        assert tests[0]["show-output"] is True
+        assert tests[1]["failure-details"] == "full"
+        assert tests[1]["show-output"] is False
+
+    @pytest.mark.parametrize("bad_defaults", [
+        "none", ["none"], {"failure-details": "loud"}, {"show-output": "yes"},
+    ])
+    def test_bad_defaults_rejected(self, tmp_path, bad_defaults):
+        p = self._write(tmp_path, {
+            "schema": "classroom50/tests/v1",
+            "defaults": bad_defaults,
+            "tests": [{"name": "a", "type": "run", "run": "true", "points": 1}],
+        })
+        with pytest.raises(ag.TestsConfigError, match="defaults"):
+            ag.load_tests(p)
+
+
+# ---------------------------------------------------------------------------
+# compose_detail / compose_output (failure-details policy + per-surface limits)
+# ---------------------------------------------------------------------------
+
+
+class TestComposeDetail:
+    def _io_fail(self, tmp_path, level, comparison="exact"):
+        spec = {"name": "t", "type": "io", "run": "echo warn >&2; echo nope",
+                "expected": "one\ntwo", "comparison": comparison, "points": 1,
+                "failure-details": level}
+        return ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+
+    def test_full_shows_expected_side(self, tmp_path):
+        detail = ag.compose_detail(self._io_fail(tmp_path, "full"))
+        assert "-two" in detail and "+nope" in detail  # the diff
+
+    def test_actual_only_hides_expected_and_diff(self, tmp_path):
+        # #765: neither the diff nor the expected block may reveal the answer,
+        # but the student's own stdout/stderr stay visible.
+        detail = ag.compose_detail(self._io_fail(tmp_path, "actual-only"))
+        assert "two" not in detail
+        assert "+++" not in detail and "--- expected" not in detail
+        assert "--- actual stdout ---" in detail and "nope" in detail
+        assert "--- stderr ---" in detail and "warn" in detail
+
+    def test_actual_only_included_comparison(self, tmp_path):
+        detail = ag.compose_detail(
+            self._io_fail(tmp_path, "actual-only", comparison="included"))
+        assert "--- expected" not in detail
+        assert "nope" in detail
+
+    def test_none_keeps_only_the_failure_kind(self, tmp_path):
+        detail = ag.compose_detail(self._io_fail(tmp_path, "none"))
+        assert detail == "exit 0; comparison=exact"
+
+    def test_none_hides_run_output(self, tmp_path):
+        spec = {"name": "t", "type": "run", "run": "echo secret >&2; false",
+                "points": 1, "failure-details": "none"}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert detail == "exit 1 (wanted 0)" and "secret" not in detail
+
+    def test_none_hides_setup_output(self, tmp_path):
+        spec = {"name": "t", "type": "run", "setup": "echo secret >&2; false",
+                "run": "true", "points": 1, "failure-details": "none"}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert detail == "setup exited 1" and "secret" not in detail
+
+    def test_actual_only_keeps_run_output(self, tmp_path):
+        # actual-only only redacts the expected side; a run test has none, so
+        # it matches full.
+        spec = {"name": "t", "type": "run", "run": "echo oops >&2; false",
+                "points": 1, "failure-details": "actual-only"}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "oops" in ag.compose_detail(o)
+
+    def test_surface_limits_clip_independently(self, tmp_path):
+        # #612: the same outcome renders clipped for the release body but far
+        # roomier for the Actions log — clipping happens at render, not capture.
+        spec = {"name": "t", "type": "run",
+                "run": "python3 -c \"print('x' * 10000)\"; false",
+                "timeout": 60, "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        body_detail = ag.compose_detail(o)
+        log_detail = ag.compose_detail(o, limit=ag.MAX_LOG_CAPTURED_CHARS)
+        assert "... (truncated)" in body_detail
+        assert len(body_detail) < 3000
+        assert "... (truncated)" not in log_detail
+        assert "x" * 10000 in log_detail
+
+
+class TestComposeOutput:
+    def test_labels_each_captured_stream(self, tmp_path):
+        spec = {"name": "t", "type": "run", "setup": "echo setup-out; echo setup-err >&2",
+                "run": "echo run-out; echo run-err >&2", "points": 1,
+                "show-output": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert o["passed"]
+        output = ag.compose_output(o)
+        assert "--- setup stdout ---\nsetup-out" in output
+        assert "--- setup stderr ---\nsetup-err" in output
+        assert "--- stdout ---\nrun-out" in output
+        assert "--- stderr ---\nrun-err" in output
+
+    def test_silent_pass_notes_no_output(self, tmp_path):
+        spec = {"name": "t", "type": "run", "run": "true", "points": 1,
+                "show-output": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert ag.compose_output(o) == "(no output captured)"
+
+    def test_passing_io_stdout_is_captured(self, tmp_path):
+        # #764's capture half: a passing test's output used to be discarded.
+        spec = {"name": "t", "type": "io", "run": "echo hello",
+                "expected": "hello", "comparison": "included", "points": 1,
+                "show-output": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert o["passed"]
+        assert "hello" in ag.compose_output(o)
 
 
 # ---------------------------------------------------------------------------
@@ -380,6 +518,52 @@ class TestRenderDeclarativeBody:
         outcomes = [{"test-name": "a", "passed": True, "score": 1, "max-score": 1, "detail": ""}]
         body = ag.render_declarative_body(result, outcomes, "all good")
         assert "Failure details" not in body
+        assert "Test output" not in body
+
+    def test_show_output_adds_collapsed_output_section(self):
+        # #764: a passing show-output test gets its captured streams in a
+        # collapsed section; an ordinary passing test stays silent.
+        result = {"score": 2, "max-score": 2}
+        outcomes = [
+            {"test-name": "loud", "passed": True, "score": 1, "max-score": 1,
+             "detail": "", "show-output": True,
+             "capture": {"stdout": "dotnet 8.0.100\n"}},
+            {"test-name": "quiet", "passed": True, "score": 1, "max-score": 1,
+             "detail": "", "capture": {"stdout": "hidden\n"}},
+        ]
+        body = ag.render_declarative_body(result, outcomes, "all good")
+        assert "<details><summary>Test output</summary>" in body
+        assert "**loud**" in body and "dotnet 8.0.100" in body
+        assert "**quiet**" not in body and "hidden" not in body
+
+    def test_failure_details_policy_applies_to_body(self):
+        # #765: the release body must honor actual-only — no expected block.
+        result = {"score": 0, "max-score": 1}
+        outcomes = [
+            {"test-name": "t", "passed": False, "score": 0, "max-score": 1,
+             "detail": "exit 0; comparison=included", "type": "io",
+             "comparison": "included", "failure-kind": "output",
+             "failure-details": "actual-only",
+             "capture": {"stdout": "mine\n", "expected": "answer"}},
+        ]
+        body = ag.render_declarative_body(result, outcomes, "s")
+        assert "mine" in body
+        assert "answer" not in body and "--- expected" not in body
+
+    def test_show_output_with_backtick_fence_cannot_break_out(self):
+        # Same injection defense as the failure details: passing output flows
+        # into the new section, so a ``` line must stay inside the fence.
+        evil = "```\n# PWNED markdown heading\n```python"
+        result = {"score": 1, "max-score": 1}
+        outcomes = [{"test-name": "t", "passed": True, "score": 1, "max-score": 1,
+                     "detail": "", "show-output": True,
+                     "capture": {"stdout": evil}}]
+        body = ag.render_declarative_body(result, outcomes, "s")
+        lines = body.splitlines()
+        start = lines.index("````")
+        end = len(lines) - 1 - lines[::-1].index("````")
+        assert start < end
+        assert "# PWNED markdown heading" in lines[start:end]
 
     def test_detail_with_backtick_fence_cannot_break_out(self):
         # Student output flows into the failure detail; a ``` line must
@@ -464,6 +648,55 @@ class TestRenderLogReport:
         outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1}]
         report = ag.render_log_report(outcomes, color=False)
         assert "::group::FAIL: t\n::endgroup::" in report
+
+    def test_passing_show_output_gets_a_group(self):
+        # #764 on the log surface: passing show-output tests fold their
+        # captured streams into an OUTPUT group; ordinary passes stay bare.
+        outcomes = [
+            {"test-name": "loud", "passed": True, "score": 1, "max-score": 1,
+             "detail": "", "show-output": True,
+             "capture": {"stdout": "dotnet 8.0.100\n"}},
+            {"test-name": "quiet", "passed": True, "score": 1, "max-score": 1,
+             "detail": "", "capture": {"stdout": "hidden\n"}},
+        ]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "::group::OUTPUT: loud" in report
+        assert "\n  --- stdout ---\n  dotnet 8.0.100" in report
+        assert "OUTPUT: quiet" not in report and "hidden" not in report
+
+    def test_show_output_cannot_inject_workflow_commands(self):
+        # The OUTPUT group carries student-controlled output too; the same
+        # two-space indent must defend it.
+        outcomes = [{"test-name": "t", "passed": True, "score": 1, "max-score": 1,
+                     "detail": "", "show-output": True,
+                     "capture": {"stdout": "::endgroup::\n::error::pwned"}}]
+        report = ag.render_log_report(outcomes, color=False)
+        for line in report.splitlines():
+            if line.startswith("::"):
+                assert line in ("::group::OUTPUT: t", "::endgroup::")
+
+    def test_log_surface_uses_the_larger_clip(self):
+        # #612: output that the release body truncates renders in full in the
+        # log group (up to MAX_LOG_CAPTURED_CHARS).
+        long_out = "y" * (ag.MAX_CAPTURED_CHARS * 3)
+        outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1,
+                     "detail": "exit 1 (wanted 0)", "type": "run",
+                     "failure-kind": "exit", "capture": {"stderr": long_out}}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert long_out in report
+        assert "... (truncated)" not in report
+
+    def test_failure_details_policy_applies_to_log(self):
+        # #765: students can read their own repo's workflow logs, so the log
+        # groups honor the policy too.
+        outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1,
+                     "detail": "exit 0; comparison=exact", "type": "io",
+                     "comparison": "exact", "failure-kind": "output",
+                     "failure-details": "none",
+                     "capture": {"stdout": "mine", "expected": "answer"}}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "answer" not in report and "mine" not in report
+        assert "::group::FAIL: t\n  exit 0; comparison=exact\n::endgroup::" in report
 
 
 # ---------------------------------------------------------------------------

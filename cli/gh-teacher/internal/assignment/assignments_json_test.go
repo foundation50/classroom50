@@ -636,6 +636,80 @@ func TestParseAssignments_TestsRoundTrip(t *testing.T) {
 	}
 }
 
+func TestParseAssignments_TestDefaultsRoundTrip(t *testing.T) {
+	// The assignment-level test_defaults block parses (including an explicit
+	// per-test show-output:false override), validates its enum, and survives
+	// a re-encode/re-parse.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "mode": "individual",
+      "autograder": "default",
+      "test_defaults": { "failure-details": "none", "show-output": true },
+      "tests": [
+        { "name": "a", "type": "run", "run": "true", "points": 1 },
+        { "name": "b", "type": "run", "run": "true", "points": 1, "failure-details": "full", "show-output": false }
+      ]
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	entry := file.Assignments[0]
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "none" {
+		t.Fatalf("test_defaults not parsed: %#v", entry.TestDefaults)
+	}
+	if entry.TestDefaults.ShowOutput == nil || !*entry.TestDefaults.ShowOutput {
+		t.Errorf("test_defaults.show-output not parsed: %#v", entry.TestDefaults.ShowOutput)
+	}
+	if entry.Tests[1].FailureDetails != "full" {
+		t.Errorf("per-test failure-details not parsed: %#v", entry.Tests[1])
+	}
+	if entry.Tests[1].ShowOutput == nil || *entry.Tests[1].ShowOutput {
+		t.Errorf("explicit per-test show-output:false lost: %#v", entry.Tests[1].ShowOutput)
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !reflect.DeepEqual(again.Assignments[0].TestDefaults, entry.TestDefaults) {
+		t.Errorf("test_defaults not stable across round-trip: %#v", again.Assignments[0].TestDefaults)
+	}
+	if !reflect.DeepEqual(again.Assignments[0].Tests, entry.Tests) {
+		t.Errorf("tests not stable across round-trip: %#v", again.Assignments[0].Tests)
+	}
+}
+
+func TestParseAssignments_RejectsBadTestDefaults(t *testing.T) {
+	// An invalid enum value and an unknown sub-key (the closed-sub-object
+	// rule, mirroring runtime) must both be hard errors.
+	for name, block := range map[string]string{
+		"bad enum":        `{ "failure-details": "loud" }`,
+		"unknown sub-key": `{ "verbosity": "high" }`,
+	} {
+		in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    { "slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default",
+      "test_defaults": ` + block + ` }
+  ]
+}`)
+		if _, err := ParseAssignments(in); err == nil {
+			t.Errorf("%s: expected error, got nil", name)
+		}
+	}
+}
+
 func TestParseAssignments_FeedbackPRRoundTrip(t *testing.T) {
 	// feedback_pr=true parses, survives a re-encode/re-parse, and an
 	// entry without the field defaults to false.

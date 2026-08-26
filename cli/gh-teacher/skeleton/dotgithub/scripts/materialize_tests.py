@@ -71,6 +71,12 @@ def materialize(root: pathlib.Path) -> int:
             outdir = root / classroom / "autograders" / slug
             outdir.mkdir(parents=True, exist_ok=True)
             payload = {"schema": TESTS_SCHEMA_V1, "tests": tests}
+            # Assignment-level defaults for the per-test reporting options
+            # (failure-details / show-output) ride the envelope; runner.py's
+            # load_tests folds them into each spec at grade time.
+            defaults = entry.get("test_defaults")
+            if isinstance(defaults, dict) and defaults:
+                payload["defaults"] = defaults
             (outdir / TESTS_FILENAME).write_text(
                 json.dumps(payload, indent=2) + "\n", encoding="utf-8")
             print(f"materialized {outdir / TESTS_FILENAME} ({len(tests)} test(s))")

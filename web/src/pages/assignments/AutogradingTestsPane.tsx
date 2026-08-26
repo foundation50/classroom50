@@ -17,6 +17,7 @@ import {
   Select,
   TableShell,
   Textarea,
+  ToggleField,
 } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
@@ -24,7 +25,10 @@ import {
   TEST_TIMEOUT_MAX_SECONDS,
   validateTestDraft,
 } from "@/util/assignmentTests"
-import type { AssignmentTestComparison } from "@/types/classroom"
+import type {
+  AssignmentTestComparison,
+  AssignmentTestFailureDetails,
+} from "@/types/classroom"
 
 const TYPE_OPTIONS = [
   {
@@ -44,6 +48,37 @@ const TYPE_OPTIONS = [
   },
 ] as const
 
+const FAILURE_DETAILS_OPTIONS = [
+  {
+    value: "full",
+    labelKey: "assignments.autograder.failureDetailsFull",
+  },
+  {
+    value: "actual-only",
+    labelKey: "assignments.autograder.failureDetailsActualOnly",
+  },
+  {
+    value: "none",
+    labelKey: "assignments.autograder.failureDetailsNone",
+  },
+] as const satisfies readonly {
+  value: AssignmentTestFailureDetails
+  labelKey: string
+}[]
+
+const SHOW_OUTPUT_OPTIONS = [
+  { on: true, labelKey: "assignments.autograder.showOutputOn" },
+  { on: false, labelKey: "assignments.autograder.showOutputOff" },
+] as const
+
+// The assignment's resolved report defaults, threaded into the test editor so
+// its selects can mark the current default option instead of offering an
+// opaque "assignment default" entry.
+type TestReportDefaults = {
+  failureDetails: AssignmentTestFailureDetails
+  showOutput: boolean
+}
+
 type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
 
 // Editor works on a local copy; nothing reaches the form's `tests` until commit.
@@ -59,6 +94,7 @@ type AutogradingTestModalProps = {
   editor: EditorState
   dialogRef: React.RefObject<HTMLDialogElement | null>
   otherNames: string[]
+  defaults: TestReportDefaults
   onCancel: () => void
   onCommit: (draft: AssignmentTestDraft) => void
 }
@@ -67,6 +103,7 @@ const AutogradingTestModal = ({
   editor,
   dialogRef,
   otherNames,
+  defaults,
   onCancel,
   onCommit,
 }: AutogradingTestModalProps) => {
@@ -365,6 +402,76 @@ const AutogradingTestModal = ({
             )}
           </FormField>
         </div>
+
+        <div className="flex flex-wrap gap-8">
+          <FormField
+            htmlFor={field("failureDetails")}
+            label={t("assignments.autograder.failureDetails")}
+            hint={t("assignments.autograder.failureDetailsHint")}
+          >
+            {({ id }) => (
+              <Select
+                id={id}
+                value={draft.failureDetails || defaults.failureDetails}
+                onChange={(e) => {
+                  // Picking the assignment default stores "" (inherit), so a
+                  // later change to the default still cascades to this test;
+                  // any other pick is an explicit per-test override.
+                  const level = e.target.value as AssignmentTestFailureDetails
+                  set(
+                    "failureDetails",
+                    level === defaults.failureDetails ? "" : level,
+                  )
+                }}
+              >
+                {FAILURE_DETAILS_OPTIONS.map(({ value, labelKey }) => (
+                  <option key={value} value={value}>
+                    {value === defaults.failureDetails
+                      ? t("assignments.autograder.defaultOption", {
+                          label: t(labelKey),
+                        })
+                      : t(labelKey)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </FormField>
+
+          <FormField
+            htmlFor={field("showOutput")}
+            label={t("assignments.autograder.showOutput")}
+            hint={t("assignments.autograder.showOutputHint")}
+          >
+            {({ id }) => (
+              <Select
+                id={id}
+                value={
+                  (
+                    draft.showOutput === ""
+                      ? defaults.showOutput
+                      : draft.showOutput
+                  )
+                    ? "on"
+                    : "off"
+                }
+                onChange={(e) => {
+                  const on = e.target.value === "on"
+                  set("showOutput", on === defaults.showOutput ? "" : on)
+                }}
+              >
+                {SHOW_OUTPUT_OPTIONS.map(({ on, labelKey }) => (
+                  <option key={labelKey} value={on ? "on" : "off"}>
+                    {on === defaults.showOutput
+                      ? t("assignments.autograder.defaultOption", {
+                          label: t(labelKey),
+                        })
+                      : t(labelKey)}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </FormField>
+        </div>
       </div>
     </Modal>
   )
@@ -387,6 +494,7 @@ const typeBadge = (type: AssignmentTestDraft["type"], t: TFunction) => {
 
 const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   const { t } = useTranslation()
+  const paneFieldId = useId()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const [editor, setEditor] = useState<EditorState | null>(null)
   // The test list collapses so a long table doesn't bury the Advanced settings
@@ -609,19 +717,97 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                   )}
                 </tbody>
               </TableShell>
+
+              {/* Assignment-level defaults for the per-test report options;
+                  a test's own report options override them (folded into the
+                  materialized tests.json as `defaults`). */}
+              <fieldset className="mt-4">
+                <legend className="label font-bold">
+                  {t("assignments.autograder.defaults.heading")}
+                </legend>
+                <p className="text-sm pb-2 text-base-content/70">
+                  {t("assignments.autograder.defaults.hint")}
+                </p>
+                <div className="flex flex-wrap items-center gap-x-8 gap-y-3">
+                  <form.Field name="test_failure_details">
+                    {(defaultsField) => (
+                      <FormField
+                        htmlFor={`${paneFieldId}-failure-details`}
+                        label={t(
+                          "assignments.autograder.defaults.failureDetails",
+                        )}
+                      >
+                        {({ id }) => (
+                          <Select
+                            id={id}
+                            value={defaultsField.state.value}
+                            onChange={(e) =>
+                              defaultsField.handleChange(
+                                e.target
+                                  .value as (typeof defaultsField.state)["value"],
+                              )
+                            }
+                          >
+                            <option value="">
+                              {t(
+                                "assignments.autograder.defaults.failureDetailsFull",
+                              )}
+                            </option>
+                            <option value="actual-only">
+                              {t(
+                                "assignments.autograder.failureDetailsActualOnly",
+                              )}
+                            </option>
+                            <option value="none">
+                              {t("assignments.autograder.failureDetailsNone")}
+                            </option>
+                          </Select>
+                        )}
+                      </FormField>
+                    )}
+                  </form.Field>
+
+                  <form.Field name="test_show_output">
+                    {(defaultsField) => (
+                      <ToggleField
+                        id={`${paneFieldId}-show-output`}
+                        checked={defaultsField.state.value}
+                        onChange={defaultsField.handleChange}
+                        label={t("assignments.autograder.defaults.showOutput")}
+                        help={t(
+                          "assignments.autograder.defaults.showOutputHelp",
+                        )}
+                      />
+                    )}
+                  </form.Field>
+                </div>
+              </fieldset>
             </Collapse>
 
             {editor && (
-              <AutogradingTestModal
-                // Remount per open so the local draft re-initializes from the
-                // freshly opened baseline.
-                key={`${editor.mode}-${editor.index}`}
-                editor={editor}
-                dialogRef={dialogRef}
-                otherNames={otherNames(field.state.value, editor)}
-                onCancel={closeEditor}
-                onCommit={commitEditor}
-              />
+              <form.Subscribe
+                selector={(state) => ({
+                  // Resolve "" (grader default) to the concrete level so the
+                  // modal can mark the effective default option.
+                  failureDetails:
+                    state.values.test_failure_details || ("full" as const),
+                  showOutput: state.values.test_show_output,
+                })}
+              >
+                {(defaults) => (
+                  <AutogradingTestModal
+                    // Remount per open so the local draft re-initializes from the
+                    // freshly opened baseline.
+                    key={`${editor.mode}-${editor.index}`}
+                    editor={editor}
+                    dialogRef={dialogRef}
+                    otherNames={otherNames(field.state.value, editor)}
+                    defaults={defaults}
+                    onCancel={closeEditor}
+                    onCommit={commitEditor}
+                  />
+                )}
+              </form.Subscribe>
             )}
           </>
         )}

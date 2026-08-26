@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
 import type {
+  AssignmentTestDefaults,
   RepoPermission,
   RepoFeatures,
   SubmissionMode,
@@ -419,6 +420,11 @@ export type CreateAssignmentInput = {
   // the block when no key is set; accept resolves + applies it at fresh create.
   repo_features?: RepoFeatures
   tests: AssignmentTestDraft[]
+  // Assignment-level defaults for the per-test reporting options
+  // (failure-details / show-output); per-test values override.
+  // buildAssignmentEntry omits the block when undefined or when the
+  // assignment carries no tests. Mirrors the CLI's test_defaults object.
+  test_defaults?: AssignmentTestDefaults
   // Whether the write path may attempt the owner-only template read-grant
   // (addRepositoryToTeam). Set from useCanAttemptTemplateGrant at the call site
   // (true unless the org role is a confirmed non-owner). When false the save

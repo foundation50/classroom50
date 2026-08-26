@@ -32,6 +32,7 @@ vi.mock("@/lib/githubHealth/githubStatusApi", () => ({
 // payload — the page's onError/onSuccess wiring is what's under test.
 vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
   formValuesToRepoFeatures: () => undefined,
+  formValuesToTestDefaults: () => undefined,
   default: ({
     onSubmit,
   }: {

@@ -136,3 +136,40 @@ class TestMaterialize:
         out = tmp_path / "cs" / "autograders" / "hello" / "tests.json"
         loaded = runner.load_tests(out)
         assert [t["name"] for t in loaded] == ["compiles", "prints"]
+
+    def test_copies_test_defaults_into_envelope(self, tmp_path):
+        # An assignment-level test_defaults block rides the tests.json
+        # envelope as `defaults`; runner.load_tests folds it into each spec.
+        _write_classroom(tmp_path, "cs", _manifest([
+            {"slug": "hello",
+             "test_defaults": {"failure-details": "none", "show-output": True},
+             "tests": [
+                 {"name": "compiles", "type": "run", "run": "true", "points": 1},
+                 {"name": "loud", "type": "run", "run": "true", "points": 1,
+                  "failure-details": "full", "show-output": False},
+             ]},
+        ]))
+        mt.materialize(tmp_path)
+        out = tmp_path / "cs" / "autograders" / "hello" / "tests.json"
+        payload = json.loads(out.read_text())
+        assert payload["defaults"] == {"failure-details": "none", "show-output": True}
+        loaded = runner.load_tests(out)
+        assert loaded[0]["failure-details"] == "none"
+        assert loaded[0]["show-output"] is True
+        assert loaded[1]["failure-details"] == "full"
+        assert loaded[1]["show-output"] is False
+
+    def test_omits_absent_or_empty_test_defaults(self, tmp_path):
+        # No test_defaults (or an empty/malformed one) keeps the envelope at
+        # its historical two-key shape.
+        _write_classroom(tmp_path, "cs-a", _manifest([
+            {"slug": "hello", "tests": [_io_test()]}]))
+        _write_classroom(tmp_path, "cs-b", _manifest([
+            {"slug": "world", "test_defaults": {}, "tests": [_io_test()]}]))
+        _write_classroom(tmp_path, "cs-c", _manifest([
+            {"slug": "bad", "test_defaults": "nope", "tests": [_io_test()]}]))
+        mt.materialize(tmp_path)
+        for classroom, slug in (("cs-a", "hello"), ("cs-b", "world"), ("cs-c", "bad")):
+            payload = json.loads(
+                (tmp_path / classroom / "autograders" / slug / "tests.json").read_text())
+            assert "defaults" not in payload

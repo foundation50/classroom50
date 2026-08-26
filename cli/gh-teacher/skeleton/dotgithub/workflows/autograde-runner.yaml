@@ -291,9 +291,10 @@ jobs:
           if tests is not None:
               _TEST_TYPES = {"io", "run", "python"}
               _COMPARISONS = {"exact", "included", "regex"}
+              _FAILURE_DETAILS = {"full", "actual-only", "none"}
               _TEST_KEYS = {"name", "type", "setup", "run", "input", "input-file",
                             "expected", "expected-file", "comparison", "timeout",
-                            "exit-code", "points"}
+                            "exit-code", "points", "failure-details", "show-output"}
               _IO_ONLY_KEYS = ("input", "input-file", "expected", "expected-file", "comparison")
               if not isinstance(tests, list):
                   fail(f"entry {assignment!r}: tests must be an array")
@@ -333,6 +334,12 @@ jobs:
                   points = t.get("points", 0)
                   if isinstance(points, bool) or not isinstance(points, int) or not (0 <= points <= 1000):
                       fail(f"{where}.points must be an integer between 0 and 1000")
+                  fd = t.get("failure-details")
+                  if fd is not None and fd not in _FAILURE_DETAILS:
+                      fail(f"{where}.failure-details {fd!r} must be one of {sorted(_FAILURE_DETAILS)}")
+                  so = t.get("show-output")
+                  if so is not None and not isinstance(so, bool):
+                      fail(f"{where}.show-output must be a boolean")
                   exit_code = t.get("exit-code")
                   if ttype == "io":
                       comparison = t.get("comparison")
@@ -355,6 +362,23 @@ jobs:
                               fail(f"{where}: exit-code is only valid for a run test, not a {ttype} test")
                           if isinstance(exit_code, bool) or not isinstance(exit_code, int) or not (0 <= exit_code <= 255):
                               fail(f"{where}.exit-code must be an integer between 0 and 255")
+
+          # === Re-validate the assignment-level test_defaults block ===
+          # Mirrors tests.go's TestDefaults validator: a closed sub-object
+          # carrying defaults for the per-test reporting options.
+          test_defaults = entry.get("test_defaults")
+          if test_defaults is not None:
+              if not isinstance(test_defaults, dict):
+                  fail(f"entry {assignment!r}: test_defaults must be an object")
+              extras = sorted(set(test_defaults) - {"failure-details", "show-output"})
+              if extras:
+                  fail(f"entry {assignment!r}: test_defaults has unsupported keys: {extras}")
+              fd = test_defaults.get("failure-details")
+              if fd is not None and fd not in {"full", "actual-only", "none"}:
+                  fail(f"entry {assignment!r}: test_defaults.failure-details {fd!r} must be one of ['actual-only', 'full', 'none']")
+              so = test_defaults.get("show-output")
+              if so is not None and not isinstance(so, bool):
+                  fail(f"entry {assignment!r}: test_defaults.show-output must be a boolean")
 
           runtime = entry.get("runtime") or {}
           if not isinstance(runtime, dict):

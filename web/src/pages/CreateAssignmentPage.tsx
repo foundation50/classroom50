@@ -10,6 +10,7 @@ import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import CreateAssignmentForm, {
   formValuesToRepoFeatures,
+  formValuesToTestDefaults,
 } from "@/pages/assignments/CreateAssignmentForm"
 import { deriveFormShape } from "@/pages/assignments/formShape"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -169,6 +170,7 @@ const CreateAssignmentPage = () => {
                 repo_features: formValuesToRepoFeatures(values),
                 classroom,
                 tests: values.tests,
+                test_defaults: formValuesToTestDefaults(values),
               },
               {
                 onError: (err) => {

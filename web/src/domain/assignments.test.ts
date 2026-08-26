@@ -34,6 +34,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
 import { REPO_PERMISSIONS, SUBMISSION_MODES } from "@/types/classroom"
+import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
 
 const fullSource: Assignment = {
@@ -3304,6 +3305,40 @@ describe("SUBMISSION_MODES parity with assignments-v1 schema", () => {
   it("matches the schema submission_mode enum exactly and in order", () => {
     const schemaEnum = schema.$defs.assignment.properties.submission_mode.enum
     expect(schemaEnum).toEqual([...SUBMISSION_MODES])
+  })
+})
+
+describe("TEST_FAILURE_DETAILS_LEVELS parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      test: {
+        properties: { "failure-details": { enum: string[] } }
+      }
+      assignment: {
+        properties: {
+          test_defaults: {
+            properties: { "failure-details": { enum: string[] } }
+          }
+        }
+      }
+    }
+  }
+
+  it("matches the schema failure-details enum exactly and in order", () => {
+    const schemaEnum = schema.$defs.test.properties["failure-details"].enum
+    expect(schemaEnum).toEqual([...TEST_FAILURE_DETAILS_LEVELS])
+  })
+
+  it("matches the test_defaults failure-details enum too", () => {
+    const schemaEnum =
+      schema.$defs.assignment.properties.test_defaults.properties[
+        "failure-details"
+      ].enum
+    expect(schemaEnum).toEqual([...TEST_FAILURE_DETAILS_LEVELS])
   })
 })
 

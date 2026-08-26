@@ -118,6 +118,15 @@
           "items": { "$ref": "#/$defs/test" },
           "description": "Declarative tests. Mutually exclusive with a per-assignment autograder.py at <classroom>/autograders/<slug>/ — probe before writing."
         },
+        "test_defaults": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "failure-details": { "enum": ["full", "actual-only", "none"] },
+            "show-output": { "type": "boolean" }
+          },
+          "description": "Assignment-level defaults for the per-test reporting options `failure-details` and `show-output` (see #/$defs/test for their semantics); a test's own value overrides. Only meaningful alongside `tests` — the materializer copies it into tests.json's `defaults` and it is otherwise ignored. Omit entirely for the built-in defaults (failure-details `full`, show-output `false`); like `runtime` it is a CLOSED sub-object, so a new sub-key must ship in lockstep across this schema, the Go TestDefaults struct, and the web Assignment['test_defaults'] type in the same release."
+        },
         "feedback_pr": {
           "type": "boolean",
           "description": "Opt the assignment into the Feedback Pull Request: one long-lived PR per student repo (base = a frozen branch at the baseline commit, head = the default branch) for inline teacher review of the full starter→submission diff. Both accept clients open it at accept time (best-effort, so it exists even with GitHub Actions disabled); the autograde runner adopts that PR by base+head and maintains it, and remains the fallback creator when accept could not. Product default is ON (both `gh teacher assignment add` and the GUI create it enabled). On the wire it is collapsed: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; the GUI may also write `false` explicitly, so accept both. Absent or false means the PR never opens."
@@ -417,6 +426,14 @@
           "minimum": 0,
           "maximum": 1000,
           "description": "Defaults to 0 (informational test) when omitted; the CLI always writes it."
+        },
+        "failure-details": {
+          "enum": ["full", "actual-only", "none"],
+          "description": "How much failure detail students see for this test (release body, Actions log, run summary). `full` (the default when absent) = unified diff for exact comparisons, otherwise expected+actual blocks, plus stderr. `actual-only` = the student's own stdout/stderr only — no expected output and no diff (a diff would reveal it). `none` = only the failure kind (wrong output, wrong exit code, timeout, setup failed). Overrides the assignment's `test_defaults`."
+        },
+        "show-output": {
+          "type": "boolean",
+          "description": "Include the captured stdout/stderr of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
         }
       },
       "allOf": [

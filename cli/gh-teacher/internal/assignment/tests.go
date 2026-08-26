@@ -28,18 +28,31 @@ import (
 //
 // Points has no omitempty so a 0-point informational test reads explicitly.
 type TestSpec struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Setup        string `json:"setup,omitempty"`
-	Run          string `json:"run"`
-	Input        string `json:"input,omitempty"`
-	InputFile    string `json:"input-file,omitempty"`
-	Expected     string `json:"expected,omitempty"`
-	ExpectedFile string `json:"expected-file,omitempty"`
-	Comparison   string `json:"comparison,omitempty"`
-	Timeout      int    `json:"timeout,omitempty"`
-	ExitCode     *int   `json:"exit-code,omitempty"`
-	Points       int    `json:"points"`
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	Setup          string `json:"setup,omitempty"`
+	Run            string `json:"run"`
+	Input          string `json:"input,omitempty"`
+	InputFile      string `json:"input-file,omitempty"`
+	Expected       string `json:"expected,omitempty"`
+	ExpectedFile   string `json:"expected-file,omitempty"`
+	Comparison     string `json:"comparison,omitempty"`
+	Timeout        int    `json:"timeout,omitempty"`
+	ExitCode       *int   `json:"exit-code,omitempty"`
+	Points         int    `json:"points"`
+	FailureDetails string `json:"failure-details,omitempty"`
+	// *bool, not bool: an explicit false must survive the wire so a single
+	// test can opt out of a test_defaults show-output=true.
+	ShowOutput *bool `json:"show-output,omitempty"`
+}
+
+// TestDefaults is an assignment's `test_defaults` block: assignment-level
+// values for the per-test reporting options, applied by the grader to any
+// test that doesn't set its own. A CLOSED sub-object like RuntimeRef — a new
+// key must ship in lockstep across the schema, this struct, and the web type.
+type TestDefaults struct {
+	FailureDetails string `json:"failure-details,omitempty"`
+	ShowOutput     *bool  `json:"show-output,omitempty"`
 }
 
 const (
@@ -62,6 +75,19 @@ const (
 
 // comparisonModes is the allow-list, sorted.
 var comparisonModes = []string{comparisonExact, comparisonIncluded, comparisonRegex}
+
+// Failure-detail levels: how much of a failing test's captured output the
+// grader shows students (full = diff/expected+actual, actual-only = the
+// student's own output, none = just the failure kind). Empty means the
+// grader default (full).
+const (
+	failureDetailsFull       = "full"
+	failureDetailsActualOnly = "actual-only"
+	failureDetailsNone       = "none"
+)
+
+// failureDetailsLevels is the allow-list, sorted.
+var failureDetailsLevels = []string{failureDetailsActualOnly, failureDetailsFull, failureDetailsNone}
 
 // Bounds: generous for real assignments, tight enough that a hand-edited
 // assignments.json can't wedge the gradebook or blow the contents-API ceiling.
@@ -91,6 +117,23 @@ func isValidComparison(s string) bool {
 		}
 	}
 	return false
+}
+
+func isValidFailureDetails(s string) bool {
+	for _, l := range failureDetailsLevels {
+		if s == l {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateTestDefaults checks an assignment's test_defaults block.
+func ValidateTestDefaults(d TestDefaults) error {
+	if d.FailureDetails != "" && !isValidFailureDetails(d.FailureDetails) {
+		return fmt.Errorf("invalid failure-details %q: must be one of %v", d.FailureDetails, failureDetailsLevels)
+	}
+	return nil
 }
 
 // ValidateTests checks an assignment's test list on both paths: count cap,
@@ -137,6 +180,9 @@ func ValidateTestSpec(t TestSpec) error {
 	}
 	if t.Points < 0 || t.Points > maxTestPoints {
 		return fmt.Errorf("points %d must be between 0 and %d", t.Points, maxTestPoints)
+	}
+	if t.FailureDetails != "" && !isValidFailureDetails(t.FailureDetails) {
+		return fmt.Errorf("invalid failure-details %q: must be one of %v", t.FailureDetails, failureDetailsLevels)
 	}
 
 	if t.Type == testTypeIO {
