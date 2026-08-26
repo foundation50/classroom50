@@ -21,6 +21,7 @@ import {
   InlineMessage,
   Input,
   Modal,
+  ModalIcon,
   Spinner,
   Toolbar,
 } from "@/components/ui"
@@ -765,11 +766,11 @@ export const ConfirmStep = ({
         onClose={() => setShowConfirm(false)}
         size="md"
         role="alertdialog"
-        title={
-          <span className="flex items-center gap-2">
-            <AlertIcon aria-hidden="true" className="size-4 text-warning" />
-            {t("migration.confirm.modalTitle")}
-          </span>
+        title={t("migration.confirm.modalTitle")}
+        headerVisual={
+          <ModalIcon tone="warning">
+            <AlertIcon aria-hidden="true" className="size-4" />
+          </ModalIcon>
         }
         footer={
           <>

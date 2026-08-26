@@ -170,8 +170,11 @@ export function Modal({
           <div
             className={cx(
               // Full-bleed header divider: -mx-6/ps-6 counteract the modal-box
-              // padding; pe-14 keeps the title clear of the close X.
-              "-mx-6 flex items-start gap-4 border-b border-base-300 ps-6 pb-4",
+              // padding; pe-14 keeps the title clear of the close X. A lone
+              // title centers against the header visual; with a subtitle the
+              // block top-aligns.
+              "-mx-6 flex gap-4 border-b border-base-300 ps-6 pb-4",
+              subtitle !== undefined ? "items-start" : "items-center",
               hideCloseButton ? "pe-6" : "pe-14",
             )}
           >

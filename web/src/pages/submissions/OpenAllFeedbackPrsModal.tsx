@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitPullRequestIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Spinner } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon, Spinner } from "@/components/ui"
 import useOpenAllFeedbackPrs from "@/hooks/mutations/useOpenAllFeedbackPrs"
 import type { OpenAllRepoResult } from "@/domain/assignments"
 import type { AssignmentMode } from "@/types/classroom"
@@ -92,11 +92,11 @@ export function OpenAllFeedbackPrsModal({
       onClose={handleClose}
       size="md"
       closeDisabled={running}
-      title={
-        <span className="flex items-center gap-2">
+      title={t("submissions.openAllPrs.title")}
+      headerVisual={
+        <ModalIcon>
           <GitPullRequestIcon aria-hidden="true" className="size-4" />
-          {t("submissions.openAllPrs.title")}
-        </span>
+        </ModalIcon>
       }
       footer={
         summary ? (

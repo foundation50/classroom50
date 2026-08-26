@@ -7,6 +7,7 @@ import {
   Button,
   FileDropzone,
   Modal,
+  ModalIcon,
   type PickedFile,
 } from "@/components/ui"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -143,11 +144,11 @@ export function SubmitUpload({
         onClose={closeModal}
         closeDisabled={submitting}
         size="2xl"
-        title={
-          <span className="flex items-center gap-2">
-            <FileCheckIcon aria-hidden="true" className="size-4 text-primary" />
-            {t("submissions.student.upload.title")}
-          </span>
+        title={t("submissions.student.upload.title")}
+        headerVisual={
+          <ModalIcon>
+            <FileCheckIcon aria-hidden="true" className="size-4" />
+          </ModalIcon>
         }
         subtitle={t("submissions.student.upload.intro")}
         footer={
