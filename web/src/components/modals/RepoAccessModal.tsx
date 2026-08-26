@@ -394,23 +394,6 @@ export function RepoAccessModal({
       closeDisabled={isSaving}
       size="xl"
       title={t("components.modals.repoAccess.title")}
-      subtitle={
-        repoName ? (
-          <a
-            className="link inline-flex items-center gap-1.5"
-            href={repoUrl || `https://github.com/${org}/${repoName}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <MarkGithubIcon aria-hidden="true" className="size-4" />
-            {assignmentName
-              ? t("components.modals.repoAccess.viewRepoNamed", {
-                  name: assignmentName,
-                })
-              : t("components.modals.groupCollaborators.viewRepository")}
-          </a>
-        ) : undefined
-      }
       headerVisual={
         <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
@@ -444,6 +427,23 @@ export function RepoAccessModal({
         </>
       }
     >
+      {/* In the body, not the `subtitle` slot: an interactive link as the
+          dialog's aria-describedby reads poorly for AT users. */}
+      {repoName && (
+        <a
+          className="link mt-3 inline-flex w-fit items-center gap-1.5 text-sm"
+          href={repoUrl || `https://github.com/${org}/${repoName}`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <MarkGithubIcon aria-hidden="true" className="size-4" />
+          {assignmentName
+            ? t("components.modals.repoAccess.viewRepoNamed", {
+                name: assignmentName,
+              })
+            : t("components.modals.groupCollaborators.viewRepository")}
+        </a>
+      )}
       {loadingCollaborators ? (
         <div className="flex py-10">
           <Spinner

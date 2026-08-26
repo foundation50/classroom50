@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon, XIcon } from "@/components/ui/icons"
 
@@ -207,6 +207,20 @@ const BulkActionsBar = ({
   // (close-animation note in ui/Modal); each run resets them anyway.
   const [isOpen, setModalOpen] = useState(false)
 
+  // The confirm-close -> run handoff defers one macrotask so the progress
+  // dialog doesn't stack over the still-closing confirm; tracked so an unmount
+  // can't fire a stray fan-out.
+  const runTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(
+    () => () => {
+      if (runTimerRef.current) clearTimeout(runTimerRef.current)
+    },
+    [],
+  )
+  const deferRun = (which: "add" | "remove") => {
+    runTimerRef.current = setTimeout(() => void run(which), 0)
+  }
+
   const closeModal = () => {
     if (phase === "working") return
     setModalOpen(false)
@@ -386,7 +400,7 @@ const BulkActionsBar = ({
           // the progress dialog doesn't stack its box and backdrop over the
           // still-closing confirm. Not awaited — run() drives its own dialog.
           setConfirmingRemove(false)
-          setTimeout(() => void run("remove"), 0)
+          deferRun("remove")
         }}
         onClose={() => setConfirmingRemove(false)}
       />
@@ -406,7 +420,7 @@ const BulkActionsBar = ({
         confirmLabel={t("orgMembers.bulk.add")}
         onConfirm={async () => {
           setConfirmingAdd(false)
-          setTimeout(() => void run("add"), 0)
+          deferRun("add")
         }}
         onClose={() => setConfirmingAdd(false)}
       />
