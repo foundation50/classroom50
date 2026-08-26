@@ -2901,6 +2901,10 @@
         "closed": "Closed"
       }
     },
+    "deleteAssignment": {
+      "menuLabel": "Delete assignment",
+      "menuTitle": "Remove the assignment from this classroom; student repositories are kept"
+    },
     "bulkFeatures": {
       "menuLabel": "Update repository features",
       "menuTitle": "Turn Issues, Wiki, Projects, or Pull requests on or off across every student repository",
