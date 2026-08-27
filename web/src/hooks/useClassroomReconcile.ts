@@ -39,7 +39,8 @@ export function useClassroomReconcile(
       withGitConflictRetry(() =>
         reconcileClassroom(client, org, classroom, creator),
       ),
-    // An archived classroom no-ops (skipped); release its key so a same-mount
+    // An archived classroom skips the team/roster writes (though it still
+    // heals the description projection); release its key so a same-mount
     // un-archive re-reconciles rather than staying latched until remount.
     isTransientSuccess: (result) => result.skipped,
     // Invalidate only the slices that actually changed, keyed on the RUN's own

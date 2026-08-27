@@ -53,12 +53,18 @@ export function useArchiveClassroom(org: string, classroom: string) {
       // in the wrong lifecycle state. Toast is the call site's job.
       if (ctx) queryClient.setQueryData(classroomKey, ctx.prev)
     },
-    onSettled: () => {
+    onSettled: (data) => {
       // Repartition the classes list (Active/Archived/All) — a different query
       // than the per-classroom classroom.json flipped above.
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
       })
+      if (data?.teamDescription.changed) {
+        // The toggle re-projected the classroom50/team/v1 record (its `active`
+        // flag) onto the student team; refresh GET /user/teams so a teacher
+        // previewing as a student sees the lifecycle change immediately.
+        void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
+      }
     },
   })
 }

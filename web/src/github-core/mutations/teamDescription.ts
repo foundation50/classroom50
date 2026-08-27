@@ -2,7 +2,7 @@ import type { GitHubClient } from "../client"
 import type { GitHubTeam } from "../types"
 import { getClassroomJson } from "../configRepoReads"
 import { classroomTeamSlug } from "@/util/teamSlug"
-import { isClassroomArchived } from "@/types/classroom"
+import { isClassroomArchived, type Classroom } from "@/types/classroom"
 import { marshalTeamDescription } from "@/util/teamDescription"
 
 // The outcome of one reconcile touch, so the caller can decide whether to
@@ -53,17 +53,38 @@ export async function reconcileStudentTeamDescription(
     throw new ClassroomSourceReadError(err)
   }
 
+  return projectTeamDescriptionFromRecord(client, org, classroom, current)
+}
+
+// The classroom.json fields the team-description projection is derived from.
+export type TeamDescriptionSource = Pick<
+  Classroom,
+  "name" | "term" | "secret" | "active" | "team"
+>
+
+// The write half of reconcileStudentTeamDescription: project an already-known
+// classroom.json record onto the student team's description, with no
+// config-repo read. Split out so a mutation that just committed classroom.json
+// can re-project from the exact record it wrote — the Contents API is
+// read-after-write eventual, so an immediate re-read could echo the pre-write
+// body and write the stale name back.
+export async function projectTeamDescriptionFromRecord(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  record: TeamDescriptionSource,
+): Promise<TeamDescriptionReconcileResult> {
   const desired = marshalTeamDescription({
-    name: current.name,
-    term: current.term,
-    secret: current.secret,
-    active: !isClassroomArchived(current),
+    name: record.name,
+    term: record.term,
+    secret: record.secret,
+    active: !isClassroomArchived(record),
   })
 
   // The persisted slug is authoritative (GitHub may re-slug on collision); fall
   // back to the derived slug for a classroom created before the team ref was
   // recorded.
-  const slug = current.team?.slug || classroomTeamSlug(classroom)
+  const slug = record.team?.slug || classroomTeamSlug(classroom)
 
   const existing = await client.request<GitHubTeam>(
     `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,

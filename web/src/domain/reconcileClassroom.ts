@@ -1,11 +1,16 @@
 import type { GitHubClient } from "@/github-core/client"
 import { getClassroomJson } from "@/github-core/configRepoReads"
 import { GitHubAPIError } from "@/github-core/errors"
-import { isClassroomArchived, type StaffRole } from "@/types/classroom"
+import {
+  isClassroomArchived,
+  type Classroom,
+  type StaffRole,
+} from "@/types/classroom"
 import {
   ensureClassroomTeam,
   ensureStaffTeams,
   grantStaffTeamsConfigRepoAccess,
+  projectTeamDescriptionFromRecord,
   reconcileStudentTeamDescription,
   removeUserFromTeam,
   type TeamDescriptionReconcileResult,
@@ -52,12 +57,43 @@ const NOOP_RESULT: ClassroomReconcileResult = {
   rosterChanged: false,
 }
 
-// Verify (and self-heal) every classroom-scoped GitHub resource a teacher/owner
+// An archived classroom skips the team/roster writes, but its team-description
+// projection must still converge: the classroom50/team/v1 record has to
+// advertise active: false (and the final name/term), and this is the only heal
+// when the best-effort projection inside editClassroom failed during the
+// archive/edit itself. Projected from the record the archived gate already
+// read — never a re-fetch.
+async function reconcileArchivedClassroom(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  record: Classroom,
+): Promise<ClassroomReconcileResult> {
+  let description: TeamDescriptionReconcileResult
+  try {
+    description = await projectTeamDescriptionFromRecord(
+      client,
+      org,
+      classroom,
+      record,
+    )
+  } catch (err) {
+    // This path never creates the student team, so a team-read 404 is a wrong
+    // or deleted slug that never converges — latch it (mirrors the active
+    // path); everything else stays transient for a later retry.
+    if (err instanceof GitHubAPIError && err.isNotFound) {
+      throw new ClassroomReconcilePermanentError(err)
+    }
+    throw err
+  }
+  return { ...NOOP_RESULT, description }
+} // Verify (and self-heal) every classroom-scoped GitHub resource a teacher/owner
 // depends on, in one idempotent pass, composing the existing primitives.
 //
 // Every call is an org-owner op; the caller MUST gate on the teacher role. An
-// archived classroom short-circuits with no writes (returns skipped); a
-// missing/legacy classroom.json reads as active.
+// archived classroom skips the team/roster writes (returns skipped) but still
+// converges its team-description projection; a missing/legacy classroom.json
+// reads as active.
 //
 // `creator` (the acting owner) is dropped from the student/hta/ta teams this
 // pass touches, never teacher: the create POST silently adds the owner as a
@@ -72,7 +108,10 @@ export async function reconcileClassroom(
   classroom: string,
   creator?: string,
 ): Promise<ClassroomReconcileResult> {
-  if (await isArchived(client, org, classroom)) return NOOP_RESULT
+  const archivedRecord = await readArchivedRecord(client, org, classroom)
+  if (archivedRecord) {
+    return reconcileArchivedClassroom(client, org, classroom, archivedRecord)
+  }
 
   const { slug: studentTeamSlug, created: studentTeamCreated } =
     await ensureClassroomTeam(client, org, classroom)
@@ -190,20 +229,20 @@ async function dropCreatorFromNonTeacherTeams(
   }
 }
 
-// True only when classroom.json positively records active: false. A missing
-// classroom.json (404, legacy) reads as active; a transient read failure
-// rethrows so the caller's latch retries rather than reconciling blind.
-async function isArchived(
+// The classroom.json record when the classroom positively records
+// active: false, else null. A missing classroom.json (404, legacy) reads as
+// active; a transient read failure rethrows so the caller's latch retries
+// rather than reconciling blind.
+async function readArchivedRecord(
   client: GitHubClient,
   org: string,
   classroom: string,
-): Promise<boolean> {
+): Promise<Classroom | null> {
   try {
-    return isClassroomArchived(
-      await getClassroomJson(client, { org, classroom }),
-    )
+    const record = await getClassroomJson(client, { org, classroom })
+    return isClassroomArchived(record) ? record : null
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) return false
+    if (err instanceof GitHubAPIError && err.isNotFound) return null
     throw err
   }
 }

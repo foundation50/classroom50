@@ -139,8 +139,10 @@ export {
 } from "./mutations/classroomEdit"
 export {
   reconcileStudentTeamDescription,
+  projectTeamDescriptionFromRecord,
   ClassroomSourceReadError,
   type TeamDescriptionReconcileResult,
+  type TeamDescriptionSource,
 } from "./mutations/teamDescription"
 export {
   ensureInviteTeam,
