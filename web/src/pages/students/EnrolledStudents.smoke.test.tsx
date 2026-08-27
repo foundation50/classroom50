@@ -379,10 +379,18 @@ describe("EnrolledStudents — rendered phase views", () => {
       screen.getByRole("button", { name: "students.uploadTitle" }),
     )
     expect(addActions.onUploadRoster).toHaveBeenCalledTimes(1)
-    fireEvent.click(
-      screen.getByRole("button", { name: "students.inviteStudents" }),
-    )
+    fireEvent.click(screen.getByRole("button", { name: /students\.share/ }))
     expect(addActions.onInviteLinks).toHaveBeenCalledTimes(1)
+
+    // Selecting rows brings up the (stubbed, left-side) selection cluster;
+    // the add-students buttons stay put on the right.
+    fireEvent.click(
+      screen.getByRole("checkbox", { name: "students.bulk.selectAll" }),
+    )
+    expect(
+      screen.getByRole("button", { name: "students.addTitle" }),
+    ).not.toBeNull()
+    expect(capturedSelectedKeys).toEqual(["alice"])
 
     cleanup()
     mockReconcilePending = true
@@ -416,19 +424,53 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(capturedSelectedKeys).toEqual([])
   })
 
-  // Group-by-section is a toolbar view option now (next to sort), offered only
-  // when the filtered rows carry sections.
-  it("offers the group-by-section toggle in the toolbar when sections exist", () => {
+  // Grouping is a toolbar view option (next to sort) offering exactly the
+  // Role and Section columns, each gated on the roster having that dimension.
+  it("offers role/section grouping options and groups the table on selection", () => {
     useTeamRoster.mockReturnValue({
       ...populatedRoster,
-      rows: [{ ...populatedRoster.rows[0], section: "Lab 1" }],
+      counts: { enrolled: 2, pending: 0 },
+      rows: [
+        { ...populatedRoster.rows[0], section: "Lab 1" },
+        {
+          key: "tessa",
+          username: "tessa",
+          email: "",
+          section: "",
+          github_id: "9",
+          roles: ["teacher"],
+          state: "enrolled",
+        },
+      ],
     })
     render(renderView())
-    expect(screen.getByText("students.groupBySection")).not.toBeNull()
 
-    cleanup()
+    const groupBy = screen.getByLabelText("students.groupBy.label")
+    expect(screen.getByText("students.groupBy.role")).not.toBeNull()
+    expect(screen.getByText("students.groupBy.section")).not.toBeNull()
+
+    // Group by role: one rowgroup header per primary role, teacher first.
+    fireEvent.change(groupBy, { target: { value: "role" } })
+    const headers = screen
+      .getAllByRole("rowgroup")
+      .flatMap((g) => Array.from(g.querySelectorAll("th[scope='rowgroup']")))
+      .map((th) => th.textContent)
+    expect(headers[0]).toContain("students.roleTeacher")
+    expect(headers[1]).toContain("students.roleStudent")
+
+    // Group by section: the labeled bucket then the "No section" bucket.
+    fireEvent.change(groupBy, { target: { value: "section" } })
+    const sectionHeaders = screen
+      .getAllByRole("rowgroup")
+      .flatMap((g) => Array.from(g.querySelectorAll("th[scope='rowgroup']")))
+      .map((th) => th.textContent)
+    expect(sectionHeaders[0]).toContain("Lab 1")
+    expect(sectionHeaders[1]).toContain("students.noSection")
+  })
+
+  it("hides the group-by select for a sectionless, students-only roster", () => {
     useTeamRoster.mockReturnValue(populatedRoster)
     render(renderView())
-    expect(screen.queryByText("students.groupBySection")).toBeNull()
+    expect(screen.queryByLabelText("students.groupBy.label")).toBeNull()
   })
 })

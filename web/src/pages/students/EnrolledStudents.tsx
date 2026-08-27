@@ -4,6 +4,8 @@ import {
   PaperAirplaneIcon,
   PeopleIcon,
   PlusIcon,
+  RowsIcon,
+  ShareAndroidIcon,
   SyncIcon,
   UploadIcon,
   XIcon,
@@ -78,6 +80,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   groupStudentsBySection,
+  groupStudentsByRole,
   nextSelectedKeyAfterSave,
   rosterSyncMessageKeys,
 } from "./enrolledStudentsHelpers"
@@ -144,7 +147,7 @@ const EnrolledStudents = ({
 
   // Keyed by row.key so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
-  const [groupBySection, setGroupBySection] = useState(false)
+  const [grouping, setGrouping] = useState<"none" | "role" | "section">("none")
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
@@ -302,10 +305,28 @@ const EnrolledStudents = ({
     () => filtered.some((r) => r.section.trim()),
     [filtered],
   )
-  const filteredBySection = useMemo(
-    () => groupStudentsBySection(filtered),
-    [filtered],
-  )
+
+  // The grouped view of the filtered rows, or null for the flat table. Role
+  // groups order teacher-first (each header matches its rows' leading role
+  // chip); section groups sort by name with "No section" last. Rows inside a
+  // group keep the toolbar's sort order.
+  const groupedRows = useMemo(() => {
+    if (grouping === "role") {
+      return groupStudentsByRole(filtered).map((g) => ({
+        key: `role:${g.role}`,
+        label: t(ROLE_LABEL_KEY[g.role]),
+        rows: g.students,
+      }))
+    }
+    if (grouping === "section" && hasSectionsInFiltered) {
+      return groupStudentsBySection(filtered).map((g) => ({
+        key: `section:${g.section}`,
+        label: g.section === NO_SECTION ? t("students.noSection") : g.section,
+        rows: g.students,
+      }))
+    }
+    return null
+  }, [grouping, filtered, hasSectionsInFiltered, t])
 
   const selected = useMemo(
     () => rows.find((row) => row.key === selectedKey) ?? null,
@@ -343,18 +364,15 @@ const EnrolledStudents = ({
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
   }
 
-  // group-by-section reorders rows into buckets, so a shift-range must span
-  // that rendered order, not the flat filtered list.
+  // Grouping reorders rows into buckets, so a shift-range must span that
+  // rendered order, not the flat filtered list.
   const renderedOrder = useMemo(
-    () =>
-      groupBySection && hasSectionsInFiltered
-        ? filteredBySection.flatMap((g) => g.students)
-        : filtered,
-    [groupBySection, hasSectionsInFiltered, filteredBySection, filtered],
+    () => (groupedRows ? groupedRows.flatMap((g) => g.rows) : filtered),
+    [groupedRows, filtered],
   )
 
-  // Shift-click range selection over the rendered order (group-by-section
-  // aware), so a shift-range fills the span the user actually sees.
+  // Shift-click range selection over the rendered order (grouping-aware), so a
+  // shift-range fills the span the user actually sees.
   const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
     renderedOrder,
     isSelectable,
@@ -489,6 +507,10 @@ const EnrolledStudents = ({
   const showSection = sectionOptions.length > 0
   const colCount = showSection ? 6 : 5
 
+  // Role grouping earns its option only when the roster has more than plain
+  // students to group — the same gate as the role filter.
+  const canGroupByRole = roleFilterOptions.some((r) => r !== "student")
+
   // Active-filter split for the in-search-bar clear affordance ("Clear filter"
   // vs "Clear"), mirroring the submissions controls; clicking it resets query
   // and every filter (sort is a view preference, not a filter — kept).
@@ -616,9 +638,10 @@ const EnrolledStudents = ({
           toolbar's collect affordance) and doubling as the sync-in-progress
           indicator — label swaps to "Syncing…" while the on-entry reconcile,
           drift auto-sync, or a manual run is underway (the table below goes
-          inert at the same time). Search + filters + sort right-aligned like
-          the submissions controls (group-by-section lives in the table header
-          next to the count). */}
+          inert at the same time). The selection cluster (count + Actions +
+          Clear) joins it on the left while rows are selected; search +
+          filters + sort + add actions stay right-aligned like the submissions
+          controls. */}
       {!isLoading && !isError && !isEmpty ? (
         <Toolbar>
           <Button
@@ -646,6 +669,18 @@ const EnrolledStudents = ({
             />
             {syncing ? t("students.syncActive") : t("students.syncNow")}
           </Button>
+          {/* Selection cluster (count + Actions menu + Clear) — appears on
+              the left, beside Sync, while rows are selected. Always mounted:
+              it renders nothing when idle but owns the bulk-run modals. */}
+          <RosterBulkActionsBar
+            org={org}
+            classroom={classroom}
+            client={client}
+            selectedRows={selectedRows}
+            onClearSelection={() => setSelectedKeys(new Set())}
+            onDone={onBulkDone}
+            disabled={syncing}
+          />
           <Toolbar.Trailing>
             <Toolbar.Search
               placeholder={t("students.searchPlaceholder")}
@@ -703,39 +738,52 @@ const EnrolledStudents = ({
               </Toolbar.FilterSelect>
             ) : null}
             <StudentSortSelect value={sortMode} onChange={setSortMode} />
-            {/* Group-by-section is a view option like sort, so it sits beside
-                it (out of the table's bulk bar). Offered only when the
-                filtered rows actually carry sections. */}
-            {hasSectionsInFiltered ? (
-              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-sm"
-                  checked={groupBySection}
-                  onChange={(e) => setGroupBySection(e.target.checked)}
-                />
-                {t("students.groupBySection")}
-              </label>
+            {/* Grouping is a view option like sort, so it sits beside it.
+                Offers exactly the two groupable columns — Role and Section —
+                each only when the roster actually has that dimension. */}
+            {canGroupByRole || sectionOptions.length > 0 ? (
+              <Toolbar.FilterSelect
+                icon={<RowsIcon aria-hidden="true" className="size-4" />}
+                active={grouping !== "none"}
+                aria-label={t("students.groupBy.label")}
+                value={grouping}
+                onChange={(e) =>
+                  setGrouping(e.target.value as "none" | "role" | "section")
+                }
+              >
+                <option value="none">{t("students.groupBy.none")}</option>
+                {canGroupByRole ? (
+                  <option value="role">{t("students.groupBy.role")}</option>
+                ) : null}
+                {sectionOptions.length > 0 ? (
+                  <option value="section">
+                    {t("students.groupBy.section")}
+                  </option>
+                ) : null}
+              </Toolbar.FilterSelect>
             ) : null}
-            {/* The add-students actions, out of the table's bulk bar and onto
-                the toolbar's right edge (mirroring the submissions toolbar's
-                trailing actions). Disabled while a sync rewrites the roster —
-                they live outside the locked table region. */}
+            {/* The add-students actions: Share (the classroom invite link,
+                mirroring the submissions Share button), icon-only Upload, and
+                Add member as the rightmost primary action. Kept in place while
+                rows are selected (the selection cluster lives on the left).
+                Disabled while a sync rewrites the roster — they live outside
+                the locked table region. */}
             {addActions ? (
-              <div className="join">
+              <>
                 <Button
+                  variant="outline"
                   size="sm"
-                  className="join-item"
                   disabled={syncing}
-                  aria-label={t("students.addTitle")}
-                  title={t("students.addTitle")}
-                  onClick={addActions.onAddStudent}
+                  title={t("students.inviteStudents")}
+                  onClick={addActions.onInviteLinks}
                 >
-                  <PlusIcon aria-hidden="true" className="size-4" />
+                  <ShareAndroidIcon aria-hidden="true" className="size-4" />
+                  {t("students.share")}
                 </Button>
                 <Button
+                  variant="outline"
                   size="sm"
-                  className="join-item"
+                  shape="square"
                   disabled={syncing}
                   aria-label={t("students.uploadTitle")}
                   title={t("students.uploadTitle")}
@@ -744,27 +792,26 @@ const EnrolledStudents = ({
                   <UploadIcon aria-hidden="true" className="size-4" />
                 </Button>
                 <Button
+                  variant="primary"
                   size="sm"
-                  className="join-item"
                   disabled={syncing}
-                  aria-label={t("students.inviteStudents")}
-                  title={t("students.inviteStudents")}
-                  onClick={addActions.onInviteLinks}
+                  onClick={addActions.onAddStudent}
                 >
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                  <PlusIcon aria-hidden="true" className="size-4" />
+                  {t("students.addTitle")}
                 </Button>
-              </div>
+              </>
             ) : null}
           </Toolbar.Trailing>
         </Toolbar>
       ) : null}
 
       {/* The roster table: Primer DataTable treatment via the shared
-          TableShell frame (matching the assignments/submissions tables), with
-          the bulk-selection bar inside the frame above the header row. While a
-          sync is underway the whole region is inert (dimmed, pointer-events
-          off, bulk bar fieldset-disabled): the pass is rewriting the state
-          these actions act on. */}
+          TableShell frame (matching the assignments/submissions tables);
+          select-all lives in the header row and the selection actions in the
+          toolbar above. While a sync is underway the whole region is inert
+          (dimmed, pointer-events off): the pass is rewriting the state these
+          actions act on. */}
       <div
         aria-busy={syncing || undefined}
         className={cx(
@@ -772,24 +819,7 @@ const EnrolledStudents = ({
           syncing && "pointer-events-none opacity-60",
         )}
       >
-        <TableShell
-          animate={false}
-          padded
-          ariaBusy={isLoading}
-          header={
-            !isLoading && !isError && !isEmpty ? (
-              <RosterBulkActionsBar
-                org={org}
-                classroom={classroom}
-                client={client}
-                selectedRows={selectedRows}
-                onClearSelection={() => setSelectedKeys(new Set())}
-                onDone={onBulkDone}
-                disabled={syncing}
-              />
-            ) : undefined
-          }
-        >
+        <TableShell animate={false} padded ariaBusy={isLoading}>
           <caption className="sr-only">{t("students.table.caption")}</caption>
           <thead>
             <tr>
@@ -922,12 +952,13 @@ const EnrolledStudents = ({
                 </td>
               </tr>
             </tbody>
-          ) : groupBySection && hasSectionsInFiltered ? (
-            // One <tbody> per section, opened by a full-width rowgroup header —
-            // the table equivalent of the old section-divider list headers.
-            filteredBySection.map(({ section, students: group }) => (
+          ) : groupedRows ? (
+            // One <tbody> per group (role or section), opened by a full-width
+            // rowgroup header — the table equivalent of the old
+            // section-divider list headers.
+            groupedRows.map(({ key, label, rows: group }) => (
               <motion.tbody
-                key={section}
+                key={key}
                 variants={blockEnter}
                 initial="initial"
                 animate="animate"
@@ -939,9 +970,7 @@ const EnrolledStudents = ({
                     className="py-2 text-sm font-semibold text-base-content/70"
                   >
                     <div className="flex items-center justify-between">
-                      {section === NO_SECTION
-                        ? t("students.noSection")
-                        : section}
+                      {label}
                       <Badge ghost>{group.length}</Badge>
                     </div>
                   </th>

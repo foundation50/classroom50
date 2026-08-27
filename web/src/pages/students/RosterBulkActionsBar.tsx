@@ -1,11 +1,17 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PaperAirplaneIcon, XIcon } from "@/components/ui/icons"
+import {
+  ChevronDownIcon,
+  PaperAirplaneIcon,
+  SignOutIcon,
+  XCircleIcon,
+  XIcon,
+} from "@/components/ui/icons"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
-import { Alert, Button, Modal, Toolbar } from "@/components/ui"
+import { Alert, Button, DropdownMenu, Modal } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -86,11 +92,11 @@ const buildUnenrollResult = (
   }
 }
 
-// Roster multi-select bulk bar: rendered inside the table frame only while a
-// selection exists — count label plus Resend / Cancel invite / Unenroll /
-// Clear, each acting on the subset of the selection it can target. Owns one
-// progress -> results <dialog> shared by all three runs. On completion it
-// calls onDone so the page can refresh its roster/invite caches.
+// Roster multi-select actions: the toolbar's selection cluster (count + one
+// "Actions" menu with Resend / Cancel invite / Unenroll + Clear), shown only
+// while rows are selected. Owns one progress -> results <dialog> shared by all
+// three runs. On completion it calls onDone so the page can refresh its
+// roster/invite caches.
 const RosterBulkActionsBar = ({
   org,
   classroom,
@@ -135,6 +141,14 @@ const RosterBulkActionsBar = ({
   const [confirmingCancel, setConfirmingCancel] = useState(false)
 
   const hasSelection = selectedRows.length > 0
+
+  // daisyUI dropdowns are focus-driven; selecting an item blurs to close
+  // (mirrors SubmissionsActionsMenu).
+  const closeMenu = () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+  }
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
   // Only pending rows are "invitable" — the action resends their org invite.
   // (The roster is team-driven; there are no CSV-only rows to freshly invite.)
@@ -380,23 +394,28 @@ const RosterBulkActionsBar = ({
 
   return (
     <>
-      {/* The bar renders only while rows are selected — select-all lives in
-          the table's header row and the view options in the page toolbar. The
-          modals below stay mounted regardless, so a completing run's result
-          dialog survives the selection clearing out from under it. */}
+      {/* The selection cluster lives in the page toolbar and appears only
+          while rows are selected: count, one consolidated Actions menu, and
+          Clear. The modals below stay mounted regardless, so a completing
+          run's result dialog survives the selection clearing out from under
+          it. display:contents keeps the pieces direct flex children of the
+          toolbar while the fieldset still freezes them during a sync. */}
       {hasSelection ? (
-        <fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0">
-          <Toolbar header className="bg-base-200/60 transition-colors">
-            <span className="text-sm font-medium tabular-nums">
-              {t("students.bulk.selectedCount", {
-                count: selectedRows.length,
-              })}
-            </span>
-            <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-              <div className="join">
-                <Button
-                  size="sm"
-                  className="join-item"
+        <fieldset disabled={disabled} className="contents">
+          <span className="text-sm font-medium tabular-nums">
+            {t("students.bulk.selectedCount", { count: selectedRows.length })}
+          </span>
+          {/* dropdown-start: the cluster sits on the toolbar's left, so the
+              menu opens rightward instead of off the edge. */}
+          <div className="dropdown dropdown-start">
+            <Button variant="primary" size="sm">
+              {t("students.bulk.actions")}
+              <ChevronDownIcon aria-hidden="true" className="size-4" />
+            </Button>
+            <DropdownMenu className="w-64">
+              <li>
+                <button
+                  type="button"
                   disabled={invitableSelected === 0}
                   title={
                     invitableSelected === 0
@@ -405,14 +424,19 @@ const RosterBulkActionsBar = ({
                           count: invitableSelected,
                         })
                   }
-                  onClick={() => setConfirmingInvite(true)}
+                  onClick={() => {
+                    closeMenu()
+                    if (invitableSelected === 0) return
+                    setConfirmingInvite(true)
+                  }}
                 >
                   <PaperAirplaneIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.invite")}
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
                   disabled={cancellableSelected.length === 0}
                   title={
                     cancellableSelected.length === 0
@@ -421,39 +445,51 @@ const RosterBulkActionsBar = ({
                           count: cancellableSelected.length,
                         })
                   }
-                  onClick={() => setConfirmingCancel(true)}
+                  onClick={() => {
+                    closeMenu()
+                    if (cancellableSelected.length === 0) return
+                    setConfirmingCancel(true)
+                  }}
                 >
+                  <XCircleIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.cancelInvite")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="join-item text-error hover:bg-error/10"
-                  aria-label={t("students.bulk.unenrollSelected", {
-                    count: unenrollableSelected.length,
-                  })}
+                </button>
+              </li>
+              {/* Unenroll — destructive, so last and in its own group. */}
+              <div
+                className="my-1 border-t border-base-content/10"
+                role="separator"
+              />
+              <li>
+                <button
+                  type="button"
+                  className="text-error"
+                  disabled={unenrollableSelected.length === 0}
                   title={t("students.bulk.unenrollSelected", {
                     count: unenrollableSelected.length,
                   })}
-                  disabled={unenrollableSelected.length === 0}
-                  onClick={() => setConfirmingUnenroll(true)}
+                  onClick={() => {
+                    closeMenu()
+                    if (unenrollableSelected.length === 0) return
+                    setConfirmingUnenroll(true)
+                  }}
                 >
+                  <SignOutIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.unenroll")}
-                </Button>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                shape="square"
-                aria-label={t("students.bulk.clearSelection")}
-                title={t("students.bulk.clearSelection")}
-                onClick={onClearSelection}
-              >
-                <XIcon aria-hidden="true" className="size-4" />
-              </Button>
-            </div>
-          </Toolbar>
+                </button>
+              </li>
+            </DropdownMenu>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="square"
+            aria-label={t("students.bulk.clearSelection")}
+            title={t("students.bulk.clearSelection")}
+            onClick={onClearSelection}
+          >
+            <XIcon aria-hidden="true" className="size-4" />
+          </Button>
         </fieldset>
       ) : null}
 

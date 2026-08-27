@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest"
 import {
   groupStudentsBySection,
+  groupStudentsByRole,
   nextSelectedKeyAfterSave,
   rosterSyncMessageKeys,
 } from "./enrolledStudentsHelpers"
 import type { Student } from "@/types/classroom"
+import type { ClassroomRole } from "@/util/teamRoster"
 
 const student = (username: string, section?: string): Student =>
   ({ username, section }) as Student
@@ -93,6 +95,48 @@ describe("groupStudentsBySection", () => {
 
   it("returns an empty array for no students", () => {
     expect(groupStudentsBySection([])).toEqual([])
+  })
+})
+
+describe("groupStudentsByRole", () => {
+  const row = (username: string, roles: ClassroomRole[]) => ({
+    username,
+    roles,
+  })
+
+  it("groups by the highest-ranked role, ordered teacher-first", () => {
+    const groups = groupStudentsByRole([
+      row("s1", ["student"]),
+      row("prof", ["teacher"]),
+      row("helper", ["ta"]),
+      row("s2", ["student"]),
+    ])
+    expect(groups.map((g) => g.role)).toEqual(["teacher", "ta", "student"])
+    expect(groups[2].students.map((s) => s.username)).toEqual(["s1", "s2"])
+  })
+
+  it("buckets a multi-role member under their primary role only", () => {
+    // A teacher who is also on the student team groups as a teacher — the
+    // header matches the row's leading role chip, and no row appears twice.
+    const groups = groupStudentsByRole([
+      row("prof", ["student", "teacher"]),
+      row("s1", ["student"]),
+    ])
+    expect(groups.map((g) => g.role)).toEqual(["teacher", "student"])
+    expect(groups[0].students.map((s) => s.username)).toEqual(["prof"])
+    expect(groups[1].students.map((s) => s.username)).toEqual(["s1"])
+  })
+
+  it("preserves the incoming (sorted) order inside each group", () => {
+    const groups = groupStudentsByRole([
+      row("b", ["student"]),
+      row("a", ["student"]),
+    ])
+    expect(groups[0].students.map((s) => s.username)).toEqual(["b", "a"])
+  })
+
+  it("returns an empty array for no students", () => {
+    expect(groupStudentsByRole([])).toEqual([])
   })
 })
 
