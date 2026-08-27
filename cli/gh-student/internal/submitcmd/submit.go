@@ -113,8 +113,9 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 
 	message := contract.PrefixCommit(fmt.Sprintf("Submit %s", config.Assignment))
 
-	// Stamp the commit so a shell without git identity still submits.
-	identity, err := identitypkg.Fetch(client)
+	// The user's git identity, with a noreply fallback so a shell without
+	// git identity still submits.
+	identity, err := identitypkg.Resolve(client, root)
 	if err != nil {
 		return fmt.Errorf("resolve git identity: %w", err)
 	}
