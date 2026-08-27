@@ -4,7 +4,11 @@ import {
   listInviteTeams,
   readInviteTeam,
 } from "@/github-core/mutations"
-import { listOrgInvitations, listTeamMembers } from "@/github-core/queries"
+import {
+  getTeamMembershipState,
+  listOrgInvitations,
+  listTeamMembers,
+} from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { inviteTeamName, normalizeInviteEmail } from "@/util/inviteTeam"
 import { log, resolveClassroomTeamSlugs } from "./rosterPrimitives"
@@ -64,21 +68,28 @@ export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 //     team is left in place for the caller to delete after the roster commit
 //     lands;
 //   - one member on NO classroom team -> unenrolled after accepting; delete the
-//     team now so the mapping can't resurrect a removed student;
+//     team now so the mapping can't resurrect a removed student. Absence is
+//     re-proven at decision time first (see confirmEnrollment);
 //   - zero members -> the invite is live (row kept), unless the team aged past
 //     the GC guard AND no pending org invitation still maps to it (cancelled/
 //     expired) -> delete;
 //   - anomalies (tampered hash, >1 member) -> keep the team, count its email
 //     as live, and warn — never guess.
 //
+// `readOnly` classifies WITHOUT the deletes (stale/unenrolled teams are simply
+// not counted live): the roster sync's in-closure re-collect runs on every
+// conflict-retry attempt and from plain team syncs, and an irreversible
+// destructive action does not belong inside either. Deletion stays exclusive
+// to the top-level reconcile's own collect pass.
+//
 // Never throws. Fail-safe: any read failure (enumeration, a team, the org
 // invitation list) flips `trusted` off so the sync skips row removals; a rate
 // limit stops the pass early the same way.
 export async function collectInviteRecoveries(
   client: GitHubClient,
-  input: { org: string; classroom: string },
+  input: { org: string; classroom: string; readOnly?: boolean },
 ): Promise<InviteReconcileState> {
-  const { org, classroom } = input
+  const { org, classroom, readOnly = false } = input
   const recovered: RecoveredInvite[] = []
   const liveInviteEmails = new Set<string>()
   let trusted = true
@@ -98,10 +109,17 @@ export async function collectInviteRecoveries(
   // derived slug would 404 -> [] and make an enrolled invitee look unenrolled).
   // A read failure propagates to the per-team catch, never silently reads as
   // "member of nothing".
+  let classroomSlugs: Awaited<
+    ReturnType<typeof resolveClassroomTeamSlugs>
+  > | null = null
+  const loadClassroomSlugs = async () => {
+    classroomSlugs ??= await resolveClassroomTeamSlugs(client, org, classroom)
+    return classroomSlugs
+  }
   let enrolledIds: Set<number> | null = null
   const loadEnrolledIds = async (): Promise<Set<number>> => {
     if (enrolledIds) return enrolledIds
-    const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
+    const slugs = await loadClassroomSlugs()
     const rosters = await Promise.all(
       [slugs.student, ...Object.values(slugs.staff)].map((slug) =>
         listTeamMembers(client, org, slug),
@@ -109,6 +127,32 @@ export async function collectInviteRecoveries(
     )
     enrolledIds = new Set(rosters.flat().map((m) => m.id))
     return enrolledIds
+  }
+
+  // Decision-time proof for the ONE irreversible action in this pass: is this
+  // login on any classroom team RIGHT NOW? The cached snapshot above predates
+  // most of the loop, so a student who accepts while it iterates is absent
+  // from it while already sitting on their invite team — deleting on that
+  // stale evidence destroys the only record of their email <-> account mapping
+  // (issue #756). Point reads, not a re-list: the snapshot lists are exactly
+  // what went stale. "unknown" (a failed read) must keep the team.
+  const confirmEnrollment = async (
+    login: string,
+  ): Promise<"enrolled" | "unenrolled" | "unknown"> => {
+    try {
+      const slugs = await loadClassroomSlugs()
+      for (const slug of [slugs.student, ...Object.values(slugs.staff)]) {
+        const state = await getTeamMembershipState(client, org, slug, login)
+        if (state !== null) return "enrolled"
+      }
+      return "unenrolled"
+    } catch (err) {
+      // A rate limit must stop the whole pass (the per-team catch below
+      // breaks on it), not read as one team's "unknown".
+      if (err instanceof GitHubAPIError && err.isRateLimited) throw err
+      log.error("invite reconcile: enrollment re-check failed", { login, err })
+      return "unknown"
+    }
   }
 
   // Live invite-team slugs, fetched lazily only when a member-less team is old
@@ -153,8 +197,10 @@ export async function collectInviteRecoveries(
           isPastGcAge(state.createdAt) &&
           !(await loadLiveInviteSlugs()).has(slug)
         ) {
-          await deleteInviteTeam(client, org, slug)
-          deletedStale += 1
+          if (!readOnly) {
+            await deleteInviteTeam(client, org, slug)
+            deletedStale += 1
+          }
         } else {
           liveInviteEmails.add(record.email)
         }
@@ -182,11 +228,24 @@ export async function collectInviteRecoveries(
         continue
       }
       if (!enrolled.has(invitee.id)) {
-        // Accepted, then removed from the classroom: the invite lifecycle is
-        // over. Delete the team so its record can't resurrect the row later.
-        await deleteInviteTeam(client, org, slug)
-        deletedStale += 1
-        continue
+        // Absent from the snapshot is NOT proof of unenrollment (see
+        // confirmEnrollment); a confirmed stale snapshot means they enrolled
+        // mid-pass, so recover them.
+        const confirmed = await confirmEnrollment(invitee.login)
+        if (confirmed === "unknown") {
+          trusted = false
+          continue
+        }
+        if (confirmed === "unenrolled") {
+          // Accepted, then removed from the classroom: the invite lifecycle is
+          // over. Delete the team so its record can't resurrect the row later.
+          if (!readOnly) {
+            await deleteInviteTeam(client, org, slug)
+            deletedStale += 1
+          }
+          continue
+        }
+        enrolled.add(invitee.id)
       }
 
       recovered.push({

@@ -148,6 +148,9 @@ type classroomIndex struct {
 	// idByLogin omits any login held by more than one member: two accounts
 	// answering to one login is not something to guess at.
 	idByLogin map[string]int64
+	// teamSlugs are the classroom teams `enrolled` was built from (student
+	// first), kept for the scan's decision-time enrollment re-check.
+	teamSlugs []string
 	// archived is classroom.json `active: false`: the roster is frozen, so
 	// --write is refused (the web's assertClassroomNotArchived).
 	archived bool
@@ -197,6 +200,7 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 
 	counts := map[string]int{}
 	for _, team := range teams {
+		idx.teamSlugs = append(idx.teamSlugs, team.slug)
 		// Strict read: a classroom or staff team is RECORDED, so its absence is a
 		// broken classroom (renamed, deleted, mistyped), not an empty roster.
 		// Reading it as no members would make every accepted invitee look
@@ -258,6 +262,7 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 		return scan
 	}
 
+scanLoop:
 	for _, team := range teams {
 		state, ok, err := configrepo.ReadInviteTeam(client, org, team.Slug)
 		if err != nil {
@@ -335,10 +340,31 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 				continue
 			}
 			if !idx.enrolled[invitee.ID] {
-				// Accepted, then removed from the classroom: the lifecycle is
-				// over, and the record must not resurrect the row later.
-				scan.staleSlugs = append(scan.staleSlugs, team.Slug)
-				continue
+				// Absent from idx.enrolled is NOT proof of unenrollment: the
+				// index was built once, before this loop, so a student who
+				// accepted mid-pass sits on their invite team while missing
+				// from the snapshot. Deleting on that stale evidence would
+				// destroy the only record of their email <-> account mapping
+				// (issue #756), so re-prove absence at decision time first;
+				// any membership means the snapshot was stale — they enrolled
+				// since it was taken, so recover them.
+				enrolled, confErr := confirmEnrollment(client, org, idx.teamSlugs, invitee.Login)
+				if confErr != nil {
+					scan.trusted = false
+					if cliutil.IsRateLimited(confErr) {
+						_, _ = fmt.Fprintf(errOut, "Warning: %s: rate-limited while re-checking %s's classroom membership; stopping the invite pass early — re-run later.\n", org, invitee.Login)
+						break scanLoop
+					}
+					_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking %s's classroom membership failed (%v); leaving %s alone.\n", org, invitee.Login, confErr, team.Slug)
+					continue
+				}
+				if !enrolled {
+					// Accepted, then removed from the classroom: the lifecycle
+					// is over, and the record must not resurrect the row later.
+					scan.staleSlugs = append(scan.staleSlugs, team.Slug)
+					continue
+				}
+				idx.enrolled[invitee.ID] = true
 			}
 			scan.recovered = append(scan.recovered, inviteRecovery{
 				Email: email, Login: invitee.Login, ID: invitee.ID, Slug: team.Slug,
@@ -355,6 +381,22 @@ func pastGCAge(createdAt time.Time) bool {
 		return false
 	}
 	return time.Since(createdAt) > contract.InviteTeamGCMinAge
+}
+
+// confirmEnrollment reports whether login is on any classroom team RIGHT NOW,
+// via per-team point reads. Any membership record (active or pending) counts.
+// Strict: a failed read propagates so the caller keeps the team.
+func confirmEnrollment(client githubapi.Client, org string, teamSlugs []string, login string) (bool, error) {
+	for _, slug := range teamSlugs {
+		_, found, err := configrepo.GetTeamMembershipState(client, org, slug, login)
+		if err != nil {
+			return false, err
+		}
+		if found {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // rosterPlan is the roster-side work phase 2 derives from the scan and the

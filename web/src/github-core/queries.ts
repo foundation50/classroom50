@@ -80,6 +80,7 @@ export {
   ensureTeam,
   listTeamMembers,
   teamMembersQuery,
+  getTeamMembershipState,
   listOrgTeams,
   orgTeamsQuery,
   listRepoTeams,

@@ -30,6 +30,7 @@ import {
   StudentAlreadyEnrolledError,
 } from "./students"
 import { removeEmailInviteRow } from "./students/rosterPrimitives"
+import { inviteTeamName, marshalInviteDescription } from "@/util/inviteTeam"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { GitHubClient } from "@/github-core/client"
 
@@ -2497,6 +2498,17 @@ const makeTeamClient = (opts: {
   orgInviteEmails?: string[]
   // When set, the org-invitations read rejects, so removal fails closed.
   orgInvitesReject?: boolean
+  // Invite metadata teams served through the REAL collect seam (the sync's
+  // decision-time re-collect): listed on the org team list, point-read with
+  // description/created_at, members listed by exact slug.
+  inviteTeams?: {
+    slug: string
+    description: string
+    members: TeamMemberSeed[]
+  }[]
+  // How many ref updates fail 409 first (drives withGitConflictRetry); the
+  // retried closure then re-reads the CSV the losing attempt staged.
+  refConflicts?: number
   // When set, a members read for the teacher/ta team rejects with this
   // non-404 status (to exercise the best-effort staff-read degradation).
   staffReadRejects?: { role: "teacher" | "ta"; status: number }
@@ -2504,6 +2516,7 @@ const makeTeamClient = (opts: {
   const committed: { content: string | null } = { content: null }
   const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
   const teamAdds: string[] = []
+  const refConflictsSeen = { count: 0 }
 
   const requestRaw = vi.fn().mockImplementation((path: string) => {
     if (path.includes("/contents/") && path.includes("classroom.json")) {
@@ -2530,6 +2543,17 @@ const makeTeamClient = (opts: {
         const u = opts.users[login]
         if (!u) return Promise.reject(new Error(`404 no such user: ${login}`))
         return Promise.resolve({ login, name: null, email: null, ...u })
+      }
+      // Org team list (GET /orgs/{org}/teams?page=..) — enumerated by the
+      // sync's decision-time invite re-collect when a team member has no
+      // roster row.
+      if (/\/orgs\/[^/]+\/teams\?/.test(path)) {
+        return Promise.resolve(
+          (opts.inviteTeams ?? []).map((t, i) => ({
+            id: 700 + i,
+            slug: t.slug,
+          })),
+        )
       }
       // Team-add: PUT .../teams/{slug}/memberships/{login}
       if (path.includes("/teams/") && path.includes("/memberships/")) {
@@ -2578,6 +2602,13 @@ const makeTeamClient = (opts: {
         const slug = decodeURIComponent(
           path.split("/teams/")[1].split("/members")[0],
         )
+        // An invite metadata team's members, by exact slug.
+        const invite = (opts.inviteTeams ?? []).find((t) => t.slug === slug)
+        if (invite) {
+          return Promise.resolve(
+            invite.members.map((m) => ({ login: m.login, id: m.id })),
+          )
+        }
         const rejects = opts.staffReadRejects
         const rejectsTeacher =
           rejects &&
@@ -2615,6 +2646,21 @@ const makeTeamClient = (opts: {
           name: m.name ?? null,
         }))
         return Promise.resolve(members)
+      }
+      // Invite metadata team point read (readInviteTeam): GET
+      // /orgs/{org}/teams/{slug} — description + created_at.
+      {
+        const m = path.match(/\/orgs\/[^/]+\/teams\/([^/?]+)$/)
+        const slug = m ? decodeURIComponent(m[1]) : null
+        const invite = (opts.inviteTeams ?? []).find((t) => t.slug === slug)
+        if (invite) {
+          return Promise.resolve({
+            id: 700,
+            slug: invite.slug,
+            description: invite.description,
+            created_at: new Date().toISOString(),
+          })
+        }
       }
       // Org membership state: GET /orgs/{org}/memberships/{login}
       if (path.includes("/memberships/") && !path.includes("/teams/")) {
@@ -2660,6 +2706,27 @@ const makeTeamClient = (opts: {
         return Promise.resolve({ sha: "new-commit-sha" })
       }
       if (path.endsWith("/git/refs/heads/main")) {
+        if ((opts.refConflicts ?? 0) > refConflictsSeen.count) {
+          refConflictsSeen.count++
+          // The losing attempt's staged CSV stands in for the concurrent
+          // writer's commit: the retry re-reads it as the current file.
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 409,
+              url: path,
+              message: "conflict",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
         return Promise.resolve({})
       }
       return Promise.reject(new Error(`unexpected request: ${path}`))
@@ -2672,6 +2739,94 @@ const makeTeamClient = (opts: {
     request,
   }
 }
+
+describe("syncRosterFromTeam — real invite-team seam (#756)", () => {
+  const email = "ada@uni.edu"
+  const inviteTeamFor = async () => ({
+    slug: await inviteTeamName("cs101", email),
+    description: marshalInviteDescription({ email, classroom: "cs101" }),
+    members: [{ login: "ada", id: 42 }],
+  })
+
+  it("folds a mid-pass acceptor via the UN-mocked re-collect; mapping reported recorded", async () => {
+    // Ada accepted between the caller's collect (nothing recovered, her email
+    // live) and this sync's team read. The re-collect runs the REAL
+    // collectInviteRecoveries against a real invite team served over the wire:
+    // slug hashed from (classroom, email), v1 description, one member.
+    const team = await inviteTeamFor()
+    const { client, committed, request } = makeTeamClient({
+      startingCsv: HEADER + `,Ada,Lovelace,${email},,,student\n`,
+      users: {},
+      teamHas: [{ login: "ada", id: 42 }],
+      inviteTeams: [team],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: {
+        recovered: [],
+        liveInviteEmails: new Set([email]),
+        trusted: true,
+        deletedStale: 0,
+      },
+    })
+
+    // Identity folded onto the invite-time row — no appended duplicate.
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "ada",
+      github_id: "42",
+      email,
+      first_name: "Ada",
+      last_name: "Lovelace",
+    })
+    // The landed fold makes the mapping finalizable.
+    expect(result.recordedRecoveries).toEqual([
+      { email, invitee: { id: 42, login: "ada" }, slug: team.slug },
+    ])
+    // The in-closure re-collect is read-only: nothing was deleted.
+    const deletes = request.mock.calls.filter(
+      ([, options]) => (options as { method?: string })?.method === "DELETE",
+    )
+    expect(deletes).toEqual([])
+  })
+
+  it("re-derives the fold on a 409 retry: no duplicate row, teardown deferred safely", async () => {
+    const team = await inviteTeamFor()
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + `,Ada,Lovelace,${email},,,student\n`,
+      users: {},
+      teamHas: [{ login: "ada", id: 42 }],
+      inviteTeams: [team],
+      refConflicts: 1,
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: {
+        recovered: [],
+        liveInviteEmails: new Set([email]),
+        trusted: true,
+        deletedStale: 0,
+      },
+    })
+
+    // Attempt 1 folded and lost the ref race; attempt 2 re-read the folded
+    // file and recognized the work as done — ONE row, never a duplicate.
+    const rows = rowsFromCsv(committed.content!)
+    expect(
+      rows.filter((r) => r.username === "ada" || r.email === email),
+    ).toHaveLength(1)
+    expect(result.noop).toBe(true)
+    // The retry attempt never re-collected (the folded row leaves no unknown
+    // member), so the caller's empty state proves no mapping recorded THIS
+    // pass: teardown fails closed and defers to the next pass's re-recovery.
+    expect(result.recordedRecoveries).toEqual([])
+  })
+})
 
 describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-members", () => {
   it("adds active org members to the team and skips non-members", async () => {

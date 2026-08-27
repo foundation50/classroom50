@@ -98,6 +98,27 @@ export function teamMembersQuery(
   })
 }
 
+// One user's membership on one team (GET
+// /orgs/{org}/teams/{slug}/memberships/{username}): "active", "pending", or
+// null on 404 — GitHub's authoritative "not on this team" (a missing team 404s
+// the same way). Any other error propagates so a transient blip is never read
+// as "not a member".
+export async function getTeamMembershipState(
+  client: GitHubClient,
+  org: string,
+  teamSlug: string,
+  username: string,
+): Promise<"active" | "pending" | null> {
+  return tolerateGitHubError(async () => {
+    const membership = await client.request<{ state?: string }>(
+      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+        teamSlug,
+      )}/memberships/${encodeURIComponent(username)}`,
+    )
+    return membership.state === "pending" ? "pending" : "active"
+  }, null)
+}
+
 // Every team in the org across all pages (GET /orgs/{org}/teams). Owner/member
 // visibility applies (secret teams only listed for members who can see them).
 // Used to cross-reference each `classroom50-<classroom>` team's live membership

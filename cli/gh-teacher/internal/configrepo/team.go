@@ -642,6 +642,25 @@ func RemoveTeamMembership(client githubapi.Client, org, slug, username string) e
 	return nil
 }
 
+// GetTeamMembershipState reads one user's membership on one team ("active" or
+// "pending"). found=false on 404 — GitHub's authoritative "not on this team" (a
+// missing team 404s the same way). Any other error propagates so a transient
+// blip is never read as "not a member".
+func GetTeamMembershipState(client githubapi.Client, org, slug, username string) (state string, found bool, err error) {
+	path := fmt.Sprintf("orgs/%s/teams/%s/memberships/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(username))
+	var resp struct {
+		State string `json:"state"`
+	}
+	if err := client.Get(path, &resp); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("GET %s: %w", path, err)
+	}
+	return resp.State, true, nil
+}
+
 // teamHasRepoAccess reports whether the team addressed by `slug` already has
 // any access to <org>/<repo> (204 = yes, 404 = no). Keeps GrantTeamRepoRead
 // idempotent.
