@@ -168,6 +168,7 @@ const EditAssignmentForm = ({
                   ? values.pass_threshold
                   : undefined,
                 student_permission: values.student_permission || undefined,
+                repo_visibility: values.repo_visibility,
                 submission_mode: values.submission_mode,
                 submission_tags: parseSubmissionTags(values.submission_tags),
                 grading:

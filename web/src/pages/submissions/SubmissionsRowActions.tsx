@@ -2,6 +2,8 @@ import {
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
+  GlobeIcon,
+  LockIcon,
   LogIcon,
   PauseIcon,
   PlayIcon,
@@ -23,6 +25,7 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
 import useSetAutogradeState from "@/hooks/mutations/useSetAutogradeState"
+import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -343,6 +346,14 @@ export type SubmissionActionListProps = {
   // hides the action — a non-owner can't disable workflows, and there's no
   // autograde workflow to pause on empty_repo/no_autograder/custom assignments.
   canPauseAutograding?: boolean
+  // Whether the Change-visibility action applies: owner-only (org policy
+  // blocks members from flipping visibility; GitHub 403s them regardless).
+  // Applies to every repo shape — a bare or group repo is still a repo whose
+  // work a teacher may showcase (issue #766).
+  canChangeVisibility?: boolean
+  // The repo's live private flag (from the hub's repo read), driving the
+  // Change-visibility action's label/direction. undefined = still loading.
+  repoPrivate?: boolean
 }
 
 export const SubmissionActionList = ({
@@ -363,6 +374,8 @@ export const SubmissionActionList = ({
   submissionMode,
   submissionTags,
   canPauseAutograding = false,
+  canChangeVisibility = false,
+  repoPrivate,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -437,6 +450,15 @@ export const SubmissionActionList = ({
             <PauseAutogradingButton org={org} repo={repo} noRepo={!hasRepo} />
           )}
         </>
+      )}
+      {canChangeVisibility && (
+        <ChangeVisibilityButton
+          org={org}
+          repo={repo}
+          isPrivate={repoPrivate}
+          displayName={displayName || owner}
+          noRepo={!hasRepo}
+        />
       )}
       <DownloadButton
         org={org}
@@ -516,6 +538,119 @@ const UpdateTriggerButton = ({
       disabled={noRepo || pending}
       ariaLabel={t("submissions.rowTrigger.aria", { repo })}
     />
+  )
+}
+
+// Per-row Change visibility (issue #766): flip this one repo between private
+// and public — e.g. showcase a stand-out final project, or revert one. The
+// direction follows the repo's live private flag; going PUBLIC confirms first
+// (student work can carry names/emails not meant to be public), while going
+// back private applies immediately (strictly less exposure).
+const ChangeVisibilityButton = ({
+  org,
+  repo,
+  isPrivate,
+  displayName,
+  noRepo,
+}: {
+  org: string
+  repo: string
+  // The repo's live private flag; undefined while the read is pending, which
+  // disables the action (never fire against a guessed direction).
+  isPrivate?: boolean
+  displayName: string
+  noRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const run = useSafeSubmit()
+  const mutation = useSetRepoVisibility()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const stateUnknown = !noRepo && isPrivate === undefined
+  const makePublic = isPrivate !== false
+
+  const apply = async () => {
+    try {
+      await mutation.mutateAsync({
+        org,
+        repo,
+        visibility: makePublic ? "public" : "private",
+      })
+      notify({
+        tone: "success",
+        message: t(
+          makePublic
+            ? "submissions.rowVisibility.outcome.public"
+            : "submissions.rowVisibility.outcome.private",
+          { repo },
+        ),
+      })
+    } catch (err) {
+      notify({
+        tone: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : t("submissions.rowVisibility.outcome.failed"),
+      })
+    }
+  }
+
+  const handleClick = () => {
+    if (noRepo || stateUnknown || mutation.isPending) return
+    if (makePublic) {
+      setConfirmOpen(true)
+      return
+    }
+    void run(apply)
+  }
+
+  return (
+    <>
+      <ActionListRow
+        icon={makePublic ? GlobeIcon : LockIcon}
+        title={t(
+          makePublic
+            ? "submissions.rowVisibility.makePublicTitle"
+            : "submissions.rowVisibility.makePrivateTitle",
+        )}
+        description={t(
+          makePublic
+            ? "submissions.rowVisibility.makePublicDescription"
+            : "submissions.rowVisibility.makePrivateDescription",
+        )}
+        onClick={handleClick}
+        disabled={noRepo || stateUnknown || mutation.isPending}
+        loading={stateUnknown || mutation.isPending}
+        loadingLabel={t("submissions.rowVisibility.makePublicTitle")}
+        ariaLabel={t(
+          makePublic
+            ? "submissions.rowVisibility.makePublicAria"
+            : "submissions.rowVisibility.makePrivateAria",
+          { repo },
+        )}
+      />
+      <ConfirmModal
+        open={confirmOpen}
+        title={t("submissions.rowVisibility.confirmTitle", {
+          name: displayName,
+        })}
+        description={
+          <Trans
+            i18nKey="submissions.rowVisibility.confirmBody"
+            values={{ repo }}
+            components={{ repo: <EmphasisLtr className="font-normal" /> }}
+          />
+        }
+        confirmLabel={t("submissions.rowVisibility.confirmLabel")}
+        cancelLabel={t("common.cancel")}
+        dangerous
+        needsConfirm={false}
+        onConfirm={apply}
+        onClose={() => setConfirmOpen(false)}
+      />
+    </>
   )
 }
 

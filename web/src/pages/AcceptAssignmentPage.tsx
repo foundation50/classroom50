@@ -969,6 +969,25 @@ const AcceptAssignmentPage = () => {
               </div>
             </div>
 
+            {/* Upfront disclosure (issue #766): shown while the repo is yet to
+                be created. Once it exists the notice would be stale — the
+                accept step message carries the visibility that landed. */}
+            {assignmentData.repo_visibility === "public" &&
+              !repoExistsAlready &&
+              !acceptMutation.data && (
+                <Alert tone="warning" className="items-start">
+                  <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
+                  <div>
+                    <div className="font-bold">
+                      {t("accept.publicRepo.title")}
+                    </div>
+                    <div className="mt-1 text-sm">
+                      {t("accept.publicRepo.body")}
+                    </div>
+                  </div>
+                </Alert>
+              )}
+
             {(acceptMutation.isPending ||
               acceptMutation.isError ||
               acceptMutation.isSuccess) && <AcceptProgress steps={steps} />}

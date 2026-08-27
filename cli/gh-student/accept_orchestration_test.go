@@ -56,7 +56,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 			server := httptest.NewServer(mux)
 			t.Cleanup(server.Close)
 			var out bytes.Buffer
-			_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, want)
+			_, _, _, _, err := createTemplatedAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, want, false)
 			if err != nil {
 				t.Fatalf("include_all_branches=%v: unexpected error: %v", want, err)
 			}
@@ -98,7 +98,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		allOff := &assignments.RepoFeatures{
 			Issues: boolPtr(false), Wiki: boolPtr(false), Projects: boolPtr(false),
 		}
-		htmlURL, fullName, branch, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, allOff, false)
+		htmlURL, fullName, branch, already, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, allOff, false, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -139,7 +139,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		t.Cleanup(server.Close)
 
 		var out bytes.Buffer
-		_, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		_, _, branch, _, err := createTemplatedAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -179,7 +179,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		t.Cleanup(server.Close)
 
 		var out bytes.Buffer
-		_, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		_, _, branch, _, err := createTemplatedAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -213,7 +213,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, fullName, _, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		_, fullName, _, already, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -248,7 +248,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, _, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		_, _, _, already, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, false)
 		if err == nil || !strings.Contains(err.Error(), "too long") {
 			t.Fatalf("err = %v, want a 'too long' error", err)
 		}
@@ -270,7 +270,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		_, _, _, _, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, false)
 		if err == nil || !strings.Contains(err.Error(), "not accessible to you") {
 			t.Fatalf("err = %v, want the cross-org 'not accessible' message", err)
 		}
@@ -299,7 +299,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", inOrgTmpl, nil, false)
+		_, _, _, _, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", inOrgTmpl, nil, false, false)
 		if err == nil || !strings.Contains(err.Error(), "`upstream-org`") || !strings.Contains(err.Error(), "fork") {
 			t.Fatalf("err = %v, want a fork-upstream message naming `upstream-org`", err)
 		}
@@ -325,7 +325,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", inOrgTmpl, nil, false)
+		_, _, _, _, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", inOrgTmpl, nil, false, false)
 		if err == nil || !strings.Contains(err.Error(), "`upstream-org`") {
 			t.Fatalf("err = %v, want a fork-upstream message naming `upstream-org`", err)
 		}
@@ -363,7 +363,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		var out bytes.Buffer
 		// A forced feature so the PATCH still fires (a nil/all-default template-
 		// less assignment now sends none — GitHub's create defaults stand).
-		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, &assignments.RepoFeatures{Issues: boolPtr(true)})
+		htmlURL, fullName, branch, already, err := createEmptyAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, &assignments.RepoFeatures{Issues: boolPtr(true)}, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -409,7 +409,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		t.Cleanup(server.Close)
 
 		var out bytes.Buffer
-		_, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		_, _, branch, _, err := createEmptyAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -446,7 +446,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		_, _, branch, _, err := createEmptyAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -478,7 +478,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		_, fullName, branch, already, err := createEmptyAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil, false)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -515,7 +515,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, _, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil)
+		_, _, _, already, err := createEmptyAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil, false)
 		if err == nil || !strings.Contains(err.Error(), "too long") {
 			t.Fatalf("err = %v, want a 'too long' error", err)
 		}
@@ -1180,7 +1180,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg_Bare(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
-	_, _, _, already, err := createEmptyPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", false, nil)
+	_, _, _, already, err := createEmptyAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", false, nil, false)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -1224,12 +1224,12 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 
 	templated := func(client githubapi.Client) error {
 		var out bytes.Buffer
-		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false)
+		_, _, _, _, err := createTemplatedAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, false)
 		return err
 	}
 	templateless := func(client githubapi.Client, autoInit bool) error {
 		var out bytes.Buffer
-		_, _, _, _, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", autoInit, nil)
+		_, _, _, _, err := createEmptyAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", autoInit, nil, false)
 		return err
 	}
 
@@ -1316,6 +1316,128 @@ func TestOrgRepoCreationDenied(t *testing.T) {
 		}
 		if strings.Contains(err.Error(), "may not allow") {
 			t.Errorf("err = %q, want an unrelated 403 to stay unclassified", err)
+		}
+	})
+}
+
+// repo_visibility (issue #766): a public assignment creates the repo with
+// private:false on both creation paths, and the org-policy refusal of a
+// member's public create is recognized so the caller can fall back to private.
+func TestPublicRepoVisibility(t *testing.T) {
+	tmpl := assignments.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"}
+
+	t.Run("generate body carries private per visibility", func(t *testing.T) {
+		for _, public := range []bool{false, true} {
+			var body map[string]any
+			mux := http.NewServeMux()
+			mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"full_name":      "o/cs-principles-hello-alice",
+					"html_url":       "https://github.com/o/cs-principles-hello-alice",
+					"default_branch": "main",
+				})
+			})
+			mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "main"})
+			})
+			mux.HandleFunc("/repos/o/cs-principles-hello-alice/branches", func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "main"}})
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			var out bytes.Buffer
+			_, _, _, _, err := createTemplatedAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl, nil, false, public)
+			if err != nil {
+				t.Fatalf("public=%v: unexpected error: %v", public, err)
+			}
+			if body["private"] != !public {
+				t.Errorf("public=%v: generate body = %v, want private:%v", public, body, !public)
+			}
+		}
+	})
+
+	t.Run("org-repos body carries private per visibility", func(t *testing.T) {
+		for _, public := range []bool{false, true} {
+			var body map[string]any
+			mux := http.NewServeMux()
+			mux.HandleFunc("/orgs/o/repos", func(w http.ResponseWriter, r *http.Request) {
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				_ = json.NewEncoder(w).Encode(map[string]string{
+					"full_name":      "o/cs-principles-solo-alice",
+					"html_url":       "https://github.com/o/cs-principles-solo-alice",
+					"default_branch": "main",
+				})
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			var out bytes.Buffer
+			_, _, _, _, err := createEmptyAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil, public)
+			if err != nil {
+				t.Fatalf("public=%v: unexpected error: %v", public, err)
+			}
+			if body["private"] != !public {
+				t.Errorf("public=%v: create body = %v, want private:%v", public, body, !public)
+			}
+		}
+	})
+
+	refuse := func(status int, message string) githubapi.Client {
+		mux := http.NewServeMux()
+		handler := func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(status)
+			_, _ = fmt.Fprintf(w, `{"message":%q}`, message)
+		}
+		mux.HandleFunc("/orgs/o/repos", handler)
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		return newTestRESTClient(t, server)
+	}
+	create := func(client githubapi.Client) error {
+		var out bytes.Buffer
+		_, _, _, _, err := createEmptyAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true, nil, true)
+		return err
+	}
+
+	// GitHub words the refusal differently per endpoint/policy; the matcher
+	// keys on "visibility" or "public repositor…" in either message slot.
+	t.Run("visibility refusals are recognized for the private fallback", func(t *testing.T) {
+		for _, tc := range []struct {
+			status  int
+			message string
+		}{
+			{http.StatusUnprocessableEntity, "Visibility level of public is not allowed for this organization."},
+			{http.StatusForbidden, "Only organization owners can create public repositories."},
+		} {
+			err := create(refuse(tc.status, tc.message))
+			if err == nil {
+				t.Fatalf("%d %q: err = nil, want the refusal", tc.status, tc.message)
+			}
+			if !isPublicRepoCreationDenied(err) {
+				t.Errorf("isPublicRepoCreationDenied(%d %q) = false, want true", tc.status, tc.message)
+			}
+		}
+	})
+
+	t.Run("unrelated failures never trigger the private fallback", func(t *testing.T) {
+		for _, tc := range []struct {
+			status  int
+			message string
+		}{
+			{http.StatusForbidden, "Resource protected by organization SAML enforcement."},
+			{http.StatusUnprocessableEntity, "name already exists on this account"},
+			{http.StatusInternalServerError, "Server Error"},
+		} {
+			err := create(refuse(tc.status, tc.message))
+			if err == nil {
+				// The already-exists 422 recovers via GET and legitimately
+				// returns nil; it must simply not be classified as a refusal.
+				continue
+			}
+			if isPublicRepoCreationDenied(err) {
+				t.Errorf("isPublicRepoCreationDenied(%d %q) = true, want false", tc.status, tc.message)
+			}
 		}
 	})
 }

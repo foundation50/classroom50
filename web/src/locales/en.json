@@ -1258,6 +1258,16 @@
           "admin": "Admin"
         }
       },
+      "repoVisibility": {
+        "label": "Repository visibility",
+        "help": "The visibility each student repository is created with at accept time. Private is the default. Choose Public for peer-review, portfolio, or showcase assignments — students are warned before accepting.",
+        "publicWarning": "Anyone on the internet will be able to see each student's work — code, commits, and name. If the organization doesn't allow students to create public repositories, their repository is created private instead and you can make it public from the submissions page.",
+        "editHelp": "This applies to repositories created from now on; use the submissions page to change the visibility of existing ones.",
+        "levels": {
+          "private": "Private",
+          "public": "Public"
+        }
+      },
       "autograding": {
         "modeLabel": "Built-in autograder",
         "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup, so you'll need to update the existing repositories yourself.",
@@ -1404,6 +1414,7 @@
         "setupTimeoutRange": "Setup timeout must be 0 or a whole number of seconds from 1 through {{max}}.",
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repo access must be one of pull, triage, push, maintain, or admin.",
+        "repoVisibilityInvalid": "Repository visibility must be \"private\" or \"public\".",
         "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
         "gradingModeInvalid": "Grading must be \"off\", \"auto\", or \"manual\".",
         "gradingMaxPointsInvalid": "Max points must be a whole number of at least {{min}}.",
@@ -2459,6 +2470,10 @@
       "body": "Ask your teacher if you think this is a mistake.",
       "error": "This assignment isn't available to you. Ask your teacher if you think this is a mistake."
     },
+    "publicRepo": {
+      "title": "This repository will be public",
+      "body": "Your teacher configured this assignment to create public repositories: anyone on the internet will be able to see your work, including your code, commits, and name. If your organization doesn't allow you to create public repositories, a private one is created instead."
+    },
     "steps": {
       "account": "Checking your GitHub account",
       "membership": "Confirming your classroom membership",
@@ -2477,6 +2492,7 @@
       "autograderDisabled": "Autograding is disabled for this assignment",
       "repo": "Created {{org}}/{{repo}}",
       "repoExists": "Repository already exists: {{org}}/{{repo}}",
+      "repoVisibilityFellBack": "Created {{org}}/{{repo}} as private — the organization doesn't let you create public repositories; your teacher can make it public later",
       "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
       "access": "Set your repository access",
       "setup": "Autograding configured",
@@ -2947,6 +2963,31 @@
       "deferredSection_other": "{{count}} repositories were not updated",
       "deferredDetail": "Skipped — re-run to update."
     },
+    "bulkVisibility": {
+      "menuLabel": "Change repository visibility",
+      "menuTitle": "Make every student repository in this assignment public or private",
+      "titleEmptyRoster": "No students have accepted yet",
+      "title": "Change repository visibility",
+      "subtitle_one": "Applies to {{count}} student who has accepted this assignment.",
+      "subtitle_other": "Applies to {{count}} students who have accepted this assignment.",
+      "noRepos": "No students have accepted this assignment yet, so there are no repositories to change.",
+      "choiceLabel": "Make all repositories",
+      "keep": "Leave unchanged",
+      "info_one": "This changes the visibility of {{count}} student's repository. Repositories students accept later use the assignment's visibility setting.",
+      "info_other": "This changes the visibility of {{count}} students' repositories. Repositories students accept later use the assignment's visibility setting.",
+      "publicWarning_one": "This makes {{count}} student's repository visible to anyone on the internet — including all code, commit history, and any names or personal information in it. You can make it private again the same way.",
+      "publicWarning_other": "This makes {{count}} students' repositories visible to anyone on the internet — including all code, commit history, and any names or personal information in them. You can make them private again the same way.",
+      "apply": "Apply to all",
+      "working": "Updating repositories",
+      "progress": "Updated {{processed}} of {{total}}",
+      "resultHeadline": "Changed the visibility of {{count}} of {{total}} repositories.",
+      "resultHeadlineThrottled": "Changed {{count}} of {{total}} repositories before GitHub rate-limited the request — re-run to finish the rest.",
+      "failedSection_one": "{{count}} repository could not be changed",
+      "failedSection_other": "{{count}} repositories could not be changed",
+      "deferredSection_one": "{{count}} repository was not changed",
+      "deferredSection_other": "{{count}} repositories were not changed",
+      "deferredDetail": "Skipped — re-run to update."
+    },
     "bulkTrigger": {
       "menuLabel": "Update autograding triggers",
       "menuTitle": "Rewrite each student repository's autograding workflow to match the assignment's trigger setting",
@@ -3001,6 +3042,22 @@
         "resumed": "Autograding resumed for this repository.",
         "notGradable": "This repository has no autograding workflow — nothing to change.",
         "failed": "Could not change the autograding state — try again."
+      }
+    },
+    "rowVisibility": {
+      "makePublicTitle": "Make repository public",
+      "makePublicDescription": "Make this repository visible to anyone on the internet — for showcasing or peer review.",
+      "makePublicAria": "Make {{repo}} public",
+      "makePrivateTitle": "Make repository private",
+      "makePrivateDescription": "Make this repository visible only to its collaborators and the organization again.",
+      "makePrivateAria": "Make {{repo}} private",
+      "confirmTitle": "Make {{name}}'s repository public?",
+      "confirmBody": "Anyone on the internet will be able to see <repo>{{repo}}</repo> — including all code, commit history, and any names or personal information in it. You can make it private again anytime.",
+      "confirmLabel": "Make public",
+      "outcome": {
+        "public": "Repository is now public.",
+        "private": "Repository is now private.",
+        "failed": "Could not change the repository's visibility — try again."
       }
     },
     "bulkAutograde": {
@@ -3065,6 +3122,8 @@
       "autogradingEnabled": "Enabled",
       "autogradingPaused": "Paused",
       "autogradingPausedByGitHub": "Paused by GitHub",
+      "visibility": "Visibility",
+      "visibilityPrivate": "Private",
       "collaborators_one": "{{count}} collaborator",
       "collaborators_other": "{{count}} collaborators",
       "commitDescription": "Open the latest commit on GitHub",
@@ -3074,6 +3133,10 @@
       "regradeDescription": "Re-run the autograder on the latest commit",
       "downloadDescription": "Save the submission as a zip archive",
       "membersDescription": "View and manage the group's members"
+    },
+    "publicRepo": {
+      "badge": "Public",
+      "title": "This repository is public — anyone on the internet can see it"
     },
     "student": {
       "descriptionLabel": "Assignment details",

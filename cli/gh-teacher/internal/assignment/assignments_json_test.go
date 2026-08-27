@@ -89,6 +89,44 @@ func TestSubmissionModeEnumParity(t *testing.T) {
 	}
 }
 
+// TestRepoVisibilityEnumParity pins the repo_visibility allow-list across its
+// hand-mirrored sources: the JSON schema enum (declared source of truth) and
+// the Go contract.RepoVisibilities (what ValidateRepoVisibility enforces). The
+// web mirror (REPO_VISIBILITIES) is pinned against the same schema enum by a
+// vitest.
+func TestRepoVisibilityEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					RepoVisibility struct {
+						Enum []string `json:"enum"`
+					} `json:"repo_visibility"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.RepoVisibility.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema repo_visibility.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.RepoVisibilities) {
+		t.Errorf("repo_visibility drift: schema enum %v != contract.RepoVisibilities %v — update every mirror in lockstep (schema, Go contract, web REPO_VISIBILITIES)",
+			schemaEnum, contract.RepoVisibilities)
+	}
+}
+
 // TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
 // wire default; never gate on the field being present) across its three
 // hand-synced copies — the schema submission_mode.description, contract.go, and

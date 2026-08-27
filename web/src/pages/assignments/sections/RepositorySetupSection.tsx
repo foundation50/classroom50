@@ -7,7 +7,11 @@ import { Alert, Button, cx, FormField, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
 import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
-import { REPO_PERMISSIONS, defaultStudentPermission } from "@/types/classroom"
+import {
+  REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
+  defaultStudentPermission,
+} from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
 import { ToggleField } from "@/components/ui"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
@@ -224,9 +228,10 @@ export function RepositorySetupSection({
 }
 
 // The Advanced settings body for Repository Setup: copy About/Topics from the
-// template, the template's PR template as the Feedback PR body, the student
-// repo-access override, and the repository features. Split out so the
-// disclosure's contents don't nest under the section's render-prop chain.
+// template, the template's PR template as the Feedback PR body, the repo
+// visibility, the student repo-access override, and the repository features.
+// Split out so the disclosure's contents don't nest under the section's
+// render-prop chain.
 function RepositoryAdvancedFields({
   form,
   edit,
@@ -289,6 +294,8 @@ function RepositoryAdvancedFields({
           )}
         </form.Subscribe>
       ) : null}
+
+      <RepoVisibilityField form={form} edit={edit} />
 
       <StudentPermissionField form={form} />
 
@@ -384,6 +391,63 @@ function StudentPermissionField({ form }: { form: AssignmentForm }) {
             )
           }}
         </form.Subscribe>
+      )}
+    </form.Field>
+  )
+}
+
+// The accept-time repo visibility choice (private default / public for
+// showcase work). A public pick shows a persistent exposure warning, plus the
+// accept-time-only caveat on edit (existing repos are flipped from the
+// submissions page, not here).
+function RepoVisibilityField({
+  form,
+  edit,
+}: {
+  form: AssignmentForm
+  edit: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <form.Field name="repo_visibility">
+      {(field) => (
+        <FormField
+          htmlFor={field.name}
+          label={t("assignments.form.repoVisibility.label")}
+          help={t("assignments.form.repoVisibility.help")}
+        >
+          {({ id, describedById }) => (
+            <>
+              <Select
+                id={id}
+                name={field.name}
+                className="w-full sm:max-w-xs"
+                aria-describedby={describedById}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as typeof field.state.value)
+                }
+              >
+                {REPO_VISIBILITIES.map((level) => (
+                  <option key={level} value={level}>
+                    {t(`assignments.form.repoVisibility.levels.${level}`)}
+                  </option>
+                ))}
+              </Select>
+              {field.state.value === "public" ? (
+                <Alert tone="warning" role="status" className="mt-2 text-sm">
+                  <span>
+                    {t("assignments.form.repoVisibility.publicWarning")}
+                    {edit ? (
+                      <> {t("assignments.form.repoVisibility.editHelp")}</>
+                    ) : null}
+                  </span>
+                </Alert>
+              ) : null}
+            </>
+          )}
+        </FormField>
       )}
     </form.Field>
   )

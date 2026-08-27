@@ -824,8 +824,24 @@ export async function acceptAssignment(params: {
         fallbackBranch: sourceBranch || "main",
         bare: isEmptyRepo,
         includeAllBranches: assignment.include_all_branches === true,
+        publicVisibility: assignment.repo_visibility === "public",
       }),
   )
+
+  // The org refused the public create and the repo was created private
+  // instead (fail-private, never fail the accept on visibility alone).
+  // Overwrite the step's done message so the student learns the actual
+  // visibility that landed and who can change it.
+  if (created.visibilityFellBackToPrivate) {
+    onStepUpdate?.({
+      id: "repo",
+      status: "complete",
+      message: {
+        key: "accept.stepDone.repoVisibilityFellBack",
+        params: { org, repo: studentRepoNameValue },
+      },
+    })
+  }
 
   // Bare (empty_repo) path: no control files exist or are ever committed, so
   // the marker probe below is meaningless — an existing repo IS an accepted

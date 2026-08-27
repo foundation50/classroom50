@@ -55,6 +55,7 @@ import type {
   AssignmentTestFailureDetails,
   RepoPermission,
   RepoFeatures,
+  RepoVisibility,
   SubmissionMode,
   GradingMode,
 } from "@/types/classroom"
@@ -65,6 +66,7 @@ import {
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
   SUBMISSION_MODES,
   GRADING_MODES,
   GRADING_MAX_POINTS_MIN,
@@ -173,6 +175,12 @@ export type CreateAssignmentFormValues = {
   // pins it. buildAssignmentEntry omits it when it equals the default and
   // clamps group up to admin.
   student_permission: "" | RepoPermission
+  // The visibility each student repo is CREATED with at accept time:
+  // "private" (the default; omitted on the wire) or "public" (peer-review /
+  // portfolio / showcase work — students are warned before accepting).
+  // Editing it later affects only repos created from then on; existing repos
+  // are flipped from the submissions page.
+  repo_visibility: RepoVisibility
   // When the autograder fires: "every-push" (the default; omitted on the
   // wire) or "tag" (only submit/* tag pushes grade — the submit flows push
   // the tag; plain `git push` costs no Actions minutes). Baked into each
@@ -527,6 +535,13 @@ export function validateAssignmentForm(
     )
   }
 
+  // Guard the visibility picker against a hand-tampered value.
+  if (!REPO_VISIBILITIES.includes(value.repo_visibility)) {
+    errors.repo_visibility = t(
+      "assignments.form.validation.repoVisibilityInvalid",
+    )
+  }
+
   // Mirror the CLI's ValidateSubmissionTags so a bad pattern can't reach the
   // file (the util returns its own user-readable message). Only validated in
   // "tag" mode: the tags field is hidden and cleared on submit for every-push,
@@ -653,6 +668,9 @@ export function toSubmitValues(
     pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
+    // Repo visibility is accept-time provisioning like student_permission, so
+    // it is NOT cleared by any repo shape.
+    repo_visibility: value.repo_visibility,
     // The submission MODE is how the app identifies submissions and is valid
     // for every repo shape (with a shim it also drives the trigger; without one
     // it's the detection definition), so it is NOT cleared by noBuiltIn.
@@ -742,6 +760,7 @@ export const useAssignmentForm = (
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
       student_permission: defaultValues?.student_permission ?? "",
+      repo_visibility: defaultValues?.repo_visibility ?? "private",
       submission_mode: resolveSubmissionMode(defaultValues?.submission_mode),
       submission_tags: defaultValues?.submission_tags || "",
       // Create default is "off" (not graded); the option order is off ->
@@ -859,6 +878,8 @@ export const assignmentToFormValues = (
     // Absent means the mode default; the form shows "Default" and the submit
     // path re-omits it. A stored value pins the picker to that level.
     student_permission: assignment.student_permission ?? "",
+    // Absent means private (the wire default, collapsed by writers).
+    repo_visibility: assignment.repo_visibility ?? "private",
     // Absent means every-push (the wire default, collapsed by writers).
     submission_mode: resolveSubmissionMode(assignment.submission_mode),
     // Milestone tag patterns, joined one-per-line for the textarea.

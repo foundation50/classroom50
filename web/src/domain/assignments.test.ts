@@ -33,7 +33,11 @@ import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
-import { REPO_PERMISSIONS, SUBMISSION_MODES } from "@/types/classroom"
+import {
+  REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
+  SUBMISSION_MODES,
+} from "@/types/classroom"
 import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
 
@@ -1222,6 +1226,41 @@ describe("editAssignment (preserved-entry integration)", () => {
     await expect(
       editAssignment(client, editInput({ submission_mode: "on-demand" })),
     ).rejects.toThrow(/submission_mode: must be one of every-push, tag/)
+  })
+
+  // repo_visibility (issue #766) mirrors submission_mode's wire form: "public"
+  // lands verbatim, while private — explicit or absent — collapses to no field
+  // at all, so a form save can't add a key `gh teacher assignment add` would
+  // have omitted. The field is classroom50-owned, so an edit rebuilds it: a
+  // public -> private downgrade must not silently keep public.
+  it.each([
+    [undefined, "public", "public"],
+    [undefined, "private", undefined],
+    [undefined, undefined, undefined],
+    ["private", "private", undefined],
+    ["public", "private", undefined],
+    ["public", "public", "public"],
+  ] as const)(
+    "writes stored=%s + input=%s as repo_visibility=%s",
+    async (stored, input, want) => {
+      const { client, committedContent } = makeClient({
+        ...existingEntry,
+        repo_visibility: stored,
+      })
+      await editAssignment(client, editInput({ repo_visibility: input }))
+      const written = JSON.parse(committedContent()) as {
+        assignments: Assignment[]
+      }
+      const edited = written.assignments.find((a) => a.slug === SLUG)!
+      expect(edited.repo_visibility).toBe(want)
+    },
+  )
+
+  it("rejects an out-of-enum repo_visibility before writing", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ repo_visibility: "internal" })),
+    ).rejects.toThrow(/repo_visibility: must be one of private, public/)
   })
 
   // copy_about / copy_topics (issue #569): template-required guard + omitempty.
@@ -3308,6 +3347,29 @@ describe("SUBMISSION_MODES parity with assignments-v1 schema", () => {
   })
 })
 
+// The web half of the repo_visibility enum lockstep guard: REPO_VISIBILITIES
+// must equal the schema's repo_visibility enum (the declared source of truth).
+// The Go half (contract.RepoVisibilities vs the same enum) is pinned by
+// TestRepoVisibilityEnumParity.
+describe("REPO_VISIBILITIES parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      assignment: {
+        properties: { repo_visibility: { enum: string[] } }
+      }
+    }
+  }
+
+  it("matches the schema repo_visibility enum exactly and in order", () => {
+    const schemaEnum = schema.$defs.assignment.properties.repo_visibility.enum
+    expect(schemaEnum).toEqual([...REPO_VISIBILITIES])
+  })
+})
+
 describe("TEST_FAILURE_DETAILS_LEVELS parity with assignments-v1 schema", () => {
   const schemaPath = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -3498,6 +3560,161 @@ describe("createAssignmentRepo", () => {
 
     expect(result.kind).toBe("already-accepted")
     expect(result.repo.default_branch).toBe("master")
+  })
+})
+
+// repo_visibility at accept (issue #766): the create body carries the
+// assignment's visibility, and a refused PUBLIC create falls back to a private
+// one (fail-private — accept never fails on visibility alone) with the flag
+// the caller uses to tell the student.
+describe("createAssignmentRepo repo_visibility", () => {
+  const rateLimit = {
+    limit: null,
+    remaining: null,
+    used: null,
+    reset: null,
+    resource: null,
+    retryAfter: null,
+  }
+
+  it.each([
+    [undefined, true],
+    [false, true],
+    [true, false],
+  ] as const)(
+    "publicVisibility=%s sends private=%s on both create paths",
+    async (publicVisibility, wantPrivate) => {
+      const bodies: Array<{ path: string; private?: boolean }> = []
+      const client: GitHubClient = {
+        request: <T>(
+          path: string,
+          opts?: { method?: string; body?: unknown },
+        ) => {
+          if (opts?.method === "POST") {
+            bodies.push({
+              path,
+              private: (opts.body as { private?: boolean }).private,
+            })
+            return Promise.resolve({
+              name: "hw1-alice",
+              default_branch: "main",
+            } as T)
+          }
+          return Promise.reject(new Error(`unexpected: ${path}`))
+        },
+        requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        fetchArchive: () =>
+          Promise.reject(new Error("unexpected fetchArchive")),
+      }
+
+      const templated = await createAssignmentRepo({
+        client,
+        templateOwner: "acme",
+        templateRepo: "starter",
+        owner: "acme",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        publicVisibility,
+      })
+      const templateless = await createAssignmentRepo({
+        client,
+        owner: "acme",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        publicVisibility,
+      })
+
+      expect(templated.visibilityFellBackToPrivate).toBeUndefined()
+      expect(templateless.visibilityFellBackToPrivate).toBeUndefined()
+      expect(bodies).toEqual([
+        { path: "/repos/acme/starter/generate", private: wantPrivate },
+        { path: "/orgs/acme/repos", private: wantPrivate },
+      ])
+    },
+  )
+
+  it("retries a refused public create as private and flags the fallback", async () => {
+    const sentPrivate: Array<boolean | undefined> = []
+    const client: GitHubClient = {
+      request: <T>(
+        path: string,
+        opts?: { method?: string; body?: unknown },
+      ) => {
+        if (opts?.method !== "POST") {
+          return Promise.reject(new Error(`unexpected: ${path}`))
+        }
+        const isPrivate = (opts.body as { private?: boolean }).private
+        sentPrivate.push(isPrivate)
+        if (isPrivate === false) {
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 422,
+              url: path,
+              message:
+                "Visibility level of public is not allowed for this organization.",
+              body: null,
+              rateLimit,
+            }),
+          ) as Promise<T>
+        }
+        return Promise.resolve({
+          name: "hw1-alice",
+          default_branch: "main",
+        } as T)
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    }
+
+    const result = await createAssignmentRepo({
+      client,
+      templateOwner: "acme",
+      templateRepo: "starter",
+      owner: "acme",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+      publicVisibility: true,
+    })
+
+    expect(sentPrivate).toEqual([false, true])
+    expect(result.kind).toBe("generated")
+    expect(result.visibilityFellBackToPrivate).toBe(true)
+  })
+
+  it("does not misread an unrelated failure as a visibility refusal", async () => {
+    // A SAML-gated 403 on a public create must surface as the real failure,
+    // never a silent private retry.
+    let posts = 0
+    const client: GitHubClient = {
+      request: <T>(path: string, opts?: { method?: string }) => {
+        if (opts?.method === "POST") {
+          posts += 1
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 403,
+              url: path,
+              message: "Resource protected by organization SAML enforcement.",
+              body: null,
+              rateLimit,
+            }),
+          ) as Promise<T>
+        }
+        return Promise.reject(new Error(`unexpected: ${path}`))
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    }
+
+    await expect(
+      createAssignmentRepo({
+        client,
+        owner: "acme",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        publicVisibility: true,
+      }),
+    ).rejects.toThrow(/SAML/)
+    expect(posts).toBe(1)
   })
 })
 

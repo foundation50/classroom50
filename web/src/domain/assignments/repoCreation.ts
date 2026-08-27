@@ -4,6 +4,7 @@ import type {
   AssignmentTestDefaults,
   RepoPermission,
   RepoFeatures,
+  RepoVisibility,
   SubmissionMode,
   Grading,
 } from "@/types/classroom"
@@ -19,6 +20,7 @@ import {
   forkParentRestrictedError,
   inOrgTemplateError,
   isOrgRepoCreationDenied,
+  isPublicRepoCreationDenied,
   orgRepoCreationDeniedError,
   outOfOrgTemplateError,
   repoNameTooLongError,
@@ -95,7 +97,46 @@ export async function createAssignmentRepo(params: {
   // Templated only: copy ALL of the template's branches (not just the default)
   // on POST /generate. Ignored for the bare/template-less paths (no generate).
   includeAllBranches?: boolean
+  // repo_visibility "public": create the student repo public instead of
+  // private. Best-effort/fail-private — org policy can forbid a member's
+  // public create, in which case the create is retried private and the result
+  // carries visibilityFellBackToPrivate so the caller can tell the student.
+  publicVisibility?: boolean
 }): Promise<AcceptRepoCreationResult> {
+  const wantPublic = params.publicVisibility === true
+  try {
+    return await createAssignmentRepoWithVisibility(params, wantPublic)
+  } catch (err) {
+    if (
+      wantPublic &&
+      err instanceof GitHubAPIError &&
+      isPublicRepoCreationDenied(err)
+    ) {
+      log.warn("accept: public repo create denied, falling back to private", {
+        org: params.owner,
+        repo: params.name,
+        githubMessage: err.message,
+      })
+      const result = await createAssignmentRepoWithVisibility(params, false)
+      return { ...result, visibilityFellBackToPrivate: true }
+    }
+    throw err
+  }
+}
+
+async function createAssignmentRepoWithVisibility(
+  params: {
+    client: GitHubClient
+    templateOwner?: string
+    templateRepo?: string
+    owner: string
+    name: string
+    fallbackBranch: string
+    bare?: boolean
+    includeAllBranches?: boolean
+  },
+  isPublic: boolean,
+): Promise<AcceptRepoCreationResult> {
   const {
     client,
     templateOwner,
@@ -120,7 +161,7 @@ export async function createAssignmentRepo(params: {
           body: {
             owner,
             name,
-            private: true,
+            private: !isPublic,
             include_all_branches: includeAllBranches,
           },
         },
@@ -154,6 +195,13 @@ export async function createAssignmentRepo(params: {
       // template content and can't be regenerated. A rate-limit also surfaces
       // as 403, so rethrow it before treating 403/404 as a template problem.
       if (err.isRateLimited) {
+        throw err
+      }
+      // A refusal specifically of the PUBLIC create must reach the caller
+      // unclassified: createAssignmentRepo retries it as a private create.
+      // Classifying it below would blame the template or the org's
+      // member-repo-creation policy — both wrong and both terminal.
+      if (isPublic && isPublicRepoCreationDenied(err)) {
         throw err
       }
       // The destination org refusing the create is independent of where the
@@ -236,10 +284,15 @@ export async function createAssignmentRepo(params: {
     name,
     branch: fallbackBranch,
     autoInit: !bare,
+    isPublic,
   })
 }
 
-type AcceptRepoCreationResult =
+type AcceptRepoCreationResult = {
+  // Set when a public create was refused by org policy and the repo was
+  // created private instead (see createAssignmentRepo).
+  visibilityFellBackToPrivate?: boolean
+} & (
   | {
       kind: "generated"
       repo: GitHubRepo
@@ -259,6 +312,7 @@ type AcceptRepoCreationResult =
       kind: "bare"
       repo: GitHubRepo
     }
+)
 async function createEmptyAssignmentRepo(params: {
   client: GitHubClient
   owner: string
@@ -267,8 +321,9 @@ async function createEmptyAssignmentRepo(params: {
   // false = empty_repo assignment: no initial commit at all. The repo stays
   // commitless until the student's first push.
   autoInit?: boolean
+  isPublic?: boolean
 }): Promise<AcceptRepoCreationResult> {
-  const { client, owner, name, branch, autoInit = true } = params
+  const { client, owner, name, branch, autoInit = true, isPublic } = params
   let repo: GitHubRepo
 
   try {
@@ -281,7 +336,7 @@ async function createEmptyAssignmentRepo(params: {
       method: "POST",
       body: {
         name,
-        private: true,
+        private: !isPublic,
         auto_init: autoInit,
       },
     })
@@ -307,7 +362,9 @@ async function createEmptyAssignmentRepo(params: {
       if (isOrgRepoCreationDenied(err)) {
         throw orgRepoCreationDeniedError(owner, err.status, err.message)
       }
-      if (err.isForbidden) {
+      // A public-visibility refusal rethrows raw for createAssignmentRepo's
+      // private retry; skip the tripwire so the log stays a real signal.
+      if (err.isForbidden && !(isPublic && isPublicRepoCreationDenied(err))) {
         // Same tripwire as the templated path above.
         log.warn("accept: repo create 403 fell through unclassified", {
           org: owner,
@@ -400,6 +457,11 @@ export type CreateAssignmentInput = {
   // the mode default (push individual / admin group). buildAssignmentEntry
   // omits it when it equals the default and clamps group up to admin.
   student_permission?: RepoPermission
+  // The visibility each student repo is created with at accept time.
+  // Undefined or "private" = the wire default (buildAssignmentEntry omits
+  // it); "public" = repos are created public, with an upfront student
+  // warning. Mirrors the CLI's --repo-visibility.
+  repo_visibility?: RepoVisibility
   // When the autograder fires. Undefined or "every-push" = the wire default
   // (buildAssignmentEntry omits it); "tag" = the shim grades only submit/* tag
   // pushes. Mirrors the CLI's --submission-mode.

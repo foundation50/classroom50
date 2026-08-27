@@ -6,6 +6,7 @@ import {
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
   SUBMISSION_MODES,
   GRADING_MODES,
   GRADING_MAX_POINTS_MIN,
@@ -128,6 +129,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   release_assets: "classroom50-owned",
   pass_threshold: "classroom50-owned",
   student_permission: "classroom50-owned",
+  repo_visibility: "classroom50-owned",
   submission_mode: "classroom50-owned",
   submission_tags: "classroom50-owned",
   // Rebuilt from input and MUTABLE: an edit may change grading.mode now (the UI
@@ -841,6 +843,19 @@ async function buildAssignmentEntry(
   }
   if (resolvedSubmissionMode !== "every-push") {
     entry.submission_mode = resolvedSubmissionMode
+  }
+
+  // repo_visibility: validate, then collapse the wire default away like the
+  // CLI so a private entry saved here stays byte-identical to one written
+  // before the field existed. Absence IS private, so no intent is lost.
+  const resolvedRepoVisibility = input.repo_visibility ?? "private"
+  if (!REPO_VISIBILITIES.includes(resolvedRepoVisibility)) {
+    throw new Error(
+      `repo_visibility: must be one of ${REPO_VISIBILITIES.join(", ")} (got "${String(resolvedRepoVisibility)}").`,
+    )
+  }
+  if (resolvedRepoVisibility !== "private") {
+    entry.repo_visibility = resolvedRepoVisibility
   }
 
   // submission_tags: omit when empty (no milestone tags — today's behavior),

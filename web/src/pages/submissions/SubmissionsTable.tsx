@@ -43,6 +43,7 @@ import {
   GroupMembers,
   GroupRepoRow,
   NonSubmitterRow,
+  PublicRepoBadge,
   identitySubtitle,
 } from "@/pages/submissions/SubmissionsRows"
 import {
@@ -262,6 +263,8 @@ const SubmissionsTable = ({
   assignmentMode = "every-push",
   overrideGrade,
   canPauseAutograding = false,
+  canChangeVisibility = false,
+  publicRepoNames,
   initialLoading = false,
   nonSubmittersLoading = false,
   page = 0,
@@ -327,6 +330,14 @@ const SubmissionsTable = ({
   // GitHub workflow enable/disable acts on the individual repo's shim, which a
   // group assignment's founder-managed repo doesn't have in the same way.
   canPauseAutograding?: boolean
+  // Whether the manage hub's Change-visibility action applies (issue #766).
+  // Gated by the page on org OWNER only — org policy blocks members from
+  // flipping visibility, and GitHub 403s them regardless.
+  canChangeVisibility?: boolean
+  // Lowercased names of this assignment's repos that are currently PUBLIC
+  // (derived from the org repo list). Rows whose repo is in the set show the
+  // warning badge; undefined/absent renders no badges (list still loading).
+  publicRepoNames?: ReadonlySet<string>
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
   // otherwise flash before data arrives.
@@ -457,6 +468,11 @@ const SubmissionsTable = ({
       />
     )
 
+  // Whether a row's repo is currently PUBLIC (issue #766), for the warning
+  // badge shared by every row family. False while the set is still loading.
+  const isPublicRepo = (repoName: string) =>
+    Boolean(publicRepoNames?.has(repoName.toLowerCase()))
+
   // One submitted/pending row. Extracted so the paginated sequence can render
   // it inline alongside non-submitter and group-repo rows without duplicating
   // this markup. Keyed by owner by the caller.
@@ -539,26 +555,32 @@ const SubmissionsTable = ({
       >
         <td>
           {isGroup ? (
-            <GroupMembers
-              org={org}
-              repoName={repo}
-              usernames={usernames}
-              students={students}
-              repoHref={repoHref}
-              repoLabel={repo}
-            />
+            <div className="flex flex-col items-start gap-1.5">
+              <GroupMembers
+                org={org}
+                repoName={repo}
+                usernames={usernames}
+                students={students}
+                repoHref={repoHref}
+                repoLabel={repo}
+              />
+              {isPublicRepo(repo) ? <PublicRepoBadge /> : null}
+            </div>
           ) : (
-            <Avatar
-              name={getDisplayName(usernames[0], students, nameDisplayMode)}
-              initials={getInitials(usernames[0], students)}
-              github={usernames[0]}
-              subtitle={identitySubtitle(
-                getName(usernames[0], students),
-                usernames[0],
-                getSection(usernames[0], students),
-              )}
-              onClick={() => setProfileUsername(usernames[0])}
-            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Avatar
+                name={getDisplayName(usernames[0], students, nameDisplayMode)}
+                initials={getInitials(usernames[0], students)}
+                github={usernames[0]}
+                subtitle={identitySubtitle(
+                  getName(usernames[0], students),
+                  usernames[0],
+                  getSection(usernames[0], students),
+                )}
+                onClick={() => setProfileUsername(usernames[0])}
+              />
+              {isPublicRepo(repo) ? <PublicRepoBadge /> : null}
+            </div>
           )}
         </td>
         <td>
@@ -904,6 +926,12 @@ const SubmissionsTable = ({
                   }
                   thresholdFraction={passBar}
                   nameMode={nameDisplayMode}
+                  publicRepo={
+                    Boolean(student.username) &&
+                    isPublicRepo(
+                      studentRepoName(classroom, assignment, student.username),
+                    )
+                  }
                 />
               )
             }
@@ -933,6 +961,7 @@ const SubmissionsTable = ({
                 repoName={repoName}
                 students={students}
                 onManage={openManage}
+                publicRepo={isPublicRepo(repoName)}
                 actions={
                   <RepoRowActions
                     owner={owner}
@@ -1033,6 +1062,7 @@ const SubmissionsTable = ({
             submissionMode,
             submissionTags,
             canPauseAutograding,
+            canChangeVisibility,
           }}
         />
       )}

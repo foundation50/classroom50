@@ -117,18 +117,22 @@ func acceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accept <org> <classroom> <assignment>",
 		Short: "Accept an assignment from an organization's classroom",
-		Long: "Accept an assignment by creating a private repo at\n" +
+		Long: "Accept an assignment by creating a repo at\n" +
 			"<org>/<classroom>-<assignment>-<username> (lowercased). The\n" +
 			"assignment is looked up in the published assignments.json on the\n" +
-			"classroom's GitHub Pages site (no token required).\n\n" +
+			"classroom's GitHub Pages site (no token required). The repo is\n" +
+			"private unless the assignment opts into public repos\n" +
+			"(repo_visibility: public — for peer-review or showcase work), in\n" +
+			"which case it is created PUBLIC and you are told before it is\n" +
+			"created.\n\n" +
 			"If the classroom uses an unlisted URL, your teacher will give\n" +
 			"you an access key; pass it with `--key <key>`. The key is part\n" +
 			"of the published URL (`<classroom>/<key>/...`); without it the\n" +
 			"classroom's assignments can't be found. Normal classrooms need\n" +
 			"no key.\n\n" +
 			"If the assignment has a template repo (which may live outside\n" +
-			"<org>), the new repo is a private copy generated from it. If it\n" +
-			"has no template, an empty private repo is created carrying only\n" +
+			"<org>), the new repo is a copy generated from it. If it\n" +
+			"has no template, an empty repo is created carrying only\n" +
 			"the autograder workflow shim.\n\n" +
 			"The autograder workflow shim is dropped at\n" +
 			"`.github/workflows/autograde.yaml` in the new repo. For the\n" +
@@ -488,15 +492,38 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		commitBranch   string
 		cfgSource      *classroomcfg.Source
 	)
-	createMsg := fmt.Sprintf("Creating private repo for %s", assignment)
+	// repo_visibility is best-effort/fail-private: org policy may block a
+	// member from creating a public repo, so tell the student upfront, try
+	// public, and fall back to a private create rather than failing the
+	// accept on visibility alone.
+	wantPublic := entry.IsPublicRepoVisibility()
+	visibilityWord := "private"
+	if wantPublic {
+		visibilityWord = "public"
+		u.Warn("this assignment creates a PUBLIC repository — your work (code, commits, name) will be visible to anyone on the internet")
+	}
+	createMsg := fmt.Sprintf("Creating %s repo for %s", visibilityWord, assignment)
 	createSp := u.Spinner(createMsg)
 	createSp.Start()
+	createRepo := func(public bool) (htmlURL, fullName, branch string, alreadyExisted bool, err error) {
+		if hasTemplate {
+			// The generated repo's own default branch — not the template's
+			// branch — is where control files land and what the shim must
+			// trigger on.
+			return createTemplatedAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template, entry.RepoFeatures, entry.IncludeAllBranches, public)
+		}
+		return createEmptyAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, !entry.EmptyRepo, entry.RepoFeatures, public)
+	}
+	htmlURL, fullName, commitBranch, alreadyExisted, err = createRepo(wantPublic)
+	if err != nil && wantPublic && isPublicRepoCreationDenied(err) {
+		u.Warn("`%s` does not allow you to create public repositories; creating a private repository instead — your teacher can make it public later", org)
+		htmlURL, fullName, commitBranch, alreadyExisted, err = createRepo(false)
+	}
+	if err != nil {
+		createSp.Fail(createMsg)
+		return err
+	}
 	if hasTemplate {
-		var genBranch string
-		htmlURL, fullName, genBranch, alreadyExisted, err = createTemplatedPrivateAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template, entry.RepoFeatures, entry.IncludeAllBranches)
-		// The generated repo's own default branch — not the template's branch —
-		// is where control files land and what the shim must trigger on.
-		commitBranch = genBranch
 		// Resolve the template owner's immutable id best-effort so a rename
 		// of the template org/user doesn't break submit's teacher-file
 		// re-fetch. A failed lookup is non-fatal — leave owner_id null.
@@ -510,14 +537,6 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 			Repo:    entry.Template.Repo,
 			Branch:  entry.Template.Branch,
 		}
-	} else {
-		var defaultBranch string
-		htmlURL, fullName, defaultBranch, alreadyExisted, err = createEmptyPrivateAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, !entry.EmptyRepo, entry.RepoFeatures)
-		commitBranch = defaultBranch
-	}
-	if err != nil {
-		createSp.Fail(createMsg)
-		return err
 	}
 
 	// Render the default shim now that the assignment repo's default branch is
@@ -935,6 +954,25 @@ func orgRepoCreationDeniedError(org string, cause error) error {
 		"then run accept again: %w", org, cause)
 }
 
+// isPublicRepoCreationDenied matches GitHub's refusal to create a PUBLIC repo
+// for this member (org policy restricts members to private repos): a 403/422
+// whose body names the visibility restriction. Rate-limit 403s are excluded.
+// Triggers the fall-back-to-private retry so an accept never fails on
+// visibility alone.
+func isPublicRepoCreationDenied(err error) bool {
+	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
+	if !ok {
+		return false
+	}
+	if httpErr.StatusCode != http.StatusForbidden && httpErr.StatusCode != http.StatusUnprocessableEntity {
+		return false
+	}
+	if ghutil.IsRateLimited(err) {
+		return false
+	}
+	return httpErrorMentions(httpErr, "visibility") || httpErrorMentions(httpErr, "public repositor")
+}
+
 // oauthRestrictionOrg matches the org GitHub names in its OAuth-App-restriction
 // 403 body: "...the `some-org` organization has enabled OAuth App access
 // restrictions...". For a cross-org fork template the restriction is anchored to
@@ -1191,21 +1229,21 @@ func patchRepoFeatures(client githubapi.Client, u *ui.UI, verbose bool, org, rep
 	return nil
 }
 
-// createTemplatedPrivateAssignmentRepoInOrg generates a private repo from the
-// entry's template and applies the assignment's tri-state repo_features
-// (issues/wiki/projects/pull_requests) best-effort via PATCH: an absent
-// ("inherit") key re-applies the template's live setting (GitHub's /generate
-// does NOT copy feature flags), an explicit true/false forces it. Fail-open —
-// a rejected feature PATCH never fails accept. 404 on generate →
-// cross-org visibility message (template not readable by the student).
-// 422-already-exists → alreadyExisted=true and the PATCH is skipped so
-// re-runs don't disturb an existing repo.
-func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, tmpl assignments.TemplateRef, features *assignments.RepoFeatures, includeAllBranches bool) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
+// createTemplatedAssignmentRepoInOrg generates a repo from the entry's
+// template (private unless public is set) and applies the assignment's
+// tri-state repo_features (issues/wiki/projects/pull_requests) best-effort via
+// PATCH: an absent ("inherit") key re-applies the template's live setting
+// (GitHub's /generate does NOT copy feature flags), an explicit true/false
+// forces it. Fail-open — a rejected feature PATCH never fails accept. 404 on
+// generate → cross-org visibility message (template not readable by the
+// student). 422-already-exists → alreadyExisted=true and the PATCH is skipped
+// so re-runs don't disturb an existing repo.
+func createTemplatedAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, tmpl assignments.TemplateRef, features *assignments.RepoFeatures, includeAllBranches, public bool) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
 	newRepoName := reponame.Name(classroom, assignment, username)
 	createBody, err := json.Marshal(map[string]any{
 		"owner":                org,
 		"name":                 newRepoName,
-		"private":              true,
+		"private":              !public,
 		"include_all_branches": includeAllBranches,
 	})
 	if err != nil {
@@ -1291,7 +1329,7 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 
 	if updated := patchRepoFeatures(client, u, verbose, org, newRepoName, fullBody, explicitBody); updated != nil {
 		if verbose {
-			u.Detail("created private repo %s, applied repo features: %s",
+			u.Detail("created repo %s, applied repo features: %s",
 				updated.FullName, updated.HTMLURL)
 		}
 		// Prefer the PATCH response's default_branch — a template generated
@@ -1301,7 +1339,7 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 			genBranch = updated.DefaultBranch
 		}
 	} else if len(fullBody) == 0 && verbose {
-		u.Detail("created private repo %s, inheriting template repo features: %s",
+		u.Detail("created repo %s, inheriting template repo features: %s",
 			created.FullName, created.HTMLURL)
 	}
 
@@ -1315,12 +1353,12 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 	return created.HTMLURL, created.FullName, defaultBranchOrMain(genBranch), false, nil
 }
 
-// createEmptyPrivateAssignmentRepoInOrg creates an empty private repo for a
-// template-less assignment via POST /orgs/{org}/repos (mirroring gh-teacher's
-// ensureConfigRepo). autoInit true (the shim-only path) is load-bearing: it
-// gives the repo an initial commit + default branch so the shared
-// WaitForStableBranch poll and the fresh-repo Tree-commit retry both work
-// unchanged. autoInit false (the empty_repo path) leaves the repo with no
+// createEmptyAssignmentRepoInOrg creates an empty repo (private unless public
+// is set) for a template-less assignment via POST /orgs/{org}/repos (mirroring
+// gh-teacher's ensureConfigRepo). autoInit true (the shim-only path) is
+// load-bearing: it gives the repo an initial commit + default branch so the
+// shared WaitForStableBranch poll and the fresh-repo Tree-commit retry both
+// work unchanged. autoInit false (the empty_repo path) leaves the repo with no
 // commits and no branches at all — the caller must not attempt any commit.
 // Returns the repo's default_branch so the shim caller commits onto the right
 // ref (for a no-auto_init repo it is only GitHub's configured default, which
@@ -1329,11 +1367,11 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 // absent key at GitHub's own create default; an explicit true/false forces it),
 // fail-open like the templated path. 422-already-exists → alreadyExisted=true
 // and the PATCH is skipped so re-runs don't disturb an existing repo.
-func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, autoInit bool, features *assignments.RepoFeatures) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
+func createEmptyAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, autoInit bool, features *assignments.RepoFeatures, public bool) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
 	newRepoName := reponame.Name(classroom, assignment, username)
 	createBody, err := json.Marshal(map[string]any{
 		"name":      newRepoName,
-		"private":   true,
+		"private":   !public,
 		"auto_init": autoInit,
 	})
 	if err != nil {
@@ -1378,9 +1416,9 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 	if updated := patchRepoFeatures(client, u, verbose, org, newRepoName, fullBody, explicitBody); updated != nil {
 		htmlURL, fullName, defaultBranch = updated.HTMLURL, updated.FullName, defaultBranchOrMain(updated.DefaultBranch)
 		if verbose {
-			kind := "empty private repo (template-less)"
+			kind := "empty repo (template-less)"
 			if !autoInit {
-				kind = "bare private repo (empty_repo, no initial commit)"
+				kind = "bare repo (empty_repo, no initial commit)"
 			}
 			u.Detail("created %s %s, applied repo features: %s",
 				kind, updated.FullName, updated.HTMLURL)

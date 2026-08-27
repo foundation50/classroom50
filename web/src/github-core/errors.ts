@@ -317,6 +317,16 @@ export function is422UnexpectedInputs(err: unknown): boolean {
 
 function is422Mentioning(err: unknown, needle: string): boolean {
   if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
+  return githubErrorMentions(err, needle)
+}
+
+// Whether the error's message — or its body's message/errors[] items, where
+// GitHub puts the reason depending on the endpoint — mentions needle
+// (lower-case). Status-agnostic; callers gate on status themselves.
+export function githubErrorMentions(
+  err: GitHubAPIError,
+  needle: string,
+): boolean {
   if (err.message.toLowerCase().includes(needle)) return true
   const body = err.body as
     | { message?: string; errors?: Array<{ message?: string; code?: string }> }
