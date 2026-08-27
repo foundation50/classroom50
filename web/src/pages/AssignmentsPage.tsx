@@ -1,10 +1,13 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { ChevronDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
+import AssignmentsBulkBar from "@/pages/assignments/AssignmentsBulkBar"
+import { resolveSelectedRows, toggleSelectAll } from "@/util/rowSelection"
+import { useRangeSelection } from "@/hooks/useRangeSelection"
 import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
   DEFAULT_FILTERS,
@@ -34,7 +37,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { roleLabelKey, can } from "@/authz"
-import { isClassroomArchived } from "@/types/classroom"
+import { isClassroomArchived, type Assignment } from "@/types/classroom"
 import StudentAssignmentList from "@/components/org/StudentAssignmentList"
 
 // Split button: primary "Assignment" creates; the caret reveals "Reuse
@@ -149,12 +152,86 @@ export const TeacherAssignmentsView = ({
   )
 
   const hasAssignments = (sourceAssignments?.length ?? 0) > 0
+
+  // Bulk selection. Held here rather than in the table because the toolbar and
+  // the rows are siblings, and the actions (lock/delete/reuse) need the
+  // selected Assignment records, not just their slugs.
+  const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set())
+  // Only an author on a live classroom has a bulk action to reach; a read-only
+  // or archived view never shows the checkbox column.
+  const canBulk = canAuthor && !archived && hasAssignments
+  // An assignment's key is its slug — handed to the shared helpers directly,
+  // so no `{ key }` adapter array is built on every filter change.
+  const slugKey = useCallback((a: Assignment) => a.slug, [])
+  // Shift-click ranges over the rendered order, through the same hook the
+  // roster and members tables use. It owns the subtlety a hand-rolled anchor
+  // misses: a shift-click's onClick fills the range and flags the follow-up
+  // onChange, which would otherwise toggle the endpoint straight back off.
+  // Every assignment is selectable, so the predicate is constant.
+  const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
+    visible,
+    () => true,
+    setSelectedSlugs,
+    slugKey,
+  )
+  const toggleSelectAllRows = () =>
+    setSelectedSlugs((prev) => toggleSelectAll(visible, prev, slugKey))
+  const clearSelection = () => setSelectedSlugs(new Set())
+  // The selected assignments, resolved against the live list through the
+  // shared helper — one row per selected slug. A hand-edited assignments.json
+  // can carry two rows for the same slug; resolving would then return both,
+  // which would overstate the count in the bulk bar and send the slug twice to
+  // a batched write, reconciling its template twice for one flag flip.
+  const selectedAssignments = useMemo(() => {
+    const seen = new Set<string>()
+    return resolveSelectedRows(
+      sourceAssignments ?? [],
+      selectedSlugs,
+      () => true,
+      slugKey,
+    ).filter((a) => {
+      const key = slugKey(a)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [sourceAssignments, selectedSlugs, slugKey])
+  // Prune slugs that left the list — deleted from their own row, by a bulk
+  // delete, or in another tab. Adjusted during render (not in an effect), the
+  // same shape useLingeringOpen uses. Filtering only for DISPLAY would leave
+  // the dropped slugs in state, so recreating one later would bring it back
+  // pre-ticked, and an emptied selection would keep a count nothing can act on
+  // while Clear selection — which lives in the head-row takeover — is gone.
+  //
+  // Compared as a SET, never by length — see the dedupe above for why a count
+  // is not a safe proxy here.
+  const liveSlugs = useMemo(
+    () => new Set(selectedAssignments.map(slugKey)),
+    [selectedAssignments, slugKey],
+  )
+  if (liveSlugs.size !== selectedSlugs.size) setSelectedSlugs(liveSlugs)
+
   // The toolbar owns the primary action now (New assignment / archived badge),
   // so it renders whenever the list has loaded — with only the trailing action
   // when there are no assignments yet (actionsOnly), and the full search/filter/
   // sort bar once there are.
   const showToolbar = !assignmentsLoading
-  const showNoResults = hasAssignments && visible.length === 0
+  // The search/filter emptied the view. With no selection the panel replaces
+  // the table outright; with one it goes INSIDE the table body instead, so the
+  // head row keeps the count and Clear selection — same panel, same Clear
+  // filters button, either way.
+  const noResults = hasAssignments && visible.length === 0
+  const noResultsPanel = (
+    <NoSearchResults
+      title={t("assignments.toolbar.noResultsTitle")}
+      body={t("assignments.toolbar.noResultsBody")}
+      clearLabel={t("assignments.toolbar.clear")}
+      onClear={() => {
+        setQuery("")
+        setFilters({ ...DEFAULT_FILTERS })
+      }}
+    />
+  )
 
   // Right-aligned toolbar action: the New assignment split button for an author,
   // or the archived badge; null for a read-only viewer (TA).
@@ -243,16 +320,8 @@ export const TeacherAssignmentsView = ({
           trailing={primaryAction}
         />
       )}
-      {showNoResults ? (
-        <NoSearchResults
-          title={t("assignments.toolbar.noResultsTitle")}
-          body={t("assignments.toolbar.noResultsBody")}
-          clearLabel={t("assignments.toolbar.clear")}
-          onClear={() => {
-            setQuery("")
-            setFilters({ ...DEFAULT_FILTERS })
-          }}
-        />
+      {noResults && selectedAssignments.length === 0 ? (
+        noResultsPanel
       ) : (
         <AssignmentsTable
           org={org}
@@ -264,6 +333,10 @@ export const TeacherAssignmentsView = ({
           secretPending={classroomLoading || classroomError}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
+          // Only read with a live selection (else the panel above takes the
+          // whole table). "No assignments created." would be a false statement
+          // about a classroom the filter merely emptied.
+          empty={noResults ? noResultsPanel : undefined}
           studentCount={studentCount}
           loading={assignmentsLoading}
           archived={archived}
@@ -273,6 +346,20 @@ export const TeacherAssignmentsView = ({
           // Replay the row entrance on filter/sort changes; search is excluded
           // so typing doesn't remount the rows on every keystroke.
           viewSignature={`${JSON.stringify(filters)}|${sort}`}
+          selectedSlugs={canBulk ? selectedSlugs : undefined}
+          onToggleRow={canBulk ? handleToggleRow : undefined}
+          onRowCheckboxClick={canBulk ? handleRowCheckboxClick : undefined}
+          onToggleSelectAll={canBulk ? toggleSelectAllRows : undefined}
+          bulkActions={
+            canBulk ? (
+              <AssignmentsBulkBar
+                org={org}
+                classroom={classroom}
+                selected={selectedAssignments}
+                onClearSelection={clearSelection}
+              />
+            ) : undefined
+          }
         />
       )}
     </div>

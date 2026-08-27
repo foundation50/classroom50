@@ -639,7 +639,9 @@ spreadsheet or external tool. The column-by-column reference is in
   action in one place: the quick four, **Template access** (review which
   teams can read the template, and re-grant the classroom teams' read),
   **Reuse in another classroom**, and **Delete assignment** (which asks you
-  to type the slug to confirm; student repositories are kept).
+  to type the slug to confirm; student repositories are kept). To lock, reuse
+  or delete more than one assignment in a single step, see
+  [Act on several assignments at once](#act-on-several-assignments-at-once).
 - **Edit an assignment** — open the assignment, then **Assignment settings**.
   Same form as creating one, pre-filled. Provisioning settings (repository
   source, built-in autograder, grading mode) are editable; a change only affects
@@ -650,6 +652,64 @@ spreadsheet or external tool. The column-by-column reference is in
   creating one, pre-filled. The page also offers **Clean up invite data**, which
   clears the addresses held for email invitations that were never accepted. See
   [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
+### Act on several assignments at once
+
+Tick the checkbox on any row of the **Assignments** page and the table's header
+turns into a bulk bar: the count on the left, the actions on the right, lined up
+over the per-row action icons.
+
+![Bulk actions on the assignments list](images/web_assignments_bulk_bar.png)
+
+Click one checkbox, then shift-click another to select everything in between.
+Selecting the box in the header selects every assignment the current search and
+filters show. A selection survives searching and filtering — a row the search is
+hiding stays selected and is still acted on, so the count tells you how many
+assignments the next action really covers. **Clear selection** (the X) empties it.
+
+The bar offers:
+
+- **Lock** / **Unlock** — lock every selected assignment so students can't
+  access or accept it, or unlock them again. Where a private template is used,
+  locking removes the student team's read on it and unlocking restores it. Each
+  verb is disabled when it has nothing to do, so a selection that is already
+  fully locked offers only **Unlock**.
+- **Reuse** — copy the selection into another classroom in the same
+  organization, including back into its own.
+- **Delete** — remove the selected assignments from the classroom. Student
+  repositories are **not** deleted; they stay in the organization and can still
+  be reached by name.
+
+Lock, unlock and delete write the whole selection to the classroom's
+`assignments.json` in a **single commit**, so the classroom's history gets one
+entry per action and a half-applied selection is impossible — either every
+selected assignment changes or none does. Deleting asks you to type `delete`
+first, since it is the one action here with no undo in the app.
+
+![Confirming a bulk lock](images/web_assignments_bulk_lock.png)
+
+An assignment that vanished between selecting it and confirming (deleted in
+another tab, say) is reported as skipped rather than failing the whole action.
+
+#### Reusing several assignments
+
+**Reuse** works like the single-assignment **Reuse in another classroom**, once
+per selected assignment. Pick the target classroom, and a slug field appears for
+each copy, pre-filled with the slug it would take. Where that slug is already
+used in the target, a numbered suffix is filled in — copying `hw1` into a
+classroom that already has one gives you `hw1-2`. You can overwrite any of them
+before starting.
+
+![Choosing a target and slugs for a bulk reuse](images/web_assignments_bulk_reuse.png)
+
+The field turns red if a slug is taken in the target, is reserved by a renamed
+assignment, exceeds the classroom's repository-name budget, or collides with
+another copy in the same run; the copy can't start until every slug is usable.
+
+Unlike lock and delete, the copies are made one after another — each writes the
+target classroom and may create a repository — so the dialog reports progress
+and, at the end, which assignments landed and which failed. Keep the tab open
+until it finishes. A failed copy doesn't abandon the rest.
 
 ### Updating an over-budget assignment slug
 

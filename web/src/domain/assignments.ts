@@ -103,3 +103,12 @@ export {
   type DownloadRepoResult,
   type DownloadOutcome,
 } from "./assignments/downloadSubmissions"
+export {
+  setAssignmentsLockWithConflictRetry,
+  deleteAssignmentsWithConflictRetry,
+  bulkCopyAssignments,
+  type BulkLockResult,
+  type BulkDeleteResult,
+  type BulkCopyItem,
+  type BulkCopyOutcome,
+} from "./assignments/bulkActions"

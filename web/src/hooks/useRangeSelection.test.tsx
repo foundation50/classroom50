@@ -29,6 +29,7 @@ function Harness({
     rows,
     selectable,
     setSelectedKeys,
+    (r) => r.key,
   )
 
   return (

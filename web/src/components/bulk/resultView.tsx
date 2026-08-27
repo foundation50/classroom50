@@ -40,10 +40,14 @@ export const BulkResultSection = ({
         <tbody>
           {rows.map((row) => (
             <tr key={row.key}>
-              <td>
+              {/* align-top so a one-line label sits level with a detail that
+                  wrapped to three. Breaking long slugs and error sentences is
+                  the modal box's job — `overflow-wrap` is inherited, and every
+                  caller renders inside one. */}
+              <td className="align-top">
                 <code>{row.label}</code>
               </td>
-              <td className="opacity-70">{row.detail}</td>
+              <td className="align-top opacity-70">{row.detail}</td>
             </tr>
           ))}
         </tbody>
