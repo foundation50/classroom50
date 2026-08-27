@@ -5,6 +5,7 @@ const ensureClassroomTeam = vi.fn()
 const ensureStaffTeams = vi.fn()
 const grantStaffTeamsConfigRepoAccess = vi.fn()
 const reconcileDescription = vi.fn()
+const projectDescription = vi.fn()
 const removeUserFromTeam = vi.fn()
 
 vi.mock("@/github-core/configRepoReads", () => ({
@@ -17,6 +18,8 @@ vi.mock("@/github-core/mutations", () => ({
     grantStaffTeamsConfigRepoAccess(...a),
   reconcileStudentTeamDescription: (...a: unknown[]) =>
     reconcileDescription(...a),
+  projectTeamDescriptionFromRecord: (...a: unknown[]) =>
+    projectDescription(...a),
   removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
 }))
 // The roster reconciliation is exercised in reconcileRoster.test.ts; here it's
@@ -61,6 +64,7 @@ beforeEach(() => {
   ensureStaffTeams.mockReset()
   grantStaffTeamsConfigRepoAccess.mockReset()
   reconcileDescription.mockReset()
+  projectDescription.mockReset()
   removeUserFromTeam.mockReset()
   // Healthy defaults: active classroom, everything already converged.
   getClassroomJson.mockResolvedValue({ name: "CS101", active: true })
@@ -78,6 +82,7 @@ beforeEach(() => {
     created: [],
   })
   reconcileDescription.mockResolvedValue({ changed: false })
+  projectDescription.mockResolvedValue({ changed: false })
   removeUserFromTeam.mockResolvedValue(undefined)
   grantStaffTeamsConfigRepoAccess.mockResolvedValue(undefined)
 })
@@ -149,19 +154,53 @@ describe("reconcileClassroom", () => {
     expect(reconcileDescription).toHaveBeenCalledTimes(1)
   })
 
-  it("skips all writes on an archived classroom", async () => {
-    getClassroomJson.mockResolvedValue({ name: "CS101", active: false })
+  it("skips team/roster writes on an archived classroom but still heals the description", async () => {
+    // The archived short-circuit must not extend to the team-description
+    // projection: an archived classroom's classroom50/team/v1 record has to
+    // advertise active: false, and this pass is the only heal when the
+    // best-effort projection inside editClassroom failed during the archive.
+    const archived = { name: "CS101", active: false }
+    getClassroomJson.mockResolvedValue(archived)
+    projectDescription.mockResolvedValue({
+      changed: true,
+      slug: "classroom50-cs101",
+    })
     const result = await reconcileClassroom(client, "org", "cs101")
     expect(result).toEqual({
       skipped: true,
-      description: { changed: false },
+      description: { changed: true, slug: "classroom50-cs101" },
       staffCreated: [],
       invitesBackfilled: [],
       rosterChanged: false,
     })
     expect(ensureClassroomTeam).not.toHaveBeenCalled()
     expect(ensureStaffTeams).not.toHaveBeenCalled()
+    // Projected from the record the archived gate already read, never a
+    // config-repo re-fetch.
     expect(reconcileDescription).not.toHaveBeenCalled()
+    expect(projectDescription).toHaveBeenCalledWith(
+      client,
+      "org",
+      "cs101",
+      archived,
+    )
+    expect(getClassroomJson).toHaveBeenCalledTimes(1)
+  })
+
+  it("rewraps an archived-path description 404 as permanent (no just-created team to excuse it)", async () => {
+    getClassroomJson.mockResolvedValue({ name: "CS101", active: false })
+    projectDescription.mockRejectedValue(githubAPIError(404))
+    await expect(
+      reconcileClassroom(client, "org", "cs101"),
+    ).rejects.toBeInstanceOf(ClassroomReconcilePermanentError)
+  })
+
+  it("leaves a non-404 archived-path description failure transient", async () => {
+    getClassroomJson.mockResolvedValue({ name: "CS101", active: false })
+    projectDescription.mockRejectedValue(githubAPIError(500))
+    const err = await reconcileClassroom(client, "org", "cs101").catch((e) => e)
+    expect(err).toBeInstanceOf(GitHubAPIError)
+    expect(err).not.toBeInstanceOf(ClassroomReconcilePermanentError)
   })
 
   it("treats a missing/legacy classroom.json (404) as active and reconciles", async () => {

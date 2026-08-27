@@ -7,12 +7,20 @@ import {
 } from "../configRepoReads"
 import { isClassroomArchived } from "@/types/classroom"
 import { prefixCommit } from "@/util/commit"
+import { logger } from "@/lib/logger"
 import {
   createBlob,
   createTreeFromEntries,
   createCommit,
   updateRef,
 } from "./gitObjects"
+import {
+  projectTeamDescriptionFromRecord,
+  type TeamDescriptionReconcileResult,
+  type TeamDescriptionSource,
+} from "./teamDescription"
+
+const log = logger.scope("mutations:classroomEdit")
 
 export type UpdateClassroomMetadataInput = {
   org: string
@@ -147,6 +155,29 @@ export async function editClassroom(
 
   const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
+  // Students never read classroom.json — they render the classroom50/team/v1
+  // record projected onto the student team's description (GET /user/teams). So
+  // a rename/re-term/archive must re-project here, or existing students keep
+  // seeing the old name forever (mirrors the CLI edit's reconcile). Derived
+  // from the record just committed, not a re-read. Best-effort: the edit is
+  // already committed, and a failure (e.g. a non-owner teacher's 403 on the
+  // team PATCH) is healed by a later classroom-entry reconcile.
+  let teamDescription: TeamDescriptionReconcileResult = { changed: false }
+  try {
+    teamDescription = await projectTeamDescriptionFromRecord(
+      client,
+      org,
+      slug,
+      next as TeamDescriptionSource,
+    )
+  } catch (err) {
+    log.warn("edit classroom: team-description re-projection failed", {
+      org,
+      classroom: slug,
+      err,
+    })
+  }
+
   return {
     previousCommitSha: ref.object.sha,
     baseTreeSha: commit.tree.sha,
@@ -154,5 +185,6 @@ export async function editClassroom(
     newCommitSha: newCommit.sha,
     updatedRef,
     classroom: next,
+    teamDescription,
   }
 }

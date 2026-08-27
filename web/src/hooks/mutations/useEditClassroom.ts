@@ -35,6 +35,12 @@ export function useEditClassroom(
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
       })
+      if (result.teamDescription.changed) {
+        // The edit re-projected the classroom50/team/v1 record onto the student
+        // team; refresh GET /user/teams so a teacher previewing as a student
+        // sees the new name immediately.
+        void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
+      }
       onWrite?.(result)
     },
   })

@@ -207,6 +207,139 @@ describe("editClassroom archived read-only guard", () => {
   })
 })
 
+// Students never read classroom.json — they render the classroom50/team/v1
+// record projected onto the student team's description (GET /user/teams). An
+// edit must re-project that record, or existing students keep seeing the old
+// name forever (the classroom-rename stale-title bug). The projection derives
+// from the record the edit just committed, NOT a contents re-read (the
+// Contents API is read-after-write eventual and could echo the pre-write body).
+describe("editClassroom team-description re-projection", () => {
+  const makeClient = (opts?: {
+    teamPrivacy?: string
+    patchFails?: boolean
+  }) => {
+    const patched: { body: unknown }[] = []
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/contents/")) {
+        return Promise.resolve(
+          JSON.stringify({
+            schema: "classroom50/classroom/v1",
+            short_name: "cs101",
+            name: "CS 101",
+            term: "Fall",
+            org: "acme",
+            team: { id: 7, slug: "classroom50-cs101" },
+          }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const request = vi
+      .fn()
+      .mockImplementation(
+        (path: string, init?: { method?: string; body?: unknown }) => {
+          const method = init?.method ?? "GET"
+          if (/\/repos\/[^/]+\/classroom50$/.test(path)) {
+            return Promise.resolve({ default_branch: "main" })
+          }
+          if (path.endsWith("/git/ref/heads/main")) {
+            return Promise.resolve({ object: { sha: "base-sha" } })
+          }
+          if (path.includes("/git/commits/")) {
+            return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+          }
+          if (path.endsWith("/git/blobs")) {
+            return Promise.resolve({ sha: "blob-sha" })
+          }
+          if (path.endsWith("/git/trees")) {
+            return Promise.resolve({ sha: "tree-sha" })
+          }
+          if (path.endsWith("/git/commits")) {
+            return Promise.resolve({ sha: "new-commit-sha" })
+          }
+          if (path.endsWith("/git/refs/heads/main")) {
+            return Promise.resolve({})
+          }
+          if (method === "GET" && /\/orgs\/[^/]+\/teams\/[^/]+$/.test(path)) {
+            return Promise.resolve({
+              id: 7,
+              slug: "classroom50-cs101",
+              privacy: opts?.teamPrivacy ?? "secret",
+              description: JSON.stringify({
+                schema: "classroom50/team/v1",
+                name: "CS 101",
+                term: "Fall",
+              }),
+            })
+          }
+          if (method === "PATCH" && /\/orgs\/[^/]+\/teams\/[^/]+$/.test(path)) {
+            if (opts?.patchFails) {
+              return Promise.reject(new Error("PATCH forbidden"))
+            }
+            patched.push({ body: init?.body })
+            return Promise.resolve({})
+          }
+          return Promise.reject(new Error(`unexpected request: ${path}`))
+        },
+      )
+    const client = { request, requestRaw } as unknown as GitHubClient
+    return { client, patched, requestRaw }
+  }
+
+  it("PATCHes the student team description with the just-committed record", async () => {
+    const { client, patched, requestRaw } = makeClient()
+
+    const result = await editClassroom(client, {
+      org: "acme",
+      slug: "cs101",
+      name: "Renamed",
+      term: "Spring",
+    })
+
+    expect(result.teamDescription).toEqual({
+      changed: true,
+      slug: "classroom50-cs101",
+    })
+    expect(patched).toHaveLength(1)
+    const body = patched[0].body as { description: string }
+    expect(JSON.parse(body.description)).toEqual({
+      schema: "classroom50/team/v1",
+      name: "Renamed",
+      term: "Spring",
+    })
+    // Exactly one contents read (the pre-edit merge source): the projection
+    // must come from the committed record, never a post-commit re-read that
+    // could echo the pre-write body.
+    expect(requestRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it("is best-effort: a failed team PATCH doesn't fail the committed edit", async () => {
+    const { client } = makeClient({ patchFails: true })
+
+    const result = await editClassroom(client, {
+      org: "acme",
+      slug: "cs101",
+      name: "Renamed",
+    })
+
+    expect(result.newCommitSha).toBe("new-commit-sha")
+    expect(result.teamDescription).toEqual({ changed: false })
+  })
+
+  it("skips a non-secret team rather than leaking the record", async () => {
+    const { client, patched } = makeClient({ teamPrivacy: "closed" })
+
+    const result = await editClassroom(client, {
+      org: "acme",
+      slug: "cs101",
+      name: "Renamed",
+    })
+
+    expect(result.teamDescription).toEqual({ changed: false })
+    expect(patched).toHaveLength(0)
+  })
+})
+
 // ensurePages (the re-run/init write path) must agree with checkPages (the
 // audit read path) on the same org — they decide status from the same live
 // read-back, so a re-run can't warn about a Pages site the audit shows green.
