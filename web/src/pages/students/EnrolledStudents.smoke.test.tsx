@@ -503,4 +503,103 @@ describe("EnrolledStudents — rendered phase views", () => {
     render(renderView())
     expect(screen.queryByLabelText("students.groupBy.label")).toBeNull()
   })
+
+  // The combined Show select folds the status and role filters into one
+  // control: picking a role clears the status facet and vice versa, so the
+  // two facets can never silently intersect to an empty view.
+  const mixedRoster = {
+    ...emptyRoster,
+    isEmpty: false,
+    counts: { enrolled: 2, pending: 1 },
+    rows: [
+      {
+        key: "alice",
+        username: "alice",
+        email: "",
+        section: "",
+        github_id: "1",
+        roles: ["student"],
+        state: "enrolled",
+      },
+      {
+        key: "tessa",
+        username: "tessa",
+        email: "",
+        section: "",
+        github_id: "9",
+        roles: ["teacher"],
+        state: "enrolled",
+      },
+      {
+        key: "pat",
+        username: "pat",
+        email: "",
+        section: "",
+        github_id: "3",
+        roles: ["student"],
+        state: "pending",
+        invitation_id: 42,
+      },
+    ],
+  }
+
+  it("keeps the Show select's status and role facets mutually exclusive", () => {
+    useTeamRoster.mockReturnValue(mixedRoster)
+    render(renderView())
+
+    const show = screen.getByLabelText(
+      "students.filterShowLabel",
+    ) as HTMLSelectElement
+
+    fireEvent.change(show, { target: { value: "role:teacher" } })
+    expect(screen.getByText("tessa")).not.toBeNull()
+    expect(screen.queryByText("alice")).toBeNull()
+
+    // Switching to a status must clear the role facet (not intersect with it).
+    fireEvent.change(show, { target: { value: "pending" } })
+    expect(show.value).toBe("pending")
+    expect(screen.getByText("pat")).not.toBeNull()
+    expect(screen.queryByText("tessa")).toBeNull()
+  })
+
+  it("routes the pending banner's Review through the combined Show select", () => {
+    useTeamRoster.mockReturnValue(mixedRoster)
+    render(renderView())
+
+    const show = screen.getByLabelText(
+      "students.filterShowLabel",
+    ) as HTMLSelectElement
+    // Arm a role filter first: Review must clear it, not stack pending on top
+    // of an active teacher facet (which would show nothing).
+    fireEvent.change(show, { target: { value: "role:teacher" } })
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "students.pendingReview" }),
+    )
+    expect(show.value).toBe("pending")
+    expect(screen.getByText("pat")).not.toBeNull()
+    expect(screen.queryByText("tessa")).toBeNull()
+  })
+
+  // The stale-grouping fallback: when the last staff row disappears while
+  // "Group by role" is active, the table falls back to ungrouped instead of
+  // staying grouped under a select that no longer offers (or shows) "role".
+  it("falls back to no grouping when the roster loses its last staff row", () => {
+    useTeamRoster.mockReturnValue(mixedRoster)
+    const { rerender } = render(renderView())
+
+    fireEvent.change(screen.getByLabelText("students.groupBy.label"), {
+      target: { value: "role" },
+    })
+    expect(document.querySelector("th[scope='rowgroup']")).not.toBeNull()
+
+    useTeamRoster.mockReturnValue({
+      ...mixedRoster,
+      counts: { enrolled: 1, pending: 1 },
+      rows: mixedRoster.rows.filter((r) => r.key !== "tessa"),
+    })
+    rerender(renderView())
+    expect(document.querySelector("th[scope='rowgroup']")).toBeNull()
+    expect(screen.queryByLabelText("students.groupBy.label")).toBeNull()
+  })
 })

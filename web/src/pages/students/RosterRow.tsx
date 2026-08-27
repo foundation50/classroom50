@@ -1,8 +1,9 @@
 import { ChevronRightIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
-import { Badge, MonoLtr, rtlFlip } from "@/components/ui"
+import { Badge, rtlFlip } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
+import { GitHubIdentity } from "@/components/memberList/memberPresentation"
 import { STATE_BADGE_TONE, STATE_LABEL_KEY } from "@/util/classroomRoleUI"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import { ClickableTr } from "@/lib/motionComponents"
@@ -30,6 +31,7 @@ export const RosterRow = ({
   selectable = true,
   showSection = false,
   showStatus = true,
+  disabled = false,
 }: {
   row: TeamRosterRow
   selfRow: boolean
@@ -48,12 +50,19 @@ export const RosterRow = ({
   // Whether the table renders the Status column (only when some row is not
   // plainly enrolled — a fully healthy roster has nothing to report there).
   showStatus?: boolean
+  // Freeze the row (a sync is rewriting the roster): gates open/select once
+  // here so the page doesn't hand-stub every handler, and covers keyboard
+  // activation that the wrapper's pointer-events lock alone would miss.
+  disabled?: boolean
 }) => {
   const { t } = useTranslation()
   const member = rosterRowToMemberRow(row)
   const displayName = member.name
   const displayHandle = row.username || row.email
   const displayInitials = rosterRowInitials(row)
+  const open = () => {
+    if (!disabled) onOpen(row.key)
+  }
 
   // Enrolled/pending rows assert role(s) (the team is the authority), shown as
   // one badge per role via RoleBadges. Needs-attention rows have no team role
@@ -65,10 +74,7 @@ export const RosterRow = ({
   const section = row.section.trim()
 
   return (
-    <ClickableTr
-      className="group/row hover:bg-base-200"
-      onClick={() => onOpen(row.key)}
-    >
+    <ClickableTr className="group/row hover:bg-base-200" onClick={open}>
       <td className="w-0">
         <input
           type="checkbox"
@@ -78,14 +84,16 @@ export const RosterRow = ({
               ? t("students.bulk.selfNotSelectable")
               : t("students.bulk.selectRow", { label: displayHandle })
           }
-          disabled={selfRow || !selectable}
+          disabled={selfRow || !selectable || disabled}
           title={selfRow ? t("students.bulk.selfNotSelectable") : undefined}
           checked={checked}
           onClick={(e) => {
             e.stopPropagation()
-            onCheckboxClick(e, row.key)
+            if (!disabled) onCheckboxClick(e, row.key)
           }}
-          onChange={() => onToggle(row.key)}
+          onChange={() => {
+            if (!disabled) onToggle(row.key)
+          }}
         />
       </td>
       <td className="min-w-0">
@@ -93,21 +101,13 @@ export const RosterRow = ({
           name={displayName}
           github={displayHandle}
           initials={displayInitials}
-          onClick={() => onOpen(row.key)}
+          onClick={open}
         />
       </td>
       <td>
-        {/* The bare GitHub handle (no octocat, no numeric id — both live in
-            the member detail modal). */}
-        {row.username ? (
-          <span className="text-sm text-base-content/70">
-            <MonoLtr>@{row.username}</MonoLtr>
-          </span>
-        ) : (
-          <span className="text-sm italic text-base-content/70">
-            {t("orgMembers.noGitHubUsername")}
-          </span>
-        )}
+        {/* The bare GitHub handle — no octocat, no numeric id (both live in
+            the member detail modal); shared recipe via GitHubIdentity. */}
+        <GitHubIdentity row={member} bare />
       </td>
       <td>
         {hasRoles ? (

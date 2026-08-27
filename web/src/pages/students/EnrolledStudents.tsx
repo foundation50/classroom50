@@ -1,13 +1,8 @@
 import {
   AlertIcon,
-  FilterIcon,
   PaperAirplaneIcon,
   PeopleIcon,
-  PlusIcon,
-  RowsIcon,
-  ShareAndroidIcon,
   SyncIcon,
-  UploadIcon,
   XIcon,
 } from "@/components/ui/icons"
 
@@ -16,10 +11,10 @@ import {
   AnimatedAlert,
   Badge,
   Button,
+  SelectAllCheckbox,
   SkeletonRows,
   SortableTh,
   TableShell,
-  Toolbar,
   cx,
 } from "@/components/ui"
 import { EmptyState } from "@/components/list"
@@ -70,9 +65,11 @@ import {
 } from "@/pages/orgMembers/selection"
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
-import RosterBulkActionsBar, {
-  type AddStudentActions,
-} from "@/pages/students/RosterBulkActionsBar"
+import AddStudentButtons from "@/pages/students/AddStudentButtons"
+import RosterToolbar, {
+  type RosterGrouping,
+} from "@/pages/students/RosterToolbar"
+import type { AddStudentActions } from "@/pages/students/RosterBulkActionsBar"
 import type { StudentCsvRow } from "@/domain/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
@@ -151,7 +148,7 @@ const EnrolledStudents = ({
 
   // Keyed by row.key so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
-  const [grouping, setGrouping] = useState<"none" | "role" | "section">("none")
+  const [grouping, setGrouping] = useState<RosterGrouping>("none")
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
@@ -289,6 +286,16 @@ const EnrolledStudents = ({
       ? roleFilter
       : "all"
 
+  // Role grouping earns its option only when the roster has more than plain
+  // students to group — the same gate as the role filter options.
+  const canGroupByRole = roleFilterOptions.some((r) => r !== "student")
+
+  // Like effectiveRole/effectiveSection: a stale "group by role" selection
+  // (the last staff row left) falls back to no grouping rather than leaving
+  // the table grouped while the hidden select reads "No grouping".
+  const effectiveGrouping =
+    grouping === "role" && !canGroupByRole ? "none" : grouping
+
   // Text search over username/name/email + the status, role, and section
   // filters (see filterRosterRows — extracted so the facets are unit-tested).
   // Default order is enrollment state then name; an active header sort
@@ -320,14 +327,14 @@ const EnrolledStudents = ({
   // chip); section groups sort by name with "No section" last. Rows inside a
   // group keep the toolbar's sort order.
   const groupedRows = useMemo(() => {
-    if (grouping === "role") {
+    if (effectiveGrouping === "role") {
       return groupStudentsByRole(filtered).map((g) => ({
         key: `role:${g.role}`,
         label: t(ROLE_LABEL_KEY[g.role]),
         rows: g.students,
       }))
     }
-    if (grouping === "section" && hasSectionsInFiltered) {
+    if (effectiveGrouping === "section" && hasSectionsInFiltered) {
       return groupStudentsBySection(filtered).map((g) => ({
         key: `section:${g.section}`,
         label: g.section === NO_SECTION ? t("students.noSection") : g.section,
@@ -335,7 +342,7 @@ const EnrolledStudents = ({
       }))
     }
     return null
-  }, [grouping, filtered, hasSectionsInFiltered, t])
+  }, [effectiveGrouping, filtered, hasSectionsInFiltered, t])
 
   const selected = useMemo(
     () => rows.find((row) => row.key === selectedKey) ?? null,
@@ -438,24 +445,26 @@ const EnrolledStudents = ({
       },
     })
 
+  // A roster synchronization is underway — the on-entry classroom reconcile,
+  // the drift auto-sync, or the manual Sync button. While true the sync button
+  // shows progress and the table below is inert: the sync rewrites the very
+  // state (teams, invitations, roster.csv) these actions read and write.
+  const syncing = reconcilePending || syncMutation.isPending
+
   // Auto-sync on open (see useRosterAutoSync): append team members lacking a
   // CSV row when there's drift; the caller owns runSync (and its toasts, which
-  // skip on unmount).
+  // skip on unmount). Gated on the COMBINED syncing flag: the on-entry
+  // reconcile already folds drift into its own commit, so starting a second
+  // concurrent pass would only buy conflict retries.
   useRosterAutoSync({
     classroom,
     ready: !isLoading && !isError,
     csvMissingLogins,
     backfillNeededLogins,
     suppressedLogins,
-    syncPending: syncMutation.isPending,
+    syncPending: syncing,
     runSync,
   })
-
-  // A roster synchronization is underway — the on-entry classroom reconcile,
-  // the drift auto-sync, or the manual Sync button. While true the banner shows
-  // and the table below is inert: the sync rewrites the very state (teams,
-  // invitations, roster.csv) these actions read and write.
-  const syncing = reconcilePending || syncMutation.isPending
 
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
@@ -523,10 +532,6 @@ const EnrolledStudents = ({
   )
   const colCount = 5 + (showSection ? 1 : 0) + (showStatus ? 1 : 0)
 
-  // Role grouping earns its option only when the roster has more than plain
-  // students to group — the same gate as the role filter options.
-  const canGroupByRole = roleFilterOptions.some((r) => r !== "student")
-
   // The combined "Show" select folds the status and role filters into ONE
   // control (mirroring the submissions status select): picking a status
   // clears the role facet and vice versa. The two facets stay separate fields
@@ -565,13 +570,12 @@ const EnrolledStudents = ({
       selfRow={isSelf(row)}
       selectable={isSelectable(row)}
       checked={selectedKeys.has(row.key)}
-      // pointer-events-none on the syncing table only blocks the mouse; gate
-      // the handlers too so keyboard activation is equally inert.
-      onOpen={syncing ? () => {} : setSelectedKey}
-      onCheckboxClick={syncing ? () => {} : handleRowCheckboxClick}
-      onToggle={syncing ? () => {} : handleToggleRow}
+      onOpen={setSelectedKey}
+      onCheckboxClick={handleRowCheckboxClick}
+      onToggle={handleToggleRow}
       showSection={showSection}
       showStatus={showStatus}
+      disabled={syncing}
     />
   )
 
@@ -614,7 +618,7 @@ const EnrolledStudents = ({
           <Button
             variant="ghost"
             size="xs"
-            onClick={() => setStatusFilter("pending")}
+            onClick={() => onShowChange("pending")}
           >
             {t("students.pendingReview")}
           </Button>
@@ -638,12 +642,16 @@ const EnrolledStudents = ({
         </Alert>
       ) : null}
 
-      {/* Failed/expired invitations (owner-only). */}
+      {/* Failed/expired invitations (owner-only). Frozen while a sync runs —
+          this banner sits outside the locked table region, but Re-invite and
+          Dismiss write the very invitations the sync is reconciling. */}
       {!isLoading && !isError && failedInvitations.length > 0 ? (
         <FailedInvitationsList
           failedInvitations={failedInvitations}
           actionsDisabled={
-            reinviteFailedInvite.isPending || dismissFailedInvite.isPending
+            syncing ||
+            reinviteFailedInvite.isPending ||
+            dismissFailedInvite.isPending
           }
           onReinvite={reinvite}
           onDismiss={(inv) =>
@@ -676,173 +684,50 @@ const EnrolledStudents = ({
           filters + sort + add actions stay right-aligned like the submissions
           controls. */}
       {!isLoading && !isError && !isEmpty ? (
-        <Toolbar>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={syncing}
-            aria-live="polite"
-            className="text-base-content/70"
-            onClick={() => {
-              // Explicit backfill: clear the post-unenroll suppression so the
-              // teacher's deliberate Sync always runs (re-adding any drifted
-              // team members, even ones removed earlier this session).
-              suppressedLogins.clear()
-              runSync()
-            }}
-            title={
-              syncing
-                ? t("students.syncActiveHelp")
-                : t("students.syncRosterTitle")
-            }
-          >
-            <SyncIcon
-              aria-hidden="true"
-              className={cx("size-4", syncing && "animate-spin")}
-            />
-            {syncing ? t("students.syncActive") : t("students.syncNow")}
-          </Button>
-          {/* Selection cluster (count + Actions menu + Clear) — appears on
-              the left, beside Sync, while rows are selected. Always mounted:
-              it renders nothing when idle but owns the bulk-run modals. */}
-          <RosterBulkActionsBar
-            org={org}
-            classroom={classroom}
-            client={client}
-            selectedRows={selectedRows}
-            onClearSelection={() => setSelectedKeys(new Set())}
-            onDone={onBulkDone}
-            disabled={syncing}
-          />
-          <Toolbar.Trailing>
-            <Toolbar.Search
-              placeholder={t("students.searchPlaceholder")}
-              ariaLabel={t("students.searchLabel")}
-              value={query}
-              onChange={setQuery}
-              onClear={clearAllFilters}
-              clearActive={hasActiveFilter}
-              hasFilterActive={hasFilterActive}
-            />
-            {/* One combined "Show" select: enrollment states, then a role
-                group (only when staff exist). Sorting lives in the column
-                headers, so the toolbar carries filters and view options only. */}
-            <Toolbar.FilterSelect
-              icon={<FilterIcon aria-hidden="true" className="size-4" />}
-              active={showValue !== "all"}
-              aria-label={t("students.filterShowLabel")}
-              value={showValue}
-              onChange={(e) => onShowChange(e.target.value)}
-            >
-              {statusOptions.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-              {canGroupByRole ? (
-                <>
-                  <option disabled>────────</option>
-                  {roleFilterOptions.map((role) => (
-                    <option key={role} value={`role:${role}`}>
-                      {t(ROLE_LABEL_KEY[role])}
-                    </option>
-                  ))}
-                </>
-              ) : null}
-            </Toolbar.FilterSelect>
-            {sectionOptions.length > 0 ? (
-              <Toolbar.FilterSelect
-                icon={<FilterIcon aria-hidden="true" className="size-4" />}
-                active={effectiveSection !== "all"}
-                className="max-w-[10rem]"
-                aria-label={t("students.filterBySectionLabel")}
-                value={effectiveSection}
-                onChange={(e) => setSectionFilter(e.target.value)}
-              >
-                <option value="all">{t("students.filterAllSections")}</option>
-                {sectionOptions.map((section) => (
-                  <option key={section} value={section}>
-                    {section === NO_SECTION ? t("students.noSection") : section}
-                  </option>
-                ))}
-              </Toolbar.FilterSelect>
-            ) : null}
-            {/* Grouping is a view option, offering exactly the two groupable
-                columns — Role and Section — each only when the roster
-                actually has that dimension. */}
-            {canGroupByRole || sectionOptions.length > 0 ? (
-              <Toolbar.FilterSelect
-                icon={<RowsIcon aria-hidden="true" className="size-4" />}
-                active={grouping !== "none"}
-                aria-label={t("students.groupBy.label")}
-                value={grouping}
-                onChange={(e) =>
-                  setGrouping(e.target.value as "none" | "role" | "section")
-                }
-              >
-                <option value="none">{t("students.groupBy.none")}</option>
-                {canGroupByRole ? (
-                  <option value="role">{t("students.groupBy.role")}</option>
-                ) : null}
-                {sectionOptions.length > 0 ? (
-                  <option value="section">
-                    {t("students.groupBy.section")}
-                  </option>
-                ) : null}
-              </Toolbar.FilterSelect>
-            ) : null}
-            {/* The add-students actions: Share (the classroom invite link,
-                mirroring the submissions Share button), icon-only Upload, and
-                Add member as the rightmost primary action. Kept in place while
-                rows are selected (the selection cluster lives on the left).
-                Disabled while a sync rewrites the roster — they live outside
-                the locked table region. */}
-            {addActions ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={syncing}
-                  title={t("students.shareLinksTitle")}
-                  onClick={addActions.onInviteLinks}
-                >
-                  <ShareAndroidIcon aria-hidden="true" className="size-4" />
-                  {t("students.share")}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  shape="square"
-                  disabled={syncing}
-                  aria-label={t("students.uploadTitle")}
-                  title={t("students.uploadTitle")}
-                  onClick={addActions.onUploadRoster}
-                >
-                  <UploadIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  variant="primary"
-                  size="sm"
-                  disabled={syncing}
-                  onClick={addActions.onAddStudent}
-                >
-                  <PlusIcon aria-hidden="true" className="size-4" />
-                  {t("students.addTitle")}
-                </Button>
-              </>
-            ) : null}
-          </Toolbar.Trailing>
-        </Toolbar>
+        <RosterToolbar
+          org={org}
+          classroom={classroom}
+          client={client}
+          syncing={syncing}
+          onSync={() => {
+            // Explicit backfill: clear the post-unenroll suppression so the
+            // teacher's deliberate Sync always runs (re-adding any drifted
+            // team members, even ones removed earlier this session).
+            suppressedLogins.clear()
+            runSync()
+          }}
+          selectedRows={selectedRows}
+          onClearSelection={() => setSelectedKeys(new Set())}
+          onBulkDone={onBulkDone}
+          query={query}
+          onQueryChange={setQuery}
+          onClearAllFilters={clearAllFilters}
+          hasActiveFilter={hasActiveFilter}
+          hasFilterActive={hasFilterActive}
+          showValue={showValue}
+          onShowChange={onShowChange}
+          statusOptions={statusOptions}
+          roleFilterOptions={roleFilterOptions}
+          canGroupByRole={canGroupByRole}
+          sectionOptions={sectionOptions}
+          effectiveSection={effectiveSection}
+          onSectionChange={setSectionFilter}
+          grouping={effectiveGrouping}
+          onGroupingChange={setGrouping}
+          addActions={addActions ?? null}
+        />
       ) : null}
 
       {/* The roster table: Primer DataTable treatment via the shared
           TableShell frame (matching the assignments/submissions tables);
           select-all lives in the header row and the selection actions in the
-          toolbar above. While a sync is underway the whole region is inert
-          (dimmed, pointer-events off): the pass is rewriting the state these
-          actions act on. */}
+          toolbar above. While a sync is underway the whole region is inert —
+          `inert` blocks keyboard/focus wholesale (pointer-events/opacity are
+          the visual half), and the row/select-all controls are also disabled
+          so the freeze holds in DOMs that don't implement inert. */}
       <div
         aria-busy={syncing || undefined}
+        inert={syncing || undefined}
         className={cx(
           "transition-opacity",
           syncing && "pointer-events-none opacity-60",
@@ -856,15 +741,13 @@ const EnrolledStudents = ({
                 {/* Select-all lives in the select-column header (aligned above
                   the row checkboxes), replacing the old idle bulk bar. */}
                 {!isLoading && !isError && !isEmpty ? (
-                  <input
-                    type="checkbox"
-                    className="checkbox checkbox-sm align-middle"
-                    aria-label={t("students.bulk.selectAll")}
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected && !allSelected
-                    }}
-                    onChange={handleToggleSelectAll}
+                  <SelectAllCheckbox
+                    className="align-middle"
+                    ariaLabel={t("students.bulk.selectAll")}
+                    disabled={syncing}
+                    allSelected={allSelected}
+                    someSelected={someSelected}
+                    onToggle={handleToggleSelectAll}
                   />
                 ) : (
                   <span className="sr-only">
@@ -963,26 +846,27 @@ const EnrolledStudents = ({
                     body={t("students.emptyBody")}
                     action={
                       addActions ? (
-                        <div className="flex justify-center gap-2">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={addActions.onAddStudent}
-                          >
-                            <PlusIcon aria-hidden="true" className="size-4" />
-                            {t("students.addTitle")}
-                          </Button>
-                          <Button size="sm" onClick={addActions.onUploadRoster}>
-                            <UploadIcon aria-hidden="true" className="size-4" />
-                            {t("students.uploadTitle")}
-                          </Button>
-                          <Button size="sm" onClick={addActions.onInviteLinks}>
-                            <PaperAirplaneIcon
-                              aria-hidden="true"
-                              className="size-4"
+                        <div className="flex flex-col items-center gap-3">
+                          {/* The toolbar (and its syncing indicator) is hidden
+                              on an empty roster, so say it here too. */}
+                          {syncing ? (
+                            <span
+                              className="flex items-center gap-2 text-sm text-base-content/70"
+                              aria-live="polite"
+                            >
+                              <SyncIcon
+                                aria-hidden="true"
+                                className="size-4 animate-spin"
+                              />
+                              {t("students.syncActive")}
+                            </span>
+                          ) : null}
+                          <div className="flex justify-center gap-2">
+                            <AddStudentButtons
+                              addActions={addActions}
+                              disabled={syncing}
                             />
-                            {t("students.inviteStudents")}
-                          </Button>
+                          </div>
                         </div>
                       ) : null
                     }
@@ -1062,6 +946,7 @@ const EnrolledStudents = ({
         teamSlugByRole={teamSlugByRole}
         row={selected}
         canManage={isOwner}
+        frozen={syncing}
         isSelf={selected ? isSelf(selected) : false}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}

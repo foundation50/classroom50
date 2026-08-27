@@ -11,7 +11,13 @@ import {
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
-import { Alert, Button, DropdownMenu, Modal } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  DropdownMenu,
+  Modal,
+  closeDropdownMenu,
+} from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -141,14 +147,6 @@ const RosterBulkActionsBar = ({
   const [confirmingCancel, setConfirmingCancel] = useState(false)
 
   const hasSelection = selectedRows.length > 0
-
-  // daisyUI dropdowns are focus-driven; selecting an item blurs to close
-  // (mirrors SubmissionsActionsMenu).
-  const closeMenu = () => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-  }
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
   // Only pending rows are "invitable" — the action resends their org invite.
   // (The roster is team-driven; there are no CSV-only rows to freshly invite.)
@@ -175,6 +173,10 @@ const RosterBulkActionsBar = ({
   }
 
   const runUnenroll = async () => {
+    // Re-check the freeze at the run boundary: the confirm modal renders
+    // OUTSIDE the disabled fieldset (it must survive a selection clear), so a
+    // dialog opened before a sync armed could otherwise fire mid-sync.
+    if (disabled) return
     if (unenrollableSelected.length === 0) return
     setAction("unenroll")
     setPhase("working")
@@ -216,6 +218,7 @@ const RosterBulkActionsBar = ({
   }
 
   const runInvite = async () => {
+    if (disabled) return
     if (invitableSelected === 0) return
     setAction("invite")
     setPhase("working")
@@ -315,6 +318,7 @@ const RosterBulkActionsBar = ({
   }
 
   const runCancel = async () => {
+    if (disabled) return
     if (cancellableSelected.length === 0) return
     setAction("cancel")
     setPhase("working")
@@ -425,7 +429,7 @@ const RosterBulkActionsBar = ({
                         })
                   }
                   onClick={() => {
-                    closeMenu()
+                    closeDropdownMenu()
                     if (invitableSelected === 0) return
                     setConfirmingInvite(true)
                   }}
@@ -446,7 +450,7 @@ const RosterBulkActionsBar = ({
                         })
                   }
                   onClick={() => {
-                    closeMenu()
+                    closeDropdownMenu()
                     if (cancellableSelected.length === 0) return
                     setConfirmingCancel(true)
                   }}
@@ -456,10 +460,7 @@ const RosterBulkActionsBar = ({
                 </button>
               </li>
               {/* Unenroll — destructive, so last and in its own group. */}
-              <div
-                className="my-1 border-t border-base-content/10"
-                role="separator"
-              />
+              <DropdownMenu.Separator />
               <li>
                 <button
                   type="button"
@@ -469,7 +470,7 @@ const RosterBulkActionsBar = ({
                     count: unenrollableSelected.length,
                   })}
                   onClick={() => {
-                    closeMenu()
+                    closeDropdownMenu()
                     if (unenrollableSelected.length === 0) return
                     setConfirmingUnenroll(true)
                   }}
@@ -494,7 +495,7 @@ const RosterBulkActionsBar = ({
       ) : null}
 
       <ConfirmModal
-        open={confirmingUnenroll}
+        open={confirmingUnenroll && !disabled}
         dangerous
         needsConfirm={false}
         title={t("students.bulk.confirmUnenrollTitle", {
@@ -512,7 +513,7 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
-        open={confirmingInvite}
+        open={confirmingInvite && !disabled}
         dangerous={false}
         needsConfirm={false}
         title={t("students.bulk.confirmInviteTitle", {
@@ -530,7 +531,7 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
-        open={confirmingCancel}
+        open={confirmingCancel && !disabled}
         dangerous
         needsConfirm={false}
         title={t("students.bulk.confirmCancelTitle", {

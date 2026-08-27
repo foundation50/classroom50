@@ -21,10 +21,21 @@ export const initialsFor = (row: MemberListRow) =>
 // make clear these are GitHub members. Single-sentence keys (not affix concat)
 // so translators control the order of the username and the id note; the
 // username stays LTR-isolated via MonoLtr inside RTL copy.
-export const GitHubIdentity = ({ row }: { row: MemberListRow }) => {
+//
+// `bare` renders the handle alone — no octocat mark, no numeric id — for
+// surfaces with a dedicated Username column (the roster table) where the full
+// treatment repeats what the column header already says.
+export const GitHubIdentity = ({
+  row,
+  bare = false,
+}: {
+  row: MemberListRow
+  bare?: boolean
+}) => {
   const { t } = useTranslation()
+  const withId = !bare && Boolean(row.github_id)
   const identity = row.username ? (
-    row.github_id ? (
+    withId ? (
       <Trans
         i18nKey="orgMembers.usernameWithId"
         values={{ username: row.username, id: row.github_id }}
@@ -36,7 +47,7 @@ export const GitHubIdentity = ({ row }: { row: MemberListRow }) => {
     ) : (
       <MonoLtr>@{row.username}</MonoLtr>
     )
-  ) : row.github_id ? (
+  ) : withId ? (
     <Trans
       i18nKey="orgMembers.noUsernameWithId"
       values={{ id: row.github_id }}
@@ -48,6 +59,9 @@ export const GitHubIdentity = ({ row }: { row: MemberListRow }) => {
   ) : (
     <span className="italic">{t("orgMembers.noGitHubUsername")}</span>
   )
+  if (bare) {
+    return <span className="text-sm text-base-content/70">{identity}</span>
+  }
   return (
     <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
       <MarkGithubIcon aria-hidden="true" className="size-4 opacity-50" />
