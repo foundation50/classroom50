@@ -68,6 +68,7 @@ export {
   rawFileQuery,
   jsonFileQuery,
   configCommitsQuery,
+  latestConfigFileCommitQuery,
   csvFileQuery,
   rosterRawFileQuery,
   getRawFile,

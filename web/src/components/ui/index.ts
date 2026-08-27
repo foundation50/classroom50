@@ -23,7 +23,7 @@ export type { BadgeProps, BadgeTone, BadgeSize } from "./Badge"
 export { Input } from "./Input"
 export type { InputProps, InputSize } from "./Input"
 
-export { Select } from "./Select"
+export { Select, SelectSeparatorOption } from "./Select"
 export type { SelectProps, SelectSize } from "./Select"
 
 export { Combobox } from "./Combobox"
@@ -41,8 +41,9 @@ export type { HeadingProps, HeadingVariant } from "./Heading"
 export { Modal, ModalIcon, ModalFooterPortal } from "./Modal"
 export type { ModalProps, ModalSize, ModalIconTone } from "./Modal"
 
-export { DropdownMenu } from "./DropdownMenu"
+export { DropdownMenu, closeDropdownMenu } from "./DropdownMenu"
 export type { DropdownMenuProps } from "./DropdownMenu"
+export { SelectAllCheckbox } from "./SelectAllCheckbox"
 
 export { Alert, ALERT_TONE_ICON, alertToneClass, alertToneRole } from "./Alert"
 export type { AlertProps, AlertTone } from "./Alert"

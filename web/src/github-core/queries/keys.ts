@@ -85,6 +85,9 @@ export const githubKeys = {
   configCommits: (org: string, perPage: number) =>
     [...githubKeys.all, "config-commits", org, perPage] as const,
 
+  configFileCommit: (org: string, path: string) =>
+    [...githubKeys.all, "config-file-commit", org, path] as const,
+
   rawFile: (owner: string, repo: string, path: string, ref?: string) =>
     [...githubKeys.all, "raw-file", owner, repo, path, ref ?? null] as const,
 

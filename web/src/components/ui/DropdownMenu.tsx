@@ -27,4 +27,21 @@ export function DropdownMenu({
   )
 }
 
+// The one separator recipe for menu groups, so the divider chrome can't drift
+// per caller.
+function DropdownMenuSeparator() {
+  return (
+    <div className="my-1 border-t border-base-content/10" role="separator" />
+  )
+}
+DropdownMenu.Separator = DropdownMenuSeparator
+
+// daisyUI dropdowns are focus-driven, so "close the menu" is "blur the focused
+// item". The single helper for every menu item's onClick.
+export function closeDropdownMenu(): void {
+  if (document.activeElement instanceof HTMLElement) {
+    document.activeElement.blur()
+  }
+}
+
 export default DropdownMenu

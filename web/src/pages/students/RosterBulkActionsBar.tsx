@@ -1,16 +1,23 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  ChevronDownIcon,
   PaperAirplaneIcon,
-  PlusIcon,
-  UploadIcon,
+  SignOutIcon,
+  XCircleIcon,
   XIcon,
 } from "@/components/ui/icons"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
-import { Alert, Button, Modal, Toolbar } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  DropdownMenu,
+  Modal,
+  closeDropdownMenu,
+} from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -33,9 +40,9 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("students:RosterBulkActionsBar")
 
-// The three "add students" affordances the toolbar surfaces (when nothing is
-// selected). The page owns the modals; the bar just triggers them, keeping the
-// controls adjacent to the table rather than floating in the page header.
+// The three "add students" affordances (Add / Upload / Invite). The page owns
+// the modals and renders the trigger buttons in the roster toolbar; the type
+// lives here next to the bulk bar they used to sit in.
 export type AddStudentActions = {
   onAddStudent: () => void
   onUploadRoster: () => void
@@ -91,35 +98,24 @@ const buildUnenrollResult = (
   }
 }
 
-// Roster multi-select toolbar: select-all header + count label, and — once a
-// selection exists — Resend / Cancel invite / Unenroll / Clear, each acting on
-// the subset of the selection it can target. Owns one progress -> results
-// <dialog> shared by all three runs. On completion it calls onDone so the page
-// can refresh its roster/invite caches.
+// Roster multi-select actions: the toolbar's selection cluster (count + one
+// "Actions" menu with Resend / Cancel invite / Unenroll + Clear), shown only
+// while rows are selected. Owns one progress -> results <dialog> shared by all
+// three runs. On completion it calls onDone so the page can refresh its
+// roster/invite caches.
 const RosterBulkActionsBar = ({
   org,
   classroom,
   client,
   selectedRows,
-  totalCount,
-  allSelected,
-  someSelected,
-  onToggleSelectAll,
   onClearSelection,
   onDone,
-  addActions,
-  groupBySection,
-  onGroupBySectionChange,
-  canGroupBySection = false,
+  disabled = false,
 }: {
   org: string
   classroom: string
   client: GitHubClient
   selectedRows: TeamRosterRow[]
-  totalCount: number
-  allSelected: boolean
-  someSelected: boolean
-  onToggleSelectAll: () => void
   onClearSelection: () => void
   // Called after a run completes so the page can invalidate roster + invite
   // caches. `action` distinguishes what changed; on an unenroll run the removed
@@ -129,13 +125,9 @@ const RosterBulkActionsBar = ({
     action: "unenroll" | "invite" | "cancel",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => void
-  // The "add students" triggers shown on the right when nothing is selected.
-  addActions?: AddStudentActions
-  // Group-by-section toggle, rendered in the header next to the count. Shown
-  // only when canGroupBySection (the filtered rows have >=1 section).
-  groupBySection?: boolean
-  onGroupBySectionChange?: (value: boolean) => void
-  canGroupBySection?: boolean
+  // Freeze every control (a roster sync is rewriting the state these actions
+  // read/write). A <fieldset disabled> so keyboard activation is off too.
+  disabled?: boolean
 }) => {
   const { t } = useTranslation()
 
@@ -181,6 +173,10 @@ const RosterBulkActionsBar = ({
   }
 
   const runUnenroll = async () => {
+    // Re-check the freeze at the run boundary: the confirm modal renders
+    // OUTSIDE the disabled fieldset (it must survive a selection clear), so a
+    // dialog opened before a sync armed could otherwise fire mid-sync.
+    if (disabled) return
     if (unenrollableSelected.length === 0) return
     setAction("unenroll")
     setPhase("working")
@@ -222,6 +218,7 @@ const RosterBulkActionsBar = ({
   }
 
   const runInvite = async () => {
+    if (disabled) return
     if (invitableSelected === 0) return
     setAction("invite")
     setPhase("working")
@@ -321,6 +318,7 @@ const RosterBulkActionsBar = ({
   }
 
   const runCancel = async () => {
+    if (disabled) return
     if (cancellableSelected.length === 0) return
     setAction("cancel")
     setPhase("working")
@@ -400,73 +398,28 @@ const RosterBulkActionsBar = ({
 
   return (
     <>
-      <Toolbar
-        header
-        className={`transition-colors ${hasSelection ? "bg-base-200/60" : ""}`}
-      >
-        <Toolbar.Selection
-          allSelected={allSelected}
-          someSelected={someSelected}
-          onToggleSelectAll={onToggleSelectAll}
-          selectAllAriaLabel={t("students.bulk.selectAll")}
-          label={
-            hasSelection
-              ? t("students.bulk.selectedCount", { count: selectedRows.length })
-              : t("students.bulk.memberCount", { count: totalCount })
-          }
-          aux={
-            canGroupBySection && onGroupBySectionChange ? (
-              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-sm"
-                  checked={Boolean(groupBySection)}
-                  onChange={(e) => onGroupBySectionChange(e.target.checked)}
-                />
-                {t("students.groupBySection")}
-              </label>
-            ) : null
-          }
-          idleActions={
-            addActions ? (
-              <div className="join ms-auto">
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.addTitle")}
-                  title={t("students.addTitle")}
-                  onClick={addActions.onAddStudent}
-                >
-                  <PlusIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.uploadTitle")}
-                  title={t("students.uploadTitle")}
-                  onClick={addActions.onUploadRoster}
-                >
-                  <UploadIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.inviteStudents")}
-                  title={t("students.inviteStudents")}
-                  onClick={addActions.onInviteLinks}
-                >
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                </Button>
-              </div>
-            ) : null
-          }
-        >
-          {hasSelection ? (
-            <>
-              <div className="join">
-                <Button
-                  size="sm"
-                  className="join-item"
+      {/* The selection cluster lives in the page toolbar and appears only
+          while rows are selected: count, one consolidated Actions menu, and
+          Clear. The modals below stay mounted regardless, so a completing
+          run's result dialog survives the selection clearing out from under
+          it. display:contents keeps the pieces direct flex children of the
+          toolbar while the fieldset still freezes them during a sync. */}
+      {hasSelection ? (
+        <fieldset disabled={disabled} className="contents">
+          <span className="text-sm font-medium tabular-nums">
+            {t("students.bulk.selectedCount", { count: selectedRows.length })}
+          </span>
+          {/* dropdown-start: the cluster sits on the toolbar's left, so the
+              menu opens rightward instead of off the edge. */}
+          <div className="dropdown dropdown-start">
+            <Button variant="primary" size="sm">
+              {t("students.bulk.actions")}
+              <ChevronDownIcon aria-hidden="true" className="size-4" />
+            </Button>
+            <DropdownMenu className="w-64">
+              <li>
+                <button
+                  type="button"
                   disabled={invitableSelected === 0}
                   title={
                     invitableSelected === 0
@@ -475,14 +428,19 @@ const RosterBulkActionsBar = ({
                           count: invitableSelected,
                         })
                   }
-                  onClick={() => setConfirmingInvite(true)}
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (invitableSelected === 0) return
+                    setConfirmingInvite(true)
+                  }}
                 >
                   <PaperAirplaneIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.invite")}
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
                   disabled={cancellableSelected.length === 0}
                   title={
                     cancellableSelected.length === 0
@@ -491,44 +449,53 @@ const RosterBulkActionsBar = ({
                           count: cancellableSelected.length,
                         })
                   }
-                  onClick={() => setConfirmingCancel(true)}
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (cancellableSelected.length === 0) return
+                    setConfirmingCancel(true)
+                  }}
                 >
+                  <XCircleIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.cancelInvite")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="join-item text-error hover:bg-error/10"
-                  aria-label={t("students.bulk.unenrollSelected", {
-                    count: unenrollableSelected.length,
-                  })}
+                </button>
+              </li>
+              {/* Unenroll — destructive, so last and in its own group. */}
+              <DropdownMenu.Separator />
+              <li>
+                <button
+                  type="button"
+                  className="text-error"
+                  disabled={unenrollableSelected.length === 0}
                   title={t("students.bulk.unenrollSelected", {
                     count: unenrollableSelected.length,
                   })}
-                  disabled={unenrollableSelected.length === 0}
-                  onClick={() => setConfirmingUnenroll(true)}
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (unenrollableSelected.length === 0) return
+                    setConfirmingUnenroll(true)
+                  }}
                 >
+                  <SignOutIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.unenroll")}
-                </Button>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                shape="square"
-                aria-label={t("students.bulk.clearSelection")}
-                title={t("students.bulk.clearSelection")}
-                onClick={onClearSelection}
-              >
-                <XIcon aria-hidden="true" className="size-4" />
-              </Button>
-            </>
-          ) : null}
-        </Toolbar.Selection>
-      </Toolbar>
+                </button>
+              </li>
+            </DropdownMenu>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="square"
+            aria-label={t("students.bulk.clearSelection")}
+            title={t("students.bulk.clearSelection")}
+            onClick={onClearSelection}
+          >
+            <XIcon aria-hidden="true" className="size-4" />
+          </Button>
+        </fieldset>
+      ) : null}
 
       <ConfirmModal
-        open={confirmingUnenroll}
+        open={confirmingUnenroll && !disabled}
         dangerous
         needsConfirm={false}
         title={t("students.bulk.confirmUnenrollTitle", {
@@ -546,7 +513,7 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
-        open={confirmingInvite}
+        open={confirmingInvite && !disabled}
         dangerous={false}
         needsConfirm={false}
         title={t("students.bulk.confirmInviteTitle", {
@@ -564,7 +531,7 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
-        open={confirmingCancel}
+        open={confirmingCancel && !disabled}
         dangerous
         needsConfirm={false}
         title={t("students.bulk.confirmCancelTitle", {

@@ -410,14 +410,8 @@ export function sortTeamRosterRows(
   rows: TeamRosterRow[],
   mode: StudentSortMode = DEFAULT_STUDENT_SORT,
 ): TeamRosterRow[] {
-  const order: Record<TeamRosterRowState, number> = {
-    enrolled: 0,
-    pending: 1,
-    needs_attention_in_org: 2,
-    needs_attention_not_in_org: 3,
-  }
   return rows.toSorted((a, b) => {
-    const byState = order[a.state] - order[b.state]
+    const byState = STATE_ORDER[a.state] - STATE_ORDER[b.state]
     if (byState !== 0) return byState
     return sortName(a, mode).localeCompare(
       sortName(b, mode),
@@ -425,6 +419,63 @@ export function sortTeamRosterRows(
       NAME_COLLATION,
     )
   })
+}
+
+// Enrollment-state precedence shared by the default sort above and the Status
+// column sort below: settled rows first, drift last.
+const STATE_ORDER: Record<TeamRosterRowState, number> = {
+  enrolled: 0,
+  pending: 1,
+  needs_attention_in_org: 2,
+  needs_attention_not_in_org: 3,
+}
+
+// The roster table's header sorts — one comparator per sortable column:
+//   member   — display name (first-name collation, like the default sort);
+//   username — GitHub handle, blanks (pending email invites) pinned last;
+//   role     — highest-ranked role, asc = teacher first (the natural "by role"
+//              reading);
+//   section  — locale/numeric section compare, blank sections pinned last in
+//              either direction (a missing value is "no data", not "smallest");
+//   status   — enrollment-state precedence (enrolled -> pending -> drift).
+// `desc` flips only the column comparison; ties always fall back to ascending
+// display name so a reversed column stays internally scannable.
+export type RosterTableSortColumn =
+  "member" | "username" | "role" | "section" | "status"
+export function sortTeamRosterRowsBy(
+  rows: TeamRosterRow[],
+  column: RosterTableSortColumn,
+  direction: "asc" | "desc",
+): TeamRosterRow[] {
+  const flip = direction === "desc" ? -1 : 1
+  const topRank = (row: TeamRosterRow) =>
+    Math.max(0, ...row.roles.map((role) => ROLE_RANK[role]))
+  const byName = (a: TeamRosterRow, b: TeamRosterRow) =>
+    sortName(a).localeCompare(sortName(b), undefined, NAME_COLLATION)
+  // Blank-last compare regardless of direction: the inner flip cancels the
+  // outer one, so "no data" never leads a reversed column.
+  const blankLast = (va: string, vb: string): number => {
+    if (!va || !vb) return flip * (va === vb ? 0 : va ? -1 : 1)
+    return va.localeCompare(vb, undefined, { numeric: true })
+  }
+  const byColumn = (a: TeamRosterRow, b: TeamRosterRow): number => {
+    switch (column) {
+      case "member":
+        return byName(a, b)
+      case "username":
+        return blankLast(
+          a.username.trim().toLowerCase(),
+          b.username.trim().toLowerCase(),
+        )
+      case "role":
+        return topRank(b) - topRank(a)
+      case "section":
+        return blankLast(a.section.trim(), b.section.trim())
+      case "status":
+        return STATE_ORDER[a.state] - STATE_ORDER[b.state]
+    }
+  }
+  return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
 }
 
 // Project a roster row back to the display-metadata Student shape the grade

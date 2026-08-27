@@ -234,35 +234,24 @@ describe("Toolbar.Selection", () => {
     expect(checkbox.indeterminate).toBe(true)
   })
 
-  it("shows children (selected actions) and hides idleActions when selected", () => {
+  it("shows children (selected actions) when selected", () => {
     render(
-      <Toolbar.Selection
-        {...base}
-        allSelected={false}
-        someSelected
-        aux={<span>aux-toggle</span>}
-        idleActions={<span>idle-actions</span>}
-      >
+      <Toolbar.Selection {...base} allSelected={false} someSelected>
         <button>Remove</button>
       </Toolbar.Selection>,
     )
     expect(screen.getByText("Remove")).not.toBeNull()
-    expect(screen.getByText("aux-toggle")).not.toBeNull()
-    expect(screen.queryByText("idle-actions")).toBeNull()
   })
 
-  it("shows idleActions and aux when nothing is selected", () => {
+  it("renders only the count when nothing is selected and no children", () => {
     render(
       <Toolbar.Selection
         {...base}
         label="10 members"
         allSelected={false}
         someSelected={false}
-        aux={<span>aux-toggle</span>}
-        idleActions={<span>idle-actions</span>}
       />,
     )
-    expect(screen.getByText("idle-actions")).not.toBeNull()
-    expect(screen.getByText("aux-toggle")).not.toBeNull()
+    expect(screen.getByText("10 members")).not.toBeNull()
   })
 })

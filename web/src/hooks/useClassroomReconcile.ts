@@ -20,17 +20,18 @@ const log = logger.scope("useClassroomReconcile")
 // a classroom converges on any owner entry rather than only when a role/roster
 // op touches the missing resource. Owner-gated via `enabled` (a 403 for anyone
 // else); the fire-once guard, latch, and concurrency invariant live in
-// useBestEffortOwnerReconcile.
+// useBestEffortOwnerReconcile. Returns the pass's in-flight signal so pages
+// can reflect "sync in progress" (e.g. the roster's banner).
 export function useClassroomReconcile(
   org: string | undefined,
   classroom: string | undefined,
   enabled: boolean,
   creator?: string,
-): void {
+): { isPending: boolean } {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
-  useBestEffortOwnerReconcile<ClassroomReconcileResult>({
+  return useBestEffortOwnerReconcile<ClassroomReconcileResult>({
     enabled,
     org,
     classroom,
