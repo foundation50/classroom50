@@ -75,6 +75,9 @@ afterEach(() => {
   cleanup()
   run.mockReset()
   reuseState.outcomes = []
+  reuseState.running = false
+  reuseState.processed = 0
+  reuseState.total = 0
 })
 
 describe("BulkReuseAssignmentsModal", () => {
@@ -140,6 +143,20 @@ describe("BulkReuseAssignmentsModal", () => {
     const { dismiss, onClose } = setup()
     fireEvent.click(dismiss())
     expect(onClose).toHaveBeenCalledWith()
+  })
+
+  // Cannot be checked in the browser without actually copying into a real
+  // org, so the evidence is here: a run in flight shows the shared bulk
+  // progress block, not a bare line of text.
+  it("shows the shared progress block while copying", () => {
+    reuseState.running = true
+    reuseState.processed = 1
+    reuseState.total = 3
+    const { pickTarget } = setup()
+    pickTarget()
+
+    expect(screen.getByRole("progressbar")).toBeTruthy()
+    expect(screen.getByText(/assignments\.bulk\.reuseProgress/)).toBeTruthy()
   })
 
   it("normalizes a typed slug on blur", () => {

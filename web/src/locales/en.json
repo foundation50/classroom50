@@ -1748,6 +1748,7 @@
       "reuseTitle_other": "Reuse {{count}} assignments",
       "reuseBody": "Copy the selected assignments into another classroom in this organization. Pick the target, then check the slug each copy will take — where a slug is already used there, a numbered suffix is filled in, and you can overwrite any of them before copying.",
       "reuseNoTargets": "There is no other classroom in {{org}} to copy into.",
+      "reuseWorking": "Copying assignments…",
       "reuseProgress": "Copying {{processed}} of {{total}}…",
       "reuseKeepOpen": "Keep this tab open until it finishes.",
       "reuseDone_one": "{{count}} assignment copied.",

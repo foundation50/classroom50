@@ -2,7 +2,10 @@ import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { FormField, Input, Select } from "@/components/ui"
-import { BulkResultSection } from "@/components/bulk/resultView"
+import {
+  BulkProgressBlock,
+  BulkResultSection,
+} from "@/components/bulk/resultView"
 import {
   ReuseModalShell,
   reuseSlugStatus,
@@ -259,13 +262,23 @@ export function BulkReuseAssignmentsModal({
       )}
 
       {reuse.running && (
-        <p className="mt-4 text-sm text-base-content/70" role="status">
-          {t("assignments.bulk.reuseProgress", {
+        // The shared bulk progress block (spinner + bar + caption), so a
+        // sequential reuse reads like every other bulk run in the app.
+        // Indeterminate until the first copy lands: the first write is the
+        // slow one, and a bar pinned at 0% looks stuck.
+        <BulkProgressBlock
+          workingLabel={t("assignments.bulk.reuseWorking")}
+          progress={{
             processed: reuse.processed,
             total: reuse.total,
-          })}{" "}
-          {t("assignments.bulk.reuseKeepOpen")}
-        </p>
+            message: "",
+          }}
+          indeterminateUntilFirst
+          caption={`${t("assignments.bulk.reuseProgress", {
+            processed: reuse.processed,
+            total: reuse.total,
+          })} ${t("assignments.bulk.reuseKeepOpen")}`}
+        />
       )}
 
       {finished && (
