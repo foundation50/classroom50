@@ -113,33 +113,38 @@ export function RosterToolbar({
   }
   return (
     <Toolbar>
-      <div className="flex items-center gap-1">
-        {!syncing && captionParts.length > 0 ? (
-          <span className="hidden text-xs text-base-content/50 md:inline">
-            {captionParts.join(" · ")}
-          </span>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={syncing}
-          aria-live="polite"
-          className="text-base-content/70"
-          onClick={onSync}
-          title={
-            syncing
-              ? t("students.syncActiveHelp")
-              : t("students.syncRosterTitle")
-          }
-        >
-          <SyncIcon
-            aria-hidden="true"
-            className={cx("size-4", syncing && "animate-spin")}
-          />
-          {syncing ? t("students.syncActive") : t("students.syncNow")}
-        </Button>
-        <HelpTooltip help={t("students.syncHelp")} />
-      </div>
+      {/* The refresh cluster (caption + button + help) yields its spot to the
+          selection cluster while rows are selected — one left-side context at
+          a time. An active sync still freezes everything via `syncing`. */}
+      {selectedRows.length === 0 ? (
+        <div className="flex items-center gap-1">
+          {!syncing && captionParts.length > 0 ? (
+            <span className="hidden text-xs text-base-content/50 md:inline">
+              {captionParts.join(" · ")}
+            </span>
+          ) : null}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={syncing}
+            aria-live="polite"
+            className="text-base-content/70"
+            onClick={onSync}
+            title={
+              syncing
+                ? t("students.syncActiveHelp")
+                : t("students.syncRosterTitle")
+            }
+          >
+            <SyncIcon
+              aria-hidden="true"
+              className={cx("size-4", syncing && "animate-spin")}
+            />
+            {syncing ? t("students.syncActive") : t("students.syncNow")}
+          </Button>
+          <HelpTooltip help={t("students.syncHelp")} />
+        </div>
+      ) : null}
       {/* Selection cluster (count + Actions menu + Clear) — appears on the
           left, beside Sync, while rows are selected. Always mounted: it
           renders nothing when idle but owns the bulk-run modals. */}

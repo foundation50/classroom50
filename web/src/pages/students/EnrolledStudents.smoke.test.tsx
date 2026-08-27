@@ -516,8 +516,16 @@ describe("EnrolledStudents — rendered phase views", () => {
     })
     fireEvent.click(selectAll)
     expect(capturedSelectedKeys).toEqual(["alice"])
+    // The refresh cluster yields to the selection cluster while rows are
+    // selected (one left-side context at a time).
+    expect(
+      screen.queryByRole("button", { name: /students\.syncNow/ }),
+    ).toBeNull()
     fireEvent.click(selectAll)
     expect(capturedSelectedKeys).toEqual([])
+    expect(
+      screen.getByRole("button", { name: /students\.syncNow/ }),
+    ).not.toBeNull()
   })
 
   // Grouping is a toolbar view option (next to sort) offering exactly the
