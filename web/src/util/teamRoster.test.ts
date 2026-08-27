@@ -6,6 +6,7 @@ import {
   roleForGitHubOrgRole,
   rowToStudent,
   sortTeamRosterRows,
+  sortTeamRosterRowsBy,
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
   type TeamRosterRow,
@@ -790,6 +791,111 @@ describe("sortTeamRosterRows — first- vs last-name ordering", () => {
     ]
     const copy = [...input]
     sortTeamRosterRows(input)
+    expect(input).toEqual(copy)
+  })
+})
+
+describe("sortTeamRosterRowsBy — table-header column sorts", () => {
+  const enrolledRow = (over: Partial<TeamRosterRow>): TeamRosterRow => ({
+    key: over.username ?? "u",
+    state: "enrolled",
+    roles: ["student"],
+    username: "u",
+    github_id: "",
+    first_name: "",
+    last_name: "",
+    section: "",
+    email: "",
+    avatar_url: "",
+    ...over,
+  })
+
+  it("member: name asc/desc ignores the enrollment-state buckets", () => {
+    const rows = [
+      {
+        ...enrolledRow({ username: "z", first_name: "Zed" }),
+        state: "pending" as const,
+      },
+      enrolledRow({ username: "a", first_name: "Amy" }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "member", "asc").map((r) => r.username),
+    ).toEqual(["a", "z"])
+    expect(
+      sortTeamRosterRowsBy(rows, "member", "desc").map((r) => r.username),
+    ).toEqual(["z", "a"])
+  })
+
+  it("role: asc reads teacher-first by highest rank, ties by name", () => {
+    const rows = [
+      enrolledRow({ username: "s2", first_name: "Zoe" }),
+      enrolledRow({ username: "prof", roles: ["student", "teacher"] }),
+      enrolledRow({ username: "s1", first_name: "Amy" }),
+      enrolledRow({ username: "helper", roles: ["ta"] }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "role", "asc").map((r) => r.username),
+    ).toEqual(["prof", "helper", "s1", "s2"])
+    expect(
+      sortTeamRosterRowsBy(rows, "role", "desc").map((r) => r.username),
+    ).toEqual(["s1", "s2", "helper", "prof"])
+  })
+
+  it("username: handle compare with blank handles (pending invites) last", () => {
+    const rows = [
+      enrolledRow({ username: "zed", first_name: "Zed" }),
+      {
+        ...enrolledRow({ username: "", first_name: "Pending" }),
+        state: "pending" as const,
+      },
+      enrolledRow({ username: "amy", first_name: "Amy" }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "username", "asc").map((r) => r.first_name),
+    ).toEqual(["Amy", "Zed", "Pending"])
+    expect(
+      sortTeamRosterRowsBy(rows, "username", "desc").map((r) => r.first_name),
+    ).toEqual(["Zed", "Amy", "Pending"])
+  })
+
+  it("section: numeric collation with blank sections pinned last both ways", () => {
+    const rows = [
+      enrolledRow({ username: "none", first_name: "Amy" }),
+      enrolledRow({ username: "lab10", section: "Lab 10" }),
+      enrolledRow({ username: "lab2", section: "Lab 2" }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "section", "asc").map((r) => r.username),
+    ).toEqual(["lab2", "lab10", "none"])
+    expect(
+      sortTeamRosterRowsBy(rows, "section", "desc").map((r) => r.username),
+    ).toEqual(["lab10", "lab2", "none"])
+  })
+
+  it("status: enrollment-state precedence, flipped by direction", () => {
+    const rows = [
+      {
+        ...enrolledRow({ username: "drift" }),
+        state: "needs_attention_in_org" as const,
+      },
+      enrolledRow({ username: "ok" }),
+      { ...enrolledRow({ username: "inv" }), state: "pending" as const },
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "status", "asc").map((r) => r.username),
+    ).toEqual(["ok", "inv", "drift"])
+    expect(
+      sortTeamRosterRowsBy(rows, "status", "desc").map((r) => r.username),
+    ).toEqual(["drift", "inv", "ok"])
+  })
+
+  it("does not mutate the input array", () => {
+    const input = [
+      enrolledRow({ username: "b", first_name: "Bob" }),
+      enrolledRow({ username: "a", first_name: "Amy" }),
+    ]
+    const copy = [...input]
+    sortTeamRosterRowsBy(input, "member", "desc")
     expect(input).toEqual(copy)
   })
 })

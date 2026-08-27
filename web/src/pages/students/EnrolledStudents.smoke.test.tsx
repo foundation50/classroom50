@@ -260,9 +260,9 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(capturedCanManage).toBe(false)
   })
 
-  // The sort toggle re-orders the rendered roster by first vs last name. Two
-  // enrolled rows whose first/last order disagree pin the wiring.
-  it("re-sorts the roster by first vs last name via the sort toggle", () => {
+  // Sorting moved into the column headers: clicking Member toggles name
+  // asc/desc (the toolbar carries filters and view options only).
+  it("sorts by name from the Member column header", () => {
     useTeamRoster.mockReturnValue({
       ...emptyRoster,
       isEmpty: false,
@@ -301,15 +301,45 @@ describe("EnrolledStudents — rendered phase views", () => {
         : "zed-first"
     }
 
-    // Defaults to first-name order: Amy before Zed.
+    // Default order sorts by first name: Amy before Zed.
     expect(order()).toBe("amy-first")
 
-    fireEvent.change(screen.getByLabelText("students.sortBy.label"), {
-      target: { value: "last" },
+    const memberHeader = screen.getByRole("button", {
+      name: /students\.table\.colMember/,
     })
-
-    // Last-name order: Adams (Zed) before Brown (Amy).
+    // First click activates ascending (unchanged), second flips to descending.
+    fireEvent.click(memberHeader)
+    expect(order()).toBe("amy-first")
+    fireEvent.click(memberHeader)
     expect(order()).toBe("zed-first")
+  })
+
+  // The Status column only exists while some row has something to report
+  // (pending / needs attention) — a fully enrolled roster drops it.
+  it("shows the Status column only when a row is not plainly enrolled", () => {
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(renderView())
+    expect(screen.queryByText("students.table.colStatus")).toBeNull()
+
+    cleanup()
+    useTeamRoster.mockReturnValue({
+      ...populatedRoster,
+      counts: { enrolled: 1, pending: 1 },
+      rows: [
+        ...populatedRoster.rows,
+        {
+          key: "ghost@uni.edu",
+          username: "",
+          email: "ghost@uni.edu",
+          section: "",
+          github_id: "",
+          roles: ["student"],
+          state: "pending",
+        },
+      ],
+    })
+    render(renderView())
+    expect(screen.getByText("students.table.colStatus")).not.toBeNull()
   })
 
   // The Sync button is a standing affordance now (not drift-gated): always in

@@ -1,9 +1,8 @@
 import { ChevronRightIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
-import { Badge, rtlFlip } from "@/components/ui"
+import { Badge, MonoLtr, rtlFlip } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
-import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
 import { STATE_BADGE_TONE, STATE_LABEL_KEY } from "@/util/classroomRoleUI"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import { ClickableTr } from "@/lib/motionComponents"
@@ -30,6 +29,7 @@ export const RosterRow = ({
   onToggle,
   selectable = true,
   showSection = false,
+  showStatus = true,
 }: {
   row: TeamRosterRow
   selfRow: boolean
@@ -45,6 +45,9 @@ export const RosterRow = ({
   onToggle: (key: string) => void
   // Whether the table renders the Section column (only when some row has one).
   showSection?: boolean
+  // Whether the table renders the Status column (only when some row is not
+  // plainly enrolled — a fully healthy roster has nothing to report there).
+  showStatus?: boolean
 }) => {
   const { t } = useTranslation()
   const member = rosterRowToMemberRow(row)
@@ -90,9 +93,21 @@ export const RosterRow = ({
           name={displayName}
           github={displayHandle}
           initials={displayInitials}
-          subtitle={<GitHubIdentity row={member} />}
           onClick={() => onOpen(row.key)}
         />
+      </td>
+      <td>
+        {/* The bare GitHub handle (no octocat, no numeric id — both live in
+            the member detail modal). */}
+        {row.username ? (
+          <span className="text-sm text-base-content/70">
+            <MonoLtr>@{row.username}</MonoLtr>
+          </span>
+        ) : (
+          <span className="text-sm italic text-base-content/70">
+            {t("orgMembers.noGitHubUsername")}
+          </span>
+        )}
       </td>
       <td>
         {hasRoles ? (
@@ -114,19 +129,21 @@ export const RosterRow = ({
           )}
         </td>
       ) : null}
-      <td>
-        {row.state !== "enrolled" ? (
-          <Badge
-            size="sm"
-            tone={STATE_BADGE_TONE[row.state]}
-            className="whitespace-nowrap"
-          >
-            {t(STATE_LABEL_KEY[row.state])}
-          </Badge>
-        ) : (
-          <CellPlaceholder />
-        )}
-      </td>
+      {showStatus ? (
+        <td>
+          {row.state !== "enrolled" ? (
+            <Badge
+              size="sm"
+              tone={STATE_BADGE_TONE[row.state]}
+              className="whitespace-nowrap"
+            >
+              {t(STATE_LABEL_KEY[row.state])}
+            </Badge>
+          ) : (
+            <CellPlaceholder />
+          )}
+        </td>
+      ) : null}
       <td className="w-0 ps-2">
         <div className="flex items-center justify-end">
           <ChevronRightIcon

@@ -17,6 +17,7 @@ import {
   Badge,
   Button,
   SkeletonRows,
+  SortableTh,
   TableShell,
   Toolbar,
   cx,
@@ -40,7 +41,11 @@ import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
-import { sortTeamRosterRows } from "@/util/teamRoster"
+import {
+  sortTeamRosterRows,
+  sortTeamRosterRowsBy,
+  type RosterTableSortColumn,
+} from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
@@ -54,13 +59,8 @@ import {
   type RoleFilter,
   type StatusFilter,
 } from "@/pages/students/rosterFilter"
-import { StudentSortSelect } from "@/pages/students/StudentSortSelect"
 import { studentKey, toStudent } from "@/util/roster"
-import {
-  DEFAULT_STUDENT_SORT,
-  isSameGitHubUser,
-  type StudentSortMode,
-} from "@/util/students"
+import { isSameGitHubUser } from "@/util/students"
 import {
   resolveSelectedRows,
   selectableRows,
@@ -90,16 +90,20 @@ import { FailedInvitationsList } from "./FailedInvitationsList"
 import { RosterParseProblems } from "./RosterParseProblems"
 import { RosterWarnings } from "./RosterWarnings"
 
-// One bar recipe per column: select, member, roles, status, actions. Loading
-// starts with no rows, so the Section column (present only when some row has a
-// section) is never part of the skeleton.
+// One bar recipe per column: select, member, username, roles, actions. Loading
+// starts with no rows, so the conditional Section and Status columns (present
+// only when some row carries one) are never part of the skeleton.
 const SKELETON_BARS = [
   "size-5",
   "h-4 w-40",
+  "h-4 w-32",
   "h-6 w-20",
-  "h-6 w-24",
   "ms-auto h-4 w-4",
 ]
+
+// One value per (column, direction) pair for the table-header sort controls.
+type RosterTableSortValue =
+  `${RosterTableSortColumn}-asc` | `${RosterTableSortColumn}-desc`
 
 const EnrolledStudents = ({
   students = [],
@@ -152,8 +156,9 @@ const EnrolledStudents = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
   const [sectionFilter, setSectionFilter] = useState<string>("all")
-  const [sortMode, setSortMode] =
-    useState<StudentSortMode>(DEFAULT_STUDENT_SORT)
+  // Header-driven column sort; null = the default order (enrollment state,
+  // then name — see sortTeamRosterRows).
+  const [tableSort, setTableSort] = useState<RosterTableSortValue | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // Session-only banner dismissal — a page refresh re-derives roster state and
@@ -286,20 +291,24 @@ const EnrolledStudents = ({
 
   // Text search over username/name/email + the status, role, and section
   // filters (see filterRosterRows — extracted so the facets are unit-tested).
-  // The rows already arrive first-name sorted, so mode "first" is a no-op reorder.
-  const filtered = useMemo(
-    () =>
-      sortTeamRosterRows(
-        filterRosterRows(rows, {
-          query,
-          statusFilter,
-          roleFilter: effectiveRole,
-          sectionFilter: effectiveSection,
-        }),
-        sortMode,
-      ),
-    [rows, query, statusFilter, effectiveRole, effectiveSection, sortMode],
-  )
+  // Default order is enrollment state then name; an active header sort
+  // re-orders by that column instead.
+  const filtered = useMemo(() => {
+    const base = sortTeamRosterRows(
+      filterRosterRows(rows, {
+        query,
+        statusFilter,
+        roleFilter: effectiveRole,
+        sectionFilter: effectiveSection,
+      }),
+    )
+    if (!tableSort) return base
+    const [column, direction] = tableSort.split("-") as [
+      RosterTableSortColumn,
+      "asc" | "desc",
+    ]
+    return sortTeamRosterRowsBy(base, column, direction)
+  }, [rows, query, statusFilter, effectiveRole, effectiveSection, tableSort])
 
   const hasSectionsInFiltered = useMemo(
     () => filtered.some((r) => r.section.trim()),
@@ -503,13 +512,36 @@ const EnrolledStudents = ({
 
   // The Section column exists only when some row carries a section label —
   // derived from the status-independent sectionOptions so toggling a filter
-  // can't add/remove a column mid-view.
+  // can't add/remove a column mid-view. Status follows the same rule: a fully
+  // enrolled roster has nothing to report there, so the column only appears
+  // while some row is pending or needs attention (derived from ALL rows, so
+  // filtering can't add/remove it mid-view either).
   const showSection = sectionOptions.length > 0
-  const colCount = showSection ? 6 : 5
+  const showStatus = useMemo(
+    () => rows.some((r) => r.state !== "enrolled"),
+    [rows],
+  )
+  const colCount = 5 + (showSection ? 1 : 0) + (showStatus ? 1 : 0)
 
   // Role grouping earns its option only when the roster has more than plain
-  // students to group — the same gate as the role filter.
+  // students to group — the same gate as the role filter options.
   const canGroupByRole = roleFilterOptions.some((r) => r !== "student")
+
+  // The combined "Show" select folds the status and role filters into ONE
+  // control (mirroring the submissions status select): picking a status
+  // clears the role facet and vice versa. The two facets stay separate fields
+  // for filterRosterRows — the select is just a consolidated view of them.
+  const showValue =
+    effectiveRole !== "all" ? `role:${effectiveRole}` : statusFilter
+  const onShowChange = (value: string) => {
+    if (value.startsWith("role:")) {
+      setRoleFilter(value.slice("role:".length) as RoleFilter)
+      setStatusFilter("all")
+    } else {
+      setStatusFilter(value as StatusFilter)
+      setRoleFilter("all")
+    }
+  }
 
   // Active-filter split for the in-search-bar clear affordance ("Clear filter"
   // vs "Clear"), mirroring the submissions controls; clicking it resets query
@@ -539,6 +571,7 @@ const EnrolledStudents = ({
       onCheckboxClick={syncing ? () => {} : handleRowCheckboxClick}
       onToggle={syncing ? () => {} : handleToggleRow}
       showSection={showSection}
+      showStatus={showStatus}
     />
   )
 
@@ -691,35 +724,32 @@ const EnrolledStudents = ({
               clearActive={hasActiveFilter}
               hasFilterActive={hasFilterActive}
             />
+            {/* One combined "Show" select: enrollment states, then a role
+                group (only when staff exist). Sorting lives in the column
+                headers, so the toolbar carries filters and view options only. */}
             <Toolbar.FilterSelect
               icon={<FilterIcon aria-hidden="true" className="size-4" />}
-              active={statusFilter !== "all"}
-              aria-label={t("students.filterByStatusLabel")}
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+              active={showValue !== "all"}
+              aria-label={t("students.filterShowLabel")}
+              value={showValue}
+              onChange={(e) => onShowChange(e.target.value)}
             >
               {statusOptions.map((o) => (
                 <option key={o.value} value={o.value}>
                   {o.label}
                 </option>
               ))}
+              {canGroupByRole ? (
+                <>
+                  <option disabled>────────</option>
+                  {roleFilterOptions.map((role) => (
+                    <option key={role} value={`role:${role}`}>
+                      {t(ROLE_LABEL_KEY[role])}
+                    </option>
+                  ))}
+                </>
+              ) : null}
             </Toolbar.FilterSelect>
-            {roleFilterOptions.some((r) => r !== "student") ? (
-              <Toolbar.FilterSelect
-                icon={<FilterIcon aria-hidden="true" className="size-4" />}
-                active={effectiveRole !== "all"}
-                aria-label={t("students.filterByRoleLabel")}
-                value={effectiveRole}
-                onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-              >
-                <option value="all">{t("students.filterAllRoles")}</option>
-                {roleFilterOptions.map((role) => (
-                  <option key={role} value={role}>
-                    {t(ROLE_LABEL_KEY[role])}
-                  </option>
-                ))}
-              </Toolbar.FilterSelect>
-            ) : null}
             {sectionOptions.length > 0 ? (
               <Toolbar.FilterSelect
                 icon={<FilterIcon aria-hidden="true" className="size-4" />}
@@ -737,10 +767,9 @@ const EnrolledStudents = ({
                 ))}
               </Toolbar.FilterSelect>
             ) : null}
-            <StudentSortSelect value={sortMode} onChange={setSortMode} />
-            {/* Grouping is a view option like sort, so it sits beside it.
-                Offers exactly the two groupable columns — Role and Section —
-                each only when the roster actually has that dimension. */}
+            {/* Grouping is a view option, offering exactly the two groupable
+                columns — Role and Section — each only when the roster
+                actually has that dimension. */}
             {canGroupByRole || sectionOptions.length > 0 ? (
               <Toolbar.FilterSelect
                 icon={<RowsIcon aria-hidden="true" className="size-4" />}
@@ -843,12 +872,48 @@ const EnrolledStudents = ({
                   </span>
                 )}
               </th>
-              <th scope="col">{t("students.table.colMember")}</th>
-              <th scope="col">{t("students.table.colRoles")}</th>
+              {/* Sortable column headers — sorting lives here, not in the
+                  toolbar. An inactive table falls back to the default order
+                  (enrollment state, then name). */}
+              <SortableTh
+                label={t("students.table.colMember")}
+                sort={tableSort ?? undefined}
+                asc="member-asc"
+                desc="member-desc"
+                onSortChange={setTableSort}
+              />
+              <SortableTh
+                label={t("students.table.colUsername")}
+                sort={tableSort ?? undefined}
+                asc="username-asc"
+                desc="username-desc"
+                onSortChange={setTableSort}
+              />
+              <SortableTh
+                label={t("students.table.colRoles")}
+                sort={tableSort ?? undefined}
+                asc="role-asc"
+                desc="role-desc"
+                onSortChange={setTableSort}
+              />
               {showSection ? (
-                <th scope="col">{t("students.table.colSection")}</th>
+                <SortableTh
+                  label={t("students.table.colSection")}
+                  sort={tableSort ?? undefined}
+                  asc="section-asc"
+                  desc="section-desc"
+                  onSortChange={setTableSort}
+                />
               ) : null}
-              <th scope="col">{t("students.table.colStatus")}</th>
+              {showStatus ? (
+                <SortableTh
+                  label={t("students.table.colStatus")}
+                  sort={tableSort ?? undefined}
+                  asc="status-asc"
+                  desc="status-desc"
+                  onSortChange={setTableSort}
+                />
+              ) : null}
               <th scope="col" className="w-0">
                 <span className="sr-only">
                   {t("students.table.colActions")}
