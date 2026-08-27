@@ -228,9 +228,10 @@ export function RepositorySetupSection({
 }
 
 // The Advanced settings body for Repository Setup: copy About/Topics from the
-// template, the template's PR template as the Feedback PR body, the student
-// repo-access override, and the repository features. Split out so the
-// disclosure's contents don't nest under the section's render-prop chain.
+// template, the template's PR template as the Feedback PR body, the repo
+// visibility, the student repo-access override, and the repository features.
+// Split out so the disclosure's contents don't nest under the section's
+// render-prop chain.
 function RepositoryAdvancedFields({
   form,
   edit,
@@ -294,9 +295,9 @@ function RepositoryAdvancedFields({
         </form.Subscribe>
       ) : null}
 
-      <StudentPermissionField form={form} />
-
       <RepoVisibilityField form={form} edit={edit} />
+
+      <StudentPermissionField form={form} />
 
       {/* RepoFeatureControls renders its own heading, refresh, help, and
           override warning; the subscription feeds it the template ref +
