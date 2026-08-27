@@ -645,8 +645,7 @@ func RemoveTeamMembership(client githubapi.Client, org, slug, username string) e
 // GetTeamMembershipState reads one user's membership on one team ("active" or
 // "pending"). found=false on 404 — GitHub's authoritative "not on this team" (a
 // missing team 404s the same way). Any other error propagates so a transient
-// blip is never read as "not a member" — the roster sync uses this as
-// decision-time proof before deleting an invite metadata team.
+// blip is never read as "not a member".
 func GetTeamMembershipState(client githubapi.Client, org, slug, username string) (state string, found bool, err error) {
 	path := fmt.Sprintf("orgs/%s/teams/%s/memberships/%s",
 		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(username))

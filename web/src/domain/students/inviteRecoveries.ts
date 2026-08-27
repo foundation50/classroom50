@@ -69,23 +69,27 @@ export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 //     lands;
 //   - one member on NO classroom team -> unenrolled after accepting; delete the
 //     team now so the mapping can't resurrect a removed student. Absence is
-//     re-proven with decision-time point reads first — the enrollment snapshot
-//     is cached for the whole pass, so a student accepting mid-pass would
-//     otherwise be misread as unenrolled and their mapping destroyed (#756);
+//     re-proven at decision time first (see confirmEnrollment);
 //   - zero members -> the invite is live (row kept), unless the team aged past
 //     the GC guard AND no pending org invitation still maps to it (cancelled/
 //     expired) -> delete;
 //   - anomalies (tampered hash, >1 member) -> keep the team, count its email
 //     as live, and warn — never guess.
 //
+// `readOnly` classifies WITHOUT the deletes (stale/unenrolled teams are simply
+// not counted live): the roster sync's in-closure re-collect runs on every
+// conflict-retry attempt and from plain team syncs, and an irreversible
+// destructive action does not belong inside either. Deletion stays exclusive
+// to the top-level reconcile's own collect pass.
+//
 // Never throws. Fail-safe: any read failure (enumeration, a team, the org
 // invitation list) flips `trusted` off so the sync skips row removals; a rate
 // limit stops the pass early the same way.
 export async function collectInviteRecoveries(
   client: GitHubClient,
-  input: { org: string; classroom: string },
+  input: { org: string; classroom: string; readOnly?: boolean },
 ): Promise<InviteReconcileState> {
-  const { org, classroom } = input
+  const { org, classroom, readOnly = false } = input
   const recovered: RecoveredInvite[] = []
   const liveInviteEmails = new Set<string>()
   let trusted = true
@@ -143,6 +147,9 @@ export async function collectInviteRecoveries(
       }
       return "unenrolled"
     } catch (err) {
+      // A rate limit must stop the whole pass (the per-team catch below
+      // breaks on it), not read as one team's "unknown".
+      if (err instanceof GitHubAPIError && err.isRateLimited) throw err
       log.error("invite reconcile: enrollment re-check failed", { login, err })
       return "unknown"
     }
@@ -190,8 +197,10 @@ export async function collectInviteRecoveries(
           isPastGcAge(state.createdAt) &&
           !(await loadLiveInviteSlugs()).has(slug)
         ) {
-          await deleteInviteTeam(client, org, slug)
-          deletedStale += 1
+          if (!readOnly) {
+            await deleteInviteTeam(client, org, slug)
+            deletedStale += 1
+          }
         } else {
           liveInviteEmails.add(record.email)
         }
@@ -219,10 +228,9 @@ export async function collectInviteRecoveries(
         continue
       }
       if (!enrolled.has(invitee.id)) {
-        // Absent from the snapshot is NOT proof of unenrollment — a student
-        // who accepted mid-pass looks exactly like this. Only a decision-time
-        // re-check may authorize the irreversible delete; a confirmed stale
-        // snapshot means they enrolled since it was taken, so recover them.
+        // Absent from the snapshot is NOT proof of unenrollment (see
+        // confirmEnrollment); a confirmed stale snapshot means they enrolled
+        // mid-pass, so recover them.
         const confirmed = await confirmEnrollment(invitee.login)
         if (confirmed === "unknown") {
           trusted = false
@@ -231,8 +239,10 @@ export async function collectInviteRecoveries(
         if (confirmed === "unenrolled") {
           // Accepted, then removed from the classroom: the invite lifecycle is
           // over. Delete the team so its record can't resurrect the row later.
-          await deleteInviteTeam(client, org, slug)
-          deletedStale += 1
+          if (!readOnly) {
+            await deleteInviteTeam(client, org, slug)
+            deletedStale += 1
+          }
           continue
         }
         enrolled.add(invitee.id)

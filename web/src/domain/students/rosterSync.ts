@@ -41,12 +41,11 @@ export type SyncRosterFromTeamResult = {
   recoveredEmails: string[]
   // Email-only rows removed because no live invite team backs them.
   removedEmails: string[]
-  // Mappings recovered by the in-closure re-collect (a student who accepted
-  // AFTER the caller's collect pass), unknown to the caller's invite state.
-  // Returned so reconcileRoster can finalize (delete) their teams too once
-  // this commit has landed; a caller that ignores them just leaves the teams
-  // for the next pass to re-recover idempotently.
-  lateRecovered: RecoveredInvite[]
+  // The recovered mappings (the caller's and the in-closure re-collect's) that
+  // the roster provably records after this pass — the only teams safe for
+  // reconcileRoster to finalize (delete). An unrecorded mapping keeps its team
+  // as the sole record of the address and is re-recovered next pass.
+  recordedRecoveries: RecoveredInvite[]
   // No missing members, no role changes, no invite fold — nothing committed.
   noop: boolean
 }
@@ -176,9 +175,16 @@ export async function syncRosterFromTeam(
     // closure's team read (their invite team read as member-less then). Acting
     // on the stale state would append an identity-only duplicate of their
     // pending email row and strand that row for the reaper — the corruption of
-    // issue #756 — so re-collect once at decision time and fold with the fresh
-    // state. Genuinely new members (added to the team out of band) still fall
-    // through to the append below, at the cost of this one extra collect.
+    // issue #756 — so re-collect once at decision time (READ-ONLY: deletes stay
+    // with the top-level reconcile) and fold with the freshened state.
+    // Genuinely new members (added to the team out of band) still fall through
+    // to the append below.
+    //
+    // The re-collect only ever ADDS knowledge — merge, never replace. A
+    // degraded re-collect (empty, untrusted) must not discard the caller's
+    // trusted recoveries: dropping them would skip their folds while the
+    // caller still finalizes their teams, losing the mappings. Removals demand
+    // BOTH states trusted; live emails union (keeping a row is always safe).
     const hasUnknownMember = (f: ReturnType<typeof foldInvites>) => {
       const { ids, logins } = rosterClaimSet(f.foldedStudents)
       const recIds = new Set(f.recovered.map((r) => String(r.invitee.id)))
@@ -189,13 +195,24 @@ export async function syncRosterFromTeam(
           !recIds.has(String(m.id)),
       )
     }
-    let lateRecovered: RecoveredInvite[] = []
     if (hasUnknownMember(fold)) {
-      const fresh = await collectInviteRecoveries(client, { org, classroom })
+      const fresh = await collectInviteRecoveries(client, {
+        org,
+        classroom,
+        readOnly: true,
+      })
       const known = new Set((invites?.recovered ?? []).map((r) => r.slug))
-      lateRecovered = fresh.recovered.filter((r) => !known.has(r.slug))
-      inviteState = fresh
-      fold = foldInvites(fresh.recovered)
+      const lateRecovered = fresh.recovered.filter((r) => !known.has(r.slug))
+      inviteState = {
+        recovered: [...(invites?.recovered ?? []), ...lateRecovered],
+        liveInviteEmails: new Set([
+          ...(invites?.liveInviteEmails ?? []),
+          ...fresh.liveInviteEmails,
+        ]),
+        trusted: (invites?.trusted ?? false) && fresh.trusted,
+        deletedStale: invites?.deletedStale ?? 0,
+      }
+      fold = foldInvites(inviteState.recovered)
     }
     const { foldedStudents, recByEmail, recoveredEmails, unclaimed } = fold
     const inviteFolds = fold.inviteFolds
@@ -334,6 +351,25 @@ export async function syncRosterFromTeam(
       return next
     })
 
+    // A mapping is RECORDED when a row with an identity (username or usable
+    // github_id) carries the invited email AND names the account (id or login)
+    // — the web mirror of the CLI's recordsRecovery. Only recorded mappings
+    // may be finalized: until then the invite team is the sole record of the
+    // address, and deleting it on a fold that never landed loses the mapping.
+    const recordedRecoveries = (rows: StudentCsvRow[]) =>
+      (inviteState?.recovered ?? []).filter((r) => {
+        const emailKey = normalizeInviteEmail(r.email)
+        const loginKey = r.invitee.login.trim().toLowerCase()
+        return rows.some(
+          (s) =>
+            (s.username.trim() !== "" ||
+              resolveGitHubId(s.github_id) !== null) &&
+            normalizeInviteEmail(s.email ?? "") === emailKey &&
+            (parseGitHubId(s.github_id) === r.invitee.id ||
+              s.username.trim().toLowerCase() === loginKey),
+        )
+      })
+
     if (
       missing.length === 0 &&
       roleChanges === 0 &&
@@ -349,7 +385,9 @@ export async function syncRosterFromTeam(
         addedUsernames: [],
         recoveredEmails: [],
         removedEmails: [],
-        lateRecovered,
+        // No commit, but the file on disk already records these (that is what
+        // made the fold a no-op), so their teams are safe to retire.
+        recordedRecoveries: recordedRecoveries(reconciledStudents),
         noop: true,
       }
     }
@@ -406,7 +444,10 @@ export async function syncRosterFromTeam(
       addedUsernames: addedRows.map((r) => r.username),
       recoveredEmails,
       removedEmails,
-      lateRecovered,
+      recordedRecoveries: recordedRecoveries([
+        ...reconciledStudents,
+        ...addedRows,
+      ]),
       noop: false,
     }
   })

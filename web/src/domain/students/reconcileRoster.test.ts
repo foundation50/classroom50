@@ -44,7 +44,7 @@ beforeEach(() => {
     addedUsernames: [],
     recoveredEmails: ["alice@example.com"],
     removedEmails: [],
-    lateRecovered: [],
+    recordedRecoveries: [RECOVERED],
     noop: false,
   })
   finalizeInviteRecoveries.mockResolvedValue(undefined)
@@ -69,7 +69,7 @@ describe("reconcileRoster", () => {
         addedUsernames: ["alice"],
         recoveredEmails: ["alice@example.com"],
         removedEmails: ["dead@x"],
-        lateRecovered: [],
+        recordedRecoveries: [RECOVERED],
         noop: false,
       }
     })
@@ -88,7 +88,7 @@ describe("reconcileRoster", () => {
         invites: expect.objectContaining({ trusted: true }),
       }),
     )
-    // ...and the recovered teams are deleted only after it.
+    // ...and only the mappings the sync reports RECORDED are deleted, after it.
     expect(finalizeInviteRecoveries).toHaveBeenCalledWith(
       client,
       { org: "org", classroom: "cs101" },
@@ -98,13 +98,16 @@ describe("reconcileRoster", () => {
       addedUsernames: ["alice"],
       recoveredEmails: ["alice@example.com"],
       removedEmails: ["dead@x"],
-      lateRecovered: [],
+      recordedRecoveries: [RECOVERED],
       noop: false,
       deletedStaleTeams: 1,
     })
   })
 
-  it("finalizes late recoveries the sync collected itself (mid-pass acceptance)", async () => {
+  it("finalizes exactly what the sync recorded — an unrecorded mapping keeps its team", async () => {
+    // The sync recorded only bob's mapping (alice's fold never landed): alice's
+    // team must survive as the sole record of her address, re-recovered next
+    // pass; bob's is torn down now that the commit carrying it landed.
     const LATE = {
       email: "bob@example.com",
       invitee: { id: 3, login: "bob" },
@@ -114,17 +117,15 @@ describe("reconcileRoster", () => {
       addedUsernames: [],
       recoveredEmails: ["bob@example.com"],
       removedEmails: [],
-      lateRecovered: [LATE],
+      recordedRecoveries: [LATE],
       noop: false,
     })
 
     await reconcileRoster(client, INPUT)
-    // The late mapping's team is torn down with the rest — its fold landed in
-    // the same commit, so leaving it would only defer to the next pass.
     expect(finalizeInviteRecoveries).toHaveBeenCalledWith(
       client,
       { org: "org", classroom: "cs101" },
-      [RECOVERED, LATE],
+      [LATE],
     )
   })
 

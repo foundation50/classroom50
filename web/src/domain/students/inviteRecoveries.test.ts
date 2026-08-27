@@ -318,6 +318,81 @@ describe("collectInviteRecoveries", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
+  it("counts a PENDING team membership as enrolled in the re-check", async () => {
+    // Any membership record means the invite lifecycle is not provably over —
+    // a refactor to `state === "active"` must fail this test, or a mid-window
+    // acceptor would lose their mapping.
+    const team = await inviteState("cs101", "mid@example.com", [
+      { id: 99, login: "mid" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+    getTeamMembershipState.mockResolvedValue("pending")
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered.map((r) => r.email)).toEqual(["mid@example.com"])
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("a rate-limited re-check stops the pass early (never one team's 'unknown')", async () => {
+    const first = await inviteState("cs101", "one@example.com", [
+      { id: 98, login: "one" },
+    ])
+    const second = await inviteState("cs101", "two@example.com", [
+      { id: 99, login: "two" },
+    ])
+    listInviteTeams.mockResolvedValue([
+      { slug: first.slug },
+      { slug: second.slug },
+    ])
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) =>
+        slug === first.slug ? first : second,
+    )
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+    getTeamMembershipState.mockRejectedValue(rateLimitError())
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.trusted).toBe(false)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+    // The pass stopped at the first rate limit instead of burning a request
+    // per remaining team.
+    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it("readOnly classifies identically but never deletes (the sync's re-collect mode)", async () => {
+    // One confirmed-unenrolled team and one aged member-less team: a normal
+    // pass deletes both; readOnly must classify the same (neither counted
+    // live) while touching nothing.
+    const gone = await inviteState("cs101", "left@example.com", [
+      { id: 99, login: "left" },
+    ])
+    const aged = await inviteState("cs101", "stale@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([
+      { slug: gone.slug },
+      { slug: aged.slug },
+    ])
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) =>
+        slug === gone.slug ? gone : aged,
+    )
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+
+    const state = await collectInviteRecoveries(client, {
+      ...INPUT,
+      readOnly: true,
+    })
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+    expect(state.deletedStale).toBe(0)
+    expect(state.recovered).toEqual([])
+    // Neither email reads as live: the classification matched a mutating pass.
+    expect(state.liveInviteEmails.size).toBe(0)
+    expect(state.trusted).toBe(true)
+  })
+
   it("keeps the team (untrusted) when the enrollment re-check fails", async () => {
     const team = await inviteState("cs101", "blip@example.com", [
       { id: 99, login: "blip" },

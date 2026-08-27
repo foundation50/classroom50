@@ -141,8 +141,13 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
       invites: emptyInvites({ liveInviteEmails: new Set(["ada@uni.edu"]) }),
     })
 
-    // The stale caller state forced ONE decision-time re-collect...
+    // The stale caller state forced ONE decision-time re-collect — READ-ONLY:
+    // deletes stay with the top-level reconcile.
     expect(collectInviteRecoveries).toHaveBeenCalledTimes(1)
+    expect(collectInviteRecoveries).toHaveBeenCalledWith(client, {
+      ...INPUT,
+      readOnly: true,
+    })
     // ...whose mapping upgraded the invite-time row in place: identity filled,
     // teacher metadata kept, NO appended duplicate, NO removal.
     expect(rowsFromCommit()).toEqual([
@@ -159,8 +164,8 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     expect(result.addedUsernames).toEqual([])
     expect(result.removedEmails).toEqual([])
     expect(result.recoveredEmails).toEqual(["ada@uni.edu"])
-    // The late mapping is surfaced so reconcileRoster can retire its team.
-    expect(result.lateRecovered).toEqual([
+    // The landed fold records the mapping, so its team is safe to retire.
+    expect(result.recordedRecoveries).toEqual([
       {
         email: "ada@uni.edu",
         invitee: { id: 42, login: "ada" },
@@ -184,7 +189,7 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
 
     expect(collectInviteRecoveries).toHaveBeenCalledTimes(1)
     expect(result.addedUsernames).toEqual(["zed"])
-    expect(result.lateRecovered).toEqual([])
+    expect(result.recordedRecoveries).toEqual([])
     expect(rowsFromCommit()).toEqual([
       {
         username: "zed",
@@ -231,11 +236,123 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     const result = await syncRosterFromTeam(client, INPUT)
 
     expect(collectInviteRecoveries).toHaveBeenCalledTimes(1)
+    // Plain mode may only ever run a READ-ONLY collect — no team deletions
+    // from a mutation hook's sync.
+    expect(collectInviteRecoveries).toHaveBeenCalledWith(client, {
+      ...INPUT,
+      readOnly: true,
+    })
     // No liveness confirmation was even attempted: removals never arm.
     expect(pendingInviteEmails).not.toHaveBeenCalled()
     expect(result.removedEmails).toEqual([])
     const rows = rowsFromCommit()
     expect(rows?.map((r) => r.email)).toContain("bea@uni.edu")
     expect(result.addedUsernames).toEqual(["zoe"])
+  })
+
+  it("a DEGRADED re-collect merges, never replaces: caller folds land, removals disarm", async () => {
+    // The caller collected a trusted recovery for Ada, then the in-closure
+    // re-collect (triggered by unknown member Zed) degrades to the never-throw
+    // empty state. Replacing the caller's state would skip Ada's fold while
+    // her team is finalized — the #756-class loss the merge rule prevents.
+    getRawFile.mockResolvedValue(
+      HEADER +
+        ",Ada,Lovelace,ada@uni.edu,,,student\n" +
+        ",Dead,Row,dead@uni.edu,,,student",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [
+        { id: 42, login: "ada", role: "student" },
+        { id: 7, login: "zed", role: "student" },
+      ],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+    collectInviteRecoveries.mockResolvedValue(emptyInvites({ trusted: false }))
+    // The caller's (trusted) state says dead@uni.edu has no live backing.
+    const ADA = {
+      email: "ada@uni.edu",
+      invitee: { id: 42, login: "ada" },
+      slug: "invite-aaaaaaaaaaaaaaaa",
+    }
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites({ recovered: [ADA] }),
+    })
+
+    // Ada's fold still landed from the caller's recovery...
+    const rows = rowsFromCommit()
+    expect(rows?.find((r) => r.username === "ada")).toMatchObject({
+      github_id: "42",
+      email: "ada@uni.edu",
+      first_name: "Ada",
+    })
+    // ...her recorded mapping is finalizable...
+    expect(result.recordedRecoveries).toEqual([ADA])
+    // ...and the untrusted re-collect disarmed removals (dead row survives).
+    expect(result.removedEmails).toEqual([])
+    expect(rows?.map((r) => r.email)).toContain("dead@uni.edu")
+    expect(pendingInviteEmails).not.toHaveBeenCalled()
+  })
+
+  it("only RECORDED mappings are finalizable: an unlanded recovery keeps its team", async () => {
+    // The caller recovered Eve, but her invitee is invisible to this closure's
+    // members read (degraded staff read) and no row names her — nothing lands.
+    // Her mapping must NOT be reported recorded, or finalize would delete the
+    // only record of her address.
+    getRawFile.mockResolvedValue(HEADER + ",Ada,Lovelace,ada@uni.edu,,,student")
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "ada", role: "student" }],
+      fullyRead: false,
+      pendingRoleKeys: new Set(),
+    })
+    const ADA = {
+      email: "ada@uni.edu",
+      invitee: { id: 42, login: "ada" },
+      slug: "invite-aaaaaaaaaaaaaaaa",
+    }
+    const EVE = {
+      email: "eve@uni.edu",
+      invitee: { id: 99, login: "eve" },
+      slug: "invite-eeeeeeeeeeeeeeee",
+    }
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites({ recovered: [ADA, EVE] }),
+    })
+
+    // Ada folded (row records her mapping); Eve landed nowhere.
+    expect(result.recordedRecoveries).toEqual([ADA])
+    expect(rowsFromCommit()?.some((r) => r.username === "eve")).toBe(false)
+  })
+
+  it("a noop pass still reports mappings the file already records", async () => {
+    // Ada's row already carries identity + email (a prior pass folded it, but
+    // finalize failed). Nothing to commit — yet her team is provably redundant
+    // and must be retirable, or it would leak until some other change lands.
+    getRawFile.mockResolvedValue(
+      HEADER + "ada,Ada,Lovelace,ada@uni.edu,,42,student",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "ada", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+    const ADA = {
+      email: "ada@uni.edu",
+      invitee: { id: 42, login: "ada" },
+      slug: "invite-aaaaaaaaaaaaaaaa",
+    }
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites({ recovered: [ADA] }),
+    })
+
+    expect(result.noop).toBe(true)
+    expect(committed.csv).toBeNull()
+    expect(result.recordedRecoveries).toEqual([ADA])
   })
 })

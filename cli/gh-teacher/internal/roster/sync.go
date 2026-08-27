@@ -149,8 +149,7 @@ type classroomIndex struct {
 	// answering to one login is not something to guess at.
 	idByLogin map[string]int64
 	// teamSlugs are the classroom teams `enrolled` was built from (student
-	// first), kept so the scan can re-prove an apparent unenrollment with
-	// decision-time point reads before the one irreversible action of the pass.
+	// first), kept for the scan's decision-time enrollment re-check.
 	teamSlugs []string
 	// archived is classroom.json `active: false`: the roster is frozen, so
 	// --write is refused (the web's assertClassroomNotArchived).
@@ -263,6 +262,7 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 		return scan
 	}
 
+scanLoop:
 	for _, team := range teams {
 		state, ok, err := configrepo.ReadInviteTeam(client, org, team.Slug)
 		if err != nil {
@@ -345,12 +345,16 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 				// accepted mid-pass sits on their invite team while missing
 				// from the snapshot. Deleting on that stale evidence would
 				// destroy the only record of their email <-> account mapping
-				// (issue #756), so re-prove absence with decision-time point
-				// reads first; any membership means the snapshot was stale —
-				// they enrolled since it was taken, so recover them.
+				// (issue #756), so re-prove absence at decision time first;
+				// any membership means the snapshot was stale — they enrolled
+				// since it was taken, so recover them.
 				enrolled, confErr := confirmEnrollment(client, org, idx.teamSlugs, invitee.Login)
 				if confErr != nil {
 					scan.trusted = false
+					if cliutil.IsRateLimited(confErr) {
+						_, _ = fmt.Fprintf(errOut, "Warning: %s: rate-limited while re-checking %s's classroom membership; stopping the invite pass early — re-run later.\n", org, invitee.Login)
+						break scanLoop
+					}
 					_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking %s's classroom membership failed (%v); leaving %s alone.\n", org, invitee.Login, confErr, team.Slug)
 					continue
 				}
@@ -379,12 +383,9 @@ func pastGCAge(createdAt time.Time) bool {
 	return time.Since(createdAt) > contract.InviteTeamGCMinAge
 }
 
-// confirmEnrollment re-reads whether login is on any classroom team RIGHT NOW,
-// via per-team point reads (GET .../memberships/{login}) — the decision-time
-// proof required before deleting an invite metadata team as "unenrolled". Any
-// membership record (active or pending) counts: neither state proves the
-// invite lifecycle is over. Strict: a failed read propagates so the caller
-// keeps the team.
+// confirmEnrollment reports whether login is on any classroom team RIGHT NOW,
+// via per-team point reads. Any membership record (active or pending) counts.
+// Strict: a failed read propagates so the caller keeps the team.
 func confirmEnrollment(client githubapi.Client, org string, teamSlugs []string, login string) (bool, error) {
 	for _, slug := range teamSlugs {
 		_, found, err := configrepo.GetTeamMembershipState(client, org, slug, login)

@@ -102,8 +102,7 @@ export function teamMembersQuery(
 // /orgs/{org}/teams/{slug}/memberships/{username}): "active", "pending", or
 // null on 404 — GitHub's authoritative "not on this team" (a missing team 404s
 // the same way). Any other error propagates so a transient blip is never read
-// as "not a member" — the invite reconcile uses this as decision-time proof
-// before its one irreversible action (deleting a metadata team).
+// as "not a member".
 export async function getTeamMembershipState(
   client: GitHubClient,
   org: string,
