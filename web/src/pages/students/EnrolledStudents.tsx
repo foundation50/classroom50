@@ -703,6 +703,58 @@ const EnrolledStudents = ({
               </Toolbar.FilterSelect>
             ) : null}
             <StudentSortSelect value={sortMode} onChange={setSortMode} />
+            {/* Group-by-section is a view option like sort, so it sits beside
+                it (out of the table's bulk bar). Offered only when the
+                filtered rows actually carry sections. */}
+            {hasSectionsInFiltered ? (
+              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
+                <input
+                  type="checkbox"
+                  className="toggle toggle-sm"
+                  checked={groupBySection}
+                  onChange={(e) => setGroupBySection(e.target.checked)}
+                />
+                {t("students.groupBySection")}
+              </label>
+            ) : null}
+            {/* The add-students actions, out of the table's bulk bar and onto
+                the toolbar's right edge (mirroring the submissions toolbar's
+                trailing actions). Disabled while a sync rewrites the roster —
+                they live outside the locked table region. */}
+            {addActions ? (
+              <div className="join">
+                <Button
+                  size="sm"
+                  className="join-item"
+                  disabled={syncing}
+                  aria-label={t("students.addTitle")}
+                  title={t("students.addTitle")}
+                  onClick={addActions.onAddStudent}
+                >
+                  <PlusIcon aria-hidden="true" className="size-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  className="join-item"
+                  disabled={syncing}
+                  aria-label={t("students.uploadTitle")}
+                  title={t("students.uploadTitle")}
+                  onClick={addActions.onUploadRoster}
+                >
+                  <UploadIcon aria-hidden="true" className="size-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  className="join-item"
+                  disabled={syncing}
+                  aria-label={t("students.inviteStudents")}
+                  title={t("students.inviteStudents")}
+                  onClick={addActions.onInviteLinks}
+                >
+                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                </Button>
+              </div>
+            ) : null}
           </Toolbar.Trailing>
         </Toolbar>
       ) : null}
@@ -731,16 +783,8 @@ const EnrolledStudents = ({
                 classroom={classroom}
                 client={client}
                 selectedRows={selectedRows}
-                totalCount={filtered.length}
-                allSelected={allSelected}
-                someSelected={someSelected}
-                onToggleSelectAll={handleToggleSelectAll}
                 onClearSelection={() => setSelectedKeys(new Set())}
                 onDone={onBulkDone}
-                addActions={addActions}
-                groupBySection={groupBySection}
-                onGroupBySectionChange={setGroupBySection}
-                canGroupBySection={hasSectionsInFiltered}
                 disabled={syncing}
               />
             ) : undefined
@@ -750,7 +794,24 @@ const EnrolledStudents = ({
           <thead>
             <tr>
               <th scope="col" className="w-0">
-                <span className="sr-only">{t("students.table.colSelect")}</span>
+                {/* Select-all lives in the select-column header (aligned above
+                  the row checkboxes), replacing the old idle bulk bar. */}
+                {!isLoading && !isError && !isEmpty ? (
+                  <input
+                    type="checkbox"
+                    className="checkbox checkbox-sm align-middle"
+                    aria-label={t("students.bulk.selectAll")}
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected && !allSelected
+                    }}
+                    onChange={handleToggleSelectAll}
+                  />
+                ) : (
+                  <span className="sr-only">
+                    {t("students.table.colSelect")}
+                  </span>
+                )}
               </th>
               <th scope="col">{t("students.table.colMember")}</th>
               <th scope="col">{t("students.table.colRoles")}</th>

@@ -673,8 +673,6 @@
       "noneSelectable": "Nothing to select here — bulk actions (unenroll, invite) apply to students only. Staff (teachers, head TAs, and TAs) are managed in classroom Settings.",
       "selectedCount_one": "{{count}} selected",
       "selectedCount_other": "{{count}} selected",
-      "memberCount_one": "{{count}} member",
-      "memberCount_other": "{{count}} members",
       "unenroll": "Unenroll",
       "unenrollSelected_one": "Unenroll {{count}} student",
       "unenrollSelected_other": "Unenroll {{count}} students",

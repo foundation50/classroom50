@@ -68,9 +68,14 @@ vi.mock("@/pages/students/RosterMemberModal", () => ({
   },
 }))
 let capturedBulkDisabled: boolean | undefined
+let capturedSelectedKeys: string[] = []
 vi.mock("@/pages/students/RosterBulkActionsBar", () => ({
-  default: (props: { disabled?: boolean }) => {
+  default: (props: {
+    disabled?: boolean
+    selectedRows?: Array<{ key: string }>
+  }) => {
     capturedBulkDisabled = props.disabled
+    capturedSelectedKeys = (props.selectedRows ?? []).map((r) => r.key)
     return null
   },
 }))
@@ -139,6 +144,7 @@ afterEach(() => {
   mockReconcilePending = false
   capturedCanManage = undefined
   capturedBulkDisabled = undefined
+  capturedSelectedKeys = []
 })
 
 describe("EnrolledStudents — rendered phase views", () => {
@@ -345,5 +351,84 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(screen.queryByText("students.syncActive")).toBeNull()
     expect(container.querySelector(".pointer-events-none")).toBeNull()
     expect(capturedBulkDisabled).toBe(false)
+  })
+
+  // The add-students actions live on the toolbar's right edge (not in the
+  // table's bulk bar anymore): present when the page provides them, wired to
+  // their modal openers, and frozen while a sync rewrites the roster.
+  it("hosts the add-students actions in the toolbar and freezes them while syncing", () => {
+    const addActions = {
+      onAddStudent: vi.fn(),
+      onUploadRoster: vi.fn(),
+      onInviteLinks: vi.fn(),
+    }
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(
+      <EnrolledStudents
+        students={[]}
+        org="acme"
+        classroom="cs101"
+        suppressedLogins={suppressedLogins}
+        addActions={addActions}
+      />,
+    )
+
+    fireEvent.click(screen.getByRole("button", { name: "students.addTitle" }))
+    expect(addActions.onAddStudent).toHaveBeenCalledTimes(1)
+    fireEvent.click(
+      screen.getByRole("button", { name: "students.uploadTitle" }),
+    )
+    expect(addActions.onUploadRoster).toHaveBeenCalledTimes(1)
+    fireEvent.click(
+      screen.getByRole("button", { name: "students.inviteStudents" }),
+    )
+    expect(addActions.onInviteLinks).toHaveBeenCalledTimes(1)
+
+    cleanup()
+    mockReconcilePending = true
+    render(
+      <EnrolledStudents
+        students={[]}
+        org="acme"
+        classroom="cs101"
+        suppressedLogins={suppressedLogins}
+        addActions={addActions}
+      />,
+    )
+    const add = screen.getByRole("button", {
+      name: "students.addTitle",
+    }) as HTMLButtonElement
+    expect(add.disabled).toBe(true)
+  })
+
+  // Select-all moved from the bulk bar into the select-column header: toggling
+  // it feeds the selection the (stubbed) bulk bar receives.
+  it("selects all selectable rows from the table-header checkbox", () => {
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(renderView())
+
+    const selectAll = screen.getByRole("checkbox", {
+      name: "students.bulk.selectAll",
+    })
+    fireEvent.click(selectAll)
+    expect(capturedSelectedKeys).toEqual(["alice"])
+    fireEvent.click(selectAll)
+    expect(capturedSelectedKeys).toEqual([])
+  })
+
+  // Group-by-section is a toolbar view option now (next to sort), offered only
+  // when the filtered rows carry sections.
+  it("offers the group-by-section toggle in the toolbar when sections exist", () => {
+    useTeamRoster.mockReturnValue({
+      ...populatedRoster,
+      rows: [{ ...populatedRoster.rows[0], section: "Lab 1" }],
+    })
+    render(renderView())
+    expect(screen.getByText("students.groupBySection")).not.toBeNull()
+
+    cleanup()
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(renderView())
+    expect(screen.queryByText("students.groupBySection")).toBeNull()
   })
 })
