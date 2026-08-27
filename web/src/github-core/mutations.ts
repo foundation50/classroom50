@@ -112,6 +112,7 @@ export {
   addRepoCollaborator,
   removeRepoCollaborator,
   setRepoFeatures,
+  setRepoVisibility,
   replaceRepoTopics,
   type RepoFeaturePatch,
 } from "./mutations/collaborators"

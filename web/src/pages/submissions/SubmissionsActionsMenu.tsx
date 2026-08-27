@@ -5,6 +5,7 @@ import {
   FileZipIcon,
   GitBranchIcon,
   GitPullRequestIcon,
+  GlobeIcon,
   GraphIcon,
   LinkExternalIcon,
   LockIcon,
@@ -45,6 +46,7 @@ export function SubmissionsActionsMenu({
   downloadAllDisabled,
   onBulkAccess,
   onBulkFeatures,
+  onBulkVisibility,
   onBulkTrigger,
   onBulkPause,
   onBulkResume,
@@ -93,6 +95,9 @@ export function SubmissionsActionsMenu({
   // onBulkAccess (owner, individual, non-empty, has accepted repos); omitted
   // otherwise. Reconciles existing repos with the assignment's repo_features.
   onBulkFeatures?: () => void
+  // Opens the whole-assignment "Change repository visibility" modal (issue
+  // #766). Same gate as onBulkFeatures; omitted otherwise.
+  onBulkVisibility?: () => void
   // Opens the whole-assignment "Update autograding triggers" modal (retrofits
   // each repo's shim to the assignment's submission_mode). Bulk-features gate
   // plus default-autograder only; omitted otherwise.
@@ -309,6 +314,27 @@ export function SubmissionsActionsMenu({
                 >
                   <SlidersIcon aria-hidden="true" className="size-4" />
                   {t("submissions.bulkFeatures.menuLabel")}
+                </button>
+              </li>
+            )}
+            {onBulkVisibility && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={
+                    emptyRoster
+                      ? t("submissions.bulkVisibility.titleEmptyRoster")
+                      : t("submissions.bulkVisibility.menuTitle")
+                  }
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onBulkVisibility()
+                  }}
+                >
+                  <GlobeIcon aria-hidden="true" className="size-4" />
+                  {t("submissions.bulkVisibility.menuLabel")}
                 </button>
               </li>
             )}

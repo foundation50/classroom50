@@ -73,6 +73,7 @@ const base: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_visibility: "private",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "auto",

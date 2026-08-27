@@ -36,6 +36,7 @@ import { CloneSubmissionsModal } from "@/pages/submissions/CloneSubmissionsModal
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { CloseSubmissionModal } from "@/components/modals/CloseSubmissionModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
+import { BulkRepoVisibilityModal } from "@/components/modals/BulkRepoVisibilityModal"
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
@@ -341,6 +342,7 @@ const SubmissionsPageContent = () => {
   const [cloneCliOpen, setCloneCliOpen] = useState(false)
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
   const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
   const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
   const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
@@ -680,6 +682,26 @@ const SubmissionsPageContent = () => {
       siblingSlugs,
     ],
   )
+
+  // This assignment's repos that are currently PUBLIC (issue #766), lowercased
+  // for the table's per-row warning badge. Derived from the already-loaded org
+  // repo list (which carries each repo's `private` flag) intersected with the
+  // assignment's own repo names — no extra reads. undefined while the org list
+  // is still loading, so the table renders no badges rather than "all private".
+  const publicRepoNames = useMemo(() => {
+    if (!orgRepos) return undefined
+    const assignmentRepos = new Set(
+      allAssignmentRepos.map((name) => name.toLowerCase()),
+    )
+    const set = new Set<string>()
+    for (const repo of orgRepos) {
+      const name = repo.name.toLowerCase()
+      if (repo.private === false && assignmentRepos.has(name)) {
+        set.add(name)
+      }
+    }
+    return set
+  }, [orgRepos, allAssignmentRepos])
 
   // Group repos that exist but have no submission yet: for group assignments the
   // repo is named after the founder (not each member), so acceptance can't be
@@ -1370,6 +1392,17 @@ const SubmissionsPageContent = () => {
                     ? () => setBulkFeaturesOpen(true)
                     : undefined
                 }
+                // Bulk change repo visibility (issue #766): same gate as bulk
+                // features. Flips existing repos public/private — the
+                // assignment's repo_visibility applies at accept-time only.
+                onBulkVisibility={
+                  isOwner &&
+                  !isGroupAssignment &&
+                  !isEmptyRepoAssignment &&
+                  acceptedSet.size > 0
+                    ? () => setBulkVisibilityOpen(true)
+                    : undefined
+                }
                 // Bulk retrofit autograding triggers: same gate as bulk features
                 // plus default-autograder only — teacher-authored (custom) shims
                 // are never rewritten, and a no_autograder assignment has no shim
@@ -1522,6 +1555,14 @@ const SubmissionsPageContent = () => {
             assignmentResolved &&
             isDefaultAutograder(assignmentInfo.autograder)
           }
+          // Per-repo visibility toggle in the manage hub (issue #766): owner-
+          // only — org policy blocks members from flipping visibility, and
+          // GitHub 403s them regardless. Every repo shape qualifies (a bare or
+          // group repo is still showcaseable).
+          canChangeVisibility={isOwner}
+          // Lowercased names of this assignment's currently-public repos, for
+          // the per-row warning badge.
+          publicRepoNames={publicRepoNames}
           initialLoading={initialLoading}
           nonSubmittersLoading={
             !nonSubmittersReady &&
@@ -1719,6 +1760,15 @@ const SubmissionsPageContent = () => {
       <BulkRepoFeaturesModal
         open={bulkFeaturesOpen}
         onClose={() => setBulkFeaturesOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        owners={acceptedOwners}
+        students={students}
+      />
+      <BulkRepoVisibilityModal
+        open={bulkVisibilityOpen}
+        onClose={() => setBulkVisibilityOpen(false)}
         org={org}
         classroom={classroom}
         assignment={assignment}

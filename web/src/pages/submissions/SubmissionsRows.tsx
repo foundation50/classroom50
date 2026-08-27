@@ -1,4 +1,4 @@
-import { RepoIcon } from "@/components/ui/icons"
+import { GlobeIcon, RepoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { getName, getDisplayName, getInitials } from "@/util/students"
@@ -84,6 +84,24 @@ export const ActionIconLink = ({
       <Icon className="size-4 opacity-50" />
     </Button>
   )
+
+// Warning badge marking a repo that is currently PUBLIC (issue #766): the
+// student's work is visible to anyone on the internet. Rendered only when
+// public — private is the norm and stays unmarked to keep rows quiet.
+export const PublicRepoBadge = () => {
+  const { t } = useTranslation()
+  return (
+    <Badge
+      tone="warning"
+      size="sm"
+      className="whitespace-nowrap"
+      title={t("submissions.publicRepo.title")}
+    >
+      <GlobeIcon aria-hidden="true" className="size-3" />
+      {t("submissions.publicRepo.badge")}
+    </Badge>
+  )
+}
 
 // Per-row status chip for a roster student with no submission: distinguishes
 // accepted-but-not-submitted, never-accepted, and (group) no-group from a flat
@@ -259,6 +277,7 @@ export const NonSubmitterRow = ({
   onEditGrade,
   thresholdFraction = null,
   nameMode = "first",
+  publicRepo = false,
 }: {
   student: Student
   students: Student[]
@@ -283,6 +302,9 @@ export const NonSubmitterRow = ({
   // How to format the display name — "last" ("Last, First") when the table is
   // ordered by last name, matching the submitter rows.
   nameMode?: StudentSortMode
+  // Whether this student's (accepted) repo is currently public — renders the
+  // warning badge beside the status chip.
+  publicRepo?: boolean
 }) => {
   const canGrade =
     overrideGrade?.mode === "manual" &&
@@ -307,11 +329,14 @@ export const NonSubmitterRow = ({
         />
       </td>
       <td>
-        <NonSubmitterStatusBadge
-          username={student.username}
-          isGroup={isGroup}
-          acceptedUsernames={acceptedUsernames}
-        />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <NonSubmitterStatusBadge
+            username={student.username}
+            isGroup={isGroup}
+            acceptedUsernames={acceptedUsernames}
+          />
+          {publicRepo ? <PublicRepoBadge /> : null}
+        </div>
       </td>
       <td>
         {canGrade ? (
@@ -367,6 +392,7 @@ export const GroupRepoRow = ({
   students,
   actions,
   onManage,
+  publicRepo = false,
 }: {
   org: string
   classroom: string
@@ -378,6 +404,9 @@ export const GroupRepoRow = ({
   // Row-level click target: the manage-submission modal, same as the actions
   // cluster's manage button.
   onManage?: () => void
+  // Whether this group repo is currently public — renders the warning badge
+  // beside the status chip.
+  publicRepo?: boolean
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
@@ -394,9 +423,12 @@ export const GroupRepoRow = ({
         />
       </td>
       <td>
-        <Badge tone="warning" className="whitespace-nowrap">
-          {t("submissions.table.acceptedAwaiting")}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone="warning" className="whitespace-nowrap">
+            {t("submissions.table.acceptedAwaiting")}
+          </Badge>
+          {publicRepo ? <PublicRepoBadge /> : null}
+        </div>
       </td>
       <td>—</td>
       <td>—</td>

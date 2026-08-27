@@ -2963,6 +2963,31 @@
       "deferredSection_other": "{{count}} repositories were not updated",
       "deferredDetail": "Skipped — re-run to update."
     },
+    "bulkVisibility": {
+      "menuLabel": "Change repository visibility",
+      "menuTitle": "Make every student repository in this assignment public or private",
+      "titleEmptyRoster": "No students have accepted yet",
+      "title": "Change repository visibility",
+      "subtitle_one": "Applies to {{count}} student who has accepted this assignment.",
+      "subtitle_other": "Applies to {{count}} students who have accepted this assignment.",
+      "noRepos": "No students have accepted this assignment yet, so there are no repositories to change.",
+      "choiceLabel": "Make all repositories",
+      "keep": "Leave unchanged",
+      "info_one": "This changes the visibility of {{count}} student's repository. Repositories students accept later use the assignment's visibility setting.",
+      "info_other": "This changes the visibility of {{count}} students' repositories. Repositories students accept later use the assignment's visibility setting.",
+      "publicWarning_one": "This makes {{count}} student's repository visible to anyone on the internet — including all code, commit history, and any names or personal information in it. You can make it private again the same way.",
+      "publicWarning_other": "This makes {{count}} students' repositories visible to anyone on the internet — including all code, commit history, and any names or personal information in them. You can make them private again the same way.",
+      "apply": "Apply to all",
+      "working": "Updating repositories",
+      "progress": "Updated {{processed}} of {{total}}",
+      "resultHeadline": "Changed the visibility of {{count}} of {{total}} repositories.",
+      "resultHeadlineThrottled": "Changed {{count}} of {{total}} repositories before GitHub rate-limited the request — re-run to finish the rest.",
+      "failedSection_one": "{{count}} repository could not be changed",
+      "failedSection_other": "{{count}} repositories could not be changed",
+      "deferredSection_one": "{{count}} repository was not changed",
+      "deferredSection_other": "{{count}} repositories were not changed",
+      "deferredDetail": "Skipped — re-run to update."
+    },
     "bulkTrigger": {
       "menuLabel": "Update autograding triggers",
       "menuTitle": "Rewrite each student repository's autograding workflow to match the assignment's trigger setting",
@@ -3017,6 +3042,22 @@
         "resumed": "Autograding resumed for this repository.",
         "notGradable": "This repository has no autograding workflow — nothing to change.",
         "failed": "Could not change the autograding state — try again."
+      }
+    },
+    "rowVisibility": {
+      "makePublicTitle": "Make repository public",
+      "makePublicDescription": "Make this repository visible to anyone on the internet — for showcasing or peer review.",
+      "makePublicAria": "Make {{repo}} public",
+      "makePrivateTitle": "Make repository private",
+      "makePrivateDescription": "Make this repository visible only to its collaborators and the organization again.",
+      "makePrivateAria": "Make {{repo}} private",
+      "confirmTitle": "Make {{name}}'s repository public?",
+      "confirmBody": "Anyone on the internet will be able to see <repo>{{repo}}</repo> — including all code, commit history, and any names or personal information in it. You can make it private again anytime.",
+      "confirmLabel": "Make public",
+      "outcome": {
+        "public": "Repository is now public.",
+        "private": "Repository is now private.",
+        "failed": "Could not change the repository's visibility — try again."
       }
     },
     "bulkAutograde": {
@@ -3081,6 +3122,8 @@
       "autogradingEnabled": "Enabled",
       "autogradingPaused": "Paused",
       "autogradingPausedByGitHub": "Paused by GitHub",
+      "visibility": "Visibility",
+      "visibilityPrivate": "Private",
       "collaborators_one": "{{count}} collaborator",
       "collaborators_other": "{{count}} collaborators",
       "commitDescription": "Open the latest commit on GitHub",
@@ -3090,6 +3133,10 @@
       "regradeDescription": "Re-run the autograder on the latest commit",
       "downloadDescription": "Save the submission as a zip archive",
       "membersDescription": "View and manage the group's members"
+    },
+    "publicRepo": {
+      "badge": "Public",
+      "title": "This repository is public — anyone on the internet can see it"
     },
     "student": {
       "descriptionLabel": "Assignment details",

@@ -107,6 +107,19 @@ const SubmissionDetails = ({
       ),
     })
   }
+  // Visibility, from the repo read. Public gets the warning tone (the table
+  // badge's twin); private stays quiet — it is the norm.
+  if (repoData) {
+    rows.push({
+      label: t("submissions.manageModal.visibility"),
+      value:
+        repoData.private === false ? (
+          <Badge tone="warning">{t("submissions.publicRepo.badge")}</Badge>
+        ) : (
+          <Badge ghost>{t("submissions.manageModal.visibilityPrivate")}</Badge>
+        ),
+    })
+  }
   // Autograding workflow state — a read-only mirror of the Pause/Resume action,
   // so a teacher can see at a glance whether grading is on. Only for autograding
   // assignments (canPauseAutograding); notGradable means no shim, so nothing to
@@ -356,6 +369,7 @@ export const ManageSubmissionModal = ({
         <SubmissionActionList
           {...action}
           latestCommitHref={latestCommitHref}
+          repoPrivate={repoData?.private}
           onManageAccess={
             action.onManageAccess ? handleManageAccess : undefined
           }
