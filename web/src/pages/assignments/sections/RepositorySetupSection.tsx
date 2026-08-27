@@ -7,7 +7,11 @@ import { Alert, Button, cx, FormField, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
 import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
-import { REPO_PERMISSIONS, REPO_VISIBILITIES, defaultStudentPermission } from "@/types/classroom"
+import {
+  REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
+  defaultStudentPermission,
+} from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
 import { ToggleField } from "@/components/ui"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
@@ -423,9 +427,7 @@ function RepoVisibilityField({
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) =>
-                  field.handleChange(
-                    e.target.value as typeof field.state.value,
-                  )
+                  field.handleChange(e.target.value as typeof field.state.value)
                 }
               >
                 {REPO_VISIBILITIES.map((level) => (

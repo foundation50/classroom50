@@ -33,7 +33,11 @@ import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
-import { REPO_PERMISSIONS, REPO_VISIBILITIES, SUBMISSION_MODES } from "@/types/classroom"
+import {
+  REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
+  SUBMISSION_MODES,
+} from "@/types/classroom"
 import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
 

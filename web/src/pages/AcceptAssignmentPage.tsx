@@ -973,7 +973,9 @@ const AcceptAssignmentPage = () => {
               <Alert tone="warning" className="items-start">
                 <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
                 <div>
-                  <div className="font-bold">{t("accept.publicRepo.title")}</div>
+                  <div className="font-bold">
+                    {t("accept.publicRepo.title")}
+                  </div>
                   <div className="mt-1 text-sm">
                     {t("accept.publicRepo.body")}
                   </div>
