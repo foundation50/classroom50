@@ -60,7 +60,9 @@ export type BulkLockResult = {
   newCommitSha: string | null
 }
 
-// Matches the fan-out limit the other multi-repo domain walks use.
+// Deliberately below REPO_READ_CONCURRENCY (8), which the read-only domain
+// walks use: each reconcile is a repo probe plus a team permission WRITE, and
+// GitHub's secondary rate limits bite on concurrent writes rather than reads.
 const RECONCILE_CONCURRENCY = 4
 
 // The read half of the config-repo write both functions below perform: the
@@ -298,6 +300,11 @@ export type BulkCopyOutcome = {
   slug: string
   targetSlug?: string
   error?: string
+  // The copy landed, but the target classroom's student team could not be
+  // granted read on the private template — so students cannot accept it yet.
+  // Non-fatal, and never a reason to fail the run, but silence here would
+  // report a copy that no student can use as a plain success.
+  templateAccessWarning?: string
 }
 
 export type BulkCopyAssignmentsInput = {
@@ -337,14 +344,20 @@ export async function bulkCopyAssignments(
   const outcomes: BulkCopyOutcome[] = []
   for (const { source, targetSlug } of items) {
     try {
-      await copyAssignmentWithConflictRetry(client, {
+      const result = await copyAssignmentWithConflictRetry(client, {
         org,
         source,
         targetClassroom,
         targetSlug,
         canGrantTemplateAccess,
       })
-      outcomes.push({ slug: source.slug, targetSlug })
+      outcomes.push({
+        slug: source.slug,
+        targetSlug,
+        ...(result.templateGrantWarning
+          ? { templateAccessWarning: result.templateGrantWarning }
+          : {}),
+      })
     } catch (err) {
       outcomes.push({ slug: source.slug, error: getErrorMessage(err) })
     }

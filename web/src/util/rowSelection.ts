@@ -5,8 +5,8 @@
 //
 // Shared by the Org Members list (OrgMemberRow), the classroom roster
 // (TeamRosterRow) and the assignments table (Assignment). The logic reads one
-// stable key per row: `.key` by default, or whatever `keyOf` returns — so a row
-// type keyed on something else (Assignment.slug) is passed straight through
+// stable key per row, read through the caller's `keyOf` — so a row type keyed
+// on something other than `.key` (Assignment.slug) is passed straight through
 // instead of being mapped into a throwaway `{ key }` array on every render.
 // The caller supplies `keyOf` and the `selectable` predicate.
 export type KeyOf<T> = (row: T) => string

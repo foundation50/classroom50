@@ -175,9 +175,13 @@ export function AssignmentsBulkBar({
   const runDelete = async () => {
     const result = await remove.mutateAsync({ slugs })
     // An all-missing selection commits nothing; a green "0 deleted" would
-    // report a write that never happened.
+    // report a write that never happened. But "every one was already gone" and
+    // notifyMissing's "N were already gone" are the same news twice, so only
+    // one of them speaks.
     if (result.deleted.length === 0) {
-      notify({ tone: "info", message: t("assignments.bulk.deleteNoChange") })
+      if (result.missing.length === 0) {
+        notify({ tone: "info", message: t("assignments.bulk.deleteNoChange") })
+      }
     } else {
       notify({
         tone: "success",
@@ -206,7 +210,7 @@ export function AssignmentsBulkBar({
           selection reads as an announcement with nothing to act on — the count
           visible, every button off-screen. Sticky pins each end to the
           SCROLLPORT, so the alignment survives at any width. */}
-      <div className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <span className="sticky start-0 text-sm font-medium tabular-nums">
           {t("assignments.bulk.selectedCount", { count })}
         </span>

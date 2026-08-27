@@ -84,13 +84,15 @@ export function planBulkReuseSlugs({
         nextAvailableSlug(slugify(source.slug), unavailable, budget)
     const targetSlug = slugify(value)
     const lower = targetSlug.toLowerCase()
-    const issue = issueFor()
+    const issue = classify()
     // An invalid row still claims its slug: submit is blocked anyway, and
     // leaving it unclaimed would let a later row silently take the same one.
     if (lower) unavailable.add(lower)
     return { source, value, targetSlug, edited, issue }
 
-    function issueFor(): BulkReuseSlugIssue | null {
+    // Declared here so the row's own inputs stay in scope; it reads only
+    // `targetSlug`, `lower` and the sets above.
+    function classify(): BulkReuseSlugIssue | null {
       // No slug at all: either the classroom name eats the whole budget (a
       // legacy over-long classroom — nothing the teacher can type will fit,
       // which reuseSlugStatus words for itself from the budget), or the field

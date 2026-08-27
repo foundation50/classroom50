@@ -55,13 +55,21 @@ export function useRangeSelection<T>(
     key: string,
   ) => {
     const anchor = rangeAnchorKey.current
-    if (e.shiftKey && anchor && anchor !== key) {
-      rangeHandledRef.current = true
-      setSelectedKeys((prev) =>
-        selectRange(order, anchor, key, prev, selectable, keyOf),
-      )
+    if (!e.shiftKey || !anchor || anchor === key) return
+    // Only swallow the follow-up onChange when the range can actually be
+    // filled. An anchor that the filter has since removed from `order` makes
+    // selectRange a no-op, and swallowing the toggle as well would turn the
+    // click into nothing at all.
+    const anchorPresent = order.some((row) => keyOf(row) === anchor)
+    if (!anchorPresent) {
       rangeAnchorKey.current = key
+      return
     }
+    rangeHandledRef.current = true
+    setSelectedKeys((prev) =>
+      selectRange(order, anchor, key, prev, selectable, keyOf),
+    )
+    rangeAnchorKey.current = key
   }
 
   return { handleToggleRow, handleRowCheckboxClick }

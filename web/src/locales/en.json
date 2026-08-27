@@ -1757,6 +1757,7 @@
       "reuseFailed_other": "{{count}} assignments could not be copied.",
       "reuseRenamedTitle": "Copied under a different slug",
       "reuseFailedTitle": "Could not be copied",
+      "reuseTemplateWarnTitle": "Copied, but template access could not be granted",
       "deleteNoChange": "Every selected assignment was already gone; nothing was committed.",
       "reuseTargetError": "Could not read the target classroom's assignments, so a slug collision can't be resolved. Try again.",
       "reuseSlugLabel": "Slug for {{assignment}}",

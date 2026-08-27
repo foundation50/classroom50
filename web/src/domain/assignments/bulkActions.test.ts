@@ -47,7 +47,12 @@ vi.mock("./createEdit", () => ({
 }))
 
 const copyAssignment =
-  vi.fn<(client: unknown, input: { targetSlug: string }) => Promise<unknown>>()
+  vi.fn<
+    (
+      client: unknown,
+      input: { targetSlug: string },
+    ) => Promise<{ templateGrantWarning?: string }>
+  >()
 vi.mock("./copyReuse", () => ({
   copyAssignmentWithConflictRetry: (...args: unknown[]) =>
     copyAssignment(...(args as Parameters<typeof copyAssignment>)),
@@ -244,7 +249,7 @@ describe("bulkCopyAssignments", () => {
   })
 
   beforeEach(() => {
-    copyAssignment.mockReset().mockResolvedValue(undefined)
+    copyAssignment.mockReset().mockResolvedValue({})
   })
 
   it("copies each source under the slug it was handed", async () => {
@@ -282,6 +287,27 @@ describe("bulkCopyAssignments", () => {
       error: "repo already exists",
     })
     expect(outcomes[1]).toEqual({ slug: "hw2", targetSlug: "hw2" })
+  })
+
+  // A copy can land and still leave students unable to accept it, when the
+  // target classroom's team could not be granted read on a private template.
+  it("carries a template-grant warning through to the outcome", async () => {
+    copyAssignment.mockResolvedValueOnce({
+      templateGrantWarning: "could not grant read",
+    })
+
+    const outcomes = await bulkCopyAssignments(client, {
+      org: ORG,
+      targetClassroom: CLASSROOM,
+      items: [item("hw1", "hw1")],
+      canGrantTemplateAccess: true,
+    })
+
+    expect(outcomes[0]).toEqual({
+      slug: "hw1",
+      targetSlug: "hw1",
+      templateAccessWarning: "could not grant read",
+    })
   })
 
   it("reports progress after every item", async () => {

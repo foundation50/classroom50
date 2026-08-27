@@ -103,6 +103,8 @@ export function BulkReuseAssignmentsModal({
   // Only the ones whose slug had to move: the teacher confirmed it in the
   // form, but a run of twelve is worth restating.
   const renamed = copied.filter((o) => o.targetSlug !== o.slug)
+  // Landed, but students cannot accept it until the template read is granted.
+  const templateWarned = copied.filter((o) => o.templateAccessWarning)
 
   // A finished run becomes the shell's acknowledgement state, so the footer is
   // one "Done" and the report below stays put.
@@ -290,6 +292,16 @@ export function BulkReuseAssignmentsModal({
                 key: o.slug,
                 label: o.slug,
                 detail: o.targetSlug,
+              }))}
+            />
+          )}
+          {templateWarned.length > 0 && (
+            <BulkResultSection
+              title={t("assignments.bulk.reuseTemplateWarnTitle")}
+              rows={templateWarned.map((o) => ({
+                key: `tpl-${o.slug}`,
+                label: o.targetSlug ?? o.slug,
+                detail: o.templateAccessWarning,
               }))}
             />
           )}

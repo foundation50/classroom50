@@ -103,12 +103,6 @@ const SKELETON_BARS = [
 // takeover colSpan and the empty row's colSpan can't drift apart.
 const DATA_COLUMNS = 7
 
-// Stable empty set so selectAllState isn't handed a fresh one each render.
-const EMPTY_SELECTION: ReadonlySet<string> = new Set()
-// Stable empty list for the views with no checkbox column, so select-all state
-// isn't derived from a fresh array each render.
-const EMPTY_ROWS: Assignment[] = []
-
 const AssignmentsTable = ({
   org,
   classroom,
@@ -241,8 +235,8 @@ const AssignmentsTable = ({
   // The header box describes the VIEW ("is everything I can see ticked"),
   // through the same helper the roster and members tables use.
   const { allSelected, someSelected } = selectAllState(
-    selectable ? (assignments ?? []) : EMPTY_ROWS,
-    selectedSlugs ?? EMPTY_SELECTION,
+    selectable ? (assignments ?? []) : [],
+    selectedSlugs ?? new Set<string>(),
     (a) => a.slug,
   )
   // The takeover follows the SELECTION, not the view: a row hidden by the
@@ -303,13 +297,15 @@ const AssignmentsTable = ({
                 styling is for column titles and would otherwise reshape the
                 buttons sitting in it. */}
             {hasSelection ? (
-              <th
-                scope="col"
+              // A td, not a th: this cell carries the selection's actions, so
+              // announcing it as the column header for all seven data columns
+              // would make every cell below it "headed" by a toolbar.
+              <td
                 colSpan={DATA_COLUMNS}
                 className="py-2 font-normal normal-case"
               >
                 {bulkActions}
-              </th>
+              </td>
             ) : (
               <>
                 <SortableTh

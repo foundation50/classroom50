@@ -195,12 +195,16 @@ export const TeacherAssignmentsView = ({
   // the dropped slugs in state, so recreating one later would bring it back
   // pre-ticked, and an emptied selection would keep a count nothing can act on
   // while Clear selection — which lives in the head-row takeover — is gone.
-  if (
-    selectedSlugs.size > 0 &&
-    selectedAssignments.length !== selectedSlugs.size
-  ) {
-    setSelectedSlugs(new Set(selectedAssignments.map(slugKey)))
-  }
+  //
+  // Compared as a SET, not by length: a hand-edited assignments.json can carry
+  // two rows for one slug, which resolves to more rows than there are keys and
+  // would make a length test rewrite the same state forever.
+  const liveSlugs = useMemo(
+    () => new Set(selectedAssignments.map(slugKey)),
+    [selectedAssignments, slugKey],
+  )
+  if (liveSlugs.size !== selectedSlugs.size) setSelectedSlugs(liveSlugs)
+
   // The toolbar owns the primary action now (New assignment / archived badge),
   // so it renders whenever the list has loaded — with only the trailing action
   // when there are no assignments yet (actionsOnly), and the full search/filter/

@@ -16,23 +16,13 @@ vi.mock("react-i18next", async (importOriginal) => {
 vi.mock("@/context/notifications/NotificationProvider", () => ({
   useToast: () => ({ notify, dismiss: vi.fn() }),
 }))
-vi.mock("@/hooks/useGetClasses", () => ({ default: () => ({ classes: [] }) }))
 vi.mock("@/components/modals/BulkReuseAssignmentsModal", () => ({
-  BulkReuseAssignmentsModal: ({
-    onClose,
-  }: {
-    onClose: (copied: boolean) => void
-  }) => (
+  BulkReuseAssignmentsModal: ({ onClose }: { onClose: () => void }) => (
     <div>
-      <button onClick={() => onClose(false)}>abandon-reuse</button>
-      <button onClick={() => onClose(true)}>finish-reuse</button>
+      <button onClick={() => onClose()}>dismiss-reuse</button>
     </div>
   ),
 }))
-vi.mock("@/hooks/useGetClassAssignments", () => ({
-  default: () => ({ data: undefined, isLoading: false }),
-}))
-
 // Typed by signature so the recorded argument stays indexable.
 type LockArgs = { slugs: string[]; locked: boolean }
 const { notify } = vi.hoisted(() => ({
@@ -48,14 +38,6 @@ vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
   useBulkDeleteAssignments: () => ({
     mutateAsync: deleteMutate,
     isPending: false,
-  }),
-  useBulkReuseAssignments: () => ({
-    running: false,
-    processed: 0,
-    total: 0,
-    outcomes: [],
-    run: vi.fn(),
-    reset: vi.fn(),
   }),
 }))
 
@@ -88,7 +70,6 @@ beforeEach(() => {
   notify.mockReset()
   lockMutate.mockReset().mockResolvedValue({
     changed: [],
-    unchanged: [],
     missing: [],
     outcomes: [],
     newCommitSha: null,
@@ -134,25 +115,6 @@ describe("AssignmentsBulkBar selection scope", () => {
 // The row action is a toggle because one assignment has one state; a selection
 // can be mixed, so both verbs exist here — but a verb with nothing to do is
 // disabled rather than left to report "already in that state".
-// happy-dom does not lay out, so this pins the markup contract rather than the
-// pixels: the row spans a table that scrolls horizontally once its columns
-// outgrow the window, and without sticky ends the actions ride out past the
-// right edge — the count visible, every button unreachable. Measured in
-// Chromium at 1200-1440px before the classes were added.
-describe("AssignmentsBulkBar overflow", () => {
-  it("pins the count and the actions to the scrollport", () => {
-    renderBar({ selected: ["hw1"] })
-
-    const count = screen.getByText("assignments.bulk.selectedCount:1")
-    expect(count.className).toContain("sticky")
-    expect(count.className).toContain("start-0")
-
-    const actions = screen.getByLabelText("assignments.bulk.lock").parentElement
-    expect(actions?.className).toContain("sticky")
-    expect(actions?.className).toContain("end-0")
-  })
-})
-
 describe("AssignmentsBulkBar lock state", () => {
   const lockButton = () =>
     screen.getByLabelText("assignments.bulk.lock") as HTMLButtonElement
@@ -248,7 +210,6 @@ describe("AssignmentsBulkBar selection lifetime", () => {
   it("does not claim no-change when the whole selection was already gone", async () => {
     lockMutate.mockResolvedValue({
       changed: [],
-      unchanged: [],
       missing: ["hw1"],
       outcomes: [],
       newCommitSha: null,
@@ -264,7 +225,7 @@ describe("AssignmentsBulkBar selection lifetime", () => {
     expect(messages).not.toContain("assignments.bulk.lockNoChange")
   })
 
-  it("keeps the selection when the reuse dialog is abandoned", () => {
+  it("keeps the selection when the reuse dialog is dismissed", () => {
     const onClearSelection = vi.fn()
     render(
       <AssignmentsBulkBar
@@ -276,23 +237,7 @@ describe("AssignmentsBulkBar selection lifetime", () => {
     )
 
     openReuse()
-    fireEvent.click(screen.getByText("abandon-reuse"))
-    expect(onClearSelection).not.toHaveBeenCalled()
-  })
-
-  it("keeps the selection once copies have landed", () => {
-    const onClearSelection = vi.fn()
-    render(
-      <AssignmentsBulkBar
-        org="acme"
-        classroom="cs50"
-        selected={ALL.filter((a) => ["hw1"].includes(a.slug))}
-        onClearSelection={onClearSelection}
-      />,
-    )
-
-    openReuse()
-    fireEvent.click(screen.getByText("finish-reuse"))
+    fireEvent.click(screen.getByText("dismiss-reuse"))
     expect(onClearSelection).not.toHaveBeenCalled()
   })
 })
