@@ -362,7 +362,9 @@ async function createEmptyAssignmentRepo(params: {
       if (isOrgRepoCreationDenied(err)) {
         throw orgRepoCreationDeniedError(owner, err.status, err.message)
       }
-      if (err.isForbidden) {
+      // A public-visibility refusal rethrows raw for createAssignmentRepo's
+      // private retry; skip the tripwire so the log stays a real signal.
+      if (err.isForbidden && !(isPublic && isPublicRepoCreationDenied(err))) {
         // Same tripwire as the templated path above.
         log.warn("accept: repo create 403 fell through unclassified", {
           org: owner,

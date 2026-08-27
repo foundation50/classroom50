@@ -117,21 +117,22 @@ func acceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accept <org> <classroom> <assignment>",
 		Short: "Accept an assignment from an organization's classroom",
-		Long: "Accept an assignment by creating a private repo at\n" +
+		Long: "Accept an assignment by creating a repo at\n" +
 			"<org>/<classroom>-<assignment>-<username> (lowercased). The\n" +
 			"assignment is looked up in the published assignments.json on the\n" +
-			"classroom's GitHub Pages site (no token required). If the\n" +
-			"assignment opts into public repos (repo_visibility: public — for\n" +
-			"peer-review or showcase work), the repo is created PUBLIC instead\n" +
-			"and you are told before it is created.\n\n" +
+			"classroom's GitHub Pages site (no token required). The repo is\n" +
+			"private unless the assignment opts into public repos\n" +
+			"(repo_visibility: public — for peer-review or showcase work), in\n" +
+			"which case it is created PUBLIC and you are told before it is\n" +
+			"created.\n\n" +
 			"If the classroom uses an unlisted URL, your teacher will give\n" +
 			"you an access key; pass it with `--key <key>`. The key is part\n" +
 			"of the published URL (`<classroom>/<key>/...`); without it the\n" +
 			"classroom's assignments can't be found. Normal classrooms need\n" +
 			"no key.\n\n" +
 			"If the assignment has a template repo (which may live outside\n" +
-			"<org>), the new repo is a private copy generated from it. If it\n" +
-			"has no template, an empty private repo is created carrying only\n" +
+			"<org>), the new repo is a copy generated from it. If it\n" +
+			"has no template, an empty repo is created carrying only\n" +
 			"the autograder workflow shim.\n\n" +
 			"The autograder workflow shim is dropped at\n" +
 			"`.github/workflows/autograde.yaml` in the new repo. For the\n" +
@@ -1355,10 +1356,9 @@ func createTemplatedAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbo
 // createEmptyAssignmentRepoInOrg creates an empty repo (private unless public
 // is set) for a template-less assignment via POST /orgs/{org}/repos (mirroring
 // gh-teacher's ensureConfigRepo). autoInit true (the shim-only path) is
-// load-bearing: it
-// gives the repo an initial commit + default branch so the shared
-// WaitForStableBranch poll and the fresh-repo Tree-commit retry both work
-// unchanged. autoInit false (the empty_repo path) leaves the repo with no
+// load-bearing: it gives the repo an initial commit + default branch so the
+// shared WaitForStableBranch poll and the fresh-repo Tree-commit retry both
+// work unchanged. autoInit false (the empty_repo path) leaves the repo with no
 // commits and no branches at all — the caller must not attempt any commit.
 // Returns the repo's default_branch so the shim caller commits onto the right
 // ref (for a no-auto_init repo it is only GitHub's configured default, which

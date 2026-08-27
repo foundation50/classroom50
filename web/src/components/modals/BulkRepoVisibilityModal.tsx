@@ -258,9 +258,9 @@ export function BulkRepoVisibilityModal({
                   </option>
                 </Select>
               </label>
-              {/* The issue-mandated confirmation: the exposure warning renders
-                  BEFORE Apply whenever public is picked, so the teacher
-                  confirms with the consequences in view. */}
+              {/* The exposure warning renders BEFORE Apply whenever public is
+                  picked, so the teacher confirms with the consequences in
+                  view (the issue's required confirmation). */}
               {choice === "public" ? (
                 <Alert tone="warning" className="text-sm">
                   {t("submissions.bulkVisibility.publicWarning", {

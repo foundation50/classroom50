@@ -395,12 +395,10 @@ function StudentPermissionField({ form }: { form: AssignmentForm }) {
   )
 }
 
-// The repo-visibility choice: the visibility each student repo is CREATED
-// with at accept time (private, the default, or public for peer-review /
-// portfolio / showcase work). A public pick shows a persistent warning — the
-// students' work becomes visible to anyone on the internet — plus, on edit,
-// the accept-time-only caveat (existing repos aren't retrofitted; the
-// submissions page flips those).
+// The accept-time repo visibility choice (private default / public for
+// showcase work). A public pick shows a persistent exposure warning, plus the
+// accept-time-only caveat on edit (existing repos are flipped from the
+// submissions page, not here).
 function RepoVisibilityField({
   form,
   edit,

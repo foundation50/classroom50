@@ -683,11 +683,10 @@ const SubmissionsPageContent = () => {
     ],
   )
 
-  // This assignment's repos that are currently PUBLIC (issue #766), lowercased
-  // for the table's per-row warning badge. Derived from the already-loaded org
-  // repo list (which carries each repo's `private` flag) intersected with the
-  // assignment's own repo names — no extra reads. undefined while the org list
-  // is still loading, so the table renders no badges rather than "all private".
+  // This assignment's currently-PUBLIC repos (lowercased), for the table's
+  // per-row warning badge — derived from the already-loaded org repo list, no
+  // extra reads. undefined while that list loads, so the table renders no
+  // badges rather than asserting "all private".
   const publicRepoNames = useMemo(() => {
     if (!orgRepos) return undefined
     const assignmentRepos = new Set(
@@ -1560,8 +1559,6 @@ const SubmissionsPageContent = () => {
           // GitHub 403s them regardless. Every repo shape qualifies (a bare or
           // group repo is still showcaseable).
           canChangeVisibility={isOwner}
-          // Lowercased names of this assignment's currently-public repos, for
-          // the per-row warning badge.
           publicRepoNames={publicRepoNames}
           initialLoading={initialLoading}
           nonSubmittersLoading={
