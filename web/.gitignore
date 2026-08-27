@@ -30,7 +30,7 @@ dist-ssr
 .vitest-attachments
 # Anywhere, not just src/test: a browser test may live beside the component
 # it measures, and its failure screenshots are just as transient.
-src/**/__screenshots__
+**/__screenshots__
 
 # Vitest blob reports (--reporter=blob, used for CI shard merging). Transient.
 .vitest-reports

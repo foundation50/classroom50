@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent } from "@testing-library/react"
 import type { ReactNode } from "react"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -48,6 +48,8 @@ vi.mock("@/hooks/useEmptyRosterWarning", () => ({
   default: () => ({ show: false, hasRosterRows: false }),
 }))
 const orgRepoCreationWarning = vi.fn()
+// What the page last handed the (mocked) bulk bar.
+let barSelected: { slug: string }[] = []
 vi.mock("@/hooks/useOrgRepoCreationWarning", () => ({
   default: () => orgRepoCreationWarning(),
 }))
@@ -70,11 +72,35 @@ vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
 // Stub the heavy children so the test targets only the page's own wiring. The
 // toolbar mock exposes its slots so the collect-action gating is observable;
 // the collect button itself is covered in ClassroomCollectButton.test.tsx.
-vi.mock("@/pages/assignments/AssignmentsTable", () => ({ default: () => null }))
+vi.mock("@/pages/assignments/AssignmentsTable", () => ({
+  // Renders only a hidden toggle per row, so a test can drive the page's
+  // selection without mounting the real table.
+  default: (props: {
+    assignments?: { slug: string }[]
+    onToggleRow?: (slug: string) => void
+    bulkActions?: ReactNode
+  }) => (
+    <>
+      {props.bulkActions}
+      {(props.assignments ?? []).map((a, i) => (
+        <button
+          key={i}
+          data-testid={`toggle-${i}`}
+          onClick={() => props.onToggleRow?.(a.slug)}
+        >
+          toggle
+        </button>
+      ))}
+    </>
+  ),
+}))
 // Same treatment as the other children: the bar reaches for the toast
 // context, which this page test does not mount.
 vi.mock("@/pages/assignments/AssignmentsBulkBar", () => ({
-  default: () => null,
+  default: (props: { selected: { slug: string }[] }) => {
+    barSelected = props.selected
+    return null
+  },
 }))
 vi.mock("@/pages/assignments/AssignmentsToolbar", () => ({
   default: ({
@@ -111,7 +137,10 @@ beforeEach(() => {
   })
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  barSelected = []
+})
 
 describe("Assignments header student count", () => {
   it("renders the role-aware count, not the total roster row count", () => {
@@ -221,5 +250,33 @@ describe("Classroom-wide collect visibility", () => {
     })
     renderView()
     expect(screen.queryByTestId("collect-all")).toBeNull()
+  })
+})
+
+// A hand-edited assignments.json can hold two rows for one slug. Resolving the
+// selection against it would then return both, overstating the bulk bar's
+// count and sending the slug twice to a batched write.
+describe("TeacherAssignmentsView selection", () => {
+  it("resolves one row per selected slug even when the file repeats one", () => {
+    getAssignments.mockReturnValue({
+      data: {
+        assignments: [
+          { slug: "hw1", name: "Homework 1" },
+          { slug: "hw1", name: "Homework 1 (duplicate row)" },
+          { slug: "hw2", name: "Homework 2" },
+        ],
+      },
+      isLoading: false,
+    })
+    studentCount.mockReturnValue({
+      studentCount: 1,
+      isLoading: false,
+      isError: false,
+    })
+    render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
+
+    fireEvent.click(screen.getByTestId("toggle-0"))
+
+    expect(barSelected.map((a) => a.slug)).toEqual(["hw1"])
   })
 })

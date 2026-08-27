@@ -231,7 +231,12 @@ const AssignmentsTable = ({
   const canMutate = !archived && canAuthor
   // The column renders only when the page handed in selection state; a viewer
   // who cannot author has no bulk action to reach, so it stays off for them.
-  const selectable = Boolean(selectedSlugs && onToggleRow && onToggleSelectAll)
+  // `bulkActions` counts: a selection hands the head row over to it, so
+  // wiring the checkboxes without it would trade the column titles for an
+  // empty cell the moment a row is ticked.
+  const selectable = Boolean(
+    selectedSlugs && onToggleRow && onToggleSelectAll && bulkActions,
+  )
   // The header box describes the VIEW ("is everything I can see ticked"),
   // through the same helper the roster and members tables use.
   const { allSelected, someSelected } = selectAllState(

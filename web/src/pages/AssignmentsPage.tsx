@@ -178,17 +178,24 @@ export const TeacherAssignmentsView = ({
     setSelectedSlugs((prev) => toggleSelectAll(visible, prev, slugKey))
   const clearSelection = () => setSelectedSlugs(new Set())
   // The selected assignments, resolved against the live list through the
-  // shared helper.
-  const selectedAssignments = useMemo(
-    () =>
-      resolveSelectedRows(
-        sourceAssignments ?? [],
-        selectedSlugs,
-        () => true,
-        slugKey,
-      ),
-    [sourceAssignments, selectedSlugs, slugKey],
-  )
+  // shared helper — one row per selected slug. A hand-edited assignments.json
+  // can carry two rows for the same slug; resolving would then return both,
+  // which would overstate the count in the bulk bar and send the slug twice to
+  // a batched write, reconciling its template twice for one flag flip.
+  const selectedAssignments = useMemo(() => {
+    const seen = new Set<string>()
+    return resolveSelectedRows(
+      sourceAssignments ?? [],
+      selectedSlugs,
+      () => true,
+      slugKey,
+    ).filter((a) => {
+      const key = slugKey(a)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+  }, [sourceAssignments, selectedSlugs, slugKey])
   // Prune slugs that left the list — deleted from their own row, by a bulk
   // delete, or in another tab. Adjusted during render (not in an effect), the
   // same shape useLingeringOpen uses. Filtering only for DISPLAY would leave
@@ -196,9 +203,8 @@ export const TeacherAssignmentsView = ({
   // pre-ticked, and an emptied selection would keep a count nothing can act on
   // while Clear selection — which lives in the head-row takeover — is gone.
   //
-  // Compared as a SET, not by length: a hand-edited assignments.json can carry
-  // two rows for one slug, which resolves to more rows than there are keys and
-  // would make a length test rewrite the same state forever.
+  // Compared as a SET, never by length — see the dedupe above for why a count
+  // is not a safe proxy here.
   const liveSlugs = useMemo(
     () => new Set(selectedAssignments.map(slugKey)),
     [selectedAssignments, slugKey],

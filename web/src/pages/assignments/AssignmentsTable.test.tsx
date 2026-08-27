@@ -692,6 +692,24 @@ describe("AssignmentsTable selection head", () => {
     expect(screen.queryByText("assignments.table.empty")).toBeNull()
   })
 
+  // Without it, ticking a row would swap the column titles for a blank cell.
+  it("renders no checkbox column when the bulk actions are missing", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs50"
+        assignments={rows}
+        canAuthor
+        selectedSlugs={new Set<string>()}
+        onToggleRow={() => {}}
+        onToggleSelectAll={() => {}}
+      />,
+    )
+
+    expect(screen.queryByLabelText("assignments.bulk.selectAll")).toBeNull()
+    expect(screen.getByText("assignments.table.colType")).toBeTruthy()
+  })
+
   it("renders no checkbox column at all without selection wiring", () => {
     wrap(
       <AssignmentsTable
