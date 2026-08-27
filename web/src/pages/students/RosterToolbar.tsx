@@ -1,7 +1,14 @@
 import { useTranslation } from "react-i18next"
 
 import { FilterIcon, RowsIcon, SyncIcon } from "@/components/ui/icons"
-import { Button, SelectSeparatorOption, Toolbar, cx } from "@/components/ui"
+import {
+  Button,
+  HelpTooltip,
+  SelectSeparatorOption,
+  Toolbar,
+  cx,
+} from "@/components/ui"
+import { formatRelativeToNow } from "@/util/formatDate"
 import type { GitHubClient } from "@/github-core/client"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
@@ -25,6 +32,8 @@ export function RosterToolbar({
   client,
   syncing,
   onSync,
+  lastUpdatedAt = null,
+  lastSyncChanges = null,
   selectedRows,
   onClearSelection,
   onBulkDone,
@@ -53,6 +62,12 @@ export function RosterToolbar({
   // roster-writing control in the toolbar freezes.
   syncing: boolean
   onSync: () => void
+  // When roster.csv last changed (its latest commit) — null while unknown.
+  // Rendered as an "Updated x ago" caption beside the Refresh button.
+  lastUpdatedAt?: Date | null
+  // Outcome of the most recent completed refresh this session: null before
+  // any run, 0 for "no changes", otherwise the number of rows it touched.
+  lastSyncChanges?: number | null
   selectedRows: TeamRosterRow[]
   onClearSelection: () => void
   onBulkDone: (
@@ -79,25 +94,52 @@ export function RosterToolbar({
   addActions: AddStudentActions | null
 }) {
   const { t } = useTranslation()
+  // "Updated x ago · no changes" — the last-commit timestamp plus, after a
+  // refresh has run this session, whether it actually changed anything.
+  const captionParts: string[] = []
+  if (lastUpdatedAt) {
+    captionParts.push(
+      t("students.rosterUpdatedAgo", {
+        when: formatRelativeToNow(lastUpdatedAt),
+      }),
+    )
+  }
+  if (lastSyncChanges !== null) {
+    captionParts.push(
+      lastSyncChanges === 0
+        ? t("students.syncResultNoChanges")
+        : t("students.syncResultChanges", { count: lastSyncChanges }),
+    )
+  }
   return (
     <Toolbar>
-      <Button
-        variant="ghost"
-        size="sm"
-        disabled={syncing}
-        aria-live="polite"
-        className="text-base-content/70"
-        onClick={onSync}
-        title={
-          syncing ? t("students.syncActiveHelp") : t("students.syncRosterTitle")
-        }
-      >
-        <SyncIcon
-          aria-hidden="true"
-          className={cx("size-4", syncing && "animate-spin")}
-        />
-        {syncing ? t("students.syncActive") : t("students.syncNow")}
-      </Button>
+      <div className="flex items-center gap-1">
+        {!syncing && captionParts.length > 0 ? (
+          <span className="hidden text-xs text-base-content/50 md:inline">
+            {captionParts.join(" · ")}
+          </span>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={syncing}
+          aria-live="polite"
+          className="text-base-content/70"
+          onClick={onSync}
+          title={
+            syncing
+              ? t("students.syncActiveHelp")
+              : t("students.syncRosterTitle")
+          }
+        >
+          <SyncIcon
+            aria-hidden="true"
+            className={cx("size-4", syncing && "animate-spin")}
+          />
+          {syncing ? t("students.syncActive") : t("students.syncNow")}
+        </Button>
+        <HelpTooltip help={t("students.syncHelp")} />
+      </div>
       {/* Selection cluster (count + Actions menu + Clear) — appears on the
           left, beside Sync, while rows are selected. Always mounted: it
           renders nothing when idle but owns the bulk-run modals. */}

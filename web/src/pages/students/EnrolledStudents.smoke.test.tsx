@@ -31,11 +31,26 @@ vi.mock("@/hooks/useTeamRoster", () => ({
 // test can observe the auto-sync.
 const inertMutation = { mutate: vi.fn(), isPending: false }
 const syncMutate = vi.fn()
+// Result of the last completed refresh (drives the toolbar caption);
+// per-test controllable.
+let mockSyncState: { isSuccess: boolean; data?: unknown } = {
+  isSuccess: false,
+}
 vi.mock("@/hooks/mutations/useDismissFailedInvite", () => ({
   useDismissFailedInvite: () => inertMutation,
 }))
 vi.mock("@/hooks/mutations/useSyncRoster", () => ({
-  useSyncRoster: () => ({ mutate: syncMutate, isPending: false }),
+  useSyncRoster: () => ({
+    mutate: syncMutate,
+    isPending: false,
+    ...mockSyncState,
+  }),
+}))
+// roster.csv's latest commit timestamp (the "Updated x ago" caption);
+// per-test controllable, null = unknown.
+let mockLastUpdated: Date | null = null
+vi.mock("@/hooks/useRosterLastUpdated", () => ({
+  useRosterLastUpdated: () => mockLastUpdated,
 }))
 vi.mock("@/hooks/mutations/useReinviteFailedInvite", () => ({
   useReinviteFailedInvite: () => inertMutation,
@@ -142,6 +157,8 @@ afterEach(() => {
   vi.clearAllMocks()
   mockIsOwner = true
   mockReconcilePending = false
+  mockSyncState = { isSuccess: false }
+  mockLastUpdated = null
   capturedCanManage = undefined
   capturedBulkDisabled = undefined
   capturedSelectedKeys = []
@@ -370,6 +387,8 @@ describe("EnrolledStudents — rendered phase views", () => {
     const locked = container.querySelector(".pointer-events-none")
     expect(locked).not.toBeNull()
     expect(locked?.getAttribute("aria-busy")).toBe("true")
+    // The translucent skeleton shimmer overlays the frozen table.
+    expect(screen.getByTestId("roster-sync-veil")).not.toBeNull()
     expect(capturedBulkDisabled).toBe(true)
     expect(syncMutate).not.toHaveBeenCalled()
   })
@@ -380,7 +399,54 @@ describe("EnrolledStudents — rendered phase views", () => {
 
     expect(screen.queryByText("students.syncActive")).toBeNull()
     expect(container.querySelector(".pointer-events-none")).toBeNull()
+    expect(screen.queryByTestId("roster-sync-veil")).toBeNull()
     expect(capturedBulkDisabled).toBe(false)
+  })
+
+  // The Refresh caption: roster.csv's last-commit age plus, once a refresh
+  // completed this session, whether it changed anything. Hidden mid-refresh
+  // (the button label carries the state then). The help tooltip explains
+  // what refreshing does.
+  it("captions the Refresh button with last-updated time and last-run outcome", () => {
+    useTeamRoster.mockReturnValue(populatedRoster)
+    mockLastUpdated = new Date(Date.now() - 5 * 60 * 1000)
+    mockSyncState = {
+      isSuccess: true,
+      data: {
+        noop: false,
+        addedUsernames: ["a"],
+        recoveredEmails: [],
+        removedEmails: ["b@x.io"],
+        recordedRecoveries: [],
+      },
+    }
+    render(renderView())
+
+    expect(screen.getByText(/students\.rosterUpdatedAgo/)).not.toBeNull()
+    expect(screen.getByText(/students\.syncResultChanges:2/)).not.toBeNull()
+    expect(screen.getByLabelText("students.syncHelp")).not.toBeNull()
+  })
+
+  it("reports a no-change refresh and hides the caption while refreshing", () => {
+    useTeamRoster.mockReturnValue(populatedRoster)
+    mockLastUpdated = new Date()
+    mockSyncState = {
+      isSuccess: true,
+      data: {
+        noop: true,
+        addedUsernames: [],
+        recoveredEmails: [],
+        removedEmails: [],
+        recordedRecoveries: [],
+      },
+    }
+    const { unmount } = render(renderView())
+    expect(screen.getByText(/students\.syncResultNoChanges/)).not.toBeNull()
+    unmount()
+
+    mockReconcilePending = true
+    render(renderView())
+    expect(screen.queryByText(/students\.rosterUpdatedAgo/)).toBeNull()
   })
 
   // The add-students actions live on the toolbar's right edge (not in the

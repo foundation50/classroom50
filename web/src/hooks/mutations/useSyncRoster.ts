@@ -21,6 +21,10 @@ export function useSyncRoster(org: string, classroom: string) {
       void queryClient.invalidateQueries({
         queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       })
+      // The pass may have committed — refresh the "Updated x ago" caption.
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.configFileCommit(org, rosterPath(classroom)),
+      })
     },
   })
 }

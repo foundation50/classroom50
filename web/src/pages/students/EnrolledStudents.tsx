@@ -33,6 +33,7 @@ import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/gith
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
+import { useRosterLastUpdated } from "@/hooks/useRosterLastUpdated"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
@@ -451,6 +452,19 @@ const EnrolledStudents = ({
   // state (teams, invitations, roster.csv) these actions read and write.
   const syncing = reconcilePending || syncMutation.isPending
 
+  // The Refresh caption's inputs: roster.csv's latest commit timestamp, and —
+  // after a refresh completed this session — how many rows it touched (0 =
+  // "no changes"). Both manual and drift auto-runs go through syncMutation.
+  const lastUpdatedAt = useRosterLastUpdated(org, classroom)
+  const lastSyncChanges =
+    syncMutation.isSuccess && syncMutation.data
+      ? syncMutation.data.noop
+        ? 0
+        : syncMutation.data.addedUsernames.length +
+          syncMutation.data.recoveredEmails.length +
+          syncMutation.data.removedEmails.length
+      : null
+
   // Auto-sync on open (see useRosterAutoSync): append team members lacking a
   // CSV row when there's drift; the caller owns runSync (and its toasts, which
   // skip on unmount). Gated on the COMBINED syncing flag: the on-entry
@@ -689,6 +703,8 @@ const EnrolledStudents = ({
           classroom={classroom}
           client={client}
           syncing={syncing}
+          lastUpdatedAt={lastUpdatedAt}
+          lastSyncChanges={lastSyncChanges}
           onSync={() => {
             // Explicit backfill: clear the post-unenroll suppression so the
             // teacher's deliberate Sync always runs (re-adding any drifted
@@ -724,15 +740,24 @@ const EnrolledStudents = ({
           toolbar above. While a sync is underway the whole region is inert —
           `inert` blocks keyboard/focus wholesale (pointer-events/opacity are
           the visual half), and the row/select-all controls are also disabled
-          so the freeze holds in DOMs that don't implement inert. */}
+          so the freeze holds in DOMs that don't implement inert. A translucent
+          skeleton shimmer overlays the dimmed rows so the freeze reads as
+          "refreshing" rather than broken. */}
       <div
         aria-busy={syncing || undefined}
         inert={syncing || undefined}
         className={cx(
-          "transition-opacity",
+          "relative transition-opacity",
           syncing && "pointer-events-none opacity-60",
         )}
       >
+        {syncing ? (
+          <div
+            aria-hidden="true"
+            data-testid="roster-sync-veil"
+            className="skeleton absolute inset-0 z-10 rounded-box opacity-40"
+          />
+        ) : null}
         <TableShell animate={false} padded ariaBusy={isLoading}>
           <caption className="sr-only">{t("students.table.caption")}</caption>
           <thead>
