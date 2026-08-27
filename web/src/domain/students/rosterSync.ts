@@ -28,8 +28,11 @@ import {
   resolveClassroomTeamSlugs,
   listClassroomMembersWithRoles,
 } from "./rosterPrimitives"
-import type { InviteReconcileState } from "./inviteRecoveries"
-import { pendingInviteEmails } from "./inviteRecoveries"
+import type { InviteReconcileState, RecoveredInvite } from "./inviteRecoveries"
+import {
+  collectInviteRecoveries,
+  pendingInviteEmails,
+} from "./inviteRecoveries"
 
 export type SyncRosterFromTeamResult = {
   // Team members newly appended to roster.csv as metadata rows.
@@ -38,6 +41,12 @@ export type SyncRosterFromTeamResult = {
   recoveredEmails: string[]
   // Email-only rows removed because no live invite team backs them.
   removedEmails: string[]
+  // Mappings recovered by the in-closure re-collect (a student who accepted
+  // AFTER the caller's collect pass), unknown to the caller's invite state.
+  // Returned so reconcileRoster can finalize (delete) their teams too once
+  // this commit has landed; a caller that ignores them just leaves the teams
+  // for the next pass to re-recover idempotently.
+  lateRecovered: RecoveredInvite[]
   // No missing members, no role changes, no invite fold — nothing committed.
   noop: boolean
 }
@@ -66,16 +75,21 @@ export type SyncRosterFromTeamResult = {
 //
 // The diff is recomputed INSIDE the retried closure (re-reading both teams and
 // CSV each attempt) so a 409 retry or concurrent edit can't reintroduce or
-// duplicate rows. Uses the same github_id -> username -> email fallback join as
-// the roster view when deciding "missing", so a pre-resolution row with an
-// empty github_id isn't treated as missing (which would append a duplicate).
+// duplicate rows. A member unknown to both the CSV and the caller's invite
+// state triggers one decision-time re-collect of the invite teams before any
+// append — a student who accepted AFTER the caller's collect must be folded
+// onto their invite-time row, never appended as a duplicate (#756). Uses the
+// same github_id -> username -> email fallback join as the roster view when
+// deciding "missing", so a pre-resolution row with an empty github_id isn't
+// treated as missing (which would append a duplicate).
 export async function syncRosterFromTeam(
   client: GitHubClient,
   input: {
     org: string
     classroom: string
     // Invite-reconcile state from collectInviteRecoveries. Omitted = plain
-    // team sync (no fold, no removals).
+    // team sync: no removals, and folds only what a decision-time re-collect
+    // (triggered by an unknown member) proves.
     invites?: InviteReconcileState
   },
 ): Promise<SyncRosterFromTeamResult> {
@@ -108,62 +122,105 @@ export async function syncRosterFromTeam(
     // mapping claims at most one row; borrow-only writes (blank fields filled,
     // teacher values win). A mapping with no row at all is appended below with
     // its email attached.
-    const recovered = invites?.recovered ?? []
-    const recByEmail = new Map(recovered.map((r) => [r.email, r]))
-    const recById = new Map(recovered.map((r) => [String(r.invitee.id), r]))
-    const recByLogin = new Map(
-      recovered.map((r) => [r.invitee.login.toLowerCase(), r]),
-    )
-    const claimed = new Set<(typeof recovered)[number]>()
-    const recoveredEmails: string[] = []
-    let inviteFolds = 0
-    const foldedStudents = currentStudents.map((s) => {
-      const emailKey = normalizeInviteEmail(s.email ?? "")
-      const idKey = parseGitHubId(s.github_id)
-      const match =
-        (emailKey ? recByEmail.get(emailKey) : undefined) ??
-        (idKey !== null ? recById.get(String(idKey)) : undefined) ??
-        recByLogin.get(s.username.trim().toLowerCase())
-      if (!match || claimed.has(match)) return s
-      claimed.add(match)
-      const next = normalizeStudentRow({
-        ...s,
-        username: s.username || match.invitee.login,
-        github_id: s.github_id || String(match.invitee.id),
-        email: s.email?.trim() || match.email,
+    const foldInvites = (recovered: RecoveredInvite[]) => {
+      const recByEmail = new Map(recovered.map((r) => [r.email, r]))
+      const recById = new Map(recovered.map((r) => [String(r.invitee.id), r]))
+      const recByLogin = new Map(
+        recovered.map((r) => [r.invitee.login.toLowerCase(), r]),
+      )
+      const claimed = new Set<RecoveredInvite>()
+      const recoveredEmails: string[] = []
+      let inviteFolds = 0
+      const foldedStudents = currentStudents.map((s) => {
+        const emailKey = normalizeInviteEmail(s.email ?? "")
+        const idKey = parseGitHubId(s.github_id)
+        const match =
+          (emailKey ? recByEmail.get(emailKey) : undefined) ??
+          (idKey !== null ? recById.get(String(idKey)) : undefined) ??
+          recByLogin.get(s.username.trim().toLowerCase())
+        if (!match || claimed.has(match)) return s
+        claimed.add(match)
+        const next = normalizeStudentRow({
+          ...s,
+          username: s.username || match.invitee.login,
+          github_id: s.github_id || String(match.invitee.id),
+          email: s.email?.trim() || match.email,
+        })
+        if (
+          next.username !== s.username ||
+          next.github_id !== s.github_id ||
+          next.email !== s.email
+        ) {
+          inviteFolds++
+          recoveredEmails.push(match.email)
+          return next
+        }
+        return s
       })
-      if (
-        next.username !== s.username ||
-        next.github_id !== s.github_id ||
-        next.email !== s.email
-      ) {
-        inviteFolds++
-        recoveredEmails.push(match.email)
-        return next
+      return {
+        recovered,
+        recByEmail,
+        foldedStudents,
+        recoveredEmails,
+        inviteFolds,
+        unclaimed: recovered.filter((r) => !claimed.has(r)),
       }
-      return s
-    })
-    const unclaimed = recovered.filter((r) => !claimed.has(r))
+    }
+
+    let inviteState = invites
+    let fold = foldInvites(inviteState?.recovered ?? [])
+
+    // --- Late-acceptance re-collect ------------------------------------------
+    // A member no roster row identifies and no recovered mapping covers is
+    // usually a student who accepted BETWEEN the caller's collect pass and this
+    // closure's team read (their invite team read as member-less then). Acting
+    // on the stale state would append an identity-only duplicate of their
+    // pending email row and strand that row for the reaper — the corruption of
+    // issue #756 — so re-collect once at decision time and fold with the fresh
+    // state. Genuinely new members (added to the team out of band) still fall
+    // through to the append below, at the cost of this one extra collect.
+    const hasUnknownMember = (f: ReturnType<typeof foldInvites>) => {
+      const { ids, logins } = rosterClaimSet(f.foldedStudents)
+      const recIds = new Set(f.recovered.map((r) => String(r.invitee.id)))
+      return members.some(
+        (m) =>
+          !ids.has(String(m.id)) &&
+          !logins.has(m.login.toLowerCase()) &&
+          !recIds.has(String(m.id)),
+      )
+    }
+    let lateRecovered: RecoveredInvite[] = []
+    if (hasUnknownMember(fold)) {
+      const fresh = await collectInviteRecoveries(client, { org, classroom })
+      const known = new Set((invites?.recovered ?? []).map((r) => r.slug))
+      lateRecovered = fresh.recovered.filter((r) => !known.has(r.slug))
+      inviteState = fresh
+      fold = foldInvites(fresh.recovered)
+    }
+    const { foldedStudents, recByEmail, recoveredEmails, unclaimed } = fold
+    const inviteFolds = fold.inviteFolds
 
     // --- Dead email-row removal ---------------------------------------------
     // An email-ONLY row (no username, no valid github_id) exists on the roster
     // only while a live invite backs it; once the invite is cancelled, expired,
-    // or GC'd, the row goes too — in this same commit. Two gates keep that from
-    // eating a legitimate row: the invite-reconcile state must be trustworthy
-    // (a degraded invite-team read must never masquerade as "no live invites"),
-    // and every candidate is confirmed against GitHub's CURRENT pending
-    // invitations. That confirmation is read HERE, inside the retried closure,
-    // because the collect pass snapshotted teams BEFORE this CSV read — an
-    // invite sent in between has its fresh row in `currentStudents` but no
+    // or GC'd, the row goes too — in this same commit. Removals are exclusive
+    // to the full reconcile (the caller passed its invite state): a plain team
+    // sync proves nothing about the invite lifecycle. Two further gates keep
+    // one from eating a legitimate row: the invite-reconcile state must be
+    // trustworthy (a degraded invite-team read must never masquerade as "no
+    // live invites"), and every candidate is confirmed against GitHub's CURRENT
+    // pending invitations. That confirmation is read HERE, inside the retried
+    // closure, because the collect pass snapshotted teams BEFORE this CSV read
+    // — an invite sent in between has its fresh row in `currentStudents` but no
     // entry in the snapshot, and must not be reaped for it.
     const deadRows = new Set<StudentCsvRow>()
-    if (invites?.trusted) {
+    if (invites && inviteState?.trusted) {
       for (const s of foldedStudents) {
         if (s.username.trim()) continue
         if (resolveGitHubId(s.github_id) !== null) continue
         const emailKey = normalizeInviteEmail(s.email ?? "")
         if (!emailKey) continue // a blank junk row is not this pass's call
-        if (invites.liveInviteEmails.has(emailKey)) continue
+        if (inviteState.liveInviteEmails.has(emailKey)) continue
         if (recByEmail.has(emailKey)) continue
         deadRows.add(s)
       }
@@ -292,6 +349,7 @@ export async function syncRosterFromTeam(
         addedUsernames: [],
         recoveredEmails: [],
         removedEmails: [],
+        lateRecovered,
         noop: true,
       }
     }
@@ -348,6 +406,7 @@ export async function syncRosterFromTeam(
       addedUsernames: addedRows.map((r) => r.username),
       recoveredEmails,
       removedEmails,
+      lateRecovered,
       noop: false,
     }
   })

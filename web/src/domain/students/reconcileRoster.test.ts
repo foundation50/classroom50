@@ -44,6 +44,7 @@ beforeEach(() => {
     addedUsernames: [],
     recoveredEmails: ["alice@example.com"],
     removedEmails: [],
+    lateRecovered: [],
     noop: false,
   })
   finalizeInviteRecoveries.mockResolvedValue(undefined)
@@ -68,6 +69,7 @@ describe("reconcileRoster", () => {
         addedUsernames: ["alice"],
         recoveredEmails: ["alice@example.com"],
         removedEmails: ["dead@x"],
+        lateRecovered: [],
         noop: false,
       }
     })
@@ -96,9 +98,34 @@ describe("reconcileRoster", () => {
       addedUsernames: ["alice"],
       recoveredEmails: ["alice@example.com"],
       removedEmails: ["dead@x"],
+      lateRecovered: [],
       noop: false,
       deletedStaleTeams: 1,
     })
+  })
+
+  it("finalizes late recoveries the sync collected itself (mid-pass acceptance)", async () => {
+    const LATE = {
+      email: "bob@example.com",
+      invitee: { id: 3, login: "bob" },
+      slug: "invite-bbbbbbbbbbbbbbbb",
+    }
+    syncRosterFromTeam.mockResolvedValue({
+      addedUsernames: [],
+      recoveredEmails: ["bob@example.com"],
+      removedEmails: [],
+      lateRecovered: [LATE],
+      noop: false,
+    })
+
+    await reconcileRoster(client, INPUT)
+    // The late mapping's team is torn down with the rest — its fold landed in
+    // the same commit, so leaving it would only defer to the next pass.
+    expect(finalizeInviteRecoveries).toHaveBeenCalledWith(
+      client,
+      { org: "org", classroom: "cs101" },
+      [RECOVERED, LATE],
+    )
   })
 
   it("does NOT delete recovered teams when the sync throws (re-recovered next pass)", async () => {

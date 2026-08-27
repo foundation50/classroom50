@@ -2531,6 +2531,12 @@ const makeTeamClient = (opts: {
         if (!u) return Promise.reject(new Error(`404 no such user: ${login}`))
         return Promise.resolve({ login, name: null, email: null, ...u })
       }
+      // Org team list (GET /orgs/{org}/teams?page=..) — enumerated by the
+      // sync's decision-time invite re-collect when a team member has no
+      // roster row. No invite teams exist in these harnesses.
+      if (/\/orgs\/[^/]+\/teams\?/.test(path)) {
+        return Promise.resolve([])
+      }
       // Team-add: PUT .../teams/{slug}/memberships/{login}
       if (path.includes("/teams/") && path.includes("/memberships/")) {
         const login = decodeURIComponent(path.split("/memberships/")[1])

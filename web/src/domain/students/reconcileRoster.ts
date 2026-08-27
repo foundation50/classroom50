@@ -25,8 +25,10 @@ export type ReconcileRosterResult = SyncRosterFromTeamResult & {
 //      onto their rows, removes email-only rows no live invite team backs,
 //      appends missing team members, and reconciles roles/ids.
 //   3. finalize: delete the recovered mappings' teams only AFTER that commit
-//      landed, skipping any slug a fresh pending invitation now maps to (a
-//      same-email re-invite adopts the same deterministic slug).
+//      landed — including any the sync recovered itself via its decision-time
+//      re-collect (a student who accepted after step 1's snapshot) — skipping
+//      any slug a fresh pending invitation now maps to (a same-email re-invite
+//      adopts the same deterministic slug).
 // Throws what syncRosterFromTeam throws (archived classroom, malformed CSV,
 // transient write failures); the collect half is never-throw by contract.
 export async function reconcileRoster(
@@ -36,7 +38,10 @@ export async function reconcileRoster(
   const { org, classroom } = input
   const invites = await collectInviteRecoveries(client, { org, classroom })
   const sync = await syncRosterFromTeam(client, { org, classroom, invites })
-  await finalizeInviteRecoveries(client, { org, classroom }, invites.recovered)
+  await finalizeInviteRecoveries(client, { org, classroom }, [
+    ...invites.recovered,
+    ...sync.lateRecovered,
+  ])
   return { ...sync, deletedStaleTeams: invites.deletedStale }
 }
 

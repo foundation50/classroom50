@@ -4,7 +4,11 @@ import {
   listInviteTeams,
   readInviteTeam,
 } from "@/github-core/mutations"
-import { listOrgInvitations, listTeamMembers } from "@/github-core/queries"
+import {
+  getTeamMembershipState,
+  listOrgInvitations,
+  listTeamMembers,
+} from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { inviteTeamName, normalizeInviteEmail } from "@/util/inviteTeam"
 import { log, resolveClassroomTeamSlugs } from "./rosterPrimitives"
@@ -64,7 +68,10 @@ export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 //     team is left in place for the caller to delete after the roster commit
 //     lands;
 //   - one member on NO classroom team -> unenrolled after accepting; delete the
-//     team now so the mapping can't resurrect a removed student;
+//     team now so the mapping can't resurrect a removed student. Absence is
+//     re-proven with decision-time point reads first — the enrollment snapshot
+//     is cached for the whole pass, so a student accepting mid-pass would
+//     otherwise be misread as unenrolled and their mapping destroyed (#756);
 //   - zero members -> the invite is live (row kept), unless the team aged past
 //     the GC guard AND no pending org invitation still maps to it (cancelled/
 //     expired) -> delete;
@@ -98,10 +105,17 @@ export async function collectInviteRecoveries(
   // derived slug would 404 -> [] and make an enrolled invitee look unenrolled).
   // A read failure propagates to the per-team catch, never silently reads as
   // "member of nothing".
+  let classroomSlugs: Awaited<
+    ReturnType<typeof resolveClassroomTeamSlugs>
+  > | null = null
+  const loadClassroomSlugs = async () => {
+    classroomSlugs ??= await resolveClassroomTeamSlugs(client, org, classroom)
+    return classroomSlugs
+  }
   let enrolledIds: Set<number> | null = null
   const loadEnrolledIds = async (): Promise<Set<number>> => {
     if (enrolledIds) return enrolledIds
-    const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
+    const slugs = await loadClassroomSlugs()
     const rosters = await Promise.all(
       [slugs.student, ...Object.values(slugs.staff)].map((slug) =>
         listTeamMembers(client, org, slug),
@@ -109,6 +123,29 @@ export async function collectInviteRecoveries(
     )
     enrolledIds = new Set(rosters.flat().map((m) => m.id))
     return enrolledIds
+  }
+
+  // Decision-time proof for the ONE irreversible action in this pass: is this
+  // login on any classroom team RIGHT NOW? The cached snapshot above predates
+  // most of the loop, so a student who accepts while it iterates is absent
+  // from it while already sitting on their invite team — deleting on that
+  // stale evidence destroys the only record of their email <-> account mapping
+  // (issue #756). Point reads, not a re-list: the snapshot lists are exactly
+  // what went stale. "unknown" (a failed read) must keep the team.
+  const confirmEnrollment = async (
+    login: string,
+  ): Promise<"enrolled" | "unenrolled" | "unknown"> => {
+    try {
+      const slugs = await loadClassroomSlugs()
+      for (const slug of [slugs.student, ...Object.values(slugs.staff)]) {
+        const state = await getTeamMembershipState(client, org, slug, login)
+        if (state !== null) return "enrolled"
+      }
+      return "unenrolled"
+    } catch (err) {
+      log.error("invite reconcile: enrollment re-check failed", { login, err })
+      return "unknown"
+    }
   }
 
   // Live invite-team slugs, fetched lazily only when a member-less team is old
@@ -182,11 +219,23 @@ export async function collectInviteRecoveries(
         continue
       }
       if (!enrolled.has(invitee.id)) {
-        // Accepted, then removed from the classroom: the invite lifecycle is
-        // over. Delete the team so its record can't resurrect the row later.
-        await deleteInviteTeam(client, org, slug)
-        deletedStale += 1
-        continue
+        // Absent from the snapshot is NOT proof of unenrollment — a student
+        // who accepted mid-pass looks exactly like this. Only a decision-time
+        // re-check may authorize the irreversible delete; a confirmed stale
+        // snapshot means they enrolled since it was taken, so recover them.
+        const confirmed = await confirmEnrollment(invitee.login)
+        if (confirmed === "unknown") {
+          trusted = false
+          continue
+        }
+        if (confirmed === "unenrolled") {
+          // Accepted, then removed from the classroom: the invite lifecycle is
+          // over. Delete the team so its record can't resurrect the row later.
+          await deleteInviteTeam(client, org, slug)
+          deletedStale += 1
+          continue
+        }
+        enrolled.add(invitee.id)
       }
 
       recovered.push({
