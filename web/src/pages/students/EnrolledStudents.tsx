@@ -803,7 +803,7 @@ const EnrolledStudents = ({
                   variant="outline"
                   size="sm"
                   disabled={syncing}
-                  title={t("students.inviteStudents")}
+                  title={t("students.shareLinksTitle")}
                   onClick={addActions.onInviteLinks}
                 >
                   <ShareAndroidIcon aria-hidden="true" className="size-4" />

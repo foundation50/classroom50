@@ -83,7 +83,7 @@ const InviteLinksModal = ({
       open={open}
       onClose={onClose}
       size="lg"
-      title={t("students.inviteStudents")}
+      title={t("students.shareLinksTitle")}
       subtitle={t("students.inviteLinksHint")}
       footer={
         <Button variant="ghost" onClick={onClose}>
