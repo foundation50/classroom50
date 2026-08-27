@@ -58,7 +58,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 })
 // Child surfaces with their own tests + provider needs; stub so the smoke test
 // renders EnrolledStudents' own markup provider-free. RosterMemberModal's stub
-// captures its canManage prop so the owner-gate wiring test can assert it.
+// captures its canManage prop so the owner-gate wiring test can assert it; the
+// bulk bar's stub captures `disabled` so the sync-lock wiring is assertable.
 let capturedCanManage: boolean | undefined
 vi.mock("@/pages/students/RosterMemberModal", () => ({
   default: (props: { canManage?: boolean }) => {
@@ -66,8 +67,22 @@ vi.mock("@/pages/students/RosterMemberModal", () => ({
     return null
   },
 }))
+let capturedBulkDisabled: boolean | undefined
 vi.mock("@/pages/students/RosterBulkActionsBar", () => ({
-  default: () => null,
+  default: (props: { disabled?: boolean }) => {
+    capturedBulkDisabled = props.disabled
+    return null
+  },
+}))
+
+// The on-entry classroom reconcile's live signal, read via the optional
+// context hook (null off-provider). Per-test controllable so the sync-banner
+// and table-lock wiring can flip it.
+let mockReconcilePending = false
+vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
+  useClassroomRoleContextOptional: () => ({
+    reconcilePending: mockReconcilePending,
+  }),
 }))
 
 // Owner-gate: EnrolledStudents forwards canManage={isOwner} to RosterMemberModal
@@ -121,7 +136,9 @@ afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   mockIsOwner = true
+  mockReconcilePending = false
   capturedCanManage = undefined
+  capturedBulkDisabled = undefined
 })
 
 describe("EnrolledStudents — rendered phase views", () => {
@@ -287,5 +304,46 @@ describe("EnrolledStudents — rendered phase views", () => {
 
     // Last-name order: Adams (Zed) before Brown (Amy).
     expect(order()).toBe("zed-first")
+  })
+
+  // The Sync button is a standing affordance now (not drift-gated): always in
+  // the toolbar on a populated roster, and a click clears the post-unenroll
+  // suppression before running so a deliberate sync is never a silent no-op.
+  it("always offers the Sync button and clears suppression on click", () => {
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(renderView())
+
+    const button = screen.getByRole("button", { name: /students\.syncNow/ })
+    expect((button as HTMLButtonElement).disabled).toBe(false)
+    fireEvent.click(button)
+    expect(suppressedLogins.clear).toHaveBeenCalledTimes(1)
+    expect(syncMutate).toHaveBeenCalledTimes(1)
+  })
+
+  // While the on-entry reconcile runs, the Sync button doubles as the progress
+  // indicator (label swaps, disabled) and the roster locks: table region inert
+  // (dimmed + pointer-events off + aria-busy), bulk bar fieldset-disabled.
+  it("swaps the Sync button to its syncing state and locks the table while the reconcile runs", () => {
+    mockReconcilePending = true
+    useTeamRoster.mockReturnValue(populatedRoster)
+    const { container } = render(renderView())
+
+    const button = screen.getByRole("button", { name: /students\.syncActive/ })
+    expect((button as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.queryByText("students.syncNow")).toBeNull()
+    const locked = container.querySelector(".pointer-events-none")
+    expect(locked).not.toBeNull()
+    expect(locked?.getAttribute("aria-busy")).toBe("true")
+    expect(capturedBulkDisabled).toBe(true)
+    expect(syncMutate).not.toHaveBeenCalled()
+  })
+
+  it("keeps the roster interactive when no sync is running", () => {
+    useTeamRoster.mockReturnValue(populatedRoster)
+    const { container } = render(renderView())
+
+    expect(screen.queryByText("students.syncActive")).toBeNull()
+    expect(container.querySelector(".pointer-events-none")).toBeNull()
+    expect(capturedBulkDisabled).toBe(false)
   })
 })

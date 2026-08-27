@@ -22,7 +22,7 @@ vi.mock("@/auth/useGithubAuth", () => ({
 // role resolution, so stub it out here (its own behavior is covered in
 // useClassroomReconcile.test.tsx).
 vi.mock("@/hooks/useClassroomReconcile", () => ({
-  useClassroomReconcile: () => {},
+  useClassroomReconcile: () => ({ isPending: false }),
 }))
 
 import {

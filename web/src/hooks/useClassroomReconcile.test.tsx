@@ -88,6 +88,25 @@ describe("useClassroomReconcile", () => {
     expect(reconcile).not.toHaveBeenCalled()
   })
 
+  // The returned isPending is what the roster page's "sync in progress"
+  // banner/lock hangs off — pin the full lifecycle: idle -> pending -> settled.
+  it("exposes the run's in-flight state via isPending", async () => {
+    let settle!: (value: ClassroomReconcileResult) => void
+    reconcile.mockImplementation(
+      () =>
+        new Promise<ClassroomReconcileResult>((resolve) => {
+          settle = resolve
+        }),
+    )
+    const { result } = renderHook(
+      () => useClassroomReconcile("org", "cs101", true),
+      { wrapper: wrapper() },
+    )
+    await waitFor(() => expect(result.current.isPending).toBe(true))
+    settle(healthy)
+    await waitFor(() => expect(result.current.isPending).toBe(false))
+  })
+
   it("fires once per (org, classroom) with the classroom as a variable", async () => {
     reconcile.mockResolvedValue(healthy)
     renderHook(() => useClassroomReconcile("org", "cs101", true), {

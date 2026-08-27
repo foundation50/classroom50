@@ -52,7 +52,7 @@ export function useBestEffortOwnerReconcile<TResult>({
   isPermanent = defaultIsPermanent,
   isTransientSuccess,
   logSkip,
-}: BestEffortOwnerReconcileConfig<TResult>): void {
+}: BestEffortOwnerReconcileConfig<TResult>): { isPending: boolean } {
   const inFlight = useRef<Set<string>>(new Set())
 
   const reconcile = useMutation<TResult, Error, ReconcileVars>({
@@ -80,6 +80,10 @@ export function useBestEffortOwnerReconcile<TResult>({
     inFlight.current.add(key)
     mutate({ org, classroom })
   }, [enabled, org, classroom, mutate])
+
+  // The run's live in-flight signal, so a page can show "reconciling" state
+  // (the reconcile itself stays best-effort and toast-free).
+  return { isPending: reconcile.isPending }
 }
 
 export default useBestEffortOwnerReconcile

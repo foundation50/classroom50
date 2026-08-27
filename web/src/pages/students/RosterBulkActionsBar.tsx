@@ -111,6 +111,7 @@ const RosterBulkActionsBar = ({
   groupBySection,
   onGroupBySectionChange,
   canGroupBySection = false,
+  disabled = false,
 }: {
   org: string
   classroom: string
@@ -136,6 +137,9 @@ const RosterBulkActionsBar = ({
   groupBySection?: boolean
   onGroupBySectionChange?: (value: boolean) => void
   canGroupBySection?: boolean
+  // Freeze every control (a roster sync is rewriting the state these actions
+  // read/write). A <fieldset disabled> so keyboard activation is off too.
+  disabled?: boolean
 }) => {
   const { t } = useTranslation()
 
@@ -400,132 +404,136 @@ const RosterBulkActionsBar = ({
 
   return (
     <>
-      <Toolbar
-        header
-        className={`transition-colors ${hasSelection ? "bg-base-200/60" : ""}`}
-      >
-        <Toolbar.Selection
-          allSelected={allSelected}
-          someSelected={someSelected}
-          onToggleSelectAll={onToggleSelectAll}
-          selectAllAriaLabel={t("students.bulk.selectAll")}
-          label={
-            hasSelection
-              ? t("students.bulk.selectedCount", { count: selectedRows.length })
-              : t("students.bulk.memberCount", { count: totalCount })
-          }
-          aux={
-            canGroupBySection && onGroupBySectionChange ? (
-              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-sm"
-                  checked={Boolean(groupBySection)}
-                  onChange={(e) => onGroupBySectionChange(e.target.checked)}
-                />
-                {t("students.groupBySection")}
-              </label>
-            ) : null
-          }
-          idleActions={
-            addActions ? (
-              <div className="join ms-auto">
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.addTitle")}
-                  title={t("students.addTitle")}
-                  onClick={addActions.onAddStudent}
-                >
-                  <PlusIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.uploadTitle")}
-                  title={t("students.uploadTitle")}
-                  onClick={addActions.onUploadRoster}
-                >
-                  <UploadIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.inviteStudents")}
-                  title={t("students.inviteStudents")}
-                  onClick={addActions.onInviteLinks}
-                >
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                </Button>
-              </div>
-            ) : null
-          }
+      <fieldset disabled={disabled} className="m-0 min-w-0 border-0 p-0">
+        <Toolbar
+          header
+          className={`transition-colors ${hasSelection ? "bg-base-200/60" : ""}`}
         >
-          {hasSelection ? (
-            <>
-              <div className="join">
-                <Button
-                  size="sm"
-                  className="join-item"
-                  disabled={invitableSelected === 0}
-                  title={
-                    invitableSelected === 0
-                      ? t("students.bulk.inviteNoneInvitable")
-                      : t("students.bulk.inviteSelected", {
-                          count: invitableSelected,
-                        })
-                  }
-                  onClick={() => setConfirmingInvite(true)}
-                >
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                  {t("students.bulk.invite")}
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  disabled={cancellableSelected.length === 0}
-                  title={
-                    cancellableSelected.length === 0
-                      ? t("students.bulk.cancelNoneCancellable")
-                      : t("students.bulk.cancelSelected", {
-                          count: cancellableSelected.length,
-                        })
-                  }
-                  onClick={() => setConfirmingCancel(true)}
-                >
-                  {t("students.bulk.cancelInvite")}
-                </Button>
+          <Toolbar.Selection
+            allSelected={allSelected}
+            someSelected={someSelected}
+            onToggleSelectAll={onToggleSelectAll}
+            selectAllAriaLabel={t("students.bulk.selectAll")}
+            label={
+              hasSelection
+                ? t("students.bulk.selectedCount", {
+                    count: selectedRows.length,
+                  })
+                : t("students.bulk.memberCount", { count: totalCount })
+            }
+            aux={
+              canGroupBySection && onGroupBySectionChange ? (
+                <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
+                  <input
+                    type="checkbox"
+                    className="toggle toggle-sm"
+                    checked={Boolean(groupBySection)}
+                    onChange={(e) => onGroupBySectionChange(e.target.checked)}
+                  />
+                  {t("students.groupBySection")}
+                </label>
+              ) : null
+            }
+            idleActions={
+              addActions ? (
+                <div className="join ms-auto">
+                  <Button
+                    size="sm"
+                    className="join-item"
+                    aria-label={t("students.addTitle")}
+                    title={t("students.addTitle")}
+                    onClick={addActions.onAddStudent}
+                  >
+                    <PlusIcon aria-hidden="true" className="size-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="join-item"
+                    aria-label={t("students.uploadTitle")}
+                    title={t("students.uploadTitle")}
+                    onClick={addActions.onUploadRoster}
+                  >
+                    <UploadIcon aria-hidden="true" className="size-4" />
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="join-item"
+                    aria-label={t("students.inviteStudents")}
+                    title={t("students.inviteStudents")}
+                    onClick={addActions.onInviteLinks}
+                  >
+                    <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                  </Button>
+                </div>
+              ) : null
+            }
+          >
+            {hasSelection ? (
+              <>
+                <div className="join">
+                  <Button
+                    size="sm"
+                    className="join-item"
+                    disabled={invitableSelected === 0}
+                    title={
+                      invitableSelected === 0
+                        ? t("students.bulk.inviteNoneInvitable")
+                        : t("students.bulk.inviteSelected", {
+                            count: invitableSelected,
+                          })
+                    }
+                    onClick={() => setConfirmingInvite(true)}
+                  >
+                    <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                    {t("students.bulk.invite")}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="join-item"
+                    disabled={cancellableSelected.length === 0}
+                    title={
+                      cancellableSelected.length === 0
+                        ? t("students.bulk.cancelNoneCancellable")
+                        : t("students.bulk.cancelSelected", {
+                            count: cancellableSelected.length,
+                          })
+                    }
+                    onClick={() => setConfirmingCancel(true)}
+                  >
+                    {t("students.bulk.cancelInvite")}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="join-item text-error hover:bg-error/10"
+                    aria-label={t("students.bulk.unenrollSelected", {
+                      count: unenrollableSelected.length,
+                    })}
+                    title={t("students.bulk.unenrollSelected", {
+                      count: unenrollableSelected.length,
+                    })}
+                    disabled={unenrollableSelected.length === 0}
+                    onClick={() => setConfirmingUnenroll(true)}
+                  >
+                    {t("students.bulk.unenroll")}
+                  </Button>
+                </div>
+
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="join-item text-error hover:bg-error/10"
-                  aria-label={t("students.bulk.unenrollSelected", {
-                    count: unenrollableSelected.length,
-                  })}
-                  title={t("students.bulk.unenrollSelected", {
-                    count: unenrollableSelected.length,
-                  })}
-                  disabled={unenrollableSelected.length === 0}
-                  onClick={() => setConfirmingUnenroll(true)}
+                  shape="square"
+                  aria-label={t("students.bulk.clearSelection")}
+                  title={t("students.bulk.clearSelection")}
+                  onClick={onClearSelection}
                 >
-                  {t("students.bulk.unenroll")}
+                  <XIcon aria-hidden="true" className="size-4" />
                 </Button>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                shape="square"
-                aria-label={t("students.bulk.clearSelection")}
-                title={t("students.bulk.clearSelection")}
-                onClick={onClearSelection}
-              >
-                <XIcon aria-hidden="true" className="size-4" />
-              </Button>
-            </>
-          ) : null}
-        </Toolbar.Selection>
-      </Toolbar>
+              </>
+            ) : null}
+          </Toolbar.Selection>
+        </Toolbar>
+      </fieldset>
 
       <ConfirmModal
         open={confirmingUnenroll}
