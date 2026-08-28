@@ -1,8 +1,9 @@
 # Assignment Templates
 
 An assignment's starter code is a normal GitHub repository with the **Template
-repository** flag turned on. `gh student accept` creates a fresh private copy
-for each student; `gh student submit` re-fetches a couple of files from it on
+repository** flag turned on. `gh student accept` creates a fresh copy for
+each student (private, unless the assignment's **Repository visibility** is
+public); `gh student submit` re-fetches a couple of files from it on
 every submission. This page describes the expected layout.
 
 > [!NOTE]

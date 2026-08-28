@@ -149,6 +149,13 @@ the `publish-pages.yaml` workflow to run once** — push to the default branch o
 trigger it from the Actions tab. The CLI prints the Pages URL
 (`https://<org>.github.io/classroom50/`) after `init`.
 
+If the organization's Pages site uses a custom domain, GitHub answers
+`github.io` requests with a redirect that students' browsers reject. Set the
+classroom's **Custom Pages domain** in the web app so browsers fetch from the
+custom domain directly; server-side readers (the CLIs and Actions workflows)
+follow the redirect and are unaffected. See
+[Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain).
+
 If `init` warns that the org workflow-token policy or reusable-workflow access is
 too restrictive, apply them yourself:
 
@@ -266,7 +273,7 @@ browser itself must reach these hosts.
 | `classroom50.fifty-foundation.workers.dev` | Web app | The GitHub proxy (OAuth sign-in and repo downloads). See [The GitHub proxy](#the-github-proxy) below. |
 | `github.com` | Web app, CLI | OAuth sign-in and CLI authentication. |
 | `api.github.com` | Web app, CLI, Actions | All GitHub REST API calls (classrooms, rosters, assignments, grading). |
-| `*.github.io` | Web app, Actions | The org's Pages config (`<org>.github.io/classroom50/…`): the assignment manifest, autograders, and the runner. |
+| `*.github.io` | Web app, Actions | The org's Pages config (`<org>.github.io/classroom50/…`): the assignment manifest, autograders, and the runner. If the org's Pages site uses a custom domain, allow that domain too — see [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain). |
 | `codeload.github.com` | Web app | Repo archive (zip) downloads, reached through the proxy. |
 | `www.githubstatus.com` | Web app | GitHub status check for the outage banner (best-effort). |
 

@@ -56,6 +56,12 @@ Accepting creates a GitHub repository for you, named after the classroom, the
 assignment, and your username — for example,
 `introduction-to-computer-science-hello-assignment-username`.
 
+> [!NOTE]
+> Your repository is private unless your teacher configured the assignment to
+> create public repositories. In that case the accept page tells you before
+> you accept: anyone on the internet will be able to see your work, including
+> your code, commits, and name.
+
 Afterward, your organization page lists the assignment repository you now own:
 
 ![One assignment](images/web_assignments_student.png)

@@ -13,7 +13,7 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 | `whoami` | Print the authenticated GitHub user. |
 | `login` | Log in with the unified Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`) — the same set `gh teacher login` requests, so one sign-in covers both. A student only exercises `read:org`, `repo`, and `workflow`. |
 | `logout` | Log out via `gh auth logout`. |
-| `accept <org> <classroom> <assignment>` | Accept an assignment: auto-accept the org invite, create your private repo, and set up autograding. |
+| `accept <org> <classroom> <assignment>` | Accept an assignment: auto-accept the org invite, create your assignment repo, and set up autograding. |
 | `invite <org>/<repo> <username>` | Invite a classmate or TA to your repo with `push` permission. |
 | `submit` | Snapshot the current branch and push it for grading. |
 
@@ -24,9 +24,14 @@ gh student accept <org> <classroom> <assignment>
 gh student accept <org> <classroom> <assignment> --key <access-key>
 ```
 
-Creates a private repo at `<org>/<classroom>-<assignment>-<username>` (a copy of
+Creates a repo at `<org>/<classroom>-<assignment>-<username>` (a copy of
 the assignment's template, or a README-initialized repo if it's template-less),
-then prints a `git clone` command.
+then prints a `git clone` command. The repo is **private** unless the
+assignment opts into public repos (`repo_visibility: public`); then accept
+warns you before creating it that your work — code, commits, and name — will
+be visible to anyone on the internet. If the organization doesn't let you
+create public repositories, accept creates a private repo instead and notes
+that your teacher can make it public later.
 
 **`--key <access-key>`** — access key for a classroom that uses an unlisted
 URL (provided by your teacher); omit for normal classrooms.
@@ -43,7 +48,9 @@ URL (provided by your teacher); omit for normal classrooms.
    *before* creating the repo, so a fetch failure leaves no half-baked repo).
 4. Creates the repo — from the template, a README-initialized (`auto_init`)
    repo, or (for an `empty_repo` assignment) a truly bare repo with steps 3, 6,
-   and 7 skipped.
+   and 7 skipped. Private by default; public when the assignment sets
+   `repo_visibility: public`, with the warning printed before creation and a
+   fallback to private when org policy denies the public create.
 5. Applies the assignment's repository features (Issues, Wiki, Projects, Pull
    requests). By default each feature **inherits the template's setting**
    (GitHub's template-generate doesn't copy them, so accept reads the template
@@ -113,7 +120,8 @@ grading. Hand-pushing any `submit/*` tag works the same.
 2. Copies submittable files (tracked + untracked-not-ignored) into a temp
    worktree, so build artifacts don't pollute the submission.
 3. Fetches the teacher's `.gitignore` and `.github/` from the template.
-4. Commits (with your GitHub login + noreply email) and pushes to the default
+4. Commits (with your git `user.name` and `user.email`; unset fields fall
+   back to your GitHub login + noreply email) and pushes to the default
    branch as a fast-forward — no force-push; prior commits stay reachable.
 5. On a submit-only assignment, pushes the `submit/…` tag at the new commit
    (reusing an existing tag if the commit already has one, so a retry never
