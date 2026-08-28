@@ -2,11 +2,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
 
-// Direct tests for the members selection cluster's destructive routing: which
-// orchestrator each menu route dispatches — classroom remove, the #664
-// escalation checkbox (remove-org over the FULL selection), and the direct
-// org action — plus the per-open checkbox reset and the disabled remove entry
-// when nobody in the selection is removable.
+// Direct tests for the members selection cluster's destructive routing:
+// which orchestrator each menu route dispatches (classroom remove, the #664
+// escalation, the direct org action), the per-open checkbox reset, and the
+// disabled remove entry for roster-less selections.
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -20,8 +19,8 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 // ConfirmModal stub: renders children (the picker/checkbox slot) plus a
-// confirm trigger while open, honoring confirmDisabled — routing is under
-// test here; the real modal's step machinery has its own tests.
+// confirm trigger, honoring confirmDisabled — routing is under test here; the
+// real modal's step machinery has its own tests.
 vi.mock("@/components/modals", () => ({
   ConfirmModal: (props: {
     open: boolean

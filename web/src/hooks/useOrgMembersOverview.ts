@@ -38,9 +38,8 @@ export type OrgMembersOverview = {
   // keys from, so optimistic team-cache writes on the Members page target the
   // cache this hook reads (a collided classroom's real slug can differ).
   teamSlugByClassroom: Map<string, string>
-  // classroom path -> display name from classroom.json. A classroom whose
-  // metadata hasn't loaded (or carries no name) is absent — callers fall back
-  // to the path.
+  // classroom path -> display name from classroom.json. Absent while metadata
+  // hasn't loaded (or carries no name) — callers fall back to the path.
   displayNameByClassroom: Map<string, string>
   // Per-classroom roster read failures (a 404/parse error contributes no
   // students rather than failing the whole page).

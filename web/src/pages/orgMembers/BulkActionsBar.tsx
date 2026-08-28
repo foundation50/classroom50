@@ -57,22 +57,18 @@ export type BulkDoneInput =
     }
   | { action: "remove"; classroom: string; affectedKeys: string[] }
   // Org-wide removal: affectedKeys are the CONFIRMED-removed rows (they drive
-  // the members-cache drop); `unenrolled` carries what each non-skipped row
-  // was ACTUALLY unenrolled from — including rows whose org DELETE then
-  // failed, whose rosters changed server-side all the same.
+  // the members-cache drop); `unenrolled` is what each non-skipped row was
+  // ACTUALLY unenrolled from — a failed org DELETE still changed its rosters.
   | {
       action: "remove-org"
       affectedKeys: string[]
       unenrolled: Array<{ key: string; classrooms: string[] }>
     }
 
-// The members toolbar's selection cluster (count + classroom picker +
-// Add/Remove + Clear), shown only while rows are selected — mirroring the
-// roster toolbar's cluster. Owns its run modal (progress -> results) and
-// drives the bulk orchestrators. The Remove confirm carries the "also remove
-// from the organization" opt-in (#664), which escalates the run from a
-// classroom-scoped unenroll to a full org removal. On success it calls onDone
-// so the page can optimistically seed caches.
+// The members toolbar's selection cluster (count + Actions menu + Clear, the
+// roster recipe), shown only while rows are selected. Owns the confirm/run
+// modals and the #664 escalation state; onDone hands the outcome to the page
+// for cache seeding.
 const BulkActionsBar = ({
   org,
   selectedRows,
@@ -97,10 +93,8 @@ const BulkActionsBar = ({
   const bulkRemove = useBulkRemoveFromClassroom(org)
   const bulkRemoveOrg = useBulkRemoveFromOrg(org)
 
-  // The classroom a menu action targets, set when its submenu entry is picked
-  // and consumed by that action's confirm + run. `target` is the config-repo
-  // path (what the writers key on); `targetName` is the display name the
-  // confirm/result copy shows.
+  // The classroom a menu action targets: `target` is the config-repo path
+  // (what the writers key on); `targetName` the display name copy shows.
   const [target, setTarget] = useState("")
   const [action, setAction] = useState<"add" | "remove" | "remove-org" | null>(
     null,
@@ -113,10 +107,9 @@ const BulkActionsBar = ({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Gates the destructive bulk remove behind a confirmation step. Scope is
-  // what the teacher picked in the menu: a classroom-scoped remove (which the
-  // #664 checkbox can escalate) or a direct org removal (no checkbox — the
-  // escalation is already the action).
+  // Gates the destructive remove behind a confirmation. Scope is the menu
+  // route: classroom-scoped (which the #664 checkbox can escalate) or the
+  // direct org removal (no checkbox — the escalation IS the action).
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const [removeScope, setRemoveScope] = useState<"classroom" | "org">(
     "classroom",
@@ -124,21 +117,16 @@ const BulkActionsBar = ({
   // Gates the bulk add (org invite + classroom enroll) behind a confirmation.
   const [confirmingAdd, setConfirmingAdd] = useState(false)
   // The #664 opt-in: escalate the remove from the picked classroom to the
-  // whole organization (which unenrolls from EVERY classroom first).
+  // whole organization.
   const [alsoRemoveFromOrg, setAlsoRemoveFromOrg] = useState(false)
 
   const hasSelection = selectedRows.length > 0
 
   const targetName = classrooms.find((c) => c.path === target)?.name ?? target
 
-  // ---- Confirm-dialog previews ---------------------------------------------
-  // Each mirrors its orchestrator's PRE-filters over the current selection +
-  // target, so the numbers shown are the numbers the run would act on (the
-  // engines' own runtime skips — stale ids, racing edits — can only shrink
-  // them further and are reported in the results view).
-
-  // bulkAddToClassroom: skips rows already on the target (CSV-derived) and
-  // rows that aren't live org members (never invites from here).
+  // Add preview, mirroring bulkAddToClassroom's PRE-filters (runtime skips
+  // can only shrink it; results report those). Remove previews live in
+  // RemoveConfirmDialog.
   const addPreview = (() => {
     let eligible = 0
     let alreadyOn = 0
@@ -151,13 +139,8 @@ const BulkActionsBar = ({
     return { eligible, alreadyOn, notMember }
   })()
 
-  // bulkRemoveFromClassroom: skips rows not on the target, rows on an
-  // archived instance, and identity-less pending email invites. The remove
-  // previews live in RemoveConfirmDialog.
-
   // Classrooms at least one selected member can actually be removed from —
-  // the remove submenu offers only these (a target nobody is on would be a
-  // guaranteed all-skip no-op).
+  // any other target would be a guaranteed all-skip no-op.
   const removableClassrooms = classrooms.filter((c) =>
     selectedRows.some((row) =>
       row.classrooms.some((a) => a.classroom === c.path && !a.archived),
@@ -251,14 +234,9 @@ const BulkActionsBar = ({
 
   return (
     <>
-      {/* The selection cluster lives in the page toolbar and appears only
-          while rows are selected: count, one consolidated Actions menu, and
-          Clear — mirroring the roster toolbar's cluster. The destination
-          classroom is folded INTO the menu as submenus (pick the action and
-          its target in one gesture — no separate picker), with the
-          destructive actions last in their own group. The modals below stay
-          mounted regardless, so a completing run's result dialog survives
-          the selection clearing out from under it. */}
+      {/* The selection cluster, shown only while rows are selected. The
+          modals below stay mounted regardless, so a completing run's result
+          dialog survives the selection clearing out from under it. */}
       {hasSelection ? (
         <>
           <span className="text-sm font-medium tabular-nums">

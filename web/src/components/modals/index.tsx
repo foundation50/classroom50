@@ -22,8 +22,8 @@ type ConfirmModalProps = {
   cancelLabel?: string
   dangerous?: boolean
   needsConfirm?: boolean
-  // Blocks confirming (e.g. the caller's preview shows the action would touch
-  // nobody) while still letting the user adjust the dialog's inputs or cancel.
+  // Blocks confirming (e.g. the caller's preview shows a no-op) while still
+  // letting the user adjust the dialog's inputs or cancel.
   confirmDisabled?: boolean
   onConfirm: () => Promise<void>
   onClose: () => void

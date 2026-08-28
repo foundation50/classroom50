@@ -6,8 +6,7 @@ import type { BulkRemoveFromOrgResult } from "@/domain/orgMembers/bulkRemoveFrom
 import type { BulkResultView } from "@/components/bulk/resultView"
 
 // Pure builders turning each bulk orchestrator's result into the shared
-// result-modal view (headline + sectioned rows). Split out of BulkActionsBar
-// so the component carries only state and wiring.
+// result-modal view (headline + sectioned rows).
 
 export const buildAddResult = (
   res: BulkAddToClassroomResult,

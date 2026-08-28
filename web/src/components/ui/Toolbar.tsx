@@ -135,9 +135,8 @@ function ToolbarFilterSelect({
   // Match the prefix highlight on the select border/text so the whole control
   // reads as active.
   const activeSelectClass = active ? "border-warning text-warning" : undefined
-  // A caller min-width (e.g. min-w-[13rem] for long option labels) overrides
-  // the default; without the guard cx would emit both and Tailwind source
-  // order is unspecified.
+  // A caller min-width (for long option labels) overrides the default;
+  // without the guard cx would emit both and source order is unspecified.
   const hasMinWidth = hasUtility("min-w-", className)
   if (!label && !icon) {
     return (

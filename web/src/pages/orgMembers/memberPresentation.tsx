@@ -50,10 +50,10 @@ export const OrgRoleBadge = ({
   return <CellPlaceholder />
 }
 
-// Health-only badge for the table's Status column: the actionable discrepancy,
-// the informational pending invite, or CSV/team drift. The empty placeholder
-// when there is nothing to report. The three cases are mutually exclusive:
-// drift is only computed for live members, which the other two are not.
+// Health-only badge for the table's Status column: the actionable
+// discrepancy, the pending invite, or CSV/team drift; the empty placeholder
+// otherwise. The three are mutually exclusive — drift is only computed for
+// live members, which the other two are not.
 export const MemberStatusBadge = ({ row }: { row: OrgMemberRow }) => {
   const { t } = useTranslation()
   if (row.classification === "on-roster-not-member") {

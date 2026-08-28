@@ -8,9 +8,8 @@ import {
 import type { GitHubUser } from "@/github-core/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
-// Thin mutation wrapper (the useUnenrollStudent shape): the Members page owns
-// the optimistic cache seeding + delayed reconciles, so the hook carries only
-// the write.
+// Thin mutation wrapper (the useUnenrollStudent shape); the Members page owns
+// the cache seeding and reconciles.
 export function useBulkAddToClassroom(org: string) {
   const client = useGitHubClient()
 

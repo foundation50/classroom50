@@ -6,9 +6,8 @@ import { bulkRemoveFromOrg } from "@/domain/orgMembers/bulkRemoveFromOrg"
 import type { BulkRemoveProgress } from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
-// Thin mutation wrapper (the useUnenrollStudent shape): the Members page owns
-// the optimistic cache seeding + delayed reconciles, so the hook carries only
-// the write. `t` is threaded so the orchestrator's warnings arrive localized.
+// Thin mutation wrapper (the useUnenrollStudent shape); the Members page owns
+// the cache seeding and reconciles. `t` localizes the orchestrator's warnings.
 export function useBulkRemoveFromOrg(org: string) {
   const client = useGitHubClient()
   const { t } = useTranslation()

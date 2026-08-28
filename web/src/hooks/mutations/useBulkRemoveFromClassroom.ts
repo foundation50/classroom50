@@ -7,9 +7,8 @@ import {
 } from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
-// Thin mutation wrapper (the useUnenrollStudent shape): the Members page owns
-// the optimistic cache seeding + delayed reconciles, so the hook carries only
-// the write.
+// Thin mutation wrapper (the useUnenrollStudent shape); the Members page owns
+// the cache seeding and reconciles.
 export function useBulkRemoveFromClassroom(org: string) {
   const client = useGitHubClient()
 

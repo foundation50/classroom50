@@ -2,10 +2,9 @@
 import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-// Direct tests for ConfirmModal's option slot (`children`) and the
-// `confirmDisabled` gate — including the keyboard path: Enter in the
-// typed-confirm input submits through handleSubmit, which must honor
-// confirmDisabled even though the buttons are already disabled.
+// Tests for ConfirmModal's option slot (`children`) and the confirmDisabled
+// gate — including Enter in the typed-confirm input, which submits through
+// handleSubmit rather than the (already disabled) buttons.
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()

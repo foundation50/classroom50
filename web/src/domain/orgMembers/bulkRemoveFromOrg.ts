@@ -30,16 +30,10 @@ export type BulkRemoveFromOrgResult = {
 
 const labelFor = (row: OrgMemberRow) => row.username || row.email || row.key
 
-// Remove selected members from the ORGANIZATION, one at a time. Each member
-// goes through removeMemberFromOrg, which unenrolls them from EVERY classroom
-// they belong to first and deletes the org membership last — so a partial
-// failure never strips membership while rosters still list the student. That
-// deliberately includes classrooms beyond the one the teacher filtered by;
-// the confirm UI surfaces that blast radius before this runs.
-//
-// The org-wide DELETE is effectively irreversible from the app, so the
-// viewer is verified ONCE up front and the whole run fails closed when the
-// account can't be resolved (mirroring the single-row path).
+// Remove selected members from the ORGANIZATION, one removeMemberFromOrg call
+// each: unenroll from EVERY classroom first (not only the filtered one — the
+// confirm UI surfaces that), org-membership DELETE last. The viewer is
+// verified once up front, failing the whole run closed if unresolvable.
 export async function bulkRemoveFromOrg(
   client: GitHubClient,
   input: {
@@ -74,8 +68,8 @@ export async function bulkRemoveFromOrg(
   for (const row of rows) {
     const label = labelFor(row)
 
-    // Selection already excludes the signed-in account, but that gate is
-    // UI-only; re-check against the server-resolved viewer per row.
+    // The selection's self-exclusion is UI-only; re-check per row against the
+    // server-resolved viewer.
     if (
       isSameGitHubUser(viewer, {
         github_id: row.github_id,
@@ -92,9 +86,8 @@ export async function bulkRemoveFromOrg(
       tick(label)
       continue
     }
-    // The org-membership DELETE is keyed by username; without one there is
-    // nothing this action can remove (removeMemberFromOrg would bail the same
-    // way — this pre-check just keeps the outcome a clean skip).
+    // The org-membership DELETE is keyed by username — nothing to remove
+    // without one; pre-checking keeps the outcome a clean skip.
     if (!row.username) {
       outcomes.push({
         key: row.key,
@@ -113,8 +106,8 @@ export async function bulkRemoveFromOrg(
       outcomes.push({
         key: row.key,
         label,
-        // removed=false with a username means the org DELETE itself failed
-        // (the failure is already in result.warnings).
+        // removed=false with a username = the org DELETE itself failed (that
+        // failure is the last warning).
         status: result.removed ? "removed" : "failed",
         detail: result.removed ? undefined : result.warnings.at(-1),
         unenrolledClassrooms: result.unenrolledClassrooms,

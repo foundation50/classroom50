@@ -54,11 +54,9 @@ const MemberDetailModal = ({
   isSelf: boolean
   isOwner: boolean
   onClose: () => void
-  // Called after the removal flow ran; `removed` is whether the org-membership
-  // DELETE actually succeeded (false on the warnings-only path), and
-  // `unenrolledClassrooms` is what the run actually unenrolled — the page
-  // seeds/reconciles exactly those caches, never the row's full classroom list
-  // (which includes archived or failed unenrolls).
+  // Called after the removal flow ran: `removed` = the org-membership DELETE
+  // succeeded; `unenrolledClassrooms` = what the run actually unenrolled (the
+  // page seeds exactly those caches, never the row's full classroom list).
   onRemoved: (removed: boolean, unenrolledClassrooms: string[]) => void
   // Called after an on-roster non-member is invited (refresh only — no classroom
   // membership changed).
@@ -217,10 +215,8 @@ const MemberDetailModal = ({
           <ClassificationBadge row={row} isOwner={isOwner} />
         </div>
 
-        {/* The member's details, one labeled row each (the roster member
-            modal's profile-list recipe). The organization row looks redundant
-            — every row on this page shares it — but it anchors what "Remove
-            from organization" below will act on. */}
+        {/* The organization row looks redundant — every row on this page
+            shares it — but it anchors what "Remove from organization" acts on. */}
         <dl className="divide-y divide-base-300 rounded-box border border-base-300">
           <DetailRow label={t("orgMembers.details.name")}>
             {row.name || (

@@ -22,8 +22,8 @@ export const CellPlaceholder = () => (
 )
 
 // One labeled row of a member-details list (label start, value end) — the
-// single source for both member-detail modals' profile lists. Render inside a
-// `<dl className="divide-y divide-base-300 rounded-box border border-base-300">`.
+// single source for both member-detail modals' profile lists. Render inside
+// a bordered, divided <dl>.
 export const DetailRow = ({
   label,
   children,
@@ -37,8 +37,8 @@ export const DetailRow = ({
   </div>
 )
 
-// Muted treatment for a detail value that isn't recorded ("Not set" — the
-// caller supplies its own localized text).
+// Muted treatment for a detail value that isn't recorded; the caller supplies
+// its own localized "Not set" text.
 export const NotSetValue = ({ children }: { children: ReactNode }) => (
   <span className="text-base-content/40">{children}</span>
 )

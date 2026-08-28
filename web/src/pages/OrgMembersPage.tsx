@@ -144,21 +144,14 @@ const OrgMembersPage = () => {
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // True while a delayed members reconcile is scheduled — the window where an
-  // eager orgMembersAll refetch would read the lagging list and resurrect an
-  // optimistically-removed row (see invalidateMembers).
+  // eager orgMembersAll refetch would resurrect an optimistically-removed row.
   const membersReconcilePending = useRef(false)
 
-  // Refresh after an org-level member removal (unenrolls from every classroom +
-  // removes org membership). The members-list read lags the membership DELETE,
-  // so an immediate refetch would still return the removed account and the row
-  // would survive until a manual reload. Same recipe as the CSV/team caches:
-  // optimistically drop them from the members cache AND each actually-touched
-  // classroom's CSV + team caches together (no false "unprovisioned" flash),
-  // then reconcile everything with the server on a delay. `removed` is false
-  // when the org DELETE itself failed (warnings path) — membership didn't
-  // change, so only re-read; an optimistic drop would vanish a live member.
-  // `unenrolledClassrooms` is what the run REPORTED unenrolling — never the
-  // row's classroom list, which includes archived or failed unenrolls whose
+  // After an org-level removal. The members-list read lags the membership
+  // DELETE, so (like the CSV/team caches) drop the row optimistically and
+  // reconcile on a delay; `removed` false = the DELETE failed, so only
+  // re-read. `unenrolledClassrooms` is what the run REPORTED unenrolling —
+  // never row.classrooms, which includes archived or failed unenrolls whose
   // rosters really do still hold the student.
   const refresh = (
     affected: OrgMemberRow,
@@ -169,8 +162,8 @@ const OrgMembersPage = () => {
     if (removed) {
       optimisticRemoveFromMembers([affected])
       scheduleMembersReconcile()
-      // Drop the stale selection key, or the vanished row keeps the toolbar in
-      // its "N selected" state with no visible checkbox to clear it from.
+      // Drop the stale selection key, or the vanished row keeps the toolbar
+      // stuck at "N selected" with no visible checkbox to clear.
       setSelectedKeys((prev) => {
         if (!prev.has(affected.key)) return prev
         const next = new Set(prev)
@@ -230,11 +223,10 @@ const OrgMembersPage = () => {
     })
   }
 
-  // Optimistically drop removed accounts (by resolved id/login) from the
-  // orgMembersAll cache the row list derives from, so the table reflects an
-  // org removal immediately. Invalidating instead would refetch a members list
-  // that lags the membership DELETE and resurrect the row (a roster-less
-  // member has no other cache to disappear from at all).
+  // Optimistically drop removed accounts from the orgMembersAll cache the row
+  // list derives from. Invalidating instead would refetch a list that lags the
+  // DELETE and resurrect the row (a roster-less member has no other cache to
+  // disappear from at all).
   const optimisticRemoveFromMembers = (removed: OrgMemberRow[]) => {
     if (!org || removed.length === 0) return
     const { ids, logins } = identitySets(removed)
@@ -247,18 +239,17 @@ const OrgMembersPage = () => {
     )
   }
 
-  // Immediate members-list invalidation, deferred while a members reconcile is
-  // pending: inside that window the list API may still return a just-removed
-  // account, so an eager refetch would resurrect the optimistically-dropped
-  // row. The pending reconcile refetches ≤4s later anyway.
+  // Immediate members-list invalidation, deferred while a members reconcile
+  // is pending — inside that window the lagging list would resurrect the
+  // just-dropped row, and the reconcile refetches soon anyway.
   const invalidateMembers = () => {
     if (!org || membersReconcilePending.current) return
     queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
   }
 
-  // Reconcile the members cache with the server once the list API has caught
-  // up with the DELETE, mirroring scheduleClassroomReconcile. While pending,
-  // invalidateMembers defers immediate refetches (see above).
+  // Reconcile the members cache once the list API has caught up with the
+  // DELETE (mirroring scheduleClassroomReconcile); defers invalidateMembers
+  // while pending.
   const scheduleMembersReconcile = () => {
     if (!org) return
     membersReconcilePending.current = true
@@ -311,9 +302,8 @@ const OrgMembersPage = () => {
   // After a bulk add/remove: optimistically reflect the change in the CSV +
   // team caches the row status derives from (kept consistent, no false
   // "unprovisioned" flash), then reconcile both with the server on a delay.
-  // An org-wide removal touches EVERY classroom the removed members belonged
-  // to, so it seeds and reconciles each of them (the per-row refresh() logic,
-  // batched).
+  // An org-wide removal fans the same treatment out to every classroom the
+  // run actually unenrolled.
   const handleBulkDone = (input: BulkDoneInput) => {
     if (!org) return
 
@@ -322,10 +312,9 @@ const OrgMembersPage = () => {
       const removedRows = input.affectedKeys
         .map((key) => rowByKey.get(key))
         .filter((r): r is OrgMemberRow => Boolean(r))
-      // Seed/reconcile the classrooms the run REPORTED unenrolling — including
-      // rows whose org DELETE then failed (their rosters changed server-side
-      // all the same). Deriving from row.classrooms instead would assert
-      // unenrolls that were skipped (archived) or failed.
+      // Seed/reconcile the classrooms the run REPORTED unenrolling — a failed
+      // org DELETE still changed its rosters. Deriving from row.classrooms
+      // would assert unenrolls that were skipped (archived) or failed.
       const byClassroom = new Map<string, OrgMemberRow[]>()
       for (const { key, classrooms } of input.unenrolled) {
         const row = rowByKey.get(key)
@@ -482,10 +471,8 @@ const OrgMembersPage = () => {
     ownerIds,
   ])
 
-  // The combined "Show" select folds the status and role filters into ONE
-  // control (mirroring the roster toolbar): picking a status clears the role
-  // facet and vice versa. The two facets stay separate fields for
-  // filterOrgMemberRows — the select is just a consolidated view of them.
+  // The combined "Show" select folds both facets into one control (the roster
+  // recipe): picking a status clears the role facet and vice versa.
   const showValue = roleFilter !== "all" ? `role:${roleFilter}` : statusFilter
   const onShowChange = (value: string) => {
     if (value.startsWith("role:")) {
@@ -497,9 +484,8 @@ const OrgMembersPage = () => {
     }
   }
 
-  // Active-filter split for the in-search-bar clear affordance ("Clear filter"
-  // vs "Clear"), mirroring the roster controls; clicking it resets query and
-  // every filter (sort is a view preference, not a filter — kept).
+  // The in-search-bar clear affordance ("Clear filter" vs "Clear"); clicking
+  // resets query + filters (sort is a view preference, kept).
   const hasFilterActive =
     classroomFilter !== "" || statusFilter !== "all" || roleFilter !== "all"
   const hasActiveFilter = hasFilterActive || query.trim() !== ""
@@ -603,11 +589,9 @@ const OrgMembersPage = () => {
             }
           />
 
-          {/* Always-on scope warning: a GitHub org is often shared beyond one
-              teaching team (co-teachers, other courses, people who don't use
-              Classroom 50 at all), so "everyone in the org" is a superset of
-              "your students" unless the team owns the whole organization —
-              worth stating before the destructive member actions below. */}
+          {/* Always-on scope warning: a shared org lists other teachers'
+              members and students too, so say so before the destructive
+              member actions below. */}
           <Alert tone="warning" className="mt-6 text-sm">
             <span>{t("orgMembers.sharedOrgNotice", { org })}</span>
           </Alert>
@@ -632,10 +616,9 @@ const OrgMembersPage = () => {
             </span>
           </AnimatedAlert>
 
-          {/* One toolbar row (mirroring the roster/submissions controls): the
-              member-count caption — swapped for the selection cluster while
-              rows are selected — on the left; search + the classroom filter
-              right-aligned. */}
+          {/* One toolbar row (the roster/submissions recipe): member count —
+              swapped for the selection cluster while rows are selected — on
+              the left; search + filters right-aligned. */}
           <Toolbar className="mt-6">
             {selectedKeys.size === 0 && !isLoading && !isError ? (
               <span className="text-sm text-base-content/60 tabular-nums">
@@ -716,11 +699,9 @@ const OrgMembersPage = () => {
             </Toolbar.Trailing>
           </Toolbar>
 
-          {/* Primer DataTable treatment (matching the roster/assignments
-              tables): the shared TableShell frame, labeled columns, and rows
-              as real <tr>s. Select-all lives in the select-column header,
-              aligned above the row checkboxes; the selection actions sit in
-              the toolbar above. */}
+          {/* The shared TableShell recipe (roster/assignments tables):
+              select-all in the select-column header, selection actions in the
+              toolbar above. */}
           <div className="mt-4">
             <TableShell animate={false} padded ariaBusy={isLoading}>
               <caption className="sr-only">
@@ -871,9 +852,8 @@ const OrgMembersPage = () => {
                         />
                       </td>
                       <td>
-                        {/* The bare GitHub handle — no octocat, no numeric id
-                            (both live in the member detail modal); shared
-                            recipe via GitHubIdentity. */}
+                        {/* Bare handle — the octocat + numeric id live in
+                            the member detail modal. */}
                         <GitHubIdentity row={row} bare />
                       </td>
                       <td className="hidden whitespace-nowrap text-xs text-base-content/70 sm:table-cell">

@@ -41,9 +41,9 @@ export type OrgMemberRow = {
   username: string
   github_id: string
   name: string
-  // The primary email (first seen across rosters) — the one identity keys
-  // fall back to. `emails` carries EVERY distinct address the rosters (or the
-  // GitHub profile, for a roster-less member) know for this person.
+  // The primary email (first seen across rosters) — identity keys fall back
+  // to it. `emails` is every distinct address the rosters (or, for a
+  // roster-less member, the GitHub profile) know.
   email: string
   emails: string[]
   isMember: boolean
@@ -106,8 +106,8 @@ export function aggregateOrgMembers(
   }
   const byKey = new Map<string, Acc>()
 
-  // Collect every distinct address (case-insensitive, first-seen casing and
-  // order kept) — different rosters may hold different emails for one person.
+  // Every distinct address (case-insensitive; first-seen casing and order) —
+  // rosters may hold different emails for one person.
   const addEmail = (acc: Acc, email: string | undefined) => {
     const trimmed = email?.trim()
     if (!trimmed) return
@@ -254,21 +254,14 @@ const CLASSIFICATION_ORDER: Record<MemberClassification, number> = {
 
 const displayName = (row: OrgMemberRow) => row.username || row.name || row.email
 
-// What the Name cell shows: the person's name when known, else the identity
-// fallbacks the avatar renders.
+// What the Name cell shows: the name when known, else the avatar's fallbacks.
 const nameFirst = (row: OrgMemberRow) => row.name || row.username || row.email
 
 // Header-driven column sort for the Members table (mirroring
-// sortTeamRosterRowsBy):
-//   name       — display identity (name, else username, else email).
-//   username   — GitHub login, blank-last in either direction.
-//   classrooms — classroom count.
-//   role       — org role precedence (owner -> member -> not a member).
-//   status     — the default classification precedence (actionable first).
-// `desc` flips only the column comparison; ties always fall back to ascending
-// display identity so a reversed column stays internally scannable. `isOwner`
-// backs the role column — the owner set lives outside the row (the admins
-// read), so the caller supplies the predicate.
+// sortTeamRosterRowsBy). `desc` flips only the column comparison; ties fall
+// back to ascending display identity so a reversed column stays scannable.
+// `isOwner` backs the role column — ownership lives outside the row (the
+// admins read), so the caller supplies the predicate.
 export type OrgMembersSortColumn =
   "name" | "username" | "classrooms" | "role" | "status"
 export function sortOrgMemberRowsBy(
@@ -317,9 +310,9 @@ export function sortOrgMemberRowsBy(
   return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
 }
 
-// The Members toolbar's "Show" facets, mirroring the roster's combined
-// status/role select. Status keys off the row's classification/health; role
-// keys off org role (owner vs plain member — a non-member matches neither).
+// The Members toolbar's "Show" facets (the roster's combined select). Status
+// keys off classification/health; role off org role — a non-member matches
+// neither role.
 export type OrgMembersStatusFilter =
   "all" | "not-in-org" | "invitation-pending" | "not-enrolled"
 export type OrgMembersRoleFilter = "all" | "owner" | "member"

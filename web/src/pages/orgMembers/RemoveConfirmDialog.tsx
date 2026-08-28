@@ -8,11 +8,8 @@ import PreviewPanel from "@/pages/orgMembers/PreviewPanel"
 import type { BulkClassroomOption } from "@/pages/orgMembers/BulkActionsBar"
 
 // The destructive remove confirm: classroom picker, the #664 escalation
-// checkbox, a "what will happen" preview mirroring the orchestrators'
-// pre-filters, and the typed-phrase gate. Scope is what the teacher picked in
-// the menu — a classroom-scoped remove (which the checkbox can escalate) or a
-// direct org removal (no checkbox: the escalation IS the action). Pure view:
-// every piece of state lives in BulkActionsBar, which owns the runs.
+// checkbox, a preview mirroring the orchestrators' pre-filters, and the
+// typed-phrase gate. Pure view — BulkActionsBar owns the state and runs.
 const RemoveConfirmDialog = ({
   open,
   org,
@@ -46,14 +43,11 @@ const RemoveConfirmDialog = ({
   const targetName = classrooms.find((c) => c.path === target)?.name ?? target
   const removeIsOrgWide = scope === "org" || alsoRemoveFromOrg
 
-  // ---- Previews -------------------------------------------------------------
-  // Each mirrors its orchestrator's PRE-filters over the current selection +
-  // target, so the numbers shown are the numbers the run would act on (the
-  // engines' own runtime skips — stale ids, racing edits — can only shrink
-  // them further and are reported in the results view).
+  // ---- Previews: mirror each orchestrator's PRE-filters (runtime skips can
+  // only shrink the counts; the results view reports those).
 
-  // bulkRemoveFromClassroom: skips rows not on the target, rows on an
-  // archived instance, and identity-less pending email invites.
+  // bulkRemoveFromClassroom: skips rows not on the target, archived
+  // instances, and identity-less pending email invites.
   const removePreview = (() => {
     let removable = 0
     let notOn = 0
@@ -81,18 +75,14 @@ const RemoveConfirmDialog = ({
     return { removable, noUsername }
   })()
 
-  // Members the escalated org removal would also pull out of classrooms OTHER
-  // than the targeted (non-archived) one — the blast radius the confirm must
-  // surface before a classroom remove escalates to an org removal. (The
-  // direct org action needs no extra warning: its body already says every
-  // classroom is unenrolled.)
+  // Members the escalation would also pull out of classrooms OTHER than the
+  // targeted one — the blast radius to surface before widening the action.
   const otherClassroomsCount = selectedRows.filter((row) =>
     row.classrooms.some((c) => c.classroom !== target && !c.archived),
   ).length
 
   // Co-owners in the selection: an org-wide removal strips their owner access
-  // like anyone else's membership, which deserves its own signal in a shared
-  // org (other teachers' accounts live here too).
+  // like anyone else's, which deserves its own signal in a shared org.
   const ownerCount = removeIsOrgWide ? selectedRows.filter(isOwner).length : 0
 
   return (
@@ -157,11 +147,9 @@ const RemoveConfirmDialog = ({
                 </Select>
               )}
             </FormField>
-            {/* The #664 opt-in, offered only on the classroom-scoped route
-                (the direct org action IS the escalation). Ticking it widens
-                the run from the picked classroom to the WHOLE selection —
-                the label carries the full count so that widening is explicit,
-                and the copy and preview re-derive from the checkbox state. */}
+            {/* The #664 opt-in (the direct org route IS the escalation, so no
+                checkbox there). Ticking it widens the run to the WHOLE
+                selection — the label carries the full count to say so. */}
             <label className="flex cursor-pointer items-start gap-3">
               <input
                 type="checkbox"
