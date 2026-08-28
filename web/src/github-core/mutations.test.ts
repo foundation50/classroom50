@@ -92,6 +92,33 @@ describe("buildClassroomUpdate", () => {
   it("omits every optional field when none are provided (identity merge)", () => {
     expect(buildClassroomUpdate(base, {})).toEqual(base)
   })
+
+  it('pages_base_url: non-empty sets, undefined preserves, "" deletes', () => {
+    const url = "https://pages.example.edu/classroom50"
+
+    const set = buildClassroomUpdate(base, { pages_base_url: url })
+    expect(set.pages_base_url).toBe(url)
+
+    // An edit that omits the field (e.g. a pure archive toggle) must not
+    // touch a persisted custom domain.
+    const preserved = buildClassroomUpdate(
+      { ...base, pages_base_url: url },
+      { active: false },
+    )
+    expect(preserved.pages_base_url).toBe(url)
+
+    // Clearing deletes the key outright — never writes an empty string an
+    // old reader would trip on.
+    const cleared = buildClassroomUpdate(
+      { ...base, pages_base_url: url },
+      { pages_base_url: "" },
+    )
+    expect("pages_base_url" in cleared).toBe(false)
+
+    // Clearing an already-absent field stays a no-op (no key introduced).
+    const noop = buildClassroomUpdate(base, { pages_base_url: "" })
+    expect("pages_base_url" in noop).toBe(false)
+  })
 })
 
 // editClassroom enforces "archived classrooms are read-only" on the write path

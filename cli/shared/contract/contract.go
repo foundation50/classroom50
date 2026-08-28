@@ -198,6 +198,21 @@ const (
 	// secret" error, kept in lockstep with SecretPattern.
 	SecretPatternDescription = "4-64 lowercase letters or digits ([a-z0-9])"
 
+	// PagesBaseURLPattern is the anchored regex a classroom's custom Pages base
+	// URL (classroom.json / team-description `pages_base_url`) must match: an
+	// https URL, no whitespace/query/fragment, bounded so the team-description
+	// record stays within its size budget. A shape gate only — writers also
+	// normalize (strip the trailing slash, reject userinfo) via
+	// configrepo.ValidatePagesBaseURL and the web's pagesBaseUrl util.
+	// Mirrored, with NO compile-time link, in schemas/classroom-v1.schema.json,
+	// schemas/classroom-team-v1.schema.json, and the web GUI
+	// (web/src/util/pagesBaseUrl.ts) — update every copy in lockstep.
+	PagesBaseURLPattern = `^https://[^\s?#]{1,110}$`
+
+	// PagesBaseURLPatternDescription is the human-readable summary in the
+	// "invalid pages_base_url" error, kept in lockstep with PagesBaseURLPattern.
+	PagesBaseURLPatternDescription = "an https:// base URL with no whitespace, query, or fragment (at most 118 chars)"
+
 	// CommitPrefix marks every tool-authored commit so teacher and student can
 	// tell them apart from their own in the repo history. Prepended (via
 	// PrefixCommit) by every CLI commit path; hand-mirrored with NO compile-time

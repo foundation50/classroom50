@@ -930,7 +930,8 @@
     "classroomSlugInvalid": "Classroom slug must be {{description}}.",
     "classroomSlugTooLong": "Classroom slug is {{length}} characters; new classrooms are capped at {{max}} — it prefixes every student repository name, which GitHub limits to {{limit}} characters.",
     "assignmentSlugTaken": "An assignment \"{{slug}}\" already exists in this classroom.",
-    "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}."
+    "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}.",
+    "customDomainInvalid": "Enter a domain like pages.example.edu or a full https:// URL (no query, fragment, or trailing slash)."
   },
   "toasts": {
     "classroomSettingsSaved": "Classroom settings saved. Publishing to the student site now — the banner above tracks progress.",
@@ -2360,6 +2361,9 @@
       "slugPlaceholder": "e.g., ap-cs-principles",
       "term": "Classroom term",
       "termPlaceholder": "e.g., Fall 2026",
+      "customDomain": "Custom Pages domain",
+      "customDomainPlaceholder": "e.g., pages.example.edu",
+      "customDomainHint": "Only needed if your organization's GitHub Pages site uses a custom domain (github.io then redirects, which blocks students' browsers from loading assignment data). Enter the domain, or a full https:// URL if your published site doesn't live under /classroom50. Leave empty to use the default github.io address. If your staff also uses the gh-teacher CLI, upgrade it everywhere first — older releases can undo this setting.",
       "secretInvalid": "Secret must be {{description}}.",
       "protectPagesLabel": "Use an unlisted link for this classroom",
       "protectPagesHint": "Publishes this classroom's assignment data at an unguessable URL instead of one anyone can reach by guessing the org name. This is obscurity, not real access control: anyone who gets the link can read it, and links can leak (browser history, referrers, search crawlers). Off by default.",
@@ -2419,6 +2423,10 @@
     "deployInFlight": "The classroom's published files may still be deploying. Wait a minute, then try again.",
     "classroomNotPublished": "This classroom isn't published yet. It may not exist, or the publish workflow may not have run. Ask your teacher to publish it, then try again.",
     "classroomFetchFailed": "Couldn't load this classroom's published files (HTTP {{status}}). Ask your teacher to confirm the classroom is published, then try again.",
+    "classroomNetworkFailed": "Couldn't reach the classroom's published site. This can be a network problem on your side, or the organization's GitHub Pages site may use a custom domain — in that case, ask your teacher to set the custom Pages domain in Classroom Settings.",
+    "customHostUnreachable": "Couldn't reach the classroom's custom Pages domain. It may be mistyped, offline, or blocked — ask your teacher to verify the custom Pages domain in Classroom Settings.",
+    "fetchNetworkFailed": "{{label}} couldn't be loaded because the published site couldn't be reached. Check your connection and try again, or ask your teacher to verify the classroom's published files.",
+    "classroomUnreachableBothHosts": "Couldn't load this classroom's published files from {{customUrl}} or {{defaultUrl}}. {{detail}}",
     "assignmentNotInManifest": "Assignment \"{{assignmentSlug}}\" isn't in this classroom's published assignments. Check the link, or ask your teacher to publish the assignment.",
     "autograderMalformed": "Autograder \"{{autograderName}}\" may be malformed YAML. Ask your teacher to check the file in the classroom50 repository.",
     "manifestVersionUnsupported": "This classroom uses a newer assignment format (v{{version}}) than this copy of Classroom 50 supports. Reload the page, or ask your teacher to update Classroom 50.",
@@ -2465,6 +2473,15 @@
       "unableToLoad": "Unable to load assignment",
       "expectedSlug": "Expected to find assignment slug:",
       "checkUrl": "Check that the URL is correct, or ask your teacher to confirm that this assignment has been added to <file>assignments.json</file>."
+    },
+    "loadError": {
+      "badge": "Classroom unavailable",
+      "title": "Couldn't load the classroom's assignments",
+      "body": "This classroom's published assignment data couldn't be loaded, so <assignment>{{assignment}}</assignment> can't be shown. The assignment itself may be fine — the published data just couldn't be reached from your browser.",
+      "detailTitle": "What went wrong",
+      "urlsLabel": "Tried to load:",
+      "bootstrapUnknown": "Your classroom list couldn't be checked, so if this classroom uses a custom Pages domain it wasn't discovered — the address above may not be the one your class actually uses. Reload the page to retry.",
+      "retryHint": "Try again in a minute. If this keeps happening, share a screenshot of this page with your teacher — it has everything they need to fix it."
     },
     "locked": {
       "badge": "Locked",

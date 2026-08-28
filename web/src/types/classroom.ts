@@ -27,6 +27,11 @@ export type Classroom = {
   // else the plain `<classroom>/...` path. Opt-in, off by default. In lockstep
   // with the CLI's classroom-v1 schema (`[a-z0-9]{4,64}`).
   secret?: string
+  // Optional custom Pages base URL for orgs whose Pages site is served off the
+  // github.io default (the github.io 301 fails the browser's CORS check —
+  // issue #776). Everything before `/<classroom>[/<secret>]/...`, normalized
+  // (https, no trailing slash). In lockstep with the CLI's classroom-v1 schema.
+  pages_base_url?: string
 }
 
 // A minimal GitHub team identity (slug is authoritative for ops; id is the

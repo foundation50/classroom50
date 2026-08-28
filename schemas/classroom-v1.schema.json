@@ -59,6 +59,11 @@
       "pattern": "^[a-z0-9]{4,64}$",
       "description": "Optional access key for an unlisted classroom. When present, publish-pages serves this classroom's resources at an unguessable URL (`<classroom>/<secret>/...`) that every consumer inserts; when omitted, the plain `<classroom>/...` path. Obscurity, not access control — anyone with the link can read the files. Opt-in via `gh teacher classroom add --unlisted`."
     },
+    "pages_base_url": {
+      "type": "string",
+      "pattern": "^https://[^\\s?#]{1,110}$",
+      "description": "Optional base URL where this org's published Pages resources are actually served, for orgs with a custom GitHub Pages domain (github.io answers a 301 the browser's CORS check rejects — foundation50/classroom50#776). Everything before the `/<classroom>[/<secret>]/...` segment, no trailing slash: `https://<domain>/classroom50` for an org-root custom domain, `https://<domain>` for a CNAME on the classroom50 repo itself. Browser readers try this base first and fall back to the `https://<org>.github.io/classroom50` default; server-side readers (CLIs, Actions) follow the redirect and may ignore it. Fleet caveat: gh-teacher releases that predate this field re-derive the team-description projection WITHOUT it on their next reconcile (the description compare is exact-string), stripping the custom domain from student discovery until a current writer restores it — upgrade every teacher's CLI before setting this."
+    },
     "active": {
       "type": "boolean",
       "description": "Classroom lifecycle flag: false = archived, true or ABSENT = active (legacy classrooms read as active). Written only when a teacher toggles archive/unarchive. Archived classrooms drop out of the default classes list and block new assignments/edits; once published to classrooms-index.json the student accept page refuses too."

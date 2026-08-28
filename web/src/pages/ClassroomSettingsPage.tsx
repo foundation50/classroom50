@@ -76,6 +76,8 @@ const EditClassroomContent = ({
                     slug: classroom,
                     org,
                     term: values.term,
+                    // Already normalized by the form; "" clears the key.
+                    pages_base_url: values.customDomain,
                   },
                   {
                     onError: (err) => {

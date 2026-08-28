@@ -19,11 +19,13 @@ export function useAcceptAssignment(params: {
   classroom: string
   assignmentSlug: string
   secret?: string
+  pagesBaseUrl?: string
   onStepUpdate: OnAcceptStepUpdate
 }) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  const { org, classroom, assignmentSlug, secret, onStepUpdate } = params
+  const { org, classroom, assignmentSlug, secret, pagesBaseUrl, onStepUpdate } =
+    params
 
   return useMutation({
     mutationFn: () =>
@@ -33,6 +35,7 @@ export function useAcceptAssignment(params: {
         classroom,
         assignmentSlug,
         secret,
+        pagesBaseUrl,
         onStepUpdate,
       }),
     onSuccess: () => {

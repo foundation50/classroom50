@@ -24,11 +24,28 @@ const usePagesAssignments = (
     // When set, the result also exposes `assignment` (the entry with this slug),
     // so single-assignment callers don't reimplement the `.find`.
     assignmentSlug?: string
+    // Custom Pages base URL for an org off the github.io default (see
+    // fetchPagesAssignments). Sourced like `secret`: the team-description
+    // bootstrap record for students, classroom.json for teachers.
+    pagesBaseUrl?: string
   },
 ) => {
   const query = useQuery({
-    queryKey: ["pages", "assignments", org, classroom, secret ?? ""],
-    queryFn: () => fetchPagesAssignments(org ?? "", classroom ?? "", secret),
+    queryKey: [
+      "pages",
+      "assignments",
+      org,
+      classroom,
+      secret ?? "",
+      options?.pagesBaseUrl ?? "",
+    ],
+    queryFn: () =>
+      fetchPagesAssignments(
+        org ?? "",
+        classroom ?? "",
+        secret,
+        options?.pagesBaseUrl,
+      ),
     enabled: (options?.enabled ?? true) && Boolean(org && classroom),
     // Pages is a public projection that changes rarely; cache it for 10 minutes.
     // Don't retry — a 404 (protected/unprotected path mismatch or a not-yet-

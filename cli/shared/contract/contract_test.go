@@ -105,6 +105,13 @@ func TestContractLiterals(t *testing.T) {
 		// and the web GUI validator. Update every copy in lockstep on change.
 		{"SecretPattern", SecretPattern, "^[a-z0-9]{4,64}$"},
 		{"SecretPatternDescription", SecretPatternDescription, "4-64 lowercase letters or digits ([a-z0-9])"},
+		// PagesBaseURLPattern / PagesBaseURLPatternDescription are mirrored,
+		// with NO compile-time link, in schemas/classroom-v1.schema.json,
+		// schemas/classroom-team-v1.schema.json, and the web GUI
+		// (web/src/util/pagesBaseUrl.ts). Update every copy in lockstep on
+		// change.
+		{"PagesBaseURLPattern", PagesBaseURLPattern, `^https://[^\s?#]{1,110}$`},
+		{"PagesBaseURLPatternDescription", PagesBaseURLPatternDescription, "an https:// base URL with no whitespace, query, or fragment (at most 118 chars)"},
 		// CommitPrefix is mirrored, with NO compile-time link, in the web GUI
 		// (web/src/util/commit.ts COMMIT_PREFIX) and
 		// cli/gh-teacher/skeleton/dotgithub/workflows/collect-scores.yaml.

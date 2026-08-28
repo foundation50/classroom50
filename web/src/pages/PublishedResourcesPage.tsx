@@ -32,13 +32,7 @@ import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { classroomPagesSegment } from "@/util/secret"
 import { githubOrgUrl } from "@/util/orgUrl"
-import { CONFIG_REPO } from "@/util/configRepo"
-
-// Pages base for an org's classroom50 config repo. `classroom50` is the fixed
-// repo name, not the org name. Single-sourced so every row derives from it.
-function pagesBaseUrl(org: string) {
-  return `https://${org}.github.io/${CONFIG_REPO}`
-}
+import { defaultPagesBaseUrl } from "@/github-core/queries"
 
 // "engine" = generic, org-agnostic bootstrap code (identical for every org);
 // "data" = org-specific content (classrooms, assignments, autograders).
@@ -246,16 +240,24 @@ function ClassroomResources({
   index?: number
 }) {
   const { t } = useTranslation()
-  const base = pagesBaseUrl(org)
   const { data: classroomData, isLoading: classroomLoading } = useGetClassroom(
     org,
     classroom,
   )
   const secret = classroomData?.secret
+  // Classroom-scoped rows live at the custom Pages base when the classroom
+  // declares one (github.io only redirects there, and CORS-fails in a
+  // browser); the org-level pane below stays on the github.io default, which
+  // is where the engine files are canonically addressed.
+  const base = classroomData?.pages_base_url || defaultPagesBaseUrl(org)
   // Gate on the classroom read: fetching before the secret resolves would hit
-  // the unprotected path and 404 a protected classroom.
+  // the unprotected path and 404 a protected classroom. The same read carries
+  // pages_base_url, so the reachability probe checks the real host too.
   const { data: assignments, isPending: assignmentsPending } =
-    usePagesAssignments(org, classroom, secret, { enabled: !classroomLoading })
+    usePagesAssignments(org, classroom, secret, {
+      enabled: !classroomLoading,
+      pagesBaseUrl: classroomData?.pages_base_url,
+    })
   const [open, setOpen] = useState(true)
 
   // Hold skeletons until both reads settle so the resource rows and the "N
@@ -397,7 +399,7 @@ function ClassroomResources({
 
 export const PublishedResourcesPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
-  const base = pagesBaseUrl(org)
+  const base = defaultPagesBaseUrl(org)
   const { classes, isLoading: classesLoading } = useGetClasses(org)
 
   // Org-level resources are classroom-independent: the public index and the two

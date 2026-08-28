@@ -24,6 +24,11 @@
       "type": "string",
       "pattern": "^[a-z0-9]{4,64}$",
       "description": "Capability-URL access key, present only for an unlisted classroom (mirrors classroom.json.secret). Lets a member fetch this classroom's published Pages resources at the unguessable `<classroom>/<secret>/...` path before accepting any assignment. Obscurity, not access control. Omitted for a listed classroom."
+    },
+    "pages_base_url": {
+      "type": "string",
+      "pattern": "^https://[^\\s?#]{1,110}$",
+      "description": "Base URL where the org's published Pages resources are served, mirrored from classroom.json.pages_base_url for orgs with a custom GitHub Pages domain (the github.io 301 fails the browser's CORS check). Lets a student's browser fetch published resources directly from the custom domain, falling back to the github.io default. Omitted when the org uses the default github.io host."
     }
   }
 }

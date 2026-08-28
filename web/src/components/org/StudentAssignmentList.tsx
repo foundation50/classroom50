@@ -364,10 +364,11 @@ export function StudentAssignmentList({
 }) {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
-  const { secret, isLoading: loadingSecret } = useClassroomSecret(
-    org,
-    classroom,
-  )
+  const {
+    secret,
+    pagesBaseUrl,
+    isLoading: loadingSecret,
+  } = useClassroomSecret(org, classroom)
   const { sortKey, changeSort } = useListPrefsState(studentAssignmentListPrefs)
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<StudentAssignmentFilters>({
@@ -378,7 +379,10 @@ export function StudentAssignmentList({
     data: assignments,
     isLoading: loadingAssignmentsData,
     isError,
-  } = usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
+  } = usePagesAssignments(org, classroom, secret, {
+    enabled: !loadingSecret,
+    pagesBaseUrl,
+  })
   // Acceptance (the CTA and the red badge) is derived from the org repo list;
   // fold its load into the gate so a row never paints "Accept" and then
   // flips to "View my submission" once the repos land.

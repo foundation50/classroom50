@@ -304,7 +304,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 		return false, nil
 	}
 
-	desired, err := MarshalTeamDescription(c.Name, c.Term, c.Secret, !c.IsArchived())
+	desired, err := MarshalTeamDescription(c.Name, c.Term, c.Secret, c.PagesBaseURL, !c.IsArchived())
 	if err != nil {
 		return false, err
 	}

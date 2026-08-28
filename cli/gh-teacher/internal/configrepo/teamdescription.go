@@ -27,17 +27,23 @@ type TeamDescription struct {
 	Term string `json:"term,omitempty"`
 	// Capability secret, present only for an unlisted classroom.
 	Secret string `json:"secret,omitempty"`
+	// Custom Pages base URL, present only when the org serves its published
+	// Pages resources off the default github.io host.
+	PagesBaseURL string `json:"pages_base_url,omitempty"`
 	// Lifecycle flag; omitted when active (the default) to save bytes.
 	Active *bool `json:"active,omitempty"`
 }
 
 // MarshalTeamDescription encodes the bootstrap record for a student team's
 // description. `secret` is included only when non-empty AND valid (a malformed
-// secret is dropped rather than persisted into a URL segment). `active` is
-// omitted when true (readers default absent -> active). Returns "" for a record
-// with no populated fields beyond the schema is still valid — the schema
-// sentinel alone lets a reader recognize a v1 record.
-func MarshalTeamDescription(name, term, secret string, active bool) (string, error) {
+// secret is dropped rather than persisted into a URL segment). `pagesBaseURL`
+// likewise, but it degrades silently — the value may come from a hand-edited
+// classroom.json, and dropping it just falls back to the github.io default
+// (matches the web writer). `active` is omitted when true (readers default
+// absent -> active). Returns "" for a record with no populated fields beyond
+// the schema is still valid — the schema sentinel alone lets a reader
+// recognize a v1 record.
+func MarshalTeamDescription(name, term, secret, pagesBaseURL string, active bool) (string, error) {
 	desc := TeamDescription{
 		Schema: contract.TeamSchemaV1,
 		Name:   name,
@@ -50,6 +56,9 @@ func MarshalTeamDescription(name, term, secret string, active bool) (string, err
 			return "", fmt.Errorf("team description secret: %w", err)
 		}
 		desc.Secret = secret
+	}
+	if pagesBaseURL != "" && ValidatePagesBaseURL(pagesBaseURL) == nil {
+		desc.PagesBaseURL = pagesBaseURL
 	}
 	if !active {
 		desc.Active = &active

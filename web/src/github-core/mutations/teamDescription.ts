@@ -59,7 +59,7 @@ export async function reconcileStudentTeamDescription(
 // The classroom.json fields the team-description projection is derived from.
 export type TeamDescriptionSource = Pick<
   Classroom,
-  "name" | "term" | "secret" | "active" | "team"
+  "name" | "term" | "secret" | "pages_base_url" | "active" | "team"
 >
 
 // The write half of reconcileStudentTeamDescription: project an already-known
@@ -78,6 +78,7 @@ export async function projectTeamDescriptionFromRecord(
     name: record.name,
     term: record.term,
     secret: record.secret,
+    pagesBaseUrl: record.pages_base_url,
     active: !isClassroomArchived(record),
   })
 
