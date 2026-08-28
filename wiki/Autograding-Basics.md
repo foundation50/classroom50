@@ -134,11 +134,43 @@ shape `assignment test list --json` emits:
 | `timeout` | Seconds, 1–600. Omit or 0 for the default of 10s. Applies to `setup` and `run` separately. |
 | `exit-code` | `run` only, 0–255. Omit to require 0. |
 | `points` | Required, 0–1000. A 0-point test does not affect the numeric score; a failure still sets the autograde status to `failure`. |
+| `failure-details` | Optional. How much failure detail students see: `full` (default), `actual-only`, or `none`. See [Report options](#report-options). |
+| `show-output` | Optional. `true` includes the test's captured output in the report even when it passes. See [Report options](#report-options). |
 
 At most 100 tests per assignment. Put large fixtures in files
 (`input-file` / `expected-file`) under `CLASSROOM/autograders/ASSIGNMENT/`, not
 inline. In paths and commands on this page, replace `CLASSROOM` with the
 classroom's short name and `ASSIGNMENT` with the assignment slug.
+
+#### Report options
+
+Two per-test fields control what a submission's report shows, in the Release
+body, the grade job log, and the run Summary. Both can also be set once for
+the whole assignment in a `test_defaults` block on the assignment entry (the
+web form's **Report defaults** panel below the tests table); a test's own
+value overrides the default.
+
+```json
+"test_defaults": { "failure-details": "actual-only", "show-output": true }
+```
+
+**`failure-details`** — how much of a failing run students see:
+
+| Value | Students see |
+|---|---|
+| `full` (default) | A unified diff for `exact` comparisons, otherwise the expected and actual output, plus stderr. |
+| `actual-only` | The student's own stdout/stderr only — never the expected output and never a diff, since either would reveal the answer. |
+| `none` | Only the failure kind: wrong output, wrong exit code, timeout, or setup failed. |
+
+**`show-output`** — `true` adds a passing test's captured setup and run
+output to the report and the Actions log, in a collapsed section. Off by
+default (passing output is discarded). Turn it on while authoring or
+debugging an autograder; an explicit `false` on one test opts it out of a
+`show-output: true` default.
+
+In the web app, the per-test selects sit under **Report options** in the test
+editor. From the CLI, pass `--failure-details` and `--show-output` to
+[`gh teacher assignment test add`](gh-teacher#assignment-test).
 
 ### Setup commands, dependencies, and environment variables
 
@@ -201,7 +233,10 @@ repository, publish-pages **materializes** them into the assignment's Pages
 bundle as `tests.json`. At grade time, `runner.py` runs each spec in the student checkout:
 one row per test in `result.json`, plus a failure breakdown in three places — the
 **Release body**, the **grade job log** ("Grade details"), and the **run Summary
-page**. Captured output is truncated at 2000 characters.
+page**. What the breakdown contains follows the test's
+[report options](#report-options). Captured output is clipped per block:
+2,000 characters in the Release body and Summary, 100,000 in the grade job
+log, so long compiler or build output stays readable in the log.
 
 Specs are validated three times: by the CLI at write time, by the runner
 workflow at submission setup, and by `runner.py` before executing.

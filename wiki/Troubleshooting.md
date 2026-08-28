@@ -595,6 +595,26 @@ workflow has been run." Check in order:
    invite also blocks the accept flow (see the
    [accept error table](#common-gh-student-accept-errors)).
 
+### "Couldn't load the classroom's assignments" on the accept page
+
+The accept page shows this error card, listing the URLs it tried, when the
+classroom's published assignment data couldn't be fetched from the student's
+browser. The assignment itself is usually fine. Two common causes:
+
+1. **The organization's GitHub Pages site uses a custom domain.** GitHub then
+   answers `github.io` requests with a redirect the browser rejects. Set the
+   classroom's **Custom Pages domain** in the classroom's **Settings**; see
+   [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain).
+2. **A network problem or filter** on the student's side blocks the Pages
+   host. The card lists the exact URLs attempted, so a screenshot of it gives
+   the teacher everything needed to check them against
+   [Network and allowed domains](GitHub-Integration#network-and-allowed-domains).
+
+A custom domain that is set but mistyped or offline doesn't lock students
+out: the app falls back to the default `github.io` address. The message
+"Couldn't reach the classroom's custom Pages domain" means the domain in
+Classroom Settings needs verifying.
+
 ### "Template not found" / 404 on `gh student accept`
 
 Only applies to assignments with a template. Check, in order:

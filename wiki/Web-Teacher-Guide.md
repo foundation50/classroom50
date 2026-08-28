@@ -204,6 +204,15 @@ section — most assignments never need them:
   this when it finds such a file in the template; you can still toggle it. If the
   file is missing or can't be read, the built-in body is used, so nothing breaks.
   It is your responsibility to keep the template's contents correct.
+- **Repository visibility** — the visibility each student repository is
+  created with at accept time: **Private** (the default) or **Public**, for
+  peer-review, portfolio, or showcase assignments. Students are warned before
+  accepting a public assignment, since anyone on the internet can then see
+  their work, including code, commits, and name. If the organization doesn't
+  allow students to create public repositories, accept creates the repository
+  private instead and tells the student. The setting applies to repositories
+  created from then on; to change existing ones, use **Change repository
+  visibility** on the submissions page.
 - **Student repo access** — the role students get on their own repository.
 - **Repository features** — per-feature settings for **Issues**, **Wiki**,
   **Projects**, and **Pull requests** on student repositories. The default,
@@ -303,6 +312,12 @@ Each test has:
 - **Run command** — the command the runner executes.
 - **Timeout (seconds)** — how long to wait before terminating the test.
 - **Points** — the test's weight.
+- **Report options** — what the submission report shows for this test:
+  **Failure details shown to students** (a full diff, the student's own
+  output only, or only the failure type) and **Output when passing**. Both
+  start at the assignment's report defaults; pick another value to override
+  it for this test only. See
+  [Report options](Autograding-Basics#report-options) in Autograding Basics.
 
 The three test types add their own fields:
 
@@ -325,6 +340,10 @@ The three test types add their own fields:
 fields.
 
 ![Python pytest test](images/web_create_assignment_tests_python_pytest.png)
+
+Below the tests table, a **Report defaults** panel sets the same two report
+options for every test: **Default failure details** and **Include passing
+test output**. A test's own report options override them.
 
 When you're done, click **Create assignment**.
 
@@ -473,12 +492,46 @@ more information, see
 > for the bulk action). See
 > [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
 
-**The roster list** — everyone already in this classroom. Classroom 50
-gives you two shareable links: one to accept the organization invite, and one to
-onboard students added by email. Neither link enrolls anyone on its own: invite
-the student from the roster first, then share a link so they can accept and sign
-in. Below the links, each student's status shows whether they've joined the
-organization.
+**Share** — shareable links for students you've already invited. The **Share
+classroom links** dialog holds two: an onboarding link, with which a student
+accepts the invitation and signs in to Classroom 50 in one step (the link
+most classrooms share), and a GitHub organization invitation link for a
+student who can't use the onboarding one. Neither link enrolls anyone on its
+own: invite the student from the roster first, then share a link so they can
+accept and sign in.
+
+### The roster view
+
+The table lists everyone in this classroom, one row per member, with
+**Member**, **Username**, **Role**, **Section**, and **Status** columns; click
+a column header to sort by it, and click a row to open the member's detail.
+**Section** appears only when at least one member carries a section label, and
+**Status** only while a row has something to report: a pending invitation, a
+member who needs a role, or someone not in the organization.
+
+The toolbar narrows and groups the table:
+
+- **Search** — match members by name, username, or email.
+- **Show** — one filter covering both status (**Enrolled**, **Pending**,
+  **Needs a role**, **Not in org**) and role (**Student**, **Teacher**,
+  **Head TA**, **TA**).
+- A **section filter**, shown when members have sections.
+- **Group by** — group the rows by role or by section.
+
+Selecting rows (with the row checkboxes, or the select-all in the header)
+replaces the toolbar's left side with a selection bar carrying one
+**Actions** menu: **Invite** re-sends the selected students' organization
+invitations, **Cancel** cancels their pending invitations, and **Unenroll**
+removes them from the classroom. Each action asks you to confirm, then
+reports its results. Bulk actions apply to students only; staff are managed
+in the classroom's **Settings**.
+
+**Refresh roster** checks the classroom's GitHub teams and invitations for
+anything new (members who joined or left, accepted invitations, role changes)
+and updates the roster to match; the same check runs when you open the page.
+While it runs, the button reads **Refreshing roster…** and the table locks
+until it finishes. The caption beside the button shows when the roster last
+changed and what the last refresh found.
 
 ## Collect submissions
 
@@ -597,6 +650,12 @@ assignment:
   Projects / Pull-requests settings to every existing student repository
   (repositories created before a settings change, or before features were
   inherited from the template).
+- **Change repository visibility** — make every accepted student repository
+  in the assignment public or private in one pass (organization owners only).
+  Repositories students accept later use the assignment's **Repository
+  visibility** setting instead. A row whose repository is public shows a
+  **Public** badge, and a single repository can be flipped from its row's
+  manage dialog.
 - **Update autograding triggers** — retrofit existing repositories after a
   submission-type change (see below).
 - **Pause autograding** / **Resume autograding** — disable or re-enable the
@@ -624,6 +683,10 @@ assignment:
   all submissions** button next to the **Actions** menu — and the download
   icon in an assignment's row on the **Assignments** page — opens a dialog
   with that CLI command filled in for the assignment, ready to copy.
+- **Delete assignment** — remove the assignment from the classroom, with the
+  same type-the-slug confirmation as the **Manage assignment** dialog. Student
+  repositories are kept. After deleting, you land back on the assignments
+  list.
 
 ### Download scores
 
@@ -639,7 +702,8 @@ spreadsheet or external tool. The column-by-column reference is in
   action in one place: the quick four, **Template access** (review which
   teams can read the template, and re-grant the classroom teams' read),
   **Reuse in another classroom**, and **Delete assignment** (which asks you
-  to type the slug to confirm; student repositories are kept).
+  to type the slug to confirm; student repositories are kept — the
+  submissions page's **Actions** menu carries the same **Delete assignment**).
 - **Edit an assignment** — open the assignment, then **Assignment settings**.
   Same form as creating one, pre-filled. Provisioning settings (repository
   source, built-in autograder, grading mode) are editable; a change only affects
@@ -647,9 +711,34 @@ spreadsheet or external tool. The column-by-column reference is in
   students have already accepted. **Assignment type** (Individual or Group)
   stays locked, since switching it would invalidate existing submissions.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
-  creating one, pre-filled. The page also offers **Clean up invite data**, which
+  creating one, pre-filled. Its **Advanced settings** section holds the
+  **Custom Pages domain** field (see
+  [Using a custom Pages domain](#using-a-custom-pages-domain)). The page also
+  offers **Clean up invite data**, which
   clears the addresses held for email invitations that were never accepted. See
   [Invitations by email](How-Classroom-50-Works#invitations-by-email).
+
+### Using a custom Pages domain
+
+Classroom data that students' browsers read (the assignment list an accept
+link resolves against) is published through GitHub Pages, normally at
+`https://<ORG>.github.io/classroom50/`. If your organization's Pages site
+uses a [custom domain](https://docs.github.com/en/pages/configuring-a-custom-domain-for-your-github-pages-site),
+GitHub answers requests to `github.io` with a redirect that browsers reject,
+so accept links stop loading assignment data for students.
+
+To fix that, open the classroom's **Settings**, expand **Advanced settings**,
+and fill in **Custom Pages domain**. Enter the domain itself (for example
+`pages.example.edu`, read as `https://pages.example.edu/classroom50`), or a
+full `https://` URL when your published site doesn't live under
+`/classroom50`. Leave the field empty to use the default `github.io` address.
+Students' browsers try the custom domain first and fall back to `github.io`,
+so a mistyped domain can't lock students out of a working site.
+
+> [!IMPORTANT]
+> If your staff also uses the `gh teacher` CLI, upgrade it everywhere before
+> setting a custom domain: releases older than 1.35.0 don't know the field
+> and can strip it from student discovery on their next sync.
 
 ### Updating an over-budget assignment slug
 

@@ -206,7 +206,7 @@ free.
 
 | Trigger | Where |
 | --- | --- |
-| Opening the classroom's roster in the web app, or its refresh control | The web app, automatic on open and then on demand |
+| Opening the classroom's roster in the web app, or its **Refresh roster** button | The web app, automatic on open and then on demand |
 | Entering a classroom as a teacher or owner | The web app, automatic; it also repairs missing teams |
 | **Clean up invite data** | The classroom's **Settings** page, to clear stored addresses early |
 | `gh teacher roster sync <org> <classroom> --write` | The CLI, so a script or a scheduled job can run it with no browser |
@@ -253,7 +253,9 @@ Three consequences worth calling out:
 
 - **Students never see each other's work.** The "No permission" base grants
   nothing by default, and nothing grants one student access to another's
-  repository.
+  repository. The deliberate exception is an assignment whose **Repository
+  visibility** is public: its repositories are readable by anyone, which is
+  the point of a peer-review or showcase assignment.
 - **Students can read their classroom's private templates.** The whole
   classroom team gets read access so accept can copy the template. Never
   commit solutions to a template. See

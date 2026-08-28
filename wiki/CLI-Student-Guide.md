@@ -42,10 +42,13 @@ gh student accept <org> <classroom> <assignment>
 - `<classroom>` — the classroom your teacher set up (e.g., `cs-principles`).
 - `<assignment>` — the assignment slug (e.g., `hello`).
 
-This creates a **private** repository at
+This creates a repository at
 `<org>/<classroom>-<assignment>-<username>` from the assignment's template (or
 a new repository with a README and the autograding files if it's
-template-less), then prints a `git clone` command.
+template-less), then prints a `git clone` command. The repository is
+**private** unless your teacher configured the assignment to create public
+repositories; in that case accept warns you first that your work will be
+visible to anyone on the internet.
 
 <details>
 <summary>What accept does, step by step</summary>
@@ -53,8 +56,9 @@ template-less), then prints a `git clone` command.
 1. Auto-accepts any pending organization invitation.
 2. Looks up the assignment in the classroom's published manifest.
 3. Resolves the autograder workflow.
-4. Creates your private repository (a template copy, or a new
-   README-initialized repository).
+4. Creates your repository (a template copy, or a new
+   README-initialized repository) — private unless the assignment opts into
+   public repositories, in which case you're warned first.
 5. Commits the setup files (`.classroom50.yaml` and the autograde workflow).
 6. Opens the Feedback PR, when the assignment enables it.
 7. Sets your repo role: `push` for an individual assignment, or `admin` for a
@@ -160,8 +164,10 @@ When submit finishes, it prints two URLs:
   push, or git will report a conflict.
 - **History is preserved.** Submissions stack as commits; prior commits stay
   reachable for review.
-- **No git config required.** Commits are authored with your GitHub login and
-  noreply email, so a fresh shell submits cleanly.
+- **No git config required.** Commits are authored with the `user.name` and
+  `user.email` configured for your clone, so signed commits stay verified. In
+  a shell with no git identity, submit falls back to your GitHub login and
+  noreply email, so it still works.
 - **Build artifacts are excluded.** Only tracked and untracked-not-ignored files
   are submitted.
 

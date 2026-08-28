@@ -626,6 +626,7 @@ the CLI warns that students with long usernames can't accept it.
 | `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
 | `--allowed-files <pattern>` | Ordered `.gitignore`-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file. See [Advanced Autograding](Advanced-Autograding#restricting-submission-files-allowed_files). |
 | `--student-permission <role>` | Collaborator role each student gets on their **own** repo at accept: `pull`, `triage`, `push`, `maintain`, or `admin`. Omit for the default (`push` individual, `admin` group). Affects future accepts only. Caution: `admin` lets the student manage the repo's settings and collaborators; the org lockdown from `init` still blocks visibility changes. |
+| `--repo-visibility private\|public` | Visibility each student repo is **created** with at accept: `private` (default) or `public` (peer-review, portfolio, or showcase work — accept warns the student upfront that their work will be publicly visible). If org policy blocks a student from creating a public repo, accept falls back to private and says so. Affects future accepts only; flip existing repos with the submissions page's **Change repository visibility**. Re-adding without the flag keeps the stored value. |
 | `--pass-threshold <0–100>` | Advisory passing bar shown on the submissions page. Off when omitted (distinct from `0`). |
 | `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
@@ -849,9 +850,15 @@ gh teacher assignment test remove <org> <classroom> <slug> <test-name>
 
 Manage the declarative `tests` block — GitHub Classroom-style io/run/python
 checks graded with no `autograder.py`. `add` upserts by `--name`; it's refused
-while a per-assignment `autograder.py` exists. See
-[Autograders](Autograding-Basics#declarative-tests) for fields and semantics. For bulk
-edits, use `assignment add --tests <file.json>`.
+while a per-assignment `autograder.py` exists. Two flags control the
+submission report: `--failure-details {full,actual-only,none}` sets how much
+failure detail students see (omit for the assignment's default), and
+`--show-output` includes the test's captured setup/run output in the report
+even when it passes (`--show-output=false` opts one test out of a
+`show-output` default). See
+[Autograders](Autograding-Basics#declarative-tests) for fields and semantics
+and [Report options](Autograding-Basics#report-options) for what each level
+shows. For bulk edits, use `assignment add --tests <file.json>`.
 
 ## `autograder`
 
