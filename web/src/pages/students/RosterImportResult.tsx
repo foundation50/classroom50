@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert } from "@/components/ui"
+import { Alert, TableShell } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type {
   BulkImportResult,
@@ -73,20 +73,22 @@ const ImportResultSection = ({
     <div>
       <h4 className="font-bold mb-2">{title}</h4>
 
-      <div className="max-h-48 overflow-auto rounded-box border border-base-300">
-        <table className="table table-sm">
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <td>
-                  <code>{row.key}</code>
-                </td>
-                <td className="opacity-70">{row.detail}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <TableShell
+        animate={false}
+        size="sm"
+        frameClassName="max-h-48 overflow-auto"
+      >
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key}>
+              <td>
+                <code>{row.key}</code>
+              </td>
+              <td className="opacity-70">{row.detail}</td>
+            </tr>
+          ))}
+        </tbody>
+      </TableShell>
     </div>
   )
 }
