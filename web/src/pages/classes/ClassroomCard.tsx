@@ -1,5 +1,6 @@
 import { ConfirmModal } from "@/components/modals"
 import {
+  Badge,
   Button,
   Card,
   EmphasisLtr,
@@ -432,10 +433,12 @@ function ClassroomBadges({ summary }: { summary: ClassroomSummary }) {
   const { t } = useTranslation()
   return (
     <div className="flex items-center gap-2">
-      <span className="badge badge-soft badge-primary">
+      <Badge tone="primary" size="md">
         {summary.term || t("classes.noTermSpecified")}
-      </span>
+      </Badge>
       {summary.archived && (
+        // badge-neutral is deliberately not a Badge tone (Badge's neutral is
+        // the uncolored chip), so the archived chip keeps its inline recipe.
         <span className="badge badge-soft badge-neutral">
           {t("classes.archived")}
         </span>

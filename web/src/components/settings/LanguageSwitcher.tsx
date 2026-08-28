@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { AnimatedAlert, Button, rtlFlip } from "@/components/ui"
+import { AnimatedAlert, Badge, Button, rtlFlip } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
@@ -403,22 +403,21 @@ export const LanguageSwitcher = ({
                     <span className="flex items-center gap-2">
                       {languageLabel(c, lang)}
                       {source && (
-                        <span
-                          className={`badge badge-sm ${
-                            source === "registry"
-                              ? "badge-ghost"
-                              : "badge-outline"
-                          }`}
+                        // badge-outline is deliberately not a Badge feature;
+                        // it rides className for this one source chip.
+                        <Badge
+                          ghost={source === "registry"}
+                          className={
+                            source === "registry" ? undefined : "badge-outline"
+                          }
                         >
                           {source === "registry"
                             ? t("language.sourceRegistry")
                             : t("language.sourceUser")}
-                        </span>
+                        </Badge>
                       )}
                       {cov !== undefined && cov < 1 && (
-                        <span className="badge badge-ghost badge-sm">
-                          {Math.round(cov * 100)}%
-                        </span>
+                        <Badge ghost>{Math.round(cov * 100)}%</Badge>
                       )}
                     </span>
                     <Button
@@ -445,12 +444,12 @@ export const LanguageSwitcher = ({
                 code: languageLabel(preview.code, lang),
               })}
             </span>
-            <span className="badge badge-ghost badge-sm">
+            <Badge ghost>
               {t("language.previewCoverage", {
                 percent: Math.round(preview.coverage * 100),
                 keys: preview.keyCount,
               })}
-            </span>
+            </Badge>
           </div>
           {preview.sample.length > 0 && (
             <div className="flex flex-col gap-1">

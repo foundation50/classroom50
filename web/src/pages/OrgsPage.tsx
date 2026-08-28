@@ -327,6 +327,8 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
 
 function NoAccessBadge() {
   return (
+    // badge-neutral is deliberately not a Badge tone (Badge's neutral is the
+    // uncolored chip), so this lock chip keeps its inline recipe.
     <span className="badge badge-neutral gap-1">
       <LockIcon aria-hidden="true" className="size-3" />
       <Trans

@@ -15,6 +15,7 @@ import {
 
 import { EmptyState } from "@/components/list"
 import {
+  Badge,
   Button,
   Card,
   Markdown,
@@ -151,16 +152,16 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         <Card.Actions className="items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-2">
             {assignmentData?.mode === "individual" && (
-              <div className="badge badge-ghost badge-sm py-3">
+              <Badge ghost className="py-3">
                 <PersonIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.individual")}
-              </div>
+              </Badge>
             )}
             {assignmentData?.mode === "group" && (
-              <div className="badge badge-ghost badge-sm py-3">
+              <Badge ghost className="py-3">
                 <PeopleIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.group")}
-              </div>
+              </Badge>
             )}
           </div>
 

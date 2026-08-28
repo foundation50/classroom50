@@ -993,21 +993,19 @@ const AcceptAssignmentPage = () => {
       <AcceptCard>
         <EnterDiv className="card-body gap-4">
           <div className="flex justify-between">
-            <span className="badge badge-primary badge-soft">
+            <Badge tone="primary" size="md">
               <PersonIcon aria-hidden="true" className="size-4" />
               {assignmentData?.mode && modeLabelKey[assignmentData.mode]
                 ? t(modeLabelKey[assignmentData.mode])
                 : ""}
-            </span>
-            <span
-              className={`badge ${pastDue ? "badge-error badge-soft" : ""}`}
-            >
+            </Badge>
+            <Badge tone={pastDue ? "error" : "neutral"} size="md">
               {assignmentData?.due
                 ? t(pastDue ? "accept.pastDue" : "accept.due", {
                     date: formatDueDateTime(assignmentData.due),
                   })
                 : t("accept.noDueDate")}
-            </span>
+            </Badge>
           </div>
           <Heading as="h1" variant="title-medium" className="pt-2">
             {assignmentData?.name}
