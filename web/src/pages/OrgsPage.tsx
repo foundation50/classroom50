@@ -46,6 +46,7 @@ import {
   Button,
   Card,
   DropdownMenu,
+  RouterButton,
   Toolbar,
   cx,
   Heading,
@@ -312,19 +313,22 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
 
   if (!canOpen) return null
   return (
-    <Link
+    <RouterButton
       to="/$org"
       params={{ org: org.login }}
       aria-label={t("orgs.card.openAria", { org: org.login })}
-      className="btn btn-primary btn-sm"
+      variant="primary"
+      size="sm"
     >
       {t("orgs.card.open")}
-    </Link>
+    </RouterButton>
   )
 }
 
 function NoAccessBadge() {
   return (
+    // badge-neutral is deliberately not a Badge tone (Badge's neutral is the
+    // uncolored chip), so this lock chip keeps its inline recipe.
     <span className="badge badge-neutral gap-1">
       <LockIcon aria-hidden="true" className="size-3" />
       <Trans

@@ -7,7 +7,6 @@
 
 import { useMemo, useState } from "react"
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
 import { AlertIcon, LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
 
@@ -22,6 +21,7 @@ import {
   Input,
   Modal,
   ModalIcon,
+  RouterButton,
   Spinner,
   Toolbar,
 } from "@/components/ui"
@@ -382,15 +382,18 @@ export const ConfirmStep = ({
                   <p className="mt-1 text-sm text-base-content/70">
                     {t("migration.access.step1Body", { org: accessOrg })}
                   </p>
-                  <a
+                  <Button
+                    as="a"
                     href={githubOAuthGrantUrl()}
                     target="_blank"
                     rel="noreferrer"
-                    className="btn btn-primary btn-sm mt-3"
+                    variant="primary"
+                    size="sm"
+                    className="mt-3"
                   >
                     {t("migration.access.step1Button")}
                     <LinkExternalIcon aria-hidden="true" className="size-4" />
-                  </a>
+                  </Button>
                 </div>
               </div>
             </li>
@@ -407,15 +410,18 @@ export const ConfirmStep = ({
                   <p className="mt-1 text-sm text-base-content/70">
                     {t("migration.access.step2Body", { org: accessOrg })}
                   </p>
-                  <a
+                  <Button
+                    as="a"
                     href={githubOrgOAuthPolicyUrl(accessOrg)}
                     target="_blank"
                     rel="noreferrer"
-                    className="btn btn-ghost btn-sm mt-3"
+                    variant="ghost"
+                    size="sm"
+                    className="mt-3"
                   >
                     {t("migration.access.step2Button", { org: accessOrg })}
                     <LinkExternalIcon aria-hidden="true" className="size-4" />
-                  </a>
+                  </Button>
                 </div>
               </div>
             </li>
@@ -732,13 +738,13 @@ export const ConfirmStep = ({
 
             {done && result ? (
               <Card.Actions className="mt-4 justify-end">
-                <Link
+                <RouterButton
                   to="/$org/$classroom"
                   params={{ org: targetOrg, classroom: result.shortName }}
-                  className="btn btn-primary"
+                  variant="primary"
                 >
                   {t("migration.execute.viewClass")}
-                </Link>
+                </RouterButton>
               </Card.Actions>
             ) : (
               !blocked && (

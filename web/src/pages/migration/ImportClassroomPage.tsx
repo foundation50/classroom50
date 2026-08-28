@@ -4,19 +4,14 @@
 // machine. The review step runs the import in place after confirmation.
 
 import { useState } from "react"
-import {
-  Link,
-  getRouteApi,
-  useNavigate,
-  useParams,
-} from "@tanstack/react-router"
+import { getRouteApi, useNavigate, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { CheckIcon } from "@/components/ui/icons"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Button, Card, Spinner, cx } from "@/components/ui"
+import { Alert, Button, Card, RouterButton, Spinner, cx } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -94,9 +89,9 @@ const OrgSetupGate = ({ org }: { org: string }) => {
           {t("migration.gate.body", { org })}
         </p>
         <Card.Actions className="mt-4">
-          <Link to="/$org/setup" params={{ org }} className="btn btn-primary">
+          <RouterButton to="/$org/setup" params={{ org }} variant="primary">
             {t("migration.gate.setupButton")}
-          </Link>
+          </RouterButton>
         </Card.Actions>
       </Card.Body>
     </Card>

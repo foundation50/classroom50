@@ -13,7 +13,13 @@ import {
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-import { Badge, Button, DropdownMenu, EmphasisLtr } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  EmphasisLtr,
+  RouterButton,
+} from "@/components/ui"
 import {
   NoSearchResults,
   SkeletonRegion,
@@ -52,14 +58,16 @@ const NewAssignmentButton = ({
   return (
     <>
       <div className="join">
-        <Link
+        <RouterButton
           to="/$org/$classroom/assignments/new"
           params={{ org, classroom }}
-          className="btn btn-primary btn-sm join-item"
+          variant="primary"
+          size="sm"
+          className="join-item"
         >
           <PlusIcon aria-hidden="true" className="size-4" />{" "}
           {t("assignments.newButton.assignment")}
-        </Link>
+        </RouterButton>
         {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
         <div className="dropdown dropdown-end -ms-px">
           <Button

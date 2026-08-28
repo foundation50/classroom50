@@ -22,6 +22,18 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   }
 })
 
+// RouterButton (createLink) needs a router context; stub just that primitive
+// to a plain anchor so the table renders without a RouterProvider.
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({ children }: { children?: ReactNode }) => (
+      <a href="/mock">{children}</a>
+    ),
+  }
+})
+
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
 }))

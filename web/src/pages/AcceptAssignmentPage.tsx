@@ -19,6 +19,7 @@ import {
   Markdown,
   MonoLtr,
   Heading,
+  RouterButton,
 } from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -992,21 +993,19 @@ const AcceptAssignmentPage = () => {
       <AcceptCard>
         <EnterDiv className="card-body gap-4">
           <div className="flex justify-between">
-            <span className="badge badge-primary badge-soft">
+            <Badge tone="primary" size="md">
               <PersonIcon aria-hidden="true" className="size-4" />
               {assignmentData?.mode && modeLabelKey[assignmentData.mode]
                 ? t(modeLabelKey[assignmentData.mode])
                 : ""}
-            </span>
-            <span
-              className={`badge ${pastDue ? "badge-error badge-soft" : ""}`}
-            >
+            </Badge>
+            <Badge tone={pastDue ? "error" : "neutral"} size="md">
               {assignmentData?.due
                 ? t(pastDue ? "accept.pastDue" : "accept.due", {
                     date: formatDueDateTime(assignmentData.due),
                   })
                 : t("accept.noDueDate")}
-            </span>
+            </Badge>
           </div>
           <Heading as="h1" variant="title-medium" className="pt-2">
             {assignmentData?.name}
@@ -1112,8 +1111,10 @@ const AcceptAssignmentPage = () => {
                     exit="exit"
                     className="flex flex-col gap-4 overflow-hidden"
                   >
-                    <a
-                      className="btn btn-primary w-full text-lg p-5"
+                    <Button
+                      as="a"
+                      variant="primary"
+                      className="w-full text-lg p-5"
                       href={
                         acceptMutation?.data?.repo.html_url ||
                         `https://www.github.com/${org}/${checkedRepo?.name}`
@@ -1122,7 +1123,7 @@ const AcceptAssignmentPage = () => {
                       rel="noreferrer"
                     >
                       {t("accept.openRepository")}
-                    </a>
+                    </Button>
 
                     {assignmentData?.mode === "group" && (
                       <Button
@@ -1135,13 +1136,17 @@ const AcceptAssignmentPage = () => {
                     )}
 
                     {org && classroom && (
-                      <Link
+                      // outline variant (primary outline) aligns this with its
+                      // Edit-collaborators sibling above; it was a bare neutral
+                      // outline before.
+                      <RouterButton
                         to="/$org/$classroom"
                         params={{ org, classroom }}
-                        className="btn btn-outline w-full text-lg p-5"
+                        variant="outline"
+                        className="w-full text-lg p-5"
                       >
                         {t("accept.goToClassroom")}
-                      </Link>
+                      </RouterButton>
                     )}
                   </motion.div>
                 )}

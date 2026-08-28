@@ -1,4 +1,3 @@
-import { Link } from "@tanstack/react-router"
 import {
   ArrowSwitchIcon,
   BookIcon,
@@ -21,6 +20,7 @@ import {
   Card,
   Input,
   LabeledControl,
+  RouterButton,
   Select,
   Heading,
 } from "@/components/ui"
@@ -64,17 +64,18 @@ function ViewAssignmentsLink({
 }) {
   const { t } = useTranslation()
   return (
-    <Link
-      type="button"
+    <RouterButton
       to="/$org/$classroom/assignments"
       params={{ org, classroom }}
       aria-label={t("classes.viewAssignmentsAria", {
         classroom: classroomName,
       })}
-      className={`btn btn-outline btn-primary btn-sm ${block ? "w-full" : ""}`}
+      variant="outline"
+      size="sm"
+      className={block ? "w-full" : undefined}
     >
       {t("classes.viewAssignments")}
-    </Link>
+    </RouterButton>
   )
 }
 

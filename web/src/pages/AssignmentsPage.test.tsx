@@ -27,6 +27,18 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   }
 })
 
+// RouterButton (createLink) needs a router context; stub just that primitive
+// to a plain anchor so the page renders without a RouterProvider.
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({ children }: { children?: ReactNode }) => (
+      <a href="/mock">{children}</a>
+    ),
+  }
+})
+
 const studentCount = vi.fn()
 const getStudents = vi.fn()
 const getClassroom = vi.fn()

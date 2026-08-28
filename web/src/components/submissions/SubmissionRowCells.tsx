@@ -161,7 +161,9 @@ export const SubmissionCountCell = ({
     >
       <div className="flex items-center gap-1.5">
         {/* Success-toned like the Submitted progress bars: a green chip = a
-            submission exists. Hover deepens the fill as the click affordance. */}
+            submission exists. Hover deepens the fill as the click affordance.
+            A real <button> wearing the badge recipe — Badge renders a span,
+            and this chip is interactive, so it stays inline. */}
         <button
           type="button"
           className="badge badge-sm badge-success badge-soft whitespace-nowrap gap-1 hover:bg-success/20 cursor-pointer"

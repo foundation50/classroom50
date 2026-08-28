@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   Input,
   LabeledControl,
+  RouterButton,
   Select,
 } from "@/components/ui"
 import useClassroomSummaries, {
@@ -258,15 +259,16 @@ const ClassroomList = ({
         <div className="mx-1 hidden h-6 w-px self-center bg-base-300 sm:block" />
 
         <div className="join">
-          <Link
+          <RouterButton
             to="/$org/classes/new"
             params={{ org }}
-            type="button"
-            className="btn btn-primary btn-sm join-item"
+            variant="primary"
+            size="sm"
+            className="join-item"
           >
             <PlusIcon aria-hidden="true" className="size-4" />
             {t("classes.newClass")}
-          </Link>
+          </RouterButton>
           {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
           <div className="dropdown dropdown-end -ms-px">
             <Button

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
 import { Outlet, useRouterState } from "@tanstack/react-router"
 import { AnimatePresence, motion } from "motion/react"
+import { Button } from "@/components/ui"
 import Drawer, { MOBILE_DRAWER_ID, useSidebarCollapse } from "./collapseContext"
 import {
   SidebarContent,
@@ -76,12 +77,17 @@ export const DrawerContent = ({ children }: { children: ReactNode }) => {
     // White canvas per GitHub Product UI: content sits on base-100 and muted
     // panels/cards carry the base-200 gray.
     <div className="drawer-content min-h-screen bg-base-100">
-      <a
+      <Button
+        as="a"
         href="#main-content"
-        className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
+        variant="primary"
+        size="sm"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
       >
         {t("common.skipToMainContent")}
-      </a>
+      </Button>
+      {/* A label, not a Button: daisyUI's drawer opens via the checkbox this
+          label toggles — no JS handler to attach a Button to. */}
       <label
         htmlFor={MOBILE_DRAWER_ID}
         aria-label={t("nav.openMenu")}

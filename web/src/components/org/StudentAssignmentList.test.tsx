@@ -39,6 +39,36 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   }
 })
 
+// RouterButton (createLink) needs a router context; stub it to the same
+// data-attribute-carrying anchor as the Link mock above so the accept-link
+// search assertion keeps working without a RouterProvider.
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({
+      children,
+      to,
+      params,
+      search,
+    }: {
+      children?: React.ReactNode
+      to?: string
+      params?: Record<string, string>
+      search?: Record<string, string>
+    }) => (
+      <a
+        href="https://example.test/link"
+        data-to={to}
+        data-params={JSON.stringify(params ?? {})}
+        data-search={JSON.stringify(search ?? {})}
+      >
+        {children}
+      </a>
+    ),
+  }
+})
+
 const pagesAssignments = vi.fn()
 const orgRepos = vi.fn()
 const studentClassrooms = vi.fn()

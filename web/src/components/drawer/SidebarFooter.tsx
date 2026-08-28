@@ -10,6 +10,7 @@ import {
   SignOutIcon,
   SunIcon,
 } from "@/components/ui/icons"
+import { Badge } from "@/components/ui"
 import {
   useParams,
   useMatchRoute,
@@ -503,13 +504,16 @@ const AuthedSidebarFooter = () => {
                     )}
                   </span>
                   {viewAs && canPreviewRoles ? (
-                    <span
-                      className="badge badge-warning badge-xs gap-1"
+                    <Badge
+                      tone="warning"
+                      size="xs"
+                      soft={false}
+                      className="gap-1"
                       title={t("nav.rolePreviewTooltip")}
                     >
                       <EyeIcon aria-hidden="true" className="size-3" />
                       {t("nav.preview")}
-                    </span>
+                    </Badge>
                   ) : null}
                   <DeployEnvBadge />
                 </div>
