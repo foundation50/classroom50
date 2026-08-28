@@ -17,6 +17,21 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.35.0](https://github.com/foundation50/classroom50/compare/cli-v1.34.1...cli-v1.35.0) (2026-08-28)
+
+
+### Features
+
+* add autograder failure-details and show-output options ([#767](https://github.com/foundation50/classroom50/issues/767)) ([d1713bd](https://github.com/foundation50/classroom50/commit/d1713bd63be070a5321622a6b7f3d855a4c7e74a))
+* add repo_visibility control for generated assignment repos ([#771](https://github.com/foundation50/classroom50/issues/771)) ([d6ff58e](https://github.com/foundation50/classroom50/commit/d6ff58e53221a8193a8ed14808f2240337da39b6))
+* **web:** support a custom Pages domain for published classroom resources ([#782](https://github.com/foundation50/classroom50/issues/782)) ([807265c](https://github.com/foundation50/classroom50/commit/807265ce28de174f70f6fb51a197c209ca75c77f))
+
+
+### Bug Fixes
+
+* **cli:** use the student's git identity for submit commits ([#780](https://github.com/foundation50/classroom50/issues/780)) ([f96a82c](https://github.com/foundation50/classroom50/commit/f96a82c78f254864df841b82fc762409740931d5)), closes [#772](https://github.com/foundation50/classroom50/issues/772)
+* stop concurrent invite acceptance from corrupting roster.csv ([#773](https://github.com/foundation50/classroom50/issues/773)) ([14eae9c](https://github.com/foundation50/classroom50/commit/14eae9c8b12f8f76b9c44025f08855eeba4543b0))
+
 ## [1.34.1](https://github.com/foundation50/classroom50/compare/cli-v1.34.0...cli-v1.34.1) (2026-08-26)
 
 
