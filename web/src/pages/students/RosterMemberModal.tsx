@@ -45,7 +45,14 @@ import {
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
 } from "@/util/classroomRoleUI"
-import { Badge, Button, EmphasisLtr, Modal, Select } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Checkbox,
+  EmphasisLtr,
+  Modal,
+  Select,
+} from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -838,9 +845,8 @@ const RosterMemberModal = ({
 
                 {roleChanged && roleGrantsOwner ? (
                   <label className="flex items-start gap-2 rounded-box border border-error/30 bg-error/5 p-3 text-sm">
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-sm mt-0.5"
+                    <Checkbox
+                      className="mt-0.5"
                       checked={roleOwnerConfirmed}
                       onChange={(e) =>
                         setRoleOwnerConfirmed(e.currentTarget.checked)

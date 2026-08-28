@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-import { AnimatedAlert, FormField, Select } from "@/components/ui"
+import { AnimatedAlert, Checkbox, FormField, Select } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import type { OrgMemberRow } from "@/util/orgMembers"
@@ -151,9 +151,9 @@ const RemoveConfirmDialog = ({
                 checkbox there). Ticking it widens the run to the WHOLE
                 selection — the label carries the full count to say so. */}
             <label className="flex cursor-pointer items-start gap-3">
-              <input
-                type="checkbox"
-                className="checkbox checkbox-sm checkbox-error mt-0.5"
+              <Checkbox
+                tone="error"
+                className="mt-0.5"
                 checked={alsoRemoveFromOrg}
                 onChange={(e) => onAlsoRemoveFromOrgChange(e.target.checked)}
               />

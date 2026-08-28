@@ -1,4 +1,4 @@
-import { cx } from "./cx"
+import { Checkbox } from "./Checkbox"
 
 // The tri-state select-all checkbox (checked / indeterminate / empty), shared
 // by Toolbar.Selection and table headers that host select-all in the select
@@ -20,9 +20,8 @@ export function SelectAllCheckbox({
   className?: string
 }) {
   return (
-    <input
-      type="checkbox"
-      className={cx("checkbox checkbox-sm", className)}
+    <Checkbox
+      className={className}
       aria-label={ariaLabel}
       disabled={disabled}
       checked={allSelected}

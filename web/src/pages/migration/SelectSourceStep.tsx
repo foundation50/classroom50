@@ -13,7 +13,7 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { SkeletonRegion, EmptyState } from "@/components/list"
-import { Alert, Badge, Button, Card, rtlFlip } from "@/components/ui"
+import { Alert, Badge, Button, Card, Checkbox, rtlFlip } from "@/components/ui"
 import { listClassroomsWithOrg } from "@/migration/classroomApi"
 import type { ClassroomWithOrg } from "@/migration/types"
 
@@ -109,9 +109,7 @@ export const SelectSourceStep = ({
         <p className="text-base-content/70">{t("migration.select.body")}</p>
 
         <label className="mt-2 flex w-fit cursor-pointer items-center gap-2 text-sm text-base-content/70">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm"
+          <Checkbox
             checked={includeArchived}
             onChange={(e) => setIncludeArchived(e.target.checked)}
           />
