@@ -17,7 +17,14 @@ import {
   SkeletonRegion,
   ToolbarSkeleton,
 } from "@/components/list"
-import { Alert, Button, Card, DropdownMenu, EmphasisLtr } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  Card,
+  DropdownMenu,
+  EmphasisLtr,
+  RouterButton,
+} from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
@@ -38,14 +45,15 @@ const NewClassroomButton = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   return (
     <div className="join">
-      <Link
+      <RouterButton
         to="/$org/classes/new"
         params={{ org }}
-        className="btn btn-primary join-item"
+        variant="primary"
+        className="join-item"
       >
         <PlusIcon aria-hidden="true" className="size-4" />
         {t("classes.empty.createButton")}
-      </Link>
+      </RouterButton>
       {/* Not a join-item itself: daisyUI resets the join radius vars for a
           join-item's children, which would square the inner button's corners.
           The wrapper still inherits the vars as the join's last child; -ms-px

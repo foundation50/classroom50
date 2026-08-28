@@ -14,7 +14,14 @@ import {
 } from "@/components/ui/icons"
 
 import { EmptyState } from "@/components/list"
-import { Button, Card, Markdown, Modal, Heading } from "@/components/ui"
+import {
+  Button,
+  Card,
+  Markdown,
+  Modal,
+  Heading,
+  RouterButton,
+} from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
 import { assignmentDescription } from "@/types/classroom"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -64,15 +71,18 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
       className="relative col-span-12 border border-base-200 md:col-span-6 xl:col-span-4"
     >
       {canManageGroup && classroom && assignment && (
-        <Link
+        <RouterButton
           to="/$org/$classroom/assignments/$assignment/settings"
           params={{ org, classroom, assignment }}
-          className="btn btn-ghost btn-sm btn-circle absolute end-3 top-3 z-10 text-base-content/70 hover:text-primary"
+          variant="ghost"
+          size="sm"
+          shape="circle"
+          className="absolute end-3 top-3 z-10 text-base-content/70 hover:text-primary"
           aria-label={t("classes.repo.manageGroupAria", { assignment })}
           title={t("classes.repo.manageGroupTitle")}
         >
           <PencilIcon aria-hidden="true" className="size-4" />
-        </Link>
+        </RouterButton>
       )}
 
       <Card.Body className="gap-4">

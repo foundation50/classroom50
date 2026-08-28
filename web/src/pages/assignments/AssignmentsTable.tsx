@@ -41,6 +41,7 @@ import {
   Button,
   MetricCount,
   MetricBar,
+  RouterButton,
   SkeletonRows,
   SortableTh,
   TableShell,
@@ -533,8 +534,10 @@ const AssignmentsTable = ({
                       classroom={classroom}
                       assignment={assignment}
                     />
-                    <Link
-                      className="btn btn-circle btn-sm btn-ghost"
+                    <RouterButton
+                      shape="circle"
+                      size="sm"
+                      variant="ghost"
                       to="/$org/$classroom/assignments/$assignment/settings"
                       params={{
                         org,
@@ -555,7 +558,7 @@ const AssignmentsTable = ({
                       ) : (
                         <EyeIcon aria-hidden="true" className="size-4" />
                       )}
-                    </Link>
+                    </RouterButton>
                     {canMutate && (
                       <LockAssignmentAction
                         org={org}

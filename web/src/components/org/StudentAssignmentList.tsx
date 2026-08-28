@@ -12,6 +12,7 @@ import {
 import {
   Alert,
   Badge,
+  RouterButton,
   SkeletonRows,
   SortableTh,
   TableShell,
@@ -58,27 +59,27 @@ function AssignmentCta({
   const { t } = useTranslation()
   if (accepted) {
     return (
-      <Link
-        type="button"
+      <RouterButton
         to="/$org/$classroom/assignments/$assignment/submission"
         params={{ org, classroom, assignment: assignment.slug }}
-        className="btn btn-outline btn-primary btn-sm"
+        variant="outline"
+        size="sm"
       >
         {t("assignments.discover.viewSubmission")}
-      </Link>
+      </RouterButton>
     )
   }
   return (
-    <Link
-      type="button"
+    <RouterButton
       to="/$org/$classroom/assignments/$assignment/accept"
       params={{ org, classroom, assignment: assignment.slug }}
       search={secret ? { k: secret } : undefined}
-      className="btn btn-primary btn-sm"
+      variant="primary"
+      size="sm"
     >
       <FileAddedIcon aria-hidden="true" className="size-4" />
       {t("assignments.discover.accept")}
-    </Link>
+    </RouterButton>
   )
 }
 
