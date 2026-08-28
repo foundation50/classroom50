@@ -11,6 +11,7 @@ import type {
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
 import { Alert, Button, Modal } from "@/components/ui"
+import { BulkProgressRow, bulkProgressPct } from "@/components/bulk/resultView"
 import {
   classifyRosterUpload,
   hasTeacherPromotion,
@@ -671,11 +672,6 @@ const UploadRoster = ({
     if (outcome.emailResult) onEmailSuccess?.(outcome.emailResult)
   }
 
-  const progressPercent =
-    progress.total === 0
-      ? 0
-      : Math.round((progress.processed / progress.total) * 100)
-
   return (
     <>
       <input
@@ -941,31 +937,20 @@ const UploadRoster = ({
         )}
 
         {phase === "importing" && (
-          <div className="mt-6">
-            <p className="mb-2 font-medium">{progress.message}</p>
-
-            <progress
-              className="progress progress-primary w-full"
-              value={progress.processed}
-              max={progress.total || 1}
-            />
-
-            <div className="mt-2 flex justify-between text-sm opacity-70">
-              <span>
-                {t("students.progressProcessed", {
-                  processed: progress.processed,
-                  total: progress.total,
-                })}
-              </span>
-              <span>
-                {t("students.progressPercent", { percent: progressPercent })}
-              </span>
-            </div>
-
+          <BulkProgressRow
+            progress={progress}
+            processedCaption={t("students.progressProcessed", {
+              processed: progress.processed,
+              total: progress.total,
+            })}
+            percentCaption={t("students.progressPercent", {
+              percent: bulkProgressPct(progress),
+            })}
+          >
             <Alert tone="info" className="mt-6">
               <span>{t("students.keepTabOpen")}</span>
             </Alert>
-          </div>
+          </BulkProgressRow>
         )}
 
         {/* Every upload lands on ONE screen, even one that carried both kinds of

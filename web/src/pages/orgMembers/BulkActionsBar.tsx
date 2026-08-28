@@ -27,7 +27,9 @@ import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
 import { logger } from "@/lib/logger"
 import {
+  BulkProgressRow,
   BulkResultSection,
+  bulkProgressPct,
   type BulkPhase,
   type BulkProgress,
   type BulkResultView,
@@ -226,11 +228,6 @@ const BulkActionsBar = ({
       setPhase("error")
     }
   }
-
-  const progressPercent =
-    progress.total === 0
-      ? 0
-      : Math.round((progress.processed / progress.total) * 100)
 
   return (
     <>
@@ -440,26 +437,18 @@ const BulkActionsBar = ({
         }
       >
         {phase === "working" && (
-          <div className="mt-6">
-            <p className="mb-2 font-medium">{progress.message}</p>
-            <progress
-              className="progress progress-primary w-full"
-              value={progress.processed}
-              max={progress.total || 1}
-            />
-            <div className="mt-2 flex justify-between text-sm opacity-70">
-              <span>
-                {t("orgMembers.bulk.progressProcessed", {
-                  processed: progress.processed,
-                  total: progress.total,
-                })}
-              </span>
-              <span>{progressPercent}%</span>
-            </div>
+          <BulkProgressRow
+            progress={progress}
+            processedCaption={t("orgMembers.bulk.progressProcessed", {
+              processed: progress.processed,
+              total: progress.total,
+            })}
+            percentCaption={`${bulkProgressPct(progress)}%`}
+          >
             <Alert tone="info" className="mt-6">
               <span>{t("orgMembers.bulk.keepTabOpen")}</span>
             </Alert>
-          </div>
+          </BulkProgressRow>
         )}
 
         {phase === "complete" && result && (
