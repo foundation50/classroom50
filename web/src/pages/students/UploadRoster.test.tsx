@@ -1147,9 +1147,7 @@ describe("UploadRoster footer phase branches", () => {
     const retry = screen
       .getByRole("button", { name: "students.importRetryLookup" })
       .closest("button") as HTMLButtonElement
-    expect(
-      screen.getByRole("button", { name: "common.cancel" }),
-    ).toBeTruthy()
+    expect(screen.getByRole("button", { name: "common.cancel" })).toBeTruthy()
 
     await user.click(retry)
 
