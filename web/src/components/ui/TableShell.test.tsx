@@ -16,7 +16,9 @@ const body = (
 
 describe("TableShell", () => {
   it("renders the full-size house table inside the framed box by default", () => {
-    const { container } = render(<TableShell animate={false}>{body}</TableShell>)
+    const { container } = render(
+      <TableShell animate={false}>{body}</TableShell>,
+    )
     const frame = container.firstElementChild as HTMLElement
     expect(frame.className).toContain("overflow-x-auto")
     expect(frame.className).toContain("border-base-300")
@@ -43,7 +45,9 @@ describe("TableShell", () => {
     const frame = container.firstElementChild as HTMLElement
     expect(frame.className).toContain("max-h-48")
     expect(frame.className).toContain("overflow-auto")
-    expect(container.querySelector("table")?.className).not.toContain("max-h-48")
+    expect(container.querySelector("table")?.className).not.toContain(
+      "max-h-48",
+    )
   })
 
   it("keeps aria-busy and the padded recipe unchanged", () => {

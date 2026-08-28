@@ -95,6 +95,9 @@ function VpatConformanceTable({
             {t("accessibility.vpat.empty")}
           </div>
         ) : (
+          // Deliberately not TableShell: the VPAT matrix is long-form document
+          // content on the public accessibility statement, where the boxed
+          // list-frame treatment would read as UI chrome.
           <div className="overflow-x-auto">
             <table className="table w-full">
               <thead>
