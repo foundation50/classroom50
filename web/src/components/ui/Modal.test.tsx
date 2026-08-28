@@ -4,6 +4,7 @@ import { render, screen, cleanup } from "@testing-library/react"
 import { createRef } from "react"
 
 import { Modal, ModalFooterPortal } from "./Modal"
+import { logger } from "@/lib/logger"
 
 // happy-dom doesn't implement <dialog> showModal/close; stub them so the
 // open-sync effect can run without throwing.
@@ -268,7 +269,7 @@ describe("Modal", () => {
   })
 
   it("renders nothing and warns when used outside a Modal", () => {
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {})
     const { container } = render(
       <ModalFooterPortal>
         <button type="button">Orphan</button>

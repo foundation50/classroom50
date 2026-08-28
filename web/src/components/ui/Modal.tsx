@@ -15,6 +15,7 @@ import { useTranslation } from "react-i18next"
 
 import { Button } from "./Button"
 import { cx } from "./cx"
+import { logger } from "@/lib/logger"
 import { Heading } from "./Heading"
 
 // The canonical dialog. Wraps the native `<dialog className="modal">` idiom the
@@ -251,7 +252,7 @@ export function ModalFooterPortal({ children }: { children: ReactNode }) {
   const container = useContext(ModalFooterContext)
   if (container === undefined) {
     if (import.meta.env.DEV) {
-      console.warn(
+      logger.warn(
         "ModalFooterPortal rendered outside a Modal: its children are dropped.",
       )
     }
