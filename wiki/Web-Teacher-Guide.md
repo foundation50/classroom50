@@ -488,9 +488,9 @@ more information, see
 > previous course) is a different action. Inviting them again does nothing:
 > GitHub reports "Already a member," and it won't put them on this classroom's
 > roster. To enroll an existing member, open the organization's **Members** page
-> in Classroom 50 and use **Add to classroom** (per member, or select several
-> for the bulk action). See
-> [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
+> in Classroom 50, select their row (or several), and use **Actions**, then
+> **Add to classroom**. For more information, see
+> [Manage organization members](Web-Teacher-Guide#manage-organization-members).
 
 **Share** — shareable links for students you've already invited. The **Share
 classroom links** dialog holds two: an onboarding link, with which a student
@@ -532,6 +532,63 @@ and updates the roster to match; the same check runs when you open the page.
 While it runs, the button reads **Refreshing roster…** and the table locks
 until it finishes. The caption beside the button shows when the roster last
 changed and what the last refresh found.
+
+## Manage organization members
+
+The **Members** page lists everyone in your GitHub organization and the
+classrooms they belong to. Open your organization in Classroom 50, then select
+**Members** in the sidebar. The page is available to organization owners.
+
+> [!WARNING]
+> The page covers the whole organization, not only your students. If other
+> teachers share the organization (even without using Classroom 50), their
+> members appear here too, so take care when removing anyone.
+
+The table shows **Name**, **Username**, **Classrooms**, **Roles**, and
+**Status** columns; click a column header to sort by it. **Roles** is the
+organization role (**Owner** or **Member**), and **Status** reports only
+problems:
+
+- **Not an org member.** On a classroom roster but not in the organization
+  (for example, they left or were removed). Click **Invite** on the row to
+  restore their access.
+- **Invitation pending.** An email invitation hasn't been accepted yet.
+- **Not enrolled.** On a roster but missing from the classroom team, so
+  grade collection would miss them.
+
+The toolbar narrows the table: **Search** matches members by name, username,
+or email; a **Show** filter covers both status and organization role
+(**Owners**, **Members**); and a classroom filter shows one classroom's
+members, or members on **No classroom**.
+
+Click a row to open the member's details: their name, GitHub username and ID,
+every email address the rosters record for them, and their classroom access
+with a link to each classroom. From here you can also invite an on-roster
+non-member back to the organization, or remove a member from the organization.
+
+### Bulk member actions
+
+Select rows with the checkboxes (or the select-all in the header), then open
+the **Actions** menu:
+
+- **Add to classroom** enrolls the selected members on a classroom you pick in
+  the dialog. Members already on that classroom, and people who aren't
+  organization members yet, are skipped.
+- **Remove from classroom** unenrolls the selected members from a classroom
+  you pick. Select the checkbox in the dialog to also remove them from the
+  organization in the same run.
+- **Remove from organization** removes the selected members from the
+  organization. Each member is first unenrolled from every classroom they
+  belong to, so no roster is left pointing at a non-member.
+
+Each dialog previews what will happen (how many members are affected, and why
+any are skipped) before you confirm. Removals also require typing `confirm`,
+and the dialog warns when the selection includes organization owners or
+members enrolled in other classrooms.
+
+Neither unenrolling nor removing deletes repositories. For more information,
+see
+[Enroll, unenroll, and remove are separate](How-Classroom-50-Works#lifecycle-enroll-unenroll-and-remove-are-separate).
 
 ## Collect submissions
 
