@@ -29,7 +29,9 @@ import { resendClassroomInvite, retireEmailInvites } from "@/domain/students"
 import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
 import {
+  BulkProgressRow,
   BulkResultSection,
+  bulkProgressPct,
   type BulkPhase,
   type BulkProgress,
   type BulkResultView,
@@ -391,11 +393,6 @@ const RosterBulkActionsBar = ({
     onDone("cancel")
   }
 
-  const progressPercent =
-    progress.total === 0
-      ? 0
-      : Math.round((progress.processed / progress.total) * 100)
-
   return (
     <>
       {/* The selection cluster lives in the page toolbar and appears only
@@ -573,26 +570,18 @@ const RosterBulkActionsBar = ({
         }
       >
         {phase === "working" && (
-          <div className="mt-6">
-            <p className="mb-2 font-medium">{progress.message}</p>
-            <progress
-              className="progress progress-primary w-full"
-              value={progress.processed}
-              max={progress.total || 1}
-            />
-            <div className="mt-2 flex justify-between text-sm opacity-70">
-              <span>
-                {t("students.bulk.progressProcessed", {
-                  processed: progress.processed,
-                  total: progress.total,
-                })}
-              </span>
-              <span>{progressPercent}%</span>
-            </div>
+          <BulkProgressRow
+            progress={progress}
+            processedCaption={t("students.bulk.progressProcessed", {
+              processed: progress.processed,
+              total: progress.total,
+            })}
+            percentCaption={`${bulkProgressPct(progress)}%`}
+          >
             <Alert tone="info" className="mt-6">
               <span>{t("students.bulk.keepTabOpen")}</span>
             </Alert>
-          </div>
+          </BulkProgressRow>
         )}
 
         {phase === "complete" && result && (

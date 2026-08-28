@@ -11,8 +11,10 @@ import {
   Modal,
   ModalIcon,
 } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
-import { BulkResultSection } from "@/components/bulk/resultView"
+import {
+  BulkProgressBlock,
+  BulkResultSection,
+} from "@/components/bulk/resultView"
 import { slugBudgetError } from "@/components/assignments/slugBudget"
 import useRenameAssignment from "@/hooks/mutations/useRenameAssignment"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -156,10 +158,6 @@ export function RenameAssignmentModal({
   }
 
   const progress = rename.progress
-  const pct =
-    progress && progress.total > 0
-      ? Math.round((progress.processed / progress.total) * 100)
-      : 0
 
   return (
     <Modal
@@ -279,25 +277,21 @@ export function RenameAssignmentModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("assignments.rename.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            // Omit `value` until the fan-out reports so the bar animates as an
-            // indeterminate track during the config commit.
-            {...(progress ? { value: pct } : {})}
-            max={100}
-          />
-          <p className="break-all text-center text-sm text-base-content/70">
-            {progress
+        <BulkProgressBlock
+          workingLabel={t("assignments.rename.working")}
+          // No progress yet = the config-commit step: indeterminate track.
+          progress={progress ?? { processed: 0, total: 0 }}
+          indeterminateUntilFirst
+          caption={
+            progress
               ? t("assignments.rename.progress", {
                   processed: progress.processed,
                   total: progress.total,
                   repo: progress.repo,
                 })
-              : t("assignments.rename.configStep")}
-          </p>
-        </div>
+              : t("assignments.rename.configStep")
+          }
+        />
       )}
 
       {runError !== "" && (

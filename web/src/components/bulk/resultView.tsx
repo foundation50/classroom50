@@ -96,9 +96,30 @@ export const BulkPhaseFooter = ({
   )
 }
 
-// The working-phase block: spinner, percent bar, caption. With
-// `indeterminateUntilFirst`, the bar omits `value` until the first item lands
-// so a slow first write animates instead of sitting at 0%.
+// One copy of the ratio math: the <progress> fill and any textual percent
+// both derive from here.
+export const bulkProgressPct = (
+  progress: Pick<BulkProgress, "processed" | "total">,
+) =>
+  progress.total > 0
+    ? Math.round((progress.processed / progress.total) * 100)
+    : 0
+
+// Shared <progress> props. With `indeterminateUntilFirst`, `value` is omitted
+// until the first item lands so a slow first write animates as an
+// indeterminate track instead of sitting at 0%.
+export const bulkProgressBarProps = (
+  progress: Pick<BulkProgress, "processed" | "total">,
+  indeterminateUntilFirst = false,
+) => ({
+  className: "progress progress-primary w-full",
+  ...(indeterminateUntilFirst && progress.processed === 0
+    ? {}
+    : { value: bulkProgressPct(progress) }),
+  max: 100,
+})
+
+// The working-phase block: spinner, percent bar, caption.
 export const BulkProgressBlock = ({
   workingLabel,
   caption,
@@ -107,24 +128,57 @@ export const BulkProgressBlock = ({
 }: {
   workingLabel: string
   caption: React.ReactNode
-  progress: BulkProgress
+  progress: Pick<BulkProgress, "processed" | "total">
   indeterminateUntilFirst?: boolean
-}) => {
-  const pct =
-    progress.total > 0
-      ? Math.round((progress.processed / progress.total) * 100)
-      : 0
-  return (
-    <div className="mt-6 flex flex-col items-center gap-3 py-6">
-      <Spinner label={workingLabel} />
-      <progress
-        className="progress progress-primary w-full"
-        {...(indeterminateUntilFirst && progress.processed === 0
-          ? {}
-          : { value: pct })}
-        max={100}
-      />
-      <p className="text-sm text-base-content/70">{caption}</p>
+}) => (
+  <div className="mt-6 flex flex-col items-center gap-3 py-6">
+    <Spinner label={workingLabel} />
+    <progress {...bulkProgressBarProps(progress, indeterminateUntilFirst)} />
+    <p className="break-all text-center text-sm text-base-content/70">
+      {caption}
+    </p>
+  </div>
+)
+
+// The action bars' working layout: message heading, bar, processed/total on
+// the left and percent on the right, then any trailing content (the
+// keep-tab-open alert).
+export const BulkProgressRow = ({
+  progress,
+  processedCaption,
+  percentCaption,
+  children,
+}: {
+  progress: BulkProgress
+  processedCaption: React.ReactNode
+  percentCaption: React.ReactNode
+  children?: React.ReactNode
+}) => (
+  <div className="mt-6">
+    <p className="mb-2 font-medium">{progress.message}</p>
+    <progress {...bulkProgressBarProps(progress)} />
+    <div className="mt-2 flex justify-between text-sm opacity-70">
+      <span>{processedCaption}</span>
+      <span>{percentCaption}</span>
     </div>
-  )
-}
+    {children}
+  </div>
+)
+
+// The submissions modals' running block: spinner-prefixed status line above
+// the bar.
+export const BulkProgressInline = ({
+  label,
+  progress,
+}: {
+  label: React.ReactNode
+  progress: Pick<BulkProgress, "processed" | "total">
+}) => (
+  <div className="mt-4 space-y-3">
+    <p className="flex items-center gap-2 text-sm text-base-content/70">
+      <Spinner size="xs" />
+      {label}
+    </p>
+    <progress {...bulkProgressBarProps(progress)} />
+  </div>
+)

@@ -2,7 +2,8 @@ import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitPullRequestIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, ModalIcon, Spinner } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
+import { BulkProgressInline } from "@/components/bulk/resultView"
 import useOpenAllFeedbackPrs from "@/hooks/mutations/useOpenAllFeedbackPrs"
 import type { OpenAllRepoResult } from "@/domain/assignments"
 import type { AssignmentMode } from "@/types/classroom"
@@ -191,20 +192,16 @@ export function OpenAllFeedbackPrsModal({
         </div>
       ) : running ? (
         /* Running — live progress. */
-        <div className="mt-4 space-y-3">
-          <p className="flex items-center gap-2 text-sm text-base-content/70">
-            <Spinner size="xs" />
-            {t("submissions.openAllPrs.running", {
-              done: progress?.done ?? 0,
-              total: progress?.total ?? count,
-            })}
-          </p>
-          <progress
-            className="progress progress-primary w-full"
-            value={progress?.done ?? 0}
-            max={progress?.total ?? count}
-          />
-        </div>
+        <BulkProgressInline
+          label={t("submissions.openAllPrs.running", {
+            done: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          })}
+          progress={{
+            processed: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          }}
+        />
       ) : (
         /* Confirm. */
         <div className="mt-3 space-y-2 text-sm leading-6 text-base-content/70">
