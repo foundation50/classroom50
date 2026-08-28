@@ -645,10 +645,10 @@ const OrgMembersPage = () => {
             {org ? (
               <BulkActionsBar
                 org={org}
-                client={client}
                 selectedRows={selectedRows}
                 members={members}
                 classrooms={classroomOptions}
+                isOwner={isOwner}
                 onClearSelection={() => setSelectedKeys(new Set())}
                 onDone={handleBulkDone}
               />

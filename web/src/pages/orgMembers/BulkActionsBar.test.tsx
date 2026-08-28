@@ -51,22 +51,22 @@ vi.mock("@/hooks/useDeferredRun", () => ({
 }))
 
 const bulkAddToClassroom = vi.fn()
-vi.mock("@/domain/orgMembers/bulkAddToClassroom", () => ({
-  bulkAddToClassroom: (...args: unknown[]) => bulkAddToClassroom(...args),
+vi.mock("@/hooks/mutations/useBulkAddToClassroom", () => ({
+  useBulkAddToClassroom: () => ({ mutateAsync: bulkAddToClassroom }),
 }))
 const bulkRemoveFromClassroom = vi.fn()
-vi.mock("@/domain/orgMembers/bulkRemoveFromClassroom", () => ({
-  bulkRemoveFromClassroom: (...args: unknown[]) =>
-    bulkRemoveFromClassroom(...args),
+vi.mock("@/hooks/mutations/useBulkRemoveFromClassroom", () => ({
+  useBulkRemoveFromClassroom: () => ({
+    mutateAsync: bulkRemoveFromClassroom,
+  }),
 }))
 const bulkRemoveFromOrg = vi.fn()
-vi.mock("@/domain/orgMembers/bulkRemoveFromOrg", () => ({
-  bulkRemoveFromOrg: (...args: unknown[]) => bulkRemoveFromOrg(...args),
+vi.mock("@/hooks/mutations/useBulkRemoveFromOrg", () => ({
+  useBulkRemoveFromOrg: () => ({ mutateAsync: bulkRemoveFromOrg }),
 }))
 
 import BulkActionsBar from "./BulkActionsBar"
 import type { OrgMemberRow } from "@/util/orgMembers"
-import type { GitHubClient } from "@/github-core/client"
 
 const row = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
   key: over.username || over.email || "k",
@@ -103,15 +103,21 @@ const CLASSROOMS = [
 
 const renderBar = (
   selectedRows: OrgMemberRow[],
-  { onDone = vi.fn() }: { onDone?: () => void } = {},
+  {
+    onDone = vi.fn(),
+    isOwner = () => false,
+  }: {
+    onDone?: () => void
+    isOwner?: (r: OrgMemberRow) => boolean
+  } = {},
 ) =>
   render(
     <BulkActionsBar
       org="acme"
-      client={{} as GitHubClient}
       selectedRows={selectedRows}
       members={[]}
       classrooms={CLASSROOMS}
+      isOwner={isOwner}
       onClearSelection={vi.fn()}
       onDone={onDone}
     />,
@@ -150,8 +156,7 @@ describe("BulkActionsBar — destructive routing", () => {
     await confirmRun()
 
     expect(bulkRemoveFromClassroom).toHaveBeenCalledTimes(1)
-    expect(bulkRemoveFromClassroom.mock.calls[0][1]).toMatchObject({
-      org: "acme",
+    expect(bulkRemoveFromClassroom.mock.calls[0][0]).toMatchObject({
       classroom: "cs101",
       rows: [ada],
     })
@@ -191,8 +196,7 @@ describe("BulkActionsBar — destructive routing", () => {
     await confirmRun()
 
     expect(bulkRemoveFromOrg).toHaveBeenCalledTimes(1)
-    expect(bulkRemoveFromOrg.mock.calls[0][1]).toMatchObject({
-      org: "acme",
+    expect(bulkRemoveFromOrg.mock.calls[0][0]).toMatchObject({
       rows: [ada, grace],
     })
     expect(bulkRemoveFromClassroom).not.toHaveBeenCalled()
@@ -254,5 +258,14 @@ describe("BulkActionsBar — destructive routing", () => {
       selector: "button",
     }) as HTMLButtonElement
     expect(orgEntry.disabled).toBe(false)
+  })
+
+  it("warns when the org-wide removal would strip co-owners", () => {
+    renderBar([ada, grace], { isOwner: (r) => r.username === "ada" })
+
+    fireEvent.click(
+      screen.getByText("orgMembers.removeFromOrg", { selector: "button" }),
+    )
+    expect(screen.getByText("orgMembers.bulk.orgRemoveOwners:1")).toBeTruthy()
   })
 })

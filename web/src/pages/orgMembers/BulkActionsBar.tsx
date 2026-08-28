@@ -10,7 +10,6 @@ import {
 
 import {
   Alert,
-  AnimatedAlert,
   Button,
   DropdownMenu,
   FormField,
@@ -18,25 +17,14 @@ import {
   Select,
   closeDropdownMenu,
 } from "@/components/ui"
-import type { GitHubClient } from "@/github-core/client"
 import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/domain/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
-import {
-  bulkAddToClassroom,
-  type BulkAddToClassroomResult,
-} from "@/domain/orgMembers/bulkAddToClassroom"
-import {
-  bulkRemoveFromClassroom,
-  type BulkRemoveFromClassroomResult,
-} from "@/domain/orgMembers/bulkRemoveFromClassroom"
-import {
-  bulkRemoveFromOrg,
-  type BulkRemoveFromOrgResult,
-} from "@/domain/orgMembers/bulkRemoveFromOrg"
+import { useBulkAddToClassroom } from "@/hooks/mutations/useBulkAddToClassroom"
+import { useBulkRemoveFromClassroom } from "@/hooks/mutations/useBulkRemoveFromClassroom"
+import { useBulkRemoveFromOrg } from "@/hooks/mutations/useBulkRemoveFromOrg"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
-import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import { logger } from "@/lib/logger"
 import {
   BulkResultSection,
@@ -44,207 +32,18 @@ import {
   type BulkProgress,
   type BulkResultView,
 } from "@/components/bulk/resultView"
+import {
+  buildAddResult,
+  buildOrgRemoveResult,
+  buildRemoveResult,
+} from "@/pages/orgMembers/bulkResults"
+import PreviewPanel from "@/pages/orgMembers/PreviewPanel"
+import RemoveConfirmDialog from "@/pages/orgMembers/RemoveConfirmDialog"
 
 const log = logger.scope("orgMembers:BulkActionsBar")
 
 // A classroom option for the picker (the config-repo dir name/path).
 export type BulkClassroomOption = { name: string; path: string }
-
-// The confirm dialogs' "what will happen" summary: the action line, then one
-// muted line per skip bucket.
-const PreviewPanel = ({
-  primary,
-  notes,
-}: {
-  primary: string
-  notes: string[]
-}) => (
-  <div className="flex flex-col gap-1 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm">
-    <span className="font-medium">{primary}</span>
-    {notes.map((note) => (
-      <span key={note} className="text-base-content/70">
-        {note}
-      </span>
-    ))}
-  </div>
-)
-
-const buildAddResult = (
-  res: BulkAddToClassroomResult,
-  classroom: string,
-  t: ReturnType<typeof useTranslation>["t"],
-): BulkResultView => {
-  const added = res.enroll?.addedStudents ?? []
-  const csvSkipped = res.enroll?.skippedStudents ?? []
-  const teamFailed = (res.enroll?.teamResults ?? []).filter(
-    (r) => r.status === "failed",
-  )
-  const sections: BulkResultView["sections"] = []
-  if (added.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultAdded"),
-      rows: added.map((s) => ({
-        key: s.username,
-        label: s.username,
-        detail: [s.first_name, s.last_name].filter(Boolean).join(" "),
-      })),
-    })
-  }
-  const skipped = [
-    ...res.preSkipped.map((s) => ({
-      key: s.key,
-      label: s.label,
-      detail: t(`orgMembers.bulk.skipReason.${s.reason}`),
-    })),
-    ...csvSkipped.map((s) => ({
-      key: s.username,
-      label: s.username,
-      detail: s.message ?? s.reason,
-    })),
-  ]
-  if (skipped.length > 0) {
-    sections.push({ title: t("orgMembers.bulk.resultSkipped"), rows: skipped })
-  }
-  if (teamFailed.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultTeamFailures"),
-      rows: teamFailed.map((r) => ({
-        key: r.username,
-        label: r.username,
-        detail: r.message ?? t("orgMembers.bulk.couldNotAddToTeam"),
-      })),
-    })
-  }
-  return {
-    headline: t("orgMembers.bulk.addedHeadline", {
-      count: added.length,
-      classroom,
-    }),
-    sections,
-  }
-}
-
-const buildRemoveResult = (
-  res: BulkRemoveFromClassroomResult,
-  classroom: string,
-  t: ReturnType<typeof useTranslation>["t"],
-): BulkResultView => {
-  const removed = res.outcomes.filter((o) => o.status === "removed")
-  const skipped = res.outcomes.filter((o) => o.status === "skipped")
-  const failed = res.outcomes.filter((o) => o.status === "failed")
-  const sections: BulkResultView["sections"] = []
-  if (skipped.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultSkipped"),
-      rows: skipped.map((o) => ({
-        key: o.key,
-        label: o.label,
-        detail: o.detail
-          ? t(`orgMembers.bulk.skipReason.${o.detail}`, {
-              defaultValue: o.detail,
-            })
-          : undefined,
-      })),
-    })
-  }
-  if (failed.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultFailed"),
-      rows: failed.map((o) => ({
-        key: o.key,
-        label: o.label,
-        detail: o.detail,
-      })),
-    })
-  }
-  // Non-fatal side-effect warnings (team drop / invite cancel) — roster removal
-  // itself succeeded, so these are informational.
-  if (res.warnings.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultWarnings"),
-      rows: res.warnings.map((message, i) => ({
-        key: `warning-${i}`,
-        label: message,
-      })),
-    })
-  }
-  return {
-    headline: t("orgMembers.bulk.removedHeadline", {
-      count: removed.length,
-      classroom,
-    }),
-    sections,
-  }
-}
-
-const buildOrgRemoveResult = (
-  res: BulkRemoveFromOrgResult,
-  org: string,
-  t: ReturnType<typeof useTranslation>["t"],
-): BulkResultView => {
-  const removed = res.outcomes.filter((o) => o.status === "removed")
-  const skipped = res.outcomes.filter((o) => o.status === "skipped")
-  const failed = res.outcomes.filter((o) => o.status === "failed")
-  const sections: BulkResultView["sections"] = []
-  // Removed rows are listed (unlike the classroom-scoped remove) because each
-  // carries its own blast radius: how many classrooms the removal unenrolled.
-  if (removed.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultRemoved"),
-      rows: removed.map((o) => ({
-        key: o.key,
-        label: o.label,
-        detail:
-          o.unenrolledClassrooms.length > 0
-            ? t("orgMembers.bulk.unenrolledDetail", {
-                count: o.unenrolledClassrooms.length,
-                classrooms: o.unenrolledClassrooms.join(", "),
-              })
-            : undefined,
-      })),
-    })
-  }
-  if (skipped.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultSkipped"),
-      rows: skipped.map((o) => ({
-        key: o.key,
-        label: o.label,
-        detail: o.detail
-          ? t(`orgMembers.bulk.skipReason.${o.detail}`, {
-              defaultValue: o.detail,
-            })
-          : undefined,
-      })),
-    })
-  }
-  if (failed.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultFailed"),
-      rows: failed.map((o) => ({
-        key: o.key,
-        label: o.label,
-        detail: o.detail,
-      })),
-    })
-  }
-  if (res.warnings.length > 0) {
-    sections.push({
-      title: t("orgMembers.bulk.resultWarnings"),
-      rows: res.warnings.map((message, i) => ({
-        key: `warning-${i}`,
-        label: message,
-      })),
-    })
-  }
-  return {
-    headline: t("orgMembers.bulk.removedFromOrgHeadline", {
-      count: removed.length,
-      org,
-    }),
-    sections,
-  }
-}
 
 // What a completed bulk run changed, so the page can seed/invalidate exactly
 // the caches that action touched.
@@ -276,22 +75,27 @@ export type BulkDoneInput =
 // so the page can optimistically seed caches.
 const BulkActionsBar = ({
   org,
-  client,
   selectedRows,
   members,
   classrooms,
+  isOwner,
   onClearSelection,
   onDone,
 }: {
   org: string
-  client: GitHubClient
   selectedRows: OrgMemberRow[]
   members: GitHubUser[]
   classrooms: BulkClassroomOption[]
+  // Org owner/admin predicate from the page's admins read — the remove dialog
+  // warns when the selection would strip co-owners.
+  isOwner: (row: OrgMemberRow) => boolean
   onClearSelection: () => void
   onDone: (input: BulkDoneInput) => void
 }) => {
   const { t } = useTranslation()
+  const bulkAdd = useBulkAddToClassroom(org)
+  const bulkRemove = useBulkRemoveFromClassroom(org)
+  const bulkRemoveOrg = useBulkRemoveFromOrg(org)
 
   // The classroom a menu action targets, set when its submenu entry is picked
   // and consumed by that action's confirm + run. `target` is the config-repo
@@ -348,37 +152,8 @@ const BulkActionsBar = ({
   })()
 
   // bulkRemoveFromClassroom: skips rows not on the target, rows on an
-  // archived instance, and identity-less pending email invites.
-  const removePreview = (() => {
-    let removable = 0
-    let notOn = 0
-    let archived = 0
-    let pendingEmail = 0
-    for (const row of selectedRows) {
-      const access = row.classrooms.find((c) => c.classroom === target)
-      if (!access) notOn++
-      else if (access.archived) archived++
-      else if (!canTargetForUnenroll(row)) pendingEmail++
-      else removable++
-    }
-    return { removable, notOn, archived, pendingEmail }
-  })()
-
-  // bulkRemoveFromOrg: skips username-less rows (the membership DELETE is
-  // keyed by username); self is excluded by selection already.
-  const orgPreview = (() => {
-    let removable = 0
-    let noUsername = 0
-    for (const row of selectedRows) {
-      if (row.username) removable++
-      else noUsername++
-    }
-    return { removable, noUsername }
-  })()
-
-  // The confirmed remove runs org-wide when the teacher either picked the
-  // direct org action or ticked the escalation checkbox.
-  const removeIsOrgWide = removeScope === "org" || alsoRemoveFromOrg
+  // archived instance, and identity-less pending email invites. The remove
+  // previews live in RemoveConfirmDialog.
 
   // Classrooms at least one selected member can actually be removed from —
   // the remove submenu offers only these (a target nobody is on would be a
@@ -400,15 +175,6 @@ const BulkActionsBar = ({
     setModalOpen(false)
   }
 
-  // Members the escalated org removal would also pull out of classrooms OTHER
-  // than the targeted (non-archived) one — the blast radius the confirm
-  // dialog must surface before a classroom remove escalates to an org
-  // removal. (The direct org action needs no extra warning: its body already
-  // says every classroom is unenrolled.)
-  const otherClassroomsCount = selectedRows.filter((row) =>
-    row.classrooms.some((c) => c.classroom !== target && !c.archived),
-  ).length
-
   const run = async (which: "add" | "remove" | "remove-org") => {
     if (selectedRows.length === 0) return
     if (which !== "remove-org" && !target) return
@@ -425,8 +191,7 @@ const BulkActionsBar = ({
 
     try {
       if (which === "add") {
-        const res = await bulkAddToClassroom(client, {
-          org,
+        const res = await bulkAdd.mutateAsync({
           classroom: target,
           rows: selectedRows,
           members,
@@ -440,8 +205,7 @@ const BulkActionsBar = ({
           affectedKeys: selectedRows.map((r) => r.key),
         })
       } else if (which === "remove") {
-        const res = await bulkRemoveFromClassroom(client, {
-          org,
+        const res = await bulkRemove.mutateAsync({
           classroom: target,
           rows: selectedRows,
           onProgress: setProgress,
@@ -455,11 +219,10 @@ const BulkActionsBar = ({
             .map((o) => o.key),
         })
       } else {
-        const res = await bulkRemoveFromOrg(
-          client,
-          { org, rows: selectedRows, onProgress: setProgress },
-          t,
-        )
+        const res = await bulkRemoveOrg.mutateAsync({
+          rows: selectedRows,
+          onProgress: setProgress,
+        })
         setResult(buildOrgRemoveResult(res, org, t))
         onDone({
           action: "remove-org",
@@ -589,153 +352,26 @@ const BulkActionsBar = ({
         </>
       ) : null}
 
-      <ConfirmModal
+      <RemoveConfirmDialog
         open={confirmingRemove}
-        dangerous
-        needsConfirm
-        confirmText="confirm"
-        title={
-          removeIsOrgWide
-            ? t("orgMembers.bulk.confirmRemoveOrgTitle", {
-                count: selectedRows.length,
-                org,
-              })
-            : t("orgMembers.bulk.removeModalTitle", {
-                count: selectedRows.length,
-              })
-        }
-        description={
-          removeIsOrgWide
-            ? t("orgMembers.bulk.confirmRemoveOrgBody", {
-                count: selectedRows.length,
-                org,
-              })
-            : t("orgMembers.bulk.confirmRemoveBody", {
-                count: selectedRows.length,
-                classroom: targetName,
-              })
-        }
-        confirmLabel={
-          removeIsOrgWide
-            ? t("orgMembers.removeFromOrg")
-            : t("orgMembers.bulk.remove")
-        }
-        confirmDisabled={
-          removeIsOrgWide
-            ? orgPreview.removable === 0
-            : removePreview.removable === 0
-        }
-        onConfirm={async () => {
+        org={org}
+        selectedRows={selectedRows}
+        classrooms={removableClassrooms}
+        target={target}
+        onTargetChange={setTarget}
+        scope={removeScope}
+        alsoRemoveFromOrg={alsoRemoveFromOrg}
+        onAlsoRemoveFromOrgChange={setAlsoRemoveFromOrg}
+        isOwner={isOwner}
+        onConfirm={(which) => {
           // Close the confirm dialog first, then start the run next tick, so
           // the progress dialog doesn't stack its box and backdrop over the
           // still-closing confirm. Not awaited — run() drives its own dialog.
-          const which = removeIsOrgWide ? "remove-org" : "remove"
           setConfirmingRemove(false)
           deferRun(() => run(which))
         }}
         onClose={() => setConfirmingRemove(false)}
-      >
-        <div className="mt-6 flex flex-col gap-4">
-          {removeScope === "classroom" ? (
-            <>
-              {/* Only classrooms the selection actually touches are offered —
-                  any other target would be a guaranteed all-skip no-op. */}
-              <FormField label={t("orgMembers.bulk.classroomLabel")}>
-                {({ id }) => (
-                  <Select
-                    id={id}
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                  >
-                    {removableClassrooms.map((c) => (
-                      <option key={c.path} value={c.path}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </FormField>
-              {/* The #664 opt-in, offered only on the classroom-scoped route
-                  (the direct org action IS the escalation). Ticking it
-                  escalates this run to an org removal, so the copy and the
-                  preview re-derive from the checkbox state. */}
-              <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm checkbox-error mt-0.5"
-                  checked={alsoRemoveFromOrg}
-                  onChange={(e) => setAlsoRemoveFromOrg(e.target.checked)}
-                />
-                <span className="text-sm">
-                  {t("orgMembers.bulk.alsoRemoveFromOrg", { org })}
-                </span>
-              </label>
-            </>
-          ) : null}
-          {removeIsOrgWide ? (
-            <PreviewPanel
-              primary={t("orgMembers.bulk.previewRemoveOrg", {
-                count: orgPreview.removable,
-                org,
-              })}
-              notes={
-                orgPreview.noUsername > 0
-                  ? [
-                      t("orgMembers.bulk.previewSkipNoUsername", {
-                        count: orgPreview.noUsername,
-                      }),
-                    ]
-                  : []
-              }
-            />
-          ) : (
-            <PreviewPanel
-              primary={t("orgMembers.bulk.previewRemove", {
-                count: removePreview.removable,
-                classroom: targetName,
-              })}
-              notes={[
-                ...(removePreview.notOn > 0
-                  ? [
-                      t("orgMembers.bulk.previewSkipNotOn", {
-                        count: removePreview.notOn,
-                      }),
-                    ]
-                  : []),
-                ...(removePreview.archived > 0
-                  ? [
-                      t("orgMembers.bulk.previewSkipArchived", {
-                        count: removePreview.archived,
-                      }),
-                    ]
-                  : []),
-                ...(removePreview.pendingEmail > 0
-                  ? [
-                      t("orgMembers.bulk.previewSkipPendingEmail", {
-                        count: removePreview.pendingEmail,
-                      }),
-                    ]
-                  : []),
-              ]}
-            />
-          )}
-          <AnimatedAlert
-            tone="warning"
-            show={
-              removeScope === "classroom" &&
-              alsoRemoveFromOrg &&
-              otherClassroomsCount > 0
-            }
-            className="text-sm"
-          >
-            <span>
-              {t("orgMembers.bulk.orgRemoveOtherClassrooms", {
-                count: otherClassroomsCount,
-              })}
-            </span>
-          </AnimatedAlert>
-        </div>
-      </ConfirmModal>
+      />
 
       <ConfirmModal
         open={confirmingAdd}
