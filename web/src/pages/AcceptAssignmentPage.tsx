@@ -19,6 +19,7 @@ import {
   Markdown,
   MonoLtr,
   Heading,
+  RouterButton,
 } from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -1112,8 +1113,10 @@ const AcceptAssignmentPage = () => {
                     exit="exit"
                     className="flex flex-col gap-4 overflow-hidden"
                   >
-                    <a
-                      className="btn btn-primary w-full text-lg p-5"
+                    <Button
+                      as="a"
+                      variant="primary"
+                      className="w-full text-lg p-5"
                       href={
                         acceptMutation?.data?.repo.html_url ||
                         `https://www.github.com/${org}/${checkedRepo?.name}`
@@ -1122,7 +1125,7 @@ const AcceptAssignmentPage = () => {
                       rel="noreferrer"
                     >
                       {t("accept.openRepository")}
-                    </a>
+                    </Button>
 
                     {assignmentData?.mode === "group" && (
                       <Button
@@ -1135,13 +1138,17 @@ const AcceptAssignmentPage = () => {
                     )}
 
                     {org && classroom && (
-                      <Link
+                      // outline variant (primary outline) aligns this with its
+                      // Edit-collaborators sibling above; it was a bare neutral
+                      // outline before.
+                      <RouterButton
                         to="/$org/$classroom"
                         params={{ org, classroom }}
-                        className="btn btn-outline w-full text-lg p-5"
+                        variant="outline"
+                        className="w-full text-lg p-5"
                       >
                         {t("accept.goToClassroom")}
-                      </Link>
+                      </RouterButton>
                     )}
                   </motion.div>
                 )}
