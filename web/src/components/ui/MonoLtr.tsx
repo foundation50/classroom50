@@ -11,12 +11,14 @@ import { cx } from "./cx"
 
 export type MonoLtrProps = {
   className?: string
+  // Hover detail, e.g. explaining what kind of identifier this is.
+  title?: string
   children?: ReactNode
 }
 
-export function MonoLtr({ className, children }: MonoLtrProps) {
+export function MonoLtr({ className, title, children }: MonoLtrProps) {
   return (
-    <span dir="ltr" className={cx("font-mono", className)}>
+    <span dir="ltr" title={title} className={cx("font-mono", className)}>
       {children}
     </span>
   )

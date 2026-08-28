@@ -2568,6 +2568,7 @@
     "missingParams": "Missing organization, classroom, or assignment in the URL.",
     "dueDate": "Due {{date}}",
     "noDueDate": "No due date",
+    "slugTitle": "Assignment slug — the unique identifier for this assignment; display names can repeat",
     "type": {
       "badgeEveryPush": "Submits on every push",
       "badgeTag": "Submits by tag",

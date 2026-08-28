@@ -3,11 +3,12 @@ import { useTranslation } from "react-i18next"
 import {
   CircleSlashIcon,
   GitCommitIcon,
+  HashIcon,
   HubotIcon,
   TagIcon,
 } from "@/components/ui/icons"
 
-import { Badge } from "@/components/ui"
+import { Badge, MonoLtr } from "@/components/ui"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import {
   submissionModeBadgeKey,
@@ -128,6 +129,46 @@ export const AutogradingMeta = ({ state }: { state: AutogradingState }) => {
       {t(label)}
       {title && <span className="sr-only">{t(title)}</span>}
     </MetaItem>
+  )
+}
+
+// The slug identity affordance for both submission headings, rendered inside
+// the PageHeader title slot: names may repeat, so the slug is the only visible
+// way to tell twin assignments apart. Spelling it out inline crowds the
+// heading, so it hides behind a small hash chip — hovering the chip fades the
+// slug in beside the name and back out on leave. The slug
+// span always occupies its space (opacity-only reveal), so
+// the heading never reflows, and staying hovered anywhere over the chip+slug
+// region keeps it readable for select-and-copy. It stays in the accessibility
+// tree regardless, so screen readers always get it. Skipped entirely when the
+// slug would just echo the name.
+export const AssignmentTitleWithSlug = ({
+  name,
+  slug,
+}: {
+  name: string
+  slug: string
+}) => {
+  const { t } = useTranslation()
+  if (slug === name) return <>{name}</>
+  return (
+    <span className="inline-flex flex-wrap items-baseline gap-x-2">
+      {name}
+      <span className="group inline-flex items-baseline gap-x-2">
+        <span
+          className="badge badge-sm badge-ghost cursor-help self-center px-1.5"
+          title={t("submissions.slugTitle")}
+        >
+          <HashIcon aria-hidden="true" className="size-3" />
+        </span>
+        <MonoLtr
+          className="text-sm font-normal text-base-content/60 opacity-0 transition-opacity duration-200 ease-out group-hover:opacity-100 motion-reduce:transition-none"
+          title={t("submissions.slugTitle")}
+        >
+          {slug}
+        </MonoLtr>
+      </span>
+    </span>
   )
 }
 
