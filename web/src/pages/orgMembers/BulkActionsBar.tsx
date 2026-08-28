@@ -1,8 +1,23 @@
-import { useId, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PlusIcon, XIcon } from "@/components/ui/icons"
+import {
+  ChevronDownIcon,
+  PlusIcon,
+  SignOutIcon,
+  XCircleIcon,
+  XIcon,
+} from "@/components/ui/icons"
 
-import { Alert, AnimatedAlert, Button, Modal, Select } from "@/components/ui"
+import {
+  Alert,
+  AnimatedAlert,
+  Button,
+  DropdownMenu,
+  FormField,
+  Modal,
+  Select,
+  closeDropdownMenu,
+} from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/domain/students"
@@ -21,6 +36,7 @@ import {
 } from "@/domain/orgMembers/bulkRemoveFromOrg"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
+import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import { logger } from "@/lib/logger"
 import {
   BulkResultSection,
@@ -33,6 +49,25 @@ const log = logger.scope("orgMembers:BulkActionsBar")
 
 // A classroom option for the picker (the config-repo dir name/path).
 export type BulkClassroomOption = { name: string; path: string }
+
+// The confirm dialogs' "what will happen" summary: the action line, then one
+// muted line per skip bucket.
+const PreviewPanel = ({
+  primary,
+  notes,
+}: {
+  primary: string
+  notes: string[]
+}) => (
+  <div className="flex flex-col gap-1 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm">
+    <span className="font-medium">{primary}</span>
+    {notes.map((note) => (
+      <span key={note} className="text-base-content/70">
+        {note}
+      </span>
+    ))}
+  </div>
+)
 
 const buildAddResult = (
   res: BulkAddToClassroomResult,
@@ -251,9 +286,12 @@ const BulkActionsBar = ({
   onDone: (input: BulkDoneInput) => void
 }) => {
   const { t } = useTranslation()
-  const pickerId = useId()
 
-  const [classroom, setClassroom] = useState("")
+  // The classroom a menu action targets, set when its submenu entry is picked
+  // and consumed by that action's confirm + run. `target` is the config-repo
+  // path (what the writers key on); `targetName` is the display name the
+  // confirm/result copy shows.
+  const [target, setTarget] = useState("")
   const [action, setAction] = useState<"add" | "remove" | "remove-org" | null>(
     null,
   )
@@ -265,8 +303,14 @@ const BulkActionsBar = ({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
   const [error, setError] = useState<string | null>(null)
-  // Gates the destructive bulk remove behind a confirmation step.
+  // Gates the destructive bulk remove behind a confirmation step. Scope is
+  // what the teacher picked in the menu: a classroom-scoped remove (which the
+  // #664 checkbox can escalate) or a direct org removal (no checkbox — the
+  // escalation is already the action).
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  const [removeScope, setRemoveScope] = useState<"classroom" | "org">(
+    "classroom",
+  )
   // Gates the bulk add (org invite + classroom enroll) behind a confirmation.
   const [confirmingAdd, setConfirmingAdd] = useState(false)
   // The #664 opt-in: escalate the remove from the picked classroom to the
@@ -275,11 +319,69 @@ const BulkActionsBar = ({
 
   const hasSelection = selectedRows.length > 0
 
-  // Picker starts unset; until the teacher picks one, default to the first
-  // classroom. Derived (not effect-synced) so there's no cascading render, and
-  // it stays correct if the classroom list arrives after mount.
-  const effectiveClassroom =
-    classroom || (classrooms.length > 0 ? classrooms[0].path : "")
+  const targetName = classrooms.find((c) => c.path === target)?.name ?? target
+
+  // ---- Confirm-dialog previews ---------------------------------------------
+  // Each mirrors its orchestrator's PRE-filters over the current selection +
+  // target, so the numbers shown are the numbers the run would act on (the
+  // engines' own runtime skips — stale ids, racing edits — can only shrink
+  // them further and are reported in the results view).
+
+  // bulkAddToClassroom: skips rows already on the target (CSV-derived) and
+  // rows that aren't live org members (never invites from here).
+  const addPreview = (() => {
+    let eligible = 0
+    let alreadyOn = 0
+    let notMember = 0
+    for (const row of selectedRows) {
+      if (row.classrooms.some((c) => c.classroom === target)) alreadyOn++
+      else if (!row.isMember) notMember++
+      else eligible++
+    }
+    return { eligible, alreadyOn, notMember }
+  })()
+
+  // bulkRemoveFromClassroom: skips rows not on the target, rows on an
+  // archived instance, and identity-less pending email invites.
+  const removePreview = (() => {
+    let removable = 0
+    let notOn = 0
+    let archived = 0
+    let pendingEmail = 0
+    for (const row of selectedRows) {
+      const access = row.classrooms.find((c) => c.classroom === target)
+      if (!access) notOn++
+      else if (access.archived) archived++
+      else if (!canTargetForUnenroll(row)) pendingEmail++
+      else removable++
+    }
+    return { removable, notOn, archived, pendingEmail }
+  })()
+
+  // bulkRemoveFromOrg: skips username-less rows (the membership DELETE is
+  // keyed by username); self is excluded by selection already.
+  const orgPreview = (() => {
+    let removable = 0
+    let noUsername = 0
+    for (const row of selectedRows) {
+      if (row.username) removable++
+      else noUsername++
+    }
+    return { removable, noUsername }
+  })()
+
+  // The confirmed remove runs org-wide when the teacher either picked the
+  // direct org action or ticked the escalation checkbox.
+  const removeIsOrgWide = removeScope === "org" || alsoRemoveFromOrg
+
+  // Classrooms at least one selected member can actually be removed from —
+  // the remove submenu offers only these (a target nobody is on would be a
+  // guaranteed all-skip no-op).
+  const removableClassrooms = classrooms.filter((c) =>
+    selectedRows.some((row) =>
+      row.classrooms.some((a) => a.classroom === c.path && !a.archived),
+    ),
+  )
 
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
@@ -292,18 +394,18 @@ const BulkActionsBar = ({
     setModalOpen(false)
   }
 
-  // Members the org removal would also pull out of OTHER (non-archived)
-  // classrooms — the blast radius the confirm dialog must surface before the
-  // teacher escalates a classroom remove to an org removal.
+  // Members the escalated org removal would also pull out of classrooms OTHER
+  // than the targeted (non-archived) one — the blast radius the confirm
+  // dialog must surface before a classroom remove escalates to an org
+  // removal. (The direct org action needs no extra warning: its body already
+  // says every classroom is unenrolled.)
   const otherClassroomsCount = selectedRows.filter((row) =>
-    row.classrooms.some(
-      (c) => c.classroom !== effectiveClassroom && !c.archived,
-    ),
+    row.classrooms.some((c) => c.classroom !== target && !c.archived),
   ).length
 
   const run = async (which: "add" | "remove" | "remove-org") => {
     if (selectedRows.length === 0) return
-    if (which !== "remove-org" && !effectiveClassroom) return
+    if (which !== "remove-org" && !target) return
     setAction(which)
     setPhase("working")
     setModalOpen(true)
@@ -319,14 +421,14 @@ const BulkActionsBar = ({
       if (which === "add") {
         const res = await bulkAddToClassroom(client, {
           org,
-          classroom: effectiveClassroom,
+          classroom: target,
           rows: selectedRows,
           members,
           onProgress: setProgress,
         })
-        setResult(buildAddResult(res, effectiveClassroom, t))
+        setResult(buildAddResult(res, targetName, t))
         onDone({
-          classroom: effectiveClassroom,
+          classroom: target,
           action: "add",
           addedStudents: res.enroll?.addedStudents ?? [],
           affectedKeys: selectedRows.map((r) => r.key),
@@ -334,13 +436,13 @@ const BulkActionsBar = ({
       } else if (which === "remove") {
         const res = await bulkRemoveFromClassroom(client, {
           org,
-          classroom: effectiveClassroom,
+          classroom: target,
           rows: selectedRows,
           onProgress: setProgress,
         })
-        setResult(buildRemoveResult(res, effectiveClassroom, t))
+        setResult(buildRemoveResult(res, targetName, t))
         onDone({
-          classroom: effectiveClassroom,
+          classroom: target,
           action: "remove",
           affectedKeys: res.outcomes
             .filter((o) => o.status === "removed")
@@ -378,10 +480,13 @@ const BulkActionsBar = ({
   return (
     <>
       {/* The selection cluster lives in the page toolbar and appears only
-          while rows are selected: count, classroom picker, Add/Remove, and
-          Clear — mirroring the roster toolbar's cluster. The modals below
-          stay mounted regardless, so a completing run's result dialog
-          survives the selection clearing out from under it. */}
+          while rows are selected: count, one consolidated Actions menu, and
+          Clear — mirroring the roster toolbar's cluster. The destination
+          classroom is folded INTO the menu as submenus (pick the action and
+          its target in one gesture — no separate picker), with the
+          destructive actions last in their own group. The modals below stay
+          mounted regardless, so a completing run's result dialog survives
+          the selection clearing out from under it. */}
       {hasSelection ? (
         <>
           <span className="text-sm font-medium tabular-nums">
@@ -389,67 +494,77 @@ const BulkActionsBar = ({
               count: selectedRows.length,
             })}
           </span>
-          <label
-            htmlFor={`${pickerId}-picker`}
-            className="text-sm text-base-content/60"
-          >
-            {t("orgMembers.bulk.classroomLabel")}
-          </label>
-          <Select
-            id={`${pickerId}-picker`}
-            selectSize="sm"
-            className="max-w-[12rem] w-auto"
-            value={effectiveClassroom}
-            onChange={(e) => setClassroom(e.target.value)}
-            disabled={classrooms.length === 0}
-          >
-            {classrooms.length === 0 ? (
-              <option value="">{t("orgMembers.bulk.noClassrooms")}</option>
-            ) : (
-              classrooms.map((c) => (
-                <option key={c.path} value={c.path}>
-                  {c.name}
-                </option>
-              ))
-            )}
-          </Select>
-
-          <div className="join">
-            <Button
-              variant="primary"
-              size="sm"
-              className="join-item"
-              disabled={!effectiveClassroom}
-              aria-label={t("orgMembers.bulk.addToClassroom", {
-                classroom: effectiveClassroom,
-              })}
-              title={t("orgMembers.bulk.addToClassroom", {
-                classroom: effectiveClassroom,
-              })}
-              onClick={() => setConfirmingAdd(true)}
-            >
-              <PlusIcon aria-hidden="true" className="size-4" />
-              {t("orgMembers.bulk.add")}
+          {/* dropdown-start: the cluster sits on the toolbar's left, so the
+              menu opens rightward instead of off the edge. */}
+          <div className="dropdown dropdown-start">
+            <Button variant="primary" size="sm">
+              {t("orgMembers.bulk.actions")}
+              <ChevronDownIcon aria-hidden="true" className="size-4" />
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="join-item text-error hover:bg-error/10"
-              disabled={!effectiveClassroom}
-              aria-label={t("orgMembers.bulk.removeFromClassroom", {
-                classroom: effectiveClassroom,
-              })}
-              title={t("orgMembers.bulk.removeFromClassroom", {
-                classroom: effectiveClassroom,
-              })}
-              onClick={() => {
-                // Fresh decision each time: the escalation is opt-in per run.
-                setAlsoRemoveFromOrg(false)
-                setConfirmingRemove(true)
-              }}
-            >
-              {t("orgMembers.bulk.remove")}
-            </Button>
+            <DropdownMenu className="w-64">
+              <li>
+                <button
+                  type="button"
+                  disabled={classrooms.length === 0}
+                  title={
+                    classrooms.length === 0
+                      ? t("orgMembers.bulk.noClassrooms")
+                      : undefined
+                  }
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (classrooms.length === 0) return
+                    setTarget(classrooms[0].path)
+                    setConfirmingAdd(true)
+                  }}
+                >
+                  <PlusIcon aria-hidden="true" className="size-4" />
+                  {t("orgMembers.bulk.addToClassroomMenu")}
+                </button>
+              </li>
+              {/* Removals — destructive, so last and in their own group. */}
+              <DropdownMenu.Separator />
+              <li>
+                <button
+                  type="button"
+                  className="text-error"
+                  disabled={removableClassrooms.length === 0}
+                  title={
+                    removableClassrooms.length === 0
+                      ? t("orgMembers.bulk.removeNoneOnClassroom")
+                      : undefined
+                  }
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (removableClassrooms.length === 0) return
+                    setTarget(removableClassrooms[0].path)
+                    setRemoveScope("classroom")
+                    // Fresh decision each time: the escalation is opt-in per
+                    // run.
+                    setAlsoRemoveFromOrg(false)
+                    setConfirmingRemove(true)
+                  }}
+                >
+                  <SignOutIcon aria-hidden="true" className="size-4" />
+                  {t("orgMembers.bulk.removeFromClassroomMenu")}
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  className="text-error"
+                  onClick={() => {
+                    closeDropdownMenu()
+                    setRemoveScope("org")
+                    setAlsoRemoveFromOrg(false)
+                    setConfirmingRemove(true)
+                  }}
+                >
+                  <XCircleIcon aria-hidden="true" className="size-4" />
+                  {t("orgMembers.removeFromOrg")}
+                </button>
+              </li>
+            </DropdownMenu>
           </div>
 
           <Button
@@ -468,62 +583,140 @@ const BulkActionsBar = ({
       <ConfirmModal
         open={confirmingRemove}
         dangerous
-        needsConfirm={false}
+        needsConfirm
+        confirmText="confirm"
         title={
-          alsoRemoveFromOrg
+          removeIsOrgWide
             ? t("orgMembers.bulk.confirmRemoveOrgTitle", {
                 count: selectedRows.length,
                 org,
               })
-            : t("orgMembers.bulk.confirmRemoveTitle", {
+            : t("orgMembers.bulk.removeModalTitle", {
                 count: selectedRows.length,
-                classroom: effectiveClassroom,
               })
         }
         description={
-          alsoRemoveFromOrg
+          removeIsOrgWide
             ? t("orgMembers.bulk.confirmRemoveOrgBody", {
                 count: selectedRows.length,
                 org,
               })
             : t("orgMembers.bulk.confirmRemoveBody", {
                 count: selectedRows.length,
-                classroom: effectiveClassroom,
+                classroom: targetName,
               })
         }
         confirmLabel={
-          alsoRemoveFromOrg
+          removeIsOrgWide
             ? t("orgMembers.removeFromOrg")
             : t("orgMembers.bulk.remove")
+        }
+        confirmDisabled={
+          removeIsOrgWide
+            ? orgPreview.removable === 0
+            : removePreview.removable === 0
         }
         onConfirm={async () => {
           // Close the confirm dialog first, then start the run next tick, so
           // the progress dialog doesn't stack its box and backdrop over the
           // still-closing confirm. Not awaited — run() drives its own dialog.
-          const which = alsoRemoveFromOrg ? "remove-org" : "remove"
+          const which = removeIsOrgWide ? "remove-org" : "remove"
           setConfirmingRemove(false)
           deferRun(() => run(which))
         }}
         onClose={() => setConfirmingRemove(false)}
       >
-        {/* The #664 opt-in. Ticking it escalates this run from a
-            classroom-scoped unenroll to an org removal, so the copy above and
-            the warning below re-derive from the checkbox state. */}
-        <div className="mt-6 flex flex-col gap-3">
-          <label className="flex cursor-pointer items-start gap-3">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm checkbox-error mt-0.5"
-              checked={alsoRemoveFromOrg}
-              onChange={(e) => setAlsoRemoveFromOrg(e.target.checked)}
+        <div className="mt-6 flex flex-col gap-4">
+          {removeScope === "classroom" ? (
+            <>
+              {/* Only classrooms the selection actually touches are offered —
+                  any other target would be a guaranteed all-skip no-op. */}
+              <FormField label={t("orgMembers.bulk.classroomLabel")}>
+                {({ id }) => (
+                  <Select
+                    id={id}
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                  >
+                    {removableClassrooms.map((c) => (
+                      <option key={c.path} value={c.path}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                )}
+              </FormField>
+              {/* The #664 opt-in, offered only on the classroom-scoped route
+                  (the direct org action IS the escalation). Ticking it
+                  escalates this run to an org removal, so the copy and the
+                  preview re-derive from the checkbox state. */}
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm checkbox-error mt-0.5"
+                  checked={alsoRemoveFromOrg}
+                  onChange={(e) => setAlsoRemoveFromOrg(e.target.checked)}
+                />
+                <span className="text-sm">
+                  {t("orgMembers.bulk.alsoRemoveFromOrg", { org })}
+                </span>
+              </label>
+            </>
+          ) : null}
+          {removeIsOrgWide ? (
+            <PreviewPanel
+              primary={t("orgMembers.bulk.previewRemoveOrg", {
+                count: orgPreview.removable,
+                org,
+              })}
+              notes={
+                orgPreview.noUsername > 0
+                  ? [
+                      t("orgMembers.bulk.previewSkipNoUsername", {
+                        count: orgPreview.noUsername,
+                      }),
+                    ]
+                  : []
+              }
             />
-            <span className="text-sm">
-              {t("orgMembers.bulk.alsoRemoveFromOrg", { org })}
-            </span>
-          </label>
+          ) : (
+            <PreviewPanel
+              primary={t("orgMembers.bulk.previewRemove", {
+                count: removePreview.removable,
+                classroom: targetName,
+              })}
+              notes={[
+                ...(removePreview.notOn > 0
+                  ? [
+                      t("orgMembers.bulk.previewSkipNotOn", {
+                        count: removePreview.notOn,
+                      }),
+                    ]
+                  : []),
+                ...(removePreview.archived > 0
+                  ? [
+                      t("orgMembers.bulk.previewSkipArchived", {
+                        count: removePreview.archived,
+                      }),
+                    ]
+                  : []),
+                ...(removePreview.pendingEmail > 0
+                  ? [
+                      t("orgMembers.bulk.previewSkipPendingEmail", {
+                        count: removePreview.pendingEmail,
+                      }),
+                    ]
+                  : []),
+              ]}
+            />
+          )}
           <AnimatedAlert
             tone="warning"
-            show={alsoRemoveFromOrg && otherClassroomsCount > 0}
+            show={
+              removeScope === "classroom" &&
+              alsoRemoveFromOrg &&
+              otherClassroomsCount > 0
+            }
             className="text-sm"
           >
             <span>
@@ -539,21 +732,61 @@ const BulkActionsBar = ({
         open={confirmingAdd}
         dangerous={false}
         needsConfirm={false}
-        title={t("orgMembers.bulk.confirmAddTitle", {
+        title={t("orgMembers.bulk.addModalTitle", {
           count: selectedRows.length,
-          classroom: effectiveClassroom,
         })}
         description={t("orgMembers.bulk.confirmAddBody", {
           count: selectedRows.length,
-          classroom: effectiveClassroom,
+          classroom: targetName,
         })}
         confirmLabel={t("orgMembers.bulk.add")}
+        confirmDisabled={addPreview.eligible === 0}
         onConfirm={async () => {
           setConfirmingAdd(false)
           deferRun(() => run("add"))
         }}
         onClose={() => setConfirmingAdd(false)}
-      />
+      >
+        <div className="mt-6 flex flex-col gap-4">
+          <FormField label={t("orgMembers.bulk.destinationLabel")}>
+            {({ id }) => (
+              <Select
+                id={id}
+                value={target}
+                onChange={(e) => setTarget(e.target.value)}
+              >
+                {classrooms.map((c) => (
+                  <option key={c.path} value={c.path}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </FormField>
+          <PreviewPanel
+            primary={t("orgMembers.bulk.previewAdd", {
+              count: addPreview.eligible,
+              classroom: targetName,
+            })}
+            notes={[
+              ...(addPreview.alreadyOn > 0
+                ? [
+                    t("orgMembers.bulk.previewSkipAlreadyOn", {
+                      count: addPreview.alreadyOn,
+                    }),
+                  ]
+                : []),
+              ...(addPreview.notMember > 0
+                ? [
+                    t("orgMembers.bulk.previewSkipNotMember", {
+                      count: addPreview.notMember,
+                    }),
+                  ]
+                : []),
+            ]}
+          />
+        </div>
+      </ConfirmModal>
 
       <Modal
         open={isOpen}
@@ -565,10 +798,10 @@ const BulkActionsBar = ({
             ? t("orgMembers.bulk.removeOrgTitle", { org })
             : action === "remove"
               ? t("orgMembers.bulk.removeTitle", {
-                  classroom: effectiveClassroom,
+                  classroom: targetName,
                 })
               : t("orgMembers.bulk.addTitle", {
-                  classroom: effectiveClassroom,
+                  classroom: targetName,
                 })
         }
         footer={

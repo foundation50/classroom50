@@ -38,6 +38,10 @@ export type OrgMembersOverview = {
   // keys from, so optimistic team-cache writes on the Members page target the
   // cache this hook reads (a collided classroom's real slug can differ).
   teamSlugByClassroom: Map<string, string>
+  // classroom path -> display name from classroom.json. A classroom whose
+  // metadata hasn't loaded (or carries no name) is absent — callers fall back
+  // to the path.
+  displayNameByClassroom: Map<string, string>
   // Per-classroom roster read failures (a 404/parse error contributes no
   // students rather than failing the whole page).
   notes: string[]
@@ -190,6 +194,19 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     return map
   }, [classroomNames, teamSlugs])
 
+  const displayNameByClassroom = useMemo(() => {
+    const map = new Map<string, string>()
+    classroomNames.forEach((name, i) => {
+      const displayName = (
+        metaQueries[i]?.data as Classroom | undefined
+      )?.name?.trim()
+      if (displayName) map.set(name, displayName)
+    })
+    return map
+    // metaQueries is a fresh array each render; depend on the stable signature.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classroomNames, metaSignature])
+
   const isLoading =
     membersQuery.isLoading ||
     metaQueries.some((q) => q.isLoading) ||
@@ -203,6 +220,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     isLoading,
     isError,
     teamSlugByClassroom,
+    displayNameByClassroom,
     notes,
   }
 }

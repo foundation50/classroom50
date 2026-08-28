@@ -105,6 +105,7 @@ const OrgMembersPage = () => {
     isLoading,
     isError,
     teamSlugByClassroom,
+    displayNameByClassroom,
     notes,
   } = useOrgMembersOverview(org)
   const { classes } = useGetClasses(org)
@@ -123,12 +124,22 @@ const OrgMembersPage = () => {
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 
   // Refresh after an org-level member removal (unenrolls from every classroom +
-  // removes org membership). Optimistically drop them from each affected
+  // removes org membership). The members-list read lags the membership DELETE,
+  // so an immediate refetch would still return the removed account and the row
+  // would survive until a manual reload. Same recipe as the CSV/team caches:
+  // optimistically drop them from the members cache AND each affected
   // classroom's CSV + team caches together (no false "unprovisioned" flash),
-  // then reconcile with the server on a delay.
-  const refresh = (affected?: OrgMemberRow) => {
+  // then reconcile everything with the server on a delay. `removed` is false
+  // when the org DELETE itself failed (warnings path) — membership didn't
+  // change, so only re-read; an optimistic drop would vanish a live member.
+  const refresh = (affected?: OrgMemberRow, removed = true) => {
     if (!org) return
-    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    if (removed && affected) {
+      optimisticRemoveFromMembers([affected])
+      scheduleMembersReconcile()
+    } else {
+      queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    }
     invalidateInviteQueries(queryClient, org)
     for (const access of affected?.classrooms ?? []) {
       optimisticRemove(access.classroom, [affected!])
@@ -177,6 +188,35 @@ const OrgMembersPage = () => {
         `${classroom}/classroom.json`,
       ),
     })
+  }
+
+  // Optimistically drop removed accounts (by resolved id/login) from the
+  // orgMembersAll cache the row list derives from, so the table reflects an
+  // org removal immediately. Invalidating instead would refetch a members list
+  // that lags the membership DELETE and resurrect the row (a roster-less
+  // member has no other cache to disappear from at all).
+  const optimisticRemoveFromMembers = (removed: OrgMemberRow[]) => {
+    if (!org || removed.length === 0) return
+    const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
+    const logins = new Set(
+      removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
+    )
+    queryClient.setQueryData<GitHubUser[]>(
+      githubKeys.orgMembersAll(org),
+      (current) =>
+        current?.filter(
+          (m) => !ids.has(String(m.id)) && !logins.has(m.login.toLowerCase()),
+        ) ?? current,
+    )
+  }
+
+  // Reconcile the members cache with the server once the list API has caught
+  // up with the DELETE, mirroring scheduleClassroomReconcile.
+  const scheduleMembersReconcile = () => {
+    if (!org) return
+    window.setTimeout(() => {
+      queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    }, CSV_RECONCILE_DELAY_MS)
   }
 
   // Optimistically drop members (by resolved id/login) from BOTH the target
@@ -245,7 +285,10 @@ const OrgMembersPage = () => {
         invalidateClassroom(classroom, { skipCsv: true })
         scheduleClassroomReconcile(classroom)
       }
-      queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+      // affectedKeys carry only CONFIRMED-removed rows, so the optimistic
+      // members-cache drop (instead of a lag-prone refetch) is safe.
+      optimisticRemoveFromMembers(removedRows)
+      scheduleMembersReconcile()
       invalidateInviteQueries(queryClient, org)
       setSelectedKeys(new Set())
       return
@@ -425,9 +468,15 @@ const OrgMembersPage = () => {
   const handleToggleSelectAll = () =>
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
 
+  // Picker/filter options: the display name from classroom.json when its
+  // metadata has loaded, else the directory slug.
   const classroomOptions = useMemo(
-    () => classes.map((c) => ({ name: c.name, path: c.path })),
-    [classes],
+    () =>
+      classes.map((c) => ({
+        name: displayNameByClassroom.get(c.path) ?? c.name,
+        path: c.path,
+      })),
+    [classes, displayNameByClassroom],
   )
 
   return (
@@ -754,10 +803,10 @@ const OrgMembersPage = () => {
           isSelf={selected ? isSelf(selected) : false}
           isOwner={selected ? isOwner(selected) : false}
           onClose={() => setSelectedKey(null)}
-          onRemoved={() => {
+          onRemoved={(removed) => {
             const affected = selected
             setSelectedKey(null)
-            if (affected) refresh(affected)
+            if (affected) refresh(affected, removed)
           }}
           onInvited={() => {
             setSelectedKey(null)

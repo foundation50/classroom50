@@ -22,6 +22,9 @@ type ConfirmModalProps = {
   cancelLabel?: string
   dangerous?: boolean
   needsConfirm?: boolean
+  // Blocks confirming (e.g. the caller's preview shows the action would touch
+  // nobody) while still letting the user adjust the dialog's inputs or cancel.
+  confirmDisabled?: boolean
   onConfirm: () => Promise<void>
   onClose: () => void
   // Extra body content rendered above the acknowledge prompt (e.g. an option
@@ -43,6 +46,7 @@ export function ConfirmModal({
   cancelLabel,
   dangerous = true,
   needsConfirm = true,
+  confirmDisabled = false,
   onConfirm,
   onClose,
   children,
@@ -148,7 +152,7 @@ export function ConfirmModal({
 
             <Button
               variant={acknowledgeButtonVariant}
-              disabled={isSubmitting}
+              disabled={isSubmitting || confirmDisabled}
               loading={isSubmitting && !needsConfirm}
               loadingLabel={t("common.working")}
               onClick={(event) => {
@@ -181,7 +185,7 @@ export function ConfirmModal({
 
             <Button
               variant={confirmButtonVariant}
-              disabled={!canSubmit || isSubmitting}
+              disabled={!canSubmit || isSubmitting || confirmDisabled}
               loading={isSubmitting}
               loadingLabel={t("common.working")}
               onClick={() => void handleSubmit()}

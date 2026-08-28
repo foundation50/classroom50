@@ -42,8 +42,10 @@ const MemberDetailModal = ({
   isSelf: boolean
   isOwner: boolean
   onClose: () => void
-  // Called after the member is removed from the org (refresh + optimistic drop).
-  onRemoved: () => void
+  // Called after the removal flow ran; `removed` is whether the org-membership
+  // DELETE actually succeeded (false on the warnings-only path), so the page
+  // only optimistically drops the row from its caches for a real removal.
+  onRemoved: (removed: boolean) => void
   // Called after an on-roster non-member is invited (refresh only — no classroom
   // membership changed).
   onInvited: () => void
@@ -139,7 +141,7 @@ const MemberDetailModal = ({
             : t("orgMembers.removed", { label, org }),
         })
       }
-      onRemoved()
+      onRemoved(result.removed)
     } catch (err) {
       notify({
         tone: "error",
