@@ -162,6 +162,8 @@ function ThemeTable({
   return (
     <Card shadow={false}>
       <Card.Body className="gap-3 p-4">
+        {/* Deliberately not TableShell: the table already sits inside a Card,
+            and the shell's framed box would double-frame it. */}
         <div className="overflow-x-auto">
           <table className="table table-sm">
             <thead>

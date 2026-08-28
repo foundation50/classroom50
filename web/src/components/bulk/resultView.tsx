@@ -6,7 +6,7 @@
 
 import { useTranslation } from "react-i18next"
 
-import { Button, Spinner } from "@/components/ui"
+import { Button, Spinner, TableShell } from "@/components/ui"
 
 // The lifecycle of a bulk run's modal: idle (closed) -> working (progress) ->
 // complete/error (results).
@@ -34,20 +34,22 @@ export const BulkResultSection = ({
 }) => (
   <div>
     <h4 className="mb-2 font-semibold">{title}</h4>
-    <div className="max-h-48 overflow-auto rounded-box border border-base-300">
-      <table className="table table-sm">
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key}>
-              <td>
-                <code>{row.label}</code>
-              </td>
-              <td className="opacity-70">{row.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <TableShell
+      animate={false}
+      size="sm"
+      frameClassName="max-h-48 overflow-auto"
+    >
+      <tbody>
+        {rows.map((row) => (
+          <tr key={row.key}>
+            <td>
+              <code>{row.label}</code>
+            </td>
+            <td className="opacity-70">{row.detail}</td>
+          </tr>
+        ))}
+      </tbody>
+    </TableShell>
   </div>
 )
 

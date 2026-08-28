@@ -8,6 +8,7 @@ import {
   FileDropzone,
   Modal,
   ModalIcon,
+  TableShell,
   type PickedFile,
 } from "@/components/ui"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -206,50 +207,47 @@ export function SubmitUpload({
               </div>
 
               {/* Name / Size / Remove table (folder drops show their path). */}
-              <div className="overflow-hidden rounded-box border border-base-200">
-                <table className="table table-sm">
-                  <thead>
-                    <tr>
-                      <th>{t("submissions.student.upload.colName")}</th>
-                      <th className="w-24">
-                        {t("submissions.student.upload.colSize")}
-                      </th>
-                      <th className="w-10 text-end sr-only">
-                        {t("submissions.student.upload.colRemove")}
-                      </th>
+              <TableShell animate={false} size="sm">
+                <thead>
+                  <tr>
+                    <th>{t("submissions.student.upload.colName")}</th>
+                    <th className="w-24">
+                      {t("submissions.student.upload.colSize")}
+                    </th>
+                    <th className="w-10 text-end sr-only">
+                      {t("submissions.student.upload.colRemove")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {picked.map((p) => (
+                    <tr key={p.key}>
+                      <td className="max-w-0">
+                        <span className="block truncate font-mono">
+                          {p.path}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap tabular-nums text-base-content/70">
+                        {formatBytes(p.file.size)}
+                      </td>
+                      <td className="text-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          shape="square"
+                          aria-label={t("submissions.student.upload.remove", {
+                            path: p.path,
+                          })}
+                          disabled={submitting}
+                          onClick={() => removeAt(p.key)}
+                        >
+                          <XIcon aria-hidden="true" className="size-4" />
+                        </Button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {picked.map((p) => (
-                      <tr key={p.key}>
-                        <td className="max-w-0">
-                          <span className="block truncate font-mono">
-                            {p.path}
-                          </span>
-                        </td>
-                        <td className="whitespace-nowrap tabular-nums text-base-content/70">
-                          {formatBytes(p.file.size)}
-                        </td>
-                        <td className="text-end">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            shape="square"
-                            aria-label={t("submissions.student.upload.remove", {
-                              path: p.path,
-                            })}
-                            disabled={submitting}
-                            onClick={() => removeAt(p.key)}
-                          >
-                            <XIcon aria-hidden="true" className="size-4" />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
+                  ))}
+                </tbody>
+              </TableShell>
               <Alert tone="warning">
                 <div>
                   {t("submissions.student.upload.confirmBody", {
