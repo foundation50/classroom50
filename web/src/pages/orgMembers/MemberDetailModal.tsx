@@ -19,6 +19,10 @@ import {
 } from "@/components/ui"
 import { GitHubLink } from "@/components/GitHubLink"
 import Avatar from "@/components/avatar"
+import {
+  DetailRow,
+  NotSetValue,
+} from "@/components/memberList/memberPresentation"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -26,21 +30,6 @@ import {
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
 import type { OrgMemberRow } from "@/util/orgMembers"
-
-// One labeled row of the member-details list (label start, value end),
-// mirroring the roster member modal's profile list recipe.
-const DetailRow = ({
-  label,
-  children,
-}: {
-  label: string
-  children: React.ReactNode
-}) => (
-  <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-    <dt className="text-sm text-base-content/70">{label}</dt>
-    <dd className="min-w-0 text-end text-sm">{children}</dd>
-  </div>
-)
 
 // Centered modal showing one org member's details: identity, classification,
 // per-classroom access, and member-level actions (invite an on-roster
@@ -66,9 +55,11 @@ const MemberDetailModal = ({
   isOwner: boolean
   onClose: () => void
   // Called after the removal flow ran; `removed` is whether the org-membership
-  // DELETE actually succeeded (false on the warnings-only path), so the page
-  // only optimistically drops the row from its caches for a real removal.
-  onRemoved: (removed: boolean) => void
+  // DELETE actually succeeded (false on the warnings-only path), and
+  // `unenrolledClassrooms` is what the run actually unenrolled — the page
+  // seeds/reconciles exactly those caches, never the row's full classroom list
+  // (which includes archived or failed unenrolls).
+  onRemoved: (removed: boolean, unenrolledClassrooms: string[]) => void
   // Called after an on-roster non-member is invited (refresh only — no classroom
   // membership changed).
   onInvited: () => void
@@ -164,7 +155,7 @@ const MemberDetailModal = ({
             : t("orgMembers.removed", { label, org }),
         })
       }
-      onRemoved(result.removed)
+      onRemoved(result.removed, result.unenrolledClassrooms)
     } catch (err) {
       notify({
         tone: "error",
@@ -233,9 +224,7 @@ const MemberDetailModal = ({
         <dl className="divide-y divide-base-300 rounded-box border border-base-300">
           <DetailRow label={t("orgMembers.details.name")}>
             {row.name || (
-              <span className="text-base-content/40">
-                {t("orgMembers.details.notSet")}
-              </span>
+              <NotSetValue>{t("orgMembers.details.notSet")}</NotSetValue>
             )}
           </DetailRow>
           <DetailRow label={t("orgMembers.details.username")}>
@@ -251,9 +240,7 @@ const MemberDetailModal = ({
             {row.github_id ? (
               <MonoLtr>{row.github_id}</MonoLtr>
             ) : (
-              <span className="text-base-content/40">
-                {t("orgMembers.details.notSet")}
-              </span>
+              <NotSetValue>{t("orgMembers.details.notSet")}</NotSetValue>
             )}
           </DetailRow>
           {row.emails.length > 0 ? (

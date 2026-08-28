@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
@@ -93,6 +93,15 @@ const SKELETON_BARS = [
 
 const MEMBERS_COL_COUNT = SKELETON_BARS.length
 
+// Trimmed-id + lowercased-login sets for matching rows against cached GitHub
+// identities — the one matching recipe every optimistic cache drop uses.
+const identitySets = (rows: OrgMemberRow[]) => ({
+  ids: new Set(rows.map((r) => r.github_id?.trim()).filter(Boolean)),
+  logins: new Set(
+    rows.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
+  ),
+})
+
 // One value per (column, direction) pair for the table-header sort controls.
 type MembersTableSortValue =
   `${OrgMembersSortColumn}-asc` | `${OrgMembersSortColumn}-desc`
@@ -134,29 +143,48 @@ const OrgMembersPage = () => {
   // persists across search filtering (a hidden-but-selected row is still acted
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  // True while a delayed members reconcile is scheduled — the window where an
+  // eager orgMembersAll refetch would read the lagging list and resurrect an
+  // optimistically-removed row (see invalidateMembers).
+  const membersReconcilePending = useRef(false)
 
   // Refresh after an org-level member removal (unenrolls from every classroom +
   // removes org membership). The members-list read lags the membership DELETE,
   // so an immediate refetch would still return the removed account and the row
   // would survive until a manual reload. Same recipe as the CSV/team caches:
-  // optimistically drop them from the members cache AND each affected
+  // optimistically drop them from the members cache AND each actually-touched
   // classroom's CSV + team caches together (no false "unprovisioned" flash),
   // then reconcile everything with the server on a delay. `removed` is false
   // when the org DELETE itself failed (warnings path) — membership didn't
   // change, so only re-read; an optimistic drop would vanish a live member.
-  const refresh = (affected?: OrgMemberRow, removed = true) => {
+  // `unenrolledClassrooms` is what the run REPORTED unenrolling — never the
+  // row's classroom list, which includes archived or failed unenrolls whose
+  // rosters really do still hold the student.
+  const refresh = (
+    affected: OrgMemberRow,
+    removed: boolean,
+    unenrolledClassrooms: string[],
+  ) => {
     if (!org) return
-    if (removed && affected) {
+    if (removed) {
       optimisticRemoveFromMembers([affected])
       scheduleMembersReconcile()
+      // Drop the stale selection key, or the vanished row keeps the toolbar in
+      // its "N selected" state with no visible checkbox to clear it from.
+      setSelectedKeys((prev) => {
+        if (!prev.has(affected.key)) return prev
+        const next = new Set(prev)
+        next.delete(affected.key)
+        return next
+      })
     } else {
-      queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+      invalidateMembers()
     }
     invalidateInviteQueries(queryClient, org)
-    for (const access of affected?.classrooms ?? []) {
-      optimisticRemove(access.classroom, [affected!])
-      invalidateClassroom(access.classroom, { skipCsv: true })
-      scheduleClassroomReconcile(access.classroom)
+    for (const classroom of unenrolledClassrooms) {
+      optimisticRemove(classroom, [affected])
+      invalidateClassroom(classroom, { skipCsv: true })
+      scheduleClassroomReconcile(classroom)
     }
   }
 
@@ -164,7 +192,7 @@ const OrgMembersPage = () => {
   // the members + invite lists.
   const refreshInvite = () => {
     if (!org) return
-    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    invalidateMembers()
     invalidateInviteQueries(queryClient, org)
   }
 
@@ -209,10 +237,7 @@ const OrgMembersPage = () => {
   // member has no other cache to disappear from at all).
   const optimisticRemoveFromMembers = (removed: OrgMemberRow[]) => {
     if (!org || removed.length === 0) return
-    const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
-    const logins = new Set(
-      removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
-    )
+    const { ids, logins } = identitySets(removed)
     queryClient.setQueryData<GitHubUser[]>(
       githubKeys.orgMembersAll(org),
       (current) =>
@@ -222,11 +247,23 @@ const OrgMembersPage = () => {
     )
   }
 
+  // Immediate members-list invalidation, deferred while a members reconcile is
+  // pending: inside that window the list API may still return a just-removed
+  // account, so an eager refetch would resurrect the optimistically-dropped
+  // row. The pending reconcile refetches ≤4s later anyway.
+  const invalidateMembers = () => {
+    if (!org || membersReconcilePending.current) return
+    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+  }
+
   // Reconcile the members cache with the server once the list API has caught
-  // up with the DELETE, mirroring scheduleClassroomReconcile.
+  // up with the DELETE, mirroring scheduleClassroomReconcile. While pending,
+  // invalidateMembers defers immediate refetches (see above).
   const scheduleMembersReconcile = () => {
     if (!org) return
+    membersReconcilePending.current = true
     window.setTimeout(() => {
+      membersReconcilePending.current = false
       queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
     }, CSV_RECONCILE_DELAY_MS)
   }
@@ -237,10 +274,7 @@ const OrgMembersPage = () => {
   // teamSlug is the resolved slug, so a collided-name classroom updates right.
   const optimisticRemove = (classroom: string, removed: OrgMemberRow[]) => {
     if (!org || removed.length === 0) return
-    const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
-    const logins = new Set(
-      removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
-    )
+    const { ids, logins } = identitySets(removed)
     queryClient.setQueryData<StudentCsvRow[]>(
       githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       (current) =>
@@ -284,16 +318,26 @@ const OrgMembersPage = () => {
     if (!org) return
 
     if (input.action === "remove-org") {
-      const removedRows = rows.filter((r) => input.affectedKeys.includes(r.key))
-      // Archived classrooms are excluded: removeMemberFromOrg can't unenroll
-      // them, so their rosters really do still list the student.
-      const affectedClassrooms = new Set(
-        removedRows.flatMap((r) =>
-          r.classrooms.filter((c) => !c.archived).map((c) => c.classroom),
-        ),
-      )
-      for (const classroom of affectedClassrooms) {
-        optimisticRemove(classroom, removedRows)
+      const rowByKey = new Map(rows.map((r) => [r.key, r]))
+      const removedRows = input.affectedKeys
+        .map((key) => rowByKey.get(key))
+        .filter((r): r is OrgMemberRow => Boolean(r))
+      // Seed/reconcile the classrooms the run REPORTED unenrolling — including
+      // rows whose org DELETE then failed (their rosters changed server-side
+      // all the same). Deriving from row.classrooms instead would assert
+      // unenrolls that were skipped (archived) or failed.
+      const byClassroom = new Map<string, OrgMemberRow[]>()
+      for (const { key, classrooms } of input.unenrolled) {
+        const row = rowByKey.get(key)
+        if (!row) continue
+        for (const classroom of classrooms) {
+          const list = byClassroom.get(classroom) ?? []
+          list.push(row)
+          byClassroom.set(classroom, list)
+        }
+      }
+      for (const [classroom, unenrolledRows] of byClassroom) {
+        optimisticRemove(classroom, unenrolledRows)
         invalidateClassroom(classroom, { skipCsv: true })
         scheduleClassroomReconcile(classroom)
       }
@@ -365,7 +409,7 @@ const OrgMembersPage = () => {
 
     // Recompute members against the seeded caches, leaving them alone;
     // reconcile both on a delay.
-    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    invalidateMembers()
     invalidateInviteQueries(queryClient, org)
     invalidateClassroom(classroom, { skipCsv: true })
     setSelectedKeys(new Set())
@@ -890,10 +934,10 @@ const OrgMembersPage = () => {
           isSelf={selected ? isSelf(selected) : false}
           isOwner={selected ? isOwner(selected) : false}
           onClose={() => setSelectedKey(null)}
-          onRemoved={(removed) => {
+          onRemoved={(removed, unenrolledClassrooms) => {
             const affected = selected
             setSelectedKey(null)
-            if (affected) refresh(affected, removed)
+            if (affected) refresh(affected, removed, unenrolledClassrooms)
           }}
           onInvited={() => {
             setSelectedKey(null)

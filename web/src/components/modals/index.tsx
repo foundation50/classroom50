@@ -99,7 +99,7 @@ export function ConfirmModal({
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit || submittingRef.current) return
+    if (!canSubmit || confirmDisabled || submittingRef.current) return
     submittingRef.current = true
 
     setIsSubmitting(true)

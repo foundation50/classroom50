@@ -66,7 +66,11 @@ export async function removeMemberFromOrg(
   // self-lockout. (unenrollStudent can fail open — classroom-scoped and
   // reversible; this can't.)
   const viewer =
-    input.viewer ?? (await getAuthenticatedUser(client).catch(() => null))
+    input.viewer ??
+    (await getAuthenticatedUser(client).catch((err: unknown) => {
+      log.warn("remove member from org: viewer resolution failed", { org, err })
+      return null
+    }))
   if (!viewer) {
     throw new Error(
       "Couldn't verify your account, so the member wasn't removed. Please try again.",

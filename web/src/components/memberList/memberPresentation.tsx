@@ -1,4 +1,5 @@
 import { MarkGithubIcon } from "@/components/ui/icons"
+import type { ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { MonoLtr } from "@/components/ui"
@@ -18,6 +19,28 @@ export const CellPlaceholder = () => (
   <span aria-hidden="true" className="text-base-content/60">
     —
   </span>
+)
+
+// One labeled row of a member-details list (label start, value end) — the
+// single source for both member-detail modals' profile lists. Render inside a
+// `<dl className="divide-y divide-base-300 rounded-box border border-base-300">`.
+export const DetailRow = ({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) => (
+  <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+    <dt className="text-sm text-base-content/70">{label}</dt>
+    <dd className="min-w-0 text-end text-sm">{children}</dd>
+  </div>
+)
+
+// Muted treatment for a detail value that isn't recorded ("Not set" — the
+// caller supplies its own localized text).
+export const NotSetValue = ({ children }: { children: ReactNode }) => (
+  <span className="text-base-content/40">{children}</span>
 )
 
 // First initial of a row's best display string, for the avatar fallback.

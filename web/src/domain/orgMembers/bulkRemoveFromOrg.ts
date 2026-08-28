@@ -51,10 +51,15 @@ export async function bulkRemoveFromOrg(
 ): Promise<BulkRemoveFromOrgResult> {
   const { org, rows, onProgress } = input
 
-  const viewer = await getAuthenticatedUser(client).catch(() => null)
+  const viewer = await getAuthenticatedUser(client).catch((err: unknown) => {
+    log.warn("bulk remove from org: viewer resolution failed", { org, err })
+    return null
+  })
   if (!viewer) {
     throw new Error(
-      "Couldn't verify your account, so no members were removed. Please try again.",
+      t
+        ? t("orgMembers.bulk.viewerUnverified")
+        : "Couldn't verify your account, so no members were removed. Please try again.",
     )
   }
 

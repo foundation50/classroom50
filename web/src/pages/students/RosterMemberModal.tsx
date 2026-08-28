@@ -8,6 +8,10 @@ import {
 } from "@/components/ui/icons"
 
 import Avatar from "@/components/avatar"
+import {
+  DetailRow,
+  NotSetValue,
+} from "@/components/memberList/memberPresentation"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useUnenrollStudent } from "@/hooks/mutations/useUnenrollStudent"
@@ -921,42 +925,19 @@ const RosterMemberModal = ({
             />
           ) : (
             <dl className="divide-y divide-base-300 rounded-box border border-base-300">
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <dt className="text-sm text-base-content/70">
-                  {t("students.nameColumn")}
-                </dt>
-                <dd className="text-sm">
-                  {nameFromParts(row.first_name, row.last_name) || (
-                    <span className="text-base-content/40">
-                      {t("students.notSet")}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <dt className="text-sm text-base-content/70">
-                  {t("students.emailColumn")}
-                </dt>
-                <dd className="text-sm">
-                  {row.email || (
-                    <span className="text-base-content/40">
-                      {t("students.notSet")}
-                    </span>
-                  )}
-                </dd>
-              </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <dt className="text-sm text-base-content/70">
-                  {t("students.sectionColumn")}
-                </dt>
-                <dd className="text-sm">
-                  {row.section.trim() || (
-                    <span className="text-base-content/40">
-                      {t("students.notSet")}
-                    </span>
-                  )}
-                </dd>
-              </div>
+              <DetailRow label={t("students.nameColumn")}>
+                {nameFromParts(row.first_name, row.last_name) || (
+                  <NotSetValue>{t("students.notSet")}</NotSetValue>
+                )}
+              </DetailRow>
+              <DetailRow label={t("students.emailColumn")}>
+                {row.email || <NotSetValue>{t("students.notSet")}</NotSetValue>}
+              </DetailRow>
+              <DetailRow label={t("students.sectionColumn")}>
+                {row.section.trim() || (
+                  <NotSetValue>{t("students.notSet")}</NotSetValue>
+                )}
+              </DetailRow>
             </dl>
           )}
         </section>

@@ -3417,6 +3417,7 @@
       "removeTitle": "Remove members from {{classroom}}",
       "removeOrgTitle": "Remove members from the {{org}} organization",
       "starting": "Starting...",
+      "viewerUnverified": "Couldn't verify your account, so no members were removed. Please try again.",
       "keepTabOpen": "Keep this tab open until the action finishes.",
       "progressProcessed": "{{processed}} of {{total}}",
       "done": "Done",

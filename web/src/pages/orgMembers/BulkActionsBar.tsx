@@ -257,9 +257,15 @@ export type BulkDoneInput =
       affectedKeys: string[]
     }
   | { action: "remove"; classroom: string; affectedKeys: string[] }
-  // Org-wide removal: affectedKeys are the CONFIRMED-removed rows; every
-  // classroom they belonged to is affected, not just the picked one.
-  | { action: "remove-org"; affectedKeys: string[] }
+  // Org-wide removal: affectedKeys are the CONFIRMED-removed rows (they drive
+  // the members-cache drop); `unenrolled` carries what each non-skipped row
+  // was ACTUALLY unenrolled from — including rows whose org DELETE then
+  // failed, whose rosters changed server-side all the same.
+  | {
+      action: "remove-org"
+      affectedKeys: string[]
+      unenrolled: Array<{ key: string; classrooms: string[] }>
+    }
 
 // The members toolbar's selection cluster (count + classroom picker +
 // Add/Remove + Clear), shown only while rows are selected — mirroring the
@@ -460,6 +466,9 @@ const BulkActionsBar = ({
           affectedKeys: res.outcomes
             .filter((o) => o.status === "removed")
             .map((o) => o.key),
+          unenrolled: res.outcomes
+            .filter((o) => o.unenrolledClassrooms.length > 0)
+            .map((o) => ({ key: o.key, classrooms: o.unenrolledClassrooms })),
         })
       }
       setPhase("complete")
