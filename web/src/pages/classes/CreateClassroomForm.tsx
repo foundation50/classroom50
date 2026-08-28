@@ -18,7 +18,14 @@ import {
   CLASSROOM_SHORT_NAME_MAX_LEN,
   GITHUB_REPO_NAME_MAX_LEN,
 } from "@/util/repoNameBudget"
-import { Button, Card, FormField, Input, Heading } from "@/components/ui"
+import {
+  Button,
+  Card,
+  FormField,
+  Input,
+  Heading,
+  Toggle,
+} from "@/components/ui"
 
 export type CreateClassroomFormValues = {
   name: string
@@ -270,9 +277,8 @@ const CreateClassroomForm = ({
                   positive — the control IS associated. */}
               {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-primary mt-0.5"
+                <Toggle
+                  className="mt-0.5"
                   checked={field.state.value}
                   onChange={(e) => {
                     const on = e.target.checked

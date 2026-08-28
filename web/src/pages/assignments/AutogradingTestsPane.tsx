@@ -186,6 +186,9 @@ const AutogradingTestModal = ({
             {t("assignments.autograder.testType")}
           </legend>
           <div className="join w-full">
+            {/* daisyUI's btn-radio segmented control — not the Radio recipe,
+                and a SegmentedControl primitive stays gated on a second
+                consumer. */}
             {TYPE_OPTIONS.map((option) => (
               <input
                 key={option.value}

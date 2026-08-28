@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { Badge, Spinner } from "@/components/ui"
+import { Badge, Spinner, Toggle } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -204,10 +204,10 @@ const OrgActionsSection = ({
             htmlFor="autograde-pause-toggle"
             className="flex items-start gap-3"
           >
-            <input
+            <Toggle
               id="autograde-pause-toggle"
-              type="checkbox"
-              className="toggle toggle-warning mt-0.5"
+              tone="warning"
+              className="mt-0.5"
               checked={paused}
               disabled={toggleDisabled}
               aria-label={t("orgSettings.actions.toggleLabel")}
