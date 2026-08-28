@@ -159,6 +159,33 @@ describe("aggregateOrgMembers", () => {
     expect(rows[0].github_id).toBe("42")
   })
 
+  it("aggregates and dedupes every distinct email across rosters", () => {
+    // Same person (github_id 42) with a different address per roster, one of
+    // them a case-variant duplicate. `email` stays first-seen (identity
+    // fallback); `emails` collects the distinct set in first-seen order.
+    const rows = aggregateOrgMembers(
+      [member(42, "alice")],
+      [
+        roster("cs101", [
+          student({ username: "alice", github_id: "42", email: "a@x.edu" }),
+        ]),
+        roster("cs201", [
+          student({ username: "alice", github_id: "42", email: "A@X.edu" }),
+        ]),
+        roster("cs301", [
+          student({
+            username: "alice",
+            github_id: "42",
+            email: "alice@uni.edu",
+          }),
+        ]),
+      ],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].email).toBe("a@x.edu")
+    expect(rows[0].emails).toEqual(["a@x.edu", "alice@uni.edu"])
+  })
+
   it("sorts discrepancies before members", () => {
     const rows = aggregateOrgMembers(
       [member(42, "alice")],
@@ -284,6 +311,7 @@ describe("sortOrgMemberRowsBy", () => {
     github_id: "",
     name: "",
     email: "",
+    emails: [],
     isMember: true,
     classrooms: [],
     classification: "member-on-roster",

@@ -31,6 +31,7 @@ const row = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
   github_id: "42",
   name: "",
   email: "",
+  emails: [],
   isMember: true,
   classrooms: [],
   classification: "member-on-roster",

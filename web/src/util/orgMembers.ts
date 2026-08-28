@@ -41,7 +41,11 @@ export type OrgMemberRow = {
   username: string
   github_id: string
   name: string
+  // The primary email (first seen across rosters) — the one identity keys
+  // fall back to. `emails` carries EVERY distinct address the rosters (or the
+  // GitHub profile, for a roster-less member) know for this person.
   email: string
+  emails: string[]
   isMember: boolean
   classrooms: ClassroomAccess[]
   classification: MemberClassification
@@ -97,9 +101,20 @@ export function aggregateOrgMembers(
     github_id: string
     name: string
     email: string
+    emails: string[]
     classrooms: RawAccess[]
   }
   const byKey = new Map<string, Acc>()
+
+  // Collect every distinct address (case-insensitive, first-seen casing and
+  // order kept) — different rosters may hold different emails for one person.
+  const addEmail = (acc: Acc, email: string | undefined) => {
+    const trimmed = email?.trim()
+    if (!trimmed) return
+    if (!acc.emails.some((e) => e.toLowerCase() === trimmed.toLowerCase())) {
+      acc.emails.push(trimmed)
+    }
+  }
 
   for (const roster of rosters) {
     for (const student of roster.students) {
@@ -118,17 +133,21 @@ export function aggregateOrgMembers(
         if (!existing.github_id && student.github_id)
           existing.github_id = student.github_id
         if (!existing.email && student.email) existing.email = student.email
+        addEmail(existing, student.email)
         const name = fullName(student)
         if (!existing.name && name) existing.name = name
       } else {
-        byKey.set(key, {
+        const acc: Acc = {
           key,
           username: student.username ?? "",
           github_id: student.github_id ?? "",
           name: fullName(student),
           email: student.email ?? "",
+          emails: [],
           classrooms: [access],
-        })
+        }
+        addEmail(acc, student.email)
+        byKey.set(key, acc)
       }
     }
   }
@@ -177,6 +196,7 @@ export function aggregateOrgMembers(
       github_id: matchedId || acc.github_id,
       name: acc.name,
       email: acc.email,
+      emails: acc.emails,
       isMember,
       classrooms,
       // An identity-less roster row is an unaccepted email invite, not a person
@@ -201,6 +221,9 @@ export function aggregateOrgMembers(
       github_id: id,
       name: member.name ?? "",
       email: member.email ?? "",
+      // No roster rows to collect from; the GitHub profile's public email is
+      // all we know.
+      emails: member.email ? [member.email] : [],
       isMember: true,
       classrooms: [],
       classification: "member-no-roster",

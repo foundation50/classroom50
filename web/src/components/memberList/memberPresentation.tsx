@@ -8,9 +8,9 @@ import { firstGrapheme } from "@/util/students"
 // View-agnostic member presentation primitives shared by member lists and detail
 // modals (Org Members + classroom roster). They target the adapter type
 // MemberListRow so both feature surfaces feed adapted rows. These live in
-// components/ (not a feature page) because a shared component — MemberDetailHeader
-// — needs them; the org-specific helpers (ClassificationBadge, runInviteMember)
-// stay in pages/orgMembers.
+// components/ (not a feature page) so either feature can use them without a
+// cross-feature reach; the org-specific helpers (ClassificationBadge,
+// runInviteMember) stay in pages/orgMembers.
 
 // Primer-style placeholder for a cell with nothing to report (an enrolled
 // member's Status, a section-less row), so an empty cell reads as intentional.

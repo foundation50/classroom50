@@ -3327,6 +3327,16 @@
     "usernameWithId": "<username>@{{username}}</username> <meta>· id {{id}}</meta>",
     "noUsernameWithId": "<missing>no GitHub username</missing> <meta>· id {{id}}</meta>",
     "detailTitle": "Member details",
+    "details": {
+      "name": "Name",
+      "username": "GitHub username",
+      "githubId": "GitHub ID",
+      "email_one": "Email",
+      "email_other": "Emails",
+      "orgRole": "Role",
+      "organization": "Organization",
+      "notSet": "Not set"
+    },
     "manageOnGitHub": "Manage on GitHub",
     "classroomAccess": "Classroom access",
     "noRoster": "Not on any classroom roster.",
