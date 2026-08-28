@@ -17,6 +17,23 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.35.0](https://github.com/foundation50/classroom50/compare/web-v1.34.1...web-v1.35.0) (2026-08-28)
+
+
+### Features
+
+* add autograder failure-details and show-output options ([#767](https://github.com/foundation50/classroom50/issues/767)) ([d1713bd](https://github.com/foundation50/classroom50/commit/d1713bd63be070a5321622a6b7f3d855a4c7e74a))
+* add repo_visibility control for generated assignment repos ([#771](https://github.com/foundation50/classroom50/issues/771)) ([d6ff58e](https://github.com/foundation50/classroom50/commit/d6ff58e53221a8193a8ed14808f2240337da39b6))
+* **web:** add delete assignment to the submissions actions menu ([#760](https://github.com/foundation50/classroom50/issues/760)) ([efaf7da](https://github.com/foundation50/classroom50/commit/efaf7da5e3c8518620fe18d85118c6a1bc861d5c))
+* **web:** revamp the roster view and surface sync progress ([#779](https://github.com/foundation50/classroom50/issues/779)) ([19133b5](https://github.com/foundation50/classroom50/commit/19133b56c36f394dc0be9a27cc3236d1057659c3))
+* **web:** support a custom Pages domain for published classroom resources ([#782](https://github.com/foundation50/classroom50/issues/782)) ([807265c](https://github.com/foundation50/classroom50/commit/807265ce28de174f70f6fb51a197c209ca75c77f))
+
+
+### Bug Fixes
+
+* stop concurrent invite acceptance from corrupting roster.csv ([#773](https://github.com/foundation50/classroom50/issues/773)) ([14eae9c](https://github.com/foundation50/classroom50/commit/14eae9c8b12f8f76b9c44025f08855eeba4543b0))
+* **web:** stop showing stale classroom names to students after rename ([#781](https://github.com/foundation50/classroom50/issues/781)) ([f08010e](https://github.com/foundation50/classroom50/commit/f08010e7f71472d76d95d588c33d005afdf57d22))
+
 ## [1.34.1](https://github.com/foundation50/classroom50/compare/web-v1.34.0...web-v1.34.1) (2026-08-26)
 
 
