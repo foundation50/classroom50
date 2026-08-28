@@ -3,7 +3,7 @@ import { InlineSpinner } from "@/components/Spinner"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
-import { Alert, Button, cx, FormField, Select } from "@/components/ui"
+import { Alert, Button, cx, FormField, Radio, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { getRepo } from "@/github-core/repoReads"
 import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
@@ -83,10 +83,9 @@ export function RepositorySetupSection({
                       htmlFor={`${field.name}-${option}`}
                       className="flex cursor-pointer items-start justify-start gap-3"
                     >
-                      <input
+                      <Radio
                         id={`${field.name}-${option}`}
-                        type="radio"
-                        className="radio mt-1"
+                        className="mt-1"
                         name={field.name}
                         value={option}
                         checked={field.state.value === option}

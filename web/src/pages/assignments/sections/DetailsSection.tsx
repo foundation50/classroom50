@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
 import { assignmentSlugBudget } from "@/util/repoNameBudget"
-import { Alert, FormField, Input, Textarea } from "@/components/ui"
+import { Alert, FormField, Input, Radio, Textarea } from "@/components/ui"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
@@ -233,10 +233,8 @@ export function DetailsSection({
                   htmlFor={`${field.name}-${value}`}
                   className="label cursor-pointer gap-2 p-0"
                 >
-                  <input
+                  <Radio
                     id={`${field.name}-${value}`}
-                    type="radio"
-                    className="radio"
                     name={field.name}
                     value={value}
                     checked={field.state.value === value}

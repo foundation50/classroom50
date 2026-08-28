@@ -14,6 +14,7 @@ import {
   Alert,
   AnimatedAlert,
   Button,
+  Checkbox,
   SelectAllCheckbox,
   SelectSeparatorOption,
   SkeletonRows,
@@ -819,9 +820,8 @@ const OrgMembersPage = () => {
                       onClick={() => setSelectedKey(row.key)}
                     >
                       <td className="w-0">
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm size-6"
+                        <Checkbox
+                          className="size-6"
                           aria-label={
                             isSelf(row)
                               ? t("orgMembers.bulk.selfNotSelectable")

@@ -18,6 +18,7 @@ import {
 import {
   Badge,
   Collapse,
+  Checkbox,
   InlineMessage,
   Input,
   Spinner,
@@ -340,9 +341,8 @@ export const MigrationItemCard = ({
         </div>
         {selectable ? (
           <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm checkbox-primary"
+            <Checkbox
+              tone="primary"
               checked={selected}
               onChange={() => onToggle?.()}
             />

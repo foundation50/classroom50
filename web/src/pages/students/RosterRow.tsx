@@ -1,7 +1,7 @@
 import { ChevronRightIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
-import { Badge, rtlFlip } from "@/components/ui"
+import { Badge, Checkbox, rtlFlip } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
 import {
   CellPlaceholder,
@@ -71,9 +71,8 @@ export const RosterRow = ({
   return (
     <ClickableTr className="group/row hover:bg-base-200" onClick={open}>
       <td className="w-0">
-        <input
-          type="checkbox"
-          className="checkbox checkbox-sm size-6"
+        <Checkbox
+          className="size-6"
           aria-label={
             selfRow
               ? t("students.bulk.selfNotSelectable")

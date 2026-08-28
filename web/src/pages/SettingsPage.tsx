@@ -5,6 +5,7 @@ import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import {
   Button,
   Card,
+  Radio,
   RouterButton,
   SectionAnchorHeading,
   cx,
@@ -239,11 +240,12 @@ function PreferenceRadioGroup<T extends string>({
             htmlFor={id}
             className="flex cursor-pointer items-start gap-3 rounded-field border border-base-300 px-3 py-2 has-[:checked]:border-primary has-[:checked]:bg-primary/5"
           >
-            <input
+            <Radio
               id={id}
-              type="radio"
               name={name}
-              className="radio radio-sm radio-primary mt-0.5"
+              size="sm"
+              tone="primary"
+              className="mt-0.5"
               value={option.value}
               checked={value === option.value}
               onChange={() => onChange(option.value)}
