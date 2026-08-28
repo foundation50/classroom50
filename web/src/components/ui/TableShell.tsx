@@ -12,6 +12,9 @@ import { cx } from "./cx"
 export type TableShellProps = {
   children: ReactNode
   ariaBusy?: boolean
+  // Compact density (`table-sm`) for embedded/preview tables; md is the
+  // full-size list default.
+  size?: "sm" | "md"
   // Roomier tbody cell padding — the assignment lists' at-rest row separation.
   padded?: boolean
   // Scale-up entrance; disable when an ancestor already animates the block
@@ -22,23 +25,32 @@ export type TableShellProps = {
   // Rendered inside the frame after the table (e.g. a pagination bar).
   footer?: ReactNode
   className?: string
+  // Merged onto the frame div — for a vertical scroll cap
+  // (`max-h-48 overflow-auto`) the base recipe can't express. The frame
+  // itself stays single-sourced here.
+  frameClassName?: string
 }
 
 export function TableShell({
   children,
   ariaBusy,
+  size = "md",
   padded = false,
   animate = true,
   header,
   footer,
   className,
+  frameClassName,
 }: TableShellProps) {
-  const frameClass =
-    "overflow-x-auto rounded-box border border-base-300 bg-base-100"
+  const frameClass = cx(
+    "overflow-x-auto rounded-box border border-base-300 bg-base-100",
+    frameClassName,
+  )
   const table = (
     <table
       className={cx(
         "table [&_tr]:border-base-content/10 [&_thead_tr]:bg-base-200",
+        size === "sm" && "table-sm",
         padded && "[&_tbody_td]:py-4",
         className,
       )}
