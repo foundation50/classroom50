@@ -133,6 +133,9 @@ function OrgPicker({
                       <Badge tone="warning" size="sm" className="shrink-0">
                         {t("orgs.newOrg.notSupportedBadge")}
                       </Badge>
+                      {/* Deliberately a span wearing the btn recipe: the whole
+                          row is a <button> (no nesting allowed), and these chips
+                          advertise that row's click affordance. */}
                       <span className="btn btn-outline btn-xs shrink-0">
                         {t("orgs.newOrg.details")}
                       </span>

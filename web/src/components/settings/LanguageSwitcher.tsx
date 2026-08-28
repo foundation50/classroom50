@@ -53,6 +53,7 @@ export const LanguageSwitcher = ({
 
   const [code, setCode] = useState("")
   const [url, setUrl] = useState("")
+  const uploadInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
@@ -348,21 +349,30 @@ export const LanguageSwitcher = ({
             </div>
           )}
 
-          <label className="btn btn-sm btn-outline w-full">
+          {/* Hidden input + Button (the UploadRoster pattern) instead of a
+              label wearing btn classes, so the picker is a real button. */}
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void handleFile(e)}
+            disabled={busy}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={busy}
+            onClick={() => uploadInputRef.current?.click()}
+          >
             {busy && !preview ? (
               <InlineSpinner />
             ) : (
               <UploadIcon className="size-4" aria-hidden="true" />
             )}
             {t("language.uploadFile")}
-            <input
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(e) => void handleFile(e)}
-              disabled={busy}
-            />
-          </label>
+          </Button>
 
           <div className="flex flex-row gap-2">
             <input
