@@ -42,6 +42,7 @@ import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTr
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import {
+  AssignmentTitleWithSlug,
   AutogradingMeta,
   MetaItem,
   MetaStrip,
@@ -1032,7 +1033,10 @@ const SubmissionsPageContent = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("nav.submissions")} />
+      <Breadcrumb
+        endpoint={t("nav.submissions")}
+        assignmentName={assignmentInfo?.name}
+      />
       {emptyRoster.show && (
         <EmptyRosterNotice
           org={org}
@@ -1067,7 +1071,14 @@ const SubmissionsPageContent = () => {
         />
       )}
       <PageHeader
-        title={assignmentInfo?.name}
+        title={
+          assignmentInfo && (
+            <AssignmentTitleWithSlug
+              name={assignmentInfo.name}
+              slug={assignmentInfo.slug}
+            />
+          )
+        }
         subtitle={
           // Property items are quiet meta text; only genuine states (overdue,
           // approaching deadline, late, closed) keep toned badges. The

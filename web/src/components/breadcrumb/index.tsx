@@ -8,9 +8,15 @@ import { cx } from "@/components/ui"
 const Breadcrumb = ({
   className,
   endpoint,
+  assignmentName,
 }: {
   className?: string
   endpoint: string
+  // Resolved display name for the $assignment segment (falls back to the
+  // slug). Passed by the page because the metadata source is role-aware
+  // (private config repo for staff, public Pages for students) — the
+  // breadcrumb can't pick the right transport itself.
+  assignmentName?: string
 }) => {
   const { org, classroom, assignment } = useParams({ strict: false })
   const { data: classData } = useGetClassroom(org, classroom)
@@ -58,7 +64,7 @@ const Breadcrumb = ({
                 to="/$org/$classroom/assignments/$assignment"
                 params={{ org, classroom, assignment }}
               >
-                {assignment}
+                {assignmentName || assignment}
               </Link>
             </li>
           </>

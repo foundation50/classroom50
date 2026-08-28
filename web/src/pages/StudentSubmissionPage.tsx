@@ -45,6 +45,7 @@ import {
   type PushSubmission,
 } from "@/components/submissions/submissionDetailItems"
 import {
+  AssignmentTitleWithSlug,
   LastSubmittedCell,
   MetaItem,
   MetaStrip,
@@ -494,13 +495,21 @@ const StudentSubmissionPage = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("nav.mySubmission")} />
+      <Breadcrumb
+        endpoint={t("nav.mySubmission")}
+        assignmentName={assignmentData?.name}
+      />
       <PageHeader
         loading={assignmentLoading}
         title={
-          assignmentData?.name ||
-          assignment ||
-          t("submissions.student.fallbackTitle")
+          assignmentData ? (
+            <AssignmentTitleWithSlug
+              name={assignmentData.name}
+              slug={assignmentData.slug}
+            />
+          ) : (
+            assignment || t("submissions.student.fallbackTitle")
+          )
         }
         subtitle={<AssignmentMeta assignment={assignmentData} />}
       />
