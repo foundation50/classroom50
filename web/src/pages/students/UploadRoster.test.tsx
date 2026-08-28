@@ -1108,3 +1108,130 @@ describe("UploadRoster legacy-encoding fallback", () => {
     ).toBeNull()
   })
 })
+
+// The footer branches took over the action rows the blocked/complete views used
+// to render in-body (see ImportProblemsReport / RosterImportResult): the retry
+// gate, the cancel reset, and the Done dismissal live on the Modal footer now.
+describe("UploadRoster footer phase branches", () => {
+  const lookupError = (status: number) =>
+    new GitHubAPIError({
+      status,
+      url: "https://api.github.com/user/42",
+      message: "boom",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  it("offers the retry for transient-only blockers, and retrying re-resolves", async () => {
+    const user = userEvent.setup()
+    // A 5xx means we could not ASK GitHub about the id — the file is fine, so
+    // the footer offers the retry that actually resolves it.
+    getUserById.mockRejectedValueOnce(lookupError(500))
+    getUserById.mockResolvedValue({ login: "ada" })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "github_id,username\n42,ada\n"))
+    await waitFor(() =>
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
+    )
+
+    const retry = screen
+      .getByRole("button", { name: "students.importRetryLookup" })
+      .closest("button") as HTMLButtonElement
+    expect(
+      screen.getByRole("button", { name: "common.cancel" }),
+    ).toBeTruthy()
+
+    await user.click(retry)
+
+    // The re-parse asks again, succeeds, and the preview replaces the report.
+    await waitFor(() => expect(getUserById).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /noChangesToApply/ }),
+      ).toBeTruthy(),
+    )
+    expect(screen.queryByText(/students.importBlocked/)).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "students.importRetryLookup" }),
+    ).toBeNull()
+  })
+
+  it("offers no retry when any blocker is a content problem; Cancel resets", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // "n/a" is a bad email — a file the teacher has to fix; a retry would
+    // deterministically fail, so it must not be offered.
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email\nada,ada@x.edu\nbob,n/a\n"),
+    )
+    await waitFor(() =>
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
+    )
+    expect(
+      screen.queryByRole("button", { name: "students.importRetryLookup" }),
+    ).toBeNull()
+
+    await user.click(screen.getByRole("button", { name: "common.cancel" }))
+    await waitFor(() =>
+      expect(screen.getByText("students.uploadDropPrompt")).toBeTruthy(),
+    )
+  })
+
+  it("dismisses a completed import with the footer Done", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "zoe@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    renderModal(
+      <UploadRoster
+        org="acme"
+        classroom="cs50"
+        client={client}
+        open={true}
+        onOpenChange={onOpenChange}
+      />,
+    )
+
+    await uploadFile(user, file("roster.csv", "email\nzoe@x.edu\n"))
+    await user.click(
+      await waitFor(() => {
+        const b = screen
+          .getByRole("button", { name: /importAndInviteMembers/ })
+          .closest("button") as HTMLButtonElement
+        expect(b.disabled).toBe(false)
+        return b
+      }),
+    )
+
+    const done = await waitFor(
+      () =>
+        screen
+          .getByRole("button", { name: "students.done" })
+          .closest("button") as HTMLButtonElement,
+    )
+    await user.click(done)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+})
