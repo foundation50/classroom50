@@ -84,6 +84,14 @@ vi.mock("@/hooks/useDotClassroom50", () => ({
   default: () => ({ secret: undefined }),
 }))
 
+vi.mock("@/hooks/useStudentClassrooms", () => ({
+  useClassroomSecret: () => ({
+    secret: undefined,
+    pagesBaseUrl: undefined,
+    isLoading: false,
+  }),
+}))
+
 // The submit-guidance block uses clipboard; stub it so the page test stays
 // focused on the submission-details surface.
 vi.mock("@/components/SubmitGuidance", () => ({

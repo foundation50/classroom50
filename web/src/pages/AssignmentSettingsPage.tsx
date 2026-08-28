@@ -14,6 +14,7 @@ import { can } from "@/authz"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
@@ -43,8 +44,19 @@ const EditAssignmentFormStudent = ({
   // the student's repo .classroom50.yaml — the source they can read (not the
   // private classroom.json). Empty for unprotected -> plain path.
   const { secret } = useDotClassroom50(org, assignmentRepo?.name ?? "")
+  // Custom Pages base URL from the team-description bootstrap record; the
+  // read waits for it so a custom-domain org never fires a doomed github.io
+  // fetch.
+  const { pagesBaseUrl, isLoading: loadingBootstrap } = useClassroomSecret(
+    org,
+    classroom,
+  )
   const { isLoading: loadingPublic, assignment: assignmentData } =
-    usePagesAssignments(org, classroom, secret, { assignmentSlug: assignment })
+    usePagesAssignments(org, classroom, secret, {
+      assignmentSlug: assignment,
+      pagesBaseUrl,
+      enabled: !loadingBootstrap,
+    })
 
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
 
@@ -55,7 +67,7 @@ const EditAssignmentFormStudent = ({
   )
   const assignmentMode = assignmentData?.mode
 
-  if (loadingPublic || loadingRepo) {
+  if (loadingPublic || loadingRepo || loadingBootstrap) {
     return <FormSkeleton fields={3} label={t("assignmentSettings.loading")} />
   }
 

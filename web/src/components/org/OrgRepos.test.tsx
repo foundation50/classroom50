@@ -19,6 +19,14 @@ vi.mock("@/hooks/useGetMyOrgRepos", () => ({
 vi.mock("@/hooks/useDotClassroom50", () => ({
   default: () => ({}),
 }))
+vi.mock("@/hooks/useStudentClassrooms", () => ({
+  useClassroomSecret: () => ({
+    secret: undefined,
+    pagesBaseUrl: undefined,
+    isLoading: false,
+    isError: false,
+  }),
+}))
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: () => ({ assignment: undefined }),
 }))

@@ -13,6 +13,7 @@ import {
 import { Spinner } from "@/components/Spinner"
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Markdown,
@@ -32,6 +33,7 @@ import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
 import {
   localizedMessageOf,
   resolveLocalizedMessage,
+  errorText,
   type LocalizedMessage,
 } from "@/types/localizedMessage"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
@@ -40,6 +42,7 @@ import {
   MembershipError,
 } from "@/components/MembershipError"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
+import { attemptedPagesAssignmentUrls } from "@/github-core/queries"
 import { useClassroomEnrollment } from "@/hooks/useClassroomEnrollment"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
@@ -151,12 +154,26 @@ const UserInfo = ({ user }: { user: GitHubUser | null }) => {
   )
 }
 
-const AssignmentNotFound = ({
+// One scaffold for every terminal accept-page state (not found / load error /
+// locked / closed / not enrolled): tone badge + title + body, optional detail
+// sections, and the signed-in-as footer. One recipe, one source — the
+// per-state components below only choose copy and detail content.
+const AcceptErrorCard = ({
+  tone,
+  icon,
+  badge,
+  title,
+  body,
+  children,
   user,
-  assignment,
 }: {
+  tone: "error" | "warning"
+  icon: React.ReactNode
+  badge: string
+  title: string
+  body: React.ReactNode
+  children?: React.ReactNode
   user: GitHubUser | null
-  assignment?: string
 }) => {
   const { t } = useTranslation()
   return (
@@ -164,58 +181,19 @@ const AssignmentNotFound = ({
       <AcceptCard>
         <Card.Body className="gap-8">
           <div>
-            <span className="badge badge-error badge-soft gap-2">
-              <AlertIcon aria-hidden="true" className="size-4" />
-              {t("accept.notFound.badge")}
-            </span>
+            <Badge tone={tone} size="md" className="gap-2">
+              {icon}
+              {badge}
+            </Badge>
 
             <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.notFound.title")}
+              {title}
             </Heading>
 
-            <p className="mt-2 text-base text-base-content/70">
-              <Trans
-                i18nKey="accept.notFound.body"
-                values={{ assignment }}
-                components={{
-                  assignment: (
-                    <MonoLtr className="font-semibold text-base-content" />
-                  ),
-                }}
-              />
-            </p>
+            <p className="mt-2 text-base text-base-content/70">{body}</p>
           </div>
 
-          <div className="rounded-box border border-error/20 bg-error/5 p-5">
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-error/10 p-3 text-error">
-                <AlertIcon aria-hidden="true" className="size-6" />
-              </div>
-
-              <div className="min-w-0">
-                <div className="font-bold text-error">
-                  {t("accept.notFound.unableToLoad")}
-                </div>
-
-                <div className="mt-1 text-sm text-base-content/70">
-                  {t("accept.notFound.expectedSlug")}
-                </div>
-
-                <pre className="mt-3 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
-                  {assignment}
-                </pre>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
-            <Trans
-              i18nKey="accept.notFound.checkUrl"
-              components={{
-                file: <MonoLtr className="text-base-content" />,
-              }}
-            />
-          </div>
+          {children}
 
           <div className="divider my-0" />
 
@@ -232,6 +210,140 @@ const AssignmentNotFound = ({
   )
 }
 
+// The red detail panel shared by the not-found and load-error cards.
+const ErrorDetailPanel = ({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) => (
+  <div className="rounded-box border border-error/20 bg-error/5 p-5">
+    <div className="flex items-start gap-4">
+      <div className="rounded-full bg-error/10 p-3 text-error">
+        <AlertIcon aria-hidden="true" className="size-6" />
+      </div>
+
+      <div className="min-w-0">
+        <div className="font-bold text-error">{title}</div>
+        {children}
+      </div>
+    </div>
+  </div>
+)
+
+const AssignmentNotFound = ({
+  user,
+  assignment,
+}: {
+  user: GitHubUser | null
+  assignment?: string
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptErrorCard
+      tone="error"
+      icon={<AlertIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.notFound.badge")}
+      title={t("accept.notFound.title")}
+      body={
+        <Trans
+          i18nKey="accept.notFound.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    >
+      <ErrorDetailPanel title={t("accept.notFound.unableToLoad")}>
+        <div className="mt-1 text-sm text-base-content/70">
+          {t("accept.notFound.expectedSlug")}
+        </div>
+
+        <pre className="mt-3 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
+          {assignment}
+        </pre>
+      </ErrorDetailPanel>
+
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
+        <Trans
+          i18nKey="accept.notFound.checkUrl"
+          components={{
+            file: <MonoLtr className="text-base-content" />,
+          }}
+        />
+      </div>
+    </AcceptErrorCard>
+  )
+}
+
+// Shown when the published assignments manifest couldn't be LOADED at all —
+// network failure, a CORS-blocked custom-domain redirect, a 404'd Pages site,
+// or a malformed manifest. Distinct from AssignmentNotFound, which means the
+// manifest loaded fine but lacks the slug. Renders the failure detail and the
+// URL(s) attempted so a student's screenshot alone is diagnosable.
+const AssignmentLoadError = ({
+  user,
+  assignment,
+  error,
+  urls,
+  bootstrapUnknown,
+}: {
+  user: GitHubUser | null
+  assignment?: string
+  error: unknown
+  urls: string[]
+  // The teams read failed, so a custom Pages domain (if the classroom has
+  // one) could not be discovered — the URL list may be incomplete.
+  bootstrapUnknown?: boolean
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptErrorCard
+      tone="error"
+      icon={<AlertIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.loadError.badge")}
+      title={t("accept.loadError.title")}
+      body={
+        <Trans
+          i18nKey="accept.loadError.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    >
+      <ErrorDetailPanel title={t("accept.loadError.detailTitle")}>
+        <div className="mt-1 text-sm text-base-content/70">
+          {errorText(t, error)}
+        </div>
+
+        <div className="mt-3 text-sm text-base-content/70">
+          {t("accept.loadError.urlsLabel")}
+        </div>
+
+        <pre className="mt-1 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
+          {urls.join("\n")}
+        </pre>
+
+        {bootstrapUnknown && (
+          <div className="mt-3 text-sm text-base-content/70">
+            {t("accept.loadError.bootstrapUnknown")}
+          </div>
+        )}
+      </ErrorDetailPanel>
+
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
+        {t("accept.loadError.retryHint")}
+      </div>
+    </AcceptErrorCard>
+  )
+}
+
 // Shown when the requested assignment is locked. A locked assignment is closed
 // to every student (see the Assignment.locked contract), so the accept CTA and
 // mutation are never reached — this is a terminal state, not a retryable error.
@@ -244,44 +356,22 @@ const AssignmentLocked = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <AcceptLayout>
-      <AcceptCard>
-        <Card.Body className="gap-8">
-          <div>
-            <span className="badge badge-warning badge-soft gap-2">
-              <LockIcon aria-hidden="true" className="size-4" />
-              {t("accept.locked.badge")}
-            </span>
-
-            <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.locked.title")}
-            </Heading>
-
-            <p className="mt-2 text-base text-base-content/70">
-              <Trans
-                i18nKey="accept.locked.body"
-                values={{ assignment }}
-                components={{
-                  assignment: (
-                    <MonoLtr className="font-semibold text-base-content" />
-                  ),
-                }}
-              />
-            </p>
-          </div>
-
-          <div className="divider my-0" />
-
-          <div className="space-y-3">
-            <label className="label p-0 text-base font-semibold">
-              {t("accept.signedInAs")}
-            </label>
-
-            <UserInfo user={user} />
-          </div>
-        </Card.Body>
-      </AcceptCard>
-    </AcceptLayout>
+    <AcceptErrorCard
+      tone="warning"
+      icon={<LockIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.locked.badge")}
+      title={t("accept.locked.title")}
+      body={
+        <Trans
+          i18nKey="accept.locked.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    />
   )
 }
 
@@ -298,44 +388,22 @@ const AssignmentClosed = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <AcceptLayout>
-      <AcceptCard>
-        <Card.Body className="gap-8">
-          <div>
-            <span className="badge badge-warning badge-soft gap-2">
-              <CalendarIcon aria-hidden="true" className="size-4" />
-              {t("accept.closed.badge")}
-            </span>
-
-            <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.closed.title")}
-            </Heading>
-
-            <p className="mt-2 text-base text-base-content/70">
-              <Trans
-                i18nKey="accept.closed.body"
-                values={{ assignment }}
-                components={{
-                  assignment: (
-                    <MonoLtr className="font-semibold text-base-content" />
-                  ),
-                }}
-              />
-            </p>
-          </div>
-
-          <div className="divider my-0" />
-
-          <div className="space-y-3">
-            <label className="label p-0 text-base font-semibold">
-              {t("accept.signedInAs")}
-            </label>
-
-            <UserInfo user={user} />
-          </div>
-        </Card.Body>
-      </AcceptCard>
-    </AcceptLayout>
+    <AcceptErrorCard
+      tone="warning"
+      icon={<CalendarIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.closed.badge")}
+      title={t("accept.closed.title")}
+      body={
+        <Trans
+          i18nKey="accept.closed.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    />
   )
 }
 
@@ -350,36 +418,14 @@ const AssignmentClosed = ({
 const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
   const { t } = useTranslation()
   return (
-    <AcceptLayout>
-      <AcceptCard>
-        <Card.Body className="gap-8">
-          <div>
-            <span className="badge badge-warning badge-soft gap-2">
-              <LockIcon aria-hidden="true" className="size-4" />
-              {t("accept.notEnrolled.badge")}
-            </span>
-
-            <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.notEnrolled.title")}
-            </Heading>
-
-            <p className="mt-2 text-base text-base-content/70">
-              {t("accept.notEnrolled.body")}
-            </p>
-          </div>
-
-          <div className="divider my-0" />
-
-          <div className="space-y-3">
-            <label className="label p-0 text-base font-semibold">
-              {t("accept.signedInAs")}
-            </label>
-
-            <UserInfo user={user} />
-          </div>
-        </Card.Body>
-      </AcceptCard>
-    </AcceptLayout>
+    <AcceptErrorCard
+      tone="warning"
+      icon={<LockIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.notEnrolled.badge")}
+      title={t("accept.notEnrolled.title")}
+      body={t("accept.notEnrolled.body")}
+      user={user}
+    />
   )
 }
 
@@ -698,13 +744,16 @@ const AcceptAssignmentPage = () => {
   const linkSecret =
     typeof search.k === "string" && search.k !== "" ? search.k : undefined
 
-  // Fallback for a bare accept link (no ?k=): an already-enrolled student's own
-  // team description carries the classroom's capability secret.
-  const { secret: teamSecret, isLoading: loadingSecret } = useClassroomSecret(
-    org,
-    classroom,
-    !linkSecret,
-  )
+  // Bootstrap record from the student's own team description. Also the
+  // fallback secret source for a bare accept link (no ?k=) — but read ALWAYS
+  // (even when the link carries ?k=) because the custom Pages base URL for an
+  // org off the github.io default is only discoverable here, never in the link.
+  const {
+    secret: teamSecret,
+    pagesBaseUrl,
+    isLoading: loadingSecret,
+    isError: bootstrapError,
+  } = useClassroomSecret(org, classroom)
   const secret = linkSecret ?? teamSecret
 
   const { user } = useGithubAuth()
@@ -721,8 +770,14 @@ const AcceptAssignmentPage = () => {
   const { verdict: enrollmentVerdict, isLoading: loadingEnrollment } =
     useClassroomEnrollment(org, classroom, username)
 
-  const { data: assignmentsData, isLoading: loadingAssignmentsData } =
-    usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
+  const {
+    data: assignmentsData,
+    isLoading: loadingAssignmentsData,
+    error: assignmentsError,
+  } = usePagesAssignments(org, classroom, secret, {
+    enabled: !loadingSecret,
+    pagesBaseUrl,
+  })
   const loadingAssignments = loadingSecret || loadingAssignmentsData
   const {
     data: orgInvite,
@@ -769,6 +824,7 @@ const AcceptAssignmentPage = () => {
     classroom: classroom ?? "",
     assignmentSlug: assignment ?? "",
     secret,
+    pagesBaseUrl,
     onStepUpdate: (update) =>
       setSteps((prev) => ({
         ...prev,
@@ -889,6 +945,30 @@ const AcceptAssignmentPage = () => {
     !isOwnerGitHubOrgRole(orgInvite.role)
   ) {
     return <NotEnrolled user={user} />
+  }
+
+  // The manifest couldn't be loaded at all (vs. loaded-but-slug-missing below).
+  // Renders the failure and the exact URL(s) attempted so a screenshot is
+  // enough to triage — see discussion #776, where a CORS-blocked custom-domain
+  // redirect masqueraded as "assignment not found".
+  if (assignmentsError) {
+    return (
+      <AssignmentLoadError
+        user={user}
+        assignment={assignment}
+        error={assignmentsError}
+        urls={attemptedPagesAssignmentUrls(
+          org ?? "",
+          classroom ?? "",
+          secret,
+          pagesBaseUrl,
+        )}
+        // A failed teams read means a custom Pages domain couldn't be
+        // discovered (fail-open kept the fetch going on the default host);
+        // say so instead of presenting the github.io URL as the whole story.
+        bootstrapUnknown={bootstrapError && !pagesBaseUrl}
+      />
+    )
   }
 
   if (!assignmentData) {

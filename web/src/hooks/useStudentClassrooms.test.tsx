@@ -243,7 +243,12 @@ describe("useClassroomSecret", () => {
       }),
     )
     const { result } = renderHook(() => useClassroomSecret("acme", "ml"))
-    expect(result.current).toEqual({ secret: "a1b2c3d4", isLoading: false })
+    expect(result.current).toEqual({
+      secret: "a1b2c3d4",
+      pagesBaseUrl: undefined,
+      isLoading: false,
+      isError: false,
+    })
   })
 
   it("returns undefined for a classroom with no matching team", () => {
@@ -262,13 +267,23 @@ describe("useClassroomSecret", () => {
     expect(useQueryMock).toHaveBeenCalledWith(
       expect.objectContaining({ enabled: false }),
     )
-    expect(result.current).toEqual({ secret: undefined, isLoading: false })
+    expect(result.current).toEqual({
+      secret: undefined,
+      pagesBaseUrl: undefined,
+      isLoading: false,
+      isError: false,
+    })
   })
 
   it("reports isLoading while the enabled read is in flight", () => {
     useQueryMock.mockReturnValue(teams({ fetchStatus: "fetching" }))
     const { result } = renderHook(() => useClassroomSecret("acme", "ml"))
-    expect(result.current).toEqual({ secret: undefined, isLoading: true })
+    expect(result.current).toEqual({
+      secret: undefined,
+      pagesBaseUrl: undefined,
+      isLoading: true,
+      isError: false,
+    })
   })
 
   it("never reports isLoading when disabled, even mid-flight", () => {

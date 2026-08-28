@@ -286,7 +286,7 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// classroom50/team/v1 bootstrap record so students can enumerate the
 	// classroom without config-repo access. Migrated classrooms get a plain
 	// (listed) URL — no secret — so the description omits it.
-	teamDesc, err := configrepo.MarshalTeamDescription(plan.Classroom.Name, plan.Term, "", true)
+	teamDesc, err := configrepo.MarshalTeamDescription(plan.Classroom.Name, plan.Term, "", "", true)
 	if err != nil {
 		return err
 	}

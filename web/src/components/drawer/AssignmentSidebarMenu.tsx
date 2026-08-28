@@ -14,6 +14,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { studentRepoName } from "@/util/studentRepo"
 import { SidebarItemBody, SidebarNavItem } from "./primitives"
@@ -68,11 +69,20 @@ export const AssignmentSidebarMenu = ({
     enabled: isActuallyStaff,
   })
   const secret = studentSecret || classroomMeta?.secret
+  // Custom Pages base URL: team record for a real student, classroom.json for
+  // actual staff (same dual sourcing as the secret above).
+  const { pagesBaseUrl: teamPagesBaseUrl, isLoading: loadingBootstrap } =
+    useClassroomSecret(org, classroom)
+  const pagesBaseUrl = teamPagesBaseUrl || classroomMeta?.pages_base_url
   const { assignment: publicAssignment } = usePagesAssignments(
     org,
     classroom,
     secret,
-    { assignmentSlug: assignment },
+    {
+      assignmentSlug: assignment,
+      pagesBaseUrl,
+      enabled: !loadingBootstrap,
+    },
   )
   const assignmentName =
     teacherAssignments?.assignments.find((a) => a.slug === assignment)?.name ||

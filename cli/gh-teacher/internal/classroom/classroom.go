@@ -215,7 +215,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	// classroom50/team/v1 bootstrap record so a plain student can enumerate
 	// their classrooms (and read the capability secret) without config-repo
 	// access — safe because the team is secret.
-	teamDesc, err := configrepo.MarshalTeamDescription(name, term, secret, true)
+	teamDesc, err := configrepo.MarshalTeamDescription(name, term, secret, "", true)
 	if err != nil {
 		return err
 	}

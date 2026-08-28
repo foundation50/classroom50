@@ -106,6 +106,10 @@ export {
 export {
   fetchJson,
   pagesAssignmentUrl,
+  defaultPagesBaseUrl,
+  attemptedPagesUrls,
+  attemptedPagesAssignmentUrls,
+  CUSTOM_HOST_TIMEOUT_MS,
   classroomsIndexUrl,
   orgPublishesClassroom50Pages,
   extractAssignments,

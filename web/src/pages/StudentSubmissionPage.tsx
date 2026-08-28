@@ -16,6 +16,7 @@ import { useSubmissionAssignment } from "@/hooks/useSubmissionAssignment"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { studentRepoName } from "@/util/studentRepo"
 import {
   formatDueDateTime,
@@ -461,6 +462,14 @@ const StudentSubmissionPage = () => {
   // secret; the repo secret covers the post-accept case.
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = repoSecret || classroomMeta?.secret || undefined
+  // Custom Pages base URL: the team-description bootstrap record for a real
+  // student, classroom.json for a staff preview (mirrors the secret sourcing).
+  // The pages read is gated on the team read settling, so a custom-domain
+  // classroom never fires a doomed github.io fetch that flashes an error.
+  const { pagesBaseUrl: teamPagesBaseUrl, isLoading: loadingBootstrap } =
+    useClassroomSecret(org, classroom)
+  const pagesBaseUrl =
+    teamPagesBaseUrl || classroomMeta?.pages_base_url || undefined
 
   // Student page is student-gated by the route, so its assignment metadata comes
   // from PUBLIC GitHub Pages (source:"pages") — students can't read the private
@@ -468,12 +477,17 @@ const StudentSubmissionPage = () => {
   // path.
   const {
     assignment: assignmentData,
-    isLoading: assignmentLoading,
+    isLoading: loadingAssignment,
     isError: assignmentError,
   } = useSubmissionAssignment(org, classroom, assignment, {
     source: "pages",
     secret,
+    pagesBaseUrl,
+    enabled: !loadingBootstrap,
   })
+  // Hold the header/description skeletons while the gate is still resolving,
+  // not just while the pages read itself is in flight.
+  const assignmentLoading = loadingAssignment || loadingBootstrap
   const description = assignmentDescription(assignmentData)
   const submissionMode = assignmentData?.submission_mode
   const submissionTags = assignmentData?.submission_tags

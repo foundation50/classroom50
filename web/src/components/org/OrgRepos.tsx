@@ -20,6 +20,7 @@ import { assignmentDescription } from "@/types/classroom"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { EnterDiv } from "@/lib/motionComponents"
 
 const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
@@ -27,11 +28,22 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   const [descriptionOpen, setDescriptionOpen] = useState(false)
   const cl50Yaml = useDotClassroom50(org, repo.name)
   const { classroom, assignment, secret } = cl50Yaml
+  // Custom Pages base URL from the student's team-description record; the
+  // read waits for it so a custom-domain org never fires a doomed github.io
+  // fetch. One shared GET /user/teams query backs every card.
+  const { pagesBaseUrl, isLoading: loadingBootstrap } = useClassroomSecret(
+    org,
+    classroom || undefined,
+  )
   const { assignment: assignmentData } = usePagesAssignments(
     org,
     classroom,
     secret,
-    { assignmentSlug: assignment },
+    {
+      assignmentSlug: assignment,
+      pagesBaseUrl,
+      enabled: !loadingBootstrap,
+    },
   )
 
   const description = assignmentDescription(assignmentData)

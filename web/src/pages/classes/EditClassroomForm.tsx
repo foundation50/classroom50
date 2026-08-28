@@ -12,6 +12,8 @@ import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
+import { normalizePagesBaseUrl } from "@/util/pagesBaseUrl"
+import { CollapsibleAdvanced } from "@/pages/assignments/sections/CollapsibleAdvanced"
 import {
   Button,
   Card,
@@ -24,10 +26,14 @@ import {
 export type EditClassroomFormValues = {
   name: string
   term: string
+  // Raw "custom Pages domain" input: a bare domain or a full https base URL;
+  // "" = no custom domain. Normalized at submit (see normalizePagesBaseUrl).
+  customDomain: string
 }
 
 type EditClassroomFormProps = {
   defaultValues?: Partial<EditClassroomFormValues>
+  // Receives the values with customDomain already NORMALIZED ("" = clear).
   onSubmit: (values: EditClassroomFormValues) => void | Promise<void>
   cl?: Classroom
 }
@@ -289,6 +295,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
     defaultValues: {
       name: cl?.name || cl?.short_name || "",
       term: cl?.term || "",
+      customDomain: cl?.pages_base_url || "",
     } satisfies EditClassroomFormValues,
     validators: {
       onSubmit: ({ value }) => {
@@ -296,6 +303,9 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           {}
         if (!value.name.trim()) {
           errors.name = t("validation.classroomNameRequired")
+        }
+        if (normalizePagesBaseUrl(value.customDomain) === null) {
+          errors.customDomain = t("validation.customDomainInvalid")
         }
 
         return Object.keys(errors).length > 0
@@ -309,6 +319,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       await onSubmit({
         name: value.name.trim(),
         term: value.term.trim(),
+        // The validator already rejected a null normalization.
+        customDomain: normalizePagesBaseUrl(value.customDomain) ?? "",
       })
       setSubmitted(true)
     },
@@ -436,6 +448,43 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
               </FormField>
             )}
           </form.Field>
+
+          {/* Rare, org-level concern (custom Pages domain) — tucked behind the
+              shared Advanced disclosure so the common name/term path stays
+              uncluttered. */}
+          <div className="mb-4">
+            <CollapsibleAdvanced>
+              <form.Field name="customDomain">
+                {(field) => (
+                  <FormField
+                    label={t("classes.form.customDomain")}
+                    htmlFor={field.name}
+                    hint={t("classes.form.customDomainHint")}
+                    error={
+                      field.state.meta.errors.length > 0
+                        ? field.state.meta.errors[0]
+                        : undefined
+                    }
+                    className="mb-4"
+                  >
+                    {({ id, describedById, invalid }) => (
+                      <Input
+                        id={id}
+                        name={field.name}
+                        dir="ltr"
+                        aria-describedby={describedById}
+                        invalid={invalid}
+                        placeholder={t("classes.form.customDomainPlaceholder")}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                    )}
+                  </FormField>
+                )}
+              </form.Field>
+            </CollapsibleAdvanced>
+          </div>
 
           <Card.Actions className="justify-end p-2">
             <form.Subscribe

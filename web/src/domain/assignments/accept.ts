@@ -520,10 +520,20 @@ export async function acceptAssignment(params: {
   // Undefined for an unprotected classroom (plain path). Not read from
   // classroom.json — students can't access the private config repo.
   secret?: string
+  // Custom Pages base URL for an org off the github.io default, from the
+  // team-description bootstrap record. Undefined = the default host.
+  pagesBaseUrl?: string
   onStepUpdate?: OnAcceptStepUpdate
 }): Promise<AcceptAssignmentResult> {
-  const { client, org, classroom, assignmentSlug, secret, onStepUpdate } =
-    params
+  const {
+    client,
+    org,
+    classroom,
+    assignmentSlug,
+    secret,
+    pagesBaseUrl,
+    onStepUpdate,
+  } = params
 
   log.info("accept assignment: started", { org, classroom, assignmentSlug })
 
@@ -582,7 +592,14 @@ export async function acceptAssignment(params: {
       },
       onStepUpdate,
     },
-    () => fetchAssignmentFromPages(org, classroom, assignmentSlug, secret),
+    () =>
+      fetchAssignmentFromPages(
+        org,
+        classroom,
+        assignmentSlug,
+        secret,
+        pagesBaseUrl,
+      ),
   )
 
   const sourceOwner = assignment.template?.owner
@@ -766,6 +783,7 @@ export async function acceptAssignment(params: {
             classroom,
             autograder: assignment.autograder,
             secret,
+            pagesBaseUrl,
             // Preliminary branch; the default shim is re-rendered post-create
             // with the assignment repo's actual default branch (below).
             branch: sourceBranch || "main",
