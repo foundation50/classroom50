@@ -1,4 +1,5 @@
 import { MarkGithubIcon } from "@/components/ui/icons"
+import type { ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { MonoLtr } from "@/components/ui"
@@ -8,9 +9,39 @@ import { firstGrapheme } from "@/util/students"
 // View-agnostic member presentation primitives shared by member lists and detail
 // modals (Org Members + classroom roster). They target the adapter type
 // MemberListRow so both feature surfaces feed adapted rows. These live in
-// components/ (not a feature page) because a shared component — MemberDetailHeader
-// — needs them; the org-specific helpers (ClassificationBadge, runInviteMember)
-// stay in pages/orgMembers.
+// components/ (not a feature page) so either feature can use them without a
+// cross-feature reach; the org-specific helpers (ClassificationBadge,
+// runInviteMember) stay in pages/orgMembers.
+
+// Primer-style placeholder for a cell with nothing to report (an enrolled
+// member's Status, a section-less row), so an empty cell reads as intentional.
+export const CellPlaceholder = () => (
+  <span aria-hidden="true" className="text-base-content/60">
+    —
+  </span>
+)
+
+// One labeled row of a member-details list (label start, value end) — the
+// single source for both member-detail modals' profile lists. Render inside
+// a bordered, divided <dl>.
+export const DetailRow = ({
+  label,
+  children,
+}: {
+  label: string
+  children: ReactNode
+}) => (
+  <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+    <dt className="text-sm text-base-content/70">{label}</dt>
+    <dd className="min-w-0 text-end text-sm">{children}</dd>
+  </div>
+)
+
+// Muted treatment for a detail value that isn't recorded; the caller supplies
+// its own localized "Not set" text.
+export const NotSetValue = ({ children }: { children: ReactNode }) => (
+  <span className="text-base-content/40">{children}</span>
+)
 
 // First initial of a row's best display string, for the avatar fallback.
 export const initialsFor = (row: MemberListRow) =>

@@ -9,14 +9,26 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  EmphasisLtr,
+  Modal,
+  MonoLtr,
+  rtlFlip,
+} from "@/components/ui"
 import { GitHubLink } from "@/components/GitHubLink"
+import Avatar from "@/components/avatar"
+import {
+  DetailRow,
+  NotSetValue,
+} from "@/components/memberList/memberPresentation"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
+  initialsFor,
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
-import MemberDetailHeader from "@/components/memberList/MemberDetailHeader"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // Centered modal showing one org member's details: identity, classification,
@@ -42,8 +54,10 @@ const MemberDetailModal = ({
   isSelf: boolean
   isOwner: boolean
   onClose: () => void
-  // Called after the member is removed from the org (refresh + optimistic drop).
-  onRemoved: () => void
+  // Called after the removal flow ran: `removed` = the org-membership DELETE
+  // succeeded; `unenrolledClassrooms` = what the run actually unenrolled (the
+  // page seeds exactly those caches, never the row's full classroom list).
+  onRemoved: (removed: boolean, unenrolledClassrooms: string[]) => void
   // Called after an on-roster non-member is invited (refresh only — no classroom
   // membership changed).
   onInvited: () => void
@@ -139,7 +153,7 @@ const MemberDetailModal = ({
             : t("orgMembers.removed", { label, org }),
         })
       }
-      onRemoved()
+      onRemoved(result.removed, result.unenrolledClassrooms)
     } catch (err) {
       notify({
         tone: "error",
@@ -193,9 +207,62 @@ const MemberDetailModal = ({
     >
       <div className="mt-4 flex flex-col gap-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <MemberDetailHeader row={row} />
+          <Avatar
+            name={row.name || label}
+            github={row.username}
+            initials={initialsFor(row)}
+          />
           <ClassificationBadge row={row} isOwner={isOwner} />
         </div>
+
+        {/* The organization row looks redundant — every row on this page
+            shares it — but it anchors what "Remove from organization" acts on. */}
+        <dl className="divide-y divide-base-300 rounded-box border border-base-300">
+          <DetailRow label={t("orgMembers.details.name")}>
+            {row.name || (
+              <NotSetValue>{t("orgMembers.details.notSet")}</NotSetValue>
+            )}
+          </DetailRow>
+          <DetailRow label={t("orgMembers.details.username")}>
+            {row.username ? (
+              <MonoLtr>{row.username}</MonoLtr>
+            ) : (
+              <span className="italic text-base-content/70">
+                {t("orgMembers.noGitHubUsername")}
+              </span>
+            )}
+          </DetailRow>
+          <DetailRow label={t("orgMembers.details.githubId")}>
+            {row.github_id ? (
+              <MonoLtr>{row.github_id}</MonoLtr>
+            ) : (
+              <NotSetValue>{t("orgMembers.details.notSet")}</NotSetValue>
+            )}
+          </DetailRow>
+          {row.emails.length > 0 ? (
+            <DetailRow
+              label={t("orgMembers.details.email", {
+                count: row.emails.length,
+              })}
+            >
+              <span className="flex flex-col gap-0.5">
+                {row.emails.map((email) => (
+                  <span key={email.toLowerCase()}>{email}</span>
+                ))}
+              </span>
+            </DetailRow>
+          ) : null}
+          <DetailRow label={t("orgMembers.details.organization")}>
+            <EmphasisLtr>{org}</EmphasisLtr>
+          </DetailRow>
+          <DetailRow label={t("orgMembers.details.orgRole")}>
+            {isOwner
+              ? t("orgMembers.badgeOwner")
+              : row.isMember
+                ? t("orgMembers.badgeMember")
+                : t("orgMembers.badgeNotMember")}
+          </DetailRow>
+        </dl>
 
         <div>
           <h3 className="mb-2 text-sm font-semibold">

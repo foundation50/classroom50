@@ -22,8 +22,14 @@ type ConfirmModalProps = {
   cancelLabel?: string
   dangerous?: boolean
   needsConfirm?: boolean
+  // Blocks confirming (e.g. the caller's preview shows a no-op) while still
+  // letting the user adjust the dialog's inputs or cancel.
+  confirmDisabled?: boolean
   onConfirm: () => Promise<void>
   onClose: () => void
+  // Extra body content rendered above the acknowledge prompt (e.g. an option
+  // checkbox that adjusts what confirming will do).
+  children?: React.ReactNode
 }
 
 // Primer-style ConfirmationDialog built on the shared Modal primitive
@@ -40,8 +46,10 @@ export function ConfirmModal({
   cancelLabel,
   dangerous = true,
   needsConfirm = true,
+  confirmDisabled = false,
   onConfirm,
   onClose,
+  children,
 }: ConfirmModalProps) {
   const confirmInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
@@ -91,7 +99,7 @@ export function ConfirmModal({
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit || submittingRef.current) return
+    if (!canSubmit || confirmDisabled || submittingRef.current) return
     submittingRef.current = true
 
     setIsSubmitting(true)
@@ -144,7 +152,7 @@ export function ConfirmModal({
 
             <Button
               variant={acknowledgeButtonVariant}
-              disabled={isSubmitting}
+              disabled={isSubmitting || confirmDisabled}
               loading={isSubmitting && !needsConfirm}
               loadingLabel={t("common.working")}
               onClick={(event) => {
@@ -177,7 +185,7 @@ export function ConfirmModal({
 
             <Button
               variant={confirmButtonVariant}
-              disabled={!canSubmit || isSubmitting}
+              disabled={!canSubmit || isSubmitting || confirmDisabled}
               loading={isSubmitting}
               loadingLabel={t("common.working")}
               onClick={() => void handleSubmit()}
@@ -190,6 +198,8 @@ export function ConfirmModal({
     >
       {!hasAcknowledged ? (
         <>
+          {children}
+
           {dangerous ? (
             <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
               {t("components.confirmModal.dangerousPrompt")}

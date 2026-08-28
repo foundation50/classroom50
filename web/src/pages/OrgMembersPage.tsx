@@ -1,24 +1,25 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  AlertIcon,
   ChevronRightIcon,
+  FilterIcon,
   LinkExternalIcon,
   PersonAddIcon,
-  SearchIcon,
 } from "@/components/ui/icons"
 
 import {
+  Alert,
   AnimatedAlert,
-  Badge,
   Button,
-  Input,
-  Select,
+  SelectAllCheckbox,
+  SelectSeparatorOption,
   SkeletonRows,
+  SortableTh,
   TableShell,
+  Toolbar,
   rtlFlip,
 } from "@/components/ui"
 import PageShell from "@/components/PageShell"
@@ -33,7 +34,14 @@ import { githubKeys, invalidateInviteQueries } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
-import type { OrgMemberRow } from "@/util/orgMembers"
+import {
+  filterOrgMemberRows,
+  sortOrgMemberRowsBy,
+  type OrgMemberRow,
+  type OrgMembersRoleFilter,
+  type OrgMembersSortColumn,
+  type OrgMembersStatusFilter,
+} from "@/util/orgMembers"
 import { githubOrgPeopleUrl } from "@/util/orgUrl"
 import type { StudentCsvRow } from "@/domain/students"
 import type { GitHubUser } from "@/github-core/types"
@@ -41,7 +49,9 @@ import { isSameGitHubUser } from "@/util/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
 import { ClickableTr } from "@/lib/motionComponents"
-import BulkActionsBar from "@/pages/orgMembers/BulkActionsBar"
+import BulkActionsBar, {
+  type BulkDoneInput,
+} from "@/pages/orgMembers/BulkActionsBar"
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
 import {
   resolveSelectedRows,
@@ -51,8 +61,9 @@ import {
 } from "@/pages/orgMembers/selection"
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import {
-  ClassificationBadge,
   GitHubIdentity,
+  MemberStatusBadge,
+  OrgRoleBadge,
   initialsFor,
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
@@ -68,16 +79,32 @@ const CSV_RECONCILE_DELAY_MS = 4000
 // path can't collide (paths don't contain a leading colon).
 const NO_CLASSROOM_FILTER = ":none:"
 
-// One bar recipe per column: select, member, classrooms, status, actions.
+// One bar recipe per column: select, name, username, classrooms, roles,
+// status, actions.
 const SKELETON_BARS = [
   "size-5",
-  "h-4 w-40",
-  "h-4 w-24",
-  "h-6 w-28",
+  "h-4 w-36",
+  "h-4 w-28",
+  "h-4 w-20",
+  "h-6 w-20",
+  "h-6 w-24",
   "ms-auto h-4 w-4",
 ]
 
 const MEMBERS_COL_COUNT = SKELETON_BARS.length
+
+// Trimmed-id + lowercased-login sets for matching rows against cached GitHub
+// identities — the one matching recipe every optimistic cache drop uses.
+const identitySets = (rows: OrgMemberRow[]) => ({
+  ids: new Set(rows.map((r) => r.github_id?.trim()).filter(Boolean)),
+  logins: new Set(
+    rows.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
+  ),
+})
+
+// One value per (column, direction) pair for the table-header sort controls.
+type MembersTableSortValue =
+  `${OrgMembersSortColumn}-asc` | `${OrgMembersSortColumn}-desc`
 
 const OrgMembersPage = () => {
   const { t } = useTranslation()
@@ -94,6 +121,7 @@ const OrgMembersPage = () => {
     isLoading,
     isError,
     teamSlugByClassroom,
+    displayNameByClassroom,
     notes,
   } = useOrgMembersOverview(org)
   const { classes } = useGetClasses(org)
@@ -101,25 +129,55 @@ const OrgMembersPage = () => {
   // Classroom filter: "" = all, NO_CLASSROOM_FILTER = members on no roster,
   // else a classroom path. Applied on top of the text search.
   const [classroomFilter, setClassroomFilter] = useState("")
+  // The combined "Show" select's facets (status + org role), mirroring the
+  // roster toolbar's consolidated filter.
+  const [statusFilter, setStatusFilter] =
+    useState<OrgMembersStatusFilter>("all")
+  const [roleFilter, setRoleFilter] = useState<OrgMembersRoleFilter>("all")
+  // Header-driven column sort; null = the default order (classification, then
+  // name — see aggregateOrgMembers).
+  const [tableSort, setTableSort] = useState<MembersTableSortValue | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [invitingKey, setInvitingKey] = useState<string | null>(null)
   // Multi-select for bulk classroom actions. Selection is by row key and
   // persists across search filtering (a hidden-but-selected row is still acted
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  // True while a delayed members reconcile is scheduled — the window where an
+  // eager orgMembersAll refetch would resurrect an optimistically-removed row.
+  const membersReconcilePending = useRef(false)
 
-  // Refresh after an org-level member removal (unenrolls from every classroom +
-  // removes org membership). Optimistically drop them from each affected
-  // classroom's CSV + team caches together (no false "unprovisioned" flash),
-  // then reconcile with the server on a delay.
-  const refresh = (affected?: OrgMemberRow) => {
+  // After an org-level removal. The members-list read lags the membership
+  // DELETE, so (like the CSV/team caches) drop the row optimistically and
+  // reconcile on a delay; `removed` false = the DELETE failed, so only
+  // re-read. `unenrolledClassrooms` is what the run REPORTED unenrolling —
+  // never row.classrooms, which includes archived or failed unenrolls whose
+  // rosters really do still hold the student.
+  const refresh = (
+    affected: OrgMemberRow,
+    removed: boolean,
+    unenrolledClassrooms: string[],
+  ) => {
     if (!org) return
-    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    if (removed) {
+      optimisticRemoveFromMembers([affected])
+      scheduleMembersReconcile()
+      // Drop the stale selection key, or the vanished row keeps the toolbar
+      // stuck at "N selected" with no visible checkbox to clear.
+      setSelectedKeys((prev) => {
+        if (!prev.has(affected.key)) return prev
+        const next = new Set(prev)
+        next.delete(affected.key)
+        return next
+      })
+    } else {
+      invalidateMembers()
+    }
     invalidateInviteQueries(queryClient, org)
-    for (const access of affected?.classrooms ?? []) {
-      optimisticRemove(access.classroom, [affected!])
-      invalidateClassroom(access.classroom, { skipCsv: true })
-      scheduleClassroomReconcile(access.classroom)
+    for (const classroom of unenrolledClassrooms) {
+      optimisticRemove(classroom, [affected])
+      invalidateClassroom(classroom, { skipCsv: true })
+      scheduleClassroomReconcile(classroom)
     }
   }
 
@@ -127,7 +185,7 @@ const OrgMembersPage = () => {
   // the members + invite lists.
   const refreshInvite = () => {
     if (!org) return
-    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    invalidateMembers()
     invalidateInviteQueries(queryClient, org)
   }
 
@@ -165,16 +223,49 @@ const OrgMembersPage = () => {
     })
   }
 
+  // Optimistically drop removed accounts from the orgMembersAll cache the row
+  // list derives from. Invalidating instead would refetch a list that lags the
+  // DELETE and resurrect the row (a roster-less member has no other cache to
+  // disappear from at all).
+  const optimisticRemoveFromMembers = (removed: OrgMemberRow[]) => {
+    if (!org || removed.length === 0) return
+    const { ids, logins } = identitySets(removed)
+    queryClient.setQueryData<GitHubUser[]>(
+      githubKeys.orgMembersAll(org),
+      (current) =>
+        current?.filter(
+          (m) => !ids.has(String(m.id)) && !logins.has(m.login.toLowerCase()),
+        ) ?? current,
+    )
+  }
+
+  // Immediate members-list invalidation, deferred while a members reconcile
+  // is pending — inside that window the lagging list would resurrect the
+  // just-dropped row, and the reconcile refetches soon anyway.
+  const invalidateMembers = () => {
+    if (!org || membersReconcilePending.current) return
+    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+  }
+
+  // Reconcile the members cache once the list API has caught up with the
+  // DELETE (mirroring scheduleClassroomReconcile); defers invalidateMembers
+  // while pending.
+  const scheduleMembersReconcile = () => {
+    if (!org) return
+    membersReconcilePending.current = true
+    window.setTimeout(() => {
+      membersReconcilePending.current = false
+      queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    }, CSV_RECONCILE_DELAY_MS)
+  }
+
   // Optimistically drop members (by resolved id/login) from BOTH the target
   // classroom's roster.csv AND its team-members cache, in the same tick, so
   // the two never disagree (which would flash a false "unprovisioned" state).
   // teamSlug is the resolved slug, so a collided-name classroom updates right.
   const optimisticRemove = (classroom: string, removed: OrgMemberRow[]) => {
     if (!org || removed.length === 0) return
-    const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
-    const logins = new Set(
-      removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
-    )
+    const { ids, logins } = identitySets(removed)
     queryClient.setQueryData<StudentCsvRow[]>(
       githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       (current) =>
@@ -211,16 +302,47 @@ const OrgMembersPage = () => {
   // After a bulk add/remove: optimistically reflect the change in the CSV +
   // team caches the row status derives from (kept consistent, no false
   // "unprovisioned" flash), then reconcile both with the server on a delay.
-  const handleBulkDone = (input: {
-    classroom: string
-    action: "add" | "remove"
-    addedStudents: StudentCsvRow[]
-    affectedKeys: string[]
-  }) => {
+  // An org-wide removal fans the same treatment out to every classroom the
+  // run actually unenrolled.
+  const handleBulkDone = (input: BulkDoneInput) => {
     if (!org) return
-    const { classroom, action, addedStudents, affectedKeys } = input
 
-    if (action === "add" && addedStudents.length > 0) {
+    if (input.action === "remove-org") {
+      const rowByKey = new Map(rows.map((r) => [r.key, r]))
+      const removedRows = input.affectedKeys
+        .map((key) => rowByKey.get(key))
+        .filter((r): r is OrgMemberRow => Boolean(r))
+      // Seed/reconcile the classrooms the run REPORTED unenrolling — a failed
+      // org DELETE still changed its rosters. Deriving from row.classrooms
+      // would assert unenrolls that were skipped (archived) or failed.
+      const byClassroom = new Map<string, OrgMemberRow[]>()
+      for (const { key, classrooms } of input.unenrolled) {
+        const row = rowByKey.get(key)
+        if (!row) continue
+        for (const classroom of classrooms) {
+          const list = byClassroom.get(classroom) ?? []
+          list.push(row)
+          byClassroom.set(classroom, list)
+        }
+      }
+      for (const [classroom, unenrolledRows] of byClassroom) {
+        optimisticRemove(classroom, unenrolledRows)
+        invalidateClassroom(classroom, { skipCsv: true })
+        scheduleClassroomReconcile(classroom)
+      }
+      // affectedKeys carry only CONFIRMED-removed rows, so the optimistic
+      // members-cache drop (instead of a lag-prone refetch) is safe.
+      optimisticRemoveFromMembers(removedRows)
+      scheduleMembersReconcile()
+      invalidateInviteQueries(queryClient, org)
+      setSelectedKeys(new Set())
+      return
+    }
+
+    const { classroom, affectedKeys } = input
+
+    if (input.action === "add" && input.addedStudents.length > 0) {
+      const addedStudents = input.addedStudents
       const csvKey = githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom))
       queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
         const list = current ?? []
@@ -269,14 +391,14 @@ const OrgMembersPage = () => {
       )
     }
 
-    if (action === "remove" && affectedKeys.length > 0) {
+    if (input.action === "remove" && affectedKeys.length > 0) {
       const removedRows = rows.filter((r) => affectedKeys.includes(r.key))
       optimisticRemove(classroom, removedRows)
     }
 
     // Recompute members against the seeded caches, leaving them alone;
     // reconcile both on a delay.
-    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    invalidateMembers()
     invalidateInviteQueries(queryClient, org)
     invalidateClassroom(classroom, { skipCsv: true })
     setSelectedKeys(new Set())
@@ -295,39 +417,6 @@ const OrgMembersPage = () => {
     }
   }
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return rows.filter((row) => {
-      if (
-        q &&
-        ![row.username, row.name, row.email].some((field) =>
-          field.toLowerCase().includes(q),
-        )
-      ) {
-        return false
-      }
-      // Classroom filter: all / no-classroom / a specific classroom.
-      if (classroomFilter === NO_CLASSROOM_FILTER) {
-        return row.classrooms.length === 0
-      }
-      if (classroomFilter) {
-        return row.classrooms.some((c) => c.classroom === classroomFilter)
-      }
-      return true
-    })
-  }, [rows, query, classroomFilter])
-
-  const selected = useMemo(
-    () => rows.find((row) => row.key === selectedKey) ?? null,
-    [rows, selectedKey],
-  )
-  const discrepancyCount = useMemo(
-    () =>
-      rows.filter((row) => row.classification === "on-roster-not-member")
-        .length,
-    [rows],
-  )
-
   const isSelf = (row: OrgMemberRow) =>
     isSameGitHubUser(viewer ?? null, {
       github_id: row.github_id,
@@ -339,6 +428,84 @@ const OrgMembersPage = () => {
   // couldn't be read).
   const isOwner = (row: OrgMemberRow) =>
     (Boolean(row.github_id) && ownerIds.has(row.github_id)) || isSelf(row)
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    const base = filterOrgMemberRows(
+      rows.filter((row) => {
+        if (
+          q &&
+          ![row.username, row.name, row.email].some((field) =>
+            field.toLowerCase().includes(q),
+          )
+        ) {
+          return false
+        }
+        // Classroom filter: all / no-classroom / a specific classroom.
+        if (classroomFilter === NO_CLASSROOM_FILTER) {
+          return row.classrooms.length === 0
+        }
+        if (classroomFilter) {
+          return row.classrooms.some((c) => c.classroom === classroomFilter)
+        }
+        return true
+      }),
+      { statusFilter, roleFilter, isOwner },
+    )
+    if (!tableSort) return base
+    const [column, direction] = tableSort.split("-") as [
+      OrgMembersSortColumn,
+      "asc" | "desc",
+    ]
+    return sortOrgMemberRowsBy(base, column, direction, isOwner)
+    // isSelf/isOwner depend on viewer + ownerIds; recompute when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    rows,
+    query,
+    classroomFilter,
+    statusFilter,
+    roleFilter,
+    tableSort,
+    viewer,
+    ownerIds,
+  ])
+
+  // The combined "Show" select folds both facets into one control (the roster
+  // recipe): picking a status clears the role facet and vice versa.
+  const showValue = roleFilter !== "all" ? `role:${roleFilter}` : statusFilter
+  const onShowChange = (value: string) => {
+    if (value.startsWith("role:")) {
+      setRoleFilter(value.slice("role:".length) as OrgMembersRoleFilter)
+      setStatusFilter("all")
+    } else {
+      setStatusFilter(value as OrgMembersStatusFilter)
+      setRoleFilter("all")
+    }
+  }
+
+  // The in-search-bar clear affordance ("Clear filter" vs "Clear"); clicking
+  // resets query + filters (sort is a view preference, kept).
+  const hasFilterActive =
+    classroomFilter !== "" || statusFilter !== "all" || roleFilter !== "all"
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
+  const clearAllFilters = () => {
+    setQuery("")
+    setClassroomFilter("")
+    setStatusFilter("all")
+    setRoleFilter("all")
+  }
+
+  const selected = useMemo(
+    () => rows.find((row) => row.key === selectedKey) ?? null,
+    [rows, selectedKey],
+  )
+  const discrepancyCount = useMemo(
+    () =>
+      rows.filter((row) => row.classification === "on-roster-not-member")
+        .length,
+    [rows],
+  )
 
   // The signed-in owner can't be bulk-added/removed — a row is selectable only
   // when it isn't self.
@@ -375,9 +542,15 @@ const OrgMembersPage = () => {
   const handleToggleSelectAll = () =>
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
 
+  // Picker/filter options: the display name from classroom.json when its
+  // metadata has loaded, else the directory slug.
   const classroomOptions = useMemo(
-    () => classes.map((c) => ({ name: c.name, path: c.path })),
-    [classes],
+    () =>
+      classes.map((c) => ({
+        name: displayNameByClassroom.get(c.path) ?? c.name,
+        path: c.path,
+      })),
+    [classes, displayNameByClassroom],
   )
 
   return (
@@ -416,6 +589,13 @@ const OrgMembersPage = () => {
             }
           />
 
+          {/* Always-on scope warning: a shared org lists other teachers'
+              members and students too, so say so before the destructive
+              member actions below. */}
+          <Alert tone="warning" className="mt-6 text-sm">
+            <span>{t("orgMembers.sharedOrgNotice", { org })}</span>
+          </Alert>
+
           <AnimatedAlert
             tone="warning"
             show={notes.length > 0}
@@ -436,78 +616,152 @@ const OrgMembersPage = () => {
             </span>
           </AnimatedAlert>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Input
-              leadingIcon={
-                <SearchIcon aria-hidden="true" className="size-4 opacity-50" />
-              }
-              className="min-w-0 flex-1"
-              type="search"
-              placeholder={t("orgMembers.searchPlaceholder")}
-              aria-label={t("orgMembers.searchLabel")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <Select
-              className="w-full sm:w-auto sm:min-w-[14rem]"
-              aria-label={t("orgMembers.filterByClassroomLabel")}
-              value={classroomFilter}
-              onChange={(e) => setClassroomFilter(e.target.value)}
-            >
-              <option value="">{t("orgMembers.filterAllClassrooms")}</option>
-              <option value={NO_CLASSROOM_FILTER}>
-                {t("orgMembers.filterNoClassroom")}
-              </option>
-              {classroomOptions.map((c) => (
-                <option key={c.path} value={c.path}>
-                  {c.name}
+          {/* One toolbar row (the roster/submissions recipe): member count —
+              swapped for the selection cluster while rows are selected — on
+              the left; search + filters right-aligned. */}
+          <Toolbar className="mt-6">
+            {selectedKeys.size === 0 && !isLoading && !isError ? (
+              <span className="text-sm text-base-content/60 tabular-nums">
+                {t("orgMembers.bulk.memberCount", { count: filtered.length })}
+              </span>
+            ) : null}
+            {org ? (
+              <BulkActionsBar
+                org={org}
+                selectedRows={selectedRows}
+                members={members}
+                classrooms={classroomOptions}
+                isOwner={isOwner}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                onDone={handleBulkDone}
+              />
+            ) : null}
+            <Toolbar.Trailing>
+              <Toolbar.Search
+                // Wide enough for the full placeholder; the classroom filter
+                // next door stays compact in trade.
+                className="min-w-[15rem] flex-1 sm:min-w-[21rem] sm:max-w-lg"
+                placeholder={t("orgMembers.searchPlaceholder")}
+                ariaLabel={t("orgMembers.searchLabel")}
+                value={query}
+                onChange={setQuery}
+                onClear={clearAllFilters}
+                clearActive={hasActiveFilter}
+                hasFilterActive={hasFilterActive}
+              />
+              {/* One combined "Show" select: statuses, then the org-role
+                  group — mirroring the roster toolbar's consolidated filter. */}
+              <Toolbar.FilterSelect
+                icon={<FilterIcon aria-hidden="true" className="size-4" />}
+                active={showValue !== "all"}
+                aria-label={t("orgMembers.filterShowLabel")}
+                value={showValue}
+                onChange={(e) => onShowChange(e.target.value)}
+              >
+                <option value="all">{t("orgMembers.filterAll")}</option>
+                <option value="not-in-org">
+                  {t("orgMembers.filterNotInOrg")}
                 </option>
-              ))}
-            </Select>
-          </div>
+                <option value="invitation-pending">
+                  {t("orgMembers.filterInvitationPending")}
+                </option>
+                <option value="not-enrolled">
+                  {t("orgMembers.filterNotEnrolled")}
+                </option>
+                <SelectSeparatorOption />
+                <option value="role:owner">
+                  {t("orgMembers.filterOwners")}
+                </option>
+                <option value="role:member">
+                  {t("orgMembers.filterMembers")}
+                </option>
+              </Toolbar.FilterSelect>
+              <Toolbar.FilterSelect
+                icon={<FilterIcon aria-hidden="true" className="size-4" />}
+                active={classroomFilter !== ""}
+                // Compact control; long classroom names live in the popup,
+                // which sizes to its options.
+                className="min-w-[10rem]"
+                aria-label={t("orgMembers.filterByClassroomLabel")}
+                value={classroomFilter}
+                onChange={(e) => setClassroomFilter(e.target.value)}
+              >
+                <option value="">{t("orgMembers.filterAllClassrooms")}</option>
+                <option value={NO_CLASSROOM_FILTER}>
+                  {t("orgMembers.filterNoClassroom")}
+                </option>
+                {classroomOptions.map((c) => (
+                  <option key={c.path} value={c.path}>
+                    {c.name}
+                  </option>
+                ))}
+              </Toolbar.FilterSelect>
+            </Toolbar.Trailing>
+          </Toolbar>
 
-          {/* Primer DataTable treatment (matching the assignments/submissions
-              tables): the shared TableShell frame, labeled columns, and rows as
-              real <tr>s. The bulk-selection bar renders inside the frame above
-              the header row, keeping select-all adjacent to the rows it acts on. */}
+          {/* The shared TableShell recipe (roster/assignments tables):
+              select-all in the select-column header, selection actions in the
+              toolbar above. */}
           <div className="mt-4">
-            <TableShell
-              animate={false}
-              padded
-              ariaBusy={isLoading}
-              header={
-                org && !isLoading && !isError && filtered.length > 0 ? (
-                  <BulkActionsBar
-                    org={org}
-                    client={client}
-                    selectedRows={selectedRows}
-                    totalCount={filtered.length}
-                    allSelected={allFilteredSelected}
-                    someSelected={someFilteredSelected}
-                    onToggleSelectAll={handleToggleSelectAll}
-                    members={members}
-                    classrooms={classroomOptions}
-                    onClearSelection={() => setSelectedKeys(new Set())}
-                    onDone={handleBulkDone}
-                  />
-                ) : undefined
-              }
-            >
+            <TableShell animate={false} padded ariaBusy={isLoading}>
               <caption className="sr-only">
                 {t("orgMembers.table.caption")}
               </caption>
               <thead>
                 <tr>
                   <th scope="col" className="w-0">
-                    <span className="sr-only">
-                      {t("orgMembers.table.colSelect")}
-                    </span>
+                    {!isLoading && !isError && filtered.length > 0 ? (
+                      <SelectAllCheckbox
+                        className="align-middle"
+                        ariaLabel={t("orgMembers.bulk.selectAll")}
+                        allSelected={allFilteredSelected}
+                        someSelected={someFilteredSelected}
+                        onToggle={handleToggleSelectAll}
+                      />
+                    ) : (
+                      <span className="sr-only">
+                        {t("orgMembers.table.colSelect")}
+                      </span>
+                    )}
                   </th>
-                  <th scope="col">{t("orgMembers.table.colMember")}</th>
-                  <th scope="col" className="hidden sm:table-cell">
-                    {t("orgMembers.table.colClassrooms")}
-                  </th>
-                  <th scope="col">{t("orgMembers.table.colStatus")}</th>
+                  {/* Sortable column headers — an inactive table falls back
+                      to the default order (classification, then name). */}
+                  <SortableTh
+                    label={t("orgMembers.table.colName")}
+                    sort={tableSort ?? undefined}
+                    asc="name-asc"
+                    desc="name-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    label={t("orgMembers.table.colUsername")}
+                    sort={tableSort ?? undefined}
+                    asc="username-asc"
+                    desc="username-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    className="hidden sm:table-cell"
+                    label={t("orgMembers.table.colClassrooms")}
+                    sort={tableSort ?? undefined}
+                    asc="classrooms-asc"
+                    desc="classrooms-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    label={t("orgMembers.table.colRoles")}
+                    sort={tableSort ?? undefined}
+                    asc="role-asc"
+                    desc="role-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    label={t("orgMembers.table.colStatus")}
+                    sort={tableSort ?? undefined}
+                    asc="status-asc"
+                    desc="status-desc"
+                    onSortChange={setTableSort}
+                  />
                   <th scope="col" className="w-0">
                     <span className="sr-only">
                       {t("orgMembers.table.colActions")}
@@ -516,10 +770,10 @@ const OrgMembersPage = () => {
                 </tr>
               </thead>
               {/* Same recipe as the assignments table: the body enters as one
-                  block and replays on data arrival / classroom-filter changes
-                  (not per search keystroke). */}
+                  block and replays on data arrival / filter changes (not per
+                  search keystroke). */}
               <motion.tbody
-                key={`${isLoading}:${classroomFilter}`}
+                key={`${isLoading}:${classroomFilter}:${statusFilter}:${roleFilter}`}
                 variants={blockEnter}
                 initial="initial"
                 animate="animate"
@@ -594,9 +848,13 @@ const OrgMembersPage = () => {
                           name={row.name || row.username || row.email}
                           github={row.username}
                           initials={initialsFor(row)}
-                          subtitle={<GitHubIdentity row={row} />}
                           onClick={() => setSelectedKey(row.key)}
                         />
+                      </td>
+                      <td>
+                        {/* Bare handle — the octocat + numeric id live in
+                            the member detail modal. */}
+                        <GitHubIdentity row={row} bare />
                       </td>
                       <td className="hidden whitespace-nowrap text-xs text-base-content/70 sm:table-cell">
                         {t("orgMembers.classroomCount", {
@@ -604,28 +862,10 @@ const OrgMembersPage = () => {
                         })}
                       </td>
                       <td>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {row.unprovisionedClassrooms.length > 0 ? (
-                            <Badge
-                              tone="warning"
-                              className="gap-1"
-                              title={t("orgMembers.unprovisionedTitle", {
-                                classrooms:
-                                  row.unprovisionedClassrooms.join(", "),
-                              })}
-                            >
-                              <AlertIcon
-                                aria-hidden="true"
-                                className="size-3"
-                              />
-                              {t("orgMembers.unprovisionedBadge")}
-                            </Badge>
-                          ) : null}
-                          <ClassificationBadge
-                            row={row}
-                            isOwner={isOwner(row)}
-                          />
-                        </div>
+                        <OrgRoleBadge row={row} isOwner={isOwner(row)} />
+                      </td>
+                      <td>
+                        <MemberStatusBadge row={row} />
                       </td>
                       <td className="w-0 ps-2">
                         <div className="flex items-center justify-end gap-3">
@@ -674,10 +914,10 @@ const OrgMembersPage = () => {
           isSelf={selected ? isSelf(selected) : false}
           isOwner={selected ? isOwner(selected) : false}
           onClose={() => setSelectedKey(null)}
-          onRemoved={() => {
+          onRemoved={(removed, unenrolledClassrooms) => {
             const affected = selected
             setSelectedKey(null)
-            if (affected) refresh(affected)
+            if (affected) refresh(affected, removed, unenrolledClassrooms)
           }}
           onInvited={() => {
             setSelectedKey(null)

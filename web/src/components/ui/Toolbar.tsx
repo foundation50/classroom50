@@ -135,6 +135,9 @@ function ToolbarFilterSelect({
   // Match the prefix highlight on the select border/text so the whole control
   // reads as active.
   const activeSelectClass = active ? "border-warning text-warning" : undefined
+  // A caller min-width (for long option labels) overrides the default;
+  // without the guard cx would emit both and source order is unspecified.
+  const hasMinWidth = hasUtility("min-w-", className)
   if (!label && !icon) {
     return (
       <Select
@@ -150,7 +153,12 @@ function ToolbarFilterSelect({
     <LabeledControl label={label} icon={icon} active={active}>
       <Select
         selectSize={selectSize}
-        className={cx("join-item w-auto min-w-0", activeSelectClass, className)}
+        className={cx(
+          "join-item w-auto",
+          !hasMinWidth && "min-w-0",
+          activeSelectClass,
+          className,
+        )}
         {...props}
       >
         {children}

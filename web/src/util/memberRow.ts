@@ -7,7 +7,7 @@ import {
 } from "@/util/students"
 
 // Minimal display shape the shared presentation helpers (initialsFor,
-// GitHubIdentity, MemberDetailHeader) target. Neither native row satisfies it
+// GitHubIdentity) target. Neither native row satisfies it
 // structurally — each view adapts its row via the helpers below — so the shared
 // pieces stay decoupled from OrgMemberRow's classroom/classification fields and
 // TeamRosterRow's state/first_name/last_name fields.

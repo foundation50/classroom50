@@ -6,6 +6,7 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import { getAuthenticatedUser } from "@/domain/queries/users"
 import { isSameGitHubUser } from "@/util/students"
 import type { Student } from "@/types/classroom"
+import type { GitHubUser } from "@/github-core/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
 
@@ -38,7 +39,13 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 // Per-classroom failures are non-fatal warnings.
 export async function removeMemberFromOrg(
   client: GitHubClient,
-  input: { org: string; row: OrgMemberRow },
+  input: {
+    org: string
+    row: OrgMemberRow
+    // A pre-resolved signed-in account, so a bulk run verifies the viewer ONCE
+    // instead of once per member. Single-row callers omit it.
+    viewer?: GitHubUser
+  },
   t?: TFunction,
 ): Promise<RemoveFromOrgResult> {
   const { org, row } = input
@@ -58,7 +65,12 @@ export async function removeMemberFromOrg(
   // CLOSED: if the viewer can't be resolved we refuse rather than risk a
   // self-lockout. (unenrollStudent can fail open — classroom-scoped and
   // reversible; this can't.)
-  const viewer = await getAuthenticatedUser(client).catch(() => null)
+  const viewer =
+    input.viewer ??
+    (await getAuthenticatedUser(client).catch((err: unknown) => {
+      log.warn("remove member from org: viewer resolution failed", { org, err })
+      return null
+    }))
   if (!viewer) {
     throw new Error(
       "Couldn't verify your account, so the member wasn't removed. Please try again.",
