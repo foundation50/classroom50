@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { aggregateOrgMembers, type ClassroomRoster } from "./orgMembers"
+import {
+  aggregateOrgMembers,
+  sortOrgMemberRowsBy,
+  type ClassroomRoster,
+  type OrgMemberRow,
+} from "./orgMembers"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/github-core/types"
 
@@ -268,5 +273,81 @@ describe("aggregateOrgMembers — team-verified membership / unprovisioned", () 
       "member-on-roster",
       "invitation-pending",
     ])
+  })
+})
+
+describe("sortOrgMemberRowsBy", () => {
+  const orgRow = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
+    key: over.username ?? "k",
+    username: "",
+    github_id: "",
+    name: "",
+    email: "",
+    isMember: true,
+    classrooms: [],
+    classification: "member-on-roster",
+    unprovisionedClassrooms: [],
+    ...over,
+  })
+  const access = (classroom: string) => ({
+    classroom,
+    archived: false,
+    section: "",
+    state: "enrolled" as const,
+  })
+
+  it("sorts by display identity, falling back name -> email", () => {
+    const rows = [
+      orgRow({ username: "zed" }),
+      orgRow({ key: "e", email: "ada@uni.edu" }),
+      orgRow({ username: "bob" }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "member", "asc").map(
+        (r) => r.username || r.email,
+      ),
+    ).toEqual(["ada@uni.edu", "bob", "zed"])
+    expect(
+      sortOrgMemberRowsBy(rows, "member", "desc").map(
+        (r) => r.username || r.email,
+      ),
+    ).toEqual(["zed", "bob", "ada@uni.edu"])
+  })
+
+  it("sorts by classroom count with a name tiebreak", () => {
+    const rows = [
+      orgRow({ username: "two", classrooms: [access("a"), access("b")] }),
+      orgRow({ username: "none" }),
+      orgRow({ username: "one", classrooms: [access("a")] }),
+      orgRow({ username: "also-one", classrooms: [access("b")] }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "classrooms", "asc").map((r) => r.username),
+    ).toEqual(["none", "also-one", "one", "two"])
+    expect(
+      sortOrgMemberRowsBy(rows, "classrooms", "desc").map((r) => r.username),
+    ).toEqual(["two", "also-one", "one", "none"])
+  })
+
+  it("sorts by status precedence (actionable first) with a name tiebreak", () => {
+    const rows = [
+      orgRow({ username: "staff", classification: "member-no-roster" }),
+      orgRow({ username: "left", classification: "on-roster-not-member" }),
+      orgRow({ username: "ok", classification: "member-on-roster" }),
+      orgRow({ username: "invited", classification: "invitation-pending" }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "status", "asc").map((r) => r.username),
+    ).toEqual(["left", "ok", "invited", "staff"])
+  })
+
+  it("keeps the tiebreak ascending on a reversed column and doesn't mutate", () => {
+    const rows = [
+      orgRow({ username: "b", classrooms: [access("a")] }),
+      orgRow({ username: "a", classrooms: [access("a")] }),
+    ]
+    const sorted = sortOrgMemberRowsBy(rows, "classrooms", "desc")
+    expect(sorted.map((r) => r.username)).toEqual(["a", "b"])
+    expect(rows.map((r) => r.username)).toEqual(["b", "a"])
   })
 })

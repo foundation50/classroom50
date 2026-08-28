@@ -211,19 +211,58 @@ export function aggregateOrgMembers(
   // Discrepancies first (the actionable rows), then members, then by login/name.
   // A pending invitation sorts after healthy members: it is informational, and
   // putting it above them would bury the rows a teacher can act on.
-  const order: Record<MemberClassification, number> = {
-    "on-roster-not-member": 0,
-    "member-on-roster": 1,
-    "invitation-pending": 2,
-    "member-no-roster": 3,
-  }
   rows.sort((a, b) => {
-    const byClass = order[a.classification] - order[b.classification]
+    const byClass =
+      CLASSIFICATION_ORDER[a.classification] -
+      CLASSIFICATION_ORDER[b.classification]
     if (byClass !== 0) return byClass
-    return (a.username || a.name || a.email).localeCompare(
-      b.username || b.name || b.email,
-    )
+    return displayName(a).localeCompare(displayName(b))
   })
 
   return rows
+}
+
+const CLASSIFICATION_ORDER: Record<MemberClassification, number> = {
+  "on-roster-not-member": 0,
+  "member-on-roster": 1,
+  "invitation-pending": 2,
+  "member-no-roster": 3,
+}
+
+const displayName = (row: OrgMemberRow) =>
+  row.username || row.name || row.email
+
+// Header-driven column sort for the Members table (mirroring
+// sortTeamRosterRowsBy):
+//   member     — display identity (username, else name, else email).
+//   classrooms — classroom count.
+//   status     — the default classification precedence (actionable first).
+// `desc` flips only the column comparison; ties always fall back to ascending
+// display identity so a reversed column stays internally scannable.
+export type OrgMembersSortColumn = "member" | "classrooms" | "status"
+export function sortOrgMemberRowsBy(
+  rows: OrgMemberRow[],
+  column: OrgMembersSortColumn,
+  direction: "asc" | "desc",
+): OrgMemberRow[] {
+  const flip = direction === "desc" ? -1 : 1
+  const byName = (a: OrgMemberRow, b: OrgMemberRow) =>
+    displayName(a).localeCompare(displayName(b), undefined, {
+      sensitivity: "base",
+      numeric: true,
+    })
+  const byColumn = (a: OrgMemberRow, b: OrgMemberRow): number => {
+    switch (column) {
+      case "member":
+        return byName(a, b)
+      case "classrooms":
+        return a.classrooms.length - b.classrooms.length
+      case "status":
+        return (
+          CLASSIFICATION_ORDER[a.classification] -
+          CLASSIFICATION_ORDER[b.classification]
+        )
+    }
+  }
+  return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
 }
