@@ -6,8 +6,7 @@
 
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
+import { Button, Spinner } from "@/components/ui"
 
 // The lifecycle of a bulk run's modal: idle (closed) -> working (progress) ->
 // complete/error (results).

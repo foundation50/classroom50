@@ -146,7 +146,10 @@ describe("BulkProgressRow", () => {
 describe("BulkProgressInline", () => {
   it("renders the status line and a valued bar", () => {
     const { container } = render(
-      <BulkProgressInline label="Opening 1 of 2" progress={{ processed: 1, total: 2 }} />,
+      <BulkProgressInline
+        label="Opening 1 of 2"
+        progress={{ processed: 1, total: 2 }}
+      />,
     )
     expect(screen.getByText("Opening 1 of 2")).toBeDefined()
     expect(getBar(container).getAttribute("value")).toBe("50")
