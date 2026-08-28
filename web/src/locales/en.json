@@ -3282,6 +3282,7 @@
     "inviteMissingId": "Can't invite {{who}}: no GitHub id on file.",
     "inviteMalformedId": "Can't invite {{who}}: \"{{githubId}}\" isn't a valid GitHub id. Fix the github_id cell in roster.csv.",
     "subtitle": "Everyone in the <orgLink>{{org}}</orgLink> GitHub organization and the classrooms they belong to.",
+    "sharedOrgNotice": "This page lists every member of the {{org}} GitHub organization, not only your students. If other teachers share this organization, even without using Classroom 50, their members appear here too, so take care when removing anyone.",
     "manageMembersOnGitHub": "Manage organization members on GitHub",
     "discrepancy_one": "{{count}} student is on a roster but not an organization member.",
     "discrepancy_other": "{{count}} students are on a roster but not an organization member.",

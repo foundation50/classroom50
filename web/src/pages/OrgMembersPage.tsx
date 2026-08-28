@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/icons"
 
 import {
+  Alert,
   AnimatedAlert,
   Button,
   SelectAllCheckbox,
@@ -557,6 +558,15 @@ const OrgMembersPage = () => {
               </>
             }
           />
+
+          {/* Always-on scope warning: a GitHub org is often shared beyond one
+              teaching team (co-teachers, other courses, people who don't use
+              Classroom 50 at all), so "everyone in the org" is a superset of
+              "your students" unless the team owns the whole organization —
+              worth stating before the destructive member actions below. */}
+          <Alert tone="warning" className="mt-6 text-sm">
+            <span>{t("orgMembers.sharedOrgNotice", { org })}</span>
+          </Alert>
 
           <AnimatedAlert
             tone="warning"
