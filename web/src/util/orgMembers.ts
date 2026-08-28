@@ -231,18 +231,28 @@ const CLASSIFICATION_ORDER: Record<MemberClassification, number> = {
 
 const displayName = (row: OrgMemberRow) => row.username || row.name || row.email
 
+// What the Name cell shows: the person's name when known, else the identity
+// fallbacks the avatar renders.
+const nameFirst = (row: OrgMemberRow) => row.name || row.username || row.email
+
 // Header-driven column sort for the Members table (mirroring
 // sortTeamRosterRowsBy):
-//   member     — display identity (username, else name, else email).
+//   name       — display identity (name, else username, else email).
+//   username   — GitHub login, blank-last in either direction.
 //   classrooms — classroom count.
+//   role       — org role precedence (owner -> member -> not a member).
 //   status     — the default classification precedence (actionable first).
 // `desc` flips only the column comparison; ties always fall back to ascending
-// display identity so a reversed column stays internally scannable.
-export type OrgMembersSortColumn = "member" | "classrooms" | "status"
+// display identity so a reversed column stays internally scannable. `isOwner`
+// backs the role column — the owner set lives outside the row (the admins
+// read), so the caller supplies the predicate.
+export type OrgMembersSortColumn =
+  "name" | "username" | "classrooms" | "role" | "status"
 export function sortOrgMemberRowsBy(
   rows: OrgMemberRow[],
   column: OrgMembersSortColumn,
   direction: "asc" | "desc",
+  isOwner: (row: OrgMemberRow) => boolean = () => false,
 ): OrgMemberRow[] {
   const flip = direction === "desc" ? -1 : 1
   const byName = (a: OrgMemberRow, b: OrgMemberRow) =>
@@ -250,12 +260,30 @@ export function sortOrgMemberRowsBy(
       sensitivity: "base",
       numeric: true,
     })
+  // Blank-last compare regardless of direction: the inner flip cancels the
+  // outer one, so "no data" never leads a reversed column.
+  const blankLast = (va: string, vb: string): number => {
+    if (!va || !vb) return flip * (va === vb ? 0 : va ? -1 : 1)
+    return va.localeCompare(vb, undefined, { numeric: true })
+  }
+  const roleRank = (row: OrgMemberRow) =>
+    isOwner(row) ? 2 : row.isMember ? 1 : 0
   const byColumn = (a: OrgMemberRow, b: OrgMemberRow): number => {
     switch (column) {
-      case "member":
-        return byName(a, b)
+      case "name":
+        return nameFirst(a).localeCompare(nameFirst(b), undefined, {
+          sensitivity: "base",
+          numeric: true,
+        })
+      case "username":
+        return blankLast(
+          a.username.trim().toLowerCase(),
+          b.username.trim().toLowerCase(),
+        )
       case "classrooms":
         return a.classrooms.length - b.classrooms.length
+      case "role":
+        return roleRank(b) - roleRank(a)
       case "status":
         return (
           CLASSIFICATION_ORDER[a.classification] -
@@ -264,4 +292,34 @@ export function sortOrgMemberRowsBy(
     }
   }
   return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
+}
+
+// The Members toolbar's "Show" facets, mirroring the roster's combined
+// status/role select. Status keys off the row's classification/health; role
+// keys off org role (owner vs plain member — a non-member matches neither).
+export type OrgMembersStatusFilter =
+  "all" | "not-in-org" | "invitation-pending" | "not-enrolled"
+export type OrgMembersRoleFilter = "all" | "owner" | "member"
+
+export function filterOrgMemberRows(
+  rows: OrgMemberRow[],
+  facets: {
+    statusFilter: OrgMembersStatusFilter
+    roleFilter: OrgMembersRoleFilter
+    isOwner: (row: OrgMemberRow) => boolean
+  },
+): OrgMemberRow[] {
+  const { statusFilter, roleFilter, isOwner } = facets
+  return rows.filter((row) => {
+    if (statusFilter === "not-in-org") {
+      if (row.classification !== "on-roster-not-member") return false
+    } else if (statusFilter === "invitation-pending") {
+      if (row.classification !== "invitation-pending") return false
+    } else if (statusFilter === "not-enrolled") {
+      if (row.unprovisionedClassrooms.length === 0) return false
+    }
+    if (roleFilter === "owner") return isOwner(row)
+    if (roleFilter === "member") return row.isMember && !isOwner(row)
+    return true
+  })
 }

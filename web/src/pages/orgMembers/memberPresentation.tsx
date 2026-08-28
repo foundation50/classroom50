@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui"
+import { CellPlaceholder } from "@/components/memberList/memberPresentation"
 import type { GitHubClient } from "@/github-core/client"
 import type { NotifyInput } from "@/context/notifications/NotificationProvider"
 import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
@@ -20,9 +21,73 @@ import type { OrgMemberRow } from "@/util/orgMembers"
 // ClassificationBadge and runInviteMember stay here — they read `classification`
 // and invite to the org, so they are genuinely org-feature code.
 export {
+  CellPlaceholder,
   GitHubIdentity,
   initialsFor,
 } from "@/components/memberList/memberPresentation"
+
+// Org-role badge for the table's Roles column: Owner or Member; a non-member
+// shows the empty placeholder (the discrepancy lives in the Status column).
+export const OrgRoleBadge = ({
+  row,
+  isOwner = false,
+}: {
+  row: OrgMemberRow
+  isOwner?: boolean
+}) => {
+  const { t } = useTranslation()
+  if (isOwner) {
+    return (
+      <Badge tone="info" className="gap-1">
+        <ShieldCheckIcon aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.badgeOwner")}
+      </Badge>
+    )
+  }
+  if (row.isMember) {
+    return <Badge tone="success">{t("orgMembers.badgeMember")}</Badge>
+  }
+  return <CellPlaceholder />
+}
+
+// Health-only badge for the table's Status column: the actionable discrepancy,
+// the informational pending invite, or CSV/team drift. The empty placeholder
+// when there is nothing to report. The three cases are mutually exclusive:
+// drift is only computed for live members, which the other two are not.
+export const MemberStatusBadge = ({ row }: { row: OrgMemberRow }) => {
+  const { t } = useTranslation()
+  if (row.classification === "on-roster-not-member") {
+    return (
+      <Badge tone="error" className="gap-1 whitespace-nowrap">
+        <AlertIcon aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.badgeNotMember")}
+      </Badge>
+    )
+  }
+  if (row.classification === "invitation-pending") {
+    return (
+      <Badge tone="info" className="gap-1 whitespace-nowrap">
+        <ReadIcon aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.badgeInvitePending")}
+      </Badge>
+    )
+  }
+  if (row.unprovisionedClassrooms.length > 0) {
+    return (
+      <Badge
+        tone="warning"
+        className="gap-1 whitespace-nowrap"
+        title={t("orgMembers.unprovisionedTitle", {
+          classrooms: row.unprovisionedClassrooms.join(", "),
+        })}
+      >
+        <AlertIcon aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.unprovisionedBadge")}
+      </Badge>
+    )
+  }
+  return <CellPlaceholder />
+}
 
 export const ClassificationBadge = ({
   row,

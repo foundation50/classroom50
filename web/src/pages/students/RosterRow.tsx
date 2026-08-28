@@ -3,19 +3,14 @@ import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
 import { Badge, rtlFlip } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
-import { GitHubIdentity } from "@/components/memberList/memberPresentation"
+import {
+  CellPlaceholder,
+  GitHubIdentity,
+} from "@/components/memberList/memberPresentation"
 import { STATE_BADGE_TONE, STATE_LABEL_KEY } from "@/util/classroomRoleUI"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import { ClickableTr } from "@/lib/motionComponents"
 import type { TeamRosterRow } from "@/util/teamRoster"
-
-// Primer-style placeholder for a cell with nothing to report (an enrolled
-// member's Status, a section-less row), so an empty cell reads as intentional.
-const CellPlaceholder = () => (
-  <span aria-hidden="true" className="text-base-content/60">
-    —
-  </span>
-)
 
 // One roster table row: selection checkbox, avatar + identity, then role /
 // section / state cells (the checkbox is disabled for the viewer's own row and

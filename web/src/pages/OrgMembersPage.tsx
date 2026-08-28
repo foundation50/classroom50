@@ -4,7 +4,6 @@ import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
-  AlertIcon,
   ChevronRightIcon,
   FilterIcon,
   LinkExternalIcon,
@@ -13,9 +12,9 @@ import {
 
 import {
   AnimatedAlert,
-  Badge,
   Button,
   SelectAllCheckbox,
+  SelectSeparatorOption,
   SkeletonRows,
   SortableTh,
   TableShell,
@@ -35,9 +34,12 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import {
+  filterOrgMemberRows,
   sortOrgMemberRowsBy,
   type OrgMemberRow,
+  type OrgMembersRoleFilter,
   type OrgMembersSortColumn,
+  type OrgMembersStatusFilter,
 } from "@/util/orgMembers"
 import { githubOrgPeopleUrl } from "@/util/orgUrl"
 import type { StudentCsvRow } from "@/domain/students"
@@ -58,8 +60,9 @@ import {
 } from "@/pages/orgMembers/selection"
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import {
-  ClassificationBadge,
   GitHubIdentity,
+  MemberStatusBadge,
+  OrgRoleBadge,
   initialsFor,
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
@@ -75,12 +78,15 @@ const CSV_RECONCILE_DELAY_MS = 4000
 // path can't collide (paths don't contain a leading colon).
 const NO_CLASSROOM_FILTER = ":none:"
 
-// One bar recipe per column: select, member, classrooms, status, actions.
+// One bar recipe per column: select, name, username, classrooms, roles,
+// status, actions.
 const SKELETON_BARS = [
   "size-5",
-  "h-4 w-40",
-  "h-4 w-24",
-  "h-6 w-28",
+  "h-4 w-36",
+  "h-4 w-28",
+  "h-4 w-20",
+  "h-6 w-20",
+  "h-6 w-24",
   "ms-auto h-4 w-4",
 ]
 
@@ -113,6 +119,11 @@ const OrgMembersPage = () => {
   // Classroom filter: "" = all, NO_CLASSROOM_FILTER = members on no roster,
   // else a classroom path. Applied on top of the text search.
   const [classroomFilter, setClassroomFilter] = useState("")
+  // The combined "Show" select's facets (status + org role), mirroring the
+  // roster toolbar's consolidated filter.
+  const [statusFilter, setStatusFilter] =
+    useState<OrgMembersStatusFilter>("all")
+  const [roleFilter, setRoleFilter] = useState<OrgMembersRoleFilter>("all")
   // Header-driven column sort; null = the default order (classification, then
   // name — see aggregateOrgMembers).
   const [tableSort, setTableSort] = useState<MembersTableSortValue | null>(null)
@@ -372,42 +383,86 @@ const OrgMembersPage = () => {
     }
   }
 
+  const isSelf = (row: OrgMemberRow) =>
+    isSameGitHubUser(viewer ?? null, {
+      github_id: row.github_id,
+      username: row.username,
+    })
+
+  // An org owner/admin: in the fetched admin-id set, or the signed-in account
+  // (always an owner here — page is owner-gated — even if the admin list
+  // couldn't be read).
+  const isOwner = (row: OrgMemberRow) =>
+    (Boolean(row.github_id) && ownerIds.has(row.github_id)) || isSelf(row)
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    const base = rows.filter((row) => {
-      if (
-        q &&
-        ![row.username, row.name, row.email].some((field) =>
-          field.toLowerCase().includes(q),
-        )
-      ) {
-        return false
-      }
-      // Classroom filter: all / no-classroom / a specific classroom.
-      if (classroomFilter === NO_CLASSROOM_FILTER) {
-        return row.classrooms.length === 0
-      }
-      if (classroomFilter) {
-        return row.classrooms.some((c) => c.classroom === classroomFilter)
-      }
-      return true
-    })
+    const base = filterOrgMemberRows(
+      rows.filter((row) => {
+        if (
+          q &&
+          ![row.username, row.name, row.email].some((field) =>
+            field.toLowerCase().includes(q),
+          )
+        ) {
+          return false
+        }
+        // Classroom filter: all / no-classroom / a specific classroom.
+        if (classroomFilter === NO_CLASSROOM_FILTER) {
+          return row.classrooms.length === 0
+        }
+        if (classroomFilter) {
+          return row.classrooms.some((c) => c.classroom === classroomFilter)
+        }
+        return true
+      }),
+      { statusFilter, roleFilter, isOwner },
+    )
     if (!tableSort) return base
     const [column, direction] = tableSort.split("-") as [
       OrgMembersSortColumn,
       "asc" | "desc",
     ]
-    return sortOrgMemberRowsBy(base, column, direction)
-  }, [rows, query, classroomFilter, tableSort])
+    return sortOrgMemberRowsBy(base, column, direction, isOwner)
+    // isSelf/isOwner depend on viewer + ownerIds; recompute when they change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    rows,
+    query,
+    classroomFilter,
+    statusFilter,
+    roleFilter,
+    tableSort,
+    viewer,
+    ownerIds,
+  ])
+
+  // The combined "Show" select folds the status and role filters into ONE
+  // control (mirroring the roster toolbar): picking a status clears the role
+  // facet and vice versa. The two facets stay separate fields for
+  // filterOrgMemberRows — the select is just a consolidated view of them.
+  const showValue = roleFilter !== "all" ? `role:${roleFilter}` : statusFilter
+  const onShowChange = (value: string) => {
+    if (value.startsWith("role:")) {
+      setRoleFilter(value.slice("role:".length) as OrgMembersRoleFilter)
+      setStatusFilter("all")
+    } else {
+      setStatusFilter(value as OrgMembersStatusFilter)
+      setRoleFilter("all")
+    }
+  }
 
   // Active-filter split for the in-search-bar clear affordance ("Clear filter"
   // vs "Clear"), mirroring the roster controls; clicking it resets query and
-  // the classroom filter (sort is a view preference, not a filter — kept).
-  const hasFilterActive = classroomFilter !== ""
+  // every filter (sort is a view preference, not a filter — kept).
+  const hasFilterActive =
+    classroomFilter !== "" || statusFilter !== "all" || roleFilter !== "all"
   const hasActiveFilter = hasFilterActive || query.trim() !== ""
   const clearAllFilters = () => {
     setQuery("")
     setClassroomFilter("")
+    setStatusFilter("all")
+    setRoleFilter("all")
   }
 
   const selected = useMemo(
@@ -420,18 +475,6 @@ const OrgMembersPage = () => {
         .length,
     [rows],
   )
-
-  const isSelf = (row: OrgMemberRow) =>
-    isSameGitHubUser(viewer ?? null, {
-      github_id: row.github_id,
-      username: row.username,
-    })
-
-  // An org owner/admin: in the fetched admin-id set, or the signed-in account
-  // (always an owner here — page is owner-gated — even if the admin list
-  // couldn't be read).
-  const isOwner = (row: OrgMemberRow) =>
-    (Boolean(row.github_id) && ownerIds.has(row.github_id)) || isSelf(row)
 
   // The signed-in owner can't be bulk-added/removed — a row is selectable only
   // when it isn't self.
@@ -558,6 +601,9 @@ const OrgMembersPage = () => {
             ) : null}
             <Toolbar.Trailing>
               <Toolbar.Search
+                // Wide enough for the full placeholder; the classroom filter
+                // next door stays compact in trade.
+                className="min-w-[15rem] flex-1 sm:min-w-[21rem] sm:max-w-lg"
                 placeholder={t("orgMembers.searchPlaceholder")}
                 ariaLabel={t("orgMembers.searchLabel")}
                 value={query}
@@ -566,9 +612,39 @@ const OrgMembersPage = () => {
                 clearActive={hasActiveFilter}
                 hasFilterActive={hasFilterActive}
               />
+              {/* One combined "Show" select: statuses, then the org-role
+                  group — mirroring the roster toolbar's consolidated filter. */}
+              <Toolbar.FilterSelect
+                icon={<FilterIcon aria-hidden="true" className="size-4" />}
+                active={showValue !== "all"}
+                aria-label={t("orgMembers.filterShowLabel")}
+                value={showValue}
+                onChange={(e) => onShowChange(e.target.value)}
+              >
+                <option value="all">{t("orgMembers.filterAll")}</option>
+                <option value="not-in-org">
+                  {t("orgMembers.filterNotInOrg")}
+                </option>
+                <option value="invitation-pending">
+                  {t("orgMembers.filterInvitationPending")}
+                </option>
+                <option value="not-enrolled">
+                  {t("orgMembers.filterNotEnrolled")}
+                </option>
+                <SelectSeparatorOption />
+                <option value="role:owner">
+                  {t("orgMembers.filterOwners")}
+                </option>
+                <option value="role:member">
+                  {t("orgMembers.filterMembers")}
+                </option>
+              </Toolbar.FilterSelect>
               <Toolbar.FilterSelect
                 icon={<FilterIcon aria-hidden="true" className="size-4" />}
                 active={classroomFilter !== ""}
+                // Compact control; long classroom names live in the popup,
+                // which sizes to its options.
+                className="min-w-[10rem]"
                 aria-label={t("orgMembers.filterByClassroomLabel")}
                 value={classroomFilter}
                 onChange={(e) => setClassroomFilter(e.target.value)}
@@ -616,10 +692,17 @@ const OrgMembersPage = () => {
                   {/* Sortable column headers — an inactive table falls back
                       to the default order (classification, then name). */}
                   <SortableTh
-                    label={t("orgMembers.table.colMember")}
+                    label={t("orgMembers.table.colName")}
                     sort={tableSort ?? undefined}
-                    asc="member-asc"
-                    desc="member-desc"
+                    asc="name-asc"
+                    desc="name-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    label={t("orgMembers.table.colUsername")}
+                    sort={tableSort ?? undefined}
+                    asc="username-asc"
+                    desc="username-desc"
                     onSortChange={setTableSort}
                   />
                   <SortableTh
@@ -628,6 +711,13 @@ const OrgMembersPage = () => {
                     sort={tableSort ?? undefined}
                     asc="classrooms-asc"
                     desc="classrooms-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    label={t("orgMembers.table.colRoles")}
+                    sort={tableSort ?? undefined}
+                    asc="role-asc"
+                    desc="role-desc"
                     onSortChange={setTableSort}
                   />
                   <SortableTh
@@ -645,10 +735,10 @@ const OrgMembersPage = () => {
                 </tr>
               </thead>
               {/* Same recipe as the assignments table: the body enters as one
-                  block and replays on data arrival / classroom-filter changes
-                  (not per search keystroke). */}
+                  block and replays on data arrival / filter changes (not per
+                  search keystroke). */}
               <motion.tbody
-                key={`${isLoading}:${classroomFilter}`}
+                key={`${isLoading}:${classroomFilter}:${statusFilter}:${roleFilter}`}
                 variants={blockEnter}
                 initial="initial"
                 animate="animate"
@@ -723,9 +813,14 @@ const OrgMembersPage = () => {
                           name={row.name || row.username || row.email}
                           github={row.username}
                           initials={initialsFor(row)}
-                          subtitle={<GitHubIdentity row={row} />}
                           onClick={() => setSelectedKey(row.key)}
                         />
+                      </td>
+                      <td>
+                        {/* The bare GitHub handle — no octocat, no numeric id
+                            (both live in the member detail modal); shared
+                            recipe via GitHubIdentity. */}
+                        <GitHubIdentity row={row} bare />
                       </td>
                       <td className="hidden whitespace-nowrap text-xs text-base-content/70 sm:table-cell">
                         {t("orgMembers.classroomCount", {
@@ -733,28 +828,10 @@ const OrgMembersPage = () => {
                         })}
                       </td>
                       <td>
-                        <div className="flex flex-wrap items-center gap-2">
-                          {row.unprovisionedClassrooms.length > 0 ? (
-                            <Badge
-                              tone="warning"
-                              className="gap-1"
-                              title={t("orgMembers.unprovisionedTitle", {
-                                classrooms:
-                                  row.unprovisionedClassrooms.join(", "),
-                              })}
-                            >
-                              <AlertIcon
-                                aria-hidden="true"
-                                className="size-3"
-                              />
-                              {t("orgMembers.unprovisionedBadge")}
-                            </Badge>
-                          ) : null}
-                          <ClassificationBadge
-                            row={row}
-                            isOwner={isOwner(row)}
-                          />
-                        </div>
+                        <OrgRoleBadge row={row} isOwner={isOwner(row)} />
+                      </td>
+                      <td>
+                        <MemberStatusBadge row={row} />
                       </td>
                       <td className="w-0 ps-2">
                         <div className="flex items-center justify-end gap-3">
