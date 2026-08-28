@@ -262,6 +262,24 @@ describe("Modal", () => {
     expect(actions).toHaveLength(1)
     expect(actions[0].textContent).toContain("Close")
     expect(actions[0].textContent).toContain("Apply")
+    // Portal content appends AFTER the footer prop: the rightmost (primary)
+    // slot belongs to the portal when a host combines both.
+    expect(actions[0].textContent).toBe("CloseApply")
+  })
+
+  it("renders nothing and warns when used outside a Modal", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+    const { container } = render(
+      <ModalFooterPortal>
+        <button type="button">Orphan</button>
+      </ModalFooterPortal>,
+    )
+    expect(container.childNodes).toHaveLength(0)
+    expect(screen.queryByText("Orphan")).toBeNull()
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("outside a Modal"),
+    )
+    warn.mockRestore()
   })
 
   it("keeps the empty footer row hidden when neither prop nor portal fills it", () => {

@@ -42,8 +42,12 @@ import { Heading } from "./Heading"
 // open-only content with useLingeringOpen.
 
 // The footer container element, provided per Modal instance so
-// ModalFooterPortal can target the canonical action row.
-const ModalFooterContext = createContext<HTMLDivElement | null>(null)
+// ModalFooterPortal can target the canonical action row. `undefined` (the
+// default) means no Modal ancestor at all; `null` means inside a Modal whose
+// footer ref hasn't settled yet (first render) — only the former is a bug.
+const ModalFooterContext = createContext<HTMLDivElement | null | undefined>(
+  undefined,
+)
 
 export type ModalSize =
   "sm" | "md" | "lg" | "xl" | "2xl" | "3xl" | "4xl" | "5xl"
@@ -239,10 +243,23 @@ export default Modal
 
 // Renders body-owned action buttons into the Modal's canonical footer row.
 // For content whose buttons need state the `footer` prop can't reach (a form
-// instance, a phase-local handler); renders nothing outside a Modal.
+// instance, a phase-local handler); renders nothing outside a Modal. Portal
+// content lands AFTER any `footer` prop content in the same row — a host that
+// combines both must put its primary action in the portal, or the prop's
+// button would sit right of it and break the primary-rightmost convention.
 export function ModalFooterPortal({ children }: { children: ReactNode }) {
   const container = useContext(ModalFooterContext)
-  if (!container) return null
+  if (container === undefined) {
+    if (import.meta.env.DEV) {
+      console.warn(
+        "ModalFooterPortal rendered outside a Modal: its children are dropped.",
+      )
+    }
+    return null
+  }
+  // Inside a Modal but the footer ref hasn't settled yet (first render);
+  // the ref-callback state flush re-renders us into the container pre-paint.
+  if (container === null) return null
   return createPortal(children, container)
 }
 
