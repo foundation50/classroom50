@@ -255,9 +255,10 @@ To enroll students who are already org members:
    not a classroom's **Roster** page).
 2. Find each student. They show as a member with no classroom, or you can filter
    by "no classroom".
-3. Use **Add to classroom** to place them on a classroom's roster and team. To
-   do several at once, select the rows and use the bulk **Add to {classroom}**
-   action.
+3. Select each student's row.
+4. Open the **Actions** menu, then click **Add to classroom**.
+5. Pick the destination classroom in the dialog, then click **Add**. The
+   dialog previews how many members will be added before you commit.
 
 Uploading a **roster CSV** or a plain list of usernames on the **Roster** page
 also enrolls existing members: the invite is skipped, but they're still added to

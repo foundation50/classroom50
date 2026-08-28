@@ -118,7 +118,10 @@ Wrap up a finished course in this order:
 5. Remove students if you need to. Unenrolling a student removes them
    from the roster and classroom team but not from the organization, and
    never deletes repositories; removing them from the organization revokes
-   access but still deletes nothing. See
+   access but still deletes nothing. To remove a whole classroom's students
+   from the organization at once, open the organization's **Members** page,
+   filter by the classroom, select the rows, and use **Actions**, then
+   **Remove from organization**. See
    [Enroll, unenroll, and remove are separate](How-Classroom-50-Works#lifecycle-enroll-unenroll-and-remove-are-separate).
 
 ## Reusing assignments next term

@@ -113,6 +113,10 @@ They're separate actions, on purpose:
   their assignment repos) but still doesn't delete anything.
 - **Deleting a repository** is always a separate, manual step.
 
+Both actions are available per member and in bulk on the organization's
+**Members** page. For more information, see
+[Manage organization members](Web-Teacher-Guide#manage-organization-members).
+
 See [How Classroom 50 Works](How-Classroom-50-Works#lifecycle-enroll-unenroll-and-remove-are-separate).
 
 ## Assignments
