@@ -62,7 +62,10 @@ describe("bulkRemoveFromOrg", () => {
 
     await bulkRemoveFromOrg(client, {
       org: "acme",
-      rows: [row({ username: "a", key: "a" }), row({ username: "b", key: "b" })],
+      rows: [
+        row({ username: "a", key: "a" }),
+        row({ username: "b", key: "b" }),
+      ],
     })
 
     expect(getAuthenticatedUserMock).toHaveBeenCalledTimes(1)
@@ -88,7 +91,11 @@ describe("bulkRemoveFromOrg", () => {
 
     expect(removeMemberMock).toHaveBeenCalledTimes(1)
     expect(result.outcomes).toEqual([
-      expect.objectContaining({ key: "self", status: "skipped", detail: "self" }),
+      expect.objectContaining({
+        key: "self",
+        status: "skipped",
+        detail: "self",
+      }),
       expect.objectContaining({
         key: "email-only",
         status: "skipped",
@@ -114,7 +121,10 @@ describe("bulkRemoveFromOrg", () => {
 
     const result = await bulkRemoveFromOrg(client, {
       org: "acme",
-      rows: [row({ username: "a", key: "a" }), row({ username: "b", key: "b" })],
+      rows: [
+        row({ username: "a", key: "a" }),
+        row({ username: "b", key: "b" }),
+      ],
     })
 
     expect(result.warnings).toEqual(["archived warning"])

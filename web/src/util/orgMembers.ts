@@ -229,8 +229,7 @@ const CLASSIFICATION_ORDER: Record<MemberClassification, number> = {
   "member-no-roster": 3,
 }
 
-const displayName = (row: OrgMemberRow) =>
-  row.username || row.name || row.email
+const displayName = (row: OrgMemberRow) => row.username || row.name || row.email
 
 // Header-driven column sort for the Members table (mirroring
 // sortTeamRosterRowsBy):

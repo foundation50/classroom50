@@ -6,19 +6,20 @@ import { useQueryClient } from "@tanstack/react-query"
 import {
   AlertIcon,
   ChevronRightIcon,
+  FilterIcon,
   LinkExternalIcon,
   PersonAddIcon,
-  SearchIcon,
 } from "@/components/ui/icons"
 
 import {
   AnimatedAlert,
   Badge,
   Button,
-  Input,
-  Select,
+  SelectAllCheckbox,
   SkeletonRows,
+  SortableTh,
   TableShell,
+  Toolbar,
   rtlFlip,
 } from "@/components/ui"
 import PageShell from "@/components/PageShell"
@@ -33,7 +34,11 @@ import { githubKeys, invalidateInviteQueries } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
-import type { OrgMemberRow } from "@/util/orgMembers"
+import {
+  sortOrgMemberRowsBy,
+  type OrgMemberRow,
+  type OrgMembersSortColumn,
+} from "@/util/orgMembers"
 import { githubOrgPeopleUrl } from "@/util/orgUrl"
 import type { StudentCsvRow } from "@/domain/students"
 import type { GitHubUser } from "@/github-core/types"
@@ -41,7 +46,9 @@ import { isSameGitHubUser } from "@/util/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
 import { ClickableTr } from "@/lib/motionComponents"
-import BulkActionsBar from "@/pages/orgMembers/BulkActionsBar"
+import BulkActionsBar, {
+  type BulkDoneInput,
+} from "@/pages/orgMembers/BulkActionsBar"
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
 import {
   resolveSelectedRows,
@@ -79,6 +86,10 @@ const SKELETON_BARS = [
 
 const MEMBERS_COL_COUNT = SKELETON_BARS.length
 
+// One value per (column, direction) pair for the table-header sort controls.
+type MembersTableSortValue =
+  `${OrgMembersSortColumn}-asc` | `${OrgMembersSortColumn}-desc`
+
 const OrgMembersPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.members"))
@@ -101,6 +112,9 @@ const OrgMembersPage = () => {
   // Classroom filter: "" = all, NO_CLASSROOM_FILTER = members on no roster,
   // else a classroom path. Applied on top of the text search.
   const [classroomFilter, setClassroomFilter] = useState("")
+  // Header-driven column sort; null = the default order (classification, then
+  // name — see aggregateOrgMembers).
+  const [tableSort, setTableSort] = useState<MembersTableSortValue | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [invitingKey, setInvitingKey] = useState<string | null>(null)
   // Multi-select for bulk classroom actions. Selection is by row key and
@@ -211,16 +225,36 @@ const OrgMembersPage = () => {
   // After a bulk add/remove: optimistically reflect the change in the CSV +
   // team caches the row status derives from (kept consistent, no false
   // "unprovisioned" flash), then reconcile both with the server on a delay.
-  const handleBulkDone = (input: {
-    classroom: string
-    action: "add" | "remove"
-    addedStudents: StudentCsvRow[]
-    affectedKeys: string[]
-  }) => {
+  // An org-wide removal touches EVERY classroom the removed members belonged
+  // to, so it seeds and reconciles each of them (the per-row refresh() logic,
+  // batched).
+  const handleBulkDone = (input: BulkDoneInput) => {
     if (!org) return
-    const { classroom, action, addedStudents, affectedKeys } = input
 
-    if (action === "add" && addedStudents.length > 0) {
+    if (input.action === "remove-org") {
+      const removedRows = rows.filter((r) => input.affectedKeys.includes(r.key))
+      // Archived classrooms are excluded: removeMemberFromOrg can't unenroll
+      // them, so their rosters really do still list the student.
+      const affectedClassrooms = new Set(
+        removedRows.flatMap((r) =>
+          r.classrooms.filter((c) => !c.archived).map((c) => c.classroom),
+        ),
+      )
+      for (const classroom of affectedClassrooms) {
+        optimisticRemove(classroom, removedRows)
+        invalidateClassroom(classroom, { skipCsv: true })
+        scheduleClassroomReconcile(classroom)
+      }
+      queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+      invalidateInviteQueries(queryClient, org)
+      setSelectedKeys(new Set())
+      return
+    }
+
+    const { classroom, affectedKeys } = input
+
+    if (input.action === "add" && input.addedStudents.length > 0) {
+      const addedStudents = input.addedStudents
       const csvKey = githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom))
       queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
         const list = current ?? []
@@ -269,7 +303,7 @@ const OrgMembersPage = () => {
       )
     }
 
-    if (action === "remove" && affectedKeys.length > 0) {
+    if (input.action === "remove" && affectedKeys.length > 0) {
       const removedRows = rows.filter((r) => affectedKeys.includes(r.key))
       optimisticRemove(classroom, removedRows)
     }
@@ -297,7 +331,7 @@ const OrgMembersPage = () => {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return rows.filter((row) => {
+    const base = rows.filter((row) => {
       if (
         q &&
         ![row.username, row.name, row.email].some((field) =>
@@ -315,7 +349,23 @@ const OrgMembersPage = () => {
       }
       return true
     })
-  }, [rows, query, classroomFilter])
+    if (!tableSort) return base
+    const [column, direction] = tableSort.split("-") as [
+      OrgMembersSortColumn,
+      "asc" | "desc",
+    ]
+    return sortOrgMemberRowsBy(base, column, direction)
+  }, [rows, query, classroomFilter, tableSort])
+
+  // Active-filter split for the in-search-bar clear affordance ("Clear filter"
+  // vs "Clear"), mirroring the roster controls; clicking it resets query and
+  // the classroom filter (sort is a view preference, not a filter — kept).
+  const hasFilterActive = classroomFilter !== ""
+  const hasActiveFilter = hasFilterActive || query.trim() !== ""
+  const clearAllFilters = () => {
+    setQuery("")
+    setClassroomFilter("")
+  }
 
   const selected = useMemo(
     () => rows.find((row) => row.key === selectedKey) ?? null,
@@ -436,78 +486,108 @@ const OrgMembersPage = () => {
             </span>
           </AnimatedAlert>
 
-          <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Input
-              leadingIcon={
-                <SearchIcon aria-hidden="true" className="size-4 opacity-50" />
-              }
-              className="min-w-0 flex-1"
-              type="search"
-              placeholder={t("orgMembers.searchPlaceholder")}
-              aria-label={t("orgMembers.searchLabel")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <Select
-              className="w-full sm:w-auto sm:min-w-[14rem]"
-              aria-label={t("orgMembers.filterByClassroomLabel")}
-              value={classroomFilter}
-              onChange={(e) => setClassroomFilter(e.target.value)}
-            >
-              <option value="">{t("orgMembers.filterAllClassrooms")}</option>
-              <option value={NO_CLASSROOM_FILTER}>
-                {t("orgMembers.filterNoClassroom")}
-              </option>
-              {classroomOptions.map((c) => (
-                <option key={c.path} value={c.path}>
-                  {c.name}
+          {/* One toolbar row (mirroring the roster/submissions controls): the
+              member-count caption — swapped for the selection cluster while
+              rows are selected — on the left; search + the classroom filter
+              right-aligned. */}
+          <Toolbar className="mt-6">
+            {selectedKeys.size === 0 && !isLoading && !isError ? (
+              <span className="text-sm text-base-content/60 tabular-nums">
+                {t("orgMembers.bulk.memberCount", { count: filtered.length })}
+              </span>
+            ) : null}
+            {org ? (
+              <BulkActionsBar
+                org={org}
+                client={client}
+                selectedRows={selectedRows}
+                members={members}
+                classrooms={classroomOptions}
+                onClearSelection={() => setSelectedKeys(new Set())}
+                onDone={handleBulkDone}
+              />
+            ) : null}
+            <Toolbar.Trailing>
+              <Toolbar.Search
+                placeholder={t("orgMembers.searchPlaceholder")}
+                ariaLabel={t("orgMembers.searchLabel")}
+                value={query}
+                onChange={setQuery}
+                onClear={clearAllFilters}
+                clearActive={hasActiveFilter}
+                hasFilterActive={hasFilterActive}
+              />
+              <Toolbar.FilterSelect
+                icon={<FilterIcon aria-hidden="true" className="size-4" />}
+                active={classroomFilter !== ""}
+                aria-label={t("orgMembers.filterByClassroomLabel")}
+                value={classroomFilter}
+                onChange={(e) => setClassroomFilter(e.target.value)}
+              >
+                <option value="">{t("orgMembers.filterAllClassrooms")}</option>
+                <option value={NO_CLASSROOM_FILTER}>
+                  {t("orgMembers.filterNoClassroom")}
                 </option>
-              ))}
-            </Select>
-          </div>
+                {classroomOptions.map((c) => (
+                  <option key={c.path} value={c.path}>
+                    {c.name}
+                  </option>
+                ))}
+              </Toolbar.FilterSelect>
+            </Toolbar.Trailing>
+          </Toolbar>
 
-          {/* Primer DataTable treatment (matching the assignments/submissions
-              tables): the shared TableShell frame, labeled columns, and rows as
-              real <tr>s. The bulk-selection bar renders inside the frame above
-              the header row, keeping select-all adjacent to the rows it acts on. */}
+          {/* Primer DataTable treatment (matching the roster/assignments
+              tables): the shared TableShell frame, labeled columns, and rows
+              as real <tr>s. Select-all lives in the select-column header,
+              aligned above the row checkboxes; the selection actions sit in
+              the toolbar above. */}
           <div className="mt-4">
-            <TableShell
-              animate={false}
-              padded
-              ariaBusy={isLoading}
-              header={
-                org && !isLoading && !isError && filtered.length > 0 ? (
-                  <BulkActionsBar
-                    org={org}
-                    client={client}
-                    selectedRows={selectedRows}
-                    totalCount={filtered.length}
-                    allSelected={allFilteredSelected}
-                    someSelected={someFilteredSelected}
-                    onToggleSelectAll={handleToggleSelectAll}
-                    members={members}
-                    classrooms={classroomOptions}
-                    onClearSelection={() => setSelectedKeys(new Set())}
-                    onDone={handleBulkDone}
-                  />
-                ) : undefined
-              }
-            >
+            <TableShell animate={false} padded ariaBusy={isLoading}>
               <caption className="sr-only">
                 {t("orgMembers.table.caption")}
               </caption>
               <thead>
                 <tr>
                   <th scope="col" className="w-0">
-                    <span className="sr-only">
-                      {t("orgMembers.table.colSelect")}
-                    </span>
+                    {!isLoading && !isError && filtered.length > 0 ? (
+                      <SelectAllCheckbox
+                        className="align-middle"
+                        ariaLabel={t("orgMembers.bulk.selectAll")}
+                        allSelected={allFilteredSelected}
+                        someSelected={someFilteredSelected}
+                        onToggle={handleToggleSelectAll}
+                      />
+                    ) : (
+                      <span className="sr-only">
+                        {t("orgMembers.table.colSelect")}
+                      </span>
+                    )}
                   </th>
-                  <th scope="col">{t("orgMembers.table.colMember")}</th>
-                  <th scope="col" className="hidden sm:table-cell">
-                    {t("orgMembers.table.colClassrooms")}
-                  </th>
-                  <th scope="col">{t("orgMembers.table.colStatus")}</th>
+                  {/* Sortable column headers — an inactive table falls back
+                      to the default order (classification, then name). */}
+                  <SortableTh
+                    label={t("orgMembers.table.colMember")}
+                    sort={tableSort ?? undefined}
+                    asc="member-asc"
+                    desc="member-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    className="hidden sm:table-cell"
+                    label={t("orgMembers.table.colClassrooms")}
+                    sort={tableSort ?? undefined}
+                    asc="classrooms-asc"
+                    desc="classrooms-desc"
+                    onSortChange={setTableSort}
+                  />
+                  <SortableTh
+                    label={t("orgMembers.table.colStatus")}
+                    sort={tableSort ?? undefined}
+                    asc="status-asc"
+                    desc="status-desc"
+                    onSortChange={setTableSort}
+                  />
                   <th scope="col" className="w-0">
                     <span className="sr-only">
                       {t("orgMembers.table.colActions")}

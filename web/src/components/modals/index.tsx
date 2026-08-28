@@ -24,6 +24,9 @@ type ConfirmModalProps = {
   needsConfirm?: boolean
   onConfirm: () => Promise<void>
   onClose: () => void
+  // Extra body content rendered above the acknowledge prompt (e.g. an option
+  // checkbox that adjusts what confirming will do).
+  children?: React.ReactNode
 }
 
 // Primer-style ConfirmationDialog built on the shared Modal primitive
@@ -42,6 +45,7 @@ export function ConfirmModal({
   needsConfirm = true,
   onConfirm,
   onClose,
+  children,
 }: ConfirmModalProps) {
   const confirmInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
@@ -190,6 +194,8 @@ export function ConfirmModal({
     >
       {!hasAcknowledged ? (
         <>
+          {children}
+
           {dangerous ? (
             <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
               {t("components.confirmModal.dangerousPrompt")}
