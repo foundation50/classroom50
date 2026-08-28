@@ -145,7 +145,7 @@ export const DrawerSidebar = () => {
       </label>
       <nav
         aria-label={t("nav.primary")}
-        className={`flex flex-col min-h-full sidebar-rail text-neutral-content transition-[width] duration-200 ease-out ${
+        className={`flex flex-col min-h-full sidebar-rail text-neutral-content transition-[width] duration-200 ease-out [&>div]:transition-[padding] [&>div]:duration-200 [&>div]:ease-out ${
           collapsed
             ? "w-16 min-w-16 [&>div]:px-2"
             : "w-60 min-w-30 [&>div]:px-6"

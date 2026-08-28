@@ -123,7 +123,7 @@ export const AssignmentSidebarMenu = ({
   return (
     <>
       {collapsed ? (
-        <div className="flex justify-center py-2 text-sm">
+        <div className="sidebar-fade-in flex justify-center py-2 text-sm">
           <Link
             to="/$org/$classroom/assignments"
             params={{ org, classroom }}
@@ -135,7 +135,7 @@ export const AssignmentSidebarMenu = ({
           </Link>
         </div>
       ) : (
-        <div className="py-4 text-sm">
+        <div className="sidebar-fade-in py-4 text-sm">
           <Link
             to="/$org/$classroom/assignments"
             params={{ org, classroom }}
@@ -151,7 +151,7 @@ export const AssignmentSidebarMenu = ({
       )}
 
       {!collapsed && (
-        <div className="py-2">
+        <div className="sidebar-fade-in py-2">
           <h3 className="font-bold leading-tight">{assignmentName}</h3>
           <p className="text-gray-400 text-sm">{t("nav.assignment")}</p>
         </div>

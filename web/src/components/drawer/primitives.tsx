@@ -67,7 +67,9 @@ export const SidebarItemBody = ({
         />
       )}
       <span className="relative z-10 shrink-0">{icon}</span>
-      {!collapsed && <span className="relative z-10 truncate">{label}</span>}
+      {!collapsed && (
+        <span className="sidebar-fade-in relative z-10 truncate">{label}</span>
+      )}
     </span>
   )
 }
@@ -99,7 +101,7 @@ export const ClassroomLogo = () => {
         <button
           type="button"
           onClick={toggle}
-          className={`${sidebarTooltip} cursor-pointer rounded-selector p-1 transition-colors hover:bg-[var(--sidebar-surface)]`}
+          className={`${sidebarTooltip} sidebar-fade-in cursor-pointer rounded-selector p-1 transition-colors hover:bg-[var(--sidebar-surface)]`}
           data-tip={t("nav.expandSidebar")}
           aria-label={t("nav.expandSidebar")}
         >
@@ -116,7 +118,7 @@ export const ClassroomLogo = () => {
     <div className="flex items-center gap-2 px-6 py-6 border-b-1 border-neutral-content/20">
       <Link
         to="/"
-        className="flex flex-1 min-w-0 items-center text-lg text-neutral-content font-bold"
+        className="sidebar-fade-in flex flex-1 min-w-0 items-center text-lg text-neutral-content font-bold"
         title={t("nav.appName")}
       >
         <MortarBoardIcon
@@ -128,7 +130,7 @@ export const ClassroomLogo = () => {
       <button
         type="button"
         onClick={toggle}
-        className="shrink-0 rounded-selector p-1 text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content cursor-pointer"
+        className="sidebar-fade-in shrink-0 rounded-selector p-1 text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content cursor-pointer"
         aria-label={t("nav.collapseSidebar")}
         title={t("nav.collapseSidebar")}
       >
@@ -144,7 +146,7 @@ export const ExpandSidebarButton = () => {
   if (!collapsed) return null
 
   return (
-    <div className="flex justify-center py-2">
+    <div className="sidebar-fade-in flex justify-center py-2">
       <button
         type="button"
         onClick={toggle}
@@ -164,7 +166,7 @@ export const AllClasses = ({ org }: { org: string }) => {
 
   if (collapsed) {
     return (
-      <div className="flex justify-center py-2 text-sm">
+      <div className="sidebar-fade-in flex justify-center py-2 text-sm">
         <Link
           to="/$org/classes"
           params={{ org }}
@@ -179,7 +181,7 @@ export const AllClasses = ({ org }: { org: string }) => {
   }
 
   return (
-    <div className="py-4 text-sm">
+    <div className="sidebar-fade-in py-4 text-sm">
       <Link
         to="/$org/classes"
         params={{ org }}
@@ -210,7 +212,7 @@ export const SidebarClassInfo = ({
   if (collapsed) return null
 
   return (
-    <div className="py-2">
+    <div className="sidebar-fade-in py-2">
       <h3 className="font-bold">
         {classInfo?.name ||
           classInfo?.short_name ||
