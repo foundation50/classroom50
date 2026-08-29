@@ -91,13 +91,20 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   // Track auto-dismiss timers so a keyed replace / manual dismiss clears them.
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
   const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Announcements landing inside one flush window are joined, not clobbered —
+  // a second announce() must never silently drop the first.
+  const pendingAnnouncements = useRef<string[]>([])
 
   const announce = useCallback((message: string) => {
     // Clear-then-set so repeating the same message re-announces (a live
     // region only fires on content change).
     setAnnouncement("")
+    pendingAnnouncements.current.push(message)
     if (announceTimer.current) clearTimeout(announceTimer.current)
-    announceTimer.current = setTimeout(() => setAnnouncement(message), 50)
+    announceTimer.current = setTimeout(() => {
+      setAnnouncement(pendingAnnouncements.current.join(" "))
+      pendingAnnouncements.current = []
+    }, 50)
   }, [])
 
   const clearTimer = useCallback((id: string) => {

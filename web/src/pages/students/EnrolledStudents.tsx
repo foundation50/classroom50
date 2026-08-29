@@ -754,10 +754,15 @@ const EnrolledStudents = ({
         {syncError}
       </AnimatedAlert>
       {/* Select-all explanation: inline above the table (Primer: feedback
-          near the control), cleared on the next selection interaction. */}
+          near the control). `show` re-derives against the current view so
+          the notice self-clears the moment a filter/search change makes
+          rows selectable again — a latch alone would turn stale. */}
       <AnimatedAlert
         tone="info"
-        show={noneSelectableNotice}
+        show={
+          noneSelectableNotice &&
+          shouldWarnNoneSelectable(filtered.length, selectableFiltered.length)
+        }
         className="mb-3 text-sm"
         onDismiss={() => setNoneSelectableNotice(false)}
       >

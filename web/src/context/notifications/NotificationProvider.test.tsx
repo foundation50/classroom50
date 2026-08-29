@@ -89,4 +89,30 @@ describe("NotificationProvider announce", () => {
     // No visible toast accompanies it.
     expect(container.querySelector(".toast .alert")).toBeNull()
   })
+
+  it("joins announcements fired inside one flush window instead of dropping", async () => {
+    function FireTwo() {
+      const { announce } = useToast()
+      return (
+        <button
+          onClick={() => {
+            announce("First done.")
+            announce("Second done.")
+          }}
+        >
+          fire
+        </button>
+      )
+    }
+    const { container } = render(
+      <NotificationProvider>
+        <FireTwo />
+      </NotificationProvider>,
+    )
+    const region = container.querySelector('div.sr-only[role="status"]')
+    await userEvent.click(screen.getByText("fire"))
+    await waitFor(() =>
+      expect(region?.textContent).toBe("First done. Second done."),
+    )
+  })
 })

@@ -57,6 +57,14 @@ export function alertToneRole(tone: AlertTone): "alert" | "status" {
   return tone === "error" ? "alert" : "status"
 }
 
+// One shared shape for "the outcome of the last action", rendered via
+// <OutcomeAlert>. Sites narrow the tone union in their own state types but
+// share this contract instead of re-declaring it inline.
+export type AlertOutcome = {
+  tone: AlertTone
+  message: string
+}
+
 export type AlertProps = {
   tone: AlertTone
   soft?: boolean

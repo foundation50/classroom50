@@ -23,7 +23,9 @@ import {
   FormField,
   Input,
   Heading,
+  OutcomeAlert,
 } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 
 export type EditClassroomFormValues = {
   name: string
@@ -40,7 +42,7 @@ type EditClassroomFormProps = {
   cl?: Classroom
   // The host page's save outcome, rendered inline above the actions (Primer:
   // post-submit feedback near the save button, not a corner toast).
-  saveOutcome?: { tone: "success" | "error"; message: string } | null
+  saveOutcome?: AlertOutcome | null
   // Fires on any edit so the host can clear a stale saveOutcome.
   onEdit?: () => void
 }
@@ -529,13 +531,7 @@ const EditClassroomForm = ({
             {t("classes.form.noChangesToSave")}
           </AnimatedAlert>
           {/* Save outcome from the host page, in the same near-actions slot. */}
-          <AnimatedAlert
-            tone={saveOutcome?.tone ?? "success"}
-            show={saveOutcome != null}
-            className="text-sm"
-          >
-            {saveOutcome?.message}
-          </AnimatedAlert>
+          <OutcomeAlert outcome={saveOutcome} className="text-sm" />
           <Card.Actions className="justify-end p-2">
             <form.Subscribe selector={(state) => [state.isSubmitting]}>
               {([isSubmitting]) => (

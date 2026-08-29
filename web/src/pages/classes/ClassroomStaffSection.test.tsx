@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { act, fireEvent, render, screen, cleanup } from "@testing-library/react"
 import type { GitHubUser } from "@/github-core/types"
 
 // Drive the defense-in-depth gate directly off the classroom role: a non-teacher
@@ -52,8 +52,14 @@ const noopMutation = { mutate: vi.fn(), isPending: false }
 vi.mock("@/hooks/mutations/useAddStaffMember", () => ({
   useAddStaffMember: () => noopMutation,
 }))
+// Rejectable so a test can drive the remove flow's rethrow-into-ConfirmModal
+// contract; resolved by default.
+const removeStaffMutation = {
+  mutateAsync: vi.fn(() => Promise.resolve()),
+  isPending: false,
+}
 vi.mock("@/hooks/mutations/useRemoveStaffMember", () => ({
-  default: () => noopMutation,
+  default: () => removeStaffMutation,
 }))
 vi.mock("@/hooks/mutations/useResendClassroomInvite", () => ({
   default: () => noopMutation,
@@ -89,6 +95,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   roleMock.mockReset()
+  removeStaffMutation.mutateAsync.mockClear()
+  removeStaffMutation.mutateAsync.mockImplementation(() => Promise.resolve())
   resetQueryData()
 })
 
@@ -150,5 +158,32 @@ describe("ClassroomStaffSection — teacher self-removal from the teacher team",
 
     expect(screen.queryByText("classes.staff.you")).toBeNull()
     expect(screen.getByTitle("classes.staff.removeRole")).toBeTruthy()
+  })
+})
+
+// Pins the converted feedback contract: a failed remove rethrows its
+// localized message into the ConfirmModal error slot (the flow's only
+// failure surface since the toast was dropped) and the dialog stays open.
+describe("ClassroomStaffSection — remove failure surfaces in the confirm dialog", () => {
+  it("renders the rethrown localized failure in-dialog and keeps it open", async () => {
+    roleMock.mockReturnValue({ role: "teacher" })
+    viewerData = { id: 1, login: "tina" }
+    membersByRole.set("classroom50-cs101-ta", [member("bob", 2)])
+    removeStaffMutation.mutateAsync.mockImplementation(() =>
+      Promise.reject(new Error("boom")),
+    )
+
+    render(<ClassroomStaffSection org="acme" classroom="cs101" />)
+    // Open the confirm from the row action, then confirm (single-step).
+    fireEvent.click(screen.getByTitle("classes.staff.removeRole"))
+    await act(async () => {
+      fireEvent.click(screen.getByText("classes.staff.removeRole"))
+    })
+
+    expect(removeStaffMutation.mutateAsync).toHaveBeenCalledWith("bob")
+    // The localized message (the t() key here) renders inside the dialog,
+    // which stays open for a retry — the row remains listed.
+    expect(screen.getByText("classes.staff.removeFailed")).toBeTruthy()
+    expect(screen.getByText("classes.staff.confirmRemoveTitle")).toBeTruthy()
   })
 })

@@ -52,13 +52,16 @@ export type { DropdownMenuProps } from "./DropdownMenu"
 export { SelectAllCheckbox } from "./SelectAllCheckbox"
 
 export { Alert, ALERT_TONE_ICON, alertToneClass, alertToneRole } from "./Alert"
-export type { AlertProps, AlertTone } from "./Alert"
+export type { AlertProps, AlertTone, AlertOutcome } from "./Alert"
 
 export { InlineMessage } from "./InlineMessage"
 export type { InlineMessageProps, InlineMessageTone } from "./InlineMessage"
 
 export { AnimatedAlert } from "./AnimatedAlert"
 export type { AnimatedAlertProps } from "./AnimatedAlert"
+
+export { OutcomeAlert } from "./OutcomeAlert"
+export type { OutcomeAlertProps } from "./OutcomeAlert"
 
 export { Collapse } from "./Collapse"
 

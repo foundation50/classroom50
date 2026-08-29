@@ -131,7 +131,9 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
 
         <Card.Actions className="mt-5 items-center justify-end gap-2">
           {acceptError && (
-            <InlineMessage tone="error" className="me-auto">
+            // role="alert" so the insertion is announced — this replaced an
+            // error toast, and no focus move carries the message.
+            <InlineMessage tone="error" role="alert" className="me-auto">
               {t("orgs.invites.acceptError", { org: org.login })}
             </InlineMessage>
           )}

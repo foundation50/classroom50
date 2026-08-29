@@ -27,6 +27,7 @@ import useGetAutogradeState from "@/hooks/useGetAutogradeState"
 import useSetAutogradeState from "@/hooks/mutations/useSetAutogradeState"
 import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import type { ToastTone } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
@@ -36,9 +37,10 @@ import type { AssignmentMode, SubmissionMode } from "@/types/classroom"
 // render as a banner at the top of the hub dialog (Primer: feedback for a
 // dialog action stays in the dialog) rather than as page-corner toasts.
 // Outside a provider the hook falls back to a toast, so the action rows keep
-// working if ever rendered standalone.
+// working if ever rendered standalone. The hub's sink is itself unmount-safe
+// (falls back to a toast once the hub closes) — see ManageSubmissionModal.
 export type SubmissionHubFeedback = {
-  tone: "info" | "success" | "warning" | "error"
+  tone: ToastTone
   message: string
 }
 

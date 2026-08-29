@@ -139,6 +139,25 @@ describe("OrgDetailsModal", () => {
     )
   })
 
+  it("renders a failed save as an in-dialog banner and stays in edit mode", async () => {
+    planDetails.mockReturnValue({
+      data: { name: "Old Name", description: "old" },
+    })
+    mutateAsync.mockRejectedValueOnce(new Error("boom"))
+    render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
+
+    await userEvent.click(screen.getByText("orgs.detailsModal.edit"))
+    await userEvent.click(screen.getByText("orgs.detailsModal.save"))
+
+    // The failure stays inside the dialog (no toast), edit mode is retained
+    // so the teacher can retry.
+    expect(
+      await screen.findByText(/orgs\.detailsModal\.saveError/),
+    ).toBeTruthy()
+    expect(notify).not.toHaveBeenCalled()
+    expect(screen.getByText("orgs.detailsModal.save")).toBeTruthy()
+  })
+
   it("defaults a bare website host to https:// on save", async () => {
     planDetails.mockReturnValue({ data: { name: "Acme", blog: "" } })
     render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)

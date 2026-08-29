@@ -18,6 +18,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireRole from "@/components/RequireRole"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Alert, EmphasisLtr } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 
 const EditClassroomContent = ({
   org,
@@ -31,10 +32,7 @@ const EditClassroomContent = ({
   const runSave = useSafeSubmit()
   // Save outcome, rendered inline near the form's actions (Primer: feedback
   // for a page form belongs next to it, not in a corner toast).
-  const [saveOutcome, setSaveOutcome] = useState<{
-    tone: "success" | "error"
-    message: string
-  } | null>(null)
+  const [saveOutcome, setSaveOutcome] = useState<AlertOutcome | null>(null)
   const { data: cl, isLoading: loadingClassroom } = useGetClassroom(
     org,
     classroom,

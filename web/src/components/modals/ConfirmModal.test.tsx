@@ -110,3 +110,65 @@ describe("ConfirmModal — children and confirmDisabled", () => {
     expect(onConfirm).toHaveBeenCalledTimes(1)
   })
 })
+
+// The rejection contract every converted feedback flow now relies on
+// (archive/delete classroom, staff remove, invite cleanup): a rejecting
+// onConfirm renders its message inside the dialog, keeps it open, and
+// re-enables confirm for a retry. Deleting the catch in a refactor would
+// silently destroy all failure feedback for those flows.
+describe("ConfirmModal — rejecting onConfirm", () => {
+  it("renders the thrown message in-dialog, stays open, and allows retry", async () => {
+    const onConfirm = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("classes.deleteFailed localized"))
+      .mockResolvedValueOnce(undefined)
+    const onClose = vi.fn()
+    render(
+      <ConfirmModal
+        open
+        needsConfirm={false}
+        title="title"
+        confirmText="confirm"
+        onConfirm={onConfirm}
+        onClose={onClose}
+      />,
+    )
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("components.confirmModal.confirm"))
+    })
+    expect(screen.getByText("classes.deleteFailed localized")).toBeTruthy()
+    expect(onClose).not.toHaveBeenCalled()
+
+    // The confirm re-enables and a retry that resolves closes the dialog.
+    const confirm = screen.getByText(
+      "components.confirmModal.confirm",
+    ) as HTMLButtonElement
+    expect(confirm.disabled).toBe(false)
+    await act(async () => {
+      fireEvent.click(confirm)
+    })
+    expect(onConfirm).toHaveBeenCalledTimes(2)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("falls back to the generic error for a non-Error rejection", async () => {
+    const onConfirm = vi.fn().mockRejectedValue("boom")
+    render(
+      <ConfirmModal
+        open
+        needsConfirm={false}
+        title="title"
+        confirmText="confirm"
+        onConfirm={onConfirm}
+        onClose={vi.fn()}
+      />,
+    )
+    await act(async () => {
+      fireEvent.click(screen.getByText("components.confirmModal.confirm"))
+    })
+    expect(
+      screen.getByText("components.confirmModal.genericError"),
+    ).toBeTruthy()
+  })
+})

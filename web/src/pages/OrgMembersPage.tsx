@@ -416,7 +416,18 @@ const OrgMembersPage = () => {
     if (!org || invitingKey) return
     setInvitingKey(row.key)
     try {
-      await runInviteMember(client, org, row, notify, () => refreshInvite(), t)
+      await runInviteMember(
+        client,
+        org,
+        row,
+        {
+          onSuccess: (message) =>
+            notify({ tone: "success", durationMs: 6000, message }),
+          onError: (message) => notify({ tone: "error", message }),
+        },
+        () => refreshInvite(),
+        t,
+      )
     } finally {
       setInvitingKey(null)
     }

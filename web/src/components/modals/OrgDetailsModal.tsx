@@ -138,6 +138,10 @@ function OrgDetailsModal({
     <Modal
       open={open}
       onClose={onClose}
+      // While the save is in flight the dialog is the error's only home
+      // (saveError renders here and reset-on-open wipes it), so a mid-save
+      // dismissal would silently lose the failure.
+      closeDisabled={updateProfile.isPending}
       size="2xl"
       title={<span className="block truncate">{heading}</span>}
       subtitle={

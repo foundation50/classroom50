@@ -8,13 +8,14 @@ import {
 } from "@/components/ui/icons"
 
 import {
-  AnimatedAlert,
   Badge,
   Button,
   Modal,
   ModalIcon,
+  OutcomeAlert,
   Spinner,
 } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 import type { Assignment } from "@/types/classroom"
 import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -60,10 +61,7 @@ export const TemplateAccessModal = ({
   // toast. Cleared when the refetch settles with the granted team present.
   const [granted, setGranted] = useState(false)
   // Outcome of the last Fix run, rendered as an in-dialog banner.
-  const [fixOutcome, setFixOutcome] = useState<{
-    tone: "success" | "error"
-    message: string
-  } | null>(null)
+  const [fixOutcome, setFixOutcome] = useState<AlertOutcome | null>(null)
 
   const template = assignment.template
   const inOrg = !!template && template.owner.toLowerCase() === org.toLowerCase()
@@ -182,13 +180,7 @@ export const TemplateAccessModal = ({
       }
     >
       <section className="mt-5">
-        <AnimatedAlert
-          tone={fixOutcome?.tone ?? "success"}
-          show={fixOutcome != null}
-          className="mb-4 text-sm"
-        >
-          {fixOutcome?.message}
-        </AnimatedAlert>
+        <OutcomeAlert outcome={fixOutcome} className="mb-4 text-sm" />
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-sm font-semibold text-base-content/80">
             {t("assignments.template.accessModal.templateHeading")}

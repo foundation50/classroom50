@@ -102,7 +102,9 @@ const MemberDetailModal = ({
   }
 
   const handleClose = () => {
-    if (working) return
+    // Both writes route failures into the in-dialog banner, which
+    // reset-on-open wipes — so dismissal mid-flight would lose them.
+    if (working || inviting) return
     onClose()
   }
 
@@ -127,18 +129,17 @@ const MemberDetailModal = ({
     setInviting(true)
     setActionError(null)
     try {
-      // Route the helper's error tone into the in-dialog banner; the success
-      // toast passes through (it must outlive the closing dialog).
       await runInviteMember(
         client,
         org,
         row,
-        (input) => {
-          if (input.tone === "error" && typeof input.message === "string") {
-            setActionError(input.message)
-          } else {
-            notify(input)
-          }
+        {
+          // Kept as a toast: the pending badge lags the eventually-consistent
+          // refetch, and this dialog is closing.
+          onSuccess: (message) =>
+            notify({ tone: "success", durationMs: 6000, message }),
+          // The dialog stays open on failure, so the error belongs inside it.
+          onError: setActionError,
         },
         onInvited,
         t,
@@ -199,7 +200,7 @@ const MemberDetailModal = ({
     <Modal
       open={open}
       onClose={handleClose}
-      closeDisabled={working}
+      closeDisabled={working || inviting}
       size="2xl"
       title={t("orgMembers.detailTitle")}
       footer={

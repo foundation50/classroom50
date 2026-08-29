@@ -2,7 +2,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { AnimatedAlert, Badge, Spinner, Toggle } from "@/components/ui"
+import { Badge, OutcomeAlert, Spinner, Toggle } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -134,10 +135,7 @@ const OrgActionsSection = ({
   // Partial/failed toggle outcome, rendered as a banner in this section
   // (Primer: feedback next to the control). A clean flip is evident from the
   // toggle itself and only announces to SR.
-  const [outcome, setOutcome] = useState<{
-    tone: "warning" | "error"
-    message: string
-  } | null>(null)
+  const [outcome, setOutcome] = useState<AlertOutcome | null>(null)
 
   const { data: mode, isLoading } = useGetOrgActionsMode(org)
   const mutation = useSetOrgActionsMode(org)
@@ -208,14 +206,11 @@ const OrgActionsSection = ({
         </div>
       ) : (
         <div className="space-y-4">
-          <AnimatedAlert
-            tone={outcome?.tone ?? "warning"}
-            show={outcome != null}
+          <OutcomeAlert
+            outcome={outcome}
             className="text-sm"
             onDismiss={() => setOutcome(null)}
-          >
-            {outcome?.message}
-          </AnimatedAlert>
+          />
           <ActionsUsagePanel org={org} />
 
           <label
@@ -283,7 +278,10 @@ const OrgActionsSection = ({
         description={t("orgSettings.actions.confirmBody")}
         confirmLabel={t("orgSettings.actions.confirmButton")}
         cancelLabel={t("common.cancel")}
-        onConfirm={() => applyMode("paused").then(() => undefined)}
+        // Through runToggle like the unpause path: it swallows the rejection
+        // after applyMode's onError has set the section banner, so the
+        // failure renders exactly once (ConfirmModal must not also catch it).
+        onConfirm={() => runToggle(() => applyMode("paused"))}
         onClose={() => setConfirmPause(false)}
       />
     </SettingsSection>

@@ -609,7 +609,11 @@ const PendingStaffRow = ({
         </div>
       </div>
       {rowError != null && (
-        <InlineMessage tone="error">{rowError}</InlineMessage>
+        // role="alert" so the insertion is announced — this replaced an
+        // error toast, and no focus move carries the message.
+        <InlineMessage tone="error" role="alert">
+          {rowError}
+        </InlineMessage>
       )}
     </li>
   )

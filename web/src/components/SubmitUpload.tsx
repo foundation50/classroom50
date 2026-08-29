@@ -293,7 +293,9 @@ export function SubmitUpload({
           {skippedFiles.length > 0 && (
             <div className="flex flex-col gap-1">
               {skippedFiles.map(({ tone, message }) => (
-                <InlineMessage key={message} tone={tone}>
+                // role="alert" so the insertion is announced — these replaced
+                // toasts, and there is no focus move to carry the message.
+                <InlineMessage key={message} tone={tone} role="alert">
                   {message}
                 </InlineMessage>
               ))}
