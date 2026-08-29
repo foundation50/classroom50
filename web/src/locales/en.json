@@ -1199,6 +1199,7 @@
       "reset": "Reset",
       "resetSection": "Reset this section to its default settings",
       "discardChanges": "Discard changes",
+      "noChangesToSave": "No changes to save.",
       "optional": "optional",
       "name": "Assignment name",
       "namePlaceholder": "e.g., Loops Assignment",
@@ -2382,6 +2383,7 @@
       "regenerate": "Regenerate",
       "creating": "Creating...",
       "createButton": "Create classroom",
+      "noChangesToSave": "No changes to save.",
       "saving": "Saving...",
       "saveButton": "Save classroom"
     },

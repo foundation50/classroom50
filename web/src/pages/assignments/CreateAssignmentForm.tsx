@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert, Button, InlineMessage } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
@@ -98,6 +98,9 @@ const CreateAssignmentForm = ({
   // Auto-prefill slug from name until the teacher edits it directly, so a
   // deliberate slug isn't clobbered by later name edits.
   const [slugTouched, setSlugTouched] = useState(false)
+  // Feedback for an unchanged edit-mode submit (the button stays enabled per
+  // Primer; the submit itself no-ops). Rendered only while still pristine.
+  const [noChangesNotice, setNoChangesNotice] = useState(false)
   // Whether the due-date picker is shown. Seeded from the initial value (Edit of
   // an assignment with a due starts checked); a due date is opt-in otherwise.
   // Unchecking clears due_date so the write path omits it (#195).
@@ -152,6 +155,15 @@ const CreateAssignmentForm = ({
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
+        // Unchanged edit-mode submit: a no-op with feedback, never a re-run.
+        // The button stays enabled (Primer), but this form's save has side
+        // effects (the publish workflow re-triggers), so "idempotent" must be
+        // enforced here rather than assumed.
+        if (edit && form.state.isDefaultValue) {
+          setNoChangesNotice(true)
+          return
+        }
+        setNoChangesNotice(false)
         // Validate up front so we can point the teacher at the first problem
         // regardless of how (or whether) the form library propagates the
         // submit-validator errors onto individual field DOM nodes.
@@ -240,6 +252,17 @@ const CreateAssignmentForm = ({
       </fieldset>
       <div className="divider" />
       <div className="card-actions justify-end p-2">
+        {noChangesNotice && (
+          <form.Subscribe selector={(state) => state.isDefaultValue}>
+            {(isDefaultValue) =>
+              isDefaultValue ? (
+                <InlineMessage tone="neutral">
+                  {t("assignments.form.noChangesToSave")}
+                </InlineMessage>
+              ) : null
+            }
+          </form.Subscribe>
+        )}
         {onCancel && (
           <Button
             type="button"

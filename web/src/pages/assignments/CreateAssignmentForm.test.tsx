@@ -480,8 +480,8 @@ describe("edit form save/discard lifecycle", () => {
 
   it("keeps Save enabled while pristine and after a successful save", async () => {
     // Primer saving guidance: never disable the save button for an unchanged
-    // form — an unchanged save is idempotent. The re-baseline after success
-    // still hides the Discard affordance (covered below).
+    // form. The unchanged submit itself is a no-op (covered below) — the
+    // enabled button is about focusability, not about re-running the save.
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderForm(onSubmit)
@@ -499,6 +499,27 @@ describe("edit form save/discard lifecycle", () => {
 
     // Still enabled after the save re-baselines.
     await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
+  })
+
+  it("makes an unchanged submit a no-op with feedback, never a re-run", async () => {
+    // The regression this pins: saving an untouched assignment settings form
+    // must not re-trigger the publish workflow.
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderForm(onSubmit)
+
+    await user.click(saveButton())
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText("assignments.form.noChangesToSave")).toBeTruthy()
+
+    // Editing clears the notice and a real change submits once.
+    const name = screen.getByRole("textbox", {
+      name: "assignments.form.name",
+    })
+    await user.type(name, " updated")
+    expect(screen.queryByText("assignments.form.noChangesToSave")).toBeNull()
+    await user.click(saveButton())
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it("keeps the form dirty and re-submittable when the save fails", async () => {

@@ -20,6 +20,7 @@ import {
   Card,
   EmphasisLtr,
   FormField,
+  InlineMessage,
   Input,
   Heading,
 } from "@/components/ui"
@@ -288,6 +289,9 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
   const [submitted, setSubmitted] = useState(false)
+  // Feedback for an unchanged submit (the button stays enabled per Primer;
+  // the submit itself no-ops). Rendered only while still pristine.
+  const [noChangesNotice, setNoChangesNotice] = useState(false)
   // Archived = read-only: disable settings fields + Save (Archive/Delete header
   // actions stay live). editClassroom enforces this server-side.
   const archived = isClassroomArchived(cl ?? {})
@@ -341,6 +345,13 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
+        // Unchanged submit: a no-op with feedback — saving identical values
+        // would still land a pointless config-repo commit in the audit trail.
+        if (form.state.isDefaultValue) {
+          setNoChangesNotice(true)
+          return
+        }
+        setNoChangesNotice(false)
         const formEl = e.currentTarget
         void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
@@ -493,6 +504,17 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           </div>
 
           <Card.Actions className="justify-end p-2">
+            {noChangesNotice && (
+              <form.Subscribe selector={(state) => state.isDefaultValue}>
+                {(isDefaultValue) =>
+                  isDefaultValue ? (
+                    <InlineMessage tone="neutral">
+                      {t("classes.form.noChangesToSave")}
+                    </InlineMessage>
+                  ) : null
+                }
+              </form.Subscribe>
+            )}
             <form.Subscribe selector={(state) => [state.isSubmitting]}>
               {([isSubmitting]) => (
                 <Button
