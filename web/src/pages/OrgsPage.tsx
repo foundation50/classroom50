@@ -485,7 +485,13 @@ const OrgsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.organizations"))
   const queryClient = useQueryClient()
-  const { data: orgs = [], isLoading, isFetching } = useGetOrgs()
+  const {
+    data: orgs = [],
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useGetOrgs()
   const { data: pendingInvites = [] } = usePendingOrgInvites()
 
   const { viewMode, sortKey, changeView, changeSort } =
@@ -608,6 +614,19 @@ const OrgsPage = () => {
                 cardClassName="col-span-12 h-36 md:col-span-6"
               />
             </SkeletonRegion>
+          </>
+        ) : isError ? (
+          // Never render the "no organizations yet — ask your teacher" empty
+          // state on a failed read: it misdiagnoses a load failure as a
+          // roster problem.
+          <>
+            <PageHeader title={t("orgs.headingCl50")} />
+            <Alert tone="error" className="items-start">
+              <span className="text-sm">{t("orgs.loadError")}</span>
+              <Button variant="ghost" size="sm" onClick={() => refetch()}>
+                {t("orgs.retry")}
+              </Button>
+            </Alert>
           </>
         ) : (
           <>

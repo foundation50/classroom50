@@ -5,6 +5,7 @@ import { Trans, useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
+import { GitHubAPIError } from "@/github-core/errors"
 import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
   DEFAULT_FILTERS,
@@ -117,8 +118,19 @@ export const TeacherAssignmentsView = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { data: classData, isLoading: assignmentsLoading } =
-    useGetClassroomAssignments(org, classroom)
+  const {
+    data: classData,
+    isLoading: assignmentsLoading,
+    error: assignmentsErrorObj,
+    refetch: refetchAssignments,
+  } = useGetClassroomAssignments(org, classroom)
+  // A missing assignments.json 404s — the legitimate zero for a brand-new
+  // classroom (same split as ClassroomCard). Only a non-404 failure must be
+  // surfaced as an error instead of the empty state.
+  const assignmentsNotFound =
+    assignmentsErrorObj instanceof GitHubAPIError &&
+    assignmentsErrorObj.status === 404
+  const assignmentsError = Boolean(assignmentsErrorObj) && !assignmentsNotFound
   // Authoritative student-role count for the header and the table denominator,
   // so neither counts teachers/TAs. The count comes from team membership
   // (one source); roster.csv identity is fetched by useStudentCount internally.
@@ -274,6 +286,8 @@ export const TeacherAssignmentsView = ({
           allAssignments={sourceAssignments}
           studentCount={studentCount}
           loading={assignmentsLoading}
+          loadError={assignmentsError}
+          onRetryLoad={() => void refetchAssignments()}
           archived={archived}
           canAuthor={canAuthor}
           sort={sort}

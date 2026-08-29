@@ -240,7 +240,10 @@ const CsvRosterContent = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { students, isLoading } = useGetStudents(org, classroom)
+  const { students, isLoading, isError, recheckRoster } = useGetStudents(
+    org,
+    classroom,
+  )
 
   return (
     <>
@@ -256,7 +259,12 @@ const CsvRosterContent = ({
           </span>
         }
       />
-      <CsvRosterView students={students} loading={isLoading} />
+      <CsvRosterView
+        students={students}
+        loading={isLoading}
+        loadError={isError}
+        onRetryLoad={recheckRoster}
+      />
     </>
   )
 }

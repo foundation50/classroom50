@@ -169,8 +169,19 @@ const ClassesPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.classes"))
   const { org } = useParams({ strict: false })
-  const { classes, isLoading: classesLoading } = useGetClasses(org)
-  const { isStaff, isNonStaff, isLoading: roleLoading } = useOrgStaff(org)
+  const {
+    classes,
+    isLoading: classesLoading,
+    isError: classesError,
+    refetch: refetchClasses,
+  } = useGetClasses(org)
+  const {
+    isStaff,
+    isNonStaff,
+    isLoading: roleLoading,
+    isError: roleError,
+    refetch: refetchRole,
+  } = useOrgStaff(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
   const { githubOrgRole } = useGitHubOrgRole()
@@ -208,6 +219,24 @@ const ClassesPage = () => {
           <ToolbarSkeleton />
           <CardGridSkeleton cardClassName="col-span-6 h-32 xl:col-span-4" />
         </SkeletonRegion>
+      ) : roleError ? (
+        // A settled role-read failure used to render neither list nor empty
+        // state — a silent blank region. Name the failure and offer retry.
+        <Alert tone="error" className="items-start">
+          <span className="text-sm">{t("classes.roleLoadError")}</span>
+          <Button variant="ghost" size="sm" onClick={() => refetchRole()}>
+            {t("classes.retry")}
+          </Button>
+        </Alert>
+      ) : isStaff && classesError ? (
+        // Never render the first-use "create your first classroom" pane on a
+        // failed read — it tells a teacher their classrooms are gone.
+        <Alert tone="error" className="items-start">
+          <span className="text-sm">{t("classes.loadError")}</span>
+          <Button variant="ghost" size="sm" onClick={() => refetchClasses()}>
+            {t("classes.retry")}
+          </Button>
+        </Alert>
       ) : (
         <>
           {classes.length === 0 && isStaff && <CreateClassroomPane org={org} />}

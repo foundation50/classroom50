@@ -107,6 +107,8 @@ const AssignmentsTable = ({
   allAssignments,
   studentCount,
   loading = false,
+  loadError = false,
+  onRetryLoad,
   archived = false,
   canAuthor = false,
   sort,
@@ -134,6 +136,11 @@ const AssignmentsTable = ({
   // the submission ratio. undefined while the count is still resolving.
   studentCount?: number
   loading?: boolean
+  // A failed (non-404) assignments.json read. Rendered as an error row with
+  // retry — never as the "No assignments created" empty state, which would
+  // tell a teacher their assignments are gone.
+  loadError?: boolean
+  onRetryLoad?: () => void
   // When archived, hide per-row mutating actions (edit/reuse/delete); viewing
   // stays available.
   archived?: boolean
@@ -264,7 +271,25 @@ const AssignmentsTable = ({
           animate="animate"
         >
           {loading && <SkeletonRows bars={SKELETON_BARS} />}
-          {!loading && !assignments?.length && (
+          {!loading && loadError && (
+            <tr>
+              <td colSpan={7} className="px-6 py-10 text-center">
+                <span
+                  role="alert"
+                  className="inline-flex items-center gap-2 text-sm text-error"
+                >
+                  <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
+                  {t("assignments.table.loadError")}
+                </span>
+                <div className="mt-3">
+                  <Button variant="ghost" size="sm" onClick={onRetryLoad}>
+                    {t("assignments.table.retry")}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          )}
+          {!loading && !loadError && !assignments?.length && (
             <tr>
               <td colSpan={7}>
                 <EmptyState
@@ -275,6 +300,7 @@ const AssignmentsTable = ({
             </tr>
           )}
           {!loading &&
+            !loadError &&
             assignments?.map((assignment) => (
               <ClickableTr key={assignment.slug} className="hover:bg-base-200">
                 <td

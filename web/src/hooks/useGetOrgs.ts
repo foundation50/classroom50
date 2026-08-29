@@ -58,6 +58,13 @@ const useGetOrgs = () => {
     // states in to keep the page's spinner covering the whole chain.
     isLoading: memberships.isLoading || summaries.isLoading,
     isFetching: memberships.isFetching || summaries.isFetching,
+    // Same folding on the failure side, so a failed memberships read can't
+    // masquerade as "no organizations" downstream.
+    isError: memberships.isError || summaries.isError,
+    refetch: () => {
+      void memberships.refetch()
+      void summaries.refetch()
+    },
   }
 }
 
