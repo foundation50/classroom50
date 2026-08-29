@@ -62,6 +62,10 @@ export type NotifyInput = {
 type NotificationContextValue = {
   notify: (input: NotifyInput) => string
   dismiss: (id: string) => void
+  // Screen-reader-only polite announcement, for outcomes that are visually
+  // evident (a row disappears, a badge flips) and so need no toast — Primer:
+  // success messaging sparingly, but the state change must still reach AT.
+  announce: (message: string) => void
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
@@ -83,8 +87,18 @@ const MAX_TOASTS = 5
 // keyed dedup, dismissible); migrating that onto notify()/useToast is a follow-up.
 export function NotificationProvider({ children }: PropsWithChildren) {
   const [toasts, setToasts] = useState<Toast[]>([])
+  const [announcement, setAnnouncement] = useState("")
   // Track auto-dismiss timers so a keyed replace / manual dismiss clears them.
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
+  const announceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const announce = useCallback((message: string) => {
+    // Clear-then-set so repeating the same message re-announces (a live
+    // region only fires on content change).
+    setAnnouncement("")
+    if (announceTimer.current) clearTimeout(announceTimer.current)
+    announceTimer.current = setTimeout(() => setAnnouncement(message), 50)
+  }, [])
 
   const clearTimer = useCallback((id: string) => {
     const timer = timers.current.get(id)
@@ -157,14 +171,24 @@ export function NotificationProvider({ children }: PropsWithChildren) {
     return () => {
       map.forEach((timer) => clearTimeout(timer))
       map.clear()
+      if (announceTimer.current) clearTimeout(announceTimer.current)
     }
   }, [])
 
-  const value = useMemo(() => ({ notify, dismiss }), [notify, dismiss])
+  const value = useMemo(
+    () => ({ notify, dismiss, announce }),
+    [notify, dismiss, announce],
+  )
 
   return (
     <NotificationContext.Provider value={value}>
       {children}
+      {/* Always rendered (a live region must exist before it changes to be
+          announced); visually hidden — the visible outcome is the UI change
+          the announcement describes. */}
+      <div role="status" aria-live="polite" className="sr-only">
+        {announcement}
+      </div>
       <ToastViewport toasts={toasts} onDismiss={dismiss} />
     </NotificationContext.Provider>
   )

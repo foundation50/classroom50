@@ -3,7 +3,14 @@ import { useEffect, useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
 
-import { Button, FormField, Input, Modal, Textarea } from "@/components/ui"
+import {
+  AnimatedAlert,
+  Button,
+  FormField,
+  Input,
+  Modal,
+  Textarea,
+} from "@/components/ui"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -50,11 +57,12 @@ function OrgDetailsModal({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   // Ties the footer's submit button (outside the <form> element) to the form.
   const formId = useId()
   const { org, membership } = summary
   const [editing, setEditing] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
 
   // Fetch on the login unconditionally (not gated on `open`): same
   // ["github","orgs",login] key the card already fetches, so React Query
@@ -89,19 +97,17 @@ function OrgDetailsModal({
       else update.blog = normalizedBlog
       try {
         await updateProfile.mutateAsync(update)
-        notify({
-          tone: "success",
-          durationMs: 4000,
-          message: t("orgs.detailsModal.saved", { org: heading }),
-        })
+        // The modal flips back to view mode with the fresh values — SR
+        // announcement only (Primer: success messaging sparingly).
+        announce(t("orgs.detailsModal.saved", { org: heading }))
         setEditing(false)
       } catch (err) {
-        notify({
-          tone: "error",
-          message: t("orgs.detailsModal.saveError", {
+        // A dialog-action failure belongs inside the dialog, not a page toast.
+        setSaveError(
+          t("orgs.detailsModal.saveError", {
             error: err instanceof Error ? err.message : "",
           }),
-        })
+        )
       }
     },
   })
@@ -110,17 +116,22 @@ function OrgDetailsModal({
     // Reset to the latest fetched values — details may have loaded after the
     // form initialized with empty defaults.
     form.reset(currentValues())
+    setSaveError(null)
     setEditing(true)
   }
 
   const stopEditing = () => {
     form.reset(currentValues())
+    setSaveError(null)
     setEditing(false)
   }
 
   // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (open) setEditing(false)
+    if (open) {
+      setEditing(false)
+      setSaveError(null)
+    }
   }, [open])
 
   return (
@@ -208,9 +219,17 @@ function OrgDetailsModal({
           className="mt-5 flex flex-col gap-4"
           onSubmit={(e) => {
             e.preventDefault()
+            setSaveError(null)
             void form.handleSubmit()
           }}
         >
+          <AnimatedAlert
+            tone="error"
+            show={saveError != null}
+            className="text-sm"
+          >
+            {saveError}
+          </AnimatedAlert>
           <form.Field name="name">
             {(field) => (
               <FormField

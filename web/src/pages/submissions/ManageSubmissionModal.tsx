@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr } from "@/components/ui"
+import { AnimatedAlert, Badge, Modal, MonoLtr } from "@/components/ui"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
@@ -13,7 +13,9 @@ import {
 } from "@/components/modals/collaboratorHelpers"
 import {
   SubmissionActionList,
+  SubmissionHubFeedbackContext,
   type SubmissionActionListProps,
+  type SubmissionHubFeedback,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { formatSubmissionDateTime as formatDateTime } from "@/util/formatDate"
@@ -285,6 +287,9 @@ export const ManageSubmissionModal = ({
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
+  // Outcome of the last action row, rendered as a banner at the top of the
+  // hub (Primer: feedback for a dialog action stays in the dialog).
+  const [feedback, setFeedback] = useState<SubmissionHubFeedback | null>(null)
 
   // Lifted here (not in SubmissionDetails) so the repo's default-branch tip can
   // link both the "Last push" row and the "View latest commit" action. Only
@@ -334,6 +339,14 @@ export const ManageSubmissionModal = ({
         ) : undefined
       }
     >
+      <AnimatedAlert
+        tone={feedback?.tone ?? "info"}
+        show={feedback != null}
+        className="mt-3 text-sm"
+        onDismiss={() => setFeedback(null)}
+      >
+        {feedback?.message}
+      </AnimatedAlert>
       {repoHref ? (
         <a
           className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"
@@ -366,14 +379,16 @@ export const ManageSubmissionModal = ({
       ) : null}
 
       <div className="mt-4 divide-y divide-base-200">
-        <SubmissionActionList
-          {...action}
-          latestCommitHref={latestCommitHref}
-          repoPrivate={repoData?.private}
-          onManageAccess={
-            action.onManageAccess ? handleManageAccess : undefined
-          }
-        />
+        <SubmissionHubFeedbackContext.Provider value={setFeedback}>
+          <SubmissionActionList
+            {...action}
+            latestCommitHref={latestCommitHref}
+            repoPrivate={repoData?.private}
+            onManageAccess={
+              action.onManageAccess ? handleManageAccess : undefined
+            }
+          />
+        </SubmissionHubFeedbackContext.Provider>
         {isGroup && onManageMembers ? (
           <ActionListRow
             icon={PeopleIcon}

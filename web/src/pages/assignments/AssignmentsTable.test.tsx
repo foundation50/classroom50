@@ -42,7 +42,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 // the table test doesn't exercise notifications, so stub the hook rather than
 // wrapping every render in a provider.
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: () => {} }),
+  useToast: () => ({ notify: () => {}, announce: () => {} }),
 }))
 
 // The modal is exercised in its own test; here we stub it to a marker so the

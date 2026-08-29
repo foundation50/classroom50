@@ -42,7 +42,7 @@ vi.mock("@/hooks/mutations/useSetScoreOverride", () => ({
   }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: vi.fn(), announce: vi.fn() }),
 }))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),

@@ -19,8 +19,9 @@ vi.mock("@/hooks/mutations/useUpdateOrgProfile", () => ({
 }))
 
 const notify = vi.fn()
+const announce = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify, dismiss: vi.fn() }),
+  useToast: () => ({ notify, announce, dismiss: vi.fn() }),
 }))
 
 // happy-dom lacks <dialog> showModal/close; stub them so <Modal> renders open.
@@ -130,8 +131,11 @@ describe("OrgDetailsModal", () => {
     expect(mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ name: "New Name" }),
     )
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "success" }),
+    // Evident success (the modal flips back to view mode): no toast, just
+    // the SR announcement.
+    expect(notify).not.toHaveBeenCalled()
+    expect(announce).toHaveBeenCalledWith(
+      expect.stringContaining("orgs.detailsModal.saved"),
     )
   })
 

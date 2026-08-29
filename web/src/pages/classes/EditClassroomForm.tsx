@@ -123,7 +123,7 @@ const ArchiveClassroomButton = ({
   archived: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const [open, setOpen] = useState(false)
 
   // A pure archive/unarchive write: editClassroom preserves name/term when
@@ -172,32 +172,27 @@ const ArchiveClassroomButton = ({
         onConfirm={async () => {
           try {
             await archiveMutation.mutateAsync(archived)
-            notify({
-              tone: "success",
-              durationMs: 5000,
-              message: archived
+            // The page state flips in place — SR announcement only.
+            announce(
+              archived
                 ? t("classes.unarchivedToast", { classroom })
                 : t("classes.archivedToast", { classroom }),
-            })
+            )
           } catch (err) {
-            notify({
-              tone: "error",
-              message: archived
-                ? t("classes.unarchiveFailed", {
-                    classroom,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  })
-                : t("classes.archiveFailed", {
-                    classroom,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  }),
-            })
+            // Rethrow with localized copy so the failure surfaces inside the
+            // confirm dialog (Primer: dialog errors stay in the dialog).
+            throw new Error(
+              t(
+                archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
+                {
+                  classroom,
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : t("classes.somethingWentWrong"),
+                },
+              ),
+            )
           }
         }}
         onClose={() => setOpen(false)}
@@ -258,6 +253,8 @@ const CleanupInviteDataButton = ({
         onConfirm={async () => {
           try {
             const result = await purgeMutation.mutateAsync()
+            // Kept as a toast: the recovered/purged counts aren't evident
+            // anywhere in the UI once the dialog closes.
             notify({
               tone: "success",
               durationMs: 6000,
@@ -267,15 +264,15 @@ const CleanupInviteDataButton = ({
               }),
             })
           } catch (err) {
-            notify({
-              tone: "error",
-              message: t("classes.inviteCleanup.failed", {
+            // Surfaces inside the confirm dialog rather than a corner toast.
+            throw new Error(
+              t("classes.inviteCleanup.failed", {
                 error:
                   err instanceof Error
                     ? err.message
                     : t("classes.somethingWentWrong"),
               }),
-            })
+            )
           }
         }}
         onClose={() => setOpen(false)}

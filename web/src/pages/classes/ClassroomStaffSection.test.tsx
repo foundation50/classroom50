@@ -17,7 +17,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({ request: vi.fn() }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: vi.fn(), announce: vi.fn() }),
 }))
 
 // Per-query-key data so a test can seed team members (to render StaffMemberRow)

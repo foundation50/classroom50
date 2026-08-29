@@ -15,7 +15,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 
 const notify = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify, dismiss: vi.fn() }),
+  useToast: () => ({ notify, announce: vi.fn(), dismiss: vi.fn() }),
 }))
 
 const mutateAsync = vi.fn()
@@ -145,14 +145,16 @@ describe("SubmitUpload", () => {
     expect(await screen.findByText("solution/src/util.c")).toBeTruthy()
   })
 
-  it("rejects a reserved control path with a warning toast", () => {
+  it("rejects a reserved control path with an in-modal message", () => {
     render(<SubmitUpload org="acme" repo="r" assignment="hw" />)
     openModal()
     dropFlat([drop(".classroom50.yaml"), drop("ok.py")])
 
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "warning" }),
-    )
+    // The skip is reported inside the open dialog, not as a page toast.
+    expect(
+      screen.getByText(/submissions\.student\.upload\.reservedPath/),
+    ).toBeTruthy()
+    expect(notify).not.toHaveBeenCalled()
     expect(screen.getByText("ok.py")).toBeTruthy()
     expect(screen.queryByText(".classroom50.yaml")).toBeNull()
   })

@@ -30,7 +30,7 @@ vi.mock("@/context/githubOrgRole/GitHubOrgRoleProvider", () => ({
 
 const notify = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify, dismiss: vi.fn() }),
+  useToast: () => ({ notify, announce: vi.fn(), dismiss: vi.fn() }),
 }))
 
 const listRepoTeams = vi.fn()
@@ -168,7 +168,7 @@ describe("TemplateAccessModal", () => {
     )
   })
 
-  it("toasts success and disables fix after a clean grant (no re-flash)", async () => {
+  it("shows an in-modal success and disables fix after a clean grant (no re-flash)", async () => {
     orgRole = "owner"
     // Student team absent, so Fix starts enabled.
     listRepoTeams.mockResolvedValue([])
@@ -183,9 +183,11 @@ describe("TemplateAccessModal", () => {
     const onSuccess = reconcileMutate.mock.calls[0][1].onSuccess
     act(() => onSuccess({ warning: undefined }))
 
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "success" }),
-    )
+    // Feedback stays inside the open dialog rather than firing a page toast.
+    expect(
+      screen.getByText("assignments.template.reconcile.success"),
+    ).toBeTruthy()
+    expect(notify).not.toHaveBeenCalled()
     // Even though the eventually-consistent list is still empty, the button
     // stays disabled and the empty state is suppressed — no post-success
     // re-flash / re-enable.
@@ -199,7 +201,7 @@ describe("TemplateAccessModal", () => {
     ).toBeNull()
   })
 
-  it("toasts the warning and keeps fix enabled when the grant fails", async () => {
+  it("shows the in-modal failure and keeps fix enabled when the grant fails", async () => {
     orgRole = "owner"
     listRepoTeams.mockResolvedValue([])
     renderModal()
@@ -213,9 +215,10 @@ describe("TemplateAccessModal", () => {
     const onSuccess = reconcileMutate.mock.calls[0][1].onSuccess
     act(() => onSuccess({ warning: "student grant failed" }))
 
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "error" }),
-    )
+    expect(
+      screen.getByText(/assignments\.template\.reconcile\.failed/),
+    ).toBeTruthy()
+    expect(notify).not.toHaveBeenCalled()
     // A failed grant must not latch "satisfied" — the owner can retry.
     expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(false)
   })

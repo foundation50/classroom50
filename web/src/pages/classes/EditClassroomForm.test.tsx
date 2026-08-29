@@ -14,7 +14,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 
 const notify = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify }),
+  useToast: () => ({ notify, announce: vi.fn() }),
 }))
 
 // The hook under the call site: mutateAsync resolves with whatever the current

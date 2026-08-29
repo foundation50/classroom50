@@ -10,6 +10,7 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import {
+  AnimatedAlert,
   Badge,
   Button,
   EmphasisLtr,
@@ -64,11 +65,13 @@ const MemberDetailModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const [confirming, setConfirming] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [working, setWorking] = useState(false)
   const [inviting, setInviting] = useState(false)
+  // Failure of the in-dialog remove action, rendered as an in-dialog banner.
+  const [removeError, setRemoveError] = useState<string | null>(null)
 
   // Retain the last non-null row so the fading dialog keeps its content after
   // the parent clears the selection (close-animation note in ui/Modal).
@@ -84,6 +87,7 @@ const MemberDetailModal = ({
     setConfirming(false)
     setConfirmingInvite(false)
     setInviting(false)
+    setRemoveError(null)
   }, [open])
 
   // Disarm the confirm panels during render when the row identity changes
@@ -132,37 +136,39 @@ const MemberDetailModal = ({
   const handleRemove = async () => {
     if (working) return
     setWorking(true)
+    setRemoveError(null)
     try {
       const result = await removeMemberFromOrg(client, { org, row }, t)
       if (result.warnings.length > 0) {
+        // Kept as a toast: it outlives the closing dialog, and the partial
+        // outcome isn't evident from the row update alone.
         notify({
           tone: "warning",
           durationMs: 8000,
           message: result.warnings.join(" "),
         })
       } else {
-        notify({
-          tone: "success",
-          durationMs: 6000,
-          message: result.unenrolledClassrooms.length
+        // The member row disappears from the list — SR announcement only.
+        announce(
+          result.unenrolledClassrooms.length
             ? t("orgMembers.removedWithUnenroll", {
                 label,
                 org,
                 count: result.unenrolledClassrooms.length,
               })
             : t("orgMembers.removed", { label, org }),
-        })
+        )
       }
       onRemoved(result.removed, result.unenrolledClassrooms)
     } catch (err) {
-      notify({
-        tone: "error",
-        message: t("orgMembers.removeFailed", {
+      // The dialog stays open on failure, so the error belongs inside it.
+      setRemoveError(
+        t("orgMembers.removeFailed", {
           label,
           reason:
             err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
         }),
-      })
+      )
     } finally {
       setWorking(false)
       setConfirming(false)
@@ -206,6 +212,13 @@ const MemberDetailModal = ({
       }
     >
       <div className="mt-4 flex flex-col gap-4">
+        <AnimatedAlert
+          tone="error"
+          show={removeError != null}
+          className="text-sm"
+        >
+          {removeError}
+        </AnimatedAlert>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <Avatar
             name={row.name || label}

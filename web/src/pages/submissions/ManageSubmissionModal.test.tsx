@@ -49,7 +49,7 @@ vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
   default: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: vi.fn(), announce: vi.fn() }),
 }))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),

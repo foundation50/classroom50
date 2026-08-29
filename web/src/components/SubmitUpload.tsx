@@ -65,39 +65,49 @@ export function SubmitUpload({
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Picked[]>([])
   const [noFilesError, setNoFilesError] = useState(false)
+  // Files skipped by the last add (unsafe or reserved paths), surfaced inside
+  // the open dialog rather than as page toasts. Replaced wholesale on each
+  // add so the list always describes the most recent pick.
+  const [skippedFiles, setSkippedFiles] = useState<
+    { tone: "error" | "warning"; message: string }[]
+  >([])
   const submitting = mutation.isPending
 
   const addFiles = (files: PickedFile[]) => {
     setNoFilesError(false)
+    const skipped: { tone: "error" | "warning"; message: string }[] = []
+    const accepted: Picked[] = []
+    for (const { file, relativePath } of files) {
+      let path: string
+      try {
+        path = normalizeRepoPath(relativePath)
+      } catch {
+        // An unsafe path (traversal) is dropped and reported rather than
+        // silently included.
+        skipped.push({
+          tone: "error",
+          message: t("submissions.student.upload.unsafePath", {
+            name: relativePath,
+          }),
+        })
+        continue
+      }
+      // Reject reserved control paths (.github/**, .classroom50.yaml): the
+      // domain preserves the real ones, so an upload here would be ignored.
+      if (isReservedUploadPath(path)) {
+        skipped.push({
+          tone: "warning",
+          message: t("submissions.student.upload.reservedPath", { path }),
+        })
+        continue
+      }
+      accepted.push({ path, file, key: `${path}:${file.lastModified}` })
+    }
+    setSkippedFiles(skipped)
     setPicked((prev) => {
       const byPath = new Map(prev.map((p) => [p.path, p]))
-      for (const { file, relativePath } of files) {
-        let path: string
-        try {
-          path = normalizeRepoPath(relativePath)
-        } catch {
-          // An unsafe path (traversal) is dropped with a toast rather than
-          // silently included.
-          notify({
-            tone: "error",
-            message: t("submissions.student.upload.unsafePath", {
-              name: relativePath,
-            }),
-          })
-          continue
-        }
-        // Reject reserved control paths (.github/**, .classroom50.yaml): the
-        // domain preserves the real ones, so an upload here would be ignored.
-        if (isReservedUploadPath(path)) {
-          notify({
-            tone: "warning",
-            message: t("submissions.student.upload.reservedPath", { path }),
-          })
-          continue
-        }
-        // Last pick of a path wins (re-uploading a file replaces the prior one).
-        byPath.set(path, { path, file, key: `${path}:${file.lastModified}` })
-      }
+      // Last pick of a path wins (re-uploading a file replaces the prior one).
+      for (const p of accepted) byPath.set(p.path, p)
       return Array.from(byPath.values()).sort((a, b) =>
         a.path.localeCompare(b.path),
       )
@@ -118,6 +128,7 @@ export function SubmitUpload({
   const openModal = () => {
     setPicked([])
     setNoFilesError(false)
+    setSkippedFiles([])
     setOpen(true)
   }
 
@@ -133,6 +144,8 @@ export function SubmitUpload({
         picked.map(({ path, file }) => ({ path, file })),
       )
       setOpen(false)
+      // Kept as a toast: the dialog is closing and grading continues in the
+      // background, so the outcome isn't otherwise evident.
       notify({
         tone: "success",
         durationMs: 6000,
@@ -275,6 +288,16 @@ export function SubmitUpload({
               buttonLabel={t("submissions.student.upload.choose")}
               disabled={submitting}
             />
+          )}
+
+          {skippedFiles.length > 0 && (
+            <div className="flex flex-col gap-1">
+              {skippedFiles.map(({ tone, message }) => (
+                <InlineMessage key={message} tone={tone}>
+                  {message}
+                </InlineMessage>
+              ))}
+            </div>
           )}
 
           {noFilesError && (

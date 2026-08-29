@@ -22,7 +22,7 @@ vi.mock("@/hooks/useEnsureTeam", () => ({
 
 const notify = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify }),
+  useToast: () => ({ notify, announce: vi.fn() }),
 }))
 
 // Both mutation hooks are stubbed so the test asserts which backend a role
