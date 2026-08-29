@@ -22,6 +22,13 @@ import {
   bulkInviteByEmail,
   resendClassroomInvite,
   retireEmailInvite,
+  linkRosterRowToMember,
+  removeUnlinkedRows,
+  unlinkedRowRef,
+  UnlinkedRowNotFoundError,
+  UnlinkedRowAmbiguousError,
+  MemberNotActiveError,
+  MemberAlreadyOnRosterError,
   type StudentCsvRow,
 } from "@/domain/students"
 import { cancelOrgInvitation } from "@/github-core/mutations"
@@ -49,10 +56,12 @@ import {
   Badge,
   Button,
   Checkbox,
+  Combobox,
   EmphasisLtr,
   Modal,
   Select,
 } from "@/components/ui"
+import type { GitHubUser } from "@/github-core/types"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -75,6 +84,7 @@ const RosterMemberModal = ({
   teamSlugByRole,
   row: rowProp,
   canManage: canManageProp = true,
+  linkCandidates = [],
   isSelf = false,
   onClose,
   onSaved,
@@ -98,6 +108,10 @@ const RosterMemberModal = ({
   // hidden), so those actions are hidden with an explanatory note rather than
   // rendered as buttons that silently no-op.
   canManage?: boolean
+  // Org members the link picker may offer for an UNLINKED row (the parent
+  // already excludes members claiming another roster row). Empty when org
+  // membership is unreadable — the picker then explains instead of listing.
+  linkCandidates?: GitHubUser[]
   // True when this row IS the signed-in viewer. A viewer can't change their own
   // role here: demoting yourself off teacher would revoke your own org-owner
   // access mid-change (the mutation refuses it too — this hides the control so
@@ -129,6 +143,14 @@ const RosterMemberModal = ({
   const [submitting, setSubmitting] = useState(false)
   const [resolving, setResolving] = useState(false)
   const [changingRole, setChangingRole] = useState(false)
+  // Unlinked-row reconciliation: the link picker's text/open/selection, the
+  // in-flight link/remove, and the remove confirmation.
+  const [linkQuery, setLinkQuery] = useState("")
+  const [linkOpen, setLinkOpen] = useState(false)
+  const [linkTarget, setLinkTarget] = useState<GitHubUser | null>(null)
+  const [linking, setLinking] = useState(false)
+  const [removingRow, setRemovingRow] = useState(false)
+  const [confirmingRemoveRow, setConfirmingRemoveRow] = useState(false)
   // The role selected in the enrolled-row role dropdown (null = matches current,
   // no pending change). Teacher target requires the owner-grant confirmation.
   const [pendingRole, setPendingRole] = useState<ClassroomRole | null>(null)
@@ -147,7 +169,9 @@ const RosterMemberModal = ({
     resending ||
     cancelling ||
     resolving ||
-    changingRole
+    changingRole ||
+    linking ||
+    removingRow
 
   const handleClose = () => {
     if (busy) return
@@ -163,6 +187,10 @@ const RosterMemberModal = ({
     setPendingRole(null)
     setRoleOwnerConfirmed(false)
     setEditingProfile(false)
+    setLinkQuery("")
+    setLinkOpen(false)
+    setLinkTarget(null)
+    setConfirmingRemoveRow(false)
   }, [open])
 
   // Retain the last non-null row so the fading dialog keeps its content after
@@ -189,6 +217,10 @@ const RosterMemberModal = ({
     setConfirmingCancel(false)
     setConfirmingUnenroll(false)
     setEditingProfile(false)
+    setLinkQuery("")
+    setLinkOpen(false)
+    setLinkTarget(null)
+    setConfirmingRemoveRow(false)
   }
 
   const row = rowProp ?? lastRow
@@ -247,6 +279,10 @@ const RosterMemberModal = ({
     typeof row.invitation_id === "number"
   const needsRole = canManage && row.state === "needs_attention_in_org"
   const needsInvite = canManage && row.state === "needs_attention_not_in_org"
+  // An UNLINKED row (no GitHub identity) offers exactly two actions: link it
+  // to an org member, or remove it. Everything identity-keyed above is
+  // structurally unavailable (no username/id, no invitation).
+  const canLink = canManage && row.state === "unlinked"
   // Unenroll drops a roster.csv row + student-team membership — a student-only
   // action. Hidden for a staff-only row (nothing to unenroll from the roster),
   // and for a row unenroll could never match: a pending email invite carries
@@ -524,6 +560,90 @@ const RosterMemberModal = ({
     }
   }
 
+  // Typed domain errors -> teacher-actionable copy; anything else falls back
+  // to the generic link failure with the raw detail.
+  const linkErrorMessage = (err: unknown): string => {
+    if (err instanceof UnlinkedRowNotFoundError)
+      return t("students.linkRowGone", { label: displayName })
+    if (err instanceof UnlinkedRowAmbiguousError)
+      return t("students.linkRowAmbiguous", { label: displayName })
+    if (err instanceof MemberNotActiveError)
+      return t("students.linkMemberNotActive", { login: err.login })
+    if (err instanceof MemberAlreadyOnRosterError)
+      return t("students.linkMemberClaimed", { login: err.login })
+    return t("students.linkFailed", {
+      label: displayName,
+      error: getErrorMessage(err),
+    })
+  }
+
+  const handleLink = async () => {
+    if (linking || !linkTarget) return
+    setLinking(true)
+    try {
+      const result = await linkRosterRowToMember(client, {
+        org,
+        classroom,
+        rowRef: unlinkedRowRef(row),
+        member: { id: linkTarget.id, login: linkTarget.login },
+      })
+      if (result.teamAdd !== "ok") {
+        // Linked, but not on the classroom team yet — the row now renders as
+        // needs-attention, whose assign action is the retry.
+        onError(
+          row.key,
+          t("students.linkTeamAddFailed", { login: linkTarget.login }),
+        )
+      }
+      onChanged(row.key)
+      onClose()
+    } catch (err) {
+      onError(row.key, linkErrorMessage(err))
+    } finally {
+      setLinking(false)
+    }
+  }
+
+  const handleRemoveRow = async () => {
+    if (removingRow) return
+    setRemovingRow(true)
+    try {
+      const result = await removeUnlinkedRows(client, {
+        org,
+        classroom,
+        rowRefs: [unlinkedRowRef(row)],
+      })
+      if (result.removed === 0) {
+        onError(row.key, t("students.linkRowGone", { label: displayName }))
+        return
+      }
+      onChanged(row.key)
+      onClose()
+    } catch (err) {
+      onError(
+        row.key,
+        t("students.removeRowFailed", {
+          label: displayName,
+          error: getErrorMessage(err),
+        }),
+      )
+    } finally {
+      setRemovingRow(false)
+      setConfirmingRemoveRow(false)
+    }
+  }
+
+  // Picker options: the (already claim-filtered) candidates narrowed by the
+  // typed query against login and display name.
+  const linkQueryKey = linkQuery.trim().toLowerCase()
+  const linkItems = linkQueryKey
+    ? linkCandidates.filter(
+        (m) =>
+          m.login.toLowerCase().includes(linkQueryKey) ||
+          (m.name ?? "").toLowerCase().includes(linkQueryKey),
+      )
+    : linkCandidates
+
   return (
     <Modal
       open={open}
@@ -620,6 +740,98 @@ const RosterMemberModal = ({
           <p className="text-sm text-base-content/70">
             {t("students.manageOwnerOnly")}
           </p>
+        ) : null}
+
+        {/* Unlinked-row reconciliation: link the row to an org member, or
+            remove it. The picker offers only unclaimed active members; the
+            actual link re-proves everything at commit time (domain guards). */}
+        {canLink ? (
+          <section className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-200/40 p-4">
+            <p className="text-sm text-base-content/80">
+              {t("students.linkIntro")}
+            </p>
+            <div className="flex items-start gap-2">
+              <Combobox
+                id="roster-link-member"
+                className="grow"
+                label={t("students.linkMemberLabel")}
+                placeholder={t("students.linkMemberPlaceholder")}
+                value={linkQuery}
+                onInputChange={(value) => {
+                  setLinkQuery(value)
+                  setLinkTarget(null)
+                }}
+                open={linkOpen}
+                onOpenChange={setLinkOpen}
+                items={linkItems.slice(0, 30)}
+                getItemKey={(m) => m.login}
+                getItemLabel={(m) => m.login}
+                renderItem={(m) => (
+                  <span className="flex flex-col">
+                    <span className="font-mono text-sm">@{m.login}</span>
+                    {m.name ? (
+                      <span className="text-xs text-base-content/60">
+                        {m.name}
+                      </span>
+                    ) : null}
+                  </span>
+                )}
+                onSelect={(m) => {
+                  setLinkTarget(m)
+                  setLinkQuery(m.login)
+                }}
+                emptyState={t("students.linkMemberEmpty")}
+              />
+              <Button
+                variant="primary"
+                loading={linking}
+                loadingLabel={t("common.working")}
+                disabled={busy || !linkTarget}
+                onClick={() => void handleLink()}
+              >
+                {t("students.linkMemberAction")}
+              </Button>
+            </div>
+            {confirmingRemoveRow ? (
+              <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
+                <p className="text-base-content/80">
+                  {t("students.confirmRemoveRowBody", { label: displayName })}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={removingRow}
+                    onClick={() => setConfirmingRemoveRow(false)}
+                  >
+                    {t("common.cancel")}
+                  </Button>
+                  <Button
+                    variant="error"
+                    size="sm"
+                    loading={removingRow}
+                    loadingLabel={t("common.working")}
+                    disabled={removingRow}
+                    onClick={() => void handleRemoveRow()}
+                  >
+                    {t("students.removeRowAction")}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex justify-end">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-error hover:bg-error/10"
+                  disabled={busy}
+                  onClick={() => setConfirmingRemoveRow(true)}
+                >
+                  {t("students.removeRowAction")}
+                </Button>
+              </div>
+            )}
+          </section>
         ) : null}
 
         {/* Inline confirmations for the enrollment actions above. */}

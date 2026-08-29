@@ -35,6 +35,7 @@ import {
   normalizeStudentRow,
   parseRosterCsv,
   stringifyStudentsCsv,
+  ROSTER_STATUS_UNLINKED,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
@@ -211,7 +212,10 @@ export async function removeEmailInviteRows(
           !(
             targets.has(normalizeInviteEmail(row.email ?? "")) &&
             !row.username.trim() &&
-            resolveGitHubId(row.github_id) === null
+            resolveGitHubId(row.github_id) === null &&
+            // A teacher-kept row survives the invite lifecycle: cancelling the
+            // invitation returns it to plain "unlinked" instead of deleting it.
+            row.status.trim() !== ROSTER_STATUS_UNLINKED
           ),
       )
       const changed = rows.length - nextStudents.length

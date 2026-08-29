@@ -4,6 +4,7 @@ import {
   ChevronDownIcon,
   PaperAirplaneIcon,
   SignOutIcon,
+  TrashIcon,
   XCircleIcon,
   XIcon,
 } from "@/components/ui/icons"
@@ -25,7 +26,12 @@ import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
-import { resendClassroomInvite, retireEmailInvites } from "@/domain/students"
+import {
+  resendClassroomInvite,
+  retireEmailInvites,
+  removeUnlinkedRows,
+  unlinkedRowRef,
+} from "@/domain/students"
 import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
 import {
@@ -124,7 +130,7 @@ const RosterBulkActionsBar = ({
   // rows are passed so the page can suppress the automatic backfills from
   // re-adding them.
   onDone: (
-    action: "unenroll" | "invite" | "cancel",
+    action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => void
   // Freeze every control (a roster sync is rewriting the state these actions
@@ -133,9 +139,9 @@ const RosterBulkActionsBar = ({
 }) => {
   const { t } = useTranslation()
 
-  const [action, setAction] = useState<"unenroll" | "invite" | "cancel" | null>(
-    null,
-  )
+  const [action, setAction] = useState<
+    "unenroll" | "invite" | "cancel" | "removeRows" | null
+  >(null)
   const [phase, setPhase] = useState<BulkPhase>("idle")
   const [progress, setProgress] = useState<BulkProgress>({
     processed: 0,
@@ -147,6 +153,7 @@ const RosterBulkActionsBar = ({
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const [confirmingRemoveRows, setConfirmingRemoveRows] = useState(false)
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
@@ -162,6 +169,10 @@ const RosterBulkActionsBar = ({
   // ordinary rows, so filter rather than sending the whole selection and letting
   // the writer silently report the pending ones as "already removed".
   const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
+  // Unlinked rows (no GitHub identity): the ONLY bulk action for them is
+  // removing the rows themselves — invite/cancel/unenroll are all keyed on an
+  // identity or an invitation these rows don't have.
+  const unlinkedSelected = selectedRows.filter((r) => r.state === "unlinked")
 
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
@@ -393,6 +404,61 @@ const RosterBulkActionsBar = ({
     onDone("cancel")
   }
 
+  const runRemoveRows = async () => {
+    if (disabled) return
+    if (unlinkedSelected.length === 0) return
+    setAction("removeRows")
+    setPhase("working")
+    setModalOpen(true)
+    setError(null)
+    setResult(null)
+    setProgress({
+      processed: 0,
+      total: unlinkedSelected.length,
+      message: t("students.bulk.starting"),
+    })
+    try {
+      // One commit for the whole batch; rows that gained an identity since the
+      // selection are skipped server-side and reported as missed.
+      const res = await removeUnlinkedRows(client, {
+        org,
+        classroom,
+        rowRefs: unlinkedSelected.map((r) => unlinkedRowRef(r)),
+      })
+      setProgress({
+        processed: unlinkedSelected.length,
+        total: unlinkedSelected.length,
+        message: "",
+      })
+      const sections: BulkResultView["sections"] = []
+      if (res.missed > 0) {
+        sections.push({
+          title: t("students.bulk.resultSkipped"),
+          rows: [
+            {
+              key: "removeRowsMissed",
+              label: t("students.bulk.removeRowsMissed", {
+                count: res.missed,
+              }),
+            },
+          ],
+        })
+      }
+      setResult({
+        headline: t("students.bulk.removedRowsHeadline", {
+          count: res.removed,
+        }),
+        sections,
+      })
+      setPhase("complete")
+      onDone("removeRows")
+    } catch (err) {
+      log.error("bulk remove unlinked rows failed", { err, record: true })
+      setError(getErrorMessage(err))
+      setPhase("error")
+    }
+  }
+
   return (
     <>
       {/* The selection cluster lives in the page toolbar and appears only
@@ -476,6 +542,28 @@ const RosterBulkActionsBar = ({
                   {t("students.bulk.unenroll")}
                 </button>
               </li>
+              {/* Remove unlinked rows — the roster-only delete for rows with
+                  no GitHub identity. Destructive; rendered only when the
+                  selection actually contains such rows, so the menu doesn't
+                  grow a dead entry for ordinary selections. */}
+              {unlinkedSelected.length > 0 ? (
+                <li>
+                  <button
+                    type="button"
+                    className="text-error"
+                    title={t("students.bulk.removeRowsSelected", {
+                      count: unlinkedSelected.length,
+                    })}
+                    onClick={() => {
+                      closeDropdownMenu()
+                      setConfirmingRemoveRows(true)
+                    }}
+                  >
+                    <TrashIcon aria-hidden="true" className="size-4" />
+                    {t("students.bulk.removeRows")}
+                  </button>
+                </li>
+              ) : null}
             </DropdownMenu>
           </div>
           <Button
@@ -528,6 +616,24 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
+        open={confirmingRemoveRows && !disabled}
+        dangerous
+        needsConfirm={false}
+        title={t("students.bulk.confirmRemoveRowsTitle", {
+          count: unlinkedSelected.length,
+        })}
+        description={t("students.bulk.confirmRemoveRowsBody", {
+          count: unlinkedSelected.length,
+        })}
+        confirmLabel={t("students.bulk.removeRows")}
+        onConfirm={async () => {
+          setConfirmingRemoveRows(false)
+          deferRun(runRemoveRows)
+        }}
+        onClose={() => setConfirmingRemoveRows(false)}
+      />
+
+      <ConfirmModal
         open={confirmingCancel && !disabled}
         dangerous
         needsConfirm={false}
@@ -555,7 +661,9 @@ const RosterBulkActionsBar = ({
             ? t("students.bulk.inviteTitle")
             : action === "cancel"
               ? t("students.bulk.cancelTitle")
-              : t("students.bulk.unenrollTitle")
+              : action === "removeRows"
+                ? t("students.bulk.removeRowsTitle")
+                : t("students.bulk.unenrollTitle")
         }
         footer={
           phase === "complete" ? (

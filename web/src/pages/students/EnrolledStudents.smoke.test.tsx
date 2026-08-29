@@ -142,6 +142,7 @@ const emptyRoster = {
   csvMissingLogins: [],
   backfillNeededLogins: [],
   orgMembersKnown: true,
+  orgMembers: [],
   refetch: vi.fn(),
 }
 

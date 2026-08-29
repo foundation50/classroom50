@@ -507,31 +507,35 @@ The table lists everyone in this classroom, one row per member, with
 a column header to sort by it, and click a row to open the member's detail.
 **Section** appears only when at least one member carries a section label, and
 **Status** only while a row has something to report: a pending invitation, a
-member who needs a role, or someone not in the organization.
+member who needs a role, someone not in the organization, or an **unlinked**
+row (one with no GitHub account attached — a name-only upload, or an address
+that couldn't be invited). Click an unlinked row to link it to an organization
+member or remove it.
 
 The toolbar narrows and groups the table:
 
 - **Search** — match members by name, username, or email.
 - **Show** — one filter covering both status (**Enrolled**, **Pending**,
-  **Needs a role**, **Not in org**) and role (**Student**, **Teacher**,
-  **Head TA**, **TA**).
+  **Needs a role**, **Not in org**, **Unlinked** while such rows exist) and
+  role (**Student**, **Teacher**, **Head TA**, **TA**).
 - A **section filter**, shown when members have sections.
 - **Group by** — group the rows by role or by section.
 
 Selecting rows (with the row checkboxes, or the select-all in the header)
 replaces the toolbar's left side with a selection bar carrying one
 **Actions** menu: **Invite** re-sends the selected students' organization
-invitations, **Cancel** cancels their pending invitations, and **Unenroll**
-removes them from the classroom. Each action asks you to confirm, then
-reports its results. Bulk actions apply to students only; staff are managed
-in the classroom's **Settings**.
+invitations, **Cancel** cancels their pending invitations, **Unenroll**
+removes them from the classroom, and — when the selection includes unlinked
+rows — **Remove rows** deletes those rows from roster.csv. Each action asks
+you to confirm, then reports its results. Bulk actions apply to students only;
+staff are managed in the classroom's **Settings**.
 
 **Refresh roster** checks the classroom's GitHub teams and invitations for
 anything new (members who joined or left, accepted invitations, role changes)
 and updates the roster to match; the same check runs when you open the page.
-While it runs, the button reads **Refreshing roster…** and the table locks
-until it finishes. The caption beside the button shows when the roster last
-changed and what the last refresh found.
+It runs in the background — the roster stays fully usable — with the button
+reading **Refreshing roster…** while it works. The caption beside the button
+shows when the roster last changed and what the last refresh found.
 
 ## Manage organization members
 

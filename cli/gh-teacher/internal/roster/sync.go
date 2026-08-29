@@ -488,7 +488,12 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 		// pending invitations (re-read inside the commit closure, since an invite
 		// sent after the team snapshot has a row but no team entry). A recovered
 		// address is never a candidate — a duplicate row for it is the fold's
-		// business, not the reaper's.
+		// business, not the reaper's. An UNLINKED row is never a candidate
+		// either: the teacher explicitly kept it, so only a claim or an explicit
+		// delete ends it.
+		if row.IsUnlinked() {
+			continue
+		}
 		if scan.trusted && !scan.liveEmails[email] &&
 			scan.pendingEmails != nil && !scan.pendingEmails[email] {
 			if _, recovered := recoveredByEmail[email]; !recovered {

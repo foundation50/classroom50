@@ -170,6 +170,7 @@ const EnrolledStudents = ({
   // Session-only banner dismissal — a page refresh re-derives roster state and
   // shows them again.
   const [pendingDismissed, setPendingDismissed] = useState(false)
+  const [unlinkedDismissed, setUnlinkedDismissed] = useState(false)
 
   const {
     rows,
@@ -183,6 +184,7 @@ const EnrolledStudents = ({
     csvMissingLogins,
     backfillNeededLogins,
     orgMembersKnown,
+    orgMembers,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
 
@@ -249,8 +251,12 @@ const EnrolledStudents = ({
   // un-bulk-cancellable.
   const isSelectable = (row: TeamRosterRow) =>
     !isSelf(row) &&
-    hasStudentEnrollment(row) &&
-    (canTargetForUnenroll(row) || canCancelInviteFor(row))
+    // An unlinked row has no enrollment or invitation to act on, but it IS the
+    // bulk remove-rows target — selection admits it and the bar's per-action
+    // eligibility filters keep it out of the other three actions.
+    (row.state === "unlinked" ||
+      (hasStudentEnrollment(row) &&
+        (canTargetForUnenroll(row) || canCancelInviteFor(row))))
 
   // Distinct sections present across all rows (status-independent so switching
   // status never empties the section dropdown), sorted with "No section" last.
@@ -405,7 +411,8 @@ const EnrolledStudents = ({
   // Status-filter options; hide "Pending" when invites are owner-only and this
   // viewer can't read them (avoids a dead, always-empty filter). The two
   // needs-attention options only exist when org membership is known (else those
-  // rows are suppressed, so the filters would be dead).
+  // rows are suppressed, so the filters would be dead). "Unlinked" appears only
+  // while such rows exist — most classrooms never have any.
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: "all", label: t("students.filterAll") },
     { value: "enrolled", label: t("students.filterEnrolled") },
@@ -424,7 +431,27 @@ const EnrolledStudents = ({
           },
         ]
       : []),
+    ...(counts.unlinked > 0 || statusFilter === "unlinked"
+      ? [{ value: "unlinked" as const, label: t("students.filterUnlinked") }]
+      : []),
   ]
+
+  // The link picker's candidates: active org members not already claiming a
+  // roster row (by id or login). Computed here — the modal stays prop-driven —
+  // and cheap enough per render at classroom scale.
+  const linkCandidates = useMemo(() => {
+    const claimedIds = new Set<string>()
+    const claimedLogins = new Set<string>()
+    for (const row of rows) {
+      if (row.github_id.trim()) claimedIds.add(row.github_id.trim())
+      if (row.username.trim()) claimedLogins.add(row.username.toLowerCase())
+    }
+    return orgMembers.filter(
+      (m) =>
+        !claimedIds.has(String(m.id)) &&
+        !claimedLogins.has(m.login.toLowerCase()),
+    )
+  }, [rows, orgMembers])
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live
@@ -526,13 +553,18 @@ const EnrolledStudents = ({
   }
 
   // After a bulk run, clear the selection and refresh the caches the run
-  // touched (roster team membership + pending invites).
+  // touched (roster team membership + pending invites; roster.csv itself for a
+  // row removal, which is a CSV-only write nothing team-scoped reflects).
   const onBulkDone = (
-    action: "unenroll" | "invite" | "cancel",
+    action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => {
     setSelectedKeys(new Set())
     invalidateInviteQueries()
+    if (action === "removeRows") {
+      onRecheckRoster?.()
+      return
+    }
     // Unenroll changes team membership; invite changes org-invite state and may
     // team-add an already-active member; cancel removes pending invites — refresh
     // the enrolled roster for all three.
@@ -654,6 +686,41 @@ const EnrolledStudents = ({
             aria-label={t("students.dismiss")}
             title={t("students.dismiss")}
             onClick={() => setPendingDismissed(true)}
+          >
+            <XIcon aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
+      </AnimatedAlert>
+
+      {/* Unlinked-rows banner: rows with no GitHub account for the teacher to
+          reconcile (link to a member, or remove) — "Review" applies the
+          Unlinked filter. Dismissable for the session. */}
+      <AnimatedAlert
+        tone="info"
+        show={
+          !isLoading && !isError && !unlinkedDismissed && counts.unlinked > 0
+        }
+        className="flex items-center justify-between gap-3"
+      >
+        <span className="flex items-center gap-2 text-sm">
+          <PeopleIcon aria-hidden="true" className="size-4 shrink-0" />
+          {t("students.unlinkedBanner", { count: counts.unlinked })}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => onShowChange("unlinked")}
+          >
+            {t("students.pendingReview")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            shape="square"
+            aria-label={t("students.dismiss")}
+            title={t("students.dismiss")}
+            onClick={() => setUnlinkedDismissed(true)}
           >
             <XIcon aria-hidden="true" className="size-4" />
           </Button>
@@ -987,6 +1054,7 @@ const EnrolledStudents = ({
         teamSlugByRole={teamSlugByRole}
         row={selected}
         canManage={isOwner}
+        linkCandidates={linkCandidates}
         isSelf={selected ? isSelf(selected) : false}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}
@@ -1010,6 +1078,9 @@ const EnrolledStudents = ({
           invalidateInviteQueries()
           invalidateTeamRoster()
           refetchRoster()
+          // Link/remove on an UNLINKED row rewrites roster.csv itself; the
+          // team-scoped refetches above don't re-read the file.
+          onRecheckRoster?.()
         }}
         onError={(rowKey, message) => setWarning(rowKey, message)}
       />

@@ -88,6 +88,10 @@ export type UseTeamRosterResult = {
   // "needs attention" filter option (no such rows exist when membership is
   // unknown — those rows are suppressed).
   orgMembersKnown: boolean
+  // The active org members behind orgMembersKnown ([] until read). Exposed for
+  // the unlinked-row link picker, which offers exactly these accounts (minus
+  // the ones already claiming a roster row).
+  orgMembers: GitHubUser[]
   // Re-run the team-member fetch so an error surface can offer a retry without a
   // full page reload.
   refetch: () => void
@@ -194,6 +198,10 @@ export function useTeamRoster(
   // guessing — the roster degrades to the pure team-driven view, never errors.
   const orgMembersQuery = useQuery(orgMembersAllQuery(client, org))
   const orgMembersKnown = orgMembersQuery.isSuccess
+  const orgMembers = useMemo(
+    () => orgMembersQuery.data ?? [],
+    [orgMembersQuery.data],
+  )
   const { orgMemberIds, orgMemberLogins } = useMemo(() => {
     const { ids, logins } = memberIdentitySets(orgMembersQuery.data ?? [])
     return { orgMemberIds: ids, orgMemberLogins: logins }
@@ -369,6 +377,7 @@ export function useTeamRoster(
     backfillNeededCount,
     backfillNeededLogins,
     orgMembersKnown,
+    orgMembers,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + teacher + hta + ta), not just the
     // student one — otherwise a staff-team failure stays stuck in error. Also

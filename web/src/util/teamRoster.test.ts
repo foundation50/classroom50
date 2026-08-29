@@ -263,6 +263,7 @@ describe("buildTeamRoster", () => {
       pending: 1,
       needs_attention_in_org: 0,
       needs_attention_not_in_org: 0,
+      unlinked: 0,
     })
   })
 
@@ -387,6 +388,7 @@ describe("buildTeamRoster — needs-attention (CSV row on no team)", () => {
       pending: 1,
       needs_attention_in_org: 1,
       needs_attention_not_in_org: 0,
+      unlinked: 0,
     })
   })
 
@@ -897,5 +899,83 @@ describe("sortTeamRosterRowsBy — table-header column sorts", () => {
     const copy = [...input]
     sortTeamRosterRowsBy(input, "member", "desc")
     expect(input).toEqual(copy)
+  })
+})
+
+describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () => {
+  it("emits a name-only row as unlinked, with or without the marker", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [
+        csvRow({ first_name: "Grace", last_name: "Hopper", section: "s1" }),
+        csvRow({ first_name: "Alan", last_name: "T", status: "unlinked" }),
+      ],
+    })
+    expect(rows.map((r) => [r.state, r.first_name])).toEqual([
+      ["unlinked", "Alan"],
+      ["unlinked", "Grace"],
+    ])
+    expect(rows[0].username).toBe("")
+    expect(rows[0].github_id).toBe("")
+  })
+
+  it("emits a MARKED email row as unlinked, but a blank-status email-only row stays invisible", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [
+        csvRow({ email: "kept@x.edu", first_name: "Ada", status: "unlinked" }),
+        // The invite lifecycle's own row: renders only through a pending
+        // invite, and the reconcile reaps it once nothing backs it.
+        csvRow({ email: "lifecycle@x.edu", first_name: "Bob" }),
+      ],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: "unlinked",
+      email: "kept@x.edu",
+      first_name: "Ada",
+    })
+  })
+
+  it("does not double-render a marked email row a pending invite already borrows", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [invite({ id: 9, email: "kept@x.edu" })],
+      students: [
+        csvRow({ email: "kept@x.edu", first_name: "Ada", status: "unlinked" }),
+      ],
+    })
+    // One row: the pending invite, carrying the kept row's metadata.
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: "pending", first_name: "Ada" })
+  })
+
+  it("renders unlinked rows regardless of org-membership visibility", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ first_name: "Grace", last_name: "H" })],
+      orgMembersKnown: false,
+      pendingHidden: true,
+    })
+    expect(rows.map((r) => r.state)).toEqual(["unlinked"])
+  })
+
+  it("gives identical twins distinct keys and sorts unlinked last", () => {
+    const rows = buildTeamRoster({
+      members: [member(1, "ada")],
+      students: [
+        csvRow({ github_id: "1", username: "ada" }),
+        csvRow({ first_name: "Twin", last_name: "T" }),
+        csvRow({ first_name: "Twin", last_name: "T" }),
+      ],
+    })
+    expect(rows.map((r) => r.state)).toEqual([
+      "enrolled",
+      "unlinked",
+      "unlinked",
+    ])
+    const keys = rows.map((r) => r.key)
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(countByState(rows).unlinked).toBe(2)
   })
 })

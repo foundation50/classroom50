@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import {
   FORMULA_GUARDED_FIELDS,
+  ROSTER_STATUS_UNLINKED,
   STUDENT_CSV_FIELDS,
   formatRosterProblems,
   normalizeStudentRow,
@@ -93,6 +94,7 @@ describe("normalizeStudentRow", () => {
       section: "",
       github_id: "",
       role: "",
+      status: "",
     })
   })
 
@@ -148,7 +150,7 @@ describe("splitName", () => {
 
 describe("parseRosterCsv", () => {
   it("parses a well-formed file with no problems", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,\n`
     expect(parseRosterCsv(csv)).toEqual({
       rows: [
         {
@@ -159,6 +161,7 @@ describe("parseRosterCsv", () => {
           section: "Section A",
           github_id: "583231",
           role: "student",
+          status: "",
         },
       ],
       problems: [],
@@ -199,19 +202,19 @@ describe("parseRosterCsv", () => {
     expect(rows[1]).toMatchObject({ username: "", github_id: "583231" })
   })
 
-  // Deliberate: the benign "trailing role/github_id omitted" case, so a sync
+  // Deliberate: the benign "trailing status/role omitted" case, so a sync
   // must not abort on it.
   it("tolerates a row short by exactly one column (dropped trailing field)", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student\n`
     const { rows, problems } = parseRosterCsv(csv)
     expect(problems).toEqual([])
-    expect(rows[0]).toMatchObject({ github_id: "583231", role: "" })
+    expect(rows[0]).toMatchObject({ role: "student", status: "" })
   })
 
   // The cost of that tolerance: width can't tell a middle drop from a trailing
   // one, so this corruption is accepted rather than detectable.
   it("silently left-shifts a row short by one because a middle cell was dropped", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,Section A,583231,student\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,Section A,583231,student,\n`
     const { rows, problems } = parseRosterCsv(csv)
     expect(problems).toEqual([])
     expect(rows[0]).toMatchObject({
@@ -219,6 +222,7 @@ describe("parseRosterCsv", () => {
       section: "583231",
       github_id: "student",
       role: "",
+      status: "",
     })
   })
 
@@ -233,7 +237,7 @@ describe("parseRosterCsv", () => {
   })
 
   it("reports a row with too many fields", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,EXTRA\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,,EXTRA\n`
     const { problems } = parseRosterCsv(csv)
     expect(problems).toHaveLength(1)
     expect(problems[0]).toMatchObject({ line: 2 })
@@ -255,8 +259,8 @@ describe("parseRosterCsv", () => {
   it("numbers problem lines against the file, counting the header as line 1", () => {
     const csv =
       `${HEADER}\n` +
-      "ok,A,B,a@x.io,S,1,student\n" +
-      "bad,A,B,b@x.io,S,2,student,EXTRA\n"
+      "ok,A,B,a@x.io,S,1,student,\n" +
+      "bad,A,B,b@x.io,S,2,student,,EXTRA\n"
     const { problems } = parseRosterCsv(csv)
     expect(problems).toHaveLength(1)
     expect(problems[0].line).toBe(3)
@@ -285,13 +289,13 @@ describe("parseStudentsCsv", () => {
   })
 
   it("throws with the formatted problems when the file is malformed", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,EXTRA\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,,EXTRA\n`
     expect(() => parseStudentsCsv(csv)).toThrow(/Could not parse roster\.csv/)
     expect(() => parseStudentsCsv(csv)).toThrow(/line 2:/)
   })
 
   it("does not throw on the tolerated short-by-one row", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student\n`
     expect(() => parseStudentsCsv(csv)).not.toThrow()
   })
 })
@@ -301,8 +305,9 @@ describe("stringifyStudentsCsv", () => {
     const csv = stringifyStudentsCsv([row({ username: "octo" })])
     const [header, first] = csv.split("\n")
     expect(header).toBe(HEADER)
+    // The trailing comma is the empty status column.
     expect(first).toBe(
-      "octo,Grace,Hopper,grace@example.com,Section A,583231,student",
+      "octo,Grace,Hopper,grace@example.com,Section A,583231,student,",
     )
     expect(csv.endsWith("\n")).toBe(true)
   })
@@ -313,14 +318,29 @@ describe("stringifyStudentsCsv", () => {
     expect(stringifyStudentsCsv([])).toBe(`${HEADER}\n`)
   })
 
-  it("drops rows with no identity column", () => {
+  // The write-side keep-rule matches the parse side (shared vectors:
+  // cli/shared/testdata/roster_row_cases.json): a row is kept when it
+  // identifies a student (username/github_id/email) OR describes one (a name,
+  // or the explicit `status` marker); only section/role noise or a fully
+  // blank row is dropped.
+  it("keeps identity-less rows that describe a student, drops pure noise", () => {
     const csv = stringifyStudentsCsv([
       row({ username: "keep" }),
-      normalizeStudentRow({ first_name: "no identity" }),
+      // name-only row: kept (describes a student).
+      normalizeStudentRow({ first_name: "Name", last_name: "Only" }),
+      // status-marker-only row: kept (explicitly teacher-kept).
+      normalizeStudentRow({ status: ROSTER_STATUS_UNLINKED }),
+      // section/role noise only: dropped.
+      normalizeStudentRow({ section: "noise-section", role: "student" }),
+      // fully blank: dropped.
+      normalizeStudentRow({}),
     ])
-    expect(csv.trim().split("\n")).toHaveLength(2)
+    // header + keep + name-only + status-only
+    expect(csv.trim().split("\n")).toHaveLength(4)
     expect(csv).toContain("keep")
-    expect(csv).not.toContain("no identity")
+    expect(csv).toContain("Name,Only")
+    expect(csv).toContain(ROSTER_STATUS_UNLINKED)
+    expect(csv).not.toContain("noise-section")
   })
 
   it("round-trips rows through parse without changing them", () => {

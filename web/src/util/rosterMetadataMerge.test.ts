@@ -79,6 +79,7 @@ describe("applyMetadataMerge", () => {
       section: "1",
       github_id: "101",
       role: "student",
+      status: "",
     }
     const merged = applyMetadataMerge(stored, {
       first_name: "Ada",

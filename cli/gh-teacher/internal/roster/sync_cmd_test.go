@@ -689,6 +689,65 @@ func TestRunRosterSync_PendingInviteTeamIsSkippedWithoutReads(t *testing.T) {
 	}
 }
 
+// An UNLINKED row (status=unlinked, no identity) is teacher-kept: a trusted
+// pass with nothing backing its address must reap a blank-status twin while
+// passing the unlinked row over.
+func TestRunRosterSync_UnlinkedRowSurvivesTheReap(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role,status\n" +
+		",Grace,Hopper,kept@uni.edu,s1,,,unlinked\n" +
+		",,,gone@uni.edu,,,student,\n" +
+		"bob,Bob,B,bob@uni.edu,s1,202,student,\n"
+
+	mock := newSyncMock(t, roster)
+	mock.classroomMembers = []map[string]any{{"login": "bob", "id": 202}}
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 2 {
+		t.Fatalf("committed rows = %#v, want kept@ (unlinked) + bob, gone@ reaped", rows)
+	}
+	var keptSeen bool
+	for _, row := range rows {
+		if configrepo.NormalizeInviteEmail(row.Email) == "kept@uni.edu" {
+			keptSeen = true
+			if !row.IsUnlinked() {
+				t.Errorf("the kept row lost its unlinked marker: %#v", row)
+			}
+		}
+		if configrepo.NormalizeInviteEmail(row.Email) == "gone@uni.edu" {
+			t.Errorf("the dead blank-status row was kept: %#v", row)
+		}
+	}
+	if !keptSeen {
+		t.Error("the unlinked row was reaped — teacher-kept rows must survive the pass")
+	}
+}
+
+// A recovered acceptance still folds onto an unlinked row carrying the invited
+// address — gaining an identity is exactly what ends the state.
+func TestRunRosterSync_AcceptanceFoldClearsTheUnlinkedMarker(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role,status\n" +
+		",Ada,Lovelace," + inviteTestEmail + ",section-1,,student,unlinked\n"
+
+	mock := newSyncMock(t, roster)
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 1 {
+		t.Fatalf("committed %d row(s), want the one folded row: %#v", len(rows), rows)
+	}
+	row := rows[0]
+	if row.Username != syncTestAcceptedLogin || row.GitHubID != syncTestAcceptedID {
+		t.Errorf("row did not gain the recovered identity: %#v", row)
+	}
+	if row.IsUnlinked() || row.Status != "" {
+		t.Errorf("the fold must clear the unlinked marker: %#v", row)
+	}
+}
+
 // A pending row nothing backs is dead — but only when the pass can prove it.
 func TestRunRosterSync_DeadPendingRowReapedOnlyWhenTrusted(t *testing.T) {
 	roster := storedRosterHeader +

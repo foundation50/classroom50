@@ -42,6 +42,7 @@ import {
   type DroppedRow,
   type ImportHeaderIssue,
   type ParsedImportRow,
+  type UnlinkedImportRow,
 } from "./rosterImportParse"
 import { runRosterImport, type ImportProgress } from "./runRosterImport"
 import type { InviteOutcome, RoleChangeOutcome } from "./runRosterImport"
@@ -117,6 +118,11 @@ const UploadRoster = ({
   // effect below re-runs even when a re-parse yields identical identity cells.
   const [parsedRows, setParsedRows] = useState<ParsedImportRow[]>([])
   const [droppedRows, setDroppedRows] = useState<DroppedRow[]>([])
+  // Name-only rows the parse KEEPS (written as unlinked roster rows).
+  const [unlinkedParsed, setUnlinkedParsed] = useState<UnlinkedImportRow[]>([])
+  // How many unlinked rows the completed run actually wrote (name-only rows
+  // plus email rows whose invitation couldn't be sent).
+  const [unlinkedKept, setUnlinkedKept] = useState(0)
   const [parseId, setParseId] = useState(0)
   // Rows with a resolved identity (account or email), and the ones a github_id
   // made unusable. Null until resolution runs.
@@ -182,6 +188,8 @@ const UploadRoster = ({
     setUploadKind(DEFAULT_UPLOAD_KIND)
     setParsedRows([])
     setDroppedRows([])
+    setUnlinkedParsed([])
+    setUnlinkedKept(0)
     setResolved(null)
     setUnusableRows([])
     setHeaderIssue(null)
@@ -545,6 +553,7 @@ const UploadRoster = ({
     const parsed = parseRosterImportFile(text, kind)
     setParsedRows(parsed.rows)
     setDroppedRows(parsed.dropped)
+    setUnlinkedParsed(parsed.unlinked)
     setResolved(null)
     setUnusableRows([])
     setHeaderIssue(
@@ -636,6 +645,7 @@ const UploadRoster = ({
       classroom,
       rows: accountImportRows,
       emailInvites,
+      unlinkedRows: unlinkedParsed,
       // Snapshot the classification computed in the preview so the process pass
       // matches exactly what the teacher confirmed. It also carries the identity
       // mismatches the teacher just confirmed, which drive the username repair.
@@ -666,6 +676,7 @@ const UploadRoster = ({
     setRoleChangeOutcome(outcome.roleChangeOutcome)
     setEmailResult(outcome.emailResult)
     setEmailError(outcome.emailError)
+    setUnlinkedKept(outcome.unlinkedKept)
     setPhase("complete")
     onSuccess?.(outcome.importResult)
     // A mixed batch touches both caches, so both callbacks fire.
@@ -839,6 +850,17 @@ const UploadRoster = ({
                     <span>{t("students.emailInviteRosterNotice")}</span>
                   </Alert>
                 ) : null}
+                {/* Name-only rows can't be invited or enrolled; they're kept
+                    on the roster as unlinked rows the teacher links later. */}
+                {unlinkedParsed.length > 0 ? (
+                  <Alert tone="info" className="mb-4">
+                    <span>
+                      {t("students.unlinkedRosterNotice", {
+                        count: unlinkedParsed.length,
+                      })}
+                    </span>
+                  </Alert>
+                ) : null}
                 <PreflightSummary
                   preflight={preflight}
                   emailInviteCount={emailRowCount}
@@ -964,6 +986,7 @@ const UploadRoster = ({
             roleChangeOutcome={roleChangeOutcome}
             emailResult={emailResult}
             emailError={emailError}
+            unlinkedKept={unlinkedKept}
           />
         )}
 

@@ -1021,7 +1021,7 @@ describe("UploadRoster identity mismatch gate", () => {
     expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
   })
 
-  it("reports an identity-less row but still imports everyone else", async () => {
+  it("keeps an identity-less named row as unlinked and still imports everyone else", async () => {
     const user = userEvent.setup()
     classifyRosterUpload.mockReturnValue({
       noAction: [],
@@ -1036,16 +1036,18 @@ describe("UploadRoster identity mismatch gate", () => {
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
     )
 
-    // The one deliberate non-blocking case: a student who hasn't supplied a handle.
-    // There is nothing to fix, so the import must stay available.
+    // The one deliberate non-blocking case: a student who hasn't supplied a
+    // handle. Their named row is KEPT as an unlinked roster row (not dropped),
+    // and the import must stay available.
     await uploadFile(
       user,
       file("roster.csv", "username,email,first_name\nada,,Ada\n,,Nobody\n"),
     )
 
     await waitFor(() =>
-      expect(screen.getByText("students.importSkipped:1")).toBeTruthy(),
+      expect(screen.getByText("students.unlinkedRosterNotice:1")).toBeTruthy(),
     )
+    expect(screen.queryByText(/students.importSkipped/)).toBeNull()
     expect(screen.queryByText(/students.importBlocked/)).toBeNull()
     expect(importButton()?.disabled).toBe(false)
   })

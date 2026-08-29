@@ -1,5 +1,6 @@
 import {
   applyClassroomRoleChange,
+  appendUnlinkedRows,
   bulkEnrollStudentsInClassroom,
   bulkInviteByEmail,
   inviteRosterStudents,
@@ -11,6 +12,7 @@ import {
   type BulkImportResult,
   type BulkInviteByEmailResult,
   type ImportRosterRow,
+  type UnlinkedRowInput,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
@@ -67,6 +69,11 @@ export type RosterImportOutcome =
       // A hard failure of the email pass. The roster write already landed, so
       // this is surfaced on the completed screen rather than replacing it.
       emailError: string | null
+      // Rows kept on the roster as UNLINKED (no GitHub identity): name-only
+      // uploaded rows, plus email rows whose invitation couldn't be sent
+      // (already a member, or the send failed) — preserved for the roster's
+      // manual reconciliation instead of silently dropped.
+      unlinkedKept: number
     }
 
 // The roster-import flow. Runs up to two pipelines SEQUENTIALLY over one shared
@@ -95,6 +102,9 @@ export async function runRosterImport(
       last_name?: string
       section?: string
     }[]
+    // Name-only rows (no identity cell at all) the parse kept: written to the
+    // roster as `unlinked` rows for manual reconciliation instead of dropped.
+    unlinkedRows?: UnlinkedRowInput[]
     // The classification computed in the preview, snapshotted so the process
     // pass matches exactly what the teacher confirmed. Its identityMismatches
     // are the confirmed stale-username repairs.
@@ -108,6 +118,7 @@ export async function runRosterImport(
     classroom,
     rows,
     emailInvites = [],
+    unlinkedRows = [],
     plan,
     onProgress,
     messages,
@@ -421,6 +432,36 @@ export async function runRosterImport(
     }
   }
 
+  // 6) Keep the rows nothing above could place: name-only rows, plus email
+  //    rows whose invitation was skipped (already a member Classroom 50 can't
+  //    identify) or failed outright. Written as `unlinked` rows — the manual
+  //    reconciliation UI's input — in one best-effort commit; deferred
+  //    (rate-limited) addresses are NOT kept, since re-running the upload
+  //    retries their invitations.
+  const inviteByEmailKey = new Map(
+    emailInvites.map((e) => [e.email.trim().toLowerCase(), e]),
+  )
+  const unplacedEmails = [
+    ...(emailResult?.skipped.map((s) => s.email) ?? []),
+    ...(emailResult?.failed.map((f) => f.email) ?? []),
+  ]
+  const unlinkedEntries: UnlinkedRowInput[] = [
+    ...unlinkedRows,
+    ...unplacedEmails.map((email) => {
+      const source = inviteByEmailKey.get(email.trim().toLowerCase())
+      return {
+        email,
+        first_name: source?.first_name,
+        last_name: source?.last_name,
+        section: source?.section,
+      }
+    }),
+  ]
+  const unlinkedKept =
+    unlinkedEntries.length > 0
+      ? await appendUnlinkedRows(client, { org, classroom }, unlinkedEntries)
+      : 0
+
   return {
     ok: true,
     importResult,
@@ -429,5 +470,6 @@ export async function runRosterImport(
     roleChangeOutcome,
     emailResult,
     emailError,
+    unlinkedKept,
   }
 }

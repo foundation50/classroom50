@@ -106,6 +106,7 @@ export const RosterImportResult = ({
   roleChangeOutcome,
   emailResult = null,
   emailError = null,
+  unlinkedKept = 0,
 }: {
   result: BulkImportResult
   inviteError: string | null
@@ -113,6 +114,9 @@ export const RosterImportResult = ({
   roleChangeOutcome: RoleChangeOutcome | null
   emailResult?: BulkInviteByEmailResult | null
   emailError?: string | null
+  // Rows kept on the roster as UNLINKED (name-only rows, plus email rows whose
+  // invitation couldn't be sent) — reconciled later from the roster page.
+  unlinkedKept?: number
 }) => {
   const { t } = useTranslation()
   const emailInvitedCount = emailResult?.invited.length ?? 0
@@ -251,6 +255,14 @@ export const RosterImportResult = ({
             <ImportResultSection key={section.title} {...section} />
           ))
         : null}
+
+      {unlinkedKept > 0 && (
+        <Alert tone="info">
+          <span>
+            {t("students.unlinkedKeptNotice", { count: unlinkedKept })}
+          </span>
+        </Alert>
+      )}
     </div>
   )
 }

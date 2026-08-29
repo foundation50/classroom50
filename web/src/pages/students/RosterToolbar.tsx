@@ -71,7 +71,7 @@ export function RosterToolbar({
   selectedRows: TeamRosterRow[]
   onClearSelection: () => void
   onBulkDone: (
-    action: "unenroll" | "invite" | "cancel",
+    action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => void
   query: string

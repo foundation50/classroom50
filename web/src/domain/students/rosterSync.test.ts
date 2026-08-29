@@ -159,6 +159,7 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
         section: "",
         github_id: "42",
         role: "student",
+        status: "",
       },
     ])
     expect(result.addedUsernames).toEqual([])
@@ -199,6 +200,7 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
         section: "",
         github_id: "7",
         role: "student",
+        status: "",
       },
     ])
   })
@@ -384,5 +386,72 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     expect(result.noop).toBe(true)
     expect(committed.csv).toBeNull()
     expect(result.recordedRecoveries).toEqual([ADA])
+  })
+})
+
+describe("syncRosterFromTeam — unlinked rows (teacher-kept, no identity)", () => {
+  const FULL_HEADER =
+    "username,first_name,last_name,email,section,github_id,role,status\n"
+
+  it("the reap passes an unlinked email row over while eating a blank-status twin", async () => {
+    getRawFile.mockResolvedValue(
+      FULL_HEADER +
+        ",Ada,L,kept@uni.edu,s1,,,unlinked\n" +
+        ",Dead,Row,dead@uni.edu,,,student,\n" +
+        "bob,Bob,B,bob@uni.edu,,7,student,",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 7, login: "bob", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites(),
+    })
+
+    expect(result.removedEmails).toEqual(["dead@uni.edu"])
+    const rows = rowsFromCommit()
+    expect(rows?.map((r) => r.email)).toContain("kept@uni.edu")
+    expect(rows?.find((r) => r.email === "kept@uni.edu")).toMatchObject({
+      status: "unlinked",
+      username: "",
+    })
+  })
+
+  it("an acceptance fold onto an unlinked row fills identity and clears the marker", async () => {
+    getRawFile.mockResolvedValue(
+      FULL_HEADER + ",Ada,Lovelace,ada@uni.edu,s1,,student,unlinked",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "ada", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+    const ADA = {
+      email: "ada@uni.edu",
+      invitee: { id: 42, login: "ada" },
+      slug: "invite-aaaaaaaaaaaaaaaa",
+    }
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites({ recovered: [ADA] }),
+    })
+
+    expect(result.recoveredEmails).toEqual(["ada@uni.edu"])
+    expect(rowsFromCommit()).toEqual([
+      {
+        username: "ada",
+        first_name: "Ada",
+        last_name: "Lovelace",
+        email: "ada@uni.edu",
+        section: "s1",
+        github_id: "42",
+        role: "student",
+        status: "",
+      },
+    ])
   })
 })

@@ -19,6 +19,7 @@ import {
   normalizeStudentRow,
   parseStudentsCsv,
   stringifyStudentsCsv,
+  ROSTER_STATUS_UNLINKED,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { rosterPath } from "@/util/rosterPath"
@@ -151,6 +152,9 @@ export async function syncRosterFromTeam(
           username: s.username || match.invitee.login,
           github_id: s.github_id || String(match.invitee.id),
           email: s.email?.trim() || match.email,
+          // Gaining an identity ends the unlinked state (mirrors the CLI's
+          // ClaimPendingEmailRow).
+          status: s.status === ROSTER_STATUS_UNLINKED ? "" : s.status,
         })
         if (
           next.username !== s.username ||
@@ -242,6 +246,10 @@ export async function syncRosterFromTeam(
       for (const s of foldedStudents) {
         if (s.username.trim()) continue
         if (resolveGitHubId(s.github_id) !== null) continue
+        // A teacher-kept row is never a reap candidate: only a claim (identity)
+        // or an explicit teacher delete ends it. Mirrors the CLI's IsUnlinked
+        // exclusion in planRosterSync.
+        if (s.status.trim() === ROSTER_STATUS_UNLINKED) continue
         const emailKey = normalizeInviteEmail(s.email ?? "")
         if (!emailKey) continue // a blank junk row is not this pass's call
         if (inviteState.liveInviteEmails.has(emailKey)) continue

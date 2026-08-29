@@ -1631,14 +1631,14 @@ class TestLateness:
 
 
 def test_full_roster_header_matches_go_constant():
-    # The exact 7-column header must stay in lockstep with FullRosterHeader
+    # The exact 8-column header must stay in lockstep with FullRosterHeader
     # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
     # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If this
     # fails, a column or its order drifted between the codebases. Collection is
     # team-driven and only reads the roster for best-effort metadata, but the Go
     # download-metadata join and the web writer still share this header, so the
     # Python leg of the 3-way lockstep is retained.
-    assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id,role"
+    assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id,role,status"
 
 
 def test_roster_filename_matches_go_constant():
