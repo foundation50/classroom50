@@ -41,6 +41,25 @@ const submit = () =>
   screen.getByRole("button", { name: "classes.form.createButton" })
 
 describe("CreateClassroomForm slug validation", () => {
+  it("opts out of browser-native validation so the app validator runs", async () => {
+    // Without noValidate the `required` inputs fire native bubbles on an
+    // empty submit and the TanStack submit validator never runs (Primer:
+    // never use browser-native validation UI).
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = render(<CreateClassroomForm onSubmit={onSubmit} />)
+
+    const form = container.querySelector("form")!
+    expect(form.noValidate).toBe(true)
+
+    // An empty submit reaches the app validator: blocked with app copy.
+    await user.click(submit())
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect((await screen.findAllByText(/validation\./)).length).toBeGreaterThan(
+      0,
+    )
+  })
+
   it("rejects a slug over the 100-char cap and does not submit", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()

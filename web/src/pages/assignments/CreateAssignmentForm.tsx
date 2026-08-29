@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert, AnimatedAlert, Button } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
@@ -98,6 +98,9 @@ const CreateAssignmentForm = ({
   // Auto-prefill slug from name until the teacher edits it directly, so a
   // deliberate slug isn't clobbered by later name edits.
   const [slugTouched, setSlugTouched] = useState(false)
+  // Feedback for an unchanged edit-mode submit (the button stays enabled per
+  // Primer; the submit itself no-ops). Rendered only while still pristine.
+  const [noChangesNotice, setNoChangesNotice] = useState(false)
   // Whether the due-date picker is shown. Seeded from the initial value (Edit of
   // an assignment with a due starts checked); a due date is opt-in otherwise.
   // Unchecking clears due_date so the write path omits it (#195).
@@ -149,9 +152,23 @@ const CreateAssignmentForm = ({
     // stays on controls for AT parity.
     <form
       noValidate
+      // Any edit clears the unchanged-submit notice — hooked on the DOM
+      // events rather than the form model, so controls that sync through
+      // local state (pickers, toggles) still clear it.
+      onInput={() => setNoChangesNotice(false)}
+      onChange={() => setNoChangesNotice(false)}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
+        // Unchanged edit-mode submit: a no-op with feedback, never a re-run.
+        // The button stays enabled (Primer), but this form's save has side
+        // effects (the publish workflow re-triggers), so "idempotent" must be
+        // enforced here rather than assumed.
+        if (edit && form.state.isDefaultValue) {
+          setNoChangesNotice(true)
+          return
+        }
+        setNoChangesNotice(false)
         // Validate up front so we can point the teacher at the first problem
         // regardless of how (or whether) the form library propagates the
         // submit-validator errors onto individual field DOM nodes.
@@ -239,6 +256,12 @@ const CreateAssignmentForm = ({
         <FormErrors form={form} />
       </fieldset>
       <div className="divider" />
+      {/* Unchanged-submit feedback: a banner directly above the actions (the
+          action it relates to), cleared by any edit via the form-level
+          onInput/onChange below. */}
+      <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
+        {t("assignments.form.noChangesToSave")}
+      </AnimatedAlert>
       <div className="card-actions justify-end p-2">
         {onCancel && (
           <Button
@@ -258,7 +281,7 @@ const CreateAssignmentForm = ({
               state.isDefaultValue,
             ]}
           >
-            {([canSubmit, isSubmitting, isDefaultValue]) => (
+            {([, isSubmitting, isDefaultValue]) => (
               <>
                 {/* Edit mode: revert all unsaved edits back to the stored
                     assignment. Shown only while the form is dirty. */}
@@ -276,12 +299,10 @@ const CreateAssignmentForm = ({
                   variant="primary"
                   type="submit"
                   loading={isSubmitting || loading}
-                  disabled={
-                    !canSubmit ||
-                    isSubmitting ||
-                    loading ||
-                    (edit && isDefaultValue)
-                  }
+                  // Kept enabled while unchanged or invalid (Primer saving
+                  // guidance): an unchanged save is idempotent, and an invalid
+                  // submit runs the validator + focuses the first problem.
+                  disabled={isSubmitting || loading}
                 >
                   {isSubmitting || loading
                     ? null

@@ -456,9 +456,10 @@ describe("assignment setup timeout", () => {
   })
 })
 
-// After a successful save the edit form re-baselines to the saved values, so
-// the "Save Changes" button re-disables (nothing pending) until the next edit.
-describe("edit form re-disables Save after a successful save", () => {
+// The edit form re-baselines to the saved values after a successful save (the
+// Discard affordance keys on pristineness); Save itself stays enabled per
+// Primer's saving guidance.
+describe("edit form save/discard lifecycle", () => {
   const renderForm = (
     onSubmit: (values: CreateAssignmentFormValues) => void | Promise<void>,
   ) =>
@@ -477,7 +478,10 @@ describe("edit form re-disables Save after a successful save", () => {
       name: "assignments.form.saveChanges",
     }) as HTMLButtonElement
 
-  it("disables Save on success, then re-enables on the next edit", async () => {
+  it("keeps Save enabled while pristine and after a successful save", async () => {
+    // Primer saving guidance: never disable the save button for an unchanged
+    // form. The unchanged submit itself is a no-op (covered below) — the
+    // enabled button is about focusability, not about re-running the save.
     const user = userEvent.setup()
     const onSubmit = vi.fn().mockResolvedValue(undefined)
     renderForm(onSubmit)
@@ -485,7 +489,7 @@ describe("edit form re-disables Save after a successful save", () => {
     const name = screen.getByRole("textbox", {
       name: "assignments.form.name",
     })
-    expect(saveButton().disabled).toBe(true)
+    expect(saveButton().disabled).toBe(false)
 
     await user.type(name, " updated")
     expect(saveButton().disabled).toBe(false)
@@ -493,10 +497,32 @@ describe("edit form re-disables Save after a successful save", () => {
     await user.click(saveButton())
     expect(onSubmit).toHaveBeenCalledTimes(1)
 
-    await vi.waitFor(() => expect(saveButton().disabled).toBe(true))
+    // Still enabled after the save re-baselines.
+    await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
+  })
 
-    await user.type(name, " again")
-    expect(saveButton().disabled).toBe(false)
+  it("makes an unchanged submit a no-op with feedback, never a re-run", async () => {
+    // The regression this pins: saving an untouched assignment settings form
+    // must not re-trigger the publish workflow.
+    const user = userEvent.setup()
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderForm(onSubmit)
+
+    await user.click(saveButton())
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByText("assignments.form.noChangesToSave")).toBeTruthy()
+
+    // Editing clears the notice (exit-animates out) and a real change
+    // submits once.
+    const name = screen.getByRole("textbox", {
+      name: "assignments.form.name",
+    })
+    await user.type(name, " updated")
+    await vi.waitFor(() =>
+      expect(screen.queryByText("assignments.form.noChangesToSave")).toBeNull(),
+    )
+    await user.click(saveButton())
+    expect(onSubmit).toHaveBeenCalledTimes(1)
   })
 
   it("keeps the form dirty and re-submittable when the save fails", async () => {
@@ -537,7 +563,8 @@ describe("edit form re-disables Save after a successful save", () => {
     // Reverts to the stored name and the affordance disappears again.
     expect(name.value).toBe(baseAssignment.name)
     expect(discardButton()).toBeNull()
-    expect(saveButton().disabled).toBe(true)
+    // Save stays enabled on the pristine form (Primer saving guidance).
+    expect(saveButton().disabled).toBe(false)
   })
 
   it("Discard changes re-syncs the schedule pickers with the restored dates", async () => {

@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
@@ -60,6 +60,10 @@ export function GitHubPatPrompt({
   const { t } = useTranslation()
   const [token, setToken] = useState("")
   const [org, setOrg] = useState("")
+  // Set on an empty submit (the button stays enabled per Primer); cleared as
+  // soon as the user types.
+  const [requiredError, setRequiredError] = useState(false)
+  const tokenInputRef = useRef<HTMLInputElement>(null)
   const trimmed = token.trim()
   const trimmedOrg = org.trim()
   const isFineGrained = tokenType === "fine-grained"
@@ -69,7 +73,12 @@ export function GitHubPatPrompt({
       className="space-y-5"
       onSubmit={(event) => {
         event.preventDefault()
-        if (!trimmed || isValidating) return
+        if (isValidating) return
+        if (!trimmed) {
+          setRequiredError(true)
+          tokenInputRef.current?.focus()
+          return
+        }
         onSubmit(trimmed)
       }}
     >
@@ -167,17 +176,25 @@ export function GitHubPatPrompt({
           {t("auth.patPasteInstruction")}
         </span>
         <Input
+          ref={tokenInputRef}
           className="font-mono text-sm"
           type="password"
           autoComplete="off"
           spellCheck={false}
           placeholder={isFineGrained ? "github_pat_…" : "ghp_…"}
           value={token}
-          onChange={(event) => setToken(event.target.value)}
+          invalid={requiredError}
+          onChange={(event) => {
+            setToken(event.target.value)
+            setRequiredError(false)
+          }}
           disabled={isValidating}
           aria-label={t("auth.patTokenLabel")}
         />
       </label>
+      {requiredError && (
+        <p className="text-sm text-error">{t("auth.patRequired")}</p>
+      )}
 
       <p className="text-xs leading-relaxed text-base-content/70">
         {t("auth.patStorageNote")}
@@ -189,7 +206,7 @@ export function GitHubPatPrompt({
           className="w-full"
           type="submit"
           loading={isValidating}
-          disabled={!trimmed || isValidating}
+          disabled={isValidating}
         >
           {t("auth.patSubmit")}
         </Button>

@@ -1,6 +1,7 @@
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
@@ -221,14 +222,16 @@ const AddStudent = ({
           >
             {t("common.close")}
           </Button>
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => (
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
               <Button
                 type="submit"
                 form={formId}
-                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
+                // Enabled while invalid (Primer): submit runs the validators
+                // and surfaces errors. The team gate stays — the classroom
+                // team is still being ensured, a loading dependency for the
+                // student branch, not a validity check.
+                disabled={isSubmitting || (!isStaffRole && !team)}
                 variant="primary"
               >
                 {!isSubmitting
@@ -245,7 +248,8 @@ const AddStudent = ({
         onSubmit={(e) => {
           e.preventDefault()
           e.stopPropagation()
-          form.handleSubmit()
+          const formEl = e.currentTarget as HTMLFormElement
+          void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
         }}
       >
         <AnimatedAlert tone="warning" show={!!warning} className="mt-4 text-sm">

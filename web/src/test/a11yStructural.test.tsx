@@ -171,11 +171,13 @@ describe("structural a11y — 3.3.2 form-field label association", () => {
   })
 })
 
-// 3.3.1 Error Identification: an invalid field renders role="alert" error text,
-// links it to the control via aria-describedby, and marks the control invalid;
-// the non-error branch points aria-describedby at the hint instead.
+// 3.3.1 Error Identification: an invalid field renders error text linked to
+// the control via aria-describedby and marks the control invalid; the
+// non-error branch points aria-describedby at the hint instead. The error is
+// deliberately NOT a live region (Primer form validation: focus movement
+// carries the announcement) — 3.3.1 requires identification, not a role.
 describe("structural a11y — 3.3.1 form-field error identification", () => {
-  it("wires role=alert error text to the control and marks it invalid", () => {
+  it("wires described-by error text to the control and marks it invalid", () => {
     render(
       <FormField label="Name" htmlFor="n" error="Required">
         {({ describedById, invalid }) => (
@@ -188,10 +190,10 @@ describe("structural a11y — 3.3.1 form-field error identification", () => {
         )}
       </FormField>,
     )
-    const alert = screen.getByRole("alert")
-    expect(alert.textContent).toBe("Required")
+    const errorMessage = screen.getByText("Required")
+    expect(errorMessage.getAttribute("role")).toBeNull()
     const input = screen.getByLabelText("Name")
-    expect(input.getAttribute("aria-describedby")).toBe(alert.id)
+    expect(input.getAttribute("aria-describedby")).toBe(errorMessage.id)
     expect(input.getAttribute("aria-invalid")).toBe("true")
   })
 

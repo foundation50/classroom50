@@ -239,7 +239,9 @@ export function ScoreOverrideModal({
             type="button"
             variant="primary"
             size="sm"
-            disabled={saving || saveBlocked}
+            // Enabled while invalid (Primer): the validation errors already
+            // render live below the inputs; save() guards re-entry.
+            disabled={saving}
             onClick={save}
           >
             {t("submissions.scoreOverride.save")}

@@ -11,10 +11,12 @@ import { GitHubLink } from "@/components/GitHubLink"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
 import { normalizePagesBaseUrl } from "@/util/pagesBaseUrl"
 import { CollapsibleAdvanced } from "@/pages/assignments/sections/CollapsibleAdvanced"
 import {
+  AnimatedAlert,
   Button,
   Card,
   EmphasisLtr,
@@ -287,6 +289,9 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
   const [submitted, setSubmitted] = useState(false)
+  // Feedback for an unchanged submit (the button stays enabled per Primer;
+  // the submit itself no-ops). Rendered only while still pristine.
+  const [noChangesNotice, setNoChangesNotice] = useState(false)
   // Archived = read-only: disable settings fields + Save (Archive/Delete header
   // actions stay live). editClassroom enforces this server-side.
   const archived = isClassroomArchived(cl ?? {})
@@ -331,12 +336,29 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   return (
     <Card
       as="form"
+      // noValidate: Primer forms guidance — browser-native validation UI is
+      // inaccessible and clashes with our submit-time validation; `required`
+      // stays on controls for AT parity.
+      noValidate
       bordered={false}
       className="w-full"
+      // Any edit clears the unchanged-submit notice — hooked on the DOM
+      // events rather than the form model, so controls that sync through
+      // local state still clear it.
+      onInput={() => setNoChangesNotice(false)}
+      onChange={() => setNoChangesNotice(false)}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        // Unchanged submit: a no-op with feedback — saving identical values
+        // would still land a pointless config-repo commit in the audit trail.
+        if (form.state.isDefaultValue) {
+          setNoChangesNotice(true)
+          return
+        }
+        setNoChangesNotice(false)
+        const formEl = e.currentTarget
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <Card.Body>
@@ -486,28 +508,24 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             </CollapsibleAdvanced>
           </div>
 
+          {/* Unchanged-submit feedback: a banner directly above the actions,
+              cleared by any edit via the form-level onInput/onChange. */}
+          <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
+            {t("classes.form.noChangesToSave")}
+          </AnimatedAlert>
           <Card.Actions className="justify-end p-2">
-            <form.Subscribe
-              selector={(state) => [
-                state.canSubmit,
-                state.isSubmitting,
-                state.isDefaultValue,
-              ]}
-            >
-              {([canSubmit, isSubmitting, isDefaultValue]) => (
+            <form.Subscribe selector={(state) => [state.isSubmitting]}>
+              {([isSubmitting]) => (
                 <Button
                   type="submit"
                   variant="primary"
                   loading={isSubmitting}
                   loadingLabel={t("classes.form.saving")}
-                  disabled={
-                    !canSubmit || isSubmitting || submitted || isDefaultValue
-                  }
-                  title={
-                    isDefaultValue
-                      ? t("classes.form.noChangesToSave")
-                      : undefined
-                  }
+                  // Kept enabled while unchanged or invalid (Primer saving
+                  // guidance) — the old disabled-with-tooltip explanation was
+                  // unreachable by keyboard. `submitted` still latches after
+                  // the save lands (completed state, not a validity gate).
+                  disabled={isSubmitting || submitted}
                 >
                   {isSubmitting
                     ? t("classes.form.saving")

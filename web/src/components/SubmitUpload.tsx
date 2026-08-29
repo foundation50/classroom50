@@ -6,6 +6,7 @@ import {
   Alert,
   Button,
   FileDropzone,
+  InlineMessage,
   Modal,
   ModalIcon,
   TableShell,
@@ -63,9 +64,11 @@ export function SubmitUpload({
 
   const [open, setOpen] = useState(false)
   const [picked, setPicked] = useState<Picked[]>([])
+  const [noFilesError, setNoFilesError] = useState(false)
   const submitting = mutation.isPending
 
   const addFiles = (files: PickedFile[]) => {
+    setNoFilesError(false)
     setPicked((prev) => {
       const byPath = new Map(prev.map((p) => [p.path, p]))
       for (const { file, relativePath } of files) {
@@ -114,11 +117,18 @@ export function SubmitUpload({
   // Cleared on open, never at close — see the close-animation note in ui/Modal.
   const openModal = () => {
     setPicked([])
+    setNoFilesError(false)
     setOpen(true)
   }
 
-  const submit = () =>
-    run(async () => {
+  const submit = () => {
+    if (picked.length === 0) {
+      // The button stays enabled (Primer); a no-files submit surfaces the
+      // message instead of silently disabling.
+      setNoFilesError(true)
+      return
+    }
+    return run(async () => {
       await mutation.mutateAsync(
         picked.map(({ path, file }) => ({ path, file })),
       )
@@ -130,6 +140,7 @@ export function SubmitUpload({
       })
       onSubmitted?.()
     })
+  }
 
   const hasFiles = picked.length > 0
 
@@ -167,7 +178,7 @@ export function SubmitUpload({
               size="sm"
               loading={submitting}
               loadingLabel={t("submissions.student.upload.submitting")}
-              disabled={submitting || !hasFiles}
+              disabled={submitting}
               onClick={() => void submit()}
             >
               {!submitting && (
@@ -264,6 +275,12 @@ export function SubmitUpload({
               buttonLabel={t("submissions.student.upload.choose")}
               disabled={submitting}
             />
+          )}
+
+          {noFilesError && (
+            <InlineMessage tone="error">
+              {t("submissions.student.upload.noFilesError")}
+            </InlineMessage>
           )}
 
           {mutation.isError && (

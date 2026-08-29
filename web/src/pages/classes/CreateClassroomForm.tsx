@@ -3,6 +3,7 @@ import { useForm } from "@tanstack/react-form"
 import { useParams } from "@tanstack/react-router"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import {
   DEFAULT_SECRET_LENGTH,
   SECRET_PATTERN_DESCRIPTION,
@@ -132,12 +133,17 @@ const CreateClassroomForm = ({
   return (
     <Card
       as="form"
+      // noValidate: Primer forms guidance — browser-native validation UI is
+      // inaccessible and clashes with our submit-time validation; `required`
+      // stays on controls for AT parity.
+      noValidate
       bordered={false}
       className="w-full"
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        const formEl = e.currentTarget
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <Card.Body>
@@ -368,10 +374,8 @@ const CreateClassroomForm = ({
         </form.Field>
 
         <Card.Actions className="justify-end p-2">
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => {
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => {
               // Hold the loading state through post-create navigation so the
               // button never reverts to a bare disabled state.
               const busy = isSubmitting || submitted
@@ -381,7 +385,7 @@ const CreateClassroomForm = ({
                   variant="primary"
                   loading={busy}
                   loadingLabel={t("classes.form.creating")}
-                  disabled={!canSubmit || busy}
+                  disabled={busy}
                 >
                   {busy
                     ? t("classes.form.creating")

@@ -69,7 +69,7 @@ type FieldRenderArgs = {
 }
 
 // The canonical form field: a bold label (optional required marker + help
-// tooltip), the control, an optional error message (role="alert"), and optional
+// tooltip), the control, an optional error message (aria-describedby), and optional
 // helper text. Unifies the 4 label patterns and 3 error-display markups the
 // audit found. `children` is a render prop that receives the generated `id`,
 // the `aria-describedby` target (error/help), and `invalid` so the control can
@@ -122,8 +122,10 @@ export function FormField({
           ) : null}
         </label>
         {/* An invalid field gets an exclamation marker next to its label so the
-            error is visible at a glance; the role="alert" message below carries
-            the accessible announcement, so the icon is decorative. */}
+        {/* The error icon marks the label row so a scanning eye catches the
+            error is visible at a glance; the message below is tied to the
+            control via aria-describedby (announced when the field is
+            focused), so the icon is decorative. */}
         {invalid ? (
           <AlertFillIcon aria-hidden="true" className="size-4 text-error" />
         ) : null}
@@ -134,7 +136,10 @@ export function FormField({
       {children({ id, describedById, invalid, required })}
 
       {invalid ? (
-        <p id={errorId} role="alert" className="text-sm text-error">
+        // Not a live region: Primer's form-validation guidance says focus
+        // movement (to the first invalid field) carries the announcement, and
+        // per-field role="alert" messages interrupt AT users mid-form.
+        <p id={errorId} className="text-sm text-error">
           {error}
         </p>
       ) : hint ? (

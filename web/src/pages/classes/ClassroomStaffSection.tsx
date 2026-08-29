@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
@@ -122,6 +122,8 @@ const AddStaff = ({
   const { t } = useTranslation()
   const { notify } = useToast()
   const [username, setUsername] = useState("")
+  const [usernameError, setUsernameError] = useState(false)
+  const usernameInputRef = useRef<HTMLInputElement>(null)
   const [role, setRole] = useState<StaffRole>("ta")
 
   const addMutation = useAddStaffMember(org, classroom, {
@@ -134,6 +136,13 @@ const AddStaff = ({
       onSubmit={(e) => {
         e.preventDefault()
         if (disabled) return
+        if (!username.trim()) {
+          // The button stays enabled (Primer); an empty submit surfaces the
+          // field error and returns focus to the input.
+          setUsernameError(true)
+          usernameInputRef.current?.focus()
+          return
+        }
         addMutation.mutate(
           { username, role },
           {
@@ -168,16 +177,23 @@ const AddStaff = ({
         <FormField
           label={t("classes.staff.githubUsername")}
           htmlFor="staff-username"
+          error={usernameError ? t("classes.staff.enterUsername") : undefined}
         >
-          {({ id }) => (
+          {({ id, describedById, invalid }) => (
             <Input
+              ref={usernameInputRef}
               id={id}
+              aria-describedby={describedById}
+              invalid={invalid}
               autoComplete="off"
               spellCheck={false}
               placeholder={t("classes.staff.usernamePlaceholder")}
               value={username}
               disabled={disabled || addMutation.isPending}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value)
+                setUsernameError(false)
+              }}
             />
           )}
         </FormField>
@@ -203,7 +219,7 @@ const AddStaff = ({
       <Button
         type="submit"
         variant="primary"
-        disabled={disabled || addMutation.isPending || !username.trim()}
+        disabled={disabled || addMutation.isPending}
       >
         {addMutation.isPending ? (
           <InlineSpinner />

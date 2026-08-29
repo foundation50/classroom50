@@ -214,7 +214,9 @@ describe("AutogradingTestsPane editor commit gating", () => {
     )
     await user.click(commitButton())
 
-    expect((await screen.findAllByRole("alert")).length).toBeGreaterThan(0)
+    // Field errors are describedby text, not live regions (Primer) — assert
+    // the error copy renders.
+    expect(screen.getByText("Run command is required.")).toBeTruthy()
     expect(tests()).toHaveLength(0)
   })
 })
