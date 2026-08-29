@@ -4,6 +4,7 @@ import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
+  AlertIcon,
   ChevronRightIcon,
   FilterIcon,
   LinkExternalIcon,
@@ -121,6 +122,7 @@ const OrgMembersPage = () => {
     ownerIds,
     isLoading,
     isError,
+    refetchMembers,
     teamSlugByClassroom,
     displayNameByClassroom,
     notes,
@@ -784,9 +786,27 @@ const OrgMembersPage = () => {
                   <tr>
                     <td
                       colSpan={MEMBERS_COL_COUNT}
-                      className="py-10 text-center text-sm text-error"
+                      className="px-6 py-10 text-center"
                     >
-                      {t("orgMembers.loadError")}
+                      <span
+                        role="alert"
+                        className="inline-flex items-center gap-2 text-sm text-error"
+                      >
+                        <AlertIcon
+                          aria-hidden="true"
+                          className="size-4 shrink-0"
+                        />
+                        {t("orgMembers.loadError")}
+                      </span>
+                      <div className="mt-3">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={refetchMembers}
+                        >
+                          {t("orgMembers.retry")}
+                        </Button>
+                      </div>
                     </td>
                   </tr>
                 )}
