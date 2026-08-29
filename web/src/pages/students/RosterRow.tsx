@@ -26,7 +26,6 @@ export const RosterRow = ({
   selectable = true,
   showSection = false,
   showStatus = true,
-  disabled = false,
 }: {
   row: TeamRosterRow
   selfRow: boolean
@@ -45,10 +44,6 @@ export const RosterRow = ({
   // Whether the table renders the Status column (only when some row is not
   // plainly enrolled — a fully healthy roster has nothing to report there).
   showStatus?: boolean
-  // Freeze the row (a sync is rewriting the roster): gates open/select once
-  // here so the page doesn't hand-stub every handler, and covers keyboard
-  // activation that the wrapper's pointer-events lock alone would miss.
-  disabled?: boolean
 }) => {
   const { t } = useTranslation()
   const member = rosterRowToMemberRow(row)
@@ -56,7 +51,7 @@ export const RosterRow = ({
   const displayHandle = row.username || row.email
   const displayInitials = rosterRowInitials(row)
   const open = () => {
-    if (!disabled) onOpen(row.key)
+    onOpen(row.key)
   }
 
   // Enrolled/pending rows assert role(s) (the team is the authority), shown as
@@ -78,15 +73,15 @@ export const RosterRow = ({
               ? t("students.bulk.selfNotSelectable")
               : t("students.bulk.selectRow", { label: displayHandle })
           }
-          disabled={selfRow || !selectable || disabled}
+          disabled={selfRow || !selectable}
           title={selfRow ? t("students.bulk.selfNotSelectable") : undefined}
           checked={checked}
           onClick={(e) => {
             e.stopPropagation()
-            if (!disabled) onCheckboxClick(e, row.key)
+            onCheckboxClick(e, row.key)
           }}
           onChange={() => {
-            if (!disabled) onToggle(row.key)
+            onToggle(row.key)
           }}
         />
       </td>

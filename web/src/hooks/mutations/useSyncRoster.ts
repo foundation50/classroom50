@@ -10,13 +10,20 @@ import { rosterPath } from "@/util/rosterPath"
 // email-only rows, and syncs identity/role rows from the classroom teams — at
 // most one commit (see reconcileRoster). Hook owns the roster-file
 // invalidation; the up-to-date/added/failed toasts stay at the call site (see
-// ./README.md).
-export function useSyncRoster(org: string, classroom: string) {
+// ./README.md). `excludeLogins` (typically the page's suppressed-logins
+// snapshot) keeps the pass from re-appending a student unenrolled while it
+// runs — the sync is no longer mutually exclusive with roster actions.
+export function useSyncRoster(
+  org: string,
+  classroom: string,
+  excludeLogins?: () => Set<string>,
+) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: () => reconcileRoster(client, { org, classroom }),
+    mutationFn: () =>
+      reconcileRoster(client, { org, classroom, excludeLogins }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),

@@ -75,7 +75,6 @@ const RosterMemberModal = ({
   teamSlugByRole,
   row: rowProp,
   canManage: canManageProp = true,
-  frozen = false,
   isSelf = false,
   onClose,
   onSaved,
@@ -99,10 +98,6 @@ const RosterMemberModal = ({
   // hidden), so those actions are hidden with an explanatory note rather than
   // rendered as buttons that silently no-op.
   canManage?: boolean
-  // A roster sync is rewriting the state these actions read and write: keep an
-  // already-open modal readable but withdraw every write affordance until the
-  // pass lands (the page's table lock can't reach a modal that is already up).
-  frozen?: boolean
   // True when this row IS the signed-in viewer. A viewer can't change their own
   // role here: demoting yourself off teacher would revoke your own org-owner
   // access mid-change (the mutation refuses it too — this hides the control so
@@ -123,9 +118,7 @@ const RosterMemberModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  // Every write gate below derives from canManage, so folding the sync freeze
-  // in here withdraws all of them at once while the modal stays readable.
-  const canManage = canManageProp && !frozen
+  const canManage = canManageProp
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)

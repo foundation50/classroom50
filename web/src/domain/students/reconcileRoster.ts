@@ -36,11 +36,22 @@ export type ReconcileRosterResult = SyncRosterFromTeamResult & {
 // transient write failures); the collect half is never-throw by contract.
 export async function reconcileRoster(
   client: GitHubClient,
-  input: { org: string; classroom: string },
+  input: {
+    org: string
+    classroom: string
+    // Threaded through to syncRosterFromTeam's append filter (see its doc):
+    // just-unenrolled logins the sync must not resurrect.
+    excludeLogins?: () => Set<string>
+  },
 ): Promise<ReconcileRosterResult> {
-  const { org, classroom } = input
+  const { org, classroom, excludeLogins } = input
   const invites = await collectInviteRecoveries(client, { org, classroom })
-  const sync = await syncRosterFromTeam(client, { org, classroom, invites })
+  const sync = await syncRosterFromTeam(client, {
+    org,
+    classroom,
+    invites,
+    excludeLogins,
+  })
   await finalizeInviteRecoveries(
     client,
     { org, classroom },

@@ -726,7 +726,7 @@
     "syncRosterTitle": "Check GitHub for roster changes",
     "syncNow": "Refresh roster",
     "syncActive": "Refreshing roster…",
-    "syncActiveHelp": "Checking GitHub for roster changes. Roster edits are paused until it finishes.",
+    "syncActiveHelp": "Checking GitHub for roster changes. This runs in the background — you can keep working with the roster.",
     "syncHelp": "Checks your classroom's GitHub teams and invitations for anything new — members who joined or left, invitations that were accepted, and role changes — and updates the roster to match. It also runs automatically when you open this page.",
     "rosterUpdatedAgo": "Updated {{when}}",
     "syncResultNoChanges": "no changes on last refresh",

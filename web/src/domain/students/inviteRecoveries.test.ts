@@ -377,19 +377,19 @@ describe("collectInviteRecoveries", () => {
   })
 
   it("a rate-limited re-check stops the pass early (never one team's 'unknown')", async () => {
-    const first = await inviteState("cs101", "one@example.com", [
-      { id: 98, login: "one" },
-    ])
-    const second = await inviteState("cs101", "two@example.com", [
-      { id: 99, login: "two" },
-    ])
-    listInviteTeams.mockResolvedValue([
-      { slug: first.slug },
-      { slug: second.slug },
-    ])
+    // More teams than the read pool: the rate limit must stop workers from
+    // pulling the remainder, not burn a request per remaining team.
+    const teams = await Promise.all(
+      Array.from({ length: 7 }, (_, i) =>
+        inviteState("cs101", `member${i}@example.com`, [
+          { id: 900 + i, login: `member${i}` },
+        ]),
+      ),
+    )
+    const bySlug = new Map(teams.map((t) => [t.slug, t]))
+    listInviteTeams.mockResolvedValue(teams.map((t) => ({ slug: t.slug })))
     readInviteTeam.mockImplementation(
-      async (_c: unknown, _o: unknown, slug: string) =>
-        slug === first.slug ? first : second,
+      async (_c: unknown, _o: unknown, slug: string) => bySlug.get(slug),
     )
     listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
     getTeamMembershipState.mockRejectedValue(rateLimitError())
@@ -397,9 +397,9 @@ describe("collectInviteRecoveries", () => {
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.trusted).toBe(false)
     expect(deleteInviteTeam).not.toHaveBeenCalled()
-    // The pass stopped at the first rate limit instead of burning a request
-    // per remaining team.
-    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+    // Only the pool-width batch already in flight was read; the remaining
+    // teams were never pulled.
+    expect(readInviteTeam).toHaveBeenCalledTimes(5)
   })
 
   it("readOnly classifies identically but never deletes (the sync's re-collect mode)", async () => {
@@ -535,15 +535,49 @@ describe("collectInviteRecoveries", () => {
   })
 
   it("a rate limit stops the pass and flips trusted off", async () => {
-    listInviteTeams.mockResolvedValue([
-      { slug: "invite-aaaaaaaaaaaaaaaa" },
-      { slug: "invite-bbbbbbbbbbbbbbbb" },
-    ])
+    // 12 teams against a pool of 5: every read rejects rate-limited, so only
+    // the in-flight batch is ever read and no further team is pulled.
+    listInviteTeams.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        slug: `invite-${i.toString(16).padStart(16, "0")}`,
+      })),
+    )
     readInviteTeam.mockRejectedValue(rateLimitError())
 
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.trusted).toBe(false)
-    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+    expect(readInviteTeam).toHaveBeenCalledTimes(5)
+  })
+
+  it("classifies teams concurrently, bounded by the read pool", async () => {
+    const teams = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        inviteState("cs101", `bulk${i}@example.com`, []),
+      ),
+    )
+    const bySlug = new Map(teams.map((t) => [t.slug, t]))
+    listInviteTeams.mockResolvedValue(teams.map((t) => ({ slug: t.slug })))
+    let inFlight = 0
+    let maxInFlight = 0
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        inFlight--
+        return bySlug.get(slug)
+      },
+    )
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    // Every team still classified (young + member-less -> live) ...
+    expect(readInviteTeam).toHaveBeenCalledTimes(12)
+    expect(state.liveInviteEmails.size).toBe(12)
+    expect(state.trusted).toBe(true)
+    // ... several at a time, but never unbounded (GitHub's secondary rate
+    // limits are concurrency-sensitive).
+    expect(maxInFlight).toBeGreaterThan(1)
+    expect(maxInFlight).toBeLessThanOrEqual(5)
   })
 })
 

@@ -15,7 +15,6 @@ import {
   SkeletonRows,
   SortableTh,
   TableShell,
-  cx,
 } from "@/components/ui"
 import { EmptyState } from "@/components/list"
 import type { Student } from "@/types/classroom"
@@ -429,8 +428,12 @@ const EnrolledStudents = ({
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live
-  // here so they skip when unmounted.
-  const syncMutation = useSyncRoster(org, classroom)
+  // here so they skip when unmounted. The suppressed-logins snapshot keeps a
+  // pass from re-appending a student unenrolled while it runs (the roster
+  // stays interactive during a sync).
+  const syncMutation = useSyncRoster(org, classroom, () =>
+    suppressedLogins.snapshot(),
+  )
   const runSync = () => {
     setSyncError(null)
     syncMutation.mutate(undefined, {
@@ -455,9 +458,10 @@ const EnrolledStudents = ({
   }
 
   // A roster synchronization is underway — the on-entry classroom reconcile,
-  // the drift auto-sync, or the manual Sync button. While true the sync button
-  // shows progress and the table below is inert: the sync rewrites the very
-  // state (teams, invitations, roster.csv) these actions read and write.
+  // the drift auto-sync, or the manual Sync button. Feeds the Sync button's
+  // progress state and keeps a second pass from stacking on this one; the
+  // table stays fully interactive, since every roster writer rebases onto a
+  // concurrent sync commit (withGitConflictRetry) rather than racing it.
   const syncing = reconcilePending || syncMutation.isPending
 
   // The Refresh caption's inputs: roster.csv's latest commit timestamp, and —
@@ -597,7 +601,6 @@ const EnrolledStudents = ({
       onToggle={handleToggleRow}
       showSection={showSection}
       showStatus={showStatus}
-      disabled={syncing}
     />
   )
 
@@ -664,16 +667,15 @@ const EnrolledStudents = ({
         </Alert>
       ) : null}
 
-      {/* Failed/expired invitations (owner-only). Frozen while a sync runs —
-          this banner sits outside the locked table region, but Re-invite and
-          Dismiss write the very invitations the sync is reconciling. */}
+      {/* Failed/expired invitations (owner-only). Usable during a sync — a
+          concurrent re-invite/dismiss commit simply rebases (or is folded by
+          the pass's own conflict retry), so only the per-action pending
+          states gate the buttons. */}
       {!isLoading && !isError && failedInvitations.length > 0 ? (
         <FailedInvitationsList
           failedInvitations={failedInvitations}
           actionsDisabled={
-            syncing ||
-            reinviteFailedInvite.isPending ||
-            dismissFailedInvite.isPending
+            reinviteFailedInvite.isPending || dismissFailedInvite.isPending
           }
           onReinvite={reinvite}
           actionError={inviteActionError}
@@ -701,8 +703,8 @@ const EnrolledStudents = ({
       {/* Toolbar: Sync leading on the left (mirroring the submissions
           toolbar's collect affordance) and doubling as the sync-in-progress
           indicator — label swaps to "Syncing…" while the on-entry reconcile,
-          drift auto-sync, or a manual run is underway (the table below goes
-          inert at the same time). The selection cluster (count + Actions +
+          drift auto-sync, or a manual run is underway; the table stays
+          interactive throughout. The selection cluster (count + Actions +
           Clear) joins it on the left while rows are selected; search +
           filters + sort + add actions stay right-aligned like the submissions
           controls. */}
@@ -772,27 +774,10 @@ const EnrolledStudents = ({
       {/* The roster table: Primer DataTable treatment via the shared
           TableShell frame (matching the assignments/submissions tables);
           select-all lives in the header row and the selection actions in the
-          toolbar above. While a sync is underway the whole region is inert —
-          `inert` blocks keyboard/focus wholesale (pointer-events/opacity are
-          the visual half), and the row/select-all controls are also disabled
-          so the freeze holds in DOMs that don't implement inert. A translucent
-          skeleton shimmer overlays the dimmed rows so the freeze reads as
-          "refreshing" rather than broken. */}
-      <div
-        aria-busy={syncing || undefined}
-        inert={syncing || undefined}
-        className={cx(
-          "relative transition-opacity",
-          syncing && "pointer-events-none opacity-60",
-        )}
-      >
-        {syncing ? (
-          <div
-            aria-hidden="true"
-            data-testid="roster-sync-veil"
-            className="skeleton absolute inset-0 z-10 rounded-box opacity-40"
-          />
-        ) : null}
+          toolbar above. A running sync only announces itself (aria-busy +
+          the toolbar indicator) — the table stays interactive, because every
+          roster write already rebases onto a concurrent sync commit. */}
+      <div aria-busy={syncing || undefined}>
         <TableShell animate={false} padded ariaBusy={isLoading}>
           <caption className="sr-only">{t("students.table.caption")}</caption>
           <thead>
@@ -804,7 +789,6 @@ const EnrolledStudents = ({
                   <SelectAllCheckbox
                     className="align-middle"
                     ariaLabel={t("students.bulk.selectAll")}
-                    disabled={syncing}
                     allSelected={allSelected}
                     someSelected={someSelected}
                     onToggle={handleToggleSelectAll}
@@ -922,10 +906,7 @@ const EnrolledStudents = ({
                             </span>
                           ) : null}
                           <div className="flex justify-center gap-2">
-                            <AddStudentButtons
-                              addActions={addActions}
-                              disabled={syncing}
-                            />
+                            <AddStudentButtons addActions={addActions} />
                           </div>
                         </div>
                       ) : null
@@ -1006,7 +987,6 @@ const EnrolledStudents = ({
         teamSlugByRole={teamSlugByRole}
         row={selected}
         canManage={isOwner}
-        frozen={syncing}
         isSelf={selected ? isSelf(selected) : false}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}

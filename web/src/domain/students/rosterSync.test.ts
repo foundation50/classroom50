@@ -203,6 +203,36 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     ])
   })
 
+  // The roster stays interactive during a sync, so a student unenrolled while
+  // the pass runs can still be on its (stale or eventually-consistent) team
+  // read. The excludeLogins accessor carries that decision into the closure:
+  // their append is skipped rather than resurrecting the row just removed.
+  it("never appends a just-unenrolled login (excludeLogins), appending the rest", async () => {
+    getRawFile.mockResolvedValue(HEADER)
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [
+        { id: 7, login: "zed", role: "student" },
+        // Mixed case pins the normalization: suppression stores lowercase.
+        { id: 8, login: "Gone", role: "student" },
+      ],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    const excludeLogins = vi.fn(() => new Set(["gone"]))
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites(),
+      excludeLogins,
+    })
+
+    // Read at decision time, inside the retried closure, so a suppression
+    // added while the pass was already in flight lands on a retry.
+    expect(excludeLogins).toHaveBeenCalled()
+    expect(result.addedUsernames).toEqual(["zed"])
+    expect(rowsFromCommit()?.map((r) => r.username)).toEqual(["zed"])
+  })
+
   it("does not re-collect when every member is already claimed or recovered", async () => {
     getRawFile.mockResolvedValue(
       HEADER + "ada,Ada,Lovelace,ada@uni.edu,,42,student",

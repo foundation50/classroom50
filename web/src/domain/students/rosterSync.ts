@@ -90,9 +90,16 @@ export async function syncRosterFromTeam(
     // team sync: no removals, and folds only what a decision-time re-collect
     // (triggered by an unknown member) proves.
     invites?: InviteReconcileState
+    // Normalized logins whose APPEND must be skipped this pass: students the
+    // teacher just unenrolled, whom a team read taken before the drop (or an
+    // eventually-consistent one) would otherwise resurrect as a fresh row. An
+    // accessor, read inside the retried closure, so a suppression added while
+    // the pass is already in flight still lands on the retry. Appends only —
+    // edits to existing rows are harmless and stay untouched.
+    excludeLogins?: () => Set<string>
   },
 ): Promise<SyncRosterFromTeamResult> {
-  const { org, classroom, invites } = input
+  const { org, classroom, invites, excludeLogins } = input
   log.info("sync roster from team: started", { org, classroom })
   await assertClassroomNotArchived(client, org, classroom)
 
@@ -269,12 +276,17 @@ export async function syncRosterFromTeam(
 
     // A member is "missing" when their numeric id, login, AND email are all
     // unclaimed by any CSV row (the same id -> login -> email fallback join the
-    // roster view uses, so append and display can't diverge).
+    // roster view uses, so append and display can't diverge). A just-unenrolled
+    // login (excludeLogins) is never appended: its team-drop may not be visible
+    // to this closure's team read yet, and re-adding the row would undo the
+    // removal the teacher just made.
+    const excluded = excludeLogins?.() ?? null
     const missing = members.filter(
       (m) =>
         !ids.has(String(m.id)) &&
         !logins.has(m.login.toLowerCase()) &&
-        !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
+        !(m.email ? emails.has(m.email.trim().toLowerCase()) : false) &&
+        !excluded?.has(m.login.trim().toLowerCase()),
     )
 
     // Reconcile the recorded role on existing rows to match live team

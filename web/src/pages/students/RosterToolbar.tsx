@@ -58,8 +58,8 @@ export function RosterToolbar({
   classroom: string
   client: GitHubClient
   // True while any sync writer runs (entry reconcile, drift auto-sync, or the
-  // manual run): the Sync button becomes the progress indicator and every
-  // roster-writing control in the toolbar freezes.
+  // manual run): the Sync button becomes the progress indicator. Nothing else
+  // freezes — roster writes rebase onto a concurrent sync commit.
   syncing: boolean
   onSync: () => void
   // When roster.csv last changed (its latest commit) — null while unknown.
@@ -115,7 +115,8 @@ export function RosterToolbar({
     <Toolbar>
       {/* The refresh cluster (caption + button + help) yields its spot to the
           selection cluster while rows are selected — one left-side context at
-          a time. An active sync still freezes everything via `syncing`. */}
+          a time. An active sync only disables the Sync button itself (it is
+          the progress indicator; a second pass would just stack). */}
       {selectedRows.length === 0 ? (
         <div className="flex items-center gap-1">
           {!syncing && captionParts.length > 0 ? (
@@ -155,7 +156,6 @@ export function RosterToolbar({
         selectedRows={selectedRows}
         onClearSelection={onClearSelection}
         onDone={onBulkDone}
-        disabled={syncing}
       />
       <Toolbar.Trailing>
         <Toolbar.Search
@@ -233,11 +233,8 @@ export function RosterToolbar({
         {/* The add-students actions: prominent text buttons on the toolbar's
             right edge (see AddStudentButtons — shared with the empty state so
             labels can't drift). Kept in place while rows are selected (the
-            selection cluster lives on the left); disabled while a sync
-            rewrites the roster. */}
-        {addActions ? (
-          <AddStudentButtons addActions={addActions} disabled={syncing} />
-        ) : null}
+            selection cluster lives on the left) and usable during a sync. */}
+        {addActions ? <AddStudentButtons addActions={addActions} /> : null}
       </Toolbar.Trailing>
     </Toolbar>
   )

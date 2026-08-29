@@ -20,6 +20,10 @@ export type SuppressedLogins = {
   remember: (logins: Iterable<string>) => void
   forget: (logins: Iterable<string>) => void
   has: (login: string) => boolean
+  // The current set, copied — the roster sync's append filter reads this at
+  // decision time (per conflict-retry attempt), so a suppression added while
+  // a sync is already in flight still lands.
+  snapshot: () => Set<string>
   clear: () => void
 }
 
@@ -48,6 +52,7 @@ export function useSuppressedLogins(): SuppressedLogins {
       for (const login of logins) ref.current.delete(normalize(login))
     },
     has: (login) => ref.current.has(login),
+    snapshot: () => new Set(ref.current),
     clear: () => ref.current.clear(),
   }
 }
