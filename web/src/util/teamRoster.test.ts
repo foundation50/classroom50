@@ -210,14 +210,6 @@ describe("buildTeamRoster", () => {
     expect(rows.filter((r) => r.username === "ada")).toHaveLength(1)
   })
 
-  it("ignores legacy username-less CSV rows (no row emitted)", () => {
-    const rows = buildTeamRoster({
-      members: [],
-      students: [csvRow({ email: "legacy@uni.edu", first_name: "Legacy" })],
-    })
-    expect(rows).toHaveLength(0)
-  })
-
   it("enriches an enrolled row from its matching CSV row", () => {
     // roster.csv only enriches — the row exists because ada is on the team; the
     // CSV lends her name/section.
@@ -903,12 +895,12 @@ describe("sortTeamRosterRowsBy — table-header column sorts", () => {
 })
 
 describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () => {
-  it("emits a name-only row as unlinked, with or without the marker", () => {
+  it("emits a name-only row as unlinked", () => {
     const rows = buildTeamRoster({
       members: [],
       students: [
         csvRow({ first_name: "Grace", last_name: "Hopper", section: "s1" }),
-        csvRow({ first_name: "Alan", last_name: "T", status: "unlinked" }),
+        csvRow({ first_name: "Alan", last_name: "T" }),
       ],
     })
     expect(rows.map((r) => [r.state, r.first_name])).toEqual([
@@ -919,15 +911,10 @@ describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () =
     expect(rows[0].github_id).toBe("")
   })
 
-  it("emits a MARKED email row as unlinked, but a blank-status email-only row stays invisible", () => {
+  it("emits an email row nothing backs as unlinked", () => {
     const rows = buildTeamRoster({
       members: [],
-      students: [
-        csvRow({ email: "kept@x.edu", first_name: "Ada", status: "unlinked" }),
-        // The invite lifecycle's own row: renders only through a pending
-        // invite, and the reconcile reaps it once nothing backs it.
-        csvRow({ email: "lifecycle@x.edu", first_name: "Bob" }),
-      ],
+      students: [csvRow({ email: "kept@x.edu", first_name: "Ada" })],
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
@@ -937,20 +924,44 @@ describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () =
     })
   })
 
-  it("does not double-render a marked email row a pending invite already borrows", () => {
+  it("does not double-render an email row a pending invite already borrows", () => {
     const rows = buildTeamRoster({
       members: [],
       invitations: [invite({ id: 9, email: "kept@x.edu" })],
-      students: [
-        csvRow({ email: "kept@x.edu", first_name: "Ada", status: "unlinked" }),
-      ],
+      students: [csvRow({ email: "kept@x.edu", first_name: "Ada" })],
     })
     // One row: the pending invite, carrying the kept row's metadata.
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ state: "pending", first_name: "Ada" })
   })
 
-  it("renders unlinked rows regardless of org-membership visibility", () => {
+  it("does not render an email row an enrolled row already claims", () => {
+    const rows = buildTeamRoster({
+      members: [member(101, "ada")],
+      students: [
+        csvRow({ github_id: "101", username: "ada", email: "ada@x.edu" }),
+        // A leftover identity-less twin sharing the enrolled row's address.
+        csvRow({ email: "ada@x.edu", first_name: "Ada" }),
+      ],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("enrolled")
+  })
+
+  it("suppresses an email-carrying unlinked row when invitations are hidden", () => {
+    // Without the pending lists, "unbacked" is unknowable for an email row —
+    // it may render through a now-hidden invite — so it is not rendered at all.
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "kept@x.edu", first_name: "Ada" })],
+      pendingHidden: true,
+    })
+    expect(rows).toEqual([])
+  })
+
+  it("renders a name-only row regardless of org-membership or invite visibility", () => {
+    // No email means nothing could ever back the row, so pendingHidden and
+    // orgMembersKnown play no part in the decision.
     const rows = buildTeamRoster({
       members: [],
       students: [csvRow({ first_name: "Grace", last_name: "H" })],

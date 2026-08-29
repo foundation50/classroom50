@@ -4,6 +4,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 const readOrgMembershipState = vi.fn()
 const assignRosterMemberRole = vi.fn()
 const assertClassroomNotArchived = vi.fn()
+const pendingInviteEmails = vi.fn()
 
 // withRosterRewrite is replaced by an in-memory harness: `storedRows` is the
 // parsed roster the mutate closure receives; `committedRows` captures what a
@@ -20,6 +21,9 @@ vi.mock("../classrooms", () => ({
 }))
 vi.mock("./roleWrites", () => ({
   assignRosterMemberRole: (...a: unknown[]) => assignRosterMemberRole(...a),
+}))
+vi.mock("./inviteRecoveries", () => ({
+  pendingInviteEmails: (...a: unknown[]) => pendingInviteEmails(...a),
 }))
 vi.mock("./rosterPrimitives", () => ({
   log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
@@ -62,6 +66,7 @@ beforeEach(() => {
   assertClassroomNotArchived.mockResolvedValue(undefined)
   readOrgMembershipState.mockResolvedValue("active")
   assignRosterMemberRole.mockResolvedValue({ state: "assigned" })
+  pendingInviteEmails.mockResolvedValue(new Set())
 })
 
 describe("unlinkedRowRef", () => {
@@ -88,9 +93,9 @@ describe("unlinkedRowRef", () => {
 describe("linkRosterRowToMember", () => {
   const member = { id: 42, login: "ada" }
 
-  it("writes identity onto the matched row, clears the marker, then team-adds", async () => {
+  it("writes identity onto the matched row, then team-adds", async () => {
     storedRows = [
-      row({ first_name: "Ada", email: "ada@x.edu", status: "unlinked" }),
+      row({ first_name: "Ada", email: "ada@x.edu" }),
       row({ username: "bob", github_id: "7" }),
     ]
     const result = await linkRosterRowToMember(client, {
@@ -104,7 +109,6 @@ describe("linkRosterRowToMember", () => {
       github_id: "42",
       email: "ada@x.edu",
       first_name: "Ada",
-      status: "",
     })
     expect(assignRosterMemberRole).toHaveBeenCalledWith(client, {
       org: "org",
@@ -132,9 +136,7 @@ describe("linkRosterRowToMember", () => {
 
   it("refuses when the member is not an active org member (decision-time proof)", async () => {
     readOrgMembershipState.mockResolvedValue("pending")
-    storedRows = [
-      row({ first_name: "Ada", email: "a@x.edu", status: "unlinked" }),
-    ]
+    storedRows = [row({ first_name: "Ada", email: "a@x.edu" })]
     await expect(
       linkRosterRowToMember(client, {
         ...INPUT,
@@ -147,7 +149,7 @@ describe("linkRosterRowToMember", () => {
 
   it("refuses when the member already claims another row (by id or login)", async () => {
     storedRows = [
-      row({ first_name: "Ada", email: "a@x.edu", status: "unlinked" }),
+      row({ first_name: "Ada", email: "a@x.edu" }),
       row({ username: "ADA", github_id: "" }),
     ]
     await expect(
@@ -187,9 +189,7 @@ describe("linkRosterRowToMember", () => {
 
   it("reports a failed team add without failing the link", async () => {
     assignRosterMemberRole.mockRejectedValue(new Error("boom"))
-    storedRows = [
-      row({ first_name: "Ada", email: "a@x.edu", status: "unlinked" }),
-    ]
+    storedRows = [row({ first_name: "Ada", email: "a@x.edu" })]
     const result = await linkRosterRowToMember(client, {
       ...INPUT,
       rowRef: { email: "a@x.edu" },
@@ -203,7 +203,7 @@ describe("linkRosterRowToMember", () => {
 describe("removeUnlinkedRows", () => {
   it("removes matching rows in one pass and reports refs that missed", async () => {
     storedRows = [
-      row({ first_name: "Ada", email: "kept@x.edu", status: "unlinked" }),
+      row({ first_name: "Ada", email: "kept@x.edu" }),
       row({ first_name: "Grace", last_name: "H", section: "s1" }),
       row({ username: "bob", github_id: "7" }),
     ]
@@ -217,6 +217,8 @@ describe("removeUnlinkedRows", () => {
     })
     expect(result).toEqual({ removed: 2, missed: 1 })
     expect(committedRows).toEqual([storedRows[2]])
+    // One liveness read covers every email-carrying ref.
+    expect(pendingInviteEmails).toHaveBeenCalledTimes(1)
   })
 
   it("never removes a row that gained an identity mid-flight", async () => {
@@ -229,16 +231,48 @@ describe("removeUnlinkedRows", () => {
     expect(committedRows).toBeNull()
   })
 
-  it("never removes a blank-status email-only row (the reaper's territory)", async () => {
-    // A pending email-invite row matches the email ref but carries no marker
-    // and no name-only shape: the invite lifecycle owns it, not this action.
-    storedRows = [row({ email: "pending@x.edu", role: "student" })]
+  it("misses an email target a live pending invitation still backs", async () => {
+    // The address was (re-)invited since the view snapshot: the decision-time
+    // liveness read proves the row is the invite lifecycle's again, so it is
+    // spared, never removed.
+    pendingInviteEmails.mockResolvedValue(new Set(["pending@x.edu"]))
+    storedRows = [row({ email: "pending@x.edu", first_name: "Ada" })]
     const result = await removeUnlinkedRows(client, {
       ...INPUT,
       rowRefs: [{ email: "pending@x.edu" }],
     })
     expect(result).toEqual({ removed: 0, missed: 1 })
     expect(committedRows).toBeNull()
+  })
+
+  it("fails closed on a failed liveness read, but still removes name-only targets", async () => {
+    // A null return means the pending list is unknowable: every email-carrying
+    // target is missed, while a name-only row (nothing could ever back it)
+    // stays removable.
+    pendingInviteEmails.mockResolvedValue(null)
+    storedRows = [
+      row({ email: "maybe@x.edu", first_name: "Ada" }),
+      row({ first_name: "Grace", last_name: "H", section: "s1" }),
+    ]
+    const result = await removeUnlinkedRows(client, {
+      ...INPUT,
+      rowRefs: [
+        { email: "maybe@x.edu" },
+        { first_name: "Grace", last_name: "H", section: "s1" },
+      ],
+    })
+    expect(result).toEqual({ removed: 1, missed: 1 })
+    expect(committedRows).toEqual([storedRows[0]])
+  })
+
+  it("skips the liveness read entirely when every ref is name-only", async () => {
+    storedRows = [row({ first_name: "Grace", last_name: "H", section: "s1" })]
+    const result = await removeUnlinkedRows(client, {
+      ...INPUT,
+      rowRefs: [{ first_name: "Grace", last_name: "H", section: "s1" }],
+    })
+    expect(result).toEqual({ removed: 1, missed: 0 })
+    expect(pendingInviteEmails).not.toHaveBeenCalled()
   })
 })
 
@@ -261,14 +295,13 @@ describe("appendUnlinkedRows", () => {
         email: "new@x.edu",
         first_name: "Ada",
         section: "s2",
-        status: "unlinked",
       }),
-      row({ first_name: "Alan", last_name: "T", status: "unlinked" }),
+      row({ first_name: "Alan", last_name: "T" }),
     ])
   })
 
   it("returns 0 and writes nothing when every entry is unusable or claimed", async () => {
-    storedRows = [row({ email: "claimed@x.edu", status: "unlinked" })]
+    storedRows = [row({ email: "claimed@x.edu" })]
     const written = await appendUnlinkedRows(client, INPUT, [
       { email: "claimed@x.edu" },
       { section: "only" },

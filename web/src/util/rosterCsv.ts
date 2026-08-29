@@ -18,41 +18,24 @@ export const STUDENT_CSV_FIELDS = [
   "section",
   "github_id",
   "role",
-  "status",
 ] as const
 type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
 export type StudentCsvRow = Record<StudentCsvField, string>
 
-// The `status` value marking a teacher-kept row with no GitHub identity (no
-// username, no usable github_id). Such a row is never reaped by the sync's
-// dead-row removal and never removed by an invite cancel — it leaves the state
-// only by gaining an identity (a claim clears the marker) or by an explicit
-// teacher delete. Mirrors the CLI's configrepo.RosterStatusUnlinked with no
-// compile-time link; the shared row cases pin the keep-rule half.
-export const ROSTER_STATUS_UNLINKED = "unlinked"
-
-// The one reading of the marker cell, shared by every consumer (the reap and
-// cancel exclusions, the roster view's unlinked pass, the link/remove
-// actions). Unknown values read as unmarked — additive evolution.
-export function hasUnlinkedMarker(status: string | null | undefined): boolean {
-  return (status ?? "").trim() === ROSTER_STATUS_UNLINKED
-}
-
 // The keep-rule: which parsed rows survive a read (and a write). A row must
 // identify a student (username, github_id, or email) or at least DESCRIBE one
-// (a name, or the explicit `status` marker) — a row with only section/role
-// noise, or nothing at all, is dropped. Callers pass normalizeStudentRow
-// output, so every cell is already trimmed. Mirrors the CLI's recordToRow
-// rule; shared cases: cli/shared/testdata/roster_row_cases.json.
+// (a name) — a row with only section/role noise, or nothing at all, is
+// dropped. Callers pass normalizeStudentRow output, so every cell is already
+// trimmed. Mirrors the CLI's recordToRow rule; shared cases:
+// cli/shared/testdata/roster_row_cases.json.
 function isKeptRosterRow(row: StudentCsvRow): boolean {
   return Boolean(
     row.username ||
     row.github_id ||
     row.email ||
     row.first_name ||
-    row.last_name ||
-    row.status,
+    row.last_name,
   )
 }
 
@@ -74,10 +57,6 @@ export function normalizeStudentRow(
     // from the classroom's GitHub teams on sync. A pre-role file has no role
     // column, so this coerces to "".
     role: cell(row.role),
-    // Lifecycle marker ("unlinked" or ""); unknown values are preserved
-    // verbatim and treated as "" by logic — additive evolution. A pre-status
-    // file has no status column, so this coerces to "".
-    status: cell(row.status),
   }
 }
 
@@ -217,7 +196,6 @@ export const FORMULA_GUARDED_FIELDS = [
   "email",
   "section",
   "role",
-  "status",
 ] as const
 
 export function stringifyStudentsCsv(rows: StudentCsvRow[]) {

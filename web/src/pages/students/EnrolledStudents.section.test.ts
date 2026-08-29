@@ -14,12 +14,10 @@ const student = (username: string, section?: string): Student =>
 const syncResult = (over: {
   addedUsernames?: string[]
   recoveredEmails?: string[]
-  removedEmails?: string[]
   noop?: boolean
 }) => ({
   addedUsernames: over.addedUsernames ?? [],
   recoveredEmails: over.recoveredEmails ?? [],
-  removedEmails: over.removedEmails ?? [],
   noop: over.noop ?? false,
 })
 
@@ -38,13 +36,11 @@ describe("rosterSyncMessageKeys", () => {
         syncResult({
           addedUsernames: ["octocat", "hubot"],
           recoveredEmails: ["a@x.edu"],
-          removedEmails: ["gone@x.edu", "old@x.edu"],
         }),
       ),
     ).toEqual([
       { key: "students.syncAdded", count: 2 },
       { key: "students.syncMatchedEmails", count: 1 },
-      { key: "students.syncRemovedEmails", count: 2 },
     ])
   })
 
@@ -57,7 +53,7 @@ describe("rosterSyncMessageKeys", () => {
   })
 
   // A commit that only refreshed roles or backfilled ids changes the roster
-  // without moving any of the three counts; the caller falls back to a generic
+  // without moving either count; the caller falls back to a generic
   // "Roster updated." rather than claiming zero of something.
   it("reports nothing when a pass committed only role or id changes", () => {
     expect(rosterSyncMessageKeys(syncResult({}))).toEqual([])

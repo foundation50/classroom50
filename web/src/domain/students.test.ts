@@ -142,8 +142,7 @@ const makeClient = (opts: {
   return { client, committed, invitationDeletes }
 }
 
-const HEADER =
-  "username,first_name,last_name,email,section,github_id,role,status\n"
+const HEADER = "username,first_name,last_name,email,section,github_id,role\n"
 
 // The web leg of the three-way roster header lockstep. The Go
 // (TestFullRosterHeader) and Python (test_full_roster_header_matches_go_constant)
@@ -155,7 +154,7 @@ const HEADER =
 describe("roster.csv header lockstep (web leg)", () => {
   it("STUDENT_CSV_FIELDS matches the Go/Python header verbatim", () => {
     expect(STUDENT_CSV_FIELDS.join(",")).toBe(
-      "username,first_name,last_name,email,section,github_id,role,status",
+      "username,first_name,last_name,email,section,github_id,role",
     )
   })
 
@@ -361,7 +360,7 @@ describe("inviteByEmail — org invite plus a pending email row", () => {
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           const csv =
             state.committed ??
-            "username,first_name,last_name,email,section,github_id,role,status\n"
+            "username,first_name,last_name,email,section,github_id,role\n"
           return Promise.resolve({
             type: "file",
             encoding: "base64",
@@ -661,7 +660,7 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
           if (path.includes("/contents/") && path.includes("roster.csv")) {
             const csv =
               state.committed ??
-              "username,first_name,last_name,email,section,github_id,role,status\n"
+              "username,first_name,last_name,email,section,github_id,role\n"
             return Promise.resolve({
               type: "file",
               encoding: "base64",
@@ -1183,7 +1182,6 @@ describe("updateClassroomMetadata — merge changed non-empty metadata into exis
 
 describe("updateStudent — edit a roster row's teacher-facing fields in place", () => {
   // alice: enrolled github row (identity by github_id 42); bob: email-only.
-  // Legacy 7-column rows (no status column) — tolerated short-by-one.
   const aliceRow = "alice,Alice,A,alice@x.edu,Period 1,42,\n"
   const bobRow = ",Bob,B,bob@x.edu,,,\n"
 
@@ -3283,14 +3281,14 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
 
   // Regression: a roster hand-edited (or exported by a tool that drops empty
   // trailing columns) has rows with the empty trailing column omitted, e.g.
-  // `octocat,Grace,Hopper,g@x.edu,Section A,1,` (the trailing `status`
-  // dropped). Papa flags TooFewFields, but the row is benign (missing trailing
-  // field -> ""), so the parse must NOT throw and sync must still see the
-  // row's identity.
-  it("tolerates short rows missing the trailing status column", async () => {
+  // `octocat,Grace,Hopper,g@x.edu,Section A,1` (the trailing `role` dropped).
+  // Papa flags TooFewFields, but the row is benign (missing trailing field ->
+  // ""), so the parse must NOT throw and sync must still see the row's
+  // identity.
+  it("tolerates short rows missing the trailing role column", async () => {
     const shortRows =
-      "octocat,Grace,Hopper,grace@example.edu,Section A,1,\n" +
-      "torvalds,Linus,Torvalds,linus@example.edu,Section A,2,\n"
+      "octocat,Grace,Hopper,grace@example.edu,Section A,1\n" +
+      "torvalds,Linus,Torvalds,linus@example.edu,Section A,2\n"
     const { client } = makeTeamClient({
       startingCsv: HEADER + shortRows,
       users: {},
@@ -3494,16 +3492,14 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     expect(rows.filter((r) => r.email === "alice@x.edu")).toHaveLength(1)
   })
 
-  it("removes a dead email-only row and keeps one a live invite team backs", async () => {
+  it("keeps an email-only row nothing backs (the sync never removes rows)", async () => {
     const { client, committed } = makeTeamClient({
-      startingCsv:
-        HEADER + ",,,dead@x.edu,,,student\n" + ",,,live@x.edu,,,student\n",
+      startingCsv: HEADER + ",,,dead@x.edu,,,\n" + ",,,live@x.edu,,,student\n",
       users: {},
       teamHas: [],
-      // The live invitee's pending invitation preserves their recorded role...
+      // The live invitee's pending invitation preserves their recorded role;
+      // the dead row has nothing backing it and simply stays.
       teamInvites: [{ email: "live@x.edu" }],
-      // ...and the org-level pending list is what removal confirms against.
-      orgInviteEmails: ["live@x.edu"],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -3512,37 +3508,16 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState({ liveInviteEmails: new Set(["live@x.edu"]) }),
     })
 
-    expect(result.removedEmails).toEqual(["dead@x.edu"])
-    const rows = rowsFromCsv(committed.content!)
-    expect(rows).toHaveLength(1)
-    expect(rows[0].email).toBe("live@x.edu")
-  })
-
-  it("keeps a row whose invite was sent after the invite snapshot was taken", async () => {
-    // The race: collect enumerated teams BEFORE this CSV read, so a brand-new
-    // invite's row is present but absent from liveInviteEmails. GitHub's current
-    // pending list still shows it, so the row must survive.
-    const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + ",,,fresh@x.edu,,,student\n",
-      users: {},
-      teamHas: [],
-      teamInvites: [{ email: "fresh@x.edu" }],
-      orgInviteEmails: ["fresh@x.edu"],
-    })
-
-    const result = await syncRosterFromTeam(client, {
-      org: "acme",
-      classroom: "cs101",
-      // Snapshot predates the invite: nothing live, nothing recovered.
-      invites: inviteState(),
-    })
-
-    expect(result.removedEmails).toEqual([])
+    // Both rows survive; nothing else changed, so the pass is a no-op — an
+    // unbacked email row never forces a commit by itself.
     expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 
-  it("keeps every email row when the pending-invitation read fails (fail closed)", async () => {
+  it("never reads org invitations: a failing invitations endpoint is invisible to the sync", async () => {
+    // The removal pass (and its liveness confirmation) is gone: even with the
+    // org-invitations endpoint rejecting, the sync completes and the unbacked
+    // email row stays.
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER + ",,,dead@x.edu,,,student\n",
       users: {},
@@ -3557,11 +3532,11 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState(),
     })
 
-    expect(result.removedEmails).toEqual([])
+    expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 
-  it("never removes an email row when the reconcile state is untrusted", async () => {
+  it("keeps an email row even when the reconcile state is untrusted", async () => {
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER + ",,,dead@x.edu,,,student\n",
       users: {},
@@ -3575,15 +3550,14 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState({ trusted: false }),
     })
 
-    expect(result.removedEmails).toEqual([])
     expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 
-  it("never removes an identity row, even with no live invite team", async () => {
+  it("keeps identity rows untouched, even with no live invite team", async () => {
     const { client, committed } = makeTeamClient({
-      // A username row and an id-only row: both are identity rows, not
-      // email-only, so the removal pass must not touch them.
+      // A username row and an id-only row: like every other row, they are
+      // never removed by the sync.
       startingCsv: HEADER + "carol,,,c@x.edu,,,\n" + ",,,d@x.edu,,55,\n",
       users: {},
       teamHas: [],
@@ -3596,7 +3570,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState(),
     })
 
-    expect(result.removedEmails).toEqual([])
+    expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 })
@@ -3640,11 +3614,11 @@ describe("writeClassroomRoles — set role on existing rows", () => {
   })
 
   it("throws RosterCsvMalformedError on a malformed roster.csv (no commit)", async () => {
-    // The self-healing case: a stray-comma sibling row (9 fields vs 8). The
+    // The self-healing case: a stray-comma sibling row (8 fields vs 7). The
     // writeback must NOT silently rewrite (positional re-serialize would corrupt
     // the bad row) nor swallow — it raises a typed error the caller surfaces.
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "prof,,,,,9,,\n" + "student1,,,,,,,,\n",
+      startingCsv: HEADER + "prof,,,,,9,\n" + "student1,,,,,,,\n",
       users: {},
       teamHas: [],
     })
@@ -3699,11 +3673,11 @@ describe("writeClassroomRoles — set role on existing rows", () => {
 describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
   const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
 
-  it("parses a row missing the trailing status column into correct fields", () => {
-    // 7 fields: the empty trailing status column omitted. The row must parse
-    // (not throw) AND keep every value in its own column, with status -> "".
+  it("parses a row missing the trailing role column into correct fields", () => {
+    // 6 fields: the empty trailing role column omitted. The row must parse
+    // (not throw) AND keep every value in its own column, with role -> "".
     const rows = parseStudentsCsv(
-      HEADER + "octocat,Grace,Hopper,grace@example.edu,Section A,42,student\n",
+      HEADER + "octocat,Grace,Hopper,grace@example.edu,Section A,42\n",
     )
     expect(rows).toEqual([
       {
@@ -3713,14 +3687,13 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
         email: "grace@example.edu",
         section: "Section A",
         github_id: "42",
-        role: "student",
-        status: "",
+        role: "",
       },
     ])
   })
 
   it("throws on a row short by more than one column", () => {
-    // 6 fields — short by 2 (role AND status dropped). A row this incomplete
+    // 5 fields — short by 2 (github_id AND role dropped). A row this incomplete
     // can't be a mere dropped trailing column; Papa would map its values into
     // the wrong columns, so the trailing-only guard must reject it rather than
     // silently misalign identity. (A row short by exactly one is inherently
@@ -3728,7 +3701,7 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
     // see above.)
     expect(() =>
       parseStudentsCsv(
-        HEADER + "octocat,Grace,Hopper,grace@example.edu,Sec A,42\n",
+        HEADER + "octocat,Grace,Hopper,grace@example.edu,Sec A\n",
       ),
     ).toThrow(/roster\.csv/)
   })
@@ -3736,7 +3709,7 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
   it("still rejects a TooManyFields (extra column) row as before", () => {
     expect(() =>
       parseStudentsCsv(
-        HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student,,extra\n",
+        HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student,extra\n",
       ),
     ).toThrow(/roster\.csv/)
   })
@@ -3746,9 +3719,9 @@ describe("parseRosterCsv — structured per-line problems", () => {
   const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
 
   it("reports the exact malformed line for a too-many-fields row (the login-only-row case)", () => {
-    // The real bug: a hand-written row with one comma too many (9 fields vs 8).
+    // The real bug: a hand-written row with one comma too many (8 fields vs 7).
     const csv =
-      HEADER + "rongxin-liu,,,,,10591665,teacher,\n" + "student1,,,,,,,,\n"
+      HEADER + "rongxin-liu,,,,,10591665,teacher\n" + "student1,,,,,,,\n"
     const { rows, problems } = parseRosterCsv(csv)
     expect(problems).toHaveLength(1)
     // Header is line 1; rongxin-liu line 2; the malformed student1 row is line 3.
@@ -3759,13 +3732,13 @@ describe("parseRosterCsv — structured per-line problems", () => {
   })
 
   it("returns no problems for a well-formed roster", () => {
-    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student,\n"
+    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student\n"
     const { problems } = parseRosterCsv(csv)
     expect(problems).toEqual([])
   })
 
   it("treats a row short by exactly one trailing column as benign (no problem)", () => {
-    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student\n"
+    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42\n"
     const { problems } = parseRosterCsv(csv)
     expect(problems).toEqual([])
   })

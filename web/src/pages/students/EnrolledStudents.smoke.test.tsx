@@ -428,8 +428,7 @@ describe("EnrolledStudents — rendered phase views", () => {
       data: {
         noop: false,
         addedUsernames: ["a"],
-        recoveredEmails: [],
-        removedEmails: ["b@x.io"],
+        recoveredEmails: ["b@x.io"],
         recordedRecoveries: [],
       },
     }
@@ -449,7 +448,6 @@ describe("EnrolledStudents — rendered phase views", () => {
         noop: true,
         addedUsernames: [],
         recoveredEmails: [],
-        removedEmails: [],
         recordedRecoveries: [],
       },
     }

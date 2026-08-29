@@ -500,8 +500,7 @@ const EnrolledStudents = ({
       ? syncMutation.data.noop
         ? 0
         : syncMutation.data.addedUsernames.length +
-          syncMutation.data.recoveredEmails.length +
-          syncMutation.data.removedEmails.length
+          syncMutation.data.recoveredEmails.length
       : null
 
   // Auto-sync on open (see useRosterAutoSync): append team members lacking a

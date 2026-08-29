@@ -142,13 +142,13 @@ MAX_RESULT_BYTES = 10 * 1024 * 1024
 
 # Required roster columns written by `gh teacher classroom add`. Mirrors
 # RosterColumns in cli/gh-teacher/internal/configrepo/students_csv.go and the
-# web app's STUDENT_CSV_FIELDS. Identity/metadata columns; `role`
+# web app's STUDENT_CSV_FIELDS. Identity/metadata columns; the trailing `role`
 # (teacher/ta/student, or "") is best-effort recorded metadata refreshed from
 # the classroom's GitHub teams — the teams, not this column, remain the
-# enrollment authority; `status` ("unlinked" or "") marks a teacher-kept row
-# with no GitHub identity. A file written before either trailing column still
-# reads fine: DictReader is header-keyed and a missing column just yields "".
-ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id", "role", "status")
+# enrollment authority. role was added additively, so a file written before it
+# still reads fine: DictReader is header-keyed and a missing column just
+# yields "".
+ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id", "role")
 
 # Per-classroom roster file. Mirrors contract.RosterFilename in
 # cli/shared/contract/contract.go with NO compile-time link — keep

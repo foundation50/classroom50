@@ -767,8 +767,6 @@
     "syncAdded_other": "Added {{count}} team members to the roster.",
     "syncMatchedEmails_one": "Matched {{count}} invited email to a GitHub account.",
     "syncMatchedEmails_other": "Matched {{count}} invited emails to GitHub accounts.",
-    "syncRemovedEmails_one": "Removed {{count}} address whose invitation is no longer pending.",
-    "syncRemovedEmails_other": "Removed {{count}} addresses whose invitations are no longer pending.",
     "syncRosterDone": "Roster updated.",
     "syncFailed": "Couldn't sync the roster: {{error}}",
     "resendAllRateLimitedShort": "Re-sent {{resent}} invites, then hit GitHub's rate limit. Try the rest again in a minute.",

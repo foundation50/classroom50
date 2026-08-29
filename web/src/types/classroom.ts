@@ -472,8 +472,4 @@ export type Student = {
   section: string
   github_id: string
   role: string
-  // Lifecycle marker: "unlinked" for a teacher-kept row with no GitHub
-  // identity, "" otherwise. Optional because files written before the column
-  // existed (and rows projected from views that never carry it) omit it.
-  status?: string
 }

@@ -2,7 +2,6 @@ import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { parseGitHubId, rosterClaimSet } from "@/util/identity"
-import { hasUnlinkedMarker } from "@/util/rosterCsv"
 import {
   DEFAULT_STUDENT_SORT,
   NAME_COLLATION,
@@ -46,9 +45,10 @@ export {
 //  - needs_attention_not_in_org: on roster.csv, NOT an org member and no pending
 //    invite — the teacher invites them to the org.
 //  - unlinked: a roster.csv row with NO GitHub identity at all (no username, no
-//    github_id) that the roster preserves: a name-only row, or an email row the
-//    teacher explicitly kept (status=unlinked). The teacher links it to an org
-//    member or deletes it — the manual-reconciliation states.
+//    github_id) and nothing backing its email — a name-only row, or an email
+//    row whose invitation died or could never be sent. The sync never removes a
+//    row, so these wait for the teacher to link them to an org member or
+//    delete them — the manual-reconciliation state.
 //
 // The two needs-attention states require org membership to be known. When it
 // isn't (a non-owner who can't read members, or the read failed), those rows
@@ -384,15 +384,15 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     }
   }
 
-  // Unlinked pass: identity-less rows the roster PRESERVES render as their own
-  // rows so the teacher can link or delete them. Two kinds qualify:
-  //   - a name-only row (no email): nothing can ever back or reap it;
-  //   - an email row carrying the explicit status=unlinked marker, UNLESS a
-  //     rendered row already borrows that address (it shows through that row).
-  // A blank-status email-only row keeps today's behavior — it renders only
-  // through the pending invite it backs, and the reconcile reaps it once
-  // nothing does (rendering it here would flash a row the next sync deletes).
-  // Independent of orgMembersKnown/pendingHidden: these rows are pure CSV.
+  // Unlinked pass: identity-less rows render as their own rows so the teacher
+  // can link or delete them — the sync never removes a row, so these are the
+  // rows only a teacher action can resolve. Two kinds:
+  //   - a name-only row (no email): nothing can ever back it, always emitted;
+  //   - an email row NO rendered row borrows (no pending invitation carries
+  //     the address, no enrolled row claims it) — the invitation died, or the
+  //     address could never be invited. Suppressed when pendingHidden: without
+  //     the invitation lists, "unbacked" is unknowable, and mislabeling a
+  //     pending student is worse than hiding a row from a non-owner.
   {
     const renderedEmails = new Set(
       rows.map((row) => row.email.trim().toLowerCase()).filter(Boolean),
@@ -401,12 +401,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     for (const student of students) {
       if (student.github_id?.trim() || student.username?.trim()) continue
       const email = student.email?.trim().toLowerCase() ?? ""
-      const marked = hasUnlinkedMarker(student.status)
-      const nameOnly =
-        !email &&
-        Boolean(student.first_name?.trim() || student.last_name?.trim())
-      if (!marked && !nameOnly) continue
-      if (email && renderedEmails.has(email)) continue
+      if (email && (pendingHidden || renderedEmails.has(email))) continue
       // Stable-ish key from the row's own cells; duplicates get an index
       // suffix so React keys stay unique (actions on such twins fail closed
       // on the ambiguous match — see unlinkedRowRef).

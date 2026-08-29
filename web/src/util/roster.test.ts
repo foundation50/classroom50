@@ -66,7 +66,6 @@ describe("toStudent", () => {
       section: "A",
       github_id: "9",
       role: "student",
-      status: "",
     }
     const s = toStudent(row)
     expect(s).toEqual(row)
@@ -94,7 +93,6 @@ describe("toStudent", () => {
       section: "",
       github_id: "",
       role: "",
-      status: "",
     })
     expect("enrollment_status" in s).toBe(false)
     expect("email_hash" in s).toBe(false)

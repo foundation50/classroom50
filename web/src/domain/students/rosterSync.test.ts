@@ -159,11 +159,9 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
         section: "",
         github_id: "42",
         role: "student",
-        status: "",
       },
     ])
     expect(result.addedUsernames).toEqual([])
-    expect(result.removedEmails).toEqual([])
     expect(result.recoveredEmails).toEqual(["ada@uni.edu"])
     // The landed fold records the mapping, so its team is safe to retire.
     expect(result.recordedRecoveries).toEqual([
@@ -200,7 +198,6 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
         section: "",
         github_id: "7",
         role: "student",
-        status: "",
       },
     ])
   })
@@ -254,10 +251,10 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     expect(result.noop).toBe(true)
   })
 
-  it("keeps removals off in plain mode even when a re-collect ran", async () => {
-    // Plain team sync (no invites passed): the caller proved nothing about the
-    // invite lifecycle, so even a trusted re-collect must not authorize reaping
-    // the email-only row — only the fold and the append may act.
+  it("keeps an email-only row a re-collect can't explain in plain mode", async () => {
+    // Plain team sync (no invites passed): the sync never removes a row, so
+    // the email-only row nothing backs simply stays — only the fold and the
+    // append may act.
     getRawFile.mockResolvedValue(HEADER + ",Bea,Ng,bea@uni.edu,,,student")
     listClassroomMembersWithRoles.mockResolvedValue({
       members: [{ id: 9, login: "zoe", role: "student" }],
@@ -274,15 +271,15 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
       ...INPUT,
       readOnly: true,
     })
-    // No liveness confirmation was even attempted: removals never arm.
+    // The sync never reads the pending-invitation list: there is no removal
+    // to confirm liveness for.
     expect(pendingInviteEmails).not.toHaveBeenCalled()
-    expect(result.removedEmails).toEqual([])
     const rows = rowsFromCommit()
     expect(rows?.map((r) => r.email)).toContain("bea@uni.edu")
     expect(result.addedUsernames).toEqual(["zoe"])
   })
 
-  it("a DEGRADED re-collect merges, never replaces: caller folds land, removals disarm", async () => {
+  it("a DEGRADED re-collect merges, never replaces: caller folds still land", async () => {
     // The caller collected a trusted recovery for Ada, then the in-closure
     // re-collect (triggered by unknown member Zed) degrades to the never-throw
     // empty state. Replacing the caller's state would skip Ada's fold while
@@ -290,7 +287,7 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     getRawFile.mockResolvedValue(
       HEADER +
         ",Ada,Lovelace,ada@uni.edu,,,student\n" +
-        ",Dead,Row,dead@uni.edu,,,student",
+        ",Idle,Row,idle@uni.edu,,,student",
     )
     listClassroomMembersWithRoles.mockResolvedValue({
       members: [
@@ -301,7 +298,6 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
       pendingRoleKeys: new Set(),
     })
     collectInviteRecoveries.mockResolvedValue(emptyInvites({ trusted: false }))
-    // The caller's (trusted) state says dead@uni.edu has no live backing.
     const ADA = {
       email: "ada@uni.edu",
       invitee: { id: 42, login: "ada" },
@@ -322,9 +318,9 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
     })
     // ...her recorded mapping is finalizable...
     expect(result.recordedRecoveries).toEqual([ADA])
-    // ...and the untrusted re-collect disarmed removals (dead row survives).
-    expect(result.removedEmails).toEqual([])
-    expect(rows?.map((r) => r.email)).toContain("dead@uni.edu")
+    // ...and the email-only row nothing backs survives — the sync never
+    // removes a row.
+    expect(rows?.map((r) => r.email)).toContain("idle@uni.edu")
     expect(pendingInviteEmails).not.toHaveBeenCalled()
   })
 
@@ -390,15 +386,13 @@ describe("syncRosterFromTeam — late-acceptance re-collect (#756)", () => {
 })
 
 describe("syncRosterFromTeam — unlinked rows (teacher-kept, no identity)", () => {
-  const FULL_HEADER =
-    "username,first_name,last_name,email,section,github_id,role,status\n"
-
-  it("the reap passes an unlinked email row over while eating a blank-status twin", async () => {
+  it("an email-only row nothing backs survives a full pass without forcing a commit", async () => {
+    // The sync never removes a row: an unbacked email row is not drift, so a
+    // trusted full-reconcile pass with nothing else to do stays a noop.
     getRawFile.mockResolvedValue(
-      FULL_HEADER +
-        ",Ada,L,kept@uni.edu,s1,,,unlinked\n" +
-        ",Dead,Row,dead@uni.edu,,,student,\n" +
-        "bob,Bob,B,bob@uni.edu,,7,student,",
+      HEADER +
+        ",Ada,L,kept@uni.edu,s1,,\n" +
+        "bob,Bob,B,bob@uni.edu,,7,student",
     )
     listClassroomMembersWithRoles.mockResolvedValue({
       members: [{ id: 7, login: "bob", role: "student" }],
@@ -411,18 +405,16 @@ describe("syncRosterFromTeam — unlinked rows (teacher-kept, no identity)", () 
       invites: emptyInvites(),
     })
 
-    expect(result.removedEmails).toEqual(["dead@uni.edu"])
-    const rows = rowsFromCommit()
-    expect(rows?.map((r) => r.email)).toContain("kept@uni.edu")
-    expect(rows?.find((r) => r.email === "kept@uni.edu")).toMatchObject({
-      status: "unlinked",
-      username: "",
-    })
+    expect(result.noop).toBe(true)
+    expect(committed.csv).toBeNull()
+    // No liveness read either: nothing is ever removed, so nothing needs
+    // confirming.
+    expect(pendingInviteEmails).not.toHaveBeenCalled()
   })
 
-  it("an acceptance fold onto an unlinked row fills identity and clears the marker", async () => {
+  it("an acceptance fold onto a plain email row fills identity in place", async () => {
     getRawFile.mockResolvedValue(
-      FULL_HEADER + ",Ada,Lovelace,ada@uni.edu,s1,,student,unlinked",
+      HEADER + ",Ada,Lovelace,ada@uni.edu,s1,,student",
     )
     listClassroomMembersWithRoles.mockResolvedValue({
       members: [{ id: 42, login: "ada", role: "student" }],
@@ -450,7 +442,6 @@ describe("syncRosterFromTeam — unlinked rows (teacher-kept, no identity)", () 
         section: "s1",
         github_id: "42",
         role: "student",
-        status: "",
       },
     ])
   })

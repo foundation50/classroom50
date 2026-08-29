@@ -1,5 +1,5 @@
 {
-  "comment": "Cross-language golden cases for the roster.csv row keep-rule. A roster row is kept when it identifies a student (username, github_id, or email) OR describes one (a first/last name, or the explicit `status` marker); it is rejected only when all of those are blank — a row carrying only section/role noise addresses and describes nobody. Both the Go strict reader (recordToRow in cli/gh-teacher/internal/configrepo/students_csv.go) and the TS reader (parseRosterCsv in web/src/util/rosterCsv.ts) must agree on every case here, because the web WRITES email-only pending rows and identity-less `unlinked` rows and the CLI must still read that classroom's roster. `record` lists the canonical columns in header order (username,first_name,last_name,email,section,github_id,role,status). `keep` is whether the row survives the KEEP-RULE specifically. Two scoping notes, so this fixture is not read as a stronger guarantee than it is: (1) the keep decision is shared, but the two readers act differently on a row they don't keep — the web drops it silently, while Go's strict reader errors (aborting the file) and its lenient reader preserves it verbatim for round-tripping; (2) cases here carry only github_id values the id parser accepts, because Go additionally hard-errors on an unparseable github_id (e.g. `nope`) for ANY row, with or without other identity columns — a pre-existing divergence from the web, which keeps such a row. Update both readers in lockstep.",
+  "comment": "Cross-language golden cases for the roster.csv row keep-rule. A roster row is kept when it identifies a student (username, github_id, or email) OR describes one (a first/last name); it is rejected only when all of those are blank — a row carrying only section/role noise addresses and describes nobody. Both the Go strict reader (recordToRow in cli/gh-teacher/internal/configrepo/students_csv.go) and the TS reader (parseRosterCsv in web/src/util/rosterCsv.ts) must agree on every case here, because the web WRITES email-only pending rows and name-only `unlinked` rows and the CLI must still read that classroom's roster. `record` lists the canonical columns in header order (username,first_name,last_name,email,section,github_id,role). `keep` is whether the row survives the KEEP-RULE specifically. Two scoping notes, so this fixture is not read as a stronger guarantee than it is: (1) the keep decision is shared, but the two readers act differently on a row they don't keep — the web drops it silently, while Go's strict reader errors (aborting the file) and its lenient reader preserves it verbatim for round-tripping; (2) cases here carry only github_id values the id parser accepts, because Go additionally hard-errors on an unparseable github_id (e.g. `nope`) for ANY row, with or without other identity columns — a pre-existing divergence from the web, which keeps such a row. Update both readers in lockstep.",
   "columns": [
     "username",
     "first_name",
@@ -7,68 +7,62 @@
     "email",
     "section",
     "github_id",
-    "role",
-    "status"
+    "role"
   ],
   "cases": [
     {
       "why": "fully populated row",
-      "record": ["alice", "Alice", "A", "alice@x.edu", "s1", "1", "student", ""],
+      "record": ["alice", "Alice", "A", "alice@x.edu", "s1", "1", "student"],
       "keep": true
     },
     {
       "why": "username only — the classic CLI-authored row",
-      "record": ["alice", "", "", "", "", "", "", ""],
+      "record": ["alice", "", "", "", "", "", ""],
       "keep": true
     },
     {
       "why": "email only — the web's pending email-invite row",
-      "record": ["", "", "", "pending@x.edu", "", "", "student", ""],
+      "record": ["", "", "", "pending@x.edu", "", "", "student"],
       "keep": true
     },
     {
       "why": "github_id only — identity without a resolved login",
-      "record": ["", "", "", "", "", "4242", "student", ""],
+      "record": ["", "", "", "", "", "4242", "student"],
       "keep": true
     },
     {
       "why": "unusable but present github_id still counts as identity",
-      "record": ["", "", "", "", "", "0", "", ""],
+      "record": ["", "", "", "", "", "0", ""],
       "keep": true
     },
     {
       "why": "email only, surrounded by whitespace (trimmed before the check)",
-      "record": ["  ", "", "", "  pending@x.edu  ", "", "  ", "", ""],
+      "record": ["  ", "", "", "  pending@x.edu  ", "", "  ", ""],
       "keep": true
     },
     {
       "why": "name-only row — the teacher-kept unlinked row (SIS export without emails)",
-      "record": ["", "Grace", "Hopper", "", "s1", "", "", "unlinked"],
+      "record": ["", "Grace", "Hopper", "", "s1", "", ""],
       "keep": true
     },
     {
-      "why": "name-only row without the marker still describes a student",
-      "record": ["", "Ghost", "G", "", "s1", "", "student", ""],
-      "keep": true
-    },
-    {
-      "why": "status marker alone keeps the row (identity and metadata both pending)",
-      "record": ["", "", "", "", "", "", "", "unlinked"],
+      "why": "name-only row with role noise still describes a student",
+      "record": ["", "Ghost", "G", "", "s1", "", "student"],
       "keep": true
     },
     {
       "why": "section/role noise only — addresses and describes nobody",
-      "record": ["", "", "", "", "s1", "", "student", ""],
+      "record": ["", "", "", "", "s1", "", "student"],
       "keep": false
     },
     {
       "why": "entirely blank row",
-      "record": ["", "", "", "", "", "", "", ""],
+      "record": ["", "", "", "", "", "", ""],
       "keep": false
     },
     {
       "why": "whitespace-only cells are blank after trimming",
-      "record": ["  ", "", "", "   ", "", "  ", "", "  "],
+      "record": ["  ", "", "", "   ", "", "  ", ""],
       "keep": false
     }
   ]

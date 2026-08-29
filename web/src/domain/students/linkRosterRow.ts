@@ -1,13 +1,9 @@
 import type { GitHubClient } from "@/github-core/client"
 import { readOrgMembershipState } from "@/github-core/mutations"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
-import {
-  ROSTER_STATUS_UNLINKED,
-  hasUnlinkedMarker,
-  normalizeStudentRow,
-  type StudentCsvRow,
-} from "@/util/rosterCsv"
+import { normalizeStudentRow, type StudentCsvRow } from "@/util/rosterCsv"
 import { assertClassroomNotArchived } from "../classrooms"
+import { pendingInviteEmails } from "./inviteRecoveries"
 import { assignRosterMemberRole } from "./roleWrites"
 import { withRosterRewrite, log } from "./rosterPrimitives"
 
@@ -183,9 +179,6 @@ export async function linkRosterRowToMember(
       ...target,
       username: login,
       github_id: idKey,
-      // Gaining an identity ends the unlinked state (mirrors the CLI's
-      // ClaimPendingEmailRow).
-      status: hasUnlinkedMarker(target.status) ? "" : target.status,
     })
     linked = next
     return {
@@ -227,12 +220,14 @@ export type RemoveUnlinkedRowsResult = {
   missed: number
 }
 
-// Batch-delete unlinked rows, one commit. Only rows that STILL render as
-// unlinked are removed: identity-less AND (explicitly marked, or email-less
-// name-only) — the same predicate the view uses, so a row that gained an
-// identity between the selection and this write survives and is counted as
-// missed. Identical duplicate rows matching one ref are all removed (they are
-// indistinguishable by construction).
+// Batch-delete unlinked rows, one commit. Only rows that STILL qualify as
+// unlinked are removed: identity-less AND not backed by a live invitation —
+// re-proved at decision time with one pending-invitations read, so a row
+// whose address was (re-)invited since the view snapshot is spared, and a row
+// that gained an identity is missed. A FAILED invitations read fails closed:
+// email-carrying targets are all missed (name-only rows have nothing to back
+// them and stay removable). Identical duplicate rows matching one ref are all
+// removed (they are indistinguishable by construction).
 export async function removeUnlinkedRows(
   client: GitHubClient,
   input: { org: string; classroom: string; rowRefs: UnlinkedRowRef[] },
@@ -243,11 +238,23 @@ export async function removeUnlinkedRows(
   let missed = 0
   if (rowRefs.length === 0) return { removed, missed }
 
+  // Read once, outside the rewrite (the mutate closure is synchronous); a
+  // conflict retry reuses it — the guard defends against a stale VIEW, and
+  // milliseconds of invitation drift are within that tolerance.
+  const livePending = rowRefs.some((ref) =>
+    normalizeInviteEmail(ref.email ?? ""),
+  )
+    ? await pendingInviteEmails(client, org)
+    : new Set<string>()
+
   await withRosterRewrite(client, { org, classroom }, (rows) => {
     removed = 0
     missed = 0
-    const removable = (row: StudentCsvRow) =>
-      hasUnlinkedMarker(row.status) || !row.email.trim()
+    const removable = (row: StudentCsvRow) => {
+      const email = normalizeInviteEmail(row.email)
+      if (!email) return true
+      return livePending !== null && !livePending.has(email)
+    }
     const drop = new Set<number>()
     for (const ref of rowRefs) {
       const matches = matchUnlinkedRows(rows, ref).filter(
@@ -328,7 +335,6 @@ export async function appendUnlinkedRows(
             email,
             section: entry.section?.trim() ?? "",
             role: "",
-            status: ROSTER_STATUS_UNLINKED,
           }),
         )
       }

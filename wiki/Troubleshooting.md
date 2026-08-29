@@ -271,12 +271,14 @@ roster's **Unlinked** filter to reconcile them yourself: click a row and use
 **Link to organization member** to attach the right account (which also enrolls
 them on the classroom team), or select rows and use **Actions → Remove rows**
 to delete the ones you don't need. Unlinked rows are never removed
-automatically — only linking or an explicit delete ends them. From the CLI,
-`gh teacher roster add <org> <classroom> <username>` (or `roster import`)
+automatically — Classroom 50's roster sync never deletes a row, so a row whose
+invitation expired (or was never sendable) waits visibly under **Unlinked**
+instead of disappearing; only linking or an explicit delete ends it. From the
+CLI, `gh teacher roster add <org> <classroom> <username>` (or `roster import`)
 enrolls an existing member the same way. **Keep `gh teacher` up to date** if
-you use both tools: releases older than the unlinked-rows feature error on
-name-only rows in read commands like `roster list`, and their `roster sync
---write` can delete a kept email row (it can't see the marker's meaning).
+you use both tools: releases older than this behavior error on name-only rows
+in read commands like `roster list`, and their `roster sync --write` still
+carries the old automatic cleanup that can delete an email row nothing backs.
 Rows are recoverable from the `classroom50` repository's commit history.
 
 ### Invitations or accepts fail on an organization with SAML SSO

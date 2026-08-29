@@ -108,6 +108,12 @@ export {
   type LinkRosterRowResult,
   type RemoveUnlinkedRowsResult,
 } from "./students/linkRosterRow"
+export {
+  buildIdentityDirectory,
+  type IdentityDirectory,
+  type DirectoryMember,
+  type DirectoryIdentity,
+} from "./students/identityDirectory"
 
 // The roster.csv parse/serialize layer lives in util/rosterCsv (pure, no
 // GitHubClient dependency). Re-exported here so existing importers of these

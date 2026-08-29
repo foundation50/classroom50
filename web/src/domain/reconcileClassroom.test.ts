@@ -31,7 +31,6 @@ const reconcileRoster = vi.fn(() =>
   Promise.resolve({
     addedUsernames: [],
     recoveredEmails: [],
-    removedEmails: [],
     noop: true,
     deletedStaleTeams: 0,
   }),

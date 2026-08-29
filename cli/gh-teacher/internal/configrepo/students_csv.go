@@ -22,29 +22,15 @@ import (
 // (teacher/hta/ta/student, or ""), refreshed from the classroom's GitHub teams
 // by the web's sync and recorded here only on a row `roster sync` appends — the
 // teams, not this column, remain the enrollment/role authority; nothing reads it
-// for logic. status marks a row's lifecycle when it carries no GitHub identity:
-// "unlinked" (teacher-kept, never reaped or lifecycle-removed) or "" (everything
-// else — legacy semantics).
-var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id", "role", "status"}
+// for logic.
+var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id", "role"}
 
-// RosterStatusUnlinked marks a roster row a teacher chose to keep despite it
-// carrying no GitHub identity (no username, no usable github_id). Such a row is
-// never reaped by the sync's dead-row removal and never removed by an invite
-// cancel — only an explicit teacher action (or gaining an identity, which
-// clears the marker) changes it. Mirrored by the web's ROSTER_STATUS_UNLINKED
-// (web/src/util/rosterCsv.ts) with no compile-time link; the shared row cases
-// pin the keep-rule half.
-const RosterStatusUnlinked = "unlinked"
-
-// preStatusColumns is the canonical prefix a pre-status roster.csv carries
-// (through role), and preRoleColumns the still-older pre-role form (through
-// github_id). Both columns were appended additively, so files written before
-// them are valid; ParseRoster tolerates a header ending at either boundary and
-// reads the missing columns as "".
-var (
-	preStatusColumns = RosterColumns[:len(RosterColumns)-1]
-	preRoleColumns   = RosterColumns[:len(RosterColumns)-2]
-)
+// legacyRequiredColumns is the canonical prefix a pre-role roster.csv carries.
+// role was appended additively, so a file written before it (ending at
+// github_id) is still valid; ParseRoster tolerates a header missing exactly the
+// trailing role column and reads role as "". Everything before role is required
+// in order.
+var legacyRequiredColumns = RosterColumns[:len(RosterColumns)-1]
 
 // FullRosterHeader is the on-disk roster.csv header (RosterColumns,
 // comma-joined). The single shared fixture the Go, Python, and web suites
@@ -114,12 +100,6 @@ type RosterRow struct {
 	// or "" (unknown / a pre-role file). Never consulted for enrollment
 	// decisions — the classroom's teams are the authority.
 	Role string
-	// Status is the row's lifecycle marker: RosterStatusUnlinked for a
-	// teacher-kept row with no GitHub identity (never reaped), or "" for
-	// everything else (including files written before the column existed).
-	// Unknown values are preserved verbatim and treated as "" by logic —
-	// additive evolution.
-	Status string
 	// Line is the 1-based CSV line this row was read from, recorded only by
 	// ParseImportCSV: an import reports failures per line, and a file with a
 	// bad line has no row for it, so position can't stand in for line number.
@@ -139,14 +119,6 @@ type RosterRow struct {
 
 // isRaw reports whether the row is a preserved-but-unparsed record.
 func (r RosterRow) isRaw() bool { return r.raw != nil }
-
-// IsUnlinked reports whether the teacher explicitly kept this row despite it
-// carrying no GitHub identity. An unlinked row is never reaped by the sync's
-// dead-row removal; it leaves the state only by gaining an identity (a claim
-// clears the marker) or by an explicit teacher delete (web-only this release).
-func (r RosterRow) IsUnlinked() bool {
-	return !r.isRaw() && r.Status == RosterStatusUnlinked
-}
 
 // IsPendingEmailInvite reports whether the row is an email-ONLY invite row: no
 // username, no github_id that addresses an account, and an address to key on. A
@@ -203,30 +175,26 @@ func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
-	// The header must begin with the canonical columns in order. `role` and
-	// `status` are trailing additive columns, so a file that stops at github_id
-	// (pre-role) or at role (pre-status) is accepted too; anything after the
-	// matched canonical prefix is an extra column carried through verbatim.
+	// The header must begin with the canonical columns in order. `role` is a
+	// trailing additive column, so a legacy file that stops at github_id is
+	// accepted too; anything after the matched canonical prefix is an extra
+	// column carried through verbatim.
 	var canonicalLen int
 	switch {
 	case len(header) >= len(RosterColumns) && slices.Equal(header[:len(RosterColumns)], RosterColumns):
 		canonicalLen = len(RosterColumns)
-	case len(header) >= len(preStatusColumns) && slices.Equal(header[:len(preStatusColumns)], preStatusColumns):
-		// Pre-status file (canonical through role), possibly with its own extra
-		// columns. status reads as "".
-		canonicalLen = len(preStatusColumns)
-	case len(header) == len(preRoleColumns) && slices.Equal(header, preRoleColumns):
+	case len(header) == len(legacyRequiredColumns) && slices.Equal(header, legacyRequiredColumns):
 		// Pre-role file: exactly the canonical columns through github_id, no
-		// trailing columns. role and status read as "".
-		canonicalLen = len(preRoleColumns)
-	case len(header) < len(preRoleColumns) || !slices.Equal(header[:len(preRoleColumns)], preRoleColumns):
+		// trailing columns. role reads as "".
+		canonicalLen = len(legacyRequiredColumns)
+	case len(header) < len(RosterColumns) || !slices.Equal(header[:len(legacyRequiredColumns)], legacyRequiredColumns):
 		return nil, fmt.Errorf("unexpected header: got %v, want %v followed by any optional columns", header, RosterColumns)
 	default:
-		// Header begins with the pre-role prefix but the 7th column is not
-		// `role` — treat the whole tail (including that 7th column) as extras
-		// and read role/status as "". Keeps a pre-role file that already
-		// carried its own extra columns working.
-		canonicalLen = len(preRoleColumns)
+		// Header begins with the legacy prefix but the 7th column is not `role`
+		// — treat the whole tail (including that 7th column) as extras and read
+		// role as "". Keeps a pre-role file that already carried its own extra
+		// columns working.
+		canonicalLen = len(legacyRequiredColumns)
 	}
 	extraColumns := append([]string(nil), header[canonicalLen:]...)
 	// Reject a malformed extra-column header rather than mangling it on
@@ -308,15 +276,14 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
 
-	importShort := preRoleColumns[:5] // username..section
+	importShort := legacyRequiredColumns[:5] // username..section
 	switch {
 	case slices.Equal(header, RosterColumns),
-		slices.Equal(header, preStatusColumns),
-		slices.Equal(header, preRoleColumns),
+		slices.Equal(header, legacyRequiredColumns),
 		slices.Equal(header, importShort):
 	default:
-		return nil, fmt.Errorf("unexpected header: got %v, want %v optionally followed by github_id (%v), by github_id,role (%v), or by github_id,role,status (%v); no other columns are import input",
-			header, importShort, preRoleColumns, preStatusColumns, RosterColumns)
+		return nil, fmt.Errorf("unexpected header: got %v, want %v optionally followed by github_id (%v) or by github_id,role (%v); no other columns are import input",
+			header, importShort, legacyRequiredColumns, RosterColumns)
 	}
 	r.FieldsPerRecord = len(header)
 
@@ -390,8 +357,7 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 	}
 	// A row needs at least one cell that identifies or DESCRIBES a student. An
 	// identity column (username, github_id, email) has always sufficed; a row
-	// with only a NAME (or the explicit `status` marker) is now kept too — the
-	// teacher-kept "unlinked" row this feature exists for, which the web
+	// with only a NAME is kept too — the teacher-kept "unlinked" row the web
 	// renders for manual reconciliation. A row with none of these (blank, or
 	// only section/role noise) addresses and describes nobody: it stays an
 	// error (lenient parsing preserves it raw). An email-only row is valid and
@@ -400,8 +366,7 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 	// parseRosterCsv filter (web/src/util/rosterCsv.ts); shared cases:
 	// cli/shared/testdata/roster_row_cases.json.
 	hasName := strings.TrimSpace(row.FirstName) != "" || strings.TrimSpace(row.LastName) != ""
-	hasStatus := canonicalLen == len(RosterColumns) && strings.TrimSpace(record[7]) != ""
-	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" && !hasName && !hasStatus {
+	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" && !hasName {
 		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, email, or name — at least one is required to identify a student", line)
 	}
 	if trimmed := strings.TrimSpace(record[5]); trimmed != "" {
@@ -416,13 +381,10 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 		}
 		row.GitHubID = id
 	}
-	// role/status are present only when the header carried them; a pre-role or
-	// pre-status file leaves the missing trailing columns "".
-	if canonicalLen >= len(preStatusColumns) {
-		row.Role = strings.TrimSpace(undefangCSVCell(record[len(preStatusColumns)-1]))
-	}
+	// role is present only when the header carried the full canonical set; a
+	// pre-role file (canonicalLen == 6) leaves it "".
 	if canonicalLen == len(RosterColumns) {
-		row.Status = strings.TrimSpace(undefangCSVCell(record[len(RosterColumns)-1]))
+		row.Role = strings.TrimSpace(undefangCSVCell(record[len(RosterColumns)-1]))
 	}
 	if len(extraColumns) > 0 {
 		// Every row's extra order IS the header's, so share that slice instead
@@ -477,7 +439,6 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 			defangCSVCell(row.Section),
 			githubID,
 			defangCSVCell(row.Role),
-			defangCSVCell(row.Status),
 		}
 		for _, name := range extraColumns {
 			record = append(record, defangCSVCell(row.Extra[name]))
@@ -526,9 +487,7 @@ func collectExtraColumns(rows []RosterRow) []string {
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
 // web-written extra columns. The same guard applies to Role: an incoming empty
 // Role (a caller that doesn't know the team-derived role) preserves the
-// existing recorded role rather than blanking it. Status is deliberately NOT
-// carried over: every incoming row here names an account, and gaining an
-// identity is exactly what ends the unlinked state.
+// existing recorded role rather than blanking it.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	claim := func(i int, keepRole bool) ([]RosterRow, bool) {
 		if row.Extra == nil && rows[i].Extra != nil {
@@ -668,25 +627,16 @@ func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out [
 	return rows, true
 }
 
-// RemovePendingEmailRow drops the pending email-invite row for email. Returns
-// the slice and whether a row was removed. An UNLINKED row is never removed
-// here: the teacher explicitly kept it, so invite-lifecycle removals (the
-// sync's reap, a cancel) pass it over — only a claim (identity) or an explicit
-// teacher delete ends it.
+// RemovePendingEmailRow drops the pending email-invite row for email — used by
+// the EXPLICIT cancel/retire paths only. The sync never removes rows: an
+// email-only row nothing backs stays on the roster (the web renders it as
+// "unlinked" for the teacher to link or delete by hand).
 func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, removed bool) {
-	key := NormalizeInviteEmail(email)
-	if key == "" {
+	i := findPendingEmailRow(rows, email)
+	if i < 0 {
 		return rows, false
 	}
-	for i := range rows {
-		if !rows[i].IsPendingEmailInvite() || rows[i].IsUnlinked() {
-			continue
-		}
-		if NormalizeInviteEmail(rows[i].Email) == key {
-			return append(rows[:i], rows[i+1:]...), true
-		}
-	}
-	return rows, false
+	return append(rows[:i], rows[i+1:]...), true
 }
 
 // ClaimPendingEmailRow fills a recovered identity onto the pending email-invite
@@ -715,9 +665,6 @@ func ClaimPendingEmailRow(rows []RosterRow, email, login string, githubID int64)
 		// filter is the only kind that can be here.
 		rows[i].githubIDRaw = ""
 	}
-	// Gaining an identity ends the unlinked state: the row is a normal
-	// identity row from here on, subject to the ordinary lifecycle.
-	rows[i].Status = ""
 	return rows, true
 }
 
