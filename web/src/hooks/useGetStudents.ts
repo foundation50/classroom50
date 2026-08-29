@@ -7,6 +7,7 @@ import {
   githubKeys,
   rosterRawFileQuery,
 } from "@/github-core/queries"
+import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/rosterPath"
@@ -34,7 +35,12 @@ const useGetStudents = (
 ) => {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  const { data: students, isLoading } = useQuery({
+  const {
+    data: students,
+    isLoading,
+    isError,
+    error,
+  } = useQuery({
     ...csvFileQuery<Student>(
       client,
       org ?? "",
@@ -43,6 +49,11 @@ const useGetStudents = (
     ),
     select: selectStudents,
   })
+
+  // A missing roster.csv 404s — the legitimate "no one enrolled yet" zero for
+  // a new classroom, not a failure.
+  const rosterMissing =
+    error instanceof GitHubAPIError && error.status === 404
 
   // A parallel strict read of the raw bytes purely to detect malformed rows and
   // report them per line. Kept separate from the display read above (which
@@ -68,6 +79,10 @@ const useGetStudents = (
   return {
     students: students ?? EMPTY_STUDENTS,
     isLoading,
+    // Surfaced so a failed roster read never renders as an empty roster
+    // (Primer degraded-experiences: error-as-empty reads as data loss).
+    // recheckRoster doubles as the retry affordance.
+    isError: isError && !rosterMissing,
     parseProblems,
     // Re-read the raw roster.csv so a teacher who just fixed the file can
     // re-verify it in place (also refetches the tolerant display read).
