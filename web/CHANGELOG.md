@@ -17,6 +17,14 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.37.0](https://github.com/foundation50/classroom50/compare/web-v1.36.0...web-v1.37.0) (2026-08-28)
+
+
+### Features
+
+* **web:** restyle sidebar highlight per Primer and animate collapse ([#796](https://github.com/foundation50/classroom50/issues/796)) ([b2344cb](https://github.com/foundation50/classroom50/commit/b2344cb7a357d473686e3f690f86c5b9fc9b84ce))
+* **web:** use assignment name in breadcrumb and add hover slug reveal ([#799](https://github.com/foundation50/classroom50/issues/799)) ([8d020da](https://github.com/foundation50/classroom50/commit/8d020da7a16c41edc05c26c31a444602a58645c9))
+
 ## [1.36.0](https://github.com/foundation50/classroom50/compare/web-v1.35.0...web-v1.36.0) (2026-08-28)
 
 
