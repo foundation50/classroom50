@@ -52,8 +52,7 @@ const useGetStudents = (
 
   // A missing roster.csv 404s — the legitimate "no one enrolled yet" zero for
   // a new classroom, not a failure.
-  const rosterMissing =
-    error instanceof GitHubAPIError && error.status === 404
+  const rosterMissing = error instanceof GitHubAPIError && error.status === 404
 
   // A parallel strict read of the raw bytes purely to detect malformed rows and
   // report them per line. Kept separate from the display read above (which

@@ -76,6 +76,35 @@ const assignment = (over: Partial<Assignment> = {}): Assignment =>
   ({ slug: "hw1", name: "HW 1", mode: "individual", ...over }) as Assignment
 
 const inOrgTemplate = { owner: "acme", repo: "tmpl", branch: "main" }
+
+describe("AssignmentsTable load error vs empty state", () => {
+  it("renders the error row with retry instead of the empty state", () => {
+    const onRetryLoad = vi.fn()
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[]}
+        loadError
+        onRetryLoad={onRetryLoad}
+      />,
+    )
+    // The anti-misinformation assertion: a failed read must never render
+    // "No assignments created."
+    expect(screen.queryByText("assignments.table.empty")).toBeNull()
+    expect(screen.getByText("assignments.table.loadError")).toBeTruthy()
+    fireEvent.click(
+      screen.getByRole("button", { name: "assignments.table.retry" }),
+    )
+    expect(onRetryLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it("still renders the genuine empty state when there is no error", () => {
+    wrap(<AssignmentsTable org="acme" classroom="cs101" assignments={[]} />)
+    expect(screen.getByText("assignments.table.empty")).toBeTruthy()
+    expect(screen.queryByText("assignments.table.loadError")).toBeNull()
+  })
+})
 const ACCESS_ARIA = "assignments.template.accessModal.triggerAria"
 const MANAGE_ARIA = "assignments.manageModal.openAria"
 
