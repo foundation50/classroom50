@@ -258,7 +258,7 @@ const CreateAssignmentForm = ({
               state.isDefaultValue,
             ]}
           >
-            {([canSubmit, isSubmitting, isDefaultValue]) => (
+            {([, isSubmitting, isDefaultValue]) => (
               <>
                 {/* Edit mode: revert all unsaved edits back to the stored
                     assignment. Shown only while the form is dirty. */}
@@ -276,12 +276,10 @@ const CreateAssignmentForm = ({
                   variant="primary"
                   type="submit"
                   loading={isSubmitting || loading}
-                  disabled={
-                    !canSubmit ||
-                    isSubmitting ||
-                    loading ||
-                    (edit && isDefaultValue)
-                  }
+                  // Kept enabled while unchanged or invalid (Primer saving
+                  // guidance): an unchanged save is idempotent, and an invalid
+                  // submit runs the validator + focuses the first problem.
+                  disabled={isSubmitting || loading}
                 >
                   {isSubmitting || loading
                     ? null

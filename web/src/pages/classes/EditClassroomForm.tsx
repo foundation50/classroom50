@@ -491,27 +491,18 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           </div>
 
           <Card.Actions className="justify-end p-2">
-            <form.Subscribe
-              selector={(state) => [
-                state.canSubmit,
-                state.isSubmitting,
-                state.isDefaultValue,
-              ]}
-            >
-              {([canSubmit, isSubmitting, isDefaultValue]) => (
+            <form.Subscribe selector={(state) => [state.isSubmitting]}>
+              {([isSubmitting]) => (
                 <Button
                   type="submit"
                   variant="primary"
                   loading={isSubmitting}
                   loadingLabel={t("classes.form.saving")}
-                  disabled={
-                    !canSubmit || isSubmitting || submitted || isDefaultValue
-                  }
-                  title={
-                    isDefaultValue
-                      ? t("classes.form.noChangesToSave")
-                      : undefined
-                  }
+                  // Kept enabled while unchanged or invalid (Primer saving
+                  // guidance) — the old disabled-with-tooltip explanation was
+                  // unreachable by keyboard. `submitted` still latches after
+                  // the save lands (completed state, not a validity gate).
+                  disabled={isSubmitting || submitted}
                 >
                   {isSubmitting
                     ? t("classes.form.saving")
