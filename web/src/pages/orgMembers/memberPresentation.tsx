@@ -10,7 +10,6 @@ import {
 import { Badge } from "@/components/ui"
 import { CellPlaceholder } from "@/components/memberList/memberPresentation"
 import type { GitHubClient } from "@/github-core/client"
-import type { NotifyInput } from "@/context/notifications/NotificationProvider"
 import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
@@ -136,13 +135,19 @@ export const ClassificationBadge = ({
   return <Badge tone="success">{t("orgMembers.badgeMember")}</Badge>
 }
 
-// Shared invite flow for the inline row button and the detail modal. Errors are
-// toasted here so both call sites only track their own in-flight flag.
+// Shared invite flow for the inline row button and the detail modal. It
+// resolves the localized outcome copy and hands it to explicit callbacks so
+// each call site owns its own surface (the page toasts both; the modal
+// routes failures into its in-dialog banner) — routing is compiler-checked
+// instead of inferred from a notify payload's tone.
 export const runInviteMember = async (
   client: GitHubClient,
   org: string,
   row: OrgMemberRow,
-  notify: (input: NotifyInput) => void,
+  handlers: {
+    onSuccess: (message: string) => void
+    onError: (message: string) => void
+  },
   onDone: () => void,
   t: TFunction,
 ) => {
@@ -150,20 +155,15 @@ export const runInviteMember = async (
   try {
     const result = await inviteMemberToOrg(client, { org, row })
     const who = result.currentUsername ? `@${result.currentUsername}` : label
-    notify({
-      tone: "success",
-      durationMs: 6000,
-      message: t("toasts.invited", { who, org }),
-    })
+    handlers.onSuccess(t("toasts.invited", { who, org }))
     onDone()
   } catch (err) {
-    notify({
-      tone: "error",
-      message: t("orgMembers.inviteFailed", {
+    handlers.onError(
+      t("orgMembers.inviteFailed", {
         label,
         reason:
           err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
       }),
-    })
+    )
   }
 }

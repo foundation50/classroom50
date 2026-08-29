@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
+  AnimatedAlert,
   Button,
   FormField,
   HelpTooltip,
@@ -431,7 +432,7 @@ function SetTokenModal({
 export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
   const { t } = useTranslation()
   const { org } = useParams({ strict: false })
-  const { notify } = useToast()
+  const { announce } = useToast()
 
   const { data: tokenStatus, isLoading: tokenStatusLoading } =
     useGetServiceTokenStatus(org ?? "")
@@ -460,9 +461,14 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
   const renameMutation = useRenameServiceToken(org)
 
   const [modalOpen, setModalOpen] = useState(false)
+  // Advisory-metadata warning from the last save, shown as a banner in this
+  // section (the save dialog is closed by then, and a chip alone can't
+  // explain "expiry not tracked").
+  const [metadataWarning, setMetadataWarning] = useState(false)
 
   const openModal = () => {
     saveMutation.reset()
+    setMetadataWarning(false)
     setModalOpen(true)
   }
 
@@ -474,15 +480,10 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
       // clean "saved", so the teacher isn't misled by a later "expiry not
       // tracked" chip.
       if (saveMutation.data && saveMutation.data.metadataRecorded === false) {
-        notify({
-          tone: "warning",
-          message: t("orgSettings.serviceToken.savedNoMetadata"),
-        })
+        setMetadataWarning(true)
       } else {
-        notify({
-          tone: "success",
-          message: t("orgSettings.serviceToken.saved"),
-        })
+        // The status chip flips to "present" — SR announcement only.
+        announce(t("orgSettings.serviceToken.saved"))
       }
     }
   }
@@ -494,6 +495,14 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
       titleAdornment={<HelpTooltip help={t("orgSettings.serviceToken.help")} />}
       className={sectionHighlightClass(highlighted ?? false)}
     >
+      <AnimatedAlert
+        tone="warning"
+        show={metadataWarning}
+        className="mb-3 text-sm"
+        onDismiss={() => setMetadataWarning(false)}
+      >
+        {t("orgSettings.serviceToken.savedNoMetadata")}
+      </AnimatedAlert>
       {tokenStatusLoading ? (
         <div
           className="flex flex-wrap items-center justify-between gap-3"

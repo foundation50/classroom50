@@ -11,7 +11,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 
 const notify = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify, dismiss: vi.fn() }),
+  useToast: () => ({ notify, announce: vi.fn(), dismiss: vi.fn() }),
 }))
 
 const collect = vi.fn()

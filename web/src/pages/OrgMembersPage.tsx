@@ -410,11 +410,24 @@ const OrgMembersPage = () => {
 
   // Inline row invite for an on-roster non-member (mirrors the detail-drawer
   // action). Invites by github_id so a stale username doesn't matter.
+  // Feedback stays a toast for this caller: a dense table row has no inline
+  // slot, and the success must outlive the eventually-consistent refetch.
   const handleQuickInvite = async (row: OrgMemberRow) => {
     if (!org || invitingKey) return
     setInvitingKey(row.key)
     try {
-      await runInviteMember(client, org, row, notify, () => refreshInvite(), t)
+      await runInviteMember(
+        client,
+        org,
+        row,
+        {
+          onSuccess: (message) =>
+            notify({ tone: "success", durationMs: 6000, message }),
+          onError: (message) => notify({ tone: "error", message }),
+        },
+        () => refreshInvite(),
+        t,
+      )
     } finally {
       setInvitingKey(null)
     }

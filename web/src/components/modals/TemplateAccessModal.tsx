@@ -7,7 +7,15 @@ import {
   ShieldCheckIcon,
 } from "@/components/ui/icons"
 
-import { Badge, Button, Modal, ModalIcon, Spinner } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Modal,
+  ModalIcon,
+  OutcomeAlert,
+  Spinner,
+} from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 import type { Assignment } from "@/types/classroom"
 import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -15,7 +23,6 @@ import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
 import { repoTeamsQuery } from "@/github-core/queries"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
-import { useToast } from "@/context/notifications/NotificationProvider"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 
@@ -44,7 +51,6 @@ export const TemplateAccessModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  const { notify } = useToast()
   const { githubOrgRole } = useGitHubOrgRole()
   const isOwner = can("manageOrg", { githubOrgRole })
   const reconcile = useReconcileTemplateAccess()
@@ -54,6 +60,8 @@ export const TemplateAccessModal = ({
   // would re-enable and the list re-flash "no teams" right after the success
   // toast. Cleared when the refetch settles with the granted team present.
   const [granted, setGranted] = useState(false)
+  // Outcome of the last Fix run, rendered as an in-dialog banner.
+  const [fixOutcome, setFixOutcome] = useState<AlertOutcome | null>(null)
 
   const template = assignment.template
   const inOrg = !!template && template.owner.toLowerCase() === org.toLowerCase()
@@ -93,6 +101,7 @@ export const TemplateAccessModal = ({
 
   const handleFix = () => {
     setGranted(false)
+    setFixOutcome(null)
     reconcile.mutate(
       {
         org,
@@ -102,15 +111,18 @@ export const TemplateAccessModal = ({
         locked: assignment.locked,
       },
       {
+        // Outcome feedback stays inside the open dialog (Primer): success is
+        // only partially evident (the Fix button disables), and a failure
+        // needs to sit next to the action that caused it.
         onSuccess: (result) => {
           if (result.warning) {
-            notify({
+            setFixOutcome({
               tone: "error",
               message: `${t("assignments.template.reconcile.failed")} ${result.warning}`,
             })
           } else {
             setGranted(true)
-            notify({
+            setFixOutcome({
               tone: "success",
               message: t("assignments.template.reconcile.success"),
             })
@@ -168,6 +180,7 @@ export const TemplateAccessModal = ({
       }
     >
       <section className="mt-5">
+        <OutcomeAlert outcome={fixOutcome} className="mb-4 text-sm" />
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-sm font-semibold text-base-content/80">
             {t("assignments.template.accessModal.templateHeading")}

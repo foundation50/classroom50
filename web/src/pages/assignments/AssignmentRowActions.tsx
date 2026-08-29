@@ -287,7 +287,7 @@ export const LockAssignmentAction = ({
   variant?: ActionVariant
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const [open, setOpen] = useState(false)
   const locked = Boolean(assignment.locked)
   const label = assignmentName(assignment)
@@ -312,15 +312,16 @@ export const LockAssignmentAction = ({
       }
   const setLock = useSetAssignmentLock(org, classroom, (result) => {
     if (result.templateAccessWarning) {
+      // Kept as a toast: a non-fatal partial outcome with no page anchor.
       notify({ tone: "warning", message: result.templateAccessWarning })
       return
     }
-    notify({
-      tone: "success",
-      message: result.locked
+    // The row's lock icon flips in place — SR announcement only.
+    announce(
+      result.locked
         ? t("assignments.table.lockSuccess", { name: label })
         : t("assignments.table.unlockSuccess", { name: label }),
-    })
+    )
   })
 
   return (

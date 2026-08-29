@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr } from "@/components/ui"
+import { Badge, Modal, MonoLtr, OutcomeAlert } from "@/components/ui"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
@@ -13,7 +14,9 @@ import {
 } from "@/components/modals/collaboratorHelpers"
 import {
   SubmissionActionList,
+  SubmissionHubFeedbackContext,
   type SubmissionActionListProps,
+  type SubmissionHubFeedback,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { formatSubmissionDateTime as formatDateTime } from "@/util/formatDate"
@@ -285,6 +288,28 @@ export const ManageSubmissionModal = ({
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
+  const { notify } = useToast()
+  // Outcome of the last action row, rendered as a banner at the top of the
+  // hub (Primer: feedback for a dialog action stays in the dialog).
+  const [feedback, setFeedback] = useState<SubmissionHubFeedback | null>(null)
+  // Unmount-safe sink: a row action awaited past the hub's close would call
+  // setFeedback on an unmounted dialog (a silent no-op — e.g. a failed
+  // "make private" leaving the repo public with zero indication), so once
+  // this instance is gone the outcome falls back to a toast.
+  const mountedRef = useRef(true)
+  useEffect(
+    () => () => {
+      mountedRef.current = false
+    },
+    [],
+  )
+  const publishFeedback = useCallback(
+    (outcome: SubmissionHubFeedback) => {
+      if (mountedRef.current) setFeedback(outcome)
+      else notify(outcome)
+    },
+    [notify],
+  )
 
   // Lifted here (not in SubmissionDetails) so the repo's default-branch tip can
   // link both the "Last push" row and the "View latest commit" action. Only
@@ -334,6 +359,11 @@ export const ManageSubmissionModal = ({
         ) : undefined
       }
     >
+      <OutcomeAlert
+        outcome={feedback}
+        className="mt-3 text-sm"
+        onDismiss={() => setFeedback(null)}
+      />
       {repoHref ? (
         <a
           className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"
@@ -366,14 +396,16 @@ export const ManageSubmissionModal = ({
       ) : null}
 
       <div className="mt-4 divide-y divide-base-200">
-        <SubmissionActionList
-          {...action}
-          latestCommitHref={latestCommitHref}
-          repoPrivate={repoData?.private}
-          onManageAccess={
-            action.onManageAccess ? handleManageAccess : undefined
-          }
-        />
+        <SubmissionHubFeedbackContext.Provider value={publishFeedback}>
+          <SubmissionActionList
+            {...action}
+            latestCommitHref={latestCommitHref}
+            repoPrivate={repoData?.private}
+            onManageAccess={
+              action.onManageAccess ? handleManageAccess : undefined
+            }
+          />
+        </SubmissionHubFeedbackContext.Provider>
         {isGroup && onManageMembers ? (
           <ActionListRow
             icon={PeopleIcon}

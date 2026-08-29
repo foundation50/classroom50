@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert, Button, InlineMessage } from "@/components/ui"
 import type { GitHubOrgInvitation } from "@/github-core/types"
 
 // Failed/expired invitations (owner-only). GitHub couldn't deliver these, so
@@ -8,11 +8,15 @@ import type { GitHubOrgInvitation } from "@/github-core/types"
 export const FailedInvitationsList = ({
   failedInvitations,
   actionsDisabled,
+  actionError,
   onReinvite,
   onDismiss,
 }: {
   failedInvitations: GitHubOrgInvitation[]
   actionsDisabled: boolean
+  // The last re-invite/dismiss failure, rendered inline in this list
+  // (Primer: feedback next to the actions that caused it).
+  actionError?: string | null
   onReinvite: (inv: GitHubOrgInvitation) => void
   onDismiss: (inv: GitHubOrgInvitation) => void
 }) => {
@@ -22,6 +26,9 @@ export const FailedInvitationsList = ({
       <span className="text-sm font-medium">
         {t("students.failedInvitesTitle", { count: failedInvitations.length })}
       </span>
+      {actionError != null && (
+        <InlineMessage tone="error">{actionError}</InlineMessage>
+      )}
       <ul className="flex flex-col divide-y divide-warning/20">
         {failedInvitations.map((inv) => {
           const who = inv.login || inv.email || String(inv.id)

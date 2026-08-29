@@ -74,7 +74,6 @@ export function GroupCollaboratorsModal({
   maxGroupSize,
   students = [],
 }: GroupCollaboratorsModalProps) {
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Synchronous re-entrancy guard: isSaving (mutation.isPending) updates a tick
   // late, so a rapid double-click could start two overlapping saves.
   const savingRef = useRef(false)
@@ -147,13 +146,6 @@ export function GroupCollaboratorsModal({
     setSaved(false)
     setInvalidCollaborators(new Set())
   }, [open])
-
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    },
-    [],
-  )
 
   const clearInvalidCollaborator = (username: string) => {
     const normalized = normalizeUsername(username)
@@ -336,9 +328,9 @@ export function GroupCollaboratorsModal({
       }
 
       await refetchCollaborators()
+      // Persists until the next edit or save attempt (Primer: don't
+      // auto-dismiss status messages on a timer).
       setSaved(true)
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
     } finally {
       savingRef.current = false
     }

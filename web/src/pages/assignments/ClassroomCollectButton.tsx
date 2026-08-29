@@ -181,6 +181,9 @@ export function ClassroomCollectButton({
 
   useEffect(() => {
     if (collect.phase !== "failed" || collect.failure !== "dispatch") return
+    // Kept as a toast: the dispatch is fire-and-forget and this button can
+    // unmount (route change) before the failure lands; the keyed toast is
+    // the one surface guaranteed to survive.
     notify({
       tone: "error",
       key: `collect-scores:${classroom}`,

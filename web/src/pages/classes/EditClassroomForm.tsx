@@ -23,7 +23,9 @@ import {
   FormField,
   Input,
   Heading,
+  OutcomeAlert,
 } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 
 export type EditClassroomFormValues = {
   name: string
@@ -38,6 +40,11 @@ type EditClassroomFormProps = {
   // Receives the values with customDomain already NORMALIZED ("" = clear).
   onSubmit: (values: EditClassroomFormValues) => void | Promise<void>
   cl?: Classroom
+  // The host page's save outcome, rendered inline above the actions (Primer:
+  // post-submit feedback near the save button, not a corner toast).
+  saveOutcome?: AlertOutcome | null
+  // Fires on any edit so the host can clear a stale saveOutcome.
+  onEdit?: () => void
 }
 
 export const DeleteClassroomButton = ({
@@ -123,7 +130,7 @@ const ArchiveClassroomButton = ({
   archived: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const [open, setOpen] = useState(false)
 
   // A pure archive/unarchive write: editClassroom preserves name/term when
@@ -172,32 +179,28 @@ const ArchiveClassroomButton = ({
         onConfirm={async () => {
           try {
             await archiveMutation.mutateAsync(archived)
-            notify({
-              tone: "success",
-              durationMs: 5000,
-              message: archived
+            // The page state flips in place — SR announcement only.
+            announce(
+              archived
                 ? t("classes.unarchivedToast", { classroom })
                 : t("classes.archivedToast", { classroom }),
-            })
+            )
           } catch (err) {
-            notify({
-              tone: "error",
-              message: archived
-                ? t("classes.unarchiveFailed", {
-                    classroom,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  })
-                : t("classes.archiveFailed", {
-                    classroom,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  }),
-            })
+            // Rethrow with localized copy so the failure surfaces inside the
+            // confirm dialog (Primer: dialog errors stay in the dialog).
+            throw new Error(
+              t(
+                archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
+                {
+                  classroom,
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : t("classes.somethingWentWrong"),
+                },
+              ),
+              { cause: err },
+            )
           }
         }}
         onClose={() => setOpen(false)}
@@ -258,6 +261,8 @@ const CleanupInviteDataButton = ({
         onConfirm={async () => {
           try {
             const result = await purgeMutation.mutateAsync()
+            // Kept as a toast: the recovered/purged counts aren't evident
+            // anywhere in the UI once the dialog closes.
             notify({
               tone: "success",
               durationMs: 6000,
@@ -267,15 +272,16 @@ const CleanupInviteDataButton = ({
               }),
             })
           } catch (err) {
-            notify({
-              tone: "error",
-              message: t("classes.inviteCleanup.failed", {
+            // Surfaces inside the confirm dialog rather than a corner toast.
+            throw new Error(
+              t("classes.inviteCleanup.failed", {
                 error:
                   err instanceof Error
                     ? err.message
                     : t("classes.somethingWentWrong"),
               }),
-            })
+              { cause: err },
+            )
           }
         }}
         onClose={() => setOpen(false)}
@@ -284,7 +290,12 @@ const CleanupInviteDataButton = ({
   )
 }
 
-const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
+const EditClassroomForm = ({
+  onSubmit,
+  cl,
+  saveOutcome,
+  onEdit,
+}: EditClassroomFormProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
@@ -345,8 +356,14 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       // Any edit clears the unchanged-submit notice — hooked on the DOM
       // events rather than the form model, so controls that sync through
       // local state still clear it.
-      onInput={() => setNoChangesNotice(false)}
-      onChange={() => setNoChangesNotice(false)}
+      onInput={() => {
+        setNoChangesNotice(false)
+        onEdit?.()
+      }}
+      onChange={() => {
+        setNoChangesNotice(false)
+        onEdit?.()
+      }}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -513,6 +530,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
             {t("classes.form.noChangesToSave")}
           </AnimatedAlert>
+          {/* Save outcome from the host page, in the same near-actions slot. */}
+          <OutcomeAlert outcome={saveOutcome} className="text-sm" />
           <Card.Actions className="justify-end p-2">
             <form.Subscribe selector={(state) => [state.isSubmitting]}>
               {([isSubmitting]) => (

@@ -20,6 +20,7 @@ import {
   GITHUB_REPO_NAME_MAX_LEN,
 } from "@/util/repoNameBudget"
 import {
+  AnimatedAlert,
   Button,
   Card,
   FormField,
@@ -45,11 +46,15 @@ type CreateClassroomFormProps = {
   // Returns the submit's settling promise (or void) so the form can await the
   // real write and latch its loading state only on success.
   onSubmit: (values: CreateClassroomFormValues) => void | Promise<unknown>
+  // The host page's failed-create message, rendered inline above the actions
+  // (Primer: feedback for a page form belongs next to it, not a toast).
+  submitError?: string | null
 }
 
 const CreateClassroomForm = ({
   defaultValues,
   onSubmit,
+  submitError,
 }: CreateClassroomFormProps) => {
   const { t } = useTranslation()
   const { org = "" } = useParams({ strict: false })
@@ -373,6 +378,13 @@ const CreateClassroomForm = ({
           )}
         </form.Field>
 
+        <AnimatedAlert
+          tone="error"
+          show={submitError != null}
+          className="text-sm"
+        >
+          {submitError}
+        </AnimatedAlert>
         <Card.Actions className="justify-end p-2">
           <form.Subscribe selector={(state) => [state.isSubmitting]}>
             {([isSubmitting]) => {

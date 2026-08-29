@@ -113,7 +113,6 @@ export function RepoAccessModal({
   assignmentName,
   students = [],
 }: RepoAccessModalProps) {
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
   const { user } = useGithubAuth()
   const { t } = useTranslation()
@@ -191,13 +190,6 @@ export function RepoAccessModal({
     setSaved(false)
     setInvalidLogins(new Set())
   }, [open])
-
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    },
-    [],
-  )
 
   const clearInvalid = (login: string) => {
     const normalized = normalizeUsername(login)
@@ -377,9 +369,9 @@ export function RepoAccessModal({
       }
 
       await refetchCollaborators()
+      // Persists until the next edit or save attempt (Primer: don't
+      // auto-dismiss status messages on a timer).
       setSaved(true)
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
     } finally {
       savingRef.current = false
     }

@@ -98,6 +98,8 @@ export const FeedbackPrAction = ({
       {
         onSuccess: async (result) => {
           if (result.ok) {
+            // Kept as a toast: the repaired PR opens in another tab and this
+            // dialog closes, so nothing on the page evidences the outcome.
             notify({
               tone: "success",
               durationMs: 5000,

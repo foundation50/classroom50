@@ -101,7 +101,7 @@ vi.mock("@/hooks/useTrackPublishDeploy", () => ({
   useTrackPublishDeploy: () => vi.fn(),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: vi.fn(), announce: vi.fn() }),
 }))
 
 const navigateMock = vi.fn()

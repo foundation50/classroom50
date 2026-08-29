@@ -115,7 +115,7 @@ function ClassroomMenu({
   onMenuOpenChange?: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const [open, setOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -327,34 +327,35 @@ function ClassroomMenu({
         needsConfirm={false}
         dangerous={false}
         onConfirm={async () => {
-          await archiveMutation.mutateAsync(archived, {
-            onSuccess: (_r, active) => {
-              notify({
-                tone: "success",
-                durationMs: 5000,
-                message: active
-                  ? t("classes.unarchivedToast", { classroom: slug })
-                  : t("classes.archivedToast", { classroom: slug }),
-              })
-            },
-            onError: (err) => {
-              notify({
-                tone: "error",
-                message: t(
-                  archived
-                    ? "classes.unarchiveFailed"
-                    : "classes.archiveFailed",
-                  {
-                    classroom: slug,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  },
-                ),
-              })
-            },
-          })
+          try {
+            await archiveMutation.mutateAsync(archived, {
+              onSuccess: (_r, active) => {
+                // The badge flips in place — SR announcement only (Primer:
+                // no visual success message for an evident outcome).
+                announce(
+                  active
+                    ? t("classes.unarchivedToast", { classroom: slug })
+                    : t("classes.archivedToast", { classroom: slug }),
+                )
+              },
+            })
+          } catch (err) {
+            // Rethrow with the localized copy so the failure surfaces inside
+            // the confirm dialog (Primer: dialog errors stay in the dialog).
+            throw new Error(
+              t(
+                archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
+                {
+                  classroom: slug,
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : t("classes.somethingWentWrong"),
+                },
+              ),
+              { cause: err },
+            )
+          }
         }}
         onClose={() => setArchiveOpen(false)}
       />
@@ -377,51 +378,50 @@ function ClassroomMenu({
         cancelLabel={t("classes.deleteClassroomCancel")}
         dangerous
         onConfirm={async () => {
-          await deleteMutation.mutateAsync(
-            { org, classroom: slug },
-            {
-              onSuccess: (result) => {
-                // deleteClassroom returns { deleted: false } as a no-op (e.g.
-                // the dir was already gone). Don't claim success in that case.
-                if (!result.deleted) {
-                  notify({
-                    tone: "warning",
-                    message: t("classes.deleteNoop", { classroom: slug }),
-                  })
-                  return
-                }
-                // The list flow stays put (no navigate), so it is the natural
-                // place to surface the non-fatal team-cleanup warning that the
-                // edit page silently drops.
-                if (result.teamDeleteWarning) {
-                  notify({
-                    tone: "warning",
-                    message: t("classes.deleteTeamWarning", {
-                      classroom: slug,
-                    }),
-                  })
-                } else {
-                  notify({
-                    tone: "success",
-                    durationMs: 5000,
-                    message: t("classes.deletedToast", { classroom: slug }),
-                  })
-                }
+          try {
+            await deleteMutation.mutateAsync(
+              { org, classroom: slug },
+              {
+                onSuccess: (result) => {
+                  // deleteClassroom returns { deleted: false } as a no-op (e.g.
+                  // the dir was already gone). Don't claim success in that case.
+                  if (!result.deleted) {
+                    notify({
+                      tone: "warning",
+                      message: t("classes.deleteNoop", { classroom: slug }),
+                    })
+                    return
+                  }
+                  // The list flow stays put (no navigate), so it is the natural
+                  // place to surface the non-fatal team-cleanup warning that the
+                  // edit page silently drops.
+                  if (result.teamDeleteWarning) {
+                    notify({
+                      tone: "warning",
+                      message: t("classes.deleteTeamWarning", {
+                        classroom: slug,
+                      }),
+                    })
+                  } else {
+                    // The card disappears — SR announcement only.
+                    announce(t("classes.deletedToast", { classroom: slug }))
+                  }
+                },
               },
-              onError: (err) => {
-                notify({
-                  tone: "error",
-                  message: t("classes.deleteFailed", {
-                    classroom: slug,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  }),
-                })
-              },
-            },
-          )
+            )
+          } catch (err) {
+            // Surfaces inside the confirm dialog rather than a corner toast.
+            throw new Error(
+              t("classes.deleteFailed", {
+                classroom: slug,
+                error:
+                  err instanceof Error
+                    ? err.message
+                    : t("classes.somethingWentWrong"),
+              }),
+              { cause: err },
+            )
+          }
         }}
         onClose={() => setDeleteOpen(false)}
       />

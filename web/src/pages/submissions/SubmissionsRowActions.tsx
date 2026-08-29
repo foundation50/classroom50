@@ -12,7 +12,7 @@ import {
   SlidersIcon,
   SyncIcon,
 } from "@/components/ui/icons"
-import { useState } from "react"
+import { createContext, useCallback, useContext, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { safeHttpUrl } from "@/util/url"
@@ -27,10 +27,38 @@ import useGetAutogradeState from "@/hooks/useGetAutogradeState"
 import useSetAutogradeState from "@/hooks/mutations/useSetAutogradeState"
 import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import type { ToastTone } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
 import type { AssignmentMode, SubmissionMode } from "@/types/classroom"
+
+// Feedback channel for actions running inside the submission hub: outcomes
+// render as a banner at the top of the hub dialog (Primer: feedback for a
+// dialog action stays in the dialog) rather than as page-corner toasts.
+// Outside a provider the hook falls back to a toast, so the action rows keep
+// working if ever rendered standalone. The hub's sink is itself unmount-safe
+// (falls back to a toast once the hub closes) — see ManageSubmissionModal.
+export type SubmissionHubFeedback = {
+  tone: ToastTone
+  message: string
+}
+
+export const SubmissionHubFeedbackContext = createContext<
+  ((feedback: SubmissionHubFeedback) => void) | null
+>(null)
+
+const useSubmissionFeedback = () => {
+  const inHub = useContext(SubmissionHubFeedbackContext)
+  const { notify } = useToast()
+  return useCallback(
+    (feedback: SubmissionHubFeedback) => {
+      if (inHub) inHub(feedback)
+      else notify(feedback)
+    },
+    [inHub, notify],
+  )
+}
 
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
@@ -191,7 +219,7 @@ export const DownloadButton = ({
   noRepo?: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const download = useDownloadSubmission()
 
   const start = () => {
@@ -204,7 +232,7 @@ export const DownloadButton = ({
           // not an error.
           const nothing =
             err instanceof Error && err.message === "no-submission"
-          notify({
+          feedback({
             tone: nothing ? "info" : "error",
             message: nothing
               ? t("submissions.rowDownload.nothingToDownload", { owner })
@@ -489,7 +517,7 @@ const UpdateTriggerButton = ({
   noRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const client = useGitHubClient()
   // `pending` drives the disabled state; the synchronous useSafeSubmit latch is
   // the real re-entrancy guard (React state updates a render tick late, so two
@@ -509,7 +537,7 @@ const UpdateTriggerButton = ({
         mode: submissionMode,
         tags: submissionTags,
       })
-      notify({
+      feedback({
         tone:
           outcome.status === "updated" || outcome.status === "current"
             ? "success"
@@ -517,7 +545,7 @@ const UpdateTriggerButton = ({
         message: t(`submissions.rowTrigger.outcome.${outcome.status}`),
       })
     } catch (err) {
-      notify({
+      feedback({
         tone: "error",
         message:
           err instanceof Error
@@ -562,7 +590,7 @@ const ChangeVisibilityButton = ({
   noRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const run = useSafeSubmit()
   const mutation = useSetRepoVisibility()
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -577,7 +605,7 @@ const ChangeVisibilityButton = ({
         repo,
         visibility: makePublic ? "public" : "private",
       })
-      notify({
+      feedback({
         tone: "success",
         message: t(
           makePublic
@@ -587,7 +615,7 @@ const ChangeVisibilityButton = ({
         ),
       })
     } catch (err) {
-      notify({
+      feedback({
         tone: "error",
         message:
           err instanceof Error
@@ -670,7 +698,7 @@ const PauseAutogradingButton = ({
   noRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const run = useSafeSubmit()
   const {
     data: state,
@@ -697,7 +725,7 @@ const PauseAutogradingButton = ({
     if (noRepo) return
     try {
       const result = await mutation.mutateAsync({ org, repo, action })
-      notify({
+      feedback({
         tone: result.status === "notGradable" ? "warning" : "success",
         message: t(
           result.status === "notGradable"
@@ -708,7 +736,7 @@ const PauseAutogradingButton = ({
         ),
       })
     } catch (err) {
-      notify({
+      feedback({
         tone: "error",
         message:
           err instanceof Error

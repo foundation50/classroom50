@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { InlineSpinner } from "@/components/Spinner"
 import { ShieldIcon } from "@/components/ui/icons"
@@ -6,7 +7,7 @@ import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
 import { useClaimTeacher } from "@/hooks/mutations/useClaimTeacher"
-import { Alert, Button } from "@/components/ui"
+import { Alert, Button, InlineMessage } from "@/components/ui"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("classroom:claim-teacher")
@@ -26,35 +27,38 @@ export function ClaimTeacherNotice({
   classroom: string
 }) {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const { githubOrgRole } = useGitHubOrgRole()
   const { actualRole } = useClassroomRoleContext()
+  const [claimError, setClaimError] = useState<string | null>(null)
 
   const claimMutation = useClaimTeacher(org, classroom, {
     somethingWentWrong: t("classes.somethingWentWrong"),
   })
 
-  const claim = () =>
+  const claim = () => {
+    setClaimError(null)
     claimMutation.mutate(undefined, {
       onSuccess: () => {
-        notify({
-          tone: "success",
-          message: t("classes.claimTeacher.success"),
-        })
+        // The notice itself disappears once the role refetch settles — SR
+        // announcement only.
+        announce(t("classes.claimTeacher.success"))
       },
       onError: (err) => {
         log.warn("claim teacher failed", { org, classroom, err })
-        notify({
-          tone: "error",
-          message: t("classes.claimTeacher.failed", {
+        // Rendered inside this notice (Primer: feedback next to the control
+        // that caused it).
+        setClaimError(
+          t("classes.claimTeacher.failed", {
             message:
               err instanceof Error
                 ? err.message
                 : t("classes.somethingWentWrong"),
           }),
-        })
+        )
       },
     })
+  }
 
   // Only an org owner who currently resolves to `student` here needs repair. A
   // TA/teacher of this classroom, or a non-owner, never sees it. `unresolved`
@@ -65,7 +69,7 @@ export function ClaimTeacherNotice({
   return (
     <Alert
       tone="info"
-      className="mb-4 flex-col items-start gap-2 sm:flex-row sm:items-center"
+      className="mb-4 flex-col items-start gap-2 sm:flex-row sm:items-center sm:flex-wrap"
     >
       <ShieldIcon aria-hidden="true" className="size-4 shrink-0" />
       <span className="flex-1 text-sm">
@@ -84,6 +88,11 @@ export function ClaimTeacherNotice({
         )}
         {t("classes.claimTeacher.action")}
       </Button>
+      {claimError != null && (
+        <InlineMessage tone="error" className="w-full">
+          {claimError}
+        </InlineMessage>
+      )}
     </Alert>
   )
 }

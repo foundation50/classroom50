@@ -46,6 +46,7 @@ import {
   Button,
   Card,
   DropdownMenu,
+  InlineMessage,
   RouterButton,
   Toolbar,
   cx,
@@ -74,6 +75,9 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { notify } = useToast()
+  // Accept failure, rendered inside this invite card (Primer: feedback next
+  // to the action). Success keeps its toast — it rides the navigation away.
+  const [acceptError, setAcceptError] = useState(false)
   const org = invite.organization
   const isOwner = isOwnerGitHubOrgRole(invite.role)
 
@@ -126,6 +130,13 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
         </div>
 
         <Card.Actions className="mt-5 items-center justify-end gap-2">
+          {acceptError && (
+            // role="alert" so the insertion is announced — this replaced an
+            // error toast, and no focus move carries the message.
+            <InlineMessage tone="error" role="alert" className="me-auto">
+              {t("orgs.invites.acceptError", { org: org.login })}
+            </InlineMessage>
+          )}
           <GitHubLink
             href={`https://github.com/orgs/${org.login}/invitation`}
             label={t("orgs.invites.viewOnGitHub")}
@@ -138,9 +149,12 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
             size="sm"
             loading={accept.isPending}
             loadingLabel={t("orgs.invites.accepting")}
-            onClick={() =>
+            onClick={() => {
+              setAcceptError(false)
               accept.mutate(undefined, {
                 onSuccess: () => {
+                  // Kept as a toast: it must survive the navigation below
+                  // (the provider mounts above the router).
                   notify({
                     tone: "success",
                     message: t("orgs.invites.accepted", { org: org.login }),
@@ -148,13 +162,10 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
                   navigate({ to: "/$org", params: { org: org.login } })
                 },
                 onError: () => {
-                  notify({
-                    tone: "error",
-                    message: t("orgs.invites.acceptError", { org: org.login }),
-                  })
+                  setAcceptError(true)
                 },
               })
-            }
+            }}
           >
             {t("orgs.invites.acceptOpen")}
           </Button>
@@ -232,6 +243,8 @@ function HideOrgMenu({
 
   const handleHide = () => {
     hide(org.login)
+    // Kept as a toast: the card disappears, so this is the Undo's only home
+    // (Primer error-forgiveness pattern).
     notify({
       tone: "info",
       key: `org-hidden-${org.login}`,

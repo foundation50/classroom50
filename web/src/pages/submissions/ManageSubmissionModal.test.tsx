@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -49,14 +49,19 @@ vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
   default: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: notifyMock, announce: vi.fn() }),
 }))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),
 }))
 vi.mock("@/hooks/mutations/useDownloadSubmission", () => ({
-  default: () => ({ mutate: vi.fn(), isPending: false }),
+  default: () => ({ mutate: downloadMutate, isPending: false }),
 }))
+
+const notifyMock = vi.fn()
+// Configurable so tests can drive the download row's onError into the hub
+// feedback channel.
+const downloadMutate = vi.fn()
 
 import { ManageSubmissionModal } from "./ManageSubmissionModal"
 
@@ -74,6 +79,8 @@ const individualAction = {
 
 afterEach(() => {
   cleanup()
+  notifyMock.mockClear()
+  downloadMutate.mockReset()
   repoData.mockReturnValue({ data: undefined })
   collaboratorsData.mockReturnValue({ data: undefined })
   autogradeStateData.mockReturnValue({
@@ -422,5 +429,64 @@ describe("ManageSubmissionModal", () => {
         .getByRole("button", { name: "submissions.table.reviewAria" })
         .hasAttribute("disabled"),
     ).toBe(true)
+  })
+})
+
+// The hub feedback channel: an action row's outcome renders as a banner
+// inside the open hub; an outcome landing after the hub unmounts (closed
+// mid-action) falls back to a toast instead of vanishing.
+describe("ManageSubmissionModal — action feedback channel", () => {
+  const renderHub = () =>
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={individualAction}
+      />,
+    )
+
+  it("renders an action failure as an in-hub banner, not a toast", () => {
+    // The download row reports failures through its mutate onError callback.
+    downloadMutate.mockImplementation(
+      (_vars: unknown, opts?: { onError?: (err: Error) => void }) => {
+        opts?.onError?.(new Error("boom"))
+      },
+    )
+    renderHub()
+    fireEvent.click(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    )
+
+    expect(screen.getByText("submissions.rowDownload.error")).toBeTruthy()
+    expect(notifyMock).not.toHaveBeenCalled()
+  })
+
+  it("falls back to a toast when the outcome lands after the hub unmounted", () => {
+    // Capture the onError callback so it can fire post-unmount (a slow write
+    // settling after the teacher closed the hub).
+    let lateError: ((err: Error) => void) | undefined
+    downloadMutate.mockImplementation(
+      (_vars: unknown, opts?: { onError?: (err: Error) => void }) => {
+        lateError = opts?.onError
+      },
+    )
+    const view = renderHub()
+    fireEvent.click(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    )
+    view.unmount()
+
+    act(() => {
+      lateError?.(new Error("boom"))
+    })
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tone: "error",
+        message: "submissions.rowDownload.error",
+      }),
+    )
   })
 })
