@@ -55,7 +55,7 @@ const TeamRosterContent = ({
   // unenroll and skips them in the auto-backfills) and the Add modal (which
   // forgets a login on a successful re-enroll) share one set — otherwise a
   // re-added student would stay suppressed until reload.
-  const suppressedLogins = useSuppressedLogins()
+  const suppressedLogins = useSuppressedLogins(org, classroom)
 
   // Which add-students affordance is open (all mutually exclusive modals).
   const [addOpen, setAddOpen] = useState(false)

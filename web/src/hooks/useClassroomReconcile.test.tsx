@@ -118,6 +118,9 @@ describe("useClassroomReconcile", () => {
       "org",
       "cs101",
       undefined,
+      // The suppressed-logins accessor: the pass runs while the roster stays
+      // interactive, so it must honor mid-pass unenrolls.
+      expect.any(Function),
     )
   })
 
@@ -132,6 +135,7 @@ describe("useClassroomReconcile", () => {
       "org",
       "cs101",
       "prof",
+      expect.any(Function),
     )
   })
 

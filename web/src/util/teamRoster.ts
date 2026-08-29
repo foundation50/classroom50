@@ -2,7 +2,7 @@ import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { parseGitHubId, rosterClaimSet } from "@/util/identity"
-import { ROSTER_STATUS_UNLINKED } from "@/util/rosterCsv"
+import { hasUnlinkedMarker } from "@/util/rosterCsv"
 import {
   DEFAULT_STUDENT_SORT,
   NAME_COLLATION,
@@ -401,7 +401,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     for (const student of students) {
       if (student.github_id?.trim() || student.username?.trim()) continue
       const email = student.email?.trim().toLowerCase() ?? ""
-      const marked = student.status?.trim() === ROSTER_STATUS_UNLINKED
+      const marked = hasUnlinkedMarker(student.status)
       const nameOnly =
         !email &&
         Boolean(student.first_name?.trim() || student.last_name?.trim())

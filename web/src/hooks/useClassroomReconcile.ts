@@ -6,6 +6,7 @@ import {
   ClassroomReconcilePermanentError,
   type ClassroomReconcileResult,
 } from "@/domain/reconcileClassroom"
+import { suppressedLoginsFor } from "@/hooks/useSuppressedLogins"
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -37,7 +38,17 @@ export function useClassroomReconcile(
     classroom,
     run: ({ org, classroom }) =>
       withGitConflictRetry(() =>
-        reconcileClassroom(client, org, classroom, creator),
+        reconcileClassroom(
+          client,
+          org,
+          classroom,
+          creator,
+          // The pass runs while the roster stays interactive, so it must honor
+          // the same just-unenrolled suppression the roster page records —
+          // otherwise a mid-pass unenroll is resurrected from a stale team
+          // read (the manual sync threads the identical accessor).
+          () => suppressedLoginsFor(org, classroom).snapshot(),
+        ),
       ),
     // An archived classroom skips the team/roster writes (though it still
     // heals the description projection); release its key so a same-mount

@@ -32,29 +32,26 @@ export type StudentCsvRow = Record<StudentCsvField, string>
 // compile-time link; the shared row cases pin the keep-rule half.
 export const ROSTER_STATUS_UNLINKED = "unlinked"
 
-// True when the row carries the explicit unlinked marker AND still has no
-// identity. A row that gained an identity while (wrongly) keeping the marker
-// reads as a normal identity row — identity always wins.
-export function isUnlinkedRosterRow(row: StudentCsvRow): boolean {
-  return (
-    row.status.trim() === ROSTER_STATUS_UNLINKED &&
-    !row.username.trim() &&
-    !row.github_id.trim()
-  )
+// The one reading of the marker cell, shared by every consumer (the reap and
+// cancel exclusions, the roster view's unlinked pass, the link/remove
+// actions). Unknown values read as unmarked — additive evolution.
+export function hasUnlinkedMarker(status: string | null | undefined): boolean {
+  return (status ?? "").trim() === ROSTER_STATUS_UNLINKED
 }
 
 // The keep-rule: which parsed rows survive a read (and a write). A row must
 // identify a student (username, github_id, or email) or at least DESCRIBE one
 // (a name, or the explicit `status` marker) — a row with only section/role
-// noise, or nothing at all, is dropped. Mirrors the CLI's recordToRow rule;
-// shared cases: cli/shared/testdata/roster_row_cases.json.
+// noise, or nothing at all, is dropped. Callers pass normalizeStudentRow
+// output, so every cell is already trimmed. Mirrors the CLI's recordToRow
+// rule; shared cases: cli/shared/testdata/roster_row_cases.json.
 function isKeptRosterRow(row: StudentCsvRow): boolean {
   return Boolean(
     row.username ||
     row.github_id ||
     row.email ||
-    row.first_name.trim() ||
-    row.last_name.trim() ||
+    row.first_name ||
+    row.last_name ||
     row.status,
   )
 }

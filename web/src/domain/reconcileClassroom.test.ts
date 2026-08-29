@@ -23,16 +23,22 @@ vi.mock("@/github-core/mutations", () => ({
   removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
 }))
 // The roster reconciliation is exercised in reconcileRoster.test.ts; here it's
-// a no-op so these tests assert only the team/description reconcile.
+// a spy resolving a no-op so these tests assert only the team/description
+// reconcile — plus that the excludeLogins accessor is threaded through (the
+// on-entry pass runs while the roster stays interactive, so dropping it would
+// resurrect mid-pass unenrolls).
+const reconcileRoster = vi.fn(() =>
+  Promise.resolve({
+    addedUsernames: [],
+    recoveredEmails: [],
+    removedEmails: [],
+    noop: true,
+    deletedStaleTeams: 0,
+  }),
+)
 vi.mock("./students/reconcileRoster", () => ({
-  reconcileRoster: () =>
-    Promise.resolve({
-      addedUsernames: [],
-      recoveredEmails: [],
-      removedEmails: [],
-      noop: true,
-      deletedStaleTeams: 0,
-    }),
+  reconcileRoster: (...a: unknown[]) =>
+    (reconcileRoster as (...a: unknown[]) => unknown)(...a),
 }))
 
 import { reconcileClassroom } from "./reconcileClassroom"
@@ -66,6 +72,8 @@ beforeEach(() => {
   reconcileDescription.mockReset()
   projectDescription.mockReset()
   removeUserFromTeam.mockReset()
+  // Clear (not reset): the factory-baked no-op implementation must survive.
+  reconcileRoster.mockClear()
   // Healthy defaults: active classroom, everything already converged.
   getClassroomJson.mockResolvedValue({ name: "CS101", active: true })
   ensureClassroomTeam.mockResolvedValue({
@@ -107,6 +115,19 @@ describe("reconcileClassroom", () => {
     const result = await reconcileClassroom(client, "org", "cs101")
     expect(result.staffCreated).toEqual(["hta"])
     expect(result.skipped).toBe(false)
+  })
+
+  it("threads excludeLogins through to the roster reconciliation", async () => {
+    // The on-entry pass runs while the roster stays interactive, so dropping
+    // the suppression accessor here would let it resurrect a student the
+    // teacher unenrolled mid-pass.
+    const excludeLogins = () => new Set(["gone"])
+    await reconcileClassroom(client, "org", "cs101", undefined, excludeLogins)
+    expect(reconcileRoster).toHaveBeenCalledWith(client, {
+      org: "org",
+      classroom: "cs101",
+      excludeLogins,
+    })
   })
 
   it("drops the creator from the student, hta, and ta teams but never teacher", async () => {

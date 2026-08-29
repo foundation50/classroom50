@@ -3,6 +3,7 @@ import { readOrgMembershipState } from "@/github-core/mutations"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
 import {
   ROSTER_STATUS_UNLINKED,
+  hasUnlinkedMarker,
   normalizeStudentRow,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
@@ -46,6 +47,18 @@ export function unlinkedRowRef(row: {
   }
 }
 
+// The name-tuple comparison key: trimmed and lowercased, so matching and the
+// append-time dedupe below can't disagree on what "the same tuple" means.
+function tupleKey(row: {
+  first_name?: string
+  last_name?: string
+  section?: string
+}): string {
+  return [row.first_name, row.last_name, row.section]
+    .map((part) => (part ?? "").trim().toLowerCase())
+    .join("|")
+}
+
 // The rows a ref addresses. Only rows with NO identity cells at all qualify
 // (the same predicate that renders a row as unlinked), so a row that gained an
 // identity since the view snapshot can never be matched — the action simply
@@ -67,13 +80,7 @@ function matchUnlinkedRows(
     // to be email-less too keeps it from grabbing a kept email row that
     // happens to share the name.
     if (row.email.trim()) continue
-    if (
-      row.first_name.trim() === (ref.first_name ?? "").trim() &&
-      row.last_name.trim() === (ref.last_name ?? "").trim() &&
-      row.section.trim() === (ref.section ?? "").trim()
-    ) {
-      indices.push(i)
-    }
+    if (tupleKey(row) === tupleKey(ref)) indices.push(i)
   }
   return indices
 }
@@ -149,12 +156,14 @@ export async function linkRosterRowToMember(
   // Decision-time proof the picker's snapshot can't provide: the target must
   // still be an ACTIVE org member (a transient read failure propagates and the
   // teacher retries, rather than linking a row to someone who just left).
+  // assignRosterMemberRole re-checks after the commit below — deliberate: this
+  // read gates the roster WRITE, that one gates the team add.
   const state = await readOrgMembershipState(client, org, login)
   if (state !== "active") {
     throw new MemberNotActiveError(login)
   }
 
-  let linked: StudentCsvRow | null = null
+  let linked: StudentCsvRow | undefined
   await withRosterRewrite(client, { org, classroom }, (rows) => {
     const matches = matchUnlinkedRows(rows, rowRef)
     if (matches.length === 0) throw new UnlinkedRowNotFoundError()
@@ -170,23 +179,26 @@ export async function linkRosterRowToMember(
     if (clash) throw new MemberAlreadyOnRosterError(login)
 
     const target = rows[matches[0]]
-    linked = normalizeStudentRow({
+    const next = normalizeStudentRow({
       ...target,
       username: login,
       github_id: idKey,
       // Gaining an identity ends the unlinked state (mirrors the CLI's
       // ClaimPendingEmailRow).
-      status: target.status === ROSTER_STATUS_UNLINKED ? "" : target.status,
+      status: hasUnlinkedMarker(target.status) ? "" : target.status,
     })
-    const nextStudents = rows.map((row, idx) =>
-      idx === matches[0] ? linked! : row,
-    )
+    linked = next
     return {
-      nextStudents,
+      nextStudents: rows.map((row, idx) => (idx === matches[0] ? next : row)),
       changed: 1,
       message: `Link roster row to ${login}: ${classroom}`,
     }
   })
+  if (!linked) {
+    // Unreachable — the mutate above either assigned it or threw — but it lets
+    // the rest of the function use the value without non-null assertions.
+    throw new UnlinkedRowNotFoundError()
+  }
 
   // Enroll on the classroom team via the same path the needs-attention assign
   // uses. Best-effort: the row is committed either way, and a failure leaves a
@@ -199,13 +211,13 @@ export async function linkRosterRowToMember(
       role: "student",
     })
     if (assigned.state === "not-member") {
-      return { student: linked!, teamAdd: "left-org" }
+      return { student: linked, teamAdd: "left-org" }
     }
   } catch (err) {
     log.error("link roster row: team add failed", { org, classroom, err })
-    return { student: linked!, teamAdd: "failed" }
+    return { student: linked, teamAdd: "failed" }
   }
-  return { student: linked!, teamAdd: "ok" }
+  return { student: linked, teamAdd: "ok" }
 }
 
 export type RemoveUnlinkedRowsResult = {
@@ -235,7 +247,7 @@ export async function removeUnlinkedRows(
     removed = 0
     missed = 0
     const removable = (row: StudentCsvRow) =>
-      row.status.trim() === ROSTER_STATUS_UNLINKED || !row.email.trim()
+      hasUnlinkedMarker(row.status) || !row.email.trim()
     const drop = new Set<number>()
     for (const ref of rowRefs) {
       const matches = matchUnlinkedRows(rows, ref).filter(
@@ -291,14 +303,6 @@ export async function appendUnlinkedRows(
       const claimedEmails = new Set(
         rows.map((r) => normalizeInviteEmail(r.email ?? "")).filter(Boolean),
       )
-      const tupleKey = (r: {
-        first_name?: string
-        last_name?: string
-        section?: string
-      }) =>
-        [r.first_name?.trim(), r.last_name?.trim(), r.section?.trim()]
-          .map((part) => (part ?? "").toLowerCase())
-          .join("|")
       const claimedTuples = new Set(
         rows
           .filter((r) => !r.username.trim() && !r.github_id.trim())

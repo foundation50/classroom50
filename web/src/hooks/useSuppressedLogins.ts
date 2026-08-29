@@ -1,21 +1,25 @@
-import { useRef } from "react"
+import { useMemo } from "react"
 
 // Session-scoped set of GitHub logins the teacher just unenrolled, used to stop
-// the roster's automatic backfills (auto-sync, auto-reconcile) from re-adding
-// someone they removed. Unenroll is classroom-scoped — it drops the CSV row and
-// classroom-team seat but leaves an active member's ORG membership intact — so a
-// removed student can momentarily be a live org member with no team seat, which
-// auto-reconcile would otherwise "fix" by team-adding them back (and auto-sync
-// re-appending the CSV row). GitHub's Contents API is eventually consistent, so
-// a refetch right after the CSV delete can also resurface the row. Remembering
-// the login across those windows blocks the loop.
+// the roster's automatic backfills (auto-sync, auto-reconcile, and the on-entry
+// classroom reconcile) from re-adding someone they removed. Unenroll is
+// classroom-scoped — it drops the CSV row and classroom-team seat but leaves an
+// active member's ORG membership intact — so a removed student can momentarily
+// be a live org member with no team seat, which a reconcile would otherwise
+// "fix" by team-adding them back (and a sync re-appending the CSV row).
+// GitHub's Contents API is eventually consistent, so a refetch right after the
+// CSV delete can also resurface the row. Remembering the login across those
+// windows blocks the loop.
 //
-// Lives above EnrolledStudents + AddStudent (shared parent) so a re-enroll from
-// the Add modal can `forget` the login it previously suppressed — otherwise a
-// legitimately re-added student would stay suppressed until reload. In-memory by
-// design: a full reload re-derives roster state and clears it (matching the
-// drift-banner dismissal), so a genuinely still-drifted student is one refresh —
-// or the explicit Sync/Reconcile — away.
+// The store is MODULE-scoped and keyed per (org, classroom): the on-entry
+// classroom reconcile runs at the $org/$classroom boundary, outside the roster
+// page that records the unenrolls, so a component-owned ref could not reach
+// it. Per-classroom keying matters because unenroll is classroom-scoped — a
+// login removed from one classroom must still backfill normally in another.
+// In-memory by design: a full reload re-derives roster state and clears it,
+// so a genuinely still-drifted student is one refresh — or the explicit
+// Sync — away. A re-enroll `forget`s the login (see AddStudent), so a
+// legitimately re-added student never stays suppressed.
 export type SuppressedLogins = {
   remember: (logins: Iterable<string>) => void
   forget: (logins: Iterable<string>) => void
@@ -39,20 +43,44 @@ export function dropSuppressed(
   return candidates.filter((login) => !suppressed.has(normalize(login)))
 }
 
-export function useSuppressedLogins(): SuppressedLogins {
-  const ref = useRef<Set<string>>(new Set())
+const stores = new Map<string, Set<string>>()
+
+const storeFor = (org: string, classroom: string): Set<string> => {
+  const key = `${org}/${classroom}`
+  let set = stores.get(key)
+  if (!set) {
+    set = new Set()
+    stores.set(key, set)
+  }
+  return set
+}
+
+// The store's framework-free accessor, so non-page callers (the on-entry
+// reconcile hook) can consult the same set the roster page writes.
+export function suppressedLoginsFor(
+  org: string,
+  classroom: string,
+): SuppressedLogins {
+  const set = storeFor(org, classroom)
   return {
     remember: (logins) => {
       for (const login of logins) {
         const key = normalize(login)
-        if (key) ref.current.add(key)
+        if (key) set.add(key)
       }
     },
     forget: (logins) => {
-      for (const login of logins) ref.current.delete(normalize(login))
+      for (const login of logins) set.delete(normalize(login))
     },
-    has: (login) => ref.current.has(login),
-    snapshot: () => new Set(ref.current),
-    clear: () => ref.current.clear(),
+    has: (login) => set.has(login),
+    snapshot: () => new Set(set),
+    clear: () => set.clear(),
   }
+}
+
+export function useSuppressedLogins(
+  org: string,
+  classroom: string,
+): SuppressedLogins {
+  return useMemo(() => suppressedLoginsFor(org, classroom), [org, classroom])
 }
