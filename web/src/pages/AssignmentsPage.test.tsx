@@ -142,14 +142,15 @@ describe("Assignments header student count", () => {
     expect(screen.getByText("…")).toBeTruthy()
   })
 
-  it("shows the placeholder on a role-count error, not a wrong number", () => {
+  it("hides the count entirely on a role-count error, not a wrong number", () => {
     studentCount.mockReturnValue({
       studentCount: undefined,
       isLoading: false,
       isError: true,
     })
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
-    expect(screen.getByText("…")).toBeTruthy()
+    // Not the loading "…" either — that reads as still-loading forever.
+    expect(screen.queryByText("…")).toBeNull()
     expect(screen.queryByText(/assignments\.studentCount/)).toBeNull()
   })
 })

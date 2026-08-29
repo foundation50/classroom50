@@ -142,7 +142,7 @@ const TeamRosterContent = ({
                   </Badge>
                 ) : null}
               </>
-            ) : (
+            ) : rosterError ? null : ( // hide the counts on error, never a stuck "Loading roster…"
               <span>{t("students.enrolledCountLoading")}</span>
             )}
             <span aria-hidden="true" className="text-base-content/30">

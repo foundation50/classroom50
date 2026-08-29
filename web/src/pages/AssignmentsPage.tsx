@@ -218,9 +218,13 @@ export const TeacherAssignmentsView = ({
         subtitle={
           <>
             {classroomData?.term ? `${classroomData?.term} • ` : ""}
-            {studentsLoading || studentCountError
+            {studentsLoading
               ? "…"
-              : t("assignments.studentCount", { count: studentCount ?? 0 })}
+              : // A failed count is hidden entirely (never a wrong number);
+                // the perpetual "…" read as still-loading.
+                studentCountError
+                ? null
+                : t("assignments.studentCount", { count: studentCount ?? 0 })}
           </>
         }
       />

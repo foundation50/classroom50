@@ -33,6 +33,9 @@ export type OrgMembersOverview = {
   ownerIds: Set<string>
   isLoading: boolean
   isError: boolean
+  // Retry for the members read behind `isError` (the meta/roster enrichment
+  // queries degrade independently).
+  refetchMembers: () => void
   // classroom path -> resolved GitHub team slug (classroom.json.team.slug, else
   // the derived classroomTeamSlug). The SAME slug teamMembersByClassroom
   // keys from, so optimistic team-cache writes on the Members page target the
@@ -218,6 +221,9 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     ownerIds,
     isLoading,
     isError,
+    refetchMembers: () => {
+      void membersQuery.refetch()
+    },
     teamSlugByClassroom,
     displayNameByClassroom,
     notes,
