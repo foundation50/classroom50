@@ -86,9 +86,7 @@ describe("ScoreOverrideModal", () => {
     const input = screen.getByRole("spinbutton")
     await user.clear(input)
     await user.type(input, "99")
-    expect(screen.getByRole("alert").textContent).toBe(
-      "submissions.scoreOverride.range:50",
-    )
+    expect(screen.getByText("submissions.scoreOverride.range:50")).toBeTruthy()
     const save = screen.getByRole("button", {
       name: "submissions.scoreOverride.save",
     })

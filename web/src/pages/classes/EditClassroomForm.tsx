@@ -11,6 +11,7 @@ import { GitHubLink } from "@/components/GitHubLink"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
 import { normalizePagesBaseUrl } from "@/util/pagesBaseUrl"
 import { CollapsibleAdvanced } from "@/pages/assignments/sections/CollapsibleAdvanced"
@@ -340,7 +341,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        const formEl = e.currentTarget
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <Card.Body>

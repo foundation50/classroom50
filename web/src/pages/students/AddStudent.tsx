@@ -1,6 +1,7 @@
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
@@ -247,7 +248,8 @@ const AddStudent = ({
         onSubmit={(e) => {
           e.preventDefault()
           e.stopPropagation()
-          form.handleSubmit()
+          const formEl = e.currentTarget as HTMLFormElement
+          void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
         }}
       >
         <AnimatedAlert tone="warning" show={!!warning} className="mt-4 text-sm">

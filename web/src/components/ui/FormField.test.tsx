@@ -53,19 +53,21 @@ describe("FormField", () => {
         )}
       </FormField>,
     )
-    const alert = screen.getByRole("alert")
-    expect(alert.textContent).toBe("Required")
+    const errorMessage = screen.getByText("Required")
+    // Not a live region (Primer: focus movement, not role="alert", carries
+    // the validation announcement) — but still tied to the control.
+    expect(errorMessage.getAttribute("role")).toBeNull()
     const input = screen.getByLabelText("Name")
-    expect(input.getAttribute("aria-describedby")).toBe(alert.id)
+    expect(input.getAttribute("aria-describedby")).toBe(errorMessage.id)
     expect(input.getAttribute("aria-invalid")).toBe("true")
     // The invalid field renders a decorative error marker icon in the
-    // label row; the alert text carries the accessible announcement.
+    // label row; the describedby text carries the accessible announcement.
     expect(
       document.querySelector("svg.text-error[aria-hidden='true']"),
     ).not.toBeNull()
   })
 
-  it("shows helper text (not an alert) when there is no error", () => {
+  it("shows helper text (not an error) when there is no error", () => {
     render(
       <FormField label="Name" htmlFor="n" hint="Use lowercase">
         {({ describedById }) => (
@@ -73,7 +75,7 @@ describe("FormField", () => {
         )}
       </FormField>,
     )
-    expect(screen.queryByRole("alert")).toBeNull()
+    expect(document.querySelector(".text-error")).toBeNull()
     const hint = screen.getByText("Use lowercase")
     expect(screen.getByLabelText("Name").getAttribute("aria-describedby")).toBe(
       hint.id,

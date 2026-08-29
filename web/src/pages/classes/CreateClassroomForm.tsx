@@ -3,6 +3,7 @@ import { useForm } from "@tanstack/react-form"
 import { useParams } from "@tanstack/react-router"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import {
   DEFAULT_SECRET_LENGTH,
   SECRET_PATTERN_DESCRIPTION,
@@ -141,7 +142,8 @@ const CreateClassroomForm = ({
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        const formEl = e.currentTarget
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <Card.Body>
