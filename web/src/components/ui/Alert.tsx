@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import {
   AlertIcon,
   CheckCircleIcon,
+  CircleSlashIcon,
   InfoIcon,
   StopIcon,
   XIcon,
@@ -22,13 +23,17 @@ import { cx } from "./cx"
 // `role` defaults by tone — "alert" (assertive) only for errors, "status"
 // (polite) otherwise — matching the app-wide messaging ARIA convention.
 
-export type AlertTone = "info" | "success" | "warning" | "error"
+export type AlertTone = "info" | "success" | "warning" | "error" | "unavailable"
 
 const TONE_CLASS: Record<AlertTone, string> = {
   info: "alert-info",
   success: "alert-success",
   warning: "alert-warning",
   error: "alert-error",
+  // Primer's `unavailable` state (degraded reads, permission gates): the
+  // bare neutral alert — deliberately not a color, so a page of degraded
+  // sections reads calm rather than alarming.
+  unavailable: "",
 }
 
 // The single source of truth for the alert tone->class recipe. Reused by the
@@ -45,6 +50,7 @@ export const ALERT_TONE_ICON: Record<AlertTone, typeof InfoIcon> = {
   success: CheckCircleIcon,
   warning: AlertIcon,
   error: StopIcon,
+  unavailable: CircleSlashIcon,
 }
 
 export function alertToneRole(tone: AlertTone): "alert" | "status" {

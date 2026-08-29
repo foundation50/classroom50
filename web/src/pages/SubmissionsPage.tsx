@@ -1178,13 +1178,13 @@ const SubmissionsPageContent = () => {
       />
 
       {isLockedAssignment && (
-        <Alert tone="warning" role="status">
+        <Alert tone="info" role="status">
           {t("submissions.lockedNotice")}
         </Alert>
       )}
 
       {isClosedAssignment && !isLockedAssignment && (
-        <Alert tone="warning" role="status">
+        <Alert tone="info" role="status">
           {t("submissions.closedNotice")}
         </Alert>
       )}

@@ -27,7 +27,7 @@ function PermissionDeniedMessage() {
       <div className="flex size-16 items-center justify-center rounded-box bg-warning/10 text-warning">
         <ShieldXIcon aria-hidden="true" className="size-8" />
       </div>
-      <Alert tone="warning" className="max-w-md flex-col text-center">
+      <Alert tone="unavailable" className="max-w-md flex-col text-center">
         <Heading as="h1" variant="title-medium">
           {t("permissionDenied.title")}
         </Heading>
