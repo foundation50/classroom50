@@ -1,4 +1,5 @@
 import { useParams, useNavigate } from "@tanstack/react-router"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -25,6 +26,9 @@ const CreateClassroomPage = () => {
   const trackPublishDeploy = useTrackPublishDeploy()
   const { user } = useGithubAuth()
   const { org } = useParams({ strict: false })
+  // Failed-create message, rendered inline in the form (the flow stays on
+  // this page on error; only success navigates away).
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const createClassroomMutation = useCreateClassroom(
     org ?? "",
@@ -49,8 +53,10 @@ const CreateClassroomPage = () => {
       <RequireRole allow="owner">
         <PageHeader title={t("classes.createTitle")} />
         <CreateClassroomForm
-          onSubmit={(values) =>
-            createClassroomMutation.mutateAsync(
+          submitError={createError}
+          onSubmit={(values) => {
+            setCreateError(null)
+            return createClassroomMutation.mutateAsync(
               {
                 name: values.name,
                 classroom: values.slug,
@@ -62,12 +68,13 @@ const CreateClassroomPage = () => {
               {
                 onError: (err) => {
                   logWriteFailure(log, err, "create classroom failed")
-                  notify({
-                    tone: "error",
-                    message: t("toasts.classroomCreateFailed", {
+                  // Stays on the form, so the failure renders inline next to
+                  // the create button rather than as a corner toast.
+                  setCreateError(
+                    t("toasts.classroomCreateFailed", {
                       message: err.message,
                     }),
-                  })
+                  )
                 },
                 onSuccess: (_result, variables) => {
                   // Toast before navigating: the provider is mounted above the
@@ -84,7 +91,7 @@ const CreateClassroomPage = () => {
                 },
               },
             )
-          }
+          }}
         />
       </RequireRole>
     </PageShell>

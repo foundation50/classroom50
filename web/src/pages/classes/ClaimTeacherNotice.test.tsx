@@ -13,6 +13,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 const orgRoleMock = vi.fn()
 const classroomCtxMock = vi.fn()
 const notifyMock = vi.fn()
+const announceMock = vi.fn()
 const ensureTeamMock = vi.fn()
 const grantWriteMock = vi.fn()
 const addUserMock = vi.fn()
@@ -30,7 +31,7 @@ vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "owner1" } }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: notifyMock, announce: vi.fn() }),
+  useToast: () => ({ notify: notifyMock, announce: announceMock }),
 }))
 vi.mock("@/github-core/mutations", () => ({
   ensureClassroomRoleTeam: (...a: unknown[]) => ensureTeamMock(...a),
@@ -110,12 +111,10 @@ describe("ClaimTeacherNotice self-add", () => {
         role: "maintainer",
       },
     )
-    expect(notifyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "success" }),
-    )
+    expect(announceMock).toHaveBeenCalledWith("classes.claimTeacher.success")
   })
 
-  it("surfaces an error toast when the add fails", async () => {
+  it("surfaces the failure inline in the notice when the add fails", async () => {
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
     ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-teacher" })
@@ -125,8 +124,10 @@ describe("ClaimTeacherNotice self-add", () => {
     wrap(<ClaimTeacherNotice org="acme" classroom="cs101" />)
     await userEvent.click(screen.getByText(action))
 
-    expect(notifyMock).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "error" }),
-    )
+    // Rendered inline in the notice, not as a page toast.
+    expect(
+      await screen.findByText(/classes\.claimTeacher\.failed/),
+    ).toBeTruthy()
+    expect(notifyMock).not.toHaveBeenCalled()
   })
 })

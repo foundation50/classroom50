@@ -149,6 +149,15 @@ const EnrolledStudents = ({
 
   // Keyed by row.key so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
+  // Failed-invite action (re-invite/dismiss) failure, rendered inline in the
+  // failed-invitations list (Primer: feedback next to its actions).
+  const [inviteActionError, setInviteActionError] = useState<string | null>(
+    null,
+  )
+  // Manual/auto roster-sync failure, rendered as a banner above the table.
+  const [syncError, setSyncError] = useState<string | null>(null)
+  // Explains a no-op select-all (visible rows exist but none are selectable).
+  const [noneSelectableNotice, setNoneSelectableNotice] = useState(false)
   const [grouping, setGrouping] = useState<RosterGrouping>("none")
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
@@ -206,16 +215,17 @@ const EnrolledStudents = ({
     rateLimited: (who) => t("students.failedInviteRateLimited", { who }),
     notSent: (who) => t("students.failedInviteNotSent", { who }),
   })
-  const reinvite = (inv: GitHubOrgInvitation) =>
+  const reinvite = (inv: GitHubOrgInvitation) => {
+    setInviteActionError(null)
     reinviteFailedInvite.mutate(inv, {
       onError: (err) =>
-        notify({
-          tone: "error",
-          message: t("students.failedInviteReinviteError", {
+        setInviteActionError(
+          t("students.failedInviteReinviteError", {
             error: getErrorMessage(err),
           }),
-        }),
+        ),
     })
+  }
 
   // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
   // yourself), mirroring Org Members' self-exclusion. A pure staff row (no
@@ -370,13 +380,10 @@ const EnrolledStudents = ({
     // current view has rows but none are selectable — e.g., filtered to staff —
     // the click would silently no-op, so explain why instead.
     if (shouldWarnNoneSelectable(filtered.length, selectableFiltered.length)) {
-      notify({
-        tone: "info",
-        durationMs: 6000,
-        message: t("students.bulk.noneSelectable"),
-      })
+      setNoneSelectableNotice(true)
       return
     }
+    setNoneSelectableNotice(false)
     if (selectableFiltered.length === 0) return
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
   }
@@ -424,10 +431,13 @@ const EnrolledStudents = ({
   // owns the roster-file invalidation that must always run; the toasts live
   // here so they skip when unmounted.
   const syncMutation = useSyncRoster(org, classroom)
-  const runSync = () =>
+  const runSync = () => {
+    setSyncError(null)
     syncMutation.mutate(undefined, {
       onSuccess: (result) => {
         const parts = rosterSyncMessageKeys(result)
+        // Kept as a toast: the recovered/added counts aren't evident from
+        // the table alone.
         notify({
           tone: "success",
           durationMs: 5000,
@@ -439,12 +449,10 @@ const EnrolledStudents = ({
         })
       },
       onError: (err) => {
-        notify({
-          tone: "error",
-          message: t("students.syncFailed", { error: getErrorMessage(err) }),
-        })
+        setSyncError(t("students.syncFailed", { error: getErrorMessage(err) }))
       },
     })
+  }
 
   // A roster synchronization is underway — the on-entry classroom reconcile,
   // the drift auto-sync, or the manual Sync button. While true the sync button
@@ -668,7 +676,9 @@ const EnrolledStudents = ({
             dismissFailedInvite.isPending
           }
           onReinvite={reinvite}
-          onDismiss={(inv) =>
+          actionError={inviteActionError}
+          onDismiss={(inv) => {
+            setInviteActionError(null)
             dismissFailedInvite.mutate(
               {
                 invitationId: inv.id,
@@ -677,15 +687,14 @@ const EnrolledStudents = ({
               },
               {
                 onError: (err) =>
-                  notify({
-                    tone: "error",
-                    message: t("students.failedInviteDismissError", {
+                  setInviteActionError(
+                    t("students.failedInviteDismissError", {
                       error: getErrorMessage(err),
                     }),
-                  }),
+                  ),
               },
             )
-          }
+          }}
         />
       ) : null}
 
@@ -733,6 +742,27 @@ const EnrolledStudents = ({
           addActions={addActions ?? null}
         />
       ) : null}
+
+      {/* Roster-sync failure: a banner above the table it degrades, with the
+          retry being the Sync control itself. */}
+      <AnimatedAlert
+        tone="error"
+        show={syncError != null}
+        className="mb-3 text-sm"
+        onDismiss={() => setSyncError(null)}
+      >
+        {syncError}
+      </AnimatedAlert>
+      {/* Select-all explanation: inline above the table (Primer: feedback
+          near the control), cleared on the next selection interaction. */}
+      <AnimatedAlert
+        tone="info"
+        show={noneSelectableNotice}
+        className="mb-3 text-sm"
+        onDismiss={() => setNoneSelectableNotice(false)}
+      >
+        {t("students.bulk.noneSelectable")}
+      </AnimatedAlert>
 
       {/* The roster table: Primer DataTable treatment via the shared
           TableShell frame (matching the assignments/submissions tables);

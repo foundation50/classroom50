@@ -353,6 +353,7 @@ function ClassroomMenu({
                       : t("classes.somethingWentWrong"),
                 },
               ),
+              { cause: err },
             )
           }
         }}
@@ -418,6 +419,7 @@ function ClassroomMenu({
                     ? err.message
                     : t("classes.somethingWentWrong"),
               }),
+              { cause: err },
             )
           }
         }}

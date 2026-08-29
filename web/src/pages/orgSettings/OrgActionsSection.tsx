@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { Badge, Spinner, Toggle } from "@/components/ui"
+import { AnimatedAlert, Badge, Spinner, Toggle } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -128,9 +128,16 @@ const OrgActionsSection = ({
   highlighted?: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const runToggle = useSafeSubmit()
   const [confirmPause, setConfirmPause] = useState(false)
+  // Partial/failed toggle outcome, rendered as a banner in this section
+  // (Primer: feedback next to the control). A clean flip is evident from the
+  // toggle itself and only announces to SR.
+  const [outcome, setOutcome] = useState<{
+    tone: "warning" | "error"
+    message: string
+  } | null>(null)
 
   const { data: mode, isLoading } = useGetOrgActionsMode(org)
   const mutation = useSetOrgActionsMode(org)
@@ -142,16 +149,18 @@ const OrgActionsSection = ({
   // when Actions are off org-wide (disabled) — neither is a pause we own.
   const toggleDisabled = mutation.isPending || unknown || disabled
 
-  const applyMode = (next: "paused" | "active") =>
-    mutation.mutateAsync(next, {
+  const applyMode = (next: "paused" | "active") => {
+    setOutcome(null)
+    return mutation.mutateAsync(next, {
       onSuccess: (result) => {
-        notify({
-          tone: result.status === "complete" ? "success" : "warning",
-          message: result.message,
-        })
+        if (result.status === "complete") {
+          announce(result.message)
+        } else {
+          setOutcome({ tone: "warning", message: result.message })
+        }
       },
       onError: (err) => {
-        notify({
+        setOutcome({
           tone: "error",
           message: t("orgSettings.actions.toggleFailed", {
             message: err instanceof Error ? err.message : String(err),
@@ -159,6 +168,7 @@ const OrgActionsSection = ({
         })
       },
     })
+  }
 
   return (
     <SettingsSection
@@ -198,6 +208,14 @@ const OrgActionsSection = ({
         </div>
       ) : (
         <div className="space-y-4">
+          <AnimatedAlert
+            tone={outcome?.tone ?? "warning"}
+            show={outcome != null}
+            className="text-sm"
+            onDismiss={() => setOutcome(null)}
+          >
+            {outcome?.message}
+          </AnimatedAlert>
           <ActionsUsagePanel org={org} />
 
           <label

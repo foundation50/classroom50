@@ -71,7 +71,7 @@ const MemberDetailModal = ({
   const [working, setWorking] = useState(false)
   const [inviting, setInviting] = useState(false)
   // Failure of the in-dialog remove action, rendered as an in-dialog banner.
-  const [removeError, setRemoveError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Retain the last non-null row so the fading dialog keeps its content after
   // the parent clears the selection (close-animation note in ui/Modal).
@@ -87,7 +87,7 @@ const MemberDetailModal = ({
     setConfirming(false)
     setConfirmingInvite(false)
     setInviting(false)
-    setRemoveError(null)
+    setActionError(null)
   }, [open])
 
   // Disarm the confirm panels during render when the row identity changes
@@ -125,8 +125,24 @@ const MemberDetailModal = ({
   const handleInvite = async () => {
     if (inviting) return
     setInviting(true)
+    setActionError(null)
     try {
-      await runInviteMember(client, org, row, notify, onInvited, t)
+      // Route the helper's error tone into the in-dialog banner; the success
+      // toast passes through (it must outlive the closing dialog).
+      await runInviteMember(
+        client,
+        org,
+        row,
+        (input) => {
+          if (input.tone === "error" && typeof input.message === "string") {
+            setActionError(input.message)
+          } else {
+            notify(input)
+          }
+        },
+        onInvited,
+        t,
+      )
     } finally {
       setInviting(false)
       setConfirmingInvite(false)
@@ -136,7 +152,7 @@ const MemberDetailModal = ({
   const handleRemove = async () => {
     if (working) return
     setWorking(true)
-    setRemoveError(null)
+    setActionError(null)
     try {
       const result = await removeMemberFromOrg(client, { org, row }, t)
       if (result.warnings.length > 0) {
@@ -162,7 +178,7 @@ const MemberDetailModal = ({
       onRemoved(result.removed, result.unenrolledClassrooms)
     } catch (err) {
       // The dialog stays open on failure, so the error belongs inside it.
-      setRemoveError(
+      setActionError(
         t("orgMembers.removeFailed", {
           label,
           reason:
@@ -214,10 +230,10 @@ const MemberDetailModal = ({
       <div className="mt-4 flex flex-col gap-4">
         <AnimatedAlert
           tone="error"
-          show={removeError != null}
+          show={actionError != null}
           className="text-sm"
         >
-          {removeError}
+          {actionError}
         </AnimatedAlert>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <Avatar

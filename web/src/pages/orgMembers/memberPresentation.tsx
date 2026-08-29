@@ -150,6 +150,8 @@ export const runInviteMember = async (
   try {
     const result = await inviteMemberToOrg(client, { org, row })
     const who = result.currentUsername ? `@${result.currentUsername}` : label
+    // Kept as a toast: the pending badge lags the eventually-consistent
+    // refetch, so the outcome isn't immediately evident in the list.
     notify({
       tone: "success",
       durationMs: 6000,

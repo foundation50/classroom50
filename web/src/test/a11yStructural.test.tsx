@@ -114,8 +114,12 @@ describe("structural a11y — 4.1.3 status-message live region", () => {
         </NotificationProvider>,
       )
       await userEvent.click(screen.getByText("fire"))
-      const status = screen.getByRole("status")
-      expect(status.getAttribute("aria-live")).toBe("polite")
+      // Two status regions exist: the always-mounted sr-only announce()
+      // region and the toast itself — assert on the toast (it has content).
+      const statuses = screen.getAllByRole("status")
+      const toast = statuses.find((el) => el.textContent?.includes("Status."))
+      expect(toast).toBeTruthy()
+      expect(toast?.getAttribute("aria-live")).toBe("polite")
     },
   )
 

@@ -38,6 +38,11 @@ type EditClassroomFormProps = {
   // Receives the values with customDomain already NORMALIZED ("" = clear).
   onSubmit: (values: EditClassroomFormValues) => void | Promise<void>
   cl?: Classroom
+  // The host page's save outcome, rendered inline above the actions (Primer:
+  // post-submit feedback near the save button, not a corner toast).
+  saveOutcome?: { tone: "success" | "error"; message: string } | null
+  // Fires on any edit so the host can clear a stale saveOutcome.
+  onEdit?: () => void
 }
 
 export const DeleteClassroomButton = ({
@@ -192,6 +197,7 @@ const ArchiveClassroomButton = ({
                       : t("classes.somethingWentWrong"),
                 },
               ),
+              { cause: err },
             )
           }
         }}
@@ -272,6 +278,7 @@ const CleanupInviteDataButton = ({
                     ? err.message
                     : t("classes.somethingWentWrong"),
               }),
+              { cause: err },
             )
           }
         }}
@@ -281,7 +288,12 @@ const CleanupInviteDataButton = ({
   )
 }
 
-const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
+const EditClassroomForm = ({
+  onSubmit,
+  cl,
+  saveOutcome,
+  onEdit,
+}: EditClassroomFormProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
@@ -342,8 +354,14 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       // Any edit clears the unchanged-submit notice — hooked on the DOM
       // events rather than the form model, so controls that sync through
       // local state still clear it.
-      onInput={() => setNoChangesNotice(false)}
-      onChange={() => setNoChangesNotice(false)}
+      onInput={() => {
+        setNoChangesNotice(false)
+        onEdit?.()
+      }}
+      onChange={() => {
+        setNoChangesNotice(false)
+        onEdit?.()
+      }}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -509,6 +527,14 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
               cleared by any edit via the form-level onInput/onChange. */}
           <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
             {t("classes.form.noChangesToSave")}
+          </AnimatedAlert>
+          {/* Save outcome from the host page, in the same near-actions slot. */}
+          <AnimatedAlert
+            tone={saveOutcome?.tone ?? "success"}
+            show={saveOutcome != null}
+            className="text-sm"
+          >
+            {saveOutcome?.message}
           </AnimatedAlert>
           <Card.Actions className="justify-end p-2">
             <form.Subscribe selector={(state) => [state.isSubmitting]}>

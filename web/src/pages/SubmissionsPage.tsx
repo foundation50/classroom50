@@ -878,21 +878,23 @@ const SubmissionsPageContent = () => {
     classroom && assignment ? { classroom, assignment } : undefined,
   )
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   // Lock/unlock this assignment. The page owns the mutation (like Regrade all)
   // and surfaces the non-fatal template-access warning; the menu just triggers
   // the confirm. Gated on authoring rights at the call site.
   const setLock = useSetAssignmentLock(org ?? "", classroom ?? "", (result) => {
     if (result.templateAccessWarning) {
+      // Kept as a toast: a non-fatal partial outcome with no page anchor.
       notify({ tone: "warning", message: result.templateAccessWarning })
       return
     }
-    notify({
-      tone: "success",
-      message: result.locked
+    // The locked/closed banner and header badge flip in place — SR
+    // announcement only (Primer: success messaging sparingly).
+    announce(
+      result.locked
         ? t("submissions.lock.lockSuccess")
         : t("submissions.lock.unlockSuccess"),
-    })
+    )
   })
   // Same delete mechanism as the assignments table's manage hub (removes the
   // assignments.json entry; student repos are kept).
