@@ -372,10 +372,8 @@ const CreateClassroomForm = ({
         </form.Field>
 
         <Card.Actions className="justify-end p-2">
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => {
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => {
               // Hold the loading state through post-create navigation so the
               // button never reverts to a bare disabled state.
               const busy = isSubmitting || submitted
@@ -385,7 +383,7 @@ const CreateClassroomForm = ({
                   variant="primary"
                   loading={busy}
                   loadingLabel={t("classes.form.creating")}
-                  disabled={!canSubmit || busy}
+                  disabled={busy}
                 >
                   {busy
                     ? t("classes.form.creating")

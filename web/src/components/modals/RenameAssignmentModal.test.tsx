@@ -116,13 +116,17 @@ describe("RenameAssignmentModal (fresh)", () => {
     expect(apply.disabled).toBe(false)
 
     fireEvent.change(slugInput(), { target: { value: "" } })
-    expect(apply.disabled).toBe(true)
+    // Enabled while empty (Primer); applying surfaces the required error
+    // instead of running.
+    expect(apply.disabled).toBe(false)
+    fireEvent.click(apply)
+    expect(screen.getByText("assignments.rename.enterNewName")).toBeTruthy()
 
     fireEvent.change(slugInput(), { target: { value: "y".repeat(58) } })
     expect(
       screen.getByText("assignments.form.validation.slugOverBudget"),
     ).toBeTruthy()
-    expect(apply.disabled).toBe(true)
+    expect(apply.disabled).toBe(false)
 
     fireEvent.change(slugInput(), { target: { value: "taken" } })
     expect(screen.getByText("assignments.rename.error.slugTaken")).toBeTruthy()

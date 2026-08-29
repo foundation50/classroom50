@@ -221,14 +221,16 @@ const AddStudent = ({
           >
             {t("common.close")}
           </Button>
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => (
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
               <Button
                 type="submit"
                 form={formId}
-                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
+                // Enabled while invalid (Primer): submit runs the validators
+                // and surfaces errors. The team gate stays — the classroom
+                // team is still being ensured, a loading dependency for the
+                // student branch, not a validity check.
+                disabled={isSubmitting || (!isStaffRole && !team)}
                 variant="primary"
               >
                 {!isSubmitting

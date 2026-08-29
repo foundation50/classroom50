@@ -132,6 +132,9 @@ export function RenameAssignmentModal({
   const [pinnedInput, setPinnedInput] = useState<RenameAssignmentInput | null>(
     null,
   )
+  // Set when Apply is pressed with an empty/invalid slug — the button stays
+  // enabled (Primer) and the miss surfaces as the field error instead.
+  const [requiredError, setRequiredError] = useState(false)
   const canRun =
     finish || pinnedInput !== null || (newSlug !== "" && slugError === "")
   // Synchronous re-entrancy guard (CloseSubmissionModal's runningRef
@@ -140,7 +143,11 @@ export function RenameAssignmentModal({
   const runningRef = useRef(false)
 
   const run = async () => {
-    if (runningRef.current || busy || !canRun) return
+    if (runningRef.current || busy) return
+    if (!canRun) {
+      setRequiredError(true)
+      return
+    }
     runningRef.current = true
     setRunError("")
     // Clear the previous report so a re-run doesn't render it under the
@@ -221,11 +228,7 @@ export function RenameAssignmentModal({
               {t("common.cancel")}
             </Button>
             {!busy && (
-              <Button
-                variant="primary"
-                disabled={!canRun}
-                onClick={() => void run()}
-              >
+              <Button variant="primary" onClick={() => void run()}>
                 {finish
                   ? t("assignments.rename.finishApply")
                   : t("assignments.rename.apply")}
@@ -244,7 +247,12 @@ export function RenameAssignmentModal({
               </Alert>
               <FormField
                 label={t("assignments.rename.newSlugLabel")}
-                error={slugError || undefined}
+                error={
+                  slugError ||
+                  (requiredError && newSlug === ""
+                    ? t("assignments.rename.enterNewName")
+                    : undefined)
+                }
                 hint={
                   slugError
                     ? undefined
@@ -260,7 +268,10 @@ export function RenameAssignmentModal({
                     aria-describedby={describedById}
                     invalid={invalid}
                     value={slugInput}
-                    onChange={(e) => setSlugInput(e.target.value)}
+                    onChange={(e) => {
+                      setSlugInput(e.target.value)
+                      setRequiredError(false)
+                    }}
                     spellCheck={false}
                     autoComplete="off"
                   />

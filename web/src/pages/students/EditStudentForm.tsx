@@ -289,17 +289,15 @@ const EditStudentForm = ({
         >
           {t("common.cancel")}
         </Button>
-        <form.Subscribe
-          selector={(state) => [state.canSubmit, state.isSubmitting]}
-        >
-          {([canSubmit, isSubmitting]) => (
+        <form.Subscribe selector={(state) => [state.isSubmitting]}>
+          {([isSubmitting]) => (
             <Button
               type="submit"
               form={formId}
               variant="primary"
               loading={isSubmitting}
               loadingLabel={t("students.saving")}
-              disabled={!canSubmit || isSubmitting}
+              disabled={isSubmitting}
             >
               {isSubmitting ? t("students.saving") : t("students.saveChanges")}
             </Button>

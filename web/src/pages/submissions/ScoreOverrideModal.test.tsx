@@ -92,7 +92,9 @@ describe("ScoreOverrideModal", () => {
     const save = screen.getByRole("button", {
       name: "submissions.scoreOverride.save",
     })
-    expect(save.hasAttribute("disabled")).toBe(true)
+    // Enabled while invalid (Primer): the range error is already visible;
+    // clicking must still not mutate.
+    expect(save.hasAttribute("disabled")).toBe(false)
     await user.click(save)
     expect(mutate).not.toHaveBeenCalled()
   })
@@ -205,9 +207,11 @@ describe("ScoreOverrideModal", () => {
     const save = screen.getByRole("button", {
       name: "submissions.scoreOverride.save",
     })
-    // With only a score entered (no max yet), save stays disabled.
+    // With only a score entered (no max yet), a save click must not mutate
+    // (the button stays enabled per Primer; save() guards).
     await user.type(inputs[0], "7")
-    expect(save.hasAttribute("disabled")).toBe(true)
+    await user.click(save)
+    expect(mutate).not.toHaveBeenCalled()
     // Entering a valid max unblocks and submits with that max.
     await user.type(inputs[1], "10")
     expect(save.hasAttribute("disabled")).toBe(false)
