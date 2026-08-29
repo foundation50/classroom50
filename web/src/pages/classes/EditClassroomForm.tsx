@@ -16,11 +16,11 @@ import { isClassroomArchived, type Classroom } from "@/types/classroom"
 import { normalizePagesBaseUrl } from "@/util/pagesBaseUrl"
 import { CollapsibleAdvanced } from "@/pages/assignments/sections/CollapsibleAdvanced"
 import {
+  AnimatedAlert,
   Button,
   Card,
   EmphasisLtr,
   FormField,
-  InlineMessage,
   Input,
   Heading,
 } from "@/components/ui"
@@ -342,6 +342,11 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       noValidate
       bordered={false}
       className="w-full"
+      // Any edit clears the unchanged-submit notice — hooked on the DOM
+      // events rather than the form model, so controls that sync through
+      // local state still clear it.
+      onInput={() => setNoChangesNotice(false)}
+      onChange={() => setNoChangesNotice(false)}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -503,18 +508,12 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             </CollapsibleAdvanced>
           </div>
 
+          {/* Unchanged-submit feedback: a banner directly above the actions,
+              cleared by any edit via the form-level onInput/onChange. */}
+          <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
+            {t("classes.form.noChangesToSave")}
+          </AnimatedAlert>
           <Card.Actions className="justify-end p-2">
-            {noChangesNotice && (
-              <form.Subscribe selector={(state) => state.isDefaultValue}>
-                {(isDefaultValue) =>
-                  isDefaultValue ? (
-                    <InlineMessage tone="neutral">
-                      {t("classes.form.noChangesToSave")}
-                    </InlineMessage>
-                  ) : null
-                }
-              </form.Subscribe>
-            )}
             <form.Subscribe selector={(state) => [state.isSubmitting]}>
               {([isSubmitting]) => (
                 <Button

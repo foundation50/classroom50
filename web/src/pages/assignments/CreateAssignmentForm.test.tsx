@@ -512,12 +512,15 @@ describe("edit form save/discard lifecycle", () => {
     expect(onSubmit).not.toHaveBeenCalled()
     expect(screen.getByText("assignments.form.noChangesToSave")).toBeTruthy()
 
-    // Editing clears the notice and a real change submits once.
+    // Editing clears the notice (exit-animates out) and a real change
+    // submits once.
     const name = screen.getByRole("textbox", {
       name: "assignments.form.name",
     })
     await user.type(name, " updated")
-    expect(screen.queryByText("assignments.form.noChangesToSave")).toBeNull()
+    await vi.waitFor(() =>
+      expect(screen.queryByText("assignments.form.noChangesToSave")).toBeNull(),
+    )
     await user.click(saveButton())
     expect(onSubmit).toHaveBeenCalledTimes(1)
   })

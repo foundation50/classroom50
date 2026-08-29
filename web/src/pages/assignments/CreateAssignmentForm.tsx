@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Alert, Button, InlineMessage } from "@/components/ui"
+import { Alert, AnimatedAlert, Button } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
 import { RepositorySetupSection } from "./sections/RepositorySetupSection"
 import { SubmissionGradingSection } from "./sections/SubmissionGradingSection"
@@ -152,6 +152,11 @@ const CreateAssignmentForm = ({
     // stays on controls for AT parity.
     <form
       noValidate
+      // Any edit clears the unchanged-submit notice — hooked on the DOM
+      // events rather than the form model, so controls that sync through
+      // local state (pickers, toggles) still clear it.
+      onInput={() => setNoChangesNotice(false)}
+      onChange={() => setNoChangesNotice(false)}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
@@ -251,18 +256,13 @@ const CreateAssignmentForm = ({
         <FormErrors form={form} />
       </fieldset>
       <div className="divider" />
+      {/* Unchanged-submit feedback: a banner directly above the actions (the
+          action it relates to), cleared by any edit via the form-level
+          onInput/onChange below. */}
+      <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
+        {t("assignments.form.noChangesToSave")}
+      </AnimatedAlert>
       <div className="card-actions justify-end p-2">
-        {noChangesNotice && (
-          <form.Subscribe selector={(state) => state.isDefaultValue}>
-            {(isDefaultValue) =>
-              isDefaultValue ? (
-                <InlineMessage tone="neutral">
-                  {t("assignments.form.noChangesToSave")}
-                </InlineMessage>
-              ) : null
-            }
-          </form.Subscribe>
-        )}
         {onCancel && (
           <Button
             type="button"
