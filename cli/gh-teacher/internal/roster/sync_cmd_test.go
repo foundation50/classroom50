@@ -370,6 +370,12 @@ func TestRunRosterSync_DegradedInvitationReadReapsNothing(t *testing.T) {
 		if !strings.Contains(errOut, "Warning") {
 			t.Errorf("status %d: stderr must warn about the degraded read:\n%s", status, errOut)
 		}
+		// With no invitation list there is no liveness shortcut: the pass must
+		// fall back to reading every team the long way, not skip them all.
+		teamReads := countCalls(mock.calls, http.MethodGet, "/orgs/o/teams/"+mock.teams[0].slug)
+		if teamReads == 0 {
+			t.Errorf("status %d: the team was never read — a failed invitation read must fall back to the full walk", status)
+		}
 	}
 }
 
@@ -646,6 +652,40 @@ func TestRunRosterSync_MemberlessTeamGCGuard(t *testing.T) {
 				t.Errorf("nothing is pending, so the pass should say so:\n%s", out)
 			}
 		})
+	}
+}
+
+// #800: a still-pending invitation proves nobody accepted, so its team holds
+// nothing to recover — the pass must classify it as live from the invitation
+// list alone, without the two per-team reads that dominated large classrooms.
+func TestRunRosterSync_PendingInviteTeamIsSkippedWithoutReads(t *testing.T) {
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	mock := newSyncMock(t, storedRosterHeader+",,,"+inviteTestEmail+",,,student\n")
+	mock.teams = []syncTeam{{
+		slug:      slug,
+		desc:      syncInviteRecord(t, inviteTestEmail),
+		createdAt: time.Now().Add(-2 * contract.InviteTeamGCMinAge),
+	}}
+	mock.pending = []map[string]any{{"id": 7, "email": inviteTestEmail, "role": "direct_member"}}
+
+	out, _, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("exit code = %d (err %v), want 0: a live invite is nothing to do", got, err)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("reaped the row of a live invitation: %#v", mock.blobs)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v; the invitation is still pending", mock.deletedTeams)
+	}
+	if !strings.Contains(out, "up to date") {
+		t.Errorf("nothing is pending, so the pass should say so:\n%s", out)
+	}
+	for _, c := range mock.calls {
+		if strings.HasPrefix(c.Path, "/orgs/o/teams/"+slug) {
+			t.Errorf("read a team the pending invitation already proves live: %s %s", c.Method, c.Path)
+		}
 	}
 }
 

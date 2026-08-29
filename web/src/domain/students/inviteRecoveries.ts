@@ -58,8 +58,10 @@ export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 
 // Read-only-on-CSV half of the invite reconcile: enumerate this classroom's
 // invite-<hash> teams and classify each one, WITHOUT writing roster.csv (the
-// roster sync folds the result into its single commit). For each team that
-// belongs to THIS classroom (by its validated description):
+// roster sync folds the result into its single commit). A team whose slug a
+// pending org invitation still maps to is counted live from the invitation
+// alone — no per-team read (#800). For each remaining team that belongs to
+// THIS classroom (by its validated description):
 //   - verify the description's email hashes back to the team name (the team is
 //     invitee-editable after acceptance, so this is the trust boundary);
 //   - with exactly one member (of any role — the team holds no teacher, so
@@ -101,6 +103,41 @@ export async function collectInviteRecoveries(
   } catch (err) {
     log.error("invite reconcile: team listing failed", { org, err })
     return emptyState()
+  }
+
+  // Pending org invitations read ONCE, up front, each address hashed to its
+  // deterministic team slug — so the loop can classify a still-pending team as
+  // live WITHOUT reading it: an outstanding org invitation proves nobody
+  // accepted, so the team holds no email↔account mapping to recover (#800).
+  // The address comes from GitHub's invitation record — stronger than the
+  // invitee-editable description — but it does mean a tampered description on
+  // a skipped team goes unlogged this pass; it is caught as soon as the
+  // invitation resolves and the team is read. Null after a failed read: the
+  // GC reap is off (uncertainty never reaps) and the loop falls back to
+  // reading every team the long way, with `trusted` already cleared so no row
+  // is removed either. Skipped entirely with no teams to classify, so a broken
+  // invitations endpoint can't degrade a pass with nothing to prove.
+  let pendingBySlug: Map<string, string> | null = null
+  if (inviteTeams.length > 0) {
+    try {
+      const pending = await listOrgInvitations(client, org)
+      pendingBySlug = new Map(
+        await Promise.all(
+          pending
+            .filter((inv) => !inv.login && inv.email)
+            .map(async (inv) => {
+              const email = normalizeInviteEmail(inv.email as string)
+              return [await inviteTeamName(classroom, email), email] as const
+            }),
+        ),
+      )
+    } catch (err) {
+      trusted = false
+      log.error("invite reconcile: pending invitation read failed", {
+        org,
+        err,
+      })
+    }
   }
 
   // The invitee must still be on a classroom team (student or staff) for a
@@ -155,19 +192,18 @@ export async function collectInviteRecoveries(
     }
   }
 
-  // Live invite-team slugs, fetched lazily only when a member-less team is old
-  // enough to be a GC candidate. NOT error-tolerated — a degraded read
-  // propagates (skip).
-  let liveSlugs: Set<string> | null = null
-  const loadLiveInviteSlugs = async (): Promise<Set<string>> => {
-    if (liveSlugs) return liveSlugs
-    liveSlugs = await liveInviteSlugsFor(client, org, classroom)
-    return liveSlugs
-  }
-
   for (const team of inviteTeams) {
     const slug = team.slug
     if (!slug) continue
+    const pendingEmail = pendingBySlug?.get(slug)
+    if (pendingEmail !== undefined) {
+      // This slug can only be the hash of a pending address for THIS
+      // classroom (another classroom's hash never collides into it), so the
+      // invitation itself proves the invite is live and unaccepted: no team
+      // read, no members read.
+      liveInviteEmails.add(pendingEmail)
+      continue
+    }
     try {
       const state = await readInviteTeam(client, org, slug)
       if (!state) continue // already deleted
@@ -190,12 +226,16 @@ export async function collectInviteRecoveries(
 
       const invitees = state.members
       if (invitees.length === 0) {
-        // Pending — or abandoned. Reap only when BOTH hold: old enough that a
-        // mid-creation race is impossible, and no pending org invitation still
-        // maps to this slug. Uncertainty always keeps the team (and the row).
+        // Pending — or abandoned. Reap only when ALL hold: the invitation
+        // list was readable (a null map is uncertainty, and uncertainty
+        // always keeps the team and the row), old enough that a mid-creation
+        // race is impossible, and no pending invitation still maps to this
+        // slug (already ruled out by the loop-top skip; re-checked here so
+        // the reap never rests on that ordering).
         if (
+          pendingBySlug !== null &&
           isPastGcAge(state.createdAt) &&
-          !(await loadLiveInviteSlugs()).has(slug)
+          !pendingBySlug.has(slug)
         ) {
           if (!readOnly) {
             await deleteInviteTeam(client, org, slug)

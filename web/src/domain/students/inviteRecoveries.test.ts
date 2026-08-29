@@ -164,7 +164,7 @@ describe("collectInviteRecoveries", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
-  it("counts a young pending team's email as live without reading invitations", async () => {
+  it("counts a young pending team's email as live after ONE up-front invitation read", async () => {
     const team = await inviteState("cs101", "bob@example.com", [])
     listInviteTeams.mockResolvedValue([{ slug: team.slug }])
     readInviteTeam.mockResolvedValue(team)
@@ -172,7 +172,44 @@ describe("collectInviteRecoveries", () => {
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.liveInviteEmails.has("bob@example.com")).toBe(true)
     expect(state.trusted).toBe(true)
+    // The invitation list is the pass's ONE up-front liveness read (#800),
+    // never a per-team one.
+    expect(listOrgInvitations).toHaveBeenCalledTimes(1)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("reads no invitations at all when there is nothing to classify", async () => {
+    listInviteTeams.mockResolvedValue([])
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.trusted).toBe(true)
     expect(listOrgInvitations).not.toHaveBeenCalled()
+  })
+
+  // #800: an outstanding org invitation proves nobody accepted, so the team
+  // holds no mapping to recover — the pass classifies it live from the
+  // invitation alone, skipping both per-team reads that dominated large
+  // classrooms.
+  it("skips a still-pending team entirely (live from the invitation, no team read)", async () => {
+    const pendingTeam = await inviteState("cs101", "waiting@example.com", [])
+    const accepted = await inviteState("cs101", "alice@example.com", [
+      { id: 2, login: "alice" },
+    ])
+    listInviteTeams.mockResolvedValue([
+      { slug: pendingTeam.slug },
+      { slug: accepted.slug },
+    ])
+    readInviteTeam.mockResolvedValue(accepted)
+    listOrgInvitations.mockResolvedValue([
+      { id: 1, login: null, email: "waiting@example.com" },
+    ])
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.liveInviteEmails.has("waiting@example.com")).toBe(true)
+    expect(state.recovered.map((r) => r.email)).toEqual(["alice@example.com"])
+    expect(state.trusted).toBe(true)
+    // Only the accepted team was read; the pending one cost nothing.
+    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+    expect(readInviteTeam).toHaveBeenCalledWith(client, "org", accepted.slug)
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
@@ -205,7 +242,7 @@ describe("collectInviteRecoveries", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
-  it("flips trusted off when the invitations read fails (fail-safe)", async () => {
+  it("flips trusted off when the invitations read fails, falling back to the full walk", async () => {
     const team = await inviteState("cs101", "held@example.com", [], {
       createdAt: OLD_ENOUGH,
     })
@@ -216,6 +253,10 @@ describe("collectInviteRecoveries", () => {
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.trusted).toBe(false)
     expect(state.deletedStale).toBe(0)
+    // No liveness shortcut without the invitation list: the team is still
+    // read the long way, and uncertainty keeps it (and its row) live.
+    expect(readInviteTeam).toHaveBeenCalledWith(client, "org", team.slug)
+    expect(state.liveInviteEmails.has("held@example.com")).toBe(true)
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 

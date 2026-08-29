@@ -255,6 +255,20 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 		scan.pendingEmails = pending
 	}
 
+	// Each pending address hashed to its deterministic team slug, so the loop
+	// can classify a still-pending team as live WITHOUT reading it: an
+	// outstanding org invitation proves nobody accepted, so the team holds no
+	// email↔account mapping to recover (#800). The address comes from GitHub's
+	// invitation record — stronger than the invitee-editable description — but
+	// it does mean a tampered description on a skipped team goes unlogged this
+	// pass; it is caught as soon as the invitation resolves and the team is
+	// read. Empty after a failed invitation read, so the loop falls back to
+	// reading every team the long way (with every removal already off).
+	pendingBySlug := make(map[string]string, len(scan.pendingEmails))
+	for email := range scan.pendingEmails {
+		pendingBySlug[configrepo.InviteTeamName(classroom, email)] = email
+	}
+
 	teams, err := configrepo.ListInviteTeams(client, org)
 	if err != nil {
 		scan.trusted = false
@@ -264,6 +278,14 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 
 scanLoop:
 	for _, team := range teams {
+		if email, live := pendingBySlug[team.Slug]; live {
+			// This team's slug can only be the hash of a pending address for
+			// THIS classroom (another classroom's hash never collides into it),
+			// so the invitation itself proves the invite is live and unaccepted:
+			// no team read, no members read.
+			scan.liveEmails[email] = true
+			continue
+		}
 		state, ok, err := configrepo.ReadInviteTeam(client, org, team.Slug)
 		if err != nil {
 			// An unreadable team can't prove its row is dead.
