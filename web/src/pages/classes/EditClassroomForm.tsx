@@ -331,6 +331,10 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   return (
     <Card
       as="form"
+      // noValidate: Primer forms guidance — browser-native validation UI is
+      // inaccessible and clashes with our submit-time validation; `required`
+      // stays on controls for AT parity.
+      noValidate
       bordered={false}
       className="w-full"
       onSubmit={(e) => {

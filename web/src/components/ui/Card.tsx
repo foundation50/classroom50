@@ -17,6 +17,10 @@ export type CardProps = {
   dashed?: boolean
   shadow?: boolean
   children?: ReactNode
+  // Form-only, meaningful with `as="form"`: the prop type is div-based, so
+  // the one form attribute our forms need is folded in rather than making
+  // Card fully polymorphic for a single consumer pair.
+  noValidate?: boolean
 } & ComponentPropsWithoutRef<"div">
 
 export function Card({
