@@ -61,7 +61,7 @@ import {
   Modal,
   Select,
 } from "@/components/ui"
-import type { GitHubUser } from "@/github-core/types"
+import type { DirectoryMember } from "@/domain/students"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -108,10 +108,11 @@ const RosterMemberModal = ({
   // hidden), so those actions are hidden with an explanatory note rather than
   // rendered as buttons that silently no-op.
   canManage?: boolean
-  // Org members the link picker may offer for an UNLINKED row (the parent
-  // already excludes members claiming another roster row). Empty when org
-  // membership is unreadable — the picker then explains instead of listing.
-  linkCandidates?: GitHubUser[]
+  // Directory members the link picker may offer for an UNLINKED row (the
+  // parent already excludes members claiming another roster row). Sourced from
+  // the classroom identity directory — team members across the org's
+  // classrooms — so `classrooms` names where each candidate was seen.
+  linkCandidates?: DirectoryMember[]
   // True when this row IS the signed-in viewer. A viewer can't change their own
   // role here: demoting yourself off teacher would revoke your own org-owner
   // access mid-change (the mutation refuses it too — this hides the control so
@@ -147,7 +148,7 @@ const RosterMemberModal = ({
   // in-flight link/remove, and the remove confirmation.
   const [linkQuery, setLinkQuery] = useState("")
   const [linkOpen, setLinkOpen] = useState(false)
-  const [linkTarget, setLinkTarget] = useState<GitHubUser | null>(null)
+  const [linkTarget, setLinkTarget] = useState<DirectoryMember | null>(null)
   const [linking, setLinking] = useState(false)
   const [removingRow, setRemovingRow] = useState(false)
   const [confirmingRemoveRow, setConfirmingRemoveRow] = useState(false)
@@ -634,13 +635,13 @@ const RosterMemberModal = ({
   }
 
   // Picker options: the (already claim-filtered) candidates narrowed by the
-  // typed query against login and display name.
+  // typed query against login and the classrooms they were seen in.
   const linkQueryKey = linkQuery.trim().toLowerCase()
   const linkItems = linkQueryKey
     ? linkCandidates.filter(
         (m) =>
           m.login.toLowerCase().includes(linkQueryKey) ||
-          (m.name ?? "").toLowerCase().includes(linkQueryKey),
+          m.classrooms.some((c) => c.toLowerCase().includes(linkQueryKey)),
       )
     : linkCandidates
 
@@ -769,9 +770,9 @@ const RosterMemberModal = ({
                 renderItem={(m) => (
                   <span className="flex flex-col">
                     <span className="font-mono text-sm">@{m.login}</span>
-                    {m.name ? (
+                    {m.classrooms.length > 0 ? (
                       <span className="text-xs text-base-content/60">
-                        {m.name}
+                        {m.classrooms.join(", ")}
                       </span>
                     ) : null}
                   </span>

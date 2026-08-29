@@ -32,6 +32,7 @@ import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/gith
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
+import { useIdentityDirectory } from "@/hooks/useIdentityDirectory"
 import { useRosterLastUpdated } from "@/hooks/useRosterLastUpdated"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
@@ -184,7 +185,6 @@ const EnrolledStudents = ({
     csvMissingLogins,
     backfillNeededLogins,
     orgMembersKnown,
-    orgMembers,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
 
@@ -436,22 +436,26 @@ const EnrolledStudents = ({
       : []),
   ]
 
-  // The link picker's candidates: active org members not already claiming a
-  // roster row (by id or login). Computed here — the modal stays prop-driven —
-  // and cheap enough per render at classroom scale.
+  // The link picker's candidates: the classroom identity directory's member
+  // pool (every classroom team's members — deliberately NOT the org member
+  // list, which in a shared org contains other teachers' people), minus
+  // identities already claiming a roster row. The directory is built on
+  // demand: a roster with nothing to link never pays for it.
+  const identityDirectory = useIdentityDirectory(org, counts.unlinked > 0)
   const linkCandidates = useMemo(() => {
+    const members = identityDirectory.data?.members ?? []
     const claimedIds = new Set<string>()
     const claimedLogins = new Set<string>()
     for (const row of rows) {
       if (row.github_id.trim()) claimedIds.add(row.github_id.trim())
       if (row.username.trim()) claimedLogins.add(row.username.toLowerCase())
     }
-    return orgMembers.filter(
+    return members.filter(
       (m) =>
         !claimedIds.has(String(m.id)) &&
         !claimedLogins.has(m.login.toLowerCase()),
     )
-  }, [rows, orgMembers])
+  }, [rows, identityDirectory.data])
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live

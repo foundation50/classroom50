@@ -52,6 +52,11 @@ let mockLastUpdated: Date | null = null
 vi.mock("@/hooks/useRosterLastUpdated", () => ({
   useRosterLastUpdated: () => mockLastUpdated,
 }))
+// The identity-directory hook is demand-gated real react-query; stub it so
+// the smoke test stays provider-free (its own behavior has unit tests).
+vi.mock("@/hooks/useIdentityDirectory", () => ({
+  useIdentityDirectory: () => ({ data: undefined, isLoading: false }),
+}))
 vi.mock("@/hooks/mutations/useReinviteFailedInvite", () => ({
   useReinviteFailedInvite: () => inertMutation,
 }))
