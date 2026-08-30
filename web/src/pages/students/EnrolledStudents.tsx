@@ -67,11 +67,12 @@ import {
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import AddStudentButtons from "@/pages/students/AddStudentButtons"
+import RosterEditMode from "@/pages/students/RosterEditMode"
 import RosterToolbar, {
   type RosterGrouping,
 } from "@/pages/students/RosterToolbar"
 import type { AddStudentActions } from "@/pages/students/RosterBulkActionsBar"
-import type { StudentCsvRow } from "@/domain/students"
+import type { ApplyRosterEditsResult, StudentCsvRow } from "@/domain/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
 import { useMemo, useState } from "react"
@@ -102,6 +103,14 @@ const SKELETON_BARS = [
 // One value per (column, direction) pair for the table-header sort controls.
 type RosterTableSortValue =
   `${RosterTableSortColumn}-asc` | `${RosterTableSortColumn}-desc`
+
+// applyRosterEdits' stable miss tokens -> teacher-actionable copy.
+const EDIT_MISS_REASON_KEY: Record<string, string> = {
+  "row-gone": "students.editRoster.reasonRowGone",
+  ambiguous: "students.editRoster.reasonAmbiguous",
+  "identity-claimed": "students.editRoster.reasonIdentityClaimed",
+  "member-not-active": "students.editRoster.reasonMemberNotActive",
+}
 
 const EnrolledStudents = ({
   students = [],
@@ -172,6 +181,9 @@ const EnrolledStudents = ({
   // shows them again.
   const [pendingDismissed, setPendingDismissed] = useState(false)
   const [unlinkedDismissed, setUnlinkedDismissed] = useState(false)
+  // Batch Edit mode: RosterEditMode renders in place of the roster table while
+  // active (owner-only entry via the toolbar's Edit button).
+  const [editing, setEditing] = useState(false)
 
   const {
     rows,
@@ -580,6 +592,57 @@ const EnrolledStudents = ({
       suppressedLogins.remember(removed.map((r) => r.username))
   }
 
+  // Batch Edit mode saved: toast the outcome (applied count, plus any misses
+  // or failed team adds as warnings), refresh every cache the commit touched,
+  // and exit the mode. Misses are stale-view skips the domain reported, not
+  // errors — the refreshed table is the retry surface.
+  const onEditSaved = (result: ApplyRosterEditsResult) => {
+    setEditing(false)
+    if (result.applied > 0) {
+      notify({
+        tone: "success",
+        durationMs: 5000,
+        message: t("students.editRoster.savedToast", {
+          count: result.applied,
+        }),
+      })
+    }
+    if (result.missed.length > 0) {
+      notify({
+        tone: "warning",
+        message: t("students.editRoster.missedToast", {
+          count: result.missed.length,
+          details: result.missed
+            .map((m) =>
+              t(
+                EDIT_MISS_REASON_KEY[m.reason] ??
+                  EDIT_MISS_REASON_KEY["row-gone"],
+                {
+                  label: m.label,
+                },
+              ),
+            )
+            .join("; "),
+        }),
+      })
+    }
+    if (result.teamAddFailedLogins.length > 0) {
+      notify({
+        tone: "warning",
+        message: t("students.editRoster.teamAddFailed", {
+          count: result.teamAddFailedLogins.length,
+          logins: result.teamAddFailedLogins.join(", "),
+        }),
+      })
+    }
+    invalidateInviteQueries()
+    invalidateTeamRoster()
+    refetchRoster()
+    // Metadata/link edits rewrite roster.csv itself; the team-scoped
+    // refetches above don't re-read the file.
+    onRecheckRoster?.()
+  }
+
   // The Section column exists only when some row carries a section label —
   // derived from the status-independent sectionOptions so toggling a filter
   // can't add/remove a column mid-view. Status follows the same rule: a fully
@@ -778,7 +841,7 @@ const EnrolledStudents = ({
           Clear) joins it on the left while rows are selected; search +
           filters + sort + add actions stay right-aligned like the submissions
           controls. */}
-      {!isLoading && !isError && !isEmpty ? (
+      {!isLoading && !isError && !isEmpty && !editing ? (
         <RosterToolbar
           org={org}
           classroom={classroom}
@@ -812,6 +875,9 @@ const EnrolledStudents = ({
           grouping={effectiveGrouping}
           onGroupingChange={setGrouping}
           addActions={addActions ?? null}
+          // Batch Edit mode is owner-only: it links rows (team writes) and
+          // rewrites roster.csv.
+          onEditRoster={isOwner ? () => setEditing(true) : undefined}
         />
       ) : null}
 
@@ -846,209 +912,226 @@ const EnrolledStudents = ({
           select-all lives in the header row and the selection actions in the
           toolbar above. A running sync only announces itself (aria-busy +
           the toolbar indicator) — the table stays interactive, because every
-          roster write already rebases onto a concurrent sync commit. */}
-      <div aria-busy={syncing || undefined}>
-        <TableShell animate={false} padded ariaBusy={isLoading}>
-          <caption className="sr-only">{t("students.table.caption")}</caption>
-          <thead>
-            <tr>
-              <th scope="col" className="w-0">
-                {/* Select-all lives in the select-column header (aligned above
+          roster write already rebases onto a concurrent sync commit. While
+          Edit mode is active, RosterEditMode replaces the whole table (the
+          domain re-proves every staged edit at save, so a concurrent sync
+          costs at most a reported miss). */}
+      {editing ? (
+        <RosterEditMode
+          org={org}
+          classroom={classroom}
+          rows={rows}
+          linkCandidates={linkCandidates}
+          onCancel={() => setEditing(false)}
+          onSaved={onEditSaved}
+        />
+      ) : (
+        <div aria-busy={syncing || undefined}>
+          <TableShell animate={false} padded ariaBusy={isLoading}>
+            <caption className="sr-only">{t("students.table.caption")}</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="w-0">
+                  {/* Select-all lives in the select-column header (aligned above
                   the row checkboxes), replacing the old idle bulk bar. */}
-                {!isLoading && !isError && !isEmpty ? (
-                  <SelectAllCheckbox
-                    className="align-middle"
-                    ariaLabel={t("students.bulk.selectAll")}
-                    allSelected={allSelected}
-                    someSelected={someSelected}
-                    onToggle={handleToggleSelectAll}
-                  />
-                ) : (
-                  <span className="sr-only">
-                    {t("students.table.colSelect")}
-                  </span>
-                )}
-              </th>
-              {/* Sortable column headers — sorting lives here, not in the
+                  {!isLoading && !isError && !isEmpty ? (
+                    <SelectAllCheckbox
+                      className="align-middle"
+                      ariaLabel={t("students.bulk.selectAll")}
+                      allSelected={allSelected}
+                      someSelected={someSelected}
+                      onToggle={handleToggleSelectAll}
+                    />
+                  ) : (
+                    <span className="sr-only">
+                      {t("students.table.colSelect")}
+                    </span>
+                  )}
+                </th>
+                {/* Sortable column headers — sorting lives here, not in the
                   toolbar. An inactive table falls back to the default order
                   (enrollment state, then name). */}
-              <SortableTh
-                label={t("students.table.colMember")}
-                sort={tableSort ?? undefined}
-                asc="member-asc"
-                desc="member-desc"
-                onSortChange={setTableSort}
-              />
-              <SortableTh
-                label={t("students.table.colUsername")}
-                sort={tableSort ?? undefined}
-                asc="username-asc"
-                desc="username-desc"
-                onSortChange={setTableSort}
-              />
-              <SortableTh
-                label={t("students.table.colRoles")}
-                sort={tableSort ?? undefined}
-                asc="role-asc"
-                desc="role-desc"
-                onSortChange={setTableSort}
-              />
-              {showSection ? (
                 <SortableTh
-                  label={t("students.table.colSection")}
+                  label={t("students.table.colMember")}
                   sort={tableSort ?? undefined}
-                  asc="section-asc"
-                  desc="section-desc"
+                  asc="member-asc"
+                  desc="member-desc"
                   onSortChange={setTableSort}
                 />
-              ) : null}
-              {showStatus ? (
                 <SortableTh
-                  label={t("students.table.colStatus")}
+                  label={t("students.table.colUsername")}
                   sort={tableSort ?? undefined}
-                  asc="status-asc"
-                  desc="status-desc"
+                  asc="username-asc"
+                  desc="username-desc"
                   onSortChange={setTableSort}
                 />
-              ) : null}
-              <th scope="col" className="w-0">
-                <span className="sr-only">
-                  {t("students.table.colActions")}
-                </span>
-              </th>
-            </tr>
-          </thead>
-          {isLoading ? (
-            // Skeleton rows shaped like the loaded columns, so content fades
-            // into place instead of jumping in to replace a centered spinner.
-            <tbody>
-              <SkeletonRows rows={5} bars={SKELETON_BARS} />
-            </tbody>
-          ) : isError ? (
-            <tbody>
-              <tr>
-                <td colSpan={colCount} className="px-6 py-10 text-center">
-                  <span
-                    role="alert"
-                    className="inline-flex items-center gap-2 text-sm text-error"
-                  >
-                    <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
-                    {t("students.rosterLoadError")}
+                <SortableTh
+                  label={t("students.table.colRoles")}
+                  sort={tableSort ?? undefined}
+                  asc="role-asc"
+                  desc="role-desc"
+                  onSortChange={setTableSort}
+                />
+                {showSection ? (
+                  <SortableTh
+                    label={t("students.table.colSection")}
+                    sort={tableSort ?? undefined}
+                    asc="section-asc"
+                    desc="section-desc"
+                    onSortChange={setTableSort}
+                  />
+                ) : null}
+                {showStatus ? (
+                  <SortableTh
+                    label={t("students.table.colStatus")}
+                    sort={tableSort ?? undefined}
+                    asc="status-asc"
+                    desc="status-desc"
+                    onSortChange={setTableSort}
+                  />
+                ) : null}
+                <th scope="col" className="w-0">
+                  <span className="sr-only">
+                    {t("students.table.colActions")}
                   </span>
-                  <div className="mt-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => refetchRoster()}
+                </th>
+              </tr>
+            </thead>
+            {isLoading ? (
+              // Skeleton rows shaped like the loaded columns, so content fades
+              // into place instead of jumping in to replace a centered spinner.
+              <tbody>
+                <SkeletonRows rows={5} bars={SKELETON_BARS} />
+              </tbody>
+            ) : isError ? (
+              <tbody>
+                <tr>
+                  <td colSpan={colCount} className="px-6 py-10 text-center">
+                    <span
+                      role="alert"
+                      className="inline-flex items-center gap-2 text-sm text-error"
                     >
-                      {t("students.rosterRetry")}
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          ) : isEmpty ? (
-            <tbody>
-              <tr>
-                <td colSpan={colCount}>
-                  <EmptyState
-                    variant="bare"
-                    className="py-12"
-                    icon={PeopleIcon}
-                    titleAs="h3"
-                    title={t("students.emptyTitle")}
-                    body={t("students.emptyBody")}
-                    action={
-                      addActions ? (
-                        <div className="flex flex-col items-center gap-3">
-                          {/* The toolbar (and its syncing indicator) is hidden
+                      <AlertIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0"
+                      />
+                      {t("students.rosterLoadError")}
+                    </span>
+                    <div className="mt-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => refetchRoster()}
+                      >
+                        {t("students.rosterRetry")}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            ) : isEmpty ? (
+              <tbody>
+                <tr>
+                  <td colSpan={colCount}>
+                    <EmptyState
+                      variant="bare"
+                      className="py-12"
+                      icon={PeopleIcon}
+                      titleAs="h3"
+                      title={t("students.emptyTitle")}
+                      body={t("students.emptyBody")}
+                      action={
+                        addActions ? (
+                          <div className="flex flex-col items-center gap-3">
+                            {/* The toolbar (and its syncing indicator) is hidden
                               on an empty roster, so say it here too. */}
-                          {syncing ? (
-                            <span
-                              className="flex items-center gap-2 text-sm text-base-content/70"
-                              aria-live="polite"
-                            >
-                              <SyncIcon
-                                aria-hidden="true"
-                                className="size-4 animate-spin"
-                              />
-                              {t("students.syncActive")}
-                            </span>
-                          ) : null}
-                          <div className="flex justify-center gap-2">
-                            <AddStudentButtons addActions={addActions} />
+                            {syncing ? (
+                              <span
+                                className="flex items-center gap-2 text-sm text-base-content/70"
+                                aria-live="polite"
+                              >
+                                <SyncIcon
+                                  aria-hidden="true"
+                                  className="size-4 animate-spin"
+                                />
+                                {t("students.syncActive")}
+                              </span>
+                            ) : null}
+                            <div className="flex justify-center gap-2">
+                              <AddStudentButtons addActions={addActions} />
+                            </div>
                           </div>
-                        </div>
-                      ) : null
-                    }
-                  />
-                </td>
-              </tr>
-            </tbody>
-          ) : filtered.length === 0 ? (
-            <tbody>
-              <tr>
-                <td colSpan={colCount}>
-                  <EmptyState
-                    variant="bare"
-                    body={
-                      query.trim()
-                        ? t("students.noMatch")
-                        : effectiveSection !== "all" && statusFilter === "all"
-                          ? t("students.noneInSection", {
-                              section:
-                                effectiveSection === NO_SECTION
-                                  ? t("students.noSection")
-                                  : effectiveSection,
-                            })
-                          : t("students.noneWithStatus", {
-                              status:
-                                statusOptions.find(
-                                  (o) => o.value === statusFilter,
-                                )?.label ?? statusFilter,
-                            })
-                    }
-                  />
-                </td>
-              </tr>
-            </tbody>
-          ) : groupedRows ? (
-            // One <tbody> per group (role or section), opened by a full-width
-            // rowgroup header — the table equivalent of the old
-            // section-divider list headers.
-            groupedRows.map(({ key, label, rows: group }) => (
+                        ) : null
+                      }
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            ) : filtered.length === 0 ? (
+              <tbody>
+                <tr>
+                  <td colSpan={colCount}>
+                    <EmptyState
+                      variant="bare"
+                      body={
+                        query.trim()
+                          ? t("students.noMatch")
+                          : effectiveSection !== "all" && statusFilter === "all"
+                            ? t("students.noneInSection", {
+                                section:
+                                  effectiveSection === NO_SECTION
+                                    ? t("students.noSection")
+                                    : effectiveSection,
+                              })
+                            : t("students.noneWithStatus", {
+                                status:
+                                  statusOptions.find(
+                                    (o) => o.value === statusFilter,
+                                  )?.label ?? statusFilter,
+                              })
+                      }
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            ) : groupedRows ? (
+              // One <tbody> per group (role or section), opened by a full-width
+              // rowgroup header — the table equivalent of the old
+              // section-divider list headers.
+              groupedRows.map(({ key, label, rows: group }) => (
+                <motion.tbody
+                  key={key}
+                  variants={blockEnter}
+                  initial="initial"
+                  animate="animate"
+                >
+                  <tr className="bg-base-200/60">
+                    <th
+                      scope="rowgroup"
+                      colSpan={colCount}
+                      className="py-2 text-sm font-semibold text-base-content/70"
+                    >
+                      <div className="flex items-center justify-between">
+                        {label}
+                        <Badge ghost>{group.length}</Badge>
+                      </div>
+                    </th>
+                  </tr>
+                  {group.map((row) => renderRow(row))}
+                </motion.tbody>
+              ))
+            ) : (
               <motion.tbody
-                key={key}
                 variants={blockEnter}
                 initial="initial"
                 animate="animate"
               >
-                <tr className="bg-base-200/60">
-                  <th
-                    scope="rowgroup"
-                    colSpan={colCount}
-                    className="py-2 text-sm font-semibold text-base-content/70"
-                  >
-                    <div className="flex items-center justify-between">
-                      {label}
-                      <Badge ghost>{group.length}</Badge>
-                    </div>
-                  </th>
-                </tr>
-                {group.map((row) => renderRow(row))}
+                {filtered.map((row) => renderRow(row))}
               </motion.tbody>
-            ))
-          ) : (
-            <motion.tbody
-              variants={blockEnter}
-              initial="initial"
-              animate="animate"
-            >
-              {filtered.map((row) => renderRow(row))}
-            </motion.tbody>
-          )}
-        </TableShell>
-      </div>
+            )}
+          </TableShell>
+        </div>
+      )}
 
       <RosterMemberModal
         open={Boolean(selected)}

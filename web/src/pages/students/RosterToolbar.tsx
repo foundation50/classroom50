@@ -1,6 +1,11 @@
 import { useTranslation } from "react-i18next"
 
-import { FilterIcon, RowsIcon, SyncIcon } from "@/components/ui/icons"
+import {
+  FilterIcon,
+  PencilIcon,
+  RowsIcon,
+  SyncIcon,
+} from "@/components/ui/icons"
 import {
   Button,
   HelpTooltip,
@@ -53,6 +58,7 @@ export function RosterToolbar({
   grouping,
   onGroupingChange,
   addActions,
+  onEditRoster,
 }: {
   org: string
   classroom: string
@@ -92,6 +98,8 @@ export function RosterToolbar({
   onGroupingChange: (grouping: RosterGrouping) => void
   // null when the viewer can't manage the roster (buttons are simply absent).
   addActions: AddStudentActions | null
+  // Enters the batch Edit mode; absent (owner-only) hides the button.
+  onEditRoster?: () => void
 }) {
   const { t } = useTranslation()
   // "Updated x ago · no changes" — the last-commit timestamp plus, after a
@@ -234,6 +242,17 @@ export function RosterToolbar({
             right edge (see AddStudentButtons — shared with the empty state so
             labels can't drift). Kept in place while rows are selected (the
             selection cluster lives on the left) and usable during a sync. */}
+        {onEditRoster ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-base-content/70"
+            onClick={onEditRoster}
+          >
+            <PencilIcon aria-hidden="true" className="size-4" />
+            {t("students.editRoster.button")}
+          </Button>
+        ) : null}
         {addActions ? <AddStudentButtons addActions={addActions} /> : null}
       </Toolbar.Trailing>
     </Toolbar>

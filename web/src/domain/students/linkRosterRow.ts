@@ -276,6 +276,223 @@ export async function removeUnlinkedRows(
   return { removed, missed }
 }
 
+// One staged edit from the roster's batch Edit mode: link an identity-less
+// row to an org member, or patch a row's teacher-supplied metadata.
+export type RosterEdit =
+  | {
+      kind: "link"
+      rowRef: UnlinkedRowRef
+      member: { id: number; login: string }
+    }
+  | {
+      kind: "metadata"
+      // Target resolution order: github_id, else case-insensitive username,
+      // else the identity-less matcher for a still-unlinked row.
+      key: { github_id?: string; username?: string; rowRef?: UnlinkedRowRef }
+      patch: { first_name: string; last_name: string; section: string }
+    }
+
+export type ApplyRosterEditsResult = {
+  applied: number
+  // Human-actionable misses: the edit's target/guard failed against the
+  // just-read rows. `reason` is a stable token the view translates:
+  // "row-gone" | "ambiguous" | "identity-claimed" | "member-not-active".
+  missed: { label: string; reason: string }[]
+  // Logins this save linked — their rows are committed, and each got the
+  // best-effort classroom team add below.
+  linkedLogins: string[]
+  // Linked logins whose team add failed: non-fatal, the row degrades to a
+  // needs-attention row whose existing assign flow is the retry.
+  teamAddFailedLogins: string[]
+}
+
+// The human-readable handle for a missed edit, from the ref's own cells.
+function refLabel(ref: UnlinkedRowRef): string {
+  if (ref.email) return ref.email
+  return (
+    [ref.first_name, ref.last_name].filter(Boolean).join(" ").trim() ||
+    ref.section?.trim() ||
+    "row"
+  )
+}
+
+// Resolve a metadata edit's target row index, "ambiguous" only from the
+// identity-less matcher (an id/login either matches one row or none).
+function findMetadataTarget(
+  rows: StudentCsvRow[],
+  key: { github_id?: string; username?: string; rowRef?: UnlinkedRowRef },
+): number | null | "ambiguous" {
+  const idKey = key.github_id?.trim()
+  if (idKey) {
+    const idx = rows.findIndex((r) => r.github_id.trim() === idKey)
+    if (idx !== -1) return idx
+  }
+  const loginKey = key.username?.trim().toLowerCase()
+  if (loginKey) {
+    const idx = rows.findIndex(
+      (r) => r.username.trim().toLowerCase() === loginKey,
+    )
+    if (idx !== -1) return idx
+  }
+  if (key.rowRef) {
+    const matches = matchUnlinkedRows(rows, key.rowRef)
+    if (matches.length > 1) return "ambiguous"
+    if (matches.length === 1) return matches[0]
+  }
+  return null
+}
+
+// Apply a batch of staged roster edits in ONE conflict-retried commit. Every
+// guard is re-proved against the just-read rows; a failing edit is SKIPPED and
+// reported in `missed`, never aborting the batch (contrast with
+// linkRosterRowToMember, whose single-row flow throws instead). Membership is
+// verified BEFORE the rewrite, one read per distinct link member; the roster
+// commit comes first and the linked logins are team-added afterwards,
+// best-effort, for the same ordering reason as the single-row link.
+export async function applyRosterEdits(
+  client: GitHubClient,
+  input: { org: string; classroom: string; edits: RosterEdit[] },
+): Promise<ApplyRosterEditsResult> {
+  const { org, classroom, edits } = input
+  await assertClassroomNotArchived(client, org, classroom)
+
+  const memberActiveByLogin = new Map<string, boolean>()
+  for (const edit of edits) {
+    if (edit.kind !== "link") continue
+    const loginKey = edit.member.login.trim().toLowerCase()
+    if (!loginKey || memberActiveByLogin.has(loginKey)) continue
+    const state = await readOrgMembershipState(
+      client,
+      org,
+      edit.member.login.trim(),
+    )
+    memberActiveByLogin.set(loginKey, state === "active")
+  }
+
+  let applied = 0
+  let missed: { label: string; reason: string }[] = []
+  let linkedLogins: string[] = []
+
+  await withRosterRewrite(client, { org, classroom }, (rows) => {
+    // Reset per attempt: a conflict retry re-runs this closure on fresh rows.
+    applied = 0
+    missed = []
+    linkedLogins = []
+    const next = [...rows]
+    // Identities claimed by earlier link edits in THIS batch, so two staged
+    // links can't hand one account two rows within a single commit.
+    const batchIds = new Set<string>()
+    const batchLogins = new Set<string>()
+    let changed = 0
+
+    for (const edit of edits) {
+      if (edit.kind === "link") {
+        const login = edit.member.login.trim()
+        const loginKey = login.toLowerCase()
+        const idKey = String(edit.member.id)
+        if (!login || !edit.member.id || !memberActiveByLogin.get(loginKey)) {
+          missed.push({ label: login, reason: "member-not-active" })
+          continue
+        }
+        const matches = matchUnlinkedRows(next, edit.rowRef)
+        if (matches.length === 0) {
+          missed.push({ label: refLabel(edit.rowRef), reason: "row-gone" })
+          continue
+        }
+        if (matches.length > 1) {
+          missed.push({ label: refLabel(edit.rowRef), reason: "ambiguous" })
+          continue
+        }
+        const clash =
+          batchIds.has(idKey) ||
+          batchLogins.has(loginKey) ||
+          next.some(
+            (row, idx) =>
+              idx !== matches[0] &&
+              (row.github_id.trim() === idKey ||
+                row.username.trim().toLowerCase() === loginKey),
+          )
+        if (clash) {
+          missed.push({ label: login, reason: "identity-claimed" })
+          continue
+        }
+        next[matches[0]] = normalizeStudentRow({
+          ...next[matches[0]],
+          username: login,
+          github_id: idKey,
+        })
+        batchIds.add(idKey)
+        batchLogins.add(loginKey)
+        linkedLogins.push(login)
+        applied++
+        changed++
+        continue
+      }
+
+      const label =
+        edit.key.username?.trim() ||
+        edit.key.github_id?.trim() ||
+        (edit.key.rowRef ? refLabel(edit.key.rowRef) : "row")
+      const target = findMetadataTarget(next, edit.key)
+      if (target === "ambiguous") {
+        missed.push({ label, reason: "ambiguous" })
+        continue
+      }
+      if (target === null) {
+        missed.push({ label, reason: "row-gone" })
+        continue
+      }
+      // The patch deliberately excludes email: a pending row's address IS its
+      // identity (studentKey falls back to it) and hashes into its invite
+      // team's name, so rewriting it would orphan the row from its invitation.
+      const current = next[target]
+      const nextRow = normalizeStudentRow({
+        ...current,
+        first_name: edit.patch.first_name,
+        last_name: edit.patch.last_name,
+        section: edit.patch.section,
+      })
+      // The teacher's intent is satisfied either way, so a value-equal patch
+      // counts as applied — but stays out of `changed`, so an all-noop save
+      // makes no commit at all.
+      applied++
+      if (
+        nextRow.first_name === current.first_name.trim() &&
+        nextRow.last_name === current.last_name.trim() &&
+        nextRow.section === current.section.trim()
+      ) {
+        continue
+      }
+      next[target] = nextRow
+      changed++
+    }
+
+    return {
+      nextStudents: next,
+      changed,
+      message: `Batch edit ${changed} roster row${changed === 1 ? "" : "s"}: ${classroom}`,
+    }
+  })
+
+  const teamAddFailedLogins: string[] = []
+  for (const login of linkedLogins) {
+    try {
+      const assigned = await assignRosterMemberRole(client, {
+        org,
+        classroom,
+        username: login,
+        role: "student",
+      })
+      if (assigned.state === "not-member") teamAddFailedLogins.push(login)
+    } catch (err) {
+      log.error("batch roster edit: team add failed", { org, classroom, err })
+      teamAddFailedLogins.push(login)
+    }
+  }
+
+  return { applied, missed, linkedLogins, teamAddFailedLogins }
+}
+
 // One row the roster upload keeps as UNLINKED: teacher-supplied metadata with
 // no GitHub identity — a name-only SIS row, or an email row whose invitation
 // could not be sent (already a member, or the send failed).

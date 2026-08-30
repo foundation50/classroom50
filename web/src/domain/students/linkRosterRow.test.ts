@@ -8,9 +8,11 @@ const pendingInviteEmails = vi.fn()
 
 // withRosterRewrite is replaced by an in-memory harness: `storedRows` is the
 // parsed roster the mutate closure receives; `committedRows` captures what a
-// non-zero-change mutate wrote back.
+// non-zero-change mutate wrote back; `rewriteCalls` counts invocations so the
+// batch paths can prove they spend ONE rewrite.
 let storedRows: import("@/util/rosterCsv").StudentCsvRow[] = []
 let committedRows: import("@/util/rosterCsv").StudentCsvRow[] | null = null
+let rewriteCalls = 0
 
 vi.mock("@/github-core/mutations", () => ({
   readOrgMembershipState: (...a: unknown[]) => readOrgMembershipState(...a),
@@ -35,6 +37,7 @@ vi.mock("./rosterPrimitives", () => ({
       changed: number
     },
   ) => {
+    rewriteCalls++
     const { nextStudents, changed } = mutate(storedRows)
     if (changed > 0) committedRows = nextStudents
     return { changed }
@@ -43,6 +46,7 @@ vi.mock("./rosterPrimitives", () => ({
 
 import {
   appendUnlinkedRows,
+  applyRosterEdits,
   linkRosterRowToMember,
   removeUnlinkedRows,
   unlinkedRowRef,
@@ -63,6 +67,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   storedRows = []
   committedRows = null
+  rewriteCalls = 0
   assertClassroomNotArchived.mockResolvedValue(undefined)
   readOrgMembershipState.mockResolvedValue("active")
   assignRosterMemberRole.mockResolvedValue({ state: "assigned" })
@@ -308,5 +313,239 @@ describe("appendUnlinkedRows", () => {
     ])
     expect(written).toBe(0)
     expect(committedRows).toBeNull()
+  })
+})
+
+describe("applyRosterEdits", () => {
+  it("applies a mixed batch (2 links + 1 metadata) in ONE rewrite", async () => {
+    storedRows = [
+      row({ first_name: "Ada", email: "ada@x.edu" }),
+      row({ first_name: "Grace", last_name: "Hopper", section: "s1" }),
+      row({ username: "bob", github_id: "7", first_name: "Bob" }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "ada@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+        {
+          kind: "link",
+          rowRef: { first_name: "Grace", last_name: "Hopper", section: "s1" },
+          member: { id: 43, login: "grace" },
+        },
+        {
+          kind: "metadata",
+          key: { github_id: "7" },
+          patch: { first_name: "Robert", last_name: "B", section: "s2" },
+        },
+      ],
+    })
+    expect(result).toEqual({
+      applied: 3,
+      missed: [],
+      linkedLogins: ["ada", "grace"],
+      teamAddFailedLogins: [],
+    })
+    expect(rewriteCalls).toBe(1)
+    expect(committedRows?.[0]).toMatchObject({
+      username: "ada",
+      github_id: "42",
+    })
+    expect(committedRows?.[1]).toMatchObject({
+      username: "grace",
+      github_id: "43",
+    })
+    expect(committedRows?.[2]).toMatchObject({
+      first_name: "Robert",
+      last_name: "B",
+      section: "s2",
+      username: "bob",
+    })
+    // One membership read per distinct link member, before the rewrite.
+    expect(readOrgMembershipState).toHaveBeenCalledTimes(2)
+    // Both linked logins get the best-effort team add, in order.
+    expect(assignRosterMemberRole).toHaveBeenCalledTimes(2)
+    expect(assignRosterMemberRole.mock.calls[0]?.[1]).toMatchObject({
+      username: "ada",
+      role: "student",
+    })
+  })
+
+  it("misses a second link that claims an identity an earlier edit took", async () => {
+    storedRows = [
+      row({ first_name: "Ada", email: "a@x.edu" }),
+      row({ first_name: "Ada2", email: "b@x.edu" }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "a@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+        {
+          kind: "link",
+          rowRef: { email: "b@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(result.missed).toEqual([
+      { label: "ada", reason: "identity-claimed" },
+    ])
+    expect(result.linkedLogins).toEqual(["ada"])
+    expect(committedRows?.[1]).toMatchObject({ username: "", github_id: "" })
+  })
+
+  it("reports row-gone and ambiguous misses without aborting the batch", async () => {
+    storedRows = [
+      row({ first_name: "Twin", last_name: "T", section: "" }),
+      row({ first_name: "Twin", last_name: "T", section: "" }),
+      row({ username: "bob", github_id: "7" }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "gone@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+        {
+          kind: "link",
+          rowRef: { first_name: "Twin", last_name: "T", section: "" },
+          member: { id: 43, login: "grace" },
+        },
+        {
+          kind: "metadata",
+          key: { username: "bob" },
+          patch: { first_name: "Bob", last_name: "", section: "" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(result.missed).toEqual([
+      { label: "gone@x.edu", reason: "row-gone" },
+      { label: "Twin T", reason: "ambiguous" },
+    ])
+    expect(committedRows?.[2]).toMatchObject({ first_name: "Bob" })
+  })
+
+  it("misses a metadata edit whose target row is gone", async () => {
+    storedRows = [row({ username: "bob", github_id: "7" })]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "metadata",
+          key: { username: "ghost" },
+          patch: { first_name: "G", last_name: "", section: "" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(0)
+    expect(result.missed).toEqual([{ label: "ghost", reason: "row-gone" }])
+    expect(committedRows).toBeNull()
+  })
+
+  it("excludes a non-active member before the rewrite (member-not-active)", async () => {
+    readOrgMembershipState.mockImplementation(
+      async (_client: unknown, _org: unknown, login: unknown) =>
+        login === "ada" ? "active" : "pending",
+    )
+    storedRows = [
+      row({ first_name: "Ada", email: "a@x.edu" }),
+      row({ first_name: "Gone", email: "b@x.edu" }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "a@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+        {
+          kind: "link",
+          rowRef: { email: "b@x.edu" },
+          member: { id: 43, login: "leaver" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(result.missed).toEqual([
+      { label: "leaver", reason: "member-not-active" },
+    ])
+    expect(result.linkedLogins).toEqual(["ada"])
+    // The excluded member's row is untouched in the committed rewrite.
+    expect(committedRows?.[1]).toMatchObject({ username: "", github_id: "" })
+    expect(assignRosterMemberRole).toHaveBeenCalledTimes(1)
+  })
+
+  it("counts an all-noop metadata batch as applied but makes NO commit", async () => {
+    storedRows = [
+      row({
+        username: "bob",
+        github_id: "7",
+        first_name: "Bob",
+        section: "s1",
+      }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "metadata",
+          key: { github_id: "7" },
+          patch: { first_name: "Bob", last_name: "", section: "s1" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(result.missed).toEqual([])
+    expect(rewriteCalls).toBe(1)
+    expect(committedRows).toBeNull()
+  })
+
+  it("reports a failed team add in teamAddFailedLogins without failing the save", async () => {
+    assignRosterMemberRole.mockRejectedValue(new Error("boom"))
+    storedRows = [row({ first_name: "Ada", email: "a@x.edu" })]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "a@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(result.linkedLogins).toEqual(["ada"])
+    expect(result.teamAddFailedLogins).toEqual(["ada"])
+    expect(committedRows?.[0]).toMatchObject({ username: "ada" })
+  })
+
+  it("falls back to the unlinked matcher for a metadata edit keyed by rowRef", async () => {
+    storedRows = [row({ first_name: "Grace", last_name: "H", section: "s1" })]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "metadata",
+          key: {
+            rowRef: { first_name: "Grace", last_name: "H", section: "s1" },
+          },
+          patch: { first_name: "Grace", last_name: "Hopper", section: "s1" },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(committedRows?.[0]).toMatchObject({ last_name: "Hopper" })
   })
 })
