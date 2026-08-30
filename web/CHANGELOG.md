@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.38.0](https://github.com/foundation50/classroom50/compare/web-v1.37.0...web-v1.38.0) (2026-08-30)
+
+
+### Features
+
+* non-blocking roster sync, kept unlinked rows, and batch editing ([#806](https://github.com/foundation50/classroom50/issues/806)) ([5a5bb25](https://github.com/foundation50/classroom50/commit/5a5bb25554ed3f75b7abd5395467701c717f33e5))
+* **web:** add breadcrumb switchers, land new classroom on roster ([#807](https://github.com/foundation50/classroom50/issues/807)) ([e9dbca0](https://github.com/foundation50/classroom50/commit/e9dbca0c7b3de6ca07d1489ee01f21f578a266fd))
+
+
+### Bug Fixes
+
+* **web:** align form validation and saving with Primer guidance ([#803](https://github.com/foundation50/classroom50/issues/803)) ([2f3a3d4](https://github.com/foundation50/classroom50/commit/2f3a3d41f8665d3aebbf61a75c999a38ef381ab2))
+* **web:** show load errors instead of first-use empty states ([#801](https://github.com/foundation50/classroom50/issues/801)) ([babaf88](https://github.com/foundation50/classroom50/commit/babaf88994c48a94e92894546e403d9fbba76822))
+* **web:** standardize feedback notifications on Primer messaging patterns ([#804](https://github.com/foundation50/classroom50/issues/804)) ([02d36e8](https://github.com/foundation50/classroom50/commit/02d36e875d9d6b4d1550737de37ba0a129f776a3))
+
 ## [1.37.0](https://github.com/foundation50/classroom50/compare/web-v1.36.0...web-v1.37.0) (2026-08-28)
 
 

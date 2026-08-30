@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.38.0](https://github.com/foundation50/classroom50/compare/cli-v1.37.0...cli-v1.38.0) (2026-08-30)
+
+
+### Features
+
+* non-blocking roster sync, kept unlinked rows, and batch editing ([#806](https://github.com/foundation50/classroom50/issues/806)) ([5a5bb25](https://github.com/foundation50/classroom50/commit/5a5bb25554ed3f75b7abd5395467701c717f33e5))
+
 ## [1.37.0](https://github.com/foundation50/classroom50/compare/cli-v1.36.0...cli-v1.37.0) (2026-08-28)
 
 
