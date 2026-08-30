@@ -456,8 +456,8 @@ type DueMeta struct {
 }
 
 // due_meta.source values: the offset came from the input itself, was
-// auto-detected from the machine's local zone, or was carried in from
-// a migrated source deadline.
+// auto-detected from the machine's local zone, or was carried in from a
+// source deadline by the retired `classroom migrate` command.
 const (
 	DueSourceExplicit = "explicit-offset"
 	DueSourceAuto     = "auto-detected"
@@ -468,7 +468,7 @@ const (
 // kept in lockstep with the schema's pattern.
 var dueMetaOffsetRe = regexp.MustCompile(`^[+-]([01]\d|2[0-3]):[0-5]\d$`)
 
-// NewDueMeta builds the provenance block for the --due and migrate paths.
+// NewDueMeta builds the provenance block for the --due path.
 // Callers set Zone separately when the offset was auto-detected.
 func NewDueMeta(input string, t time.Time, source string) *DueMeta {
 	return &DueMeta{Input: input, Offset: t.Format("-07:00"), Source: source}
@@ -556,10 +556,12 @@ func validateAvailableFromFields(entry AssignmentEntry) error {
 	return nil
 }
 
-// MigratedFromRef records where an assignment originated when imported by
-// `classroom migrate`. Hand-authored entries never carry it. OriginalSlug is
-// set only when it differs from Slug; StarterRepo is the legacy "owner/repo"
-// before re-templating; InviteLink is diagnostic.
+// MigratedFromRef records where an assignment originated when imported by the
+// retired `classroom migrate` command (GitHub Classroom shut down). Nothing
+// writes it anymore, but migrated entries carry it and every read-modify-write
+// must round-trip it. OriginalSlug is set only when it differs from Slug;
+// StarterRepo is the legacy "owner/repo" before re-templating; InviteLink is
+// diagnostic.
 type MigratedFromRef struct {
 	Source       string `json:"source"`
 	ClassroomID  int64  `json:"classroom_id"`

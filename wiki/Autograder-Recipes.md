@@ -182,7 +182,7 @@ adopt the built-in autograder:
 - **Keep a GitHub Classroom `autograding.json`.** A custom runner workflow
   lets your existing grading action keep reading `autograding.json` from
   each student repository. See
-  [Bringing a GitHub Classroom autograder along](Advanced-Autograding#bringing-a-github-classroom-autograder-along).
+  [Keeping a GitHub Classroom autograder](Advanced-Autograding#keeping-a-github-classroom-autograder).
 
 The one reserved filename is `.github/workflows/autograde.yaml`; template
 workflows under any other name are left alone.

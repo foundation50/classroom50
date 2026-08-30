@@ -888,10 +888,10 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			attemptEntry.Extra = previous.Extra
 			attemptEntry.Locked = previous.Locked
 			// renamed_from and migrated_from are provenance owned by the slug
-			// rename and `classroom migrate` respectively — `add` has no flags
-			// for them, and both are known keys (they decode onto the struct,
-			// not Extra), so a same-slug re-add must carry them or it silently
-			// erases the rename reservation / migration record.
+			// rename and the retired `classroom migrate` respectively — `add`
+			// has no flags for them, and both are known keys (they decode onto
+			// the struct, not Extra), so a same-slug re-add must carry them or
+			// it silently erases the rename reservation / migration record.
 			attemptEntry.RenamedFrom = previous.RenamedFrom
 			attemptEntry.MigratedFrom = previous.MigratedFrom
 			// Closed is likewise preserved: it's owned out of band by the web

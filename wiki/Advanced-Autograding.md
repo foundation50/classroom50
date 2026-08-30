@@ -380,10 +380,10 @@ workflow you control, so your grading logic runs in place of the runner.
 > submission-mode` never rewrites its caller workflow — trigger changes are
 > yours to make.
 
-### Bringing a GitHub Classroom autograder along
+### Keeping a GitHub Classroom autograder
 
-This is the intended path for keeping an `autograding.json`-driven workflow after
-[migrating](FAQ#migrating-from-github-classroom). Classroom 50 has no
+This is the intended path for keeping an `autograding.json`-driven workflow
+from a classroom that originated in GitHub Classroom. Classroom 50 has no
 `.github/classroom/autograding.json` of its own — the built-in runner reads a
 [`tests` block](Autograding-Basics#declarative-tests) instead — but a custom runner workflow lets
 you keep your existing format:

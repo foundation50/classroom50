@@ -313,24 +313,16 @@ match a real student's `write`-level setup. To test the exact student
 experience, use a **separate** GitHub account added to the classroom as a
 student.
 
-## Migrating from GitHub Classroom
-
-### Can I import my existing GitHub Classroom?
-
-Yes. `gh teacher classroom migrate` imports a GitHub Classroom into your
-`classroom50` repository — it copies each starter repo into your organization
-as a fresh template and recreates the assignments. Rosters, scores, and past
-student repositories are **not** migrated; you re-onboard students for the new
-term. See [`gh teacher classroom migrate`](gh-teacher#classroom-migrate), and
-[Coming from GitHub Classroom?](Glossary#coming-from-github-classroom) for how
-GitHub Classroom's vocabulary (cutoff date, Download grades, roster
-identifiers, teams) maps onto Classroom 50's.
+## Coming from GitHub Classroom
 
 ### Will my existing scripts that manipulate student repos still work?
 
 Likely yes. As with GitHub Classroom, each student gets a normal GitHub
 repository named `<classroom>-<assignment>-<username>`, so scripts that automate
-git operations against those repos generally carry over.
+git operations against those repos generally carry over. For how GitHub
+Classroom's vocabulary (cutoff date, Download grades, roster identifiers, teams)
+maps onto Classroom 50's, see
+[Coming from GitHub Classroom?](Glossary#coming-from-github-classroom).
 
 ## Access and permissions
 

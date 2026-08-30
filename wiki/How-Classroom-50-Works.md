@@ -314,8 +314,9 @@ check is advisory: Classroom 50 works without it. See
 
 ## Why organization settings sometimes change back
 
-If you run both Classroom 50 and GitHub Classroom in the same organization, they
-can disagree on a setting and flip it back and forth, most notably private-repo
+If another tool manages the same organization, it and Classroom 50 can disagree
+on a setting and flip it back and forth — before its retirement, GitHub
+Classroom was the most common culprit, most notably over private-repo
 forking. That tug-of-war shows up in the setup and audit checks as settings that
 changed outside Classroom 50.
 Classroom 50 no longer enforces the forking setting for this reason; private

@@ -289,8 +289,8 @@ const SKELETON_COMMIT_ATTEMPTS = 3
 // mean the tip moved between our read and the update). Treat those (and only
 // those) as retryable; everything else is a real error the caller should see.
 // Exported so withGitConflictRetry treats a lost force:false race as retryable
-// too (not just a 409) — the roster and migration mutation families rely on
-// that retry for concurrency safety.
+// too (not just a 409) — the roster mutation family relies on that retry for
+// concurrency safety.
 export function isNonFastForward(err: unknown): boolean {
   if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
   const bodyText =

@@ -135,8 +135,10 @@ func (c *ClassroomJSON) IsArchived() bool {
 	return c != nil && c.Active != nil && !*c.Active
 }
 
-// MigratedFromRef records where a classroom originated when imported by
-// `classroom migrate`. Hand-authored classrooms never carry it.
+// MigratedFromRef records where a classroom originated when imported by the
+// retired `classroom migrate` command (GitHub Classroom shut down). Nothing
+// writes it anymore, but migrated classrooms carry it and every
+// read-modify-write must round-trip it.
 type MigratedFromRef struct {
 	Source           string `json:"source"`
 	ClassroomID      int64  `json:"classroom_id"`

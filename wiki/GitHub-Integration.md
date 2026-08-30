@@ -350,8 +350,6 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 | DELETE | `/repos/{owner}/{repo}` | Delete a repo (`teardown`; needs `delete_repo`). |
 | GET | `/repos/{owner}/{repo}/releases` + `/releases/assets/{id}` | Collect `submit/*` releases and `result.json`. |
 | GET | `/orgs/{org}/repos` | Page org repos for `--by-pattern` download. |
-| GET | `/classrooms`, `/classrooms/{id}`, `/classrooms/{id}/assignments`, `/assignments/{id}` | GitHub Classroom discovery (`migrate`). |
-| POST / PATCH | `/repos/{owner}/{repo}/generate`, `/repos/{owner}/{repo}` | Copy source starter repos as templates (`migrate`). |
 
 ### `gh student` CLI
 

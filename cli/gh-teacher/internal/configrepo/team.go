@@ -64,9 +64,9 @@ const (
 // StaffTeamRepoPermissions maps a staff role to the repo permission a staff
 // team gets on each student assignment repo and on private in-org templates.
 // The head-TA/TA-team template read is applied at TWO points: eagerly at
-// assignment add/reuse and classroom migrate (see grantStaffTeamTemplateRead /
-// migrate.go), and again as an idempotent re-affirm at collect-scores. The eager
-// sites use this map only as a presence gate and hardcode read
+// assignment add/reuse (see grantStaffTeamTemplateRead), and again as an
+// idempotent re-affirm at collect-scores. The eager sites use this map only
+// as a presence gate and hardcode read
 // (GrantTeamRepoRead); collect-scores reads the value. Source of truth for the
 // collector's hand-mirrored STAFF_TEAM_PERMISSIONS (collect_scores.py) — keep in
 // lockstep.
@@ -84,9 +84,9 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 
 // TemplateReadStaffRoles is the ordered set of non-owner staff roles that get an
 // eager read grant on a private in-org template (head-TA, then TA; teacher
-// omitted per StaffTeamRepoPermissions above). Single-sources the loops in
-// grantStaffTeamTemplateRead (reuse.go) and migrate.go so a future non-owner
-// staff role is one line here. Still presence-gated against
+// omitted per StaffTeamRepoPermissions above). Single-sources the loop in
+// grantStaffTeamTemplateRead (reuse.go) so a future non-owner staff role is
+// one line here. Still presence-gated against
 // StaffTeamRepoPermissions at each call site.
 var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 
