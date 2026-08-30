@@ -84,8 +84,10 @@ const CreateClassroomPage = () => {
                     durationMs: 6000,
                     message: t("toasts.classroomCreated"),
                   })
+                  // Land on the roster: a fresh classroom's next step is
+                  // enrolling students, not an empty assignments list.
                   navigate({
-                    to: "/$org/$classroom",
+                    to: "/$org/$classroom/roster",
                     params: { org, classroom: variables.classroom },
                   })
                 },

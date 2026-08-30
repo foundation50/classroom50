@@ -340,7 +340,7 @@ const AssignmentsPage = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("nav.assignments")} />
+      <Breadcrumb switcher="classroom" />
       {org && classroom && (
         <ClaimTeacherNotice org={org} classroom={classroom} />
       )}

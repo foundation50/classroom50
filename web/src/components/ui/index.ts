@@ -47,7 +47,11 @@ export type { HeadingProps, HeadingVariant } from "./Heading"
 export { Modal, ModalIcon, ModalFooterPortal } from "./Modal"
 export type { ModalProps, ModalSize, ModalIconTone } from "./Modal"
 
-export { DropdownMenu, closeDropdownMenu } from "./DropdownMenu"
+export {
+  DropdownMenu,
+  closeDropdownMenu,
+  popoverPanelClass,
+} from "./DropdownMenu"
 export type { DropdownMenuProps } from "./DropdownMenu"
 export { SelectAllCheckbox } from "./SelectAllCheckbox"
 

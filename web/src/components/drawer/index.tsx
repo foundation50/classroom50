@@ -10,7 +10,7 @@ export {
   DrawerToggle,
   DrawerSidebar,
 } from "./DrawerChrome"
-export { ClassroomLogo, AllClasses, SidebarClassInfo } from "./primitives"
+export { ClassroomLogo, AllClasses } from "./primitives"
 export { StaffSidebarMenu } from "./StaffSidebarMenu"
 export { SidebarFooter } from "./SidebarFooter"
 export { MyClasses } from "./MyClasses"

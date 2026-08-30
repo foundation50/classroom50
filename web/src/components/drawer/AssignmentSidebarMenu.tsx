@@ -11,7 +11,6 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
@@ -40,15 +39,6 @@ export const AssignmentSidebarMenu = ({
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
 
-  // Resolve the display name from whichever source the role can read. The
-  // teacher config-repo source is role-gated so a student doesn't fire a
-  // guaranteed 404; the public Pages source covers the student (and is a
-  // teacher fallback before Pages publishes).
-  const { data: teacherAssignments } = useGetClassroomAssignments(
-    org,
-    classroom,
-    { enabled: showTeacherUi },
-  )
   // A protected classroom's public Pages fetch needs the capability secret. A
   // student reads it from their own repo's .classroom50.yaml (their only
   // source); a teacher gets it from classroom.json. Gate the classroom.json read
@@ -84,11 +74,6 @@ export const AssignmentSidebarMenu = ({
       enabled: !loadingBootstrap,
     },
   )
-  const assignmentName =
-    teacherAssignments?.assignments.find((a) => a.slug === assignment)?.name ||
-    publicAssignment?.name ||
-    assignment
-
   // Group assignments give students collaborators to manage; individual
   // assignments have nothing student-editable, so we omit the settings entry
   // rather than route to a dead-end.
@@ -147,13 +132,6 @@ export const AssignmentSidebarMenu = ({
             />
             {t("nav.allAssignmentsLink")}
           </Link>
-        </div>
-      )}
-
-      {!collapsed && (
-        <div className="sidebar-fade-in py-2">
-          <h3 className="font-bold leading-tight">{assignmentName}</h3>
-          <p className="text-gray-400 text-sm">{t("nav.assignment")}</p>
         </div>
       )}
 

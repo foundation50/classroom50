@@ -38,6 +38,10 @@ vi.mock("@/hooks/useDocumentTitle", () => ({
   useDocumentTitle: () => {},
 }))
 
+// The breadcrumb's quick-switch menus read the config repo via
+// useGitHubClient, which needs the (unmounted here) GitHub provider.
+vi.mock("@/components/breadcrumb", () => ({ default: () => null }))
+
 // The student repo exists (accepted).
 vi.mock("@/hooks/useGetAssignmentRepo", () => ({
   default: () => ({

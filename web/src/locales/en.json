@@ -369,7 +369,6 @@
     "allAssignments": "All assignments",
     "allAssignmentsLink": "All assignments",
     "accountMenu": "Account menu",
-    "assignment": "Assignment",
     "assignments": "Assignments",
     "roster": "Roster",
     "settings": "Settings",
@@ -382,7 +381,6 @@
     "members": "Members",
     "activity": "Activity",
     "organizations": "Organizations",
-    "untitledCourse": "Untitled classroom",
     "userFallback": "User",
     "avatarAlt": "{{name}}'s avatar",
     "roleTeacher": "Teacher",
@@ -3548,7 +3546,12 @@
     "breadcrumb": {
       "label": "Breadcrumb",
       "classes": "Classrooms",
-      "assignments": "Assignments"
+      "assignments": "Assignments",
+      "switchClassroom": "Switch classroom",
+      "switchAssignment": "Switch assignment",
+      "findClassroom": "Find a classroom…",
+      "findAssignment": "Find an assignment…",
+      "noMatches": "No matches."
     },
     "planBadge": {
       "label": "{{name}} plan"
