@@ -383,7 +383,14 @@ function ClassroomResources({
                     aria-hidden="true"
                     className="mt-0.5 size-4 shrink-0 text-warning"
                   />
-                  <span>{t("published.unlistedWarning")}</span>
+                  <div className="flex flex-col gap-1">
+                    <span>{t("published.unlistedNote.intro")}</span>
+                    <ul className="ms-4 list-disc space-y-0.5">
+                      <li>{t("published.unlistedNote.point1")}</li>
+                      <li>{t("published.unlistedNote.point2")}</li>
+                    </ul>
+                    <span>{t("published.unlistedNote.share")}</span>
+                  </div>
                 </div>
               )}
               {resources.map((r) => (

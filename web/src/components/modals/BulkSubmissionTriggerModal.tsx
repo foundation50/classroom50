@@ -273,7 +273,16 @@ export function BulkSubmissionTriggerModal({
             </Alert>
           ) : (
             <Alert tone="warning" className="text-sm">
-              {t("submissions.bulkTrigger.warning", { count: total })}
+              <div className="flex flex-col gap-1">
+                <span>
+                  {t("submissions.bulkTrigger.warningLead", { count: total })}
+                </span>
+                <ul className="ms-4 list-disc space-y-0.5">
+                  <li>{t("submissions.bulkTrigger.warningPoint1")}</li>
+                  <li>{t("submissions.bulkTrigger.warningPoint2")}</li>
+                  <li>{t("submissions.bulkTrigger.warningPoint3")}</li>
+                </ul>
+              </div>
             </Alert>
           )}
         </div>
