@@ -148,6 +148,8 @@
     }
   },
   "common": {
+    "checkingOrgAccess": "Checking your access to this organization…",
+    "resolvingRole": "Checking your role…",
     "goToDashboard": "Go to dashboard",
     "close": "Close",
     "cancel": "Cancel",
@@ -3551,7 +3553,8 @@
       "switchAssignment": "Switch assignment",
       "findClassroom": "Find a classroom…",
       "findAssignment": "Find an assignment…",
-      "noMatches": "No matches."
+      "noMatches": "No matches.",
+      "loadError": "Couldn't load the list. It's a load error — nothing is gone."
     },
     "planBadge": {
       "label": "{{name}} plan"
