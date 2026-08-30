@@ -239,9 +239,12 @@ export function RosterEditMode({
         </Alert>
       ) : null}
 
-      {/* No overflow clip on the frame: the link pickers' panels paint below
-          their cells (see the Combobox overflow constraint). */}
-      <TableShell animate={false} frameClassName="overflow-x-visible">
+      {/* A scroll container, capped to the viewport: the link pickers' panels
+          paint below their cells INSIDE the frame, so an open panel scrolls
+          with the table instead of pushing the page past its container.
+          Opening a picker centers its row (below) so the panel is visible
+          without hand-scrolling. */}
+      <TableShell animate={false} frameClassName="max-h-[65vh] overflow-y-auto">
         <thead>
           <tr>
             <th scope="col">{t("students.table.colMember")}</th>
@@ -280,9 +283,20 @@ export function RosterEditMode({
                         }
                       }}
                       open={openPickerKey === row.key}
-                      onOpenChange={(open) =>
+                      onOpenChange={(open) => {
                         setOpenPickerKey(open ? row.key : null)
-                      }
+                        // Center the row inside the scrollable frame so the
+                        // panel below it is visible without hand-scrolling.
+                        // After the rAF the panel has rendered and extended
+                        // the frame's scroll area. (jsdom has no scrollIntoView.)
+                        if (open) {
+                          requestAnimationFrame(() =>
+                            document
+                              .getElementById(`roster-edit-link-${index}`)
+                              ?.scrollIntoView?.({ block: "center" }),
+                          )
+                        }
+                      }}
                       items={pickerItems(row).slice(0, 30)}
                       getItemKey={(m) => m.login}
                       getItemLabel={(m) => m.login}
