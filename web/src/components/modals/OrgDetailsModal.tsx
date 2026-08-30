@@ -20,6 +20,7 @@ import { isOwnerGitHubOrgRole } from "@/authz"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { normalizeWebsiteUrl, safeHttpUrl } from "@/util/url"
+import { errorText } from "@/types/localizedMessage"
 
 type ProfileFormValues = {
   name: string
@@ -105,7 +106,7 @@ function OrgDetailsModal({
         // A dialog-action failure belongs inside the dialog, not a page toast.
         setSaveError(
           t("orgs.detailsModal.saveError", {
-            error: err instanceof Error ? err.message : "",
+            error: errorText(t, err),
           }),
         )
       }

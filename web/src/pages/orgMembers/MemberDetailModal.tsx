@@ -31,6 +31,7 @@ import {
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { errorText } from "@/types/localizedMessage"
 
 // Centered modal showing one org member's details: identity, classification,
 // per-classroom access, and member-level actions (invite an on-roster
@@ -182,8 +183,7 @@ const MemberDetailModal = ({
       setActionError(
         t("orgMembers.removeFailed", {
           label,
-          reason:
-            err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
+          reason: errorText(t, err),
         }),
       )
     } finally {

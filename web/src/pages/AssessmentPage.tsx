@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import {
   Alert,
@@ -19,6 +20,7 @@ import {
   type ManualVerdict,
 } from "@/util/a11y/vpatModel"
 import type { Guidance } from "@/util/a11y/assessmentGuidance"
+import { errorText } from "@/types/localizedMessage"
 
 // Dev-only interactive WCAG assessment tool (route: /assess). It pulls in the
 // full VPAT report: the manually-assessed criteria are editable (record, then
@@ -56,6 +58,7 @@ const isManual = (c: Criterion, verdicts: Record<string, ManualVerdict>) =>
 
 export default function AssessmentPage() {
   useDocumentTitle("Assessment mode — WCAG 2.2 AA")
+  const { t } = useTranslation()
   const [data, setData] = useState<AssessData | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -66,8 +69,8 @@ export default function AssessmentPage() {
         return res.json() as Promise<AssessData>
       })
       .then(setData)
-      .catch((e) => setError(e instanceof Error ? e.message : "load failed"))
-  }, [])
+      .catch((e) => setError(errorText(t, e)))
+  }, [t])
 
   useEffect(load, [load])
 
@@ -97,24 +100,27 @@ export default function AssessmentPage() {
     [criteria, verdicts],
   )
 
-  const save = useCallback(async (body: SavePayload) => {
-    setError(null)
-    try {
-      const res = await fetch("/_assess/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
-      const next = (await res.json()) as AssessData & { error?: string }
-      if (next.error) {
-        setError(next.error)
-        return
+  const save = useCallback(
+    async (body: SavePayload) => {
+      setError(null)
+      try {
+        const res = await fetch("/_assess/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+        const next = (await res.json()) as AssessData & { error?: string }
+        if (next.error) {
+          setError(next.error)
+          return
+        }
+        setData(next)
+      } catch (e) {
+        setError(errorText(t, e))
       }
-      setData(next)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "save failed")
-    }
-  }, [])
+    },
+    [t],
+  )
 
   if (error && !data) {
     return (

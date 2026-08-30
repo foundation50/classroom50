@@ -14,6 +14,7 @@ import { AnimatedAlert, Badge, Button, rtlFlip } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { errorText } from "@/types/localizedMessage"
 import {
   BASE_LANG,
   LanguagePackError,
@@ -76,7 +77,7 @@ export const LanguageSwitcher = ({
       setNeedsCode(true)
       setError(t("language.errorCodeUndetectable"))
     } else if (err instanceof LanguagePackError) {
-      setError(err.message)
+      setError(errorText(t, err))
     } else {
       setError(t("language.errorGeneric"))
     }

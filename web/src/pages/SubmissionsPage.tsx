@@ -101,6 +101,7 @@ import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { isClassroomArchived } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
@@ -1060,7 +1061,7 @@ const SubmissionsPageContent = () => {
             <>
               {scoresErrorObj instanceof Error
                 ? t("submissions.errors.gradebookLoadWithReason", {
-                    reason: scoresErrorObj.message,
+                    reason: errorText(t, scoresErrorObj),
                   })
                 : t("submissions.errors.gradebookLoad")}{" "}
               {t("submissions.errors.gradebookLoadHint")}
@@ -1217,7 +1218,7 @@ const SubmissionsPageContent = () => {
                 <>
                   {collectScores.error instanceof Error
                     ? t("submissions.collect.statusFailedWithReason", {
-                        reason: collectScores.error.message,
+                        reason: errorText(t, collectScores.error),
                       })
                     : t("submissions.collect.statusFailed")}{" "}
                   {t("submissions.collect.statusFailedHint")}
@@ -1260,7 +1261,7 @@ const SubmissionsPageContent = () => {
             <Alert tone="error" role="status">
               {regradeAll.error instanceof Error
                 ? t("submissions.regradeAll.statusFailedWithReason", {
-                    reason: regradeAll.error.message,
+                    reason: errorText(t, regradeAll.error),
                   })
                 : t("submissions.regradeAll.statusFailed")}{" "}
               {t("submissions.regradeAll.statusFailedHint")}

@@ -32,6 +32,7 @@ import TeardownSection from "@/pages/orgSettings/TeardownSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
+import { errorText } from "@/types/localizedMessage"
 import {
   AlertIcon,
   CalendarIcon,
@@ -168,9 +169,7 @@ function TokenNameRow({
       </Button>
       {renameMutation.isError && (
         <span className="text-xs text-error">
-          {renameMutation.error instanceof Error
-            ? renameMutation.error.message
-            : t("orgSettings.serviceToken.saveError")}
+          {errorText(t, renameMutation.error)}
         </span>
       )}
     </form>
@@ -374,9 +373,7 @@ function SetTokenModal({
             hint={t("orgSettings.serviceToken.pasteHelp")}
             error={
               saveMutation.isError
-                ? saveMutation.error instanceof Error
-                  ? saveMutation.error.message
-                  : t("orgSettings.serviceToken.saveError")
+                ? errorText(t, saveMutation.error)
                 : undefined
             }
           >

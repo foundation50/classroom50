@@ -16,6 +16,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useSubmitAssignment } from "@/hooks/mutations/useSubmitAssignment"
 import type { SubmissionMode } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 import {
   normalizeRepoPath,
   isReservedUploadPath,
@@ -312,9 +313,7 @@ export function SubmitUpload({
             <Alert tone="error">
               <div>
                 {t("submissions.student.upload.error")}
-                {mutation.error instanceof Error
-                  ? ` ${mutation.error.message}`
-                  : ""}
+                {` ${errorText(t, mutation.error)}`}
               </div>
             </Alert>
           )}

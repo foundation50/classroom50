@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/icons"
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { errorText } from "@/types/localizedMessage"
 
 type ClassroomCardProps = {
   summary: ClassroomSummary
@@ -347,10 +348,7 @@ function ClassroomMenu({
                 archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
                 {
                   classroom: slug,
-                  error:
-                    err instanceof Error
-                      ? err.message
-                      : t("classes.somethingWentWrong"),
+                  error: errorText(t, err),
                 },
               ),
               { cause: err },
@@ -414,10 +412,7 @@ function ClassroomMenu({
             throw new Error(
               t("classes.deleteFailed", {
                 classroom: slug,
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : t("classes.somethingWentWrong"),
+                error: errorText(t, err),
               }),
               { cause: err },
             )

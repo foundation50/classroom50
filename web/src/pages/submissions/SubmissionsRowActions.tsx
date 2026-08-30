@@ -32,6 +32,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
 import type { AssignmentMode, SubmissionMode } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 
 // Feedback channel for actions running inside the submission hub: outcomes
 // render as a banner at the top of the hub dialog (Primer: feedback for a
@@ -547,10 +548,7 @@ const UpdateTriggerButton = ({
     } catch (err) {
       feedback({
         tone: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : t("submissions.rowTrigger.outcome.failed"),
+        message: errorText(t, err),
       })
     } finally {
       setPending(false)
@@ -617,10 +615,7 @@ const ChangeVisibilityButton = ({
     } catch (err) {
       feedback({
         tone: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : t("submissions.rowVisibility.outcome.failed"),
+        message: errorText(t, err),
       })
     }
   }
@@ -738,10 +733,7 @@ const PauseAutogradingButton = ({
     } catch (err) {
       feedback({
         tone: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : t("submissions.rowAutograde.outcome.failed"),
+        message: errorText(t, err),
       })
     }
   }

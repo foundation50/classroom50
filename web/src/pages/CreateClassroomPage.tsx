@@ -14,6 +14,7 @@ import MissingParams from "@/components/MissingParams"
 import { logger } from "@/lib/logger"
 import { logWriteFailure } from "@/lib/logWriteFailure"
 import RequireRole from "@/components/RequireRole"
+import { errorText } from "@/types/localizedMessage"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
 
 const log = logger.scope("CreateClassroomPage")
@@ -72,7 +73,7 @@ const CreateClassroomPage = () => {
                   // the create button rather than as a corner toast.
                   setCreateError(
                     t("toasts.classroomCreateFailed", {
-                      message: err.message,
+                      message: errorText(t, err),
                     }),
                   )
                 },

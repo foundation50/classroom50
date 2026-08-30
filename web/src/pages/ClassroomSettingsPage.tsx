@@ -19,6 +19,7 @@ import RequireRole from "@/components/RequireRole"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Alert, EmphasisLtr } from "@/components/ui"
 import type { AlertOutcome } from "@/components/ui"
+import { errorText } from "@/types/localizedMessage"
 
 const EditClassroomContent = ({
   org,
@@ -92,7 +93,7 @@ const EditClassroomContent = ({
                           err instanceof GitHubAPIError && err.status === 409
                             ? t("toasts.classroomSaveConflict")
                             : t("toasts.classroomSaveFailed", {
-                                message: err.message,
+                                message: errorText(t, err),
                               }),
                       })
                     },

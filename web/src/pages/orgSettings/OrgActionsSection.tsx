@@ -17,6 +17,7 @@ import useGetOrgActionsBudget from "@/hooks/useGetOrgActionsBudget"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
+import { errorText } from "@/types/localizedMessage"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
@@ -161,7 +162,7 @@ const OrgActionsSection = ({
         setOutcome({
           tone: "error",
           message: t("orgSettings.actions.toggleFailed", {
-            message: err instanceof Error ? err.message : String(err),
+            message: errorText(t, err),
           }),
         })
       },
