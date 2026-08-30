@@ -3,6 +3,7 @@ import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import {
+  AnimatedAlert,
   Button,
   Card,
   Radio,
@@ -12,6 +13,7 @@ import {
   Heading,
   headingVariantClass,
 } from "@/components/ui"
+import { useOptionalToast } from "@/context/notifications/NotificationProvider"
 import { useTranslation } from "react-i18next"
 import { useMemo, useState } from "react"
 import useGetOrgs from "@/hooks/useGetOrgs"
@@ -265,6 +267,85 @@ function PreferenceRadioGroup<T extends string>({
   )
 }
 
+// Draft-and-save wrapper around PreferenceRadioGroup (Primer settings
+// guidance: an explicit Save, not save-on-click). Selection edits a local
+// draft; Save commits it through the pref hook. An unchanged save is a no-op
+// with a notice (the house form pattern), a real save confirms inline and
+// announces to SR. An external pref change (another tab, the OS) re-syncs a
+// pristine draft but never clobbers in-progress edits.
+function PreferenceForm<T extends string>({
+  name,
+  legend,
+  value,
+  onSave,
+  options,
+  savedMessage,
+}: {
+  name: string
+  legend: string
+  value: T
+  onSave: (next: T) => void
+  options: { value: T; label: string; hint: string }[]
+  savedMessage: string
+}) {
+  const { t } = useTranslation()
+  // Optional: the settings page also renders in provider-less tests.
+  const announce = useOptionalToast()?.announce
+  const [draft, setDraft] = useState<T>(value)
+  const [lastValue, setLastValue] = useState(value)
+  if (value !== lastValue) {
+    setLastValue(value)
+    setDraft((current) => (current === lastValue ? value : current))
+  }
+  const [notice, setNotice] = useState<"saved" | "noChanges" | null>(null)
+
+  return (
+    <form
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault()
+        if (draft === value) {
+          setNotice("noChanges")
+          return
+        }
+        onSave(draft)
+        setNotice("saved")
+        announce?.(savedMessage)
+      }}
+    >
+      <PreferenceRadioGroup
+        name={name}
+        legend={legend}
+        value={draft}
+        onChange={(next) => {
+          setDraft(next)
+          setNotice(null)
+        }}
+        options={options}
+      />
+      <AnimatedAlert
+        tone="info"
+        show={notice === "noChanges"}
+        className="mt-3 text-sm"
+      >
+        {t("settings.noChangesToSave")}
+      </AnimatedAlert>
+      <AnimatedAlert
+        tone="success"
+        show={notice === "saved"}
+        className="mt-3 text-sm"
+      >
+        {savedMessage}
+      </AnimatedAlert>
+      <div className="mt-4">
+        <Button type="submit" variant="primary" size="sm">
+          {t("common.save")}
+        </Button>
+      </div>
+    </form>
+  )
+}
+
 // Card shell for a settings section: an anchor heading + subheading over its
 // body. Matches the Service-tokens / Hidden-orgs sections.
 function SettingsSectionCard({
@@ -358,12 +439,13 @@ function AppearanceSection({ highlighted }: { highlighted?: boolean }) {
       subheading={t("settings.appearance.subheading")}
       highlighted={highlighted}
     >
-      <PreferenceRadioGroup
+      <PreferenceForm
         name="theme-pref"
         legend={t("settings.appearance.groupAria")}
         value={pref}
-        onChange={setThemePref}
+        onSave={setThemePref}
         options={options}
+        savedMessage={t("settings.appearance.saved")}
       />
     </SettingsSectionCard>
   )
@@ -417,12 +499,13 @@ function MotionSection({ highlighted }: { highlighted?: boolean }) {
       subheading={t("settings.motion.subheading")}
       highlighted={highlighted}
     >
-      <PreferenceRadioGroup
+      <PreferenceForm
         name="motion-pref"
         legend={t("settings.motion.groupAria")}
         value={pref}
-        onChange={setPref}
+        onSave={setPref}
         options={options}
+        savedMessage={t("settings.motion.saved")}
       />
     </SettingsSectionCard>
   )

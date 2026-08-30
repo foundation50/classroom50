@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { AppBanner } from "@/components/AppBanner"
 import { Button } from "@/components/ui"
 import { useVersionCheck } from "@/hooks/useVersionCheck"
+import { useBannerSlot } from "@/context/bannerStack/BannerStackProvider"
 
 // State the banner depends on — structural so the decision stays a pure,
 // testable function (mirrors resolveDriftBannerView).
@@ -39,10 +40,11 @@ export function UpdateAvailableBanner() {
     dismissedCommit,
     deployedCommit: data?.commit,
   })
+  const granted = useBannerSlot("update-available", visible)
 
   return (
     <AnimatePresence initial={false}>
-      {visible ? (
+      {granted ? (
         <AppBanner
           key="app-update"
           tone="success"
