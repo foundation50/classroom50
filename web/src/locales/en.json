@@ -3548,7 +3548,12 @@
     "breadcrumb": {
       "label": "Breadcrumb",
       "classes": "Classrooms",
-      "assignments": "Assignments"
+      "assignments": "Assignments",
+      "switchClassroom": "Switch classroom",
+      "switchAssignment": "Switch assignment",
+      "findClassroom": "Find a classroom…",
+      "findAssignment": "Find an assignment…",
+      "noMatches": "No matches."
     },
     "planBadge": {
       "label": "{{name}} plan"

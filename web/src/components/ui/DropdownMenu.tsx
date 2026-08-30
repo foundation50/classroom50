@@ -7,6 +7,11 @@ import { cx } from "./cx"
 // utilities (width, max-height, overflow) via className.
 export type DropdownMenuProps = ComponentPropsWithRef<"ul">
 
+// The one popover-surface recipe (chrome only, no layout), shared by
+// DropdownMenu, Combobox, and panel-style popovers that aren't a bare menu.
+export const popoverPanelClass =
+  "z-10 mt-1 rounded-box border border-base-300 bg-base-100 shadow"
+
 export function DropdownMenu({
   className,
   children,
@@ -16,10 +21,7 @@ export function DropdownMenu({
     <ul
       tabIndex={0}
       role="menu"
-      className={cx(
-        "dropdown-content menu z-10 mt-1 rounded-box border border-base-300 bg-base-100 p-1 shadow",
-        className,
-      )}
+      className={cx("dropdown-content menu p-1", popoverPanelClass, className)}
       {...props}
     >
       {children}

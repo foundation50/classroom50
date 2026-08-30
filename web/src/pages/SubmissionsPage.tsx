@@ -1035,10 +1035,7 @@ const SubmissionsPageContent = () => {
 
   return (
     <PageShell>
-      <Breadcrumb
-        endpoint={t("nav.submissions")}
-        assignmentName={assignmentInfo?.name}
-      />
+      <Breadcrumb switcher="assignment" assignmentName={assignmentInfo?.name} />
       {emptyRoster.show && (
         <EmptyRosterNotice
           org={org}

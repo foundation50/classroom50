@@ -9,6 +9,7 @@ import {
 
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { cx } from "./cx"
+import { popoverPanelClass } from "./DropdownMenu"
 import { Input, type InputProps } from "./Input"
 
 // The app's only combobox. Data-free on purpose: it owns the ARIA contract,
@@ -188,7 +189,7 @@ export function Combobox<T>({
           // preventDefault themselves before selecting; the scrollable list is
           // exempted below so scrollbar drags still work.
           onPointerDown={(event) => event.preventDefault()}
-          className="absolute inset-x-0 top-full z-10 mt-1 rounded-box border border-base-300 bg-base-100 shadow"
+          className={cx("absolute inset-x-0 top-full", popoverPanelClass)}
         >
           {status ? (
             <div
