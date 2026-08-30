@@ -74,6 +74,10 @@ export type RosterImportOutcome =
       // (already a member, or the send failed) — preserved for the roster's
       // manual reconciliation instead of silently dropped.
       unlinkedKept: number
+      // Addresses the preview linked to verified members of a previous
+      // classroom; their rows rode the account pipeline. Carried through
+      // untouched, purely for the result dialog.
+      linked: { email: string; login: string; classroom: string }[]
     }
 
 // The roster-import flow. Runs up to two pipelines SEQUENTIALLY over one shared
@@ -105,6 +109,10 @@ export async function runRosterImport(
     // Name-only rows (no identity cell at all) the parse kept: written to the
     // roster as `unlinked` rows for manual reconciliation instead of dropped.
     unlinkedRows?: UnlinkedRowInput[]
+    // Confirmed resolve-before-invite links: email rows the caller already
+    // converted into account rows in `rows`. No behavior here — echoed to the
+    // outcome so the result dialog can report them.
+    linkedEmails?: { email: string; login: string; classroom: string }[]
     // The classification computed in the preview, snapshotted so the process
     // pass matches exactly what the teacher confirmed. Its identityMismatches
     // are the confirmed stale-username repairs.
@@ -119,6 +127,7 @@ export async function runRosterImport(
     rows,
     emailInvites = [],
     unlinkedRows = [],
+    linkedEmails = [],
     plan,
     onProgress,
     messages,
@@ -471,5 +480,6 @@ export async function runRosterImport(
     emailResult,
     emailError,
     unlinkedKept,
+    linked: linkedEmails,
   }
 }

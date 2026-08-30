@@ -107,6 +107,7 @@ export const RosterImportResult = ({
   emailResult = null,
   emailError = null,
   unlinkedKept = 0,
+  linked = [],
 }: {
   result: BulkImportResult
   inviteError: string | null
@@ -117,6 +118,9 @@ export const RosterImportResult = ({
   // Rows kept on the roster as UNLINKED (name-only rows, plus email rows whose
   // invitation couldn't be sent) — reconciled later from the roster page.
   unlinkedKept?: number
+  // Addresses linked to a verified member of a previous classroom and enrolled
+  // directly instead of invited.
+  linked?: { email: string; login: string; classroom: string }[]
 }) => {
   const { t } = useTranslation()
   const emailInvitedCount = emailResult?.invited.length ?? 0
@@ -239,6 +243,17 @@ export const RosterImportResult = ({
             key: `${f.username}-${i}`,
             label: f.username,
             detail: f.message,
+          }))}
+        />
+      )}
+
+      {linked.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailLinked")}
+          rows={linked.map((l) => ({
+            key: l.email,
+            label: l.email,
+            detail: `@${l.login} · ${l.classroom}`,
           }))}
         />
       )}

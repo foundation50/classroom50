@@ -2,15 +2,16 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { UploadIcon } from "@/components/ui/icons"
 
-import { resolveRosterUploadContext } from "@/domain/students"
+import { resolveRosterUploadContext, resolveEmailRows } from "@/domain/students"
 import type {
   BulkImportResult,
   BulkInviteByEmailResult,
   ImportRosterRow,
+  ResolvedEmailLink,
   RosterUploadContext,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Checkbox, Modal } from "@/components/ui"
 import { BulkProgressRow, bulkProgressPct } from "@/components/bulk/resultView"
 import {
   classifyRosterUpload,
@@ -133,6 +134,17 @@ const UploadRoster = ({
   const [emailResult, setEmailResult] =
     useState<BulkInviteByEmailResult | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
+  // Uploaded addresses the identity directory matched to a verified member of a
+  // previous classroom — enrolled directly instead of invited, once confirmed.
+  // Resolved ONCE per parse, alongside the identity resolution below.
+  const [emailLinks, setEmailLinks] = useState<ResolvedEmailLink[]>([])
+  const [emailLinksDegraded, setEmailLinksDegraded] = useState(false)
+  // The teacher's explicit confirmation of those email→account links.
+  const [linksConfirmed, setLinksConfirmed] = useState(false)
+  // The links the completed run actually applied, for the result dialog.
+  const [linkedApplied, setLinkedApplied] = useState<
+    { email: string; login: string; classroom: string }[]
+  >([])
   // Why an empty parse produced no rows, when the cause is the file's shape (no
   // identity column, or malformed CSV) rather than merely unusable values.
   const [headerIssue, setHeaderIssue] = useState<ImportHeaderIssue | null>(null)
@@ -195,6 +207,10 @@ const UploadRoster = ({
     setHeaderIssue(null)
     setEmailResult(null)
     setEmailError(null)
+    setEmailLinks([])
+    setEmailLinksDegraded(false)
+    setLinksConfirmed(false)
+    setLinkedApplied([])
     setProgress({ processed: 0, total: 0, message: "" })
     setResult(null)
     setInviteOutcome(null)
@@ -267,8 +283,22 @@ const UploadRoster = ({
           context.loginById,
         )
         if (preflightToken.current !== token) return
+        // Resolve-before-invite: match the file's addresses against previous
+        // classrooms' rosters, so the links land (and gate) with the preview.
+        // Never called for a file with no email rows — the directory build
+        // behind it walks every classroom.
+        const emailAddresses = resolvedFile.rows
+          .filter(isEmailRow)
+          .map((r) => r.identity.email)
+        const linkResult =
+          emailAddresses.length > 0
+            ? await resolveEmailRows(client, org, emailAddresses)
+            : { links: [], degraded: false }
+        if (preflightToken.current !== token) return
         setResolved(resolvedFile.rows)
         setUnusableRows(resolvedFile.unusable)
+        setEmailLinks(linkResult.links)
+        setEmailLinksDegraded(linkResult.degraded)
         setRolesByUser((prev) =>
           Object.fromEntries(
             resolvedFile.rows.map((r) => {
@@ -369,6 +399,7 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
+    setLinksConfirmed(false)
   }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
@@ -511,7 +542,8 @@ const UploadRoster = ({
     (!preflight || hasActionableWork) &&
     (!needsRoleConfirm || roleChangesConfirmed) &&
     (!needsMetadataConfirm || metadataConfirmed) &&
-    (!needsMismatchConfirm || mismatchConfirmed)
+    (!needsMismatchConfirm || mismatchConfirmed) &&
+    (emailLinks.length === 0 || linksConfirmed)
 
   // The roster primary-button label names the action and its scale. Counts here
   // come from inviteCount / metadataUpdate — never the row total — so the button
@@ -549,6 +581,7 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
+    setLinksConfirmed(false)
     setParseId((n) => n + 1)
     const parsed = parseRosterImportFile(text, kind)
     setParsedRows(parsed.rows)
@@ -556,6 +589,8 @@ const UploadRoster = ({
     setUnlinkedParsed(parsed.unlinked)
     setResolved(null)
     setUnusableRows([])
+    setEmailLinks([])
+    setEmailLinksDegraded(false)
     setHeaderIssue(
       parsed.rows.length === 0 ? detectImportHeaderIssue(text) : null,
     )
@@ -632,19 +667,54 @@ const UploadRoster = ({
       section: r.section,
       role: roleFor(r.identity),
     }))
-    const emailInvites = emailRows.map((r) => ({
-      email: r.identity.email,
-      role: roleFor(r.identity),
-      first_name: r.first_name,
-      last_name: r.last_name,
-      section: r.section,
-    }))
+    // Resolve-before-invite: a confirmed link's email row imports as an ACCOUNT
+    // row under the verified member's current login, and its address leaves the
+    // invite list — the account pipeline enrolls/team-adds it like any other row.
+    const linkByEmail = new Map(emailLinks.map((l) => [l.email, l]))
+    const linkedRows: ImportRosterRow[] = []
+    const linkedEmails: { email: string; login: string; classroom: string }[] =
+      []
+    const emailInvites: {
+      email: string
+      role: ClassroomRole
+      first_name?: string
+      last_name?: string
+      section?: string
+    }[] = []
+    for (const r of emailRows) {
+      const link = linkByEmail.get(r.identity.email)
+      if (link) {
+        linkedRows.push({
+          username: link.login,
+          github_id: String(link.id),
+          first_name: r.first_name,
+          last_name: r.last_name,
+          email: r.email || r.identity.email,
+          section: r.section,
+          role: roleFor(r.identity),
+        })
+        linkedEmails.push({
+          email: link.email,
+          login: link.login,
+          classroom: link.classroom,
+        })
+      } else {
+        emailInvites.push({
+          email: r.identity.email,
+          role: roleFor(r.identity),
+          first_name: r.first_name,
+          last_name: r.last_name,
+          section: r.section,
+        })
+      }
+    }
 
     const outcome = await runRosterImport(client, {
       org,
       classroom,
-      rows: accountImportRows,
+      rows: [...accountImportRows, ...linkedRows],
       emailInvites,
+      linkedEmails,
       unlinkedRows: unlinkedParsed,
       // Snapshot the classification computed in the preview so the process pass
       // matches exactly what the teacher confirmed. It also carries the identity
@@ -677,6 +747,7 @@ const UploadRoster = ({
     setEmailResult(outcome.emailResult)
     setEmailError(outcome.emailError)
     setUnlinkedKept(outcome.unlinkedKept)
+    setLinkedApplied(outcome.linked)
     setPhase("complete")
     onSuccess?.(outcome.importResult)
     // A mixed batch touches both caches, so both callbacks fire.
@@ -850,6 +921,34 @@ const UploadRoster = ({
                     <span>{t("students.emailInviteRosterNotice")}</span>
                   </Alert>
                 ) : null}
+                {/* Resolve-before-invite: addresses matched (and re-verified) to
+                    members of previous classrooms skip the invitation entirely.
+                    An explicit confirmation gates the linking, mirroring the
+                    metadata gate above. */}
+                {emailLinks.length > 0 ? (
+                  <Alert tone="info" className="mb-4">
+                    <div className="flex flex-col gap-2">
+                      <span>
+                        {t("students.emailLinksNotice", {
+                          count: emailLinks.length,
+                        })}
+                        {emailLinksDegraded
+                          ? ` ${t("students.emailLinksDegraded")}`
+                          : null}
+                      </span>
+                      <label className="flex items-start gap-2 text-sm">
+                        <Checkbox
+                          className="mt-0.5"
+                          checked={linksConfirmed}
+                          onChange={(e) =>
+                            setLinksConfirmed(e.currentTarget.checked)
+                          }
+                        />
+                        <span>{t("students.emailLinksConfirm")}</span>
+                      </label>
+                    </div>
+                  </Alert>
+                ) : null}
                 {/* Name-only rows can't be invited or enrolled; they're kept
                     on the roster as unlinked rows the teacher links later. */}
                 {unlinkedParsed.length > 0 ? (
@@ -987,6 +1086,7 @@ const UploadRoster = ({
             emailResult={emailResult}
             emailError={emailError}
             unlinkedKept={unlinkedKept}
+            linked={linkedApplied}
           />
         )}
 

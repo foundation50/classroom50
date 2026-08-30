@@ -107,6 +107,18 @@ describe("runRosterImport — happy path", () => {
       { username: "alice", role: "student" },
     ])
     expect(out.inviteError).toBeNull()
+    // No links were passed, so none are reported.
+    expect(out.linked).toEqual([])
+  })
+
+  it("threads linkedEmails through to the outcome untouched", async () => {
+    const linkedEmails = [
+      { email: "zoe@x.edu", login: "zoe-gh", classroom: "cs50-fall" },
+    ]
+    const out = await call({ linkedEmails })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(out.linked).toEqual(linkedEmails)
   })
 })
 
