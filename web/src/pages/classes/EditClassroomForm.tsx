@@ -527,7 +527,9 @@ const EditClassroomForm = ({
           </AnimatedAlert>
           {/* Save outcome from the host page, in the same near-actions slot. */}
           <OutcomeAlert outcome={saveOutcome} className="text-sm" />
-          <Card.Actions className="justify-end p-2">
+          {/* Primer page-form convention: actions bottom-LEFT (right alignment
+              is for dialog footers). */}
+          <Card.Actions className="justify-start p-2">
             <form.Subscribe selector={(state) => [state.isSubmitting]}>
               {([isSubmitting]) => (
                 <Button

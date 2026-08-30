@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { AlertIcon, CalendarIcon, DownloadIcon } from "@/components/ui/icons"
 import Papa from "papaparse"
@@ -381,23 +381,65 @@ const SubmissionsPageContent = () => {
       setFilters((current) => applyStatusSelection(current, statusParam))
     }
   }
-  // Client-side table pagination over the display list. `page` is 0-based;
-  // clamped at render (pageBounds) so a filter that shrinks the list can't
-  // strand the view on an empty page.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  // Client-side table pagination over the display list, held in the URL
+  // (Primer: pagination is URL state — reload/back keep the page and a view
+  // is sharable). 1-based `?page=` in the URL, 0-based internally; page 1 and
+  // the default size never travel. Clamped at render (pageBounds) so a
+  // filter that shrinks the list can't strand the view on an empty page.
+  const { page: pageParam, pageSize: pageSizeParam } = useSearch({
+    strict: false,
+  })
+  const page = (pageParam ?? 1) - 1
+  const pageSize = pageSizeParam ?? DEFAULT_PAGE_SIZE
+  const setPage = useCallback(
+    (next: number) => {
+      void navigate({
+        to: ".",
+        // Paging is a navigation step: pushed, so Back walks pages.
+        search: (prev) => ({
+          ...prev,
+          page: next >= 1 ? next + 1 : undefined,
+        }),
+        resetScroll: false,
+      })
+    },
+    [navigate],
+  )
+  const setPageSize = useCallback(
+    (next: number) => {
+      void navigate({
+        to: ".",
+        search: (prev) => ({
+          ...prev,
+          pageSize: next === DEFAULT_PAGE_SIZE ? undefined : next,
+          page: undefined,
+        }),
+        resetScroll: false,
+      })
+    },
+    [navigate],
+  )
   // Reset to the first page whenever the visible set changes (new search,
-  // filter, sort, page size, or a different assignment). Done render-purely via
-  // a stored view signature (setState-during-render, not an effect) so the reset
-  // lands in the same commit as the change — no extra render, and no
-  // setState-in-effect. React bails out of the re-render once the signature
-  // matches.
+  // filter, sort, or a different assignment). The URL page param is cleared
+  // via a replace so the reset doesn't pollute history; the render-time
+  // clamp covers the frame until the navigation lands.
   const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
-  const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
-  if (viewSignature !== lastViewSignature) {
-    setLastViewSignature(viewSignature)
-    setPage(0)
-  }
+  const lastViewSignatureRef = useRef(viewSignature)
+  useEffect(() => {
+    if (viewSignature === lastViewSignatureRef.current) return
+    lastViewSignatureRef.current = viewSignature
+    if (pageParam !== undefined) {
+      void navigate({
+        to: ".",
+        search: (prev) => ({
+          ...prev,
+          page: undefined,
+        }),
+        replace: true,
+        resetScroll: false,
+      })
+    }
+  }, [viewSignature, pageParam, navigate])
   // The animation signature drops the search text: re-keying the rows on every
   // keystroke would remount and replay the whole tbody entrance while typing.
   // Filter/sort/size/assignment changes still re-stagger.
@@ -1484,6 +1526,18 @@ const SubmissionsPageContent = () => {
             </>
           }
         />
+        {/* Dense-content skip (Primer): keyboard users can jump past the
+            whole submissions table instead of tabbing through every row's
+            links and actions. Mirrors the global skip-to-main recipe. */}
+        <Button
+          as="a"
+          href="#after-submissions-table"
+          variant="primary"
+          size="sm"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
+        >
+          {t("submissions.skipPastTable")}
+        </Button>
         <SubmissionsTable
           scores={visibleRows}
           students={students}
@@ -1594,6 +1648,8 @@ const SubmissionsPageContent = () => {
           // is enabled, so a detection-only view (no_autograder) still shimmers.
           settling={overlayCapable && (livePending || detectedPending)}
         />
+        {/* The skip link's landing point, focusable so focus actually moves. */}
+        <span id="after-submissions-table" tabIndex={-1} />
       </div>
       <ConfirmModal
         open={regradeConfirmOpen}

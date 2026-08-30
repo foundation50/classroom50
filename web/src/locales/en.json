@@ -2688,6 +2688,7 @@
     },
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View template",
+    "skipPastTable": "Skip past the submissions table",
     "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
     "closedNotice": "Submissions are closed. New students can't accept this assignment. When you close from here, accepted students' repositories are set to read-only; existing work is preserved. Reopen it from the Actions menu to allow submissions again.",
     "lock": {

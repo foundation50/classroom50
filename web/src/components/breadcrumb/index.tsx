@@ -24,7 +24,7 @@ import {
   InlineMessage,
   popoverPanelClass,
 } from "@/components/ui"
-import { CheckIcon, ChevronDownIcon, SearchIcon } from "@/components/ui/icons"
+import { CheckIcon, TriangleDownIcon, SearchIcon } from "@/components/ui/icons"
 import { GitHubAPIError } from "@/github-core/errors"
 
 // GitHub-style leaf switcher (like the repo picker in github.com's header):
@@ -113,7 +113,7 @@ const CrumbSwitcher = <T,>({
             setOpen((wasOpen) => !wasOpen)
           }}
         >
-          <ChevronDownIcon aria-hidden="true" className="size-4" />
+          <TriangleDownIcon aria-hidden="true" className="size-4" />
         </Button>
         {open && (
           <div

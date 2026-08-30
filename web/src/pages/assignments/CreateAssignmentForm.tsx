@@ -262,17 +262,9 @@ const CreateAssignmentForm = ({
       <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
         {t("assignments.form.noChangesToSave")}
       </AnimatedAlert>
-      <div className="card-actions justify-end p-2">
-        {onCancel && (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onCancel}
-            disabled={loading}
-          >
-            {readOnly ? t("assignments.form.back") : t("common.cancel")}
-          </Button>
-        )}
+      {/* Primer page-form convention: actions bottom-LEFT, primary leftmost
+          (right alignment is for dialog footers). */}
+      <div className="card-actions justify-start p-2">
         {!readOnly && (
           <form.Subscribe
             selector={(state) => [
@@ -283,18 +275,6 @@ const CreateAssignmentForm = ({
           >
             {([, isSubmitting, isDefaultValue]) => (
               <>
-                {/* Edit mode: revert all unsaved edits back to the stored
-                    assignment. Shown only while the form is dirty. */}
-                {edit && !isDefaultValue ? (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={discardChanges}
-                    disabled={isSubmitting || loading}
-                  >
-                    {t("assignments.form.discardChanges")}
-                  </Button>
-                ) : null}
                 <Button
                   variant="primary"
                   type="submit"
@@ -310,9 +290,31 @@ const CreateAssignmentForm = ({
                       ? t("assignments.form.saveChanges")
                       : t("assignments.form.createButton")}
                 </Button>
+                {/* Edit mode: revert all unsaved edits back to the stored
+                    assignment. Shown only while the form is dirty. */}
+                {edit && !isDefaultValue ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={discardChanges}
+                    disabled={isSubmitting || loading}
+                  >
+                    {t("assignments.form.discardChanges")}
+                  </Button>
+                ) : null}
               </>
             )}
           </form.Subscribe>
+        )}
+        {onCancel && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onCancel}
+            disabled={loading}
+          >
+            {readOnly ? t("assignments.form.back") : t("common.cancel")}
+          </Button>
         )}
       </div>
     </form>

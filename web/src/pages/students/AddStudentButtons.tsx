@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import {
-  ChevronDownIcon,
+  TriangleDownIcon,
   PencilIcon,
   PlusIcon,
   ShareAndroidIcon,
@@ -71,7 +71,7 @@ export function AddStudentButtons({
             className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("students.addMoreOptions")}
           >
-            <ChevronDownIcon aria-hidden="true" className="size-4" />
+            <TriangleDownIcon aria-hidden="true" className="size-4" />
           </Button>
           <DropdownMenu className="w-max">
             <li>

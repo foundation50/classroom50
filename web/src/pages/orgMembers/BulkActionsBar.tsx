@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  ChevronDownIcon,
+  TriangleDownIcon,
   PlusIcon,
   SignOutIcon,
   XCircleIcon,
@@ -245,7 +245,7 @@ const BulkActionsBar = ({
           <div className="dropdown dropdown-start">
             <Button variant="primary" size="sm">
               {t("orgMembers.bulk.actions")}
-              <ChevronDownIcon aria-hidden="true" className="size-4" />
+              <TriangleDownIcon aria-hidden="true" className="size-4" />
             </Button>
             <DropdownMenu className="w-64">
               <li>
