@@ -17,6 +17,29 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.39.0](https://github.com/foundation50/classroom50/compare/web-v1.38.0...web-v1.39.0) (2026-08-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811))
+
+### Features
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811)) ([319b7f6](https://github.com/foundation50/classroom50/commit/319b7f613db0f260ba619001eb4e93f345fdbc14))
+
+
+### Bug Fixes
+
+* **web:** a11y mechanics sweep — focus, announcements, and error copy ([#808](https://github.com/foundation50/classroom50/issues/808)) ([56cb0bc](https://github.com/foundation50/classroom50/commit/56cb0bcec9f16132197165a76e1d7f7b3b277ad4))
+* **web:** adopt Primer conventions — carets, save placement, banners, URL pagination ([#810](https://github.com/foundation50/classroom50/issues/810)) ([d0ae13f](https://github.com/foundation50/classroom50/commit/d0ae13f7ac21d8cc30d3fe18a5b01c9ed454deb0))
+* **web:** align user-facing copy with GitHub voice and Primer conventions ([#813](https://github.com/foundation50/classroom50/issues/813)) ([6f7216b](https://github.com/foundation50/classroom50/commit/6f7216b95f0533346c7d49a003b6bf0c12dacf18))
+
+
+### Miscellaneous Chores
+
+* pin next release to 1.39.0 ([640736b](https://github.com/foundation50/classroom50/commit/640736b70c3ee865aef7a99eb78a212833391eb4))
+
 ## [1.38.0](https://github.com/foundation50/classroom50/compare/web-v1.37.0...web-v1.38.0) (2026-08-30)
 
 

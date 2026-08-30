@@ -17,6 +17,22 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.39.0](https://github.com/foundation50/classroom50/compare/cli-v1.38.0...cli-v1.39.0) (2026-08-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811))
+
+### Features
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811)) ([319b7f6](https://github.com/foundation50/classroom50/commit/319b7f613db0f260ba619001eb4e93f345fdbc14))
+
+
+### Miscellaneous Chores
+
+* pin next release to 1.39.0 ([640736b](https://github.com/foundation50/classroom50/commit/640736b70c3ee865aef7a99eb78a212833391eb4))
+
 ## [1.38.0](https://github.com/foundation50/classroom50/compare/cli-v1.37.0...cli-v1.38.0) (2026-08-30)
 
 
