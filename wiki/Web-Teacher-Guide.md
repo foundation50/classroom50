@@ -363,11 +363,13 @@ GitHub organization.
 > Students must accept the organization invitation before they can work on
 > assignments.
 
-**Add member** — add one student by GitHub username (name and email
+**Add member** (in the **Upload roster** button's dropdown menu) — add one
+student by GitHub username (name and email
 optional). You can enter an email instead of a username; that student then
 completes a separate onboarding process (see below).
 
-**Upload** — bulk-add students from a file. Roster CSV is how every upload is
+**Upload roster** — bulk-add
+students from a file. Roster CSV is how every upload is
 read, and it handles all three shapes; the other two entries in **Read the file
 as** are overrides that force one interpretation:
 
@@ -379,6 +381,10 @@ as** are overrides that force one interpretation:
   even if it looks like an address, or **Email addresses** to read every line as
   an address and no columns at all. Either one is you telling the app what every
   line is, so a line that doesn't fit is reported rather than read the other way.
+
+Not sure what the file should look like? **Download template** on the upload
+dialog saves a five-row example CSV — rows with a username only, an email only,
+and both — to fill in with your own students.
 
 If any row carries a value the upload can't use — an address that isn't valid, a
 `github_id` matching no account, a line that's neither a handle nor an address —
@@ -475,7 +481,8 @@ Here `octocat` is found by id (even after a rename), `hubot` by username, and
 > address.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
-or `github_id`. Either tool reads that file back: **Upload** matches those rows
+or `github_id`. Either tool reads that file back: **Upload roster** matches
+those rows
 by email, and `gh teacher roster import` corrects a pending row's name and
 section by address without touching the invitation. A row identified only by
 `github_id` is the exception, since `import` resolves students by username: it

@@ -524,6 +524,7 @@
   },
   "students": {
     "addTitle": "Add member",
+    "addMoreOptions": "More add options",
     "addHint": "Enter a GitHub username to add a student with their details, or an email to send an organization invite. An email invite keeps the name and section you enter on a pending roster row until the student accepts.",
     "addRoleLabel": "Role",
     "addStaffHint": "Teachers, head TAs, and TAs are added by GitHub username. Teachers and head TAs get write access to the classroom50 repository; TAs get read-only. A teacher is granted organization owner.",
@@ -824,7 +825,8 @@
     "couldNotReadFile": "Could not read file",
     "startingImport": "Starting import...",
     "importFailed": "Import failed",
-    "uploadTitle": "Upload",
+    "uploadTitle": "Upload roster",
+    "downloadTemplate": "Download template",
     "uploadDropPrompt": "Drop a file here, or click to choose",
     "uploadHintAll": "A roster CSV with a github_id, username, or email column — or a plain list of GitHub usernames or email addresses, one per line. Rows with only an email are invited by email.",
     "detectedFormat": "Read the file as",

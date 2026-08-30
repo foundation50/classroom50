@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  ROSTER_TEMPLATE_CSV,
   coerceImportRole,
   detectImportHeaderIssue,
   parseRosterImportFile,
@@ -516,5 +517,29 @@ describe("parseRosterImportFile: email-list override", () => {
       dropped: [],
       unlinked: [],
     })
+  })
+})
+
+describe("ROSTER_TEMPLATE_CSV", () => {
+  it("parses cleanly under the default format, covering every identity shape", () => {
+    const result = parse(ROSTER_TEMPLATE_CSV)
+    expect(result.dropped).toEqual([])
+    expect(result.unlinked).toEqual([])
+    const identities = result.rows.map((r) => r.identity)
+    expect(identities).toEqual([
+      { username: "student1", email: "student1@example.com" },
+      { username: "student2" },
+      { email: "student3@example.net" },
+      { username: "student4" },
+      { username: "student5", email: "student5@example.edu" },
+    ])
+    // Reserved example domains only — a template address must never be
+    // deliverable.
+    for (const row of result.rows) {
+      if (row.email) expect(row.email).toMatch(/@example\.(com|net|edu)$/)
+    }
+    // At least one row leaves section blank, so the template itself shows the
+    // column is optional.
+    expect(result.rows.some((r) => r.section === "")).toBe(true)
   })
 })

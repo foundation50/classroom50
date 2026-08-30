@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { UploadIcon } from "@/components/ui/icons"
+import { DownloadIcon, UploadIcon } from "@/components/ui/icons"
 
 import { resolveRosterUploadContext, resolveEmailRows } from "@/domain/students"
 import type {
@@ -20,6 +20,7 @@ import {
 } from "@/util/rosterUploadPreflight"
 import { logger } from "@/lib/logger"
 import { decodeTextFile } from "@/util/fileBytes"
+import { downloadBlob } from "@/util/downloadBlob"
 import { isTeacherRole } from "@/authz"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
@@ -74,6 +75,20 @@ export {
 } from "./rosterImportParse"
 
 const log = logger.scope("students:UploadRoster")
+
+// A five-row starter roster: no github_id column (teachers rarely have it),
+// every common identity shape — username-only, email-only, and both — and a
+// section-less row so the column reads as optional.
+// Addresses use reserved example domains so none can ever be deliverable.
+export const ROSTER_TEMPLATE_CSV =
+  [
+    "username,first_name,last_name,email,section",
+    "student1,Mario,Mario,student1@example.com,A",
+    "student2,Luigi,Mario,,A",
+    ",Peach,Toadstool,student3@example.net,B",
+    "student4,Bowser,Koopa,,B",
+    "student5,Yoshi,Yoshi,student5@example.edu,",
+  ].join("\n") + "\n"
 
 type UploadRosterProps = {
   org: string
@@ -850,9 +865,30 @@ const UploadRoster = ({
               <p className="text-sm opacity-70">
                 {t("students.uploadHintAll")}
               </p>
-              <Button variant="primary" size="sm" className="mt-2">
-                {t("students.chooseFile")}
-              </Button>
+              <div className="mt-2 flex items-center gap-2">
+                <Button variant="primary" size="sm">
+                  {t("students.chooseFile")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-base-content/70"
+                  onClick={(e) => {
+                    // The whole drop zone opens the file picker on click;
+                    // downloading the template must not also do that.
+                    e.stopPropagation()
+                    downloadBlob(
+                      new Blob([ROSTER_TEMPLATE_CSV], {
+                        type: "text/csv;charset=utf-8",
+                      }),
+                      "roster-template.csv",
+                    )
+                  }}
+                >
+                  <DownloadIcon aria-hidden="true" className="size-4" />
+                  {t("students.downloadTemplate")}
+                </Button>
+              </div>
             </div>
             <p className="mt-3 text-center text-xs opacity-60">
               {t("students.supportedFormats")}
