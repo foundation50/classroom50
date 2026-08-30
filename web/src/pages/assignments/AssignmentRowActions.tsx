@@ -99,13 +99,18 @@ export const CopyAcceptLinkAction = ({
       variant="ghost"
       size="sm"
       shape="circle"
-      disabled={secretPending}
+      // aria-disabled + click guard instead of `disabled`: the button stays
+      // focusable so the title/aria-label reason ("secret still loading" /
+      // "load failed") is reachable by keyboard and screen readers.
+      aria-disabled={secretPending || undefined}
+      className={secretPending ? "opacity-50" : undefined}
       title={state ?? t("assignments.table.copyLinkTitle")}
       aria-label={t("assignments.table.copyLinkAria", {
         name: assignmentName(assignment),
       })}
       onClick={(e) => {
         e.stopPropagation()
+        if (secretPending) return
         void copy()
       }}
     >

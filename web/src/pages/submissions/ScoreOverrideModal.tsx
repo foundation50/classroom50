@@ -1,14 +1,7 @@
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Alert,
-  Button,
-  FormField,
-  Input,
-  Modal,
-  Spinner,
-} from "@/components/ui"
+import { Alert, Button, FormField, Input, Modal } from "@/components/ui"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { useSetScoreOverride } from "@/hooks/mutations/useSetScoreOverride"
 
@@ -225,7 +218,6 @@ export function ScoreOverrideModal({
               </Button>
             ) : null}
           </div>
-          {saving ? <Spinner size="xs" className="self-center" /> : null}
           <Button
             type="button"
             variant="ghost"
@@ -240,8 +232,9 @@ export function ScoreOverrideModal({
             variant="primary"
             size="sm"
             // Enabled while invalid (Primer): the validation errors already
-            // render live below the inputs; save() guards re-entry.
-            disabled={saving}
+            // render live below the inputs; save() guards re-entry. `loading`
+            // keeps it focusable-but-inert and announces busy.
+            loading={saving}
             onClick={save}
           >
             {t("submissions.scoreOverride.save")}

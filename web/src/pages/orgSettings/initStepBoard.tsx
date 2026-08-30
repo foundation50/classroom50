@@ -19,7 +19,7 @@ import {
   isOrgDefaultsStepData,
   unenforcedDefaultItems,
 } from "./orgDefaultsStepData"
-import { Badge, Spinner, rtlFlip, type BadgeTone } from "@/components/ui"
+import { Badge, InlineSpinner, rtlFlip, type BadgeTone } from "@/components/ui"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
@@ -216,7 +216,7 @@ const STATUS_ICON: Record<InitStepStatus, ReactNode> = {
   complete: <CheckCircleFillIcon aria-hidden="true" className="size-4" />,
   warning: <AlertFillIcon aria-hidden="true" className="size-4" />,
   error: <XCircleFillIcon aria-hidden="true" className="size-4" />,
-  running: <Spinner size="xs" className="size-4" />,
+  running: <InlineSpinner className="size-4" />,
   pending: null,
   skipped: null,
 }

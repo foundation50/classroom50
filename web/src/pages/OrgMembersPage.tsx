@@ -862,7 +862,11 @@ const OrgMembersPage = () => {
                                   label: row.username || row.email || row.name,
                                 })
                           }
-                          disabled={isSelf(row)}
+                          // aria-disabled + click guard instead of `disabled`:
+                          // the checkbox stays focusable so the "you can't
+                          // select yourself" reason reaches keyboard and
+                          // screen-reader users.
+                          aria-disabled={isSelf(row) || undefined}
                           title={
                             isSelf(row)
                               ? t("orgMembers.bulk.selfNotSelectable")
@@ -871,9 +875,16 @@ const OrgMembersPage = () => {
                           checked={selectedKeys.has(row.key)}
                           onClick={(e) => {
                             e.stopPropagation()
+                            if (isSelf(row)) {
+                              e.preventDefault()
+                              return
+                            }
                             handleRowCheckboxClick(e, row.key)
                           }}
-                          onChange={() => handleToggleRow(row.key)}
+                          onChange={() => {
+                            if (isSelf(row)) return
+                            handleToggleRow(row.key)
+                          }}
                         />
                       </td>
                       <td className="min-w-0">

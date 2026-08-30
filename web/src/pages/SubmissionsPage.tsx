@@ -22,7 +22,7 @@ import {
   EmphasisLtr,
   HelpTooltip,
   MetricBar,
-  Spinner,
+  InlineSpinner,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
@@ -1200,7 +1200,7 @@ const SubmissionsPageContent = () => {
           )}
           {collectScores.phase === "running" && (
             <Alert tone="info" role="status">
-              <Spinner size="xs" />
+              <InlineSpinner />
               {t("submissions.collect.statusRunning")}
             </Alert>
           )}
@@ -1241,7 +1241,7 @@ const SubmissionsPageContent = () => {
           )}
           {regradeAll.phase === "running" && (
             <Alert tone="info" role="status">
-              <Spinner size="xs" />
+              <InlineSpinner />
               {t("submissions.regradeAll.statusRunning")}
             </Alert>
           )}

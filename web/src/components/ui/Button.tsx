@@ -12,11 +12,12 @@ import { cx } from "./cx"
 // The canonical button. Wraps daisyUI `btn` so the ~160 inline sites share one
 // prop->class mapping instead of hand-ordered modifier strings. Color/size are
 // props; icon-only buttons pick a `shape`; `loading` renders the accessible
-// Spinner inside and disables the button (replacing the hand-placed inner
-// spinners the audit found). A trailing `className` escape hatch stays for the
-// per-site layout utilities (`w-full`, `join-item`, `self-start`, ...). `ref`
-// is a plain prop (React 19) so sites that manage focus can still reach the
-// underlying element.
+// Spinner inside and makes the button inert WITHOUT semantically disabling it
+// (aria-disabled + click guard — a native `disabled` would drop keyboard focus
+// mid-action, per Primer's loading guidance). A trailing `className` escape
+// hatch stays for the per-site layout utilities (`w-full`, `join-item`,
+// `self-start`, ...). `ref` is a plain prop (React 19) so sites that manage
+// focus can still reach the underlying element.
 //
 // Passing `href` (or `as="a"`) renders an <a> that reuses the same recipe, so
 // link-shaped actions (open a repo/commit in a new tab) share the button look
@@ -114,6 +115,7 @@ export function Button({
   disabled,
   type,
   ref,
+  onClick,
   ...rest
 }: ButtonProps) {
   const classes = cx(
@@ -147,6 +149,11 @@ export function Button({
         download={download}
         aria-disabled={inert || undefined}
         aria-busy={loading || undefined}
+        onClick={
+          inert
+            ? (event) => event.preventDefault()
+            : (onClick as AnchorHTMLAttributes<HTMLAnchorElement>["onClick"])
+        }
         {...(rest as AnchorHTMLAttributes<HTMLAnchorElement>)}
       >
         {inner}
@@ -159,8 +166,22 @@ export function Button({
       ref={ref as Ref<HTMLButtonElement>}
       type={type ?? "button"}
       className={classes}
-      disabled={disabled || loading}
+      // Loading does NOT semantically disable (Primer: a disabled initiating
+      // button drops keyboard focus mid-action). aria-disabled + the click
+      // guard keep it inert but focusable; aria-busy carries the state.
+      disabled={disabled}
+      aria-disabled={disabled || loading || undefined}
       aria-busy={loading || undefined}
+      onClick={(event) => {
+        if (loading) {
+          // Swallow activation (including a submit re-fire) mid-action; the
+          // per-site re-entrancy latches stay the real guard.
+          event.preventDefault()
+          event.stopPropagation()
+          return
+        }
+        onClick?.(event)
+      }}
       {...rest}
     >
       {inner}

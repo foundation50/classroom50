@@ -22,7 +22,7 @@ import {
   Modal,
   ModalIcon,
   RouterButton,
-  Spinner,
+  InlineSpinner,
   Toolbar,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
@@ -481,8 +481,11 @@ export const ConfirmStep = ({
         </p>
 
         {isLoading && !plan && (
-          <div className="mt-6 flex items-center gap-2 text-base-content/70">
-            <Spinner size="sm" />
+          <div
+            role="status"
+            className="mt-6 flex items-center gap-2 text-base-content/70"
+          >
+            <InlineSpinner size="sm" />
             {t("migration.confirm.loading")}
           </div>
         )}
@@ -597,8 +600,11 @@ export const ConfirmStep = ({
               ))}
 
             {(isFetching || pendingEdit) && !controlsDisabled && (
-              <div className="mt-4 flex items-center gap-1 text-sm text-base-content/50">
-                <Spinner size="xs" />
+              <div
+                role="status"
+                className="mt-4 flex items-center gap-1 text-sm text-base-content/50"
+              >
+                <InlineSpinner />
                 {t("migration.confirm.updating")}
               </div>
             )}
