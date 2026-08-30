@@ -2,7 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { Badge, OutcomeAlert, Spinner, Toggle } from "@/components/ui"
+import { Badge, OutcomeAlert, InlineSpinner, Toggle } from "@/components/ui"
 import type { AlertOutcome } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
@@ -17,6 +17,7 @@ import useGetOrgActionsBudget from "@/hooks/useGetOrgActionsBudget"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
+import { errorText } from "@/types/localizedMessage"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
@@ -161,7 +162,7 @@ const OrgActionsSection = ({
         setOutcome({
           tone: "error",
           message: t("orgSettings.actions.toggleFailed", {
-            message: err instanceof Error ? err.message : String(err),
+            message: errorText(t, err),
           }),
         })
       },
@@ -201,8 +202,11 @@ const OrgActionsSection = ({
       }
     >
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-base-content/70">
-          <Spinner /> {t("orgSettings.actions.loading")}
+        <div
+          role="status"
+          className="flex items-center gap-2 text-sm text-base-content/70"
+        >
+          <InlineSpinner size="md" /> {t("orgSettings.actions.loading")}
         </div>
       ) : (
         <div className="space-y-4">
@@ -245,8 +249,11 @@ const OrgActionsSection = ({
           </label>
 
           {mutation.isPending && (
-            <div className="flex items-center gap-2 text-sm text-base-content/70">
-              <Spinner /> {t("orgSettings.actions.applying")}
+            <div
+              role="status"
+              className="flex items-center gap-2 text-sm text-base-content/70"
+            >
+              <InlineSpinner size="md" /> {t("orgSettings.actions.applying")}
             </div>
           )}
 

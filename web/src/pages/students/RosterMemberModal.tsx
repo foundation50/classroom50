@@ -26,6 +26,7 @@ import {
 } from "@/domain/students"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
+import { errorText } from "@/types/localizedMessage"
 import {
   isMalformedGitHubId,
   nameFromParts,
@@ -531,10 +532,7 @@ const RosterMemberModal = ({
       onUnenrolled(row.key, result.teamWarning)
       onClose()
     } catch (err) {
-      onError(
-        row.key,
-        err instanceof Error ? err.message : t("students.somethingWentWrong"),
-      )
+      onError(row.key, errorText(t, err))
     } finally {
       setWorking(false)
       setConfirmingUnenroll(false)

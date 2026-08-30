@@ -13,6 +13,7 @@ import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 import { normalizePagesBaseUrl } from "@/util/pagesBaseUrl"
 import { CollapsibleAdvanced } from "@/pages/assignments/sections/CollapsibleAdvanced"
 import {
@@ -193,10 +194,7 @@ const ArchiveClassroomButton = ({
                 archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
                 {
                   classroom,
-                  error:
-                    err instanceof Error
-                      ? err.message
-                      : t("classes.somethingWentWrong"),
+                  error: errorText(t, err),
                 },
               ),
               { cause: err },
@@ -275,10 +273,7 @@ const CleanupInviteDataButton = ({
             // Surfaces inside the confirm dialog rather than a corner toast.
             throw new Error(
               t("classes.inviteCleanup.failed", {
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : t("classes.somethingWentWrong"),
+                error: errorText(t, err),
               }),
               { cause: err },
             )

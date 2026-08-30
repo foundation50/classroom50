@@ -148,6 +148,8 @@
     }
   },
   "common": {
+    "checkingOrgAccess": "Checking your access to this organization…",
+    "resolvingRole": "Checking your role…",
     "goToDashboard": "Go to dashboard",
     "close": "Close",
     "cancel": "Cancel",
@@ -236,7 +238,6 @@
       "suffix": "Template repo suffix",
       "suffixHelp": "Optional text appended to every copied template repo name (e.g. hw1 becomes hw1-f26). Use it only if a repo with the assignment's name already exists in this organization and the import would otherwise collide. Leave blank in most cases.",
       "suffixPlaceholder": "optional",
-      "preflightError": "Couldn't build the import preview.",
       "loading": "Retrieving classroom data…",
       "updating": "Updating preview…",
       "selectAll": "Select all assignments",
@@ -820,7 +821,6 @@
     "githubIdentityNoId": "GitHub: <username>@{{username}}</username>",
     "saving": "Saving...",
     "saveChanges": "Save changes",
-    "couldNotReadFile": "Could not read file",
     "startingImport": "Starting import...",
     "importFailed": "Import failed",
     "uploadTitle": "Upload roster",
@@ -1591,6 +1591,8 @@
       "sortByName": "Sort by name",
       "sortByDue": "Sort by due date",
       "empty": "No assignments created.",
+      "emptyTitle": "Create your first assignment",
+      "emptyBody": "Assignments you create or reuse from another classroom will show up here.",
       "loadError": "Couldn't load assignments from GitHub. This is a load error — your assignments aren't gone.",
       "retry": "Retry",
       "individual": "Individual",
@@ -2019,7 +2021,6 @@
       "placeholder": "github_pat_…",
       "validating": "Validating…",
       "saveButton": "Save token",
-      "saveError": "Could not validate or save the token.",
       "saved": "Service token saved.",
       "savedNoMetadata": "Service token saved, but its expiry and name couldn't be recorded — the health chip may show “expiry not tracked” until you save again."
     },
@@ -2119,7 +2120,6 @@
     "teardown": {
       "title": "Danger zone",
       "description": "Tear down this organization by deleting <strong>every</strong> repository in it, including the <repo>classroom50</repo> repository, and removing the GitHub team of every classroom. This is irreversible.",
-      "prepareError": "Couldn't prepare the teardown plan.",
       "preparing": "Preparing…",
       "button": "Tear down organization",
       "confirmText": "delete {{org}}",
@@ -3149,8 +3149,7 @@
       "outcome": {
         "paused": "Autograding paused for this repository.",
         "resumed": "Autograding resumed for this repository.",
-        "notGradable": "This repository has no autograding workflow — nothing to change.",
-        "failed": "Could not change the autograding state — try again."
+        "notGradable": "This repository has no autograding workflow — nothing to change."
       }
     },
     "rowVisibility": {
@@ -3165,8 +3164,7 @@
       "confirmLabel": "Make public",
       "outcome": {
         "public": "Repository is now public.",
-        "private": "Repository is now private.",
-        "failed": "Could not change the repository's visibility — try again."
+        "private": "Repository is now private."
       }
     },
     "bulkAutograde": {
@@ -3551,7 +3549,8 @@
       "switchAssignment": "Switch assignment",
       "findClassroom": "Find a classroom…",
       "findAssignment": "Find an assignment…",
-      "noMatches": "No matches."
+      "noMatches": "No matches.",
+      "loadError": "Couldn't load the list. It's a load error — nothing is gone."
     },
     "planBadge": {
       "label": "{{name}} plan"

@@ -17,8 +17,15 @@ import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePoint
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
-import { Button, cx, Input, popoverPanelClass } from "@/components/ui"
+import {
+  Button,
+  cx,
+  Input,
+  InlineMessage,
+  popoverPanelClass,
+} from "@/components/ui"
 import { CheckIcon, ChevronDownIcon, SearchIcon } from "@/components/ui/icons"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // GitHub-style leaf switcher (like the repo picker in github.com's header):
 // the current segment's name in default ink plus a caret that opens a titled
@@ -35,6 +42,7 @@ const CrumbSwitcher = <T,>({
   searchPlaceholder,
   items,
   getLabel,
+  loadError = false,
   children,
 }: {
   name: ReactNode
@@ -46,6 +54,10 @@ const CrumbSwitcher = <T,>({
   items: T[]
   // Plain-text form of an item, used for search filtering.
   getLabel: (item: T) => string
+  // The source list failed to load (a real failure, not the expected
+  // role-based 404): the panel says so instead of showing an empty list a
+  // user would misread as "nothing to switch to".
+  loadError?: boolean
   // Renders the filtered items as menu rows; `close` dismisses the panel on
   // selection.
   children: (visible: T[], close: () => void) => ReactNode
@@ -134,7 +146,11 @@ const CrumbSwitcher = <T,>({
                 onChange={(event) => setQuery(event.target.value)}
               />
             </div>
-            {visible.length > 0 ? (
+            {loadError ? (
+              <InlineMessage tone="error" className="px-3 py-3">
+                {t("components.breadcrumb.loadError")}
+              </InlineMessage>
+            ) : visible.length > 0 ? (
               // text-base-content: rows are actions, not trail links, so they
               // opt out of the nav's [&_a] accent-blue. The --menu-active-*
               // vars tone daisyUI's pressed-item feedback down from the
@@ -182,11 +198,21 @@ const Breadcrumb = ({
   // Switcher menu data. Each source stays idle (disabled query / empty list)
   // unless its switcher is requested. Both read the staff config repo, so for
   // a student the list resolves empty and the leaf degrades to plain text.
-  const { classes } = useGetClasses(switcher === "classroom" ? org : undefined)
+  const { classes, isError: classesError } = useGetClasses(
+    switcher === "classroom" ? org : undefined,
+  )
   const classroomSummaries = useClassroomSummaries(org, classes)
   const assignmentsQuery = useGetClassroomAssignments(org, classroom, {
     enabled: switcher === "assignment",
   })
+  // A student's 404 on the staff-only assignments.json is the expected
+  // degrade-to-plain-text path, not a load failure.
+  const assignmentsError =
+    assignmentsQuery.isError &&
+    !(
+      assignmentsQuery.error instanceof GitHubAPIError &&
+      assignmentsQuery.error.status === 404
+    )
 
   if (!org && !classroom) return <div></div>
 
@@ -221,13 +247,14 @@ const Breadcrumb = ({
         )}
         {org && classroom && switcher === "classroom" && (
           <li aria-current="page">
-            {switchableClassrooms.length > 1 ? (
+            {switchableClassrooms.length > 1 || classesError ? (
               <CrumbSwitcher
                 name={classroomName}
                 title={t("components.breadcrumb.switchClassroom")}
                 searchPlaceholder={t("components.breadcrumb.findClassroom")}
                 items={switchableClassrooms}
                 getLabel={(s) => classroomDisplayName(s, s.path)}
+                loadError={classesError}
               >
                 {(visible, close) =>
                   visible.map((s) => (
@@ -275,7 +302,7 @@ const Breadcrumb = ({
             </li>
             {switcher === "assignment" ? (
               <li aria-current="page">
-                {assignments.length > 1 ? (
+                {assignments.length > 1 || assignmentsError ? (
                   <CrumbSwitcher
                     name={assignmentName || assignment}
                     title={t("components.breadcrumb.switchAssignment")}
@@ -284,6 +311,7 @@ const Breadcrumb = ({
                     )}
                     items={assignments}
                     getLabel={(a) => a.name || a.slug}
+                    loadError={assignmentsError}
                   >
                     {/* Straight to each assignment's submissions gradebook:
                         the switcher only materializes from the staff-only

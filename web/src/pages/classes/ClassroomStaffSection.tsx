@@ -28,6 +28,7 @@ import useCancelClassroomInvite from "@/hooks/mutations/useCancelClassroomInvite
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 import {
   ROLE_LABEL_KEY,
   ROLE_PLURAL_KEY,
@@ -165,9 +166,7 @@ const AddStaff = ({
               const message =
                 err instanceof GitHubAPIError && err.status === 404
                   ? t("classes.staff.noSuchUser")
-                  : err instanceof Error
-                    ? err.message
-                    : t("classes.somethingWentWrong")
+                  : errorText(t, err)
               setAddError(t("classes.staff.addFailed", { message }))
               usernameInputRef.current?.focus()
             },
@@ -449,10 +448,7 @@ const StaffMemberRow = ({
             throw new Error(
               t("classes.staff.removeFailed", {
                 login: member.login,
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : t("classes.somethingWentWrong"),
+                error: errorText(t, err),
               }),
               { cause: err },
             )
@@ -547,10 +543,7 @@ const PendingStaffRow = ({
                         setRowError(
                           t("classes.staff.resendFailed", {
                             who,
-                            error:
-                              err instanceof Error
-                                ? err.message
-                                : t("classes.somethingWentWrong"),
+                            error: errorText(t, err),
                           }),
                         ),
                     },
@@ -589,10 +582,7 @@ const PendingStaffRow = ({
                       setRowError(
                         t("classes.staff.cancelFailed", {
                           who,
-                          error:
-                            err instanceof Error
-                              ? err.message
-                              : t("classes.somethingWentWrong"),
+                          error: errorText(t, err),
                         }),
                       ),
                   },

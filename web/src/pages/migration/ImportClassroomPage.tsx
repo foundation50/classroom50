@@ -11,7 +11,14 @@ import { CheckIcon } from "@/components/ui/icons"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Button, Card, RouterButton, Spinner, cx } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  Card,
+  RouterButton,
+  InlineSpinner,
+  cx,
+} from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
@@ -141,8 +148,11 @@ export const ImportClassroomPage = () => {
       />
 
       {status.isLoading && (
-        <div className="flex items-center gap-2 text-base-content/70">
-          <Spinner size="sm" />
+        <div
+          role="status"
+          className="flex items-center gap-2 text-base-content/70"
+        >
+          <InlineSpinner size="sm" />
           {t("migration.gate.checking")}
         </div>
       )}

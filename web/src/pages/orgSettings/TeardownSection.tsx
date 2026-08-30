@@ -8,11 +8,11 @@ import { Button, HelpTooltip, MonoLtr, cx } from "@/components/ui"
 import {
   formatTeardownResult,
   TeardownAbortError,
-  TeardownMarkerError,
   TeardownScopeError,
   type TeardownPlan,
 } from "@/domain/teardown"
 import {
+  errorText,
   localizedMessageOf,
   resolveLocalizedMessage,
 } from "@/types/localizedMessage"
@@ -72,10 +72,7 @@ const TeardownSection = ({
       onError: (err) => {
         log.warn("teardown plan failed", { org, err })
         setError({
-          message:
-            err instanceof TeardownMarkerError
-              ? err.message
-              : t("orgSettings.teardown.prepareError"),
+          message: errorText(t, err),
           canElevate: false,
         })
       },

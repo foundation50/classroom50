@@ -18,6 +18,7 @@ import {
   latestCollectedAt,
 } from "@/pages/submissions/dashboard"
 import { formatRelativeToNow } from "@/util/formatDate"
+import { errorText } from "@/types/localizedMessage"
 
 // Classroom-wide "Collect all", presented as the assignments toolbar's
 // freshness widget — a passive "Submission data collected x ago" line, an
@@ -190,7 +191,7 @@ export function ClassroomCollectButton({
       message:
         collect.error instanceof Error
           ? `${t("submissions.collect.statusFailedWithReason", {
-              reason: collect.error.message,
+              reason: errorText(t, collect.error),
             })} ${t("submissions.collect.statusFailedHint")}`
           : `${t("submissions.collect.statusFailed")} ${t(
               "submissions.collect.statusFailedHint",

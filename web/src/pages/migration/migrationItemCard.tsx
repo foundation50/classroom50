@@ -21,7 +21,7 @@ import {
   Checkbox,
   InlineMessage,
   Input,
-  Spinner,
+  InlineSpinner,
   cx,
   rtlFlip,
   type BadgeTone,
@@ -91,7 +91,7 @@ const STATUS_BADGE: Record<
 }
 
 const StatusIcon = ({ icon }: { icon: string }) => {
-  if (icon === "running") return <Spinner size="xs" className="size-4" />
+  if (icon === "running") return <InlineSpinner className="size-4" />
   if (icon === "done")
     return <CheckCircleIcon aria-hidden="true" className="size-4" />
   if (icon === "skip")

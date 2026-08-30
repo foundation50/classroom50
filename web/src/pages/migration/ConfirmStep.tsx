@@ -22,14 +22,11 @@ import {
   Modal,
   ModalIcon,
   RouterButton,
-  Spinner,
+  InlineSpinner,
   Toolbar,
 } from "@/components/ui"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
-import {
-  localizedMessageOf,
-  resolveLocalizedMessage,
-} from "@/types/localizedMessage"
+import { errorText } from "@/types/localizedMessage"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import { useMigrateClassroom } from "@/hooks/mutations/useMigrateClassroom"
 import { buildPreflight } from "@/migration/preflight"
@@ -62,14 +59,6 @@ export const ConfirmStep = ({
   const client = useGitHubClient()
   const { data: viewer } = useGitHubViewer()
   const mutation = useMigrateClassroom(targetOrg)
-
-  // Prefer a translatable { key, params } payload the migration layer attached
-  // over a raw English Error.message (which is a diagnostic fallback only).
-  const renderError = (err: unknown, fallbackKey: string): string => {
-    const localized = localizedMessageOf(err)
-    if (localized) return resolveLocalizedMessage(t, localized)
-    return err instanceof Error ? err.message : t(fallbackKey)
-  }
 
   // Tunables. `shortName` and `templateSuffix` change the PLAN (target repo
   // names, collision checks), so they key the preflight query. `name` and
@@ -481,17 +470,18 @@ export const ConfirmStep = ({
         </p>
 
         {isLoading && !plan && (
-          <div className="mt-6 flex items-center gap-2 text-base-content/70">
-            <Spinner size="sm" />
+          <div
+            role="status"
+            className="mt-6 flex items-center gap-2 text-base-content/70"
+          >
+            <InlineSpinner size="sm" />
             {t("migration.confirm.loading")}
           </div>
         )}
 
         {isError && !plan && (
           <Alert tone="error" className="mt-4 items-start">
-            <span className="text-sm">
-              {renderError(error, "migration.confirm.preflightError")}
-            </span>
+            <span className="text-sm">{errorText(t, error)}</span>
             <Button variant="ghost" size="sm" onClick={() => refetch()}>
               {t("migration.select.retry")}
             </Button>
@@ -570,9 +560,7 @@ export const ConfirmStep = ({
               <Alert tone="error" className="mt-4 items-start">
                 <div>
                   <p className="font-medium">{t("migration.execute.error")}</p>
-                  <p className="mt-1 text-sm">
-                    {renderError(mutation.error, "migration.execute.error")}
-                  </p>
+                  <p className="mt-1 text-sm">{errorText(t, mutation.error)}</p>
                 </div>
               </Alert>
             )}
@@ -582,9 +570,7 @@ export const ConfirmStep = ({
                 inline — the stale plan stays visible but Import is disabled. */}
             {isError && !controlsDisabled && (
               <Alert tone="error" className="mt-4 items-start">
-                <span className="text-sm">
-                  {renderError(error, "migration.confirm.preflightError")}
-                </span>
+                <span className="text-sm">{errorText(t, error)}</span>
               </Alert>
             )}
 
@@ -597,8 +583,11 @@ export const ConfirmStep = ({
               ))}
 
             {(isFetching || pendingEdit) && !controlsDisabled && (
-              <div className="mt-4 flex items-center gap-1 text-sm text-base-content/50">
-                <Spinner size="xs" />
+              <div
+                role="status"
+                className="mt-4 flex items-center gap-1 text-sm text-base-content/50"
+              >
+                <InlineSpinner />
                 {t("migration.confirm.updating")}
               </div>
             )}

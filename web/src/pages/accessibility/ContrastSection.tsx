@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import { InfoIcon } from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Modal } from "@/components/ui"
+import { useRovingTabList } from "@/hooks/useRovingTabList"
 
 import {
   STATUS_TONE,
@@ -219,6 +220,11 @@ export function ContrastSection() {
 
   const activeTheme = pickedTheme ?? audit?.themes[0]?.theme ?? null
   const shownTheme = audit?.themes.find((th) => th.theme === activeTheme)
+  const tabsId = useId()
+  const tabProps = useRovingTabList(
+    audit?.themes.length ?? 0,
+    audit?.themes.findIndex((th) => th.theme === activeTheme) ?? 0,
+  )
   const marginCount = audit?.summary.marginMisses ?? 0
 
   return (
@@ -254,14 +260,17 @@ export function ContrastSection() {
 
           <div className="flex flex-wrap items-center gap-3">
             <div role="tablist" className="tabs-boxed tabs w-fit">
-              {audit.themes.map((th) => (
+              {audit.themes.map((th, index) => (
                 <button
                   key={th.theme}
                   type="button"
                   role="tab"
+                  id={`${tabsId}-tab-${th.theme}`}
                   aria-selected={th.theme === activeTheme}
+                  aria-controls={`${tabsId}-panel`}
                   className={tabClass(th.theme === activeTheme)}
                   onClick={() => setPickedTheme(th.theme)}
+                  {...tabProps(index)}
                 >
                   {th.label}
                 </button>
@@ -270,7 +279,13 @@ export function ContrastSection() {
           </div>
 
           {shownTheme && (
-            <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
+            <div
+              role="tabpanel"
+              id={`${tabsId}-panel`}
+              aria-labelledby={`${tabsId}-tab-${shownTheme.theme}`}
+            >
+              <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
+            </div>
           )}
 
           <details className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">

@@ -41,6 +41,7 @@ import {
 } from "@/pages/orgMembers/bulkResults"
 import PreviewPanel from "@/pages/orgMembers/PreviewPanel"
 import RemoveConfirmDialog from "@/pages/orgMembers/RemoveConfirmDialog"
+import { errorText } from "@/types/localizedMessage"
 
 const log = logger.scope("orgMembers:BulkActionsBar")
 
@@ -222,9 +223,7 @@ const BulkActionsBar = ({
       setPhase("complete")
     } catch (err) {
       log.error("bulk action failed", { err, record: true })
-      setError(
-        err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
-      )
+      setError(errorText(t, err))
       setPhase("error")
     }
   }

@@ -13,7 +13,7 @@ import {
   Modal,
   ModalIcon,
   OutcomeAlert,
-  Spinner,
+  InlineSpinner,
 } from "@/components/ui"
 import type { AlertOutcome } from "@/components/ui"
 import type { Assignment } from "@/types/classroom"
@@ -262,8 +262,11 @@ const TeamsList = ({
 
   if (loading) {
     return (
-      <p className="mt-2 flex items-center gap-2 text-sm text-base-content/60">
-        <Spinner size="xs" />
+      <p
+        role="status"
+        className="mt-2 flex items-center gap-2 text-sm text-base-content/60"
+      >
+        <InlineSpinner />
         {t("assignments.template.accessModal.teamsLoading")}
       </p>
     )

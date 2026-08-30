@@ -9,6 +9,7 @@ import {
 import {
   Alert,
   AnimatedAlert,
+  OutcomeAlert,
   Badge,
   Button,
   SelectAllCheckbox,
@@ -141,7 +142,7 @@ const EnrolledStudents = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const { data: viewer } = useGitHubViewer()
   // Roster invite / unenroll / role-change all hit owner-only org APIs
   // (createOrgInvitation, removeOrgMembership, setOrgMembershipRole). Gate the
@@ -165,6 +166,9 @@ const EnrolledStudents = ({
   )
   // Manual/auto roster-sync failure, rendered as a banner above the table.
   const [syncError, setSyncError] = useState<string | null>(null)
+  // Batch-edit partial outcome (stale-view misses, failed team adds),
+  // rendered as a warning banner above the refreshed table.
+  const [editWarning, setEditWarning] = useState<string | null>(null)
   // Explains a no-op select-all (visible rows exist but none are selectable).
   const [noneSelectableNotice, setNoneSelectableNotice] = useState(false)
   const [grouping, setGrouping] = useState<RosterGrouping>("none")
@@ -592,25 +596,26 @@ const EnrolledStudents = ({
       suppressedLogins.remember(removed.map((r) => r.username))
   }
 
-  // Batch Edit mode saved: toast the outcome (applied count, plus any misses
-  // or failed team adds as warnings), refresh every cache the commit touched,
+  // Batch Edit mode saved: announce the applied count (the refreshed table
+  // itself shows the outcome), surface any misses or failed team adds as a
+  // warning banner above the table (Primer: feedback near the rows it
+  // describes, not a corner toast), refresh every cache the commit touched,
   // and exit the mode. Misses are stale-view skips the domain reported, not
   // errors — the refreshed table is the retry surface.
   const onEditSaved = (result: ApplyRosterEditsResult) => {
     setEditing(false)
+    setEditWarning(null)
     if (result.applied > 0) {
-      notify({
-        tone: "success",
-        durationMs: 5000,
-        message: t("students.editRoster.savedToast", {
+      announce(
+        t("students.editRoster.savedToast", {
           count: result.applied,
         }),
-      })
+      )
     }
+    const warnings: string[] = []
     if (result.missed.length > 0) {
-      notify({
-        tone: "warning",
-        message: t("students.editRoster.missedToast", {
+      warnings.push(
+        t("students.editRoster.missedToast", {
           count: result.missed.length,
           details: result.missed
             .map((m) =>
@@ -624,17 +629,17 @@ const EnrolledStudents = ({
             )
             .join("; "),
         }),
-      })
+      )
     }
     if (result.teamAddFailedLogins.length > 0) {
-      notify({
-        tone: "warning",
-        message: t("students.editRoster.teamAddFailed", {
+      warnings.push(
+        t("students.editRoster.teamAddFailed", {
           count: result.teamAddFailedLogins.length,
           logins: result.teamAddFailedLogins.join(", "),
         }),
-      })
+      )
     }
+    if (warnings.length > 0) setEditWarning(warnings.join(" "))
     invalidateInviteQueries()
     invalidateTeamRoster()
     refetchRoster()
@@ -891,6 +896,13 @@ const EnrolledStudents = ({
       >
         {syncError}
       </AnimatedAlert>
+      {/* Batch-edit partial outcome: the refreshed table is the retry
+          surface, so the detail banner sits right above it. */}
+      <OutcomeAlert
+        outcome={editWarning ? { tone: "warning", message: editWarning } : null}
+        className="mb-3 text-sm"
+        onDismiss={() => setEditWarning(null)}
+      />
       {/* Select-all explanation: inline above the table (Primer: feedback
           near the control). `show` re-derives against the current view so
           the notice self-clears the moment a filter/search change makes

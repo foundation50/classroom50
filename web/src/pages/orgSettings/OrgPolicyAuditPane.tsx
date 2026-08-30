@@ -16,7 +16,7 @@ import useRepairOrgPolicyConcern from "@/hooks/mutations/useRepairOrgPolicyConce
 import {
   Badge,
   Button,
-  Spinner,
+  InlineSpinner,
   rtlFlip,
   type BadgeTone,
 } from "@/components/ui"
@@ -592,8 +592,11 @@ const OrgPolicyAuditPane = ({
       }
     >
       {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-base-content/70">
-          <Spinner size="sm" />
+        <div
+          role="status"
+          className="flex items-center gap-2 text-sm text-base-content/70"
+        >
+          <InlineSpinner size="sm" />
           {t("orgSettings.audit.auditing")}
         </div>
       )}

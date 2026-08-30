@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Toolbar, cx } from "@/components/ui"
+import { useRovingTabList } from "@/hooks/useRovingTabList"
 import {
   CONFORMANCE_TONE,
   hasGenericRemark,
@@ -45,6 +46,11 @@ function VpatConformanceTable({
   const { t } = useTranslation()
   const [activePrinciple, setActivePrinciple] =
     useState<WcagPrinciple>("Perceivable")
+  const tabsId = useId()
+  const tabProps = useRovingTabList(
+    PRINCIPLE_ORDER.length,
+    PRINCIPLE_ORDER.indexOf(activePrinciple),
+  )
 
   // Counts per principle reflect the current search/filter so a tab shows how
   // many rows it holds (and an emptied tab reads 0 rather than looking broken).
@@ -65,14 +71,17 @@ function VpatConformanceTable({
           aria-label={t("accessibility.vpat.principleTabsAria")}
           className="tabs-boxed tabs w-fit"
         >
-          {PRINCIPLE_ORDER.map((principle) => (
+          {PRINCIPLE_ORDER.map((principle, index) => (
             <button
               key={principle}
               type="button"
               role="tab"
+              id={`${tabsId}-tab-${principle}`}
               aria-selected={principle === activePrinciple}
+              aria-controls={`${tabsId}-panel`}
               className={tabClass(principle === activePrinciple)}
               onClick={() => setActivePrinciple(principle)}
+              {...tabProps(index)}
             >
               {principle}
               <span
@@ -89,65 +98,73 @@ function VpatConformanceTable({
           ))}
         </div>
 
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
-            <IssueDraftIcon aria-hidden="true" className="size-4" />
-            {t("accessibility.vpat.empty")}
-          </div>
-        ) : (
-          // Deliberately not TableShell: the VPAT matrix is long-form document
-          // content on the public accessibility statement, where the boxed
-          // list-frame treatment would read as UI chrome.
-          <div className="overflow-x-auto">
-            <table className="table w-full">
-              <thead>
-                <tr>
-                  <th className="w-64">
-                    {t("accessibility.vpat.col.criterion")}
-                  </th>
-                  <th className="w-14">{t("accessibility.vpat.col.level")}</th>
-                  <th className="w-40">
-                    {t("accessibility.vpat.col.conformance")}
-                  </th>
-                  <th className="w-28">
-                    {t("accessibility.vpat.col.assessed")}
-                  </th>
-                  <th className="min-w-[24rem]">
-                    {t("accessibility.vpat.col.remarks")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id}>
-                    <td className="align-top">
-                      <span className="font-mono text-xs text-base-content/60">
-                        {c.id}
-                      </span>{" "}
-                      {c.name}
-                    </td>
-                    <td className="align-top font-mono text-xs">{c.level}</td>
-                    <td className="align-top">
-                      <Badge tone={CONFORMANCE_TONE[c.status]}>
-                        {t(`accessibility.vpat.status.${c.status}`)}
-                      </Badge>
-                    </td>
-                    <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
-                      {c.assessed ?? generated}
-                    </td>
-                    <td className="align-top text-sm text-base-content/70">
-                      {hasGenericRemark(c) ? (
-                        <span className="text-base-content/40">—</span>
-                      ) : (
-                        c.remark
-                      )}
-                    </td>
+        <div
+          role="tabpanel"
+          id={`${tabsId}-panel`}
+          aria-labelledby={`${tabsId}-tab-${activePrinciple}`}
+        >
+          {rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
+              <IssueDraftIcon aria-hidden="true" className="size-4" />
+              {t("accessibility.vpat.empty")}
+            </div>
+          ) : (
+            // Deliberately not TableShell: the VPAT matrix is long-form document
+            // content on the public accessibility statement, where the boxed
+            // list-frame treatment would read as UI chrome.
+            <div className="overflow-x-auto">
+              <table className="table w-full">
+                <thead>
+                  <tr>
+                    <th className="w-64">
+                      {t("accessibility.vpat.col.criterion")}
+                    </th>
+                    <th className="w-14">
+                      {t("accessibility.vpat.col.level")}
+                    </th>
+                    <th className="w-40">
+                      {t("accessibility.vpat.col.conformance")}
+                    </th>
+                    <th className="w-28">
+                      {t("accessibility.vpat.col.assessed")}
+                    </th>
+                    <th className="min-w-[24rem]">
+                      {t("accessibility.vpat.col.remarks")}
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {rows.map((c) => (
+                    <tr key={c.id}>
+                      <td className="align-top">
+                        <span className="font-mono text-xs text-base-content/60">
+                          {c.id}
+                        </span>{" "}
+                        {c.name}
+                      </td>
+                      <td className="align-top font-mono text-xs">{c.level}</td>
+                      <td className="align-top">
+                        <Badge tone={CONFORMANCE_TONE[c.status]}>
+                          {t(`accessibility.vpat.status.${c.status}`)}
+                        </Badge>
+                      </td>
+                      <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
+                        {c.assessed ?? generated}
+                      </td>
+                      <td className="align-top text-sm text-base-content/70">
+                        {hasGenericRemark(c) ? (
+                          <span className="text-base-content/40">—</span>
+                        ) : (
+                          c.remark
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </Card.Body>
     </Card>
   )

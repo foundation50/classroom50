@@ -7,6 +7,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
+import { errorText } from "@/types/localizedMessage"
 import type { AssignmentMode } from "@/types/classroom"
 
 // The Feedback-PR action: links to the open Feedback PR (opened at accept
@@ -57,7 +58,7 @@ export const FeedbackPrAction = ({
       // `error`; show it rather than the misleading "no PR yet" message.
       const { data: pr, error } = await refetch()
       if (error) {
-        setErrorMsg(error instanceof Error ? error.message : String(error))
+        setErrorMsg(errorText(t, error))
         setModalOpen(true)
       } else if (pr) {
         window.open(pr.html_url, "_blank", "noopener,noreferrer")
@@ -116,7 +117,7 @@ export const FeedbackPrAction = ({
           setErrorMsg(repairReasonMessage(result))
         },
         onError: (err) => {
-          setErrorMsg(err instanceof Error ? err.message : String(err))
+          setErrorMsg(errorText(t, err))
         },
       },
     )

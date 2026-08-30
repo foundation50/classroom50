@@ -19,6 +19,7 @@ import {
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
 import { logger } from "@/lib/logger"
+import { errorText } from "@/types/localizedMessage"
 import { decodeTextFile } from "@/util/fileBytes"
 import { downloadBlob } from "@/util/downloadBlob"
 import { isTeacherRole } from "@/authz"
@@ -317,9 +318,7 @@ const UploadRoster = ({
         log.warn("roster upload preflight failed", { err, record: true })
         setPreflightContext(null)
         setResolved(null)
-        setPreflightError(
-          err instanceof Error ? err.message : t("students.somethingWentWrong"),
-        )
+        setPreflightError(errorText(t, err))
       })
       .finally(() => {
         if (preflightToken.current === token) setPreflighting(false)
@@ -619,9 +618,7 @@ const UploadRoster = ({
     } catch (err) {
       if (ingestToken.current !== token) return
       log.warn("upload file read/parse failed", { err, record: true })
-      setError(
-        err instanceof Error ? err.message : t("students.couldNotReadFile"),
-      )
+      setError(errorText(t, err))
       setPhase("error")
     }
   }

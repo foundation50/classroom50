@@ -6,7 +6,7 @@
 
 import { useTranslation } from "react-i18next"
 
-import { Button, Spinner, TableShell } from "@/components/ui"
+import { Button, InlineSpinner, Spinner, TableShell } from "@/components/ui"
 
 // The lifecycle of a bulk run's modal: idle (closed) -> working (progress) ->
 // complete/error (results).
@@ -106,14 +106,17 @@ export const bulkProgressPct = (
     ? Math.round((progress.processed / progress.total) * 100)
     : 0
 
-// Shared <progress> props. With `indeterminateUntilFirst`, `value` is omitted
-// until the first item lands so a slow first write animates as an
-// indeterminate track instead of sitting at 0%.
+// Shared <progress> props — including the accessible name (a bare <progress>
+// is announced as an unlabeled progressbar). With `indeterminateUntilFirst`,
+// `value` is omitted until the first item lands so a slow first write
+// animates as an indeterminate track instead of sitting at 0%.
 export const bulkProgressBarProps = (
   progress: Pick<BulkProgress, "processed" | "total">,
+  label: string,
   indeterminateUntilFirst = false,
 ) => ({
   className: "progress progress-primary w-full",
+  "aria-label": label,
   ...(indeterminateUntilFirst && progress.processed === 0
     ? {}
     : { value: bulkProgressPct(progress) }),
@@ -134,7 +137,9 @@ export const BulkProgressBlock = ({
 }) => (
   <div className="mt-6 flex flex-col items-center gap-3 py-6">
     <Spinner label={workingLabel} />
-    <progress {...bulkProgressBarProps(progress, indeterminateUntilFirst)} />
+    <progress
+      {...bulkProgressBarProps(progress, workingLabel, indeterminateUntilFirst)}
+    />
     <p className="break-all text-center text-sm text-base-content/70">
       {caption}
     </p>
@@ -157,7 +162,7 @@ export const BulkProgressRow = ({
 }) => (
   <div className="mt-6">
     <p className="mb-2 font-medium">{progress.message}</p>
-    <progress {...bulkProgressBarProps(progress)} />
+    <progress {...bulkProgressBarProps(progress, progress.message)} />
     <div className="mt-2 flex justify-between text-sm opacity-70">
       <span>{processedCaption}</span>
       <span>{percentCaption}</span>
@@ -172,14 +177,17 @@ export const BulkProgressInline = ({
   label,
   progress,
 }: {
-  label: React.ReactNode
+  label: string
   progress: Pick<BulkProgress, "processed" | "total">
 }) => (
   <div className="mt-4 space-y-3">
-    <p className="flex items-center gap-2 text-sm text-base-content/70">
-      <Spinner size="xs" />
+    <p
+      role="status"
+      className="flex items-center gap-2 text-sm text-base-content/70"
+    >
+      <InlineSpinner />
       {label}
     </p>
-    <progress {...bulkProgressBarProps(progress)} />
+    <progress {...bulkProgressBarProps(progress, label)} />
   </div>
 )

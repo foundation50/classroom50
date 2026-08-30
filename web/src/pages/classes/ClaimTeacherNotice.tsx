@@ -8,6 +8,7 @@ import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRolePr
 import { can } from "@/authz"
 import { useClaimTeacher } from "@/hooks/mutations/useClaimTeacher"
 import { Alert, Button, InlineMessage } from "@/components/ui"
+import { errorText } from "@/types/localizedMessage"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("classroom:claim-teacher")
@@ -50,10 +51,7 @@ export function ClaimTeacherNotice({
         // that caused it).
         setClaimError(
           t("classes.claimTeacher.failed", {
-            message:
-              err instanceof Error
-                ? err.message
-                : t("classes.somethingWentWrong"),
+            message: errorText(t, err),
           }),
         )
       },

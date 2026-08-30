@@ -53,6 +53,7 @@ import {
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
+import { errorText } from "@/types/localizedMessage"
 
 // A submit/<UTC-ts>-<short-sha> release tag → its trailing short sha, so a
 // push submission can link the graded release published at its commit. Returns
@@ -247,7 +248,7 @@ const SubmissionBody = ({
     const firstError = [releasesErrorObj, repoError].find(
       (e) => e instanceof Error,
     )
-    const message = firstError instanceof Error ? firstError.message : ""
+    const message = firstError ? errorText(t, firstError) : ""
     return (
       <Alert tone="error">
         {t("submissions.student.loadError")}

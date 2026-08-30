@@ -19,7 +19,7 @@ import {
   Button,
   SkeletonRows,
   SortableTh,
-  Spinner,
+  InlineSpinner,
   TablePagination,
   TableShell,
 } from "@/components/ui"
@@ -985,8 +985,8 @@ const SubmissionsTable = ({
                 colSpan={5}
                 className="py-4 text-center text-sm text-base-content/60"
               >
-                <span className="inline-flex items-center gap-2">
-                  <Spinner size="xs" />
+                <span role="status" className="inline-flex items-center gap-2">
+                  <InlineSpinner />
                   {t("submissions.table.resolvingNonSubmitters")}
                 </span>
               </td>

@@ -12,6 +12,7 @@ import { CellPlaceholder } from "@/components/memberList/memberPresentation"
 import type { GitHubClient } from "@/github-core/client"
 import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { errorText } from "@/types/localizedMessage"
 
 // Org-specific member presentation. The view-agnostic primitives (initialsFor,
 // GitHubIdentity) moved down to components/memberList/memberPresentation so a
@@ -161,8 +162,7 @@ export const runInviteMember = async (
     handlers.onError(
       t("orgMembers.inviteFailed", {
         label,
-        reason:
-          err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
+        reason: errorText(t, err),
       }),
     )
   }
