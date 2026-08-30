@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { DownloadIcon, UploadIcon } from "@/components/ui/icons"
 
-import { resolveRosterUploadContext, resolveEmailRows } from "@/domain/students"
+import { resolveRosterUploadContext } from "@/domain/students"
 import type {
   BulkImportResult,
   BulkInviteByEmailResult,
@@ -27,6 +27,7 @@ import {
   DEFAULT_UPLOAD_KIND,
   type UploadKind,
 } from "@/pages/students/uploadClassify"
+import { useResolveEmailRows } from "@/hooks/useIdentityDirectory"
 import { DetectedFormatSelect } from "@/pages/students/DetectedFormatSelect"
 import {
   identityKey,
@@ -34,11 +35,13 @@ import {
   isEmailRow,
   loginIdentityKey,
   resolveImportIdentities,
+  splitEmailRowsByLink,
   type ImportIdentity,
   type ResolvedImportRow,
   type UnusableRow,
 } from "@/pages/students/rosterImportResolve"
 import {
+  ROSTER_TEMPLATE_CSV,
   detectImportHeaderIssue,
   parseRosterImportFile,
   type DroppedRow,
@@ -64,10 +67,11 @@ import {
   onlyTransientBlockers,
 } from "./ImportProblemsReport"
 
-// Preserve the module's original public surface: the pure parse helpers live in
-// ./rosterImportParse now, but UploadRoster.test.ts and any importer still pull
-// them from here.
+// Preserve the module's original public surface: the pure parse helpers (and
+// the roster template) live in ./rosterImportParse now, but UploadRoster.test.ts
+// and any importer still pull them from here.
 export {
+  ROSTER_TEMPLATE_CSV,
   coerceImportRole,
   detectImportHeaderIssue,
   parseRosterImportFile,
@@ -75,20 +79,6 @@ export {
 } from "./rosterImportParse"
 
 const log = logger.scope("students:UploadRoster")
-
-// A five-row starter roster: no github_id column (teachers rarely have it),
-// every common identity shape — username-only, email-only, and both — and a
-// section-less row so the column reads as optional.
-// Addresses use reserved example domains so none can ever be deliverable.
-export const ROSTER_TEMPLATE_CSV =
-  [
-    "username,first_name,last_name,email,section",
-    "student1,Mario,Mario,student1@example.com,A",
-    "student2,Luigi,Mario,,A",
-    ",Peach,Toadstool,student3@example.net,B",
-    "student4,Bowser,Koopa,,B",
-    "student5,Yoshi,Yoshi,student5@example.edu,",
-  ].join("\n") + "\n"
 
 type UploadRosterProps = {
   org: string
@@ -117,6 +107,7 @@ const UploadRoster = ({
 }: UploadRosterProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
+  const resolveUploadedEmails = useResolveEmailRows(client, org)
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
   const [fileName, setFileName] = useState("")
@@ -300,15 +291,12 @@ const UploadRoster = ({
         if (preflightToken.current !== token) return
         // Resolve-before-invite: match the file's addresses against previous
         // classrooms' rosters, so the links land (and gate) with the preview.
-        // Never called for a file with no email rows — the directory build
-        // behind it walks every classroom.
+        // The cached resolver short-circuits an empty list and shares one
+        // directory build across re-parses and the single-add path.
         const emailAddresses = resolvedFile.rows
           .filter(isEmailRow)
           .map((r) => r.identity.email)
-        const linkResult =
-          emailAddresses.length > 0
-            ? await resolveEmailRows(client, org, emailAddresses)
-            : { links: [], degraded: false }
+        const linkResult = await resolveUploadedEmails(emailAddresses)
         if (preflightToken.current !== token) return
         setResolved(resolvedFile.rows)
         setUnusableRows(resolvedFile.unusable)
@@ -684,45 +672,12 @@ const UploadRoster = ({
     }))
     // Resolve-before-invite: a confirmed link's email row imports as an ACCOUNT
     // row under the verified member's current login, and its address leaves the
-    // invite list — the account pipeline enrolls/team-adds it like any other row.
-    const linkByEmail = new Map(emailLinks.map((l) => [l.email, l]))
-    const linkedRows: ImportRosterRow[] = []
-    const linkedEmails: { email: string; login: string; classroom: string }[] =
-      []
-    const emailInvites: {
-      email: string
-      role: ClassroomRole
-      first_name?: string
-      last_name?: string
-      section?: string
-    }[] = []
-    for (const r of emailRows) {
-      const link = linkByEmail.get(r.identity.email)
-      if (link) {
-        linkedRows.push({
-          username: link.login,
-          github_id: String(link.id),
-          first_name: r.first_name,
-          last_name: r.last_name,
-          email: r.email || r.identity.email,
-          section: r.section,
-          role: roleFor(r.identity),
-        })
-        linkedEmails.push({
-          email: link.email,
-          login: link.login,
-          classroom: link.classroom,
-        })
-      } else {
-        emailInvites.push({
-          email: r.identity.email,
-          role: roleFor(r.identity),
-          first_name: r.first_name,
-          last_name: r.last_name,
-          section: r.section,
-        })
-      }
-    }
+    // invite list — see splitEmailRowsByLink.
+    const { linkedRows, linkedEmails, emailInvites } = splitEmailRowsByLink(
+      emailRows,
+      emailLinks,
+      roleFor,
+    )
 
     const outcome = await runRosterImport(client, {
       org,
@@ -959,8 +914,9 @@ const UploadRoster = ({
                 ) : null}
                 {/* Resolve-before-invite: addresses matched (and re-verified) to
                     members of previous classrooms skip the invitation entirely.
-                    An explicit confirmation gates the linking, mirroring the
-                    metadata gate above. */}
+                    The teacher confirms the CONCRETE bindings — each address is
+                    listed with the account and source classroom it links to —
+                    mirroring the metadata gate above. */}
                 {emailLinks.length > 0 ? (
                   <Alert tone="info" className="mb-4">
                     <div className="flex flex-col gap-2">
@@ -968,10 +924,18 @@ const UploadRoster = ({
                         {t("students.emailLinksNotice", {
                           count: emailLinks.length,
                         })}
-                        {emailLinksDegraded
-                          ? ` ${t("students.emailLinksDegraded")}`
-                          : null}
                       </span>
+                      <ul className="flex flex-col gap-0.5 text-sm">
+                        {emailLinks.map((link) => (
+                          <li key={link.email} className="font-mono">
+                            {t("students.emailLinkBinding", {
+                              email: link.email,
+                              login: link.login,
+                              classroom: link.classroom,
+                            })}
+                          </li>
+                        ))}
+                      </ul>
                       <label className="flex items-start gap-2 text-sm">
                         <Checkbox
                           className="mt-0.5"
@@ -983,6 +947,14 @@ const UploadRoster = ({
                         <span>{t("students.emailLinksConfirm")}</span>
                       </label>
                     </div>
+                  </Alert>
+                ) : null}
+                {/* A degraded directory read must warn even when it produced
+                    zero links — that absence is exactly what it may have
+                    caused (addresses that WOULD have matched get invited). */}
+                {emailLinksDegraded && emailRowCount > 0 ? (
+                  <Alert tone="warning" className="mb-4">
+                    <span>{t("students.emailLinksDegraded")}</span>
                   </Alert>
                 ) : null}
                 {/* Name-only rows can't be invited or enrolled; they're kept

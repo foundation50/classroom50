@@ -1,15 +1,9 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Alert,
-  Badge,
-  Button,
-  Combobox,
-  Input,
-  TableShell,
-} from "@/components/ui"
+import { Alert, Badge, Button, Input, TableShell } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
+import MemberLinkPicker from "@/pages/students/MemberLinkPicker"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
@@ -56,6 +50,11 @@ export function RosterEditMode({
 }) {
   const { t } = useTranslation()
   const client = useGitHubClient()
+  // Freeze the rows as of entering edit mode: drafts key on row.key, so a
+  // background sync mutating a derived key would silently drop staged edits.
+  // applyRosterEdits re-proves every guard at commit time, so editing a frozen
+  // view is safe — staleness only costs a reported miss.
+  const [editRows] = useState(() => rows)
   const [drafts, setDrafts] = useState<Map<string, RowDraft>>(new Map())
   // Per-row link picker text; only one picker panel is open at a time.
   const [linkQueries, setLinkQueries] = useState<Record<string, string>>({})
@@ -102,30 +101,34 @@ export function RosterEditMode({
   const rowDirty = (row: TeamRosterRow) =>
     metadataDirty(row) || stagedLink(row) !== null
 
-  // The save payload, recomposed from the drafts: a link edit first, then the
-  // row's metadata edit keyed by the freshest identity it will have (the
-  // just-linked login for a linked row, else github_id/username, else the
-  // identity-less ref) so the batch's ordering resolves each target.
+  // The save payload, recomposed from the drafts. A linked row's dirty
+  // metadata rides INSIDE its link edit (one atomic unit — if the link misses,
+  // the patch dies with it instead of resolving by login to another student's
+  // pre-existing row); a plain metadata edit is keyed by github_id/username,
+  // else the identity-less ref.
   const stagedEdits = useMemo((): RosterEdit[] => {
     const edits: RosterEdit[] = []
-    for (const row of rows) {
+    for (const row of editRows) {
       const link = stagedLink(row)
+      const patch = metadataDirty(row)
+        ? {
+            first_name: draftValue(row, "first_name"),
+            last_name: draftValue(row, "last_name"),
+            section: draftValue(row, "section"),
+          }
+        : undefined
       if (link) {
         edits.push({
           kind: "link",
           rowRef: unlinkedRowRef(row),
           member: { id: link.id, login: link.login },
+          ...(patch ? { patch } : {}),
         })
+        continue
       }
-      if (!metadataDirty(row)) continue
-      const patch = {
-        first_name: draftValue(row, "first_name"),
-        last_name: draftValue(row, "last_name"),
-        section: draftValue(row, "section"),
-      }
-      const key = link
-        ? { username: link.login }
-        : row.github_id.trim() || row.username.trim()
+      if (!patch) continue
+      const key =
+        row.github_id.trim() || row.username.trim()
           ? {
               github_id: row.github_id.trim() || undefined,
               username: row.username.trim() || undefined,
@@ -135,8 +138,10 @@ export function RosterEditMode({
     }
     return edits
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, drafts])
+  }, [editRows, drafts])
 
+  // One edit = one staged unit: a link carrying a patch counts once, matching
+  // how applyRosterEdits counts it applied or missed.
   const stagedCount = stagedEdits.length
 
   // Members already staged on some row, so two pickers can't stage the same
@@ -149,17 +154,13 @@ export function RosterEditMode({
     return ids
   }, [drafts])
 
-  const pickerItems = (row: TeamRosterRow) => {
-    const query = (linkQueries[row.key] ?? "").trim().toLowerCase()
+  // Candidate pool for one row's picker: staged picks exclude each other (the
+  // domain would miss the second anyway; don't offer it). The typed-query
+  // filter and item cap live in MemberLinkPicker.
+  const pickerPool = (row: TeamRosterRow) => {
     const selected = stagedLink(row)
-    const pool = linkCandidates.filter(
+    return linkCandidates.filter(
       (m) => !stagedMemberIds.has(m.id) || m.id === selected?.id,
-    )
-    if (!query) return pool
-    return pool.filter(
-      (m) =>
-        m.login.toLowerCase().includes(query) ||
-        m.classrooms.some((c) => c.toLowerCase().includes(query)),
     )
   }
 
@@ -255,7 +256,7 @@ export function RosterEditMode({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => {
+          {editRows.map((row, index) => {
             const editable = canEditMetadata(row)
             const dirty = rowDirty(row)
             const link = stagedLink(row)
@@ -266,11 +267,16 @@ export function RosterEditMode({
                 </td>
                 <td className="min-w-52">
                   {row.state === "unlinked" ? (
-                    <Combobox
+                    <MemberLinkPicker
                       id={`roster-edit-link-${index}`}
                       label={t("students.editRoster.linkLabel")}
                       placeholder={t("students.editRoster.linkPlaceholder")}
+                      emptyState={t("students.editRoster.linkEmpty")}
                       inputSize="sm"
+                      // The metadata Inputs disable while saving; the picker
+                      // must freeze too or a keystroke mutates mid-save.
+                      frozen={saving}
+                      items={pickerPool(row)}
                       value={linkQueries[row.key] ?? ""}
                       onInputChange={(value) => {
                         setLinkQueries((prev) => ({
@@ -297,19 +303,6 @@ export function RosterEditMode({
                           )
                         }
                       }}
-                      items={pickerItems(row).slice(0, 30)}
-                      getItemKey={(m) => m.login}
-                      getItemLabel={(m) => m.login}
-                      renderItem={(m) => (
-                        <span className="flex flex-col">
-                          <span className="font-mono text-sm">{m.login}</span>
-                          {m.classrooms.length > 0 ? (
-                            <span className="text-xs text-base-content/60">
-                              {m.classrooms.join(", ")}
-                            </span>
-                          ) : null}
-                        </span>
-                      )}
                       onSelect={(m) => {
                         setDraft(row.key, { link: m })
                         setLinkQueries((prev) => ({
@@ -317,7 +310,6 @@ export function RosterEditMode({
                           [row.key]: m.login,
                         }))
                       }}
-                      emptyState={t("students.editRoster.linkEmpty")}
                     />
                   ) : (
                     <span className="font-mono text-sm">

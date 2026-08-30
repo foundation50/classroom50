@@ -201,6 +201,45 @@ describe("RosterEditMode", () => {
     expect(onSaved).toHaveBeenCalledWith(result)
   })
 
+  it("fuses a link and metadata staged on the SAME row into ONE edit", async () => {
+    applyRosterEdits.mockResolvedValue({
+      applied: 1,
+      missed: [],
+      linkedLogins: ["ghopper"],
+      teamAddFailedLogins: [],
+    })
+    renderMode()
+
+    const picker = screen.getByLabelText("students.editRoster.linkLabel")
+    fireEvent.focus(picker)
+    fireEvent.pointerDown(screen.getByRole("option", { name: "ghopper" }))
+    // The unlinked row's first-name input (second row in the table).
+    fireEvent.change(
+      screen.getAllByLabelText("students.editRoster.firstName")[1],
+      { target: { value: "Gracie" } },
+    )
+
+    // One atomic unit, not a link plus a login-keyed metadata edit.
+    expect(screen.getByText("students.editRoster.stagedCount:1")).not.toBeNull()
+
+    await act(async () => {
+      fireEvent.click(saveButton())
+    })
+
+    expect(applyRosterEdits.mock.calls[0]?.[1]).toEqual({
+      org: "acme",
+      classroom: "cs101",
+      edits: [
+        {
+          kind: "link",
+          rowRef: { first_name: "Grace", last_name: "Hopper", section: "s2" },
+          member: { id: 42, login: "ghopper" },
+          patch: { first_name: "Gracie", last_name: "Hopper", section: "s2" },
+        },
+      ],
+    })
+  })
+
   it("routes Cancel through the discard confirm only when edits are staged", () => {
     const onCancel = vi.fn()
     renderMode({ onCancel })

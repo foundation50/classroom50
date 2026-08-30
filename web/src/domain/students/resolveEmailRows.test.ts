@@ -134,4 +134,24 @@ describe("resolveEmailRows", () => {
     expect(links).toEqual([])
     expect(degraded).toBe(true)
   })
+
+  it("uses a provided opts.directory and never rebuilds it", async () => {
+    getUserById.mockResolvedValue({ id: 1, login: "ada" })
+
+    const { links, degraded } = await resolveEmailRows(
+      client,
+      ORG,
+      ["a@x.com"],
+      {
+        directory: directory([
+          ["a@x.com", { id: 1, login: "ada", classroom: "cs101" }],
+        ]),
+      },
+    )
+    expect(links).toEqual([
+      { email: "a@x.com", id: 1, login: "ada", classroom: "cs101" },
+    ])
+    expect(degraded).toBe(false)
+    expect(buildIdentityDirectory).not.toHaveBeenCalled()
+  })
 })

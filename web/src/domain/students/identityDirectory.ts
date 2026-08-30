@@ -84,6 +84,10 @@ export async function buildIdentityDirectory(
     return emptyDirectory(true)
   }
 
+  // A rate limit dooms every request the remaining scans would issue, so the
+  // first rate-limited scan stops the pool: later scans mark themselves failed
+  // (-> degraded) without touching the API (mirrors collectInviteRecoveries).
+  let rateLimited = false
   const scans = await mapWithConcurrency(
     classrooms,
     REPO_READ_CONCURRENCY,
@@ -93,6 +97,10 @@ export async function buildIdentityDirectory(
         members: [],
         rows: [],
         failed: false,
+      }
+      if (rateLimited) {
+        scan.failed = true
+        return scan
       }
       try {
         const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
@@ -133,7 +141,10 @@ export async function buildIdentityDirectory(
             scan.rows.push({ email, id, login: row.username.trim() })
           }
         }
-      } catch {
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.isRateLimited) {
+          rateLimited = true
+        }
         scan.failed = true
       }
       return scan

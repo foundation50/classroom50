@@ -6,11 +6,8 @@ import {
   useInvalidateTeamRoster,
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
-import {
-  enrollStudentInClassroom,
-  inviteByEmail,
-  resolveEmailRows,
-} from "@/domain/students"
+import { enrollStudentInClassroom, inviteByEmail } from "@/domain/students"
+import { useResolveEmailRows } from "@/hooks/useIdentityDirectory"
 import { toStudent } from "@/util/roster"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { rosterPath } from "@/util/rosterPath"
@@ -43,6 +40,7 @@ export function useEnrollOrInviteStudent(
   const updateRosterCache = useUpdateRosterCache(org, classroom)
   const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
   const seedTeamMember = useSeedTeamMember(org, classroom)
+  const resolveEmails = useResolveEmailRows(githubClient, org)
 
   return useMutation({
     mutationFn: async (value: EnrollOrInviteFormValues) => {
@@ -83,7 +81,7 @@ export function useEnrollOrInviteStudent(
       // previous classroom's roster already mapped to an account is enrolled
       // directly (GitHub refuses to invite an existing member, and the
       // directory plus decision-time verification prove who owns it).
-      const { links } = await resolveEmailRows(githubClient, org, [email])
+      const { links } = await resolveEmails([email])
       const link = links.at(0)
       if (link) {
         const result = await enrollStudentInClassroom(githubClient, {

@@ -391,10 +391,11 @@ If any row carries a value the upload can't use — an address that isn't valid,
 it lists those rows with their line numbers and imports none of them. Fix the
 file and upload it again; re-uploading is safe, because students already in the
 classroom are left alone. That check covers every identity column independently, so
-a shifted column is caught even when the row's other cells look fine. The one
-exception is a row with no identifying column at all, usually a student who hasn't
-given you a GitHub account yet: that row is reported and skipped, and everyone else
-is imported.
+a shifted column is caught even when the row's other cells look fine. A row with a
+name but no identifying column — usually a student who hasn't given you a GitHub
+account yet — is kept on the roster as an **Unlinked** row you can link or remove
+later; only a row with nothing usable at all is reported and skipped, and everyone
+else is imported.
 
 ### Roster CSV fields
 

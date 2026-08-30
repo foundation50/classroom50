@@ -9,10 +9,14 @@ const pendingInviteEmails = vi.fn()
 // withRosterRewrite is replaced by an in-memory harness: `storedRows` is the
 // parsed roster the mutate closure receives; `committedRows` captures what a
 // non-zero-change mutate wrote back; `rewriteCalls` counts invocations so the
-// batch paths can prove they spend ONE rewrite.
+// batch paths can prove they spend ONE rewrite. Setting `firstAttemptRows`
+// makes the harness invoke the closure on those rows first and DISCARD the
+// result, then re-invoke on `storedRows` — simulating a git-conflict retry, so
+// tests can prove the closure's per-attempt reset.
 let storedRows: import("@/util/rosterCsv").StudentCsvRow[] = []
 let committedRows: import("@/util/rosterCsv").StudentCsvRow[] | null = null
 let rewriteCalls = 0
+let firstAttemptRows: import("@/util/rosterCsv").StudentCsvRow[] | null = null
 
 vi.mock("@/github-core/mutations", () => ({
   readOrgMembershipState: (...a: unknown[]) => readOrgMembershipState(...a),
@@ -38,6 +42,7 @@ vi.mock("./rosterPrimitives", () => ({
     },
   ) => {
     rewriteCalls++
+    if (firstAttemptRows) mutate(firstAttemptRows)
     const { nextStudents, changed } = mutate(storedRows)
     if (changed > 0) committedRows = nextStudents
     return { changed }
@@ -68,6 +73,7 @@ beforeEach(() => {
   storedRows = []
   committedRows = null
   rewriteCalls = 0
+  firstAttemptRows = null
   assertClassroomNotArchived.mockResolvedValue(undefined)
   readOrgMembershipState.mockResolvedValue("active")
   assignRosterMemberRole.mockResolvedValue({ state: "assigned" })
@@ -547,5 +553,107 @@ describe("applyRosterEdits", () => {
     })
     expect(result.applied).toBe(1)
     expect(committedRows?.[0]).toMatchObject({ last_name: "Hopper" })
+  })
+
+  it("resets per attempt on a conflict retry: a row that gained an identity flips to missed, no duplicate linkedLogins", async () => {
+    firstAttemptRows = [
+      row({ first_name: "Ada", email: "a@x.edu" }),
+      row({ first_name: "Grace", email: "b@x.edu" }),
+    ]
+    // Between attempts the first row gained an identity; the second is intact.
+    storedRows = [
+      row({ username: "someone", github_id: "9", email: "a@x.edu" }),
+      row({ first_name: "Grace", email: "b@x.edu" }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "a@x.edu" },
+          member: { id: 42, login: "ada" },
+        },
+        {
+          kind: "link",
+          rowRef: { email: "b@x.edu" },
+          member: { id: 43, login: "grace" },
+        },
+      ],
+    })
+    // The doomed first attempt's tallies were discarded wholesale: "ada" is
+    // missed (not stale-applied) and "grace" appears exactly once.
+    expect(result.applied).toBe(1)
+    expect(result.missed).toEqual([{ label: "a@x.edu", reason: "row-gone" }])
+    expect(result.linkedLogins).toEqual(["grace"])
+    expect(assignRosterMemberRole).toHaveBeenCalledTimes(1)
+    expect(committedRows?.[0]).toMatchObject({ username: "someone" })
+    expect(committedRows?.[1]).toMatchObject({ username: "grace" })
+  })
+
+  it("never lands a fused patch on another row when the link misses as identity-claimed on retry", async () => {
+    firstAttemptRows = [row({ first_name: "Ada", email: "a@x.edu" })]
+    // Second attempt: the member claimed a different row between attempts.
+    const existing = row({
+      username: "ada",
+      github_id: "42",
+      first_name: "Existing",
+      last_name: "Student",
+      section: "s9",
+    })
+    storedRows = [row({ first_name: "Ada", email: "a@x.edu" }), existing]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "a@x.edu" },
+          member: { id: 42, login: "ada" },
+          patch: { first_name: "Patched", last_name: "P", section: "s1" },
+        },
+      ],
+    })
+    // ONE missed unit — the patch died with its link instead of resolving by
+    // login to the member's pre-existing row.
+    expect(result.applied).toBe(0)
+    expect(result.missed).toEqual([
+      { label: "ada", reason: "identity-claimed" },
+    ])
+    expect(result.linkedLogins).toEqual([])
+    expect(committedRows).toBeNull()
+  })
+
+  it("applies a fused link+patch as ONE unit: identity and metadata land on the matched row in one commit", async () => {
+    storedRows = [
+      row({ first_name: "Ada", email: "a@x.edu" }),
+      row({ username: "bob", github_id: "7" }),
+    ]
+    const result = await applyRosterEdits(client, {
+      ...INPUT,
+      edits: [
+        {
+          kind: "link",
+          rowRef: { email: "a@x.edu" },
+          member: { id: 42, login: "ada" },
+          patch: {
+            first_name: "Adalene",
+            last_name: "Lovelace",
+            section: "s2",
+          },
+        },
+      ],
+    })
+    expect(result.applied).toBe(1)
+    expect(result.missed).toEqual([])
+    expect(result.linkedLogins).toEqual(["ada"])
+    expect(rewriteCalls).toBe(1)
+    expect(committedRows?.[0]).toMatchObject({
+      username: "ada",
+      github_id: "42",
+      first_name: "Adalene",
+      last_name: "Lovelace",
+      section: "s2",
+      email: "a@x.edu",
+    })
+    expect(committedRows?.[1]).toEqual(storedRows[1])
   })
 })

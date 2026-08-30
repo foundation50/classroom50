@@ -47,6 +47,22 @@ vi.mock("@/domain/students", async (importOriginal) => {
   }
 })
 
+// The cached resolver hook needs a QueryClientProvider these tests don't
+// mount; mirror its real semantics (empty input short-circuits) over the
+// same resolveEmailRows spy the domain mock uses.
+vi.mock("@/hooks/useIdentityDirectory", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useIdentityDirectory")>()
+  return {
+    ...actual,
+    useResolveEmailRows:
+      (client: unknown, org: unknown) => (emails: string[]) =>
+        emails.length === 0
+          ? Promise.resolve({ links: [], degraded: false })
+          : resolveEmailRows(client, org, emails),
+  }
+})
+
 // The id -> login network fallback, used only for an id the org-member map lacks.
 vi.mock("@/github-core/queries", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/github-core/queries")>()

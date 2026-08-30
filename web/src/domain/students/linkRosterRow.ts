@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import { readOrgMembershipState } from "@/github-core/mutations"
+import { mapWithConcurrency } from "@/util/concurrency"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
 import { normalizeStudentRow, type StudentCsvRow } from "@/util/rosterCsv"
 import { assertClassroomNotArchived } from "../classrooms"
@@ -283,6 +284,10 @@ export type RosterEdit =
       kind: "link"
       rowRef: UnlinkedRowRef
       member: { id: number; login: string }
+      // Metadata staged on the SAME row, fused into the link so it lives and
+      // dies with it — a missed link must never let its patch resolve (by the
+      // just-linked login) to another student's pre-existing row.
+      patch?: { first_name: string; last_name: string; section: string }
     }
   | {
       kind: "metadata"
@@ -356,18 +361,25 @@ export async function applyRosterEdits(
   const { org, classroom, edits } = input
   await assertClassroomNotArchived(client, org, classroom)
 
+  // Verify membership once per distinct link member, in a small pool — the
+  // reads are independent, and the bound keeps a large batch off GitHub's
+  // secondary rate limits.
   const memberActiveByLogin = new Map<string, boolean>()
+  const distinctLogins = new Map<string, string>()
   for (const edit of edits) {
     if (edit.kind !== "link") continue
-    const loginKey = edit.member.login.trim().toLowerCase()
-    if (!loginKey || memberActiveByLogin.has(loginKey)) continue
-    const state = await readOrgMembershipState(
-      client,
-      org,
-      edit.member.login.trim(),
-    )
-    memberActiveByLogin.set(loginKey, state === "active")
+    const login = edit.member.login.trim()
+    const loginKey = login.toLowerCase()
+    if (!loginKey || distinctLogins.has(loginKey)) continue
+    distinctLogins.set(loginKey, login)
   }
+  const loginEntries = [...distinctLogins]
+  const states = await mapWithConcurrency(loginEntries, 5, ([, login]) =>
+    readOrgMembershipState(client, org, login),
+  )
+  loginEntries.forEach(([loginKey], i) => {
+    memberActiveByLogin.set(loginKey, states[i] === "active")
+  })
 
   let applied = 0
   let missed: { label: string; reason: string }[] = []
@@ -420,6 +432,15 @@ export async function applyRosterEdits(
           ...next[matches[0]],
           username: login,
           github_id: idKey,
+          // The fused patch rides the link: same matched row, same commit. A
+          // missed link above already skipped it.
+          ...(edit.patch
+            ? {
+                first_name: edit.patch.first_name,
+                last_name: edit.patch.last_name,
+                section: edit.patch.section,
+              }
+            : {}),
         })
         batchIds.add(idKey)
         batchLogins.add(loginKey)

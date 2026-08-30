@@ -14,6 +14,20 @@ import {
   type OptionalImportHeader,
 } from "@/pages/students/rosterImportHeaders"
 
+// A five-row starter roster: no github_id column (teachers rarely have it),
+// every common identity shape — username-only, email-only, and both — and a
+// section-less row so the column reads as optional.
+// Addresses use reserved example domains so none can ever be deliverable.
+export const ROSTER_TEMPLATE_CSV =
+  [
+    "username,first_name,last_name,email,section",
+    "student1,Mario,Mario,student1@example.com,A",
+    "student2,Luigi,Mario,,A",
+    ",Peach,Toadstool,student3@example.net,B",
+    "student4,Bowser,Koopa,,B",
+    "student5,Yoshi,Yoshi,student5@example.edu,",
+  ].join("\n") + "\n"
+
 // Coerce a raw string to a ClassroomRole, or undefined when absent/unknown.
 // Case-insensitive; the upload defaults undefined to "student" and lets the
 // teacher override, so an unrecognized value degrades to student rather than

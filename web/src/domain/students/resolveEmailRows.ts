@@ -8,7 +8,10 @@ import type { GitHubClient } from "@/github-core/client"
 import { readOrgMembershipState } from "@/github-core/mutations"
 import { getUserById } from "@/github-core/queries"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
-import { buildIdentityDirectory } from "./identityDirectory"
+import {
+  buildIdentityDirectory,
+  type IdentityDirectory,
+} from "./identityDirectory"
 
 export type ResolvedEmailLink = {
   email: string
@@ -19,6 +22,11 @@ export type ResolvedEmailLink = {
   classroom: string
 }
 
+export type ResolveEmailRowsResult = {
+  links: ResolvedEmailLink[]
+  degraded: boolean
+}
+
 // Never throws; an address that can't be verified simply doesn't appear in
 // `links` (it falls back to the ordinary email-invite path). `degraded` mirrors
 // the directory: some classrooms couldn't be read, so more addresses may have
@@ -27,13 +35,17 @@ export async function resolveEmailRows(
   client: GitHubClient,
   org: string,
   emails: string[],
-): Promise<{ links: ResolvedEmailLink[]; degraded: boolean }> {
+  // A caller that already holds a directory (e.g. a query cache) passes it in;
+  // otherwise each call pays for the full org walk.
+  opts?: { directory?: IdentityDirectory },
+): Promise<ResolveEmailRowsResult> {
   const unique = [...new Set(emails.map(normalizeInviteEmail).filter(Boolean))]
   // The directory build walks every classroom, so never pay for it on an
   // upload that carries no addresses.
   if (unique.length === 0) return { links: [], degraded: false }
 
-  const directory = await buildIdentityDirectory(client, org)
+  const directory =
+    opts?.directory ?? (await buildIdentityDirectory(client, org))
   const links: ResolvedEmailLink[] = []
   // Sequential on purpose: a file carries a handful of addresses at most, and
   // each verification is two small reads.

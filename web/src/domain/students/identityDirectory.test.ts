@@ -47,6 +47,15 @@ const notFoundError = () =>
     rateLimit: emptyRateLimit,
   })
 
+const rateLimitError = () =>
+  new GitHubAPIError({
+    status: 429,
+    url: "https://api.github.com/x",
+    message: "rate limited",
+    body: null,
+    rateLimit: emptyRateLimit,
+  })
+
 const dirs = (...names: string[]) =>
   names.map((name) => ({ type: "dir", name, path: name }))
 
@@ -238,6 +247,32 @@ describe("buildIdentityDirectory", () => {
     expect(directory.degraded).toBe(true)
     expect(directory.byEmail.size).toBe(0)
     expect(directory.members).toEqual([])
+  })
+
+  it("a rate-limited classroom read stops the remaining scans from issuing requests", async () => {
+    // 12 classrooms against a pool of 8: every scan's first read rejects
+    // rate-limited, so only the in-flight batch ever issues requests and the
+    // rest fail immediately (-> degraded) without a call.
+    listClassroomDirs.mockResolvedValue(
+      dirs(...Array.from({ length: 12 }, (_, i) => `cs${100 + i}`)),
+    )
+    resolveClassroomTeamSlugs.mockRejectedValue(rateLimitError())
+
+    const directory = await buildIdentityDirectory(client, ORG)
+    expect(directory.degraded).toBe(true)
+    expect(resolveClassroomTeamSlugs).toHaveBeenCalledTimes(8)
+    expect(listTeamMembers).not.toHaveBeenCalled()
+  })
+
+  it("a NON-rate-limit classroom failure never stops the other scans", async () => {
+    listClassroomDirs.mockResolvedValue(
+      dirs(...Array.from({ length: 12 }, (_, i) => `cs${100 + i}`)),
+    )
+    resolveClassroomTeamSlugs.mockRejectedValue(new Error("boom"))
+
+    const directory = await buildIdentityDirectory(client, ORG)
+    expect(directory.degraded).toBe(true)
+    expect(resolveClassroomTeamSlugs).toHaveBeenCalledTimes(12)
   })
 
   it("sorts members by login; a member on two classrooms' teams appears once with both", async () => {

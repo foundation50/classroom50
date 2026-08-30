@@ -6,8 +6,9 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { rosterPath } from "@/util/rosterPath"
 
 // The teacher-triggered (and auto-run on open) roster reconciliation: one
-// consolidated pass that recovers accepted email invites, drops dead
-// email-only rows, and syncs identity/role rows from the classroom teams — at
+// consolidated pass that recovers accepted email invites and syncs
+// identity/role rows from the classroom teams (rows are never removed —
+// unbacked email rows render as unlinked) — at
 // most one commit (see reconcileRoster). Hook owns the roster-file
 // invalidation; the up-to-date/added/failed toasts stay at the call site (see
 // ./README.md). `excludeLogins` (typically the page's suppressed-logins

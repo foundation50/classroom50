@@ -874,6 +874,7 @@
     "emailLinksNotice_one": "{{count}} address matches a student from a previous classroom's roster and will be enrolled directly instead of invited.",
     "emailLinksNotice_other": "{{count}} addresses match students from previous classrooms' rosters and will be enrolled directly instead of invited.",
     "emailLinksConfirm": "Link these addresses to the matched GitHub accounts",
+    "emailLinkBinding": "{{email}} → @{{login}} ({{classroom}})",
     "emailLinksDegraded": "Some classrooms couldn't be read, so more addresses may be linkable than shown.",
     "unlinkedRosterNotice_one": "{{count}} row has a name but no GitHub username, github_id, or email. It will be kept on the roster as an unlinked row you can link to an organization member later.",
     "unlinkedRosterNotice_other": "{{count}} rows have a name but no GitHub username, github_id, or email. They will be kept on the roster as unlinked rows you can link to organization members later.",

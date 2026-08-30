@@ -11,6 +11,7 @@ const applyClassroomRoleChange =
   vi.fn<(...args: unknown[]) => Promise<unknown>>()
 const bulkInviteByEmail = vi.fn<(...args: unknown[]) => Promise<unknown>>()
 const repairRosterUsernames = vi.fn<(...args: unknown[]) => Promise<unknown>>()
+const appendUnlinkedRows = vi.fn<(...args: unknown[]) => Promise<unknown>>()
 
 vi.mock("@/domain/students", () => {
   // Declared inside the (hoisted) factory so they exist when the mock evaluates.
@@ -26,6 +27,7 @@ vi.mock("@/domain/students", () => {
       applyClassroomRoleChange(...a),
     bulkInviteByEmail: (...a: unknown[]) => bulkInviteByEmail(...a),
     repairRosterUsernames: (...a: unknown[]) => repairRosterUsernames(...a),
+    appendUnlinkedRows: (...a: unknown[]) => appendUnlinkedRows(...a),
     NoNewStudentsError,
     RosterCsvMalformedError,
   }
@@ -41,7 +43,7 @@ const { NoNewStudentsError, RosterCsvMalformedError } =
 
 import { runRosterImport } from "./runRosterImport"
 import type { GitHubClient } from "@/github-core/client"
-import type { ImportRosterRow } from "@/domain/students"
+import type { ImportRosterRow, UnlinkedRowInput } from "@/domain/students"
 
 const client = {} as unknown as GitHubClient
 const messages = {
@@ -93,6 +95,7 @@ beforeEach(() => {
       warnings: [],
     })
   })
+  appendUnlinkedRows.mockResolvedValue(0)
 })
 
 describe("runRosterImport — happy path", () => {
@@ -418,5 +421,126 @@ describe("runRosterImport — confirmed team moves", () => {
     expect(out.roleChangeOutcome?.changed).toEqual([
       { username: "dave", to: "student" },
     ])
+  })
+})
+
+describe("runRosterImport — keep-unplaced-as-unlinked pass", () => {
+  const emailInvites = [
+    {
+      email: "skip@x.edu",
+      role: "student" as const,
+      first_name: "Sky",
+      last_name: "Ipped",
+      section: "A",
+    },
+    {
+      email: "fail@x.edu",
+      role: "student" as const,
+      first_name: "Fay",
+      last_name: "Iled",
+      section: "B",
+    },
+    {
+      email: "defer@x.edu",
+      role: "student" as const,
+      first_name: "Deb",
+      last_name: "Ferred",
+      section: "C",
+    },
+  ]
+
+  it("keeps skipped + failed email invites (never deferred), each with its file's metadata", async () => {
+    bulkInviteByEmail.mockResolvedValueOnce({
+      invited: [],
+      // Mixed-case/whitespace result email: the join back to the uploaded
+      // invite's metadata must normalize, while the entry echoes the
+      // result's email verbatim.
+      skipped: [{ email: " Skip@X.edu" }],
+      failed: [{ email: "fail@x.edu", message: "boom" }],
+      deferred: ["defer@x.edu"],
+    })
+    appendUnlinkedRows.mockResolvedValueOnce(2)
+    const out = await call({ emailInvites })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(appendUnlinkedRows).toHaveBeenCalledOnce()
+    const [, target, entries] = appendUnlinkedRows.mock.calls[0] as [
+      unknown,
+      { org: string; classroom: string },
+      UnlinkedRowInput[],
+    ]
+    expect(target).toEqual({ org: "acme", classroom: "cs101" })
+    // Deferred (rate-limited) addresses are NOT kept — re-running the upload
+    // retries their invitations instead.
+    expect(entries).toEqual([
+      {
+        email: " Skip@X.edu",
+        first_name: "Sky",
+        last_name: "Ipped",
+        section: "A",
+      },
+      {
+        email: "fail@x.edu",
+        first_name: "Fay",
+        last_name: "Iled",
+        section: "B",
+      },
+    ])
+    expect(out.unlinkedKept).toBe(2)
+  })
+
+  it("folds name-only unlinked rows into the SAME single append as unplaced emails", async () => {
+    bulkInviteByEmail.mockResolvedValueOnce({
+      invited: [],
+      skipped: [{ email: "skip@x.edu" }],
+      failed: [],
+      deferred: [],
+    })
+    appendUnlinkedRows.mockResolvedValueOnce(2)
+    const unlinkedRows: UnlinkedRowInput[] = [
+      { first_name: "Name", last_name: "Only", section: "S1" },
+    ]
+    const out = await call({ emailInvites: [emailInvites[0]], unlinkedRows })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(appendUnlinkedRows).toHaveBeenCalledOnce()
+    const entries = appendUnlinkedRows.mock.calls[0][2] as UnlinkedRowInput[]
+    expect(entries).toEqual([
+      { first_name: "Name", last_name: "Only", section: "S1" },
+      {
+        email: "skip@x.edu",
+        first_name: "Sky",
+        last_name: "Ipped",
+        section: "A",
+      },
+    ])
+  })
+
+  it("reports appendUnlinkedRows' own count as unlinkedKept (dedup can write fewer)", async () => {
+    appendUnlinkedRows.mockResolvedValueOnce(1)
+    const out = await call({
+      unlinkedRows: [
+        { first_name: "Name", last_name: "Only" },
+        { first_name: "Already", last_name: "There" },
+      ] satisfies UnlinkedRowInput[],
+    })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(appendUnlinkedRows).toHaveBeenCalledOnce()
+    expect(out.unlinkedKept).toBe(1)
+  })
+
+  it("skips the append entirely when nothing is unplaced", async () => {
+    bulkInviteByEmail.mockResolvedValueOnce({
+      invited: [{ email: "skip@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: ["defer@x.edu"],
+    })
+    const out = await call({ emailInvites: [emailInvites[0], emailInvites[2]] })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    expect(appendUnlinkedRows).not.toHaveBeenCalled()
+    expect(out.unlinkedKept).toBe(0)
   })
 })

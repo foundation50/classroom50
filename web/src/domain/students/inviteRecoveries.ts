@@ -25,12 +25,13 @@ export type RecoveredInvite = {
 export type InviteReconcileState = {
   recovered: RecoveredInvite[]
   // Normalized emails whose invite team is still live (invite pending, or an
-  // anomaly we refuse to touch). An email-only roster row backed by one of
-  // these must be KEPT by the sync's removal pass.
+  // anomaly we refuse to touch). Rows are never removed by the sync; these
+  // emails mark rows as invitation-backed (Pending, not Unlinked).
   liveInviteEmails: Set<string>
   // True only when the invite-team enumeration AND every per-team read
-  // completed. When false the sync must not remove email-only rows — an
-  // unreadable team can't prove its row is dead.
+  // completed. When false the sync must not act on liveness conclusions — an
+  // unreadable team can't prove anything about its row. Still gates
+  // invite-team deletion.
   trusted: boolean
   // Teams deleted without a recovery: an accepted invitee no longer on any
   // classroom team (unenrolled — must not resurrect a row), or a member-less
