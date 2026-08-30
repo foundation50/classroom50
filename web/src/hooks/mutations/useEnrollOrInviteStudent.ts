@@ -6,7 +6,11 @@ import {
   useInvalidateTeamRoster,
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
-import { enrollStudentInClassroom, inviteByEmail } from "@/domain/students"
+import {
+  enrollStudentInClassroom,
+  inviteByEmail,
+  resolveEmailRows,
+} from "@/domain/students"
 import { toStudent } from "@/util/roster"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { rosterPath } from "@/util/rosterPath"
@@ -75,13 +79,43 @@ export function useEnrollOrInviteStudent(
         }
       }
 
-      // Email-only -> a GitHub org invite (carrying the classroom team + a
-      // per-invite metadata team that retains the email) plus a pending
-      // email-only roster row. The row lives exactly as long as the invite
-      // does: on acceptance the reconcile fills in the account identity; a
-      // cancelled/expired invite's row is removed by the same reconcile. The
-      // typed name/section ride along onto that row — nothing else can recover
-      // them before the student has an account.
+      // Email-only. Resolve-first, mirroring the upload's ladder: an address a
+      // previous classroom's roster already mapped to an account is enrolled
+      // directly (GitHub refuses to invite an existing member, and the
+      // directory plus decision-time verification prove who owns it).
+      const { links } = await resolveEmailRows(githubClient, org, [email])
+      const link = links.at(0)
+      if (link) {
+        const result = await enrollStudentInClassroom(githubClient, {
+          org,
+          classroom,
+          username: link.login,
+          first_name,
+          last_name,
+          email,
+          section: section || undefined,
+        })
+        return {
+          kind: "username" as const,
+          label: link.login,
+          warning: result?.teamWarning ?? "",
+          student: toStudent(result.student),
+          enrolledMember: result.enrolled
+            ? {
+                id: Number(result.student.github_id),
+                login: result.student.username,
+              }
+            : null,
+        }
+      }
+
+      // No provable mapping -> a GitHub org invite (carrying the classroom
+      // team + a per-invite metadata team that retains the email) plus a
+      // pending email-only roster row. On acceptance the reconcile fills in
+      // the account identity; a cancelled/expired invite's row stays on the
+      // roster as "unlinked" for the teacher (the sync never removes rows).
+      // The typed name/section ride along onto that row — nothing else can
+      // recover them before the student has an account.
       const result = await inviteByEmail(githubClient, {
         org,
         classroom,
