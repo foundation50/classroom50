@@ -169,11 +169,11 @@ export const TeacherAssignmentsView = ({
   )
 
   const hasAssignments = (sourceAssignments?.length ?? 0) > 0
-  // The toolbar owns the primary action now (New assignment / archived badge),
-  // so it renders whenever the list has loaded — with only the trailing action
-  // when there are no assignments yet (actionsOnly), and the full search/filter/
-  // sort bar once there are.
-  const showToolbar = !assignmentsLoading
+  // The toolbar renders only once assignments exist: on a first-use empty
+  // list the table's blankslate carries the New-assignment action instead
+  // (Primer: the empty state owns its resolving action, and a view gets one
+  // primary button — a toolbar copy would duplicate it).
+  const showToolbar = !assignmentsLoading && hasAssignments
   const showNoResults = hasAssignments && visible.length === 0
 
   // Right-aligned toolbar action: the New assignment split button for an author,
@@ -262,7 +262,6 @@ export const TeacherAssignmentsView = ({
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          actionsOnly={!hasAssignments}
           leading={collectAction}
           trailing={primaryAction}
         />
@@ -292,6 +291,14 @@ export const TeacherAssignmentsView = ({
           loading={assignmentsLoading}
           loadError={assignmentsError}
           onRetryLoad={() => void refetchAssignments()}
+          // The first-use blankslate's action — the same split button
+          // (create + reuse) the toolbar shows once assignments exist. A TA
+          // or an archived classroom gets no action (plain empty statement).
+          emptyAction={
+            canAuthor && !archived ? (
+              <NewAssignmentButton org={org} classroom={classroom} />
+            ) : undefined
+          }
           archived={archived}
           canAuthor={canAuthor}
           sort={sort}

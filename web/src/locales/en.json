@@ -1593,6 +1593,8 @@
       "sortByName": "Sort by name",
       "sortByDue": "Sort by due date",
       "empty": "No assignments created.",
+      "emptyTitle": "Create your first assignment",
+      "emptyBody": "Assignments you create or reuse from another classroom will show up here.",
       "loadError": "Couldn't load assignments from GitHub. This is a load error — your assignments aren't gone.",
       "retry": "Retry",
       "individual": "Individual",

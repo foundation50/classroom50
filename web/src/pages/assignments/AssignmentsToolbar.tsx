@@ -15,9 +15,8 @@ import {
 // classroom-wide action (Collect all), while search + filters + sort + the
 // trailing actions (the New assignment split button or the archived badge)
 // sit on the right — so the primary action lives in the bar, not the page
-// header. When `actionsOnly` is set (no assignments exist yet) only the
-// leading/trailing actions render — the search/filter/sort controls would
-// have nothing to act on.
+// header. The bar renders only once assignments exist: on a first-use empty
+// list the table's blankslate owns the New-assignment action instead.
 const AssignmentsToolbar = ({
   query,
   onQueryChange,
@@ -25,7 +24,6 @@ const AssignmentsToolbar = ({
   onFiltersChange,
   sort,
   onSortChange,
-  actionsOnly = false,
   leading,
   trailing,
 }: {
@@ -35,7 +33,6 @@ const AssignmentsToolbar = ({
   onFiltersChange: (filters: AssignmentFilters) => void
   sort: AssignmentSort
   onSortChange: (sort: AssignmentSort) => void
-  actionsOnly?: boolean
   // Left-aligned lead content (the Collect all button), as on the submissions
   // toolbar where DataFreshness leads. Search + filters + sort + actions sit
   // on the right.
@@ -49,15 +46,6 @@ const AssignmentsToolbar = ({
   const clearAll = () => {
     onQueryChange("")
     onFiltersChange({ ...DEFAULT_FILTERS })
-  }
-
-  if (actionsOnly) {
-    return leading || trailing ? (
-      <Toolbar>
-        {leading}
-        <Toolbar.Trailing>{trailing}</Toolbar.Trailing>
-      </Toolbar>
-    ) : null
   }
 
   return (

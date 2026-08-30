@@ -104,6 +104,37 @@ describe("AssignmentsTable load error vs empty state", () => {
     expect(screen.getByText("assignments.table.empty")).toBeTruthy()
     expect(screen.queryByText("assignments.table.loadError")).toBeNull()
   })
+
+  it("renders the first-use blankslate with the action when emptyAction is given", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[]}
+        canAuthor
+        emptyAction={<button type="button">new assignment</button>}
+      />,
+    )
+    // Rich blankslate (title + body + action), not the plain statement.
+    expect(screen.getByText("assignments.table.emptyTitle")).toBeTruthy()
+    expect(screen.getByText("assignments.table.emptyBody")).toBeTruthy()
+    expect(screen.getByRole("button", { name: "new assignment" })).toBeTruthy()
+    expect(screen.queryByText("assignments.table.empty")).toBeNull()
+  })
+
+  it("never renders the blankslate action on a load error", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[]}
+        loadError
+        emptyAction={<button type="button">new assignment</button>}
+      />,
+    )
+    expect(screen.queryByRole("button", { name: "new assignment" })).toBeNull()
+    expect(screen.getByText("assignments.table.loadError")).toBeTruthy()
+  })
 })
 const ACCESS_ARIA = "assignments.template.accessModal.triggerAria"
 const MANAGE_ARIA = "assignments.manageModal.openAria"

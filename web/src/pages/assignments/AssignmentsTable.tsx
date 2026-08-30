@@ -6,6 +6,7 @@ import {
   EyeIcon,
   LockIcon,
   PencilIcon,
+  PlusIcon,
   SlidersIcon,
 } from "@/components/ui/icons"
 
@@ -17,6 +18,7 @@ import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
+import type { ReactNode } from "react"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
@@ -109,6 +111,7 @@ const AssignmentsTable = ({
   loading = false,
   loadError = false,
   onRetryLoad,
+  emptyAction,
   archived = false,
   canAuthor = false,
   sort,
@@ -141,6 +144,11 @@ const AssignmentsTable = ({
   // tell a teacher their assignments are gone.
   loadError?: boolean
   onRetryLoad?: () => void
+  // The "New assignment" affordance rendered inside the first-use empty
+  // state (Primer blankslate: the resolving action lives in the empty state;
+  // the page hides its toolbar so the view has one primary action). Omit for
+  // read-only viewers — the empty state then shows the plain statement.
+  emptyAction?: ReactNode
   // When archived, hide per-row mutating actions (edit/reuse/delete); viewing
   // stays available.
   archived?: boolean
@@ -292,10 +300,27 @@ const AssignmentsTable = ({
           {!loading && !loadError && !assignments?.length && (
             <tr>
               <td colSpan={7}>
-                <EmptyState
-                  variant="bare"
-                  body={t("assignments.table.empty")}
-                />
+                {emptyAction ? (
+                  // First-use blankslate (Primer): the resolving action lives
+                  // here, and the page hides its toolbar so the view carries
+                  // a single primary action.
+                  <EmptyState
+                    variant="bare"
+                    className="py-12"
+                    icon={PlusIcon}
+                    titleAs="h3"
+                    title={t("assignments.table.emptyTitle")}
+                    body={t("assignments.table.emptyBody")}
+                    action={emptyAction}
+                  />
+                ) : (
+                  // Read-only viewers (TA, archived classroom) get the plain
+                  // statement — there is no action they could take.
+                  <EmptyState
+                    variant="bare"
+                    body={t("assignments.table.empty")}
+                  />
+                )}
               </td>
             </tr>
           )}
