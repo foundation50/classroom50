@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router"
 import {
   ArrowSwitchIcon,
-  ChevronDownIcon,
+  TriangleDownIcon,
   FilterIcon,
   MarkGithubIcon,
   PlusIcon,
@@ -278,7 +278,7 @@ const ClassroomList = ({
               className="join-item h-full border-s border-primary-content/20 px-1.5"
               aria-label={t("classes.newButton.moreOptions")}
             >
-              <ChevronDownIcon aria-hidden="true" className="size-4" />
+              <TriangleDownIcon aria-hidden="true" className="size-4" />
             </Button>
             <DropdownMenu className="w-max">
               {/* FEATURE: github-classroom-migration — removable entry point (#312) */}

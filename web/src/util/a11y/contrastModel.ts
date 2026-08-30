@@ -366,6 +366,29 @@ function buildTheme(theme: Theme): Pair[] {
     true,
   )
 
+  // Progress fill vs its own track (MetricBar funnel bars, the bulk progress
+  // bars): daisyUI's track is currentColor at 20% over the surface, so the
+  // filled-vs-unfilled distinction is a 1.4.11 non-text pair on base-100.
+  const progressTrack = (token: string) =>
+    flattenOver(
+      mixColor("oklab", token, 20, "transparent"),
+      parseColor(T.base100),
+    )
+  for (const [name, token] of [
+    ["primary", T.primary],
+    ["info", T.info],
+    ["success", T.success],
+  ] as const) {
+    add(
+      `progress-${name}`,
+      `progress ${name} fill vs its own track on base-100`,
+      opaque(token),
+      progressTrack(token),
+      "body",
+      "nonText",
+    )
+  }
+
   return pairs
 }
 

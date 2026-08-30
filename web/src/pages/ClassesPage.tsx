@@ -1,7 +1,7 @@
 import { useParams, Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  ChevronDownIcon,
+  TriangleDownIcon,
   MarkGithubIcon,
   PlusIcon,
 } from "@/components/ui/icons"
@@ -65,7 +65,7 @@ const NewClassroomButton = ({ org }: { org: string }) => {
           className="join-item h-full border-s border-primary-content/20 px-2"
           aria-label={t("classes.newButton.moreOptions")}
         >
-          <ChevronDownIcon aria-hidden="true" className="size-4" />
+          <TriangleDownIcon aria-hidden="true" className="size-4" />
         </Button>
         <DropdownMenu className="w-max">
           {/* FEATURE: github-classroom-migration — removable entry point (#312) */}

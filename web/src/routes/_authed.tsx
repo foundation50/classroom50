@@ -2,6 +2,7 @@ import { createFileRoute, redirect, useParams } from "@tanstack/react-router"
 import { type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
+import { BannerStackProvider } from "@/context/bannerStack/BannerStackProvider"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
 import { BudgetCreatedBanner } from "@/components/BudgetCreatedBanner"
 import { OfflineBanner } from "@/components/OfflineBanner"
@@ -60,14 +61,16 @@ function AuthedLayout() {
   return (
     <AuthedShell
       topSlot={
-        <>
+        // Priority-capped stack (Primer: at most two banners at once);
+        // order here is cosmetic — BANNER_PRIORITY owns precedence.
+        <BannerStackProvider>
           <OfflineBanner />
           <GitHubStatusBanner />
           <ScopeWarningBanner />
           <SkeletonDriftBanner />
           <BudgetCreatedBanner />
           <UpdateAvailableBanner />
-        </>
+        </BannerStackProvider>
       }
     />
   )

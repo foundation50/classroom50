@@ -385,7 +385,9 @@ const CreateClassroomForm = ({
         >
           {submitError}
         </AnimatedAlert>
-        <Card.Actions className="justify-end p-2">
+        {/* Primer page-form convention: actions bottom-LEFT (right alignment
+              is for dialog footers). */}
+        <Card.Actions className="justify-start p-2">
           <form.Subscribe selector={(state) => [state.isSubmitting]}>
             {([isSubmitting]) => {
               // Hold the loading state through post-create navigation so the

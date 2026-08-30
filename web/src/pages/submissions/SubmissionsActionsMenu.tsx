@@ -1,6 +1,6 @@
 import {
   CalendarIcon,
-  ChevronDownIcon,
+  TriangleDownIcon,
   DownloadIcon,
   FileZipIcon,
   GitBranchIcon,
@@ -162,7 +162,7 @@ export function SubmissionsActionsMenu({
             ? t("submissions.collect.active")
             : t("submissions.regradeAll.active")
           : t("submissions.menu.actions")}
-        {!busy && <ChevronDownIcon aria-hidden="true" className="size-4" />}
+        {!busy && <TriangleDownIcon aria-hidden="true" className="size-4" />}
       </Button>
       <DropdownMenu className="w-64">
         {/* Metrics — graded-snapshot stats; hidden in live view (onMetrics

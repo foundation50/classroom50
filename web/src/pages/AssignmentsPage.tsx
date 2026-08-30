@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { ChevronDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
+import { TriangleDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -78,7 +78,7 @@ const NewAssignmentButton = ({
             className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
           >
-            <ChevronDownIcon aria-hidden="true" className="size-4" />
+            <TriangleDownIcon aria-hidden="true" className="size-4" />
           </Button>
           <DropdownMenu className="w-max">
             <li>
