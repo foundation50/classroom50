@@ -600,8 +600,8 @@ func renameRepoAPI(client githubapi.Client, org, repo, newName string) error {
 }
 
 // summarizeRenameResults prints per-repo lines plus the tally, returning a
-// non-zero-exit error when anything failed (best-effort partial completion,
-// mirroring migrate) with the idempotent re-run hint.
+// non-zero-exit error when anything failed (best-effort partial completion)
+// with the idempotent re-run hint.
 func summarizeRenameResults(out, errOut io.Writer, p renameParams, results []repoRenameResult) error {
 	var renamed, healed, current, foreign, noMarker, failed int
 	for _, r := range results {

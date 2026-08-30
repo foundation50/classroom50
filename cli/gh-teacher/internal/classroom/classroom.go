@@ -1,8 +1,7 @@
 // Package classroom implements the `gh teacher classroom` command group:
 // managing classroom directories inside the <org>/classroom50 repository
-// (add/list/edit/remove) plus `classroom migrate` (imports an existing GitHub
-// Classroom). Only NewCmd is exported. The four-file scaffold lands through the
-// race-safe internal/configwrite seam.
+// (add/list/edit/remove). Only NewCmd is exported. The four-file scaffold lands
+// through the race-safe internal/configwrite seam.
 package classroom
 
 import (
@@ -37,11 +36,6 @@ const (
 // rosterCSVHeader derives from configrepo.RosterColumns so they can't drift.
 var rosterCSVHeader = strings.Join(configrepo.RosterColumns, ",") + "\n"
 
-// defaultAutograderName is the "use the universal default autograder"
-// sentinel, single-sourced from the shared contract; the migrate path stamps
-// it onto imported assignments that don't name their own autograder.
-const defaultAutograderName = contract.DefaultAutograderName
-
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "classroom",
@@ -67,7 +61,6 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(classroomArchiveCmd())
 	cmd.AddCommand(classroomUnarchiveCmd())
 	cmd.AddCommand(classroomRemoveCmd())
-	cmd.AddCommand(classroomMigrateCmd())
 	return cmd
 }
 
@@ -248,7 +241,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams access to the classroom50 repository (%v); staff may lack write until re-affirmed.\n", err)
 	}
 
-	files, err := classroomScaffold(org, shortName, name, term, secret, nil, nil, &team, staffTeams)
+	files, err := classroomScaffold(org, shortName, name, term, secret, &team, staffTeams)
 	if err != nil {
 		return err
 	}
@@ -300,8 +293,8 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 }
 
 // seedStaffTeams creates (or adopts) the staff teams (teacher, hta, ta) and
-// adds the acting teacher as teacher-team maintainer — shared by `classroom
-// add` and `classroom migrate`. It does NOT grant config-repo access; the
+// adds the acting teacher as teacher-team maintainer for `classroom add`.
+// It does NOT grant config-repo access; the
 // caller does that via GrantStaffTeamsConfigRepoAccess after the creator drop
 // (see EnsureStaffTeams). Returns the resolved acting login (empty when it
 // couldn't be read) so the caller can drop that same user from the non-teacher
@@ -599,7 +592,7 @@ func editClassroom(client githubapi.Client, out, errOut io.Writer, org, shortNam
 	// Re-project the classroom50/team/v1 record onto the student team so a
 	// renamed/re-termed classroom isn't left showing a stale title in a
 	// student's "My Classrooms". Best-effort: a reconcile failure must not fail
-	// the edit (the config write already landed); a later add/migrate converges.
+	// the edit (the config write already landed); a later add converges.
 	if _, rErr := configrepo.ReconcileClassroomTeamDescription(client, org, shortName, branch); rErr != nil {
 		_, _ = fmt.Fprintf(errOut, "Note: couldn't refresh the student team's classroom record: %v\n", rErr)
 	}
@@ -873,32 +866,26 @@ func confirmClassroomRemove(in io.Reader, out io.Writer, shortName string) error
 }
 
 // classroomScaffold returns destination-path → content for the four-file
-// scaffold. A nil `entries` normalizes to an empty slice so assignments.json
-// marshals as `[]`. `migration` populates classroom.json's optional
-// `migrated_from` block.
-func classroomScaffold(org, shortName, name, term, secret string, entries []assignment.AssignmentEntry, migration *configrepo.MigratedFromRef, team *configrepo.TeamRef, staffTeams *configrepo.StaffTeamsRef) (map[string]string, error) {
+// scaffold.
+func classroomScaffold(org, shortName, name, term, secret string, team *configrepo.TeamRef, staffTeams *configrepo.StaffTeamsRef) (map[string]string, error) {
 	classroom := configrepo.ClassroomJSON{
-		Schema:       classroomSchemaV1,
-		Name:         name,
-		ShortName:    shortName,
-		Term:         term,
-		Org:          org,
-		Secret:       secret,
-		Team:         team,
-		Teams:        staffTeams,
-		MigratedFrom: migration,
+		Schema:    classroomSchemaV1,
+		Name:      name,
+		ShortName: shortName,
+		Term:      term,
+		Org:       org,
+		Secret:    secret,
+		Team:      team,
+		Teams:     staffTeams,
 	}
 	classroomBytes, err := output.JSONPretty(classroom)
 	if err != nil {
 		return nil, fmt.Errorf("encode classroom.json: %w", err)
 	}
 
-	if entries == nil {
-		entries = []assignment.AssignmentEntry{}
-	}
 	assignmentsBytes, err := assignment.EncodeAssignments(assignment.AssignmentsJSON{
 		Schema:      assignmentsSchemaV1,
-		Assignments: entries,
+		Assignments: []assignment.AssignmentEntry{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode assignments.json: %w", err)

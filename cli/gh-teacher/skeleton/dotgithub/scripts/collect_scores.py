@@ -79,7 +79,7 @@ SUBMIT_TAG_PREFIX = "submit/"
 # Repo permission the grant gives each staff role's team. Hand-mirrored from Go
 # StaffTeamRepoPermissions (source of truth; parity-tested) — keep in lockstep.
 # The head-TA/TA-team template read is granted eagerly at assignment add/reuse
-# and classroom migrate (Go side, which hardcodes read there); this collect-time
+# (Go side, which hardcodes read there); this collect-time
 # grant reads the value below and is the idempotent re-affirm. A role absent
 # here gets nothing (the teacher team is an org owner with access via ownership,
 # so only the non-owner staff teams — head-TA and TA — need a grant).

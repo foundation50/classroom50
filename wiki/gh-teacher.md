@@ -22,7 +22,6 @@ output, or `--verbose` / `-v` for per-step detail.
 | `classroom edit <org> <short-name>` | Update a classroom's name/term. |
 | `classroom archive` / `unarchive <org> <short-name>` | Archive or restore a classroom. |
 | `classroom remove <org> <short-name>` | Delete a classroom's config directory (not student repos). |
-| `classroom migrate --source <id-or-org> --target <org>` | Import a GitHub Classroom. |
 | `roster list <org> <classroom>` | List roster rows. Flags: `--json`, `--quiet`. |
 | `roster add <org> <classroom> <username>` | Add/upsert a student; invites them. |
 | `roster invite <org> <classroom> <email>` | Invite one student by email, or a whole list with `--file <path>`. Flags: `--first-name`, `--last-name`, `--section` (single invite only). |
@@ -252,54 +251,6 @@ gh teacher classroom remove <org> <short-name> [--yes]
 Deletes the `<short-name>/` directory and the classroom's teams in one commit.
 Prompts for the typed short-name unless `--yes`. Does **not** delete student
 repos.
-
-### `classroom migrate`
-
-Import an existing GitHub Classroom into `<target>/classroom50`.
-
-```sh
-gh teacher classroom migrate --source <id-or-org> --target <org> [--dry-run]
-gh teacher classroom migrate --source 95884 --target cs50-fall-2026 --short-name cs-principles --term Fall-2026
-```
-
-For each assignment, it copies the source starter repo into the target
-organization as a fresh template, then commits the classroom's four-file
-scaffold. GitHub Classroom is 1:1 with organizations, so migrate several legacy
-classrooms into one target organization by running this once per source.
-
-**Flags:** `--source <id-or-org>` (required), `--target <org>` (required),
-`--short-name`, `--term`, `--template-suffix` (escape target name collisions),
-`--rename <source-slug>=<new-slug>` (repeatable), `--include-archived`,
-`--dry-run`.
-
-**Slug handling:** assignment slugs import verbatim when they fit the
-repo-name budget (see `assignment add`). A slug that would push
-`<classroom>-<assignment>-<username>` past GitHub's 100-character limit is
-shortened automatically to the classroom's budget, suffixed `-2`, `-3`, … past
-collisions, and each mapping is reported (`--dry-run` annotates those rows
-with `renamed-from=<source>`). Pass `--rename <source-slug>=<new-slug>` to
-choose the imported slug yourself; explicit renames are validated against the
-slug pattern, the budget, and uniqueness within the batch before anything is
-created. An auto-derived short-name is truncated to 40 characters; an explicit
-`--short-name` past the cap fails before any template repos are created.
-
-**Not migrated:** roster, scores, accepted student repos, and GitHub Classroom's
-autograding config. Re-onboard students with `gh teacher roster add`/`import`
-and author grading under `<classroom>/autograders/<slug>/`.
-
-<details>
-<summary>Source resolution, provenance, and failure model</summary>
-
-- **Numeric source** resolves the classroom directly; **org-login source** lists
-  the classrooms you administer and matches by organization. Multiple matches in
-  one org enumerate candidates and ask for `--source <id>`.
-- Each migrated entry carries a `migrated_from` provenance block.
-- `mode: group` assignments migrate with their `max_group_size`.
-- Per-assignment failures skip that entry with a reason; the commit still lands
-  with the successes and exits non-zero. Re-running reuses templates that
-  already exist.
-
-</details>
 
 ## `roster`
 

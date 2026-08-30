@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   SHORT_NAME_PATTERN,
-  assertValidShortName,
   isCanonicalTeamShortName,
   isValidShortName,
 } from "./shortName"
@@ -40,17 +39,5 @@ describe("isValidShortName", () => {
     expect(isValidShortName("a".repeat(101))).toBe(false) // over cap
     expect(isValidShortName("cs--50")).toBe(false) // non-canonical
     expect(isValidShortName("CS-50")).toBe(false) // uppercase
-  })
-})
-
-describe("assertValidShortName", () => {
-  it("passes a valid slug", () => {
-    expect(() => assertValidShortName("cs-principles")).not.toThrow()
-  })
-
-  it("throws on an over-cap slug", () => {
-    expect(() => assertValidShortName("a".repeat(101))).toThrow(
-      /shortNameInvalid/,
-    )
   })
 })

@@ -163,5 +163,5 @@ in Advanced Autograding.
 ### Bringing a GitHub Classroom autograder along
 
 Moved to
-[Bringing a GitHub Classroom autograder along](Advanced-Autograding#bringing-a-github-classroom-autograder-along)
+[Keeping a GitHub Classroom autograder](Advanced-Autograding#keeping-a-github-classroom-autograder)
 in Advanced Autograding.

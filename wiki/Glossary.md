@@ -229,7 +229,5 @@ GitHub's redirects from the old repository names keep working. See
 
 Most vocabulary carries over unchanged: classroom, roster, assignment,
 individual and group assignments, template repository, starter code, accept.
-Where the behavior behind a term differs, the entry above says so. To
-bring an existing classroom over, see
-[`gh teacher classroom migrate`](gh-teacher#classroom-migrate) and the
-[migration FAQ](FAQ#migrating-from-github-classroom).
+Where the behavior behind a term differs, the entry above says so. See also
+[Coming from GitHub Classroom](FAQ#coming-from-github-classroom) in the FAQ.

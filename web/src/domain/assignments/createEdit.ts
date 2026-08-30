@@ -141,8 +141,8 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // Rebuilt from input alongside tests; a clearing edit (back to the grader
   // defaults) must win over the stale stored block.
   test_defaults: "classroom50-owned",
-  // Written only by the CLI's `migrate`; the form never rebuilds it, so it must
-  // ride through a GUI edit untouched.
+  // Written only by the retired GitHub Classroom migrate feature; the form
+  // never rebuilds it, so it must ride through a GUI edit untouched.
   migrated_from: "preserved",
   // Written only by the one-shot slug rename; carries the reservation and
   // collection-grandfather contracts, so an edit must never drop it.

@@ -1,10 +1,6 @@
-import { useParams, Link } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import {
-  TriangleDownIcon,
-  MarkGithubIcon,
-  PlusIcon,
-} from "@/components/ui/icons"
+import { PlusIcon } from "@/components/ui/icons"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -17,14 +13,7 @@ import {
   SkeletonRegion,
   ToolbarSkeleton,
 } from "@/components/list"
-import {
-  Alert,
-  Button,
-  Card,
-  DropdownMenu,
-  EmphasisLtr,
-  RouterButton,
-} from "@/components/ui"
+import { Alert, Button, Card, EmphasisLtr, RouterButton } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
@@ -37,47 +26,13 @@ import ClassroomList from "@/pages/classes/ClassroomList"
 import StudentClassroomList from "@/pages/classes/StudentClassroomList"
 import { useStudentClassroomSummaries } from "@/hooks/useStudentClassroomSummaries"
 
-// Split button: "New classroom" (primary) with a chevron dropdown whose only
-// item is "Import from GitHub Classroom". Mirrors the assignments-page new
-// button. The dropdown item is the removable migration entry point (#312) — the
-// primary Link and this whole control's shell stay if migration is dropped.
 const NewClassroomButton = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   return (
-    <div className="join">
-      <RouterButton
-        to="/$org/classes/new"
-        params={{ org }}
-        variant="primary"
-        className="join-item"
-      >
-        <PlusIcon aria-hidden="true" className="size-4" />
-        {t("classes.empty.createButton")}
-      </RouterButton>
-      {/* Not a join-item itself: daisyUI resets the join radius vars for a
-          join-item's children, which would square the inner button's corners.
-          The wrapper still inherits the vars as the join's last child; -ms-px
-          keeps the 1px border overlap join-item would have provided. */}
-      <div className="dropdown dropdown-end -ms-px">
-        <Button
-          variant="primary"
-          tabIndex={0}
-          className="join-item h-full border-s border-primary-content/20 px-2"
-          aria-label={t("classes.newButton.moreOptions")}
-        >
-          <TriangleDownIcon aria-hidden="true" className="size-4" />
-        </Button>
-        <DropdownMenu className="w-max">
-          {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
-          <li>
-            <Link to="/$org/import" params={{ org }}>
-              <MarkGithubIcon aria-hidden="true" className="size-4" />
-              {t("migration.entryButton")}
-            </Link>
-          </li>
-        </DropdownMenu>
-      </div>
-    </div>
+    <RouterButton to="/$org/classes/new" params={{ org }} variant="primary">
+      <PlusIcon aria-hidden="true" className="size-4" />
+      {t("classes.empty.createButton")}
+    </RouterButton>
   )
 }
 

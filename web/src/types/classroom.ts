@@ -352,7 +352,9 @@ export type Assignment = {
   // meaningful alongside `tests`. In lockstep with the CLI's assignments-v1
   // schema (`test_defaults`) and the Go TestDefaults struct.
   test_defaults?: AssignmentTestDefaults
-  // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
+  // Provenance from the retired GitHub Classroom migrate feature. Nothing
+  // writes it anymore, but migrated classrooms carry it and readers must
+  // round-trip it.
   migrated_from?: MigratedFrom
   // The assignment's PREVIOUS slug, from the one-shot slug rename (a single
   // slug, never a chain — a renamed assignment can't be renamed again).

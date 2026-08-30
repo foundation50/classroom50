@@ -201,13 +201,6 @@ When `init` finishes, it prints the future Pages URL
 
 ## 4. Add a classroom
 
-> [!TIP]
-> **Migrating from GitHub Classroom?** Replace steps 4 and 7 with
-> `gh teacher classroom migrate --source <id-or-org> --target <org>`. It copies
-> each starter repo into your organization as a fresh template and commits the
-> classroom in one go. Roster and scores aren't migrated. Pass `--dry-run`
-> first. See [`gh teacher classroom migrate`](gh-teacher#classroom-migrate).
-
 Each classroom is a directory in `<org>/classroom50` holding four files:
 
 | File | Purpose |

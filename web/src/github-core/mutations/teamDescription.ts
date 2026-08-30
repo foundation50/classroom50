@@ -29,7 +29,7 @@ export class ClassroomSourceReadError extends Error {
 // Backfill/reconcile the classroom50/team/v1 bootstrap record onto the SECRET
 // student team's GitHub description, so a plain student can enumerate this
 // classroom (and recover its capability secret) from GET /user/teams without
-// config-repo access. The CLI writes this at classroom add/migrate; this is the
+// config-repo access. The CLI writes this at classroom add; this is the
 // web equivalent for GUI-created and pre-schema classrooms.
 //
 // Idempotent: reads classroom.json for the desired record, resolves the team by

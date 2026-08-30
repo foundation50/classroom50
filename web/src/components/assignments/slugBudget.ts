@@ -8,13 +8,12 @@ import {
 } from "@/util/repoNameBudget"
 
 // The composed repo-name budget error for `slug` in `classroom`, or undefined
-// when it fits (#691). The single recipe shared by the submit validator, the
-// live as-you-type checks (DetailsSection, RenameAssignmentModal), and the
-// migration confirm step. A classroom leaving no room for any slug (a legacy
-// over-long short-name) points at a new classroom instead of an impossible
-// shorter slug, mirroring the CLI's ComposedRepoNameBudget. Lives in
-// components/ (not pages/) so modals can import it without crossing the layer
-// boundary.
+// when it fits (#691). The single recipe shared by the submit validator and the
+// live as-you-type checks (DetailsSection, RenameAssignmentModal). A classroom
+// leaving no room for any slug (a legacy over-long short-name) points at a new
+// classroom instead of an impossible shorter slug, mirroring the CLI's
+// ComposedRepoNameBudget. Lives in components/ (not pages/) so modals can
+// import it without crossing the layer boundary.
 export function slugBudgetError(
   t: TFunction,
   classroom: string,
