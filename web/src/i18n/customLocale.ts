@@ -528,7 +528,7 @@ const SAMPLE_KEYS = [
   "nav.roleTeacher",
   "nav.roleStudent",
   "nav.myClasses",
-  "nav.assignment",
+  "nav.assignments",
   "common.save",
 ] as const
 

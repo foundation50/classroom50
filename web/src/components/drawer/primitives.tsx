@@ -4,11 +4,10 @@ import {
   ChevronRightIcon,
   MortarBoardIcon,
 } from "@/components/ui/icons"
-import { Link, useParams } from "@tanstack/react-router"
+import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
 import { motion } from "motion/react"
-import type { Classroom } from "@/types/classroom"
 import { useSidebarCollapse } from "./collapseContext"
 import {
   navItemClass,
@@ -193,33 +192,6 @@ export const AllClasses = ({ org }: { org: string }) => {
         />
         {t("nav.allClassesLink")}
       </Link>
-    </div>
-  )
-}
-
-// Accepts a partial identity so both sources can feed it: the staff
-// classroom.json read (full Classroom) and a student's team-derived record
-// (name/term only).
-export const SidebarClassInfo = ({
-  classInfo,
-}: {
-  classInfo?: Partial<Pick<Classroom, "name" | "short_name" | "term">>
-}) => {
-  const { classroom } = useParams({ strict: false })
-  const { collapsed } = useSidebarCollapse()
-  const { t } = useTranslation()
-
-  if (collapsed) return null
-
-  return (
-    <div className="sidebar-fade-in py-2">
-      <h3 className="font-bold">
-        {classInfo?.name ||
-          classInfo?.short_name ||
-          classroom ||
-          t("nav.untitledCourse")}
-      </h3>
-      <p className="text-gray-400 text-sm">{classInfo?.term ?? ""}</p>
     </div>
   )
 }
