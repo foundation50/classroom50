@@ -43,7 +43,6 @@ beforeEach(() => {
   syncRosterFromTeam.mockResolvedValue({
     addedUsernames: [],
     recoveredEmails: ["alice@example.com"],
-    removedEmails: [],
     recordedRecoveries: [RECOVERED],
     noop: false,
   })
@@ -68,7 +67,6 @@ describe("reconcileRoster", () => {
       return {
         addedUsernames: ["alice"],
         recoveredEmails: ["alice@example.com"],
-        removedEmails: ["dead@x"],
         recordedRecoveries: [RECOVERED],
         noop: false,
       }
@@ -97,7 +95,6 @@ describe("reconcileRoster", () => {
     expect(result).toEqual({
       addedUsernames: ["alice"],
       recoveredEmails: ["alice@example.com"],
-      removedEmails: ["dead@x"],
       recordedRecoveries: [RECOVERED],
       noop: false,
       deletedStaleTeams: 1,
@@ -116,7 +113,6 @@ describe("reconcileRoster", () => {
     syncRosterFromTeam.mockResolvedValue({
       addedUsernames: [],
       recoveredEmails: ["bob@example.com"],
-      removedEmails: [],
       recordedRecoveries: [LATE],
       noop: false,
     })

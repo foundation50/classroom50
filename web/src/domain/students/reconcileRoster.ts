@@ -22,8 +22,9 @@ export type ReconcileRosterResult = SyncRosterFromTeamResult & {
 //   1. collect: classify this classroom's invite teams (accepted -> recovered
 //      mappings, pending -> live emails) and GC the stale ones. No CSV writes.
 //   2. sync: one conflict-retried commit that folds the recovered mappings
-//      onto their rows, removes email-only rows no live invite team backs,
-//      appends missing team members, and reconciles roles/ids.
+//      onto their rows (rows are never removed — unbacked email rows stay
+//      visible as unlinked), appends missing team members, and reconciles
+//      roles/ids.
 //   3. finalize: delete ONLY the mappings the roster provably records after
 //      the sync (sync.recordedRecoveries — the caller's recoveries plus any
 //      the sync's decision-time re-collect folded, gated on the landed rows;
@@ -36,11 +37,22 @@ export type ReconcileRosterResult = SyncRosterFromTeamResult & {
 // transient write failures); the collect half is never-throw by contract.
 export async function reconcileRoster(
   client: GitHubClient,
-  input: { org: string; classroom: string },
+  input: {
+    org: string
+    classroom: string
+    // Threaded through to syncRosterFromTeam's append filter (see its doc):
+    // just-unenrolled logins the sync must not resurrect.
+    excludeLogins?: () => Set<string>
+  },
 ): Promise<ReconcileRosterResult> {
-  const { org, classroom } = input
+  const { org, classroom, excludeLogins } = input
   const invites = await collectInviteRecoveries(client, { org, classroom })
-  const sync = await syncRosterFromTeam(client, { org, classroom, invites })
+  const sync = await syncRosterFromTeam(client, {
+    org,
+    classroom,
+    invites,
+    excludeLogins,
+  })
   await finalizeInviteRecoveries(
     client,
     { org, classroom },

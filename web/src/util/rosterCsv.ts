@@ -23,6 +23,22 @@ type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
 export type StudentCsvRow = Record<StudentCsvField, string>
 
+// The keep-rule: which parsed rows survive a read (and a write). A row must
+// identify a student (username, github_id, or email) or at least DESCRIBE one
+// (a name) — a row with only section/role noise, or nothing at all, is
+// dropped. Callers pass normalizeStudentRow output, so every cell is already
+// trimmed. Mirrors the CLI's recordToRow rule; shared cases:
+// cli/shared/testdata/roster_row_cases.json.
+function isKeptRosterRow(row: StudentCsvRow): boolean {
+  return Boolean(
+    row.username ||
+    row.github_id ||
+    row.email ||
+    row.first_name ||
+    row.last_name,
+  )
+}
+
 export function normalizeStudentRow(
   row: Partial<Record<StudentCsvField, unknown>>,
 ): StudentCsvRow {
@@ -117,7 +133,7 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
 
   const rows = parsed.data
     .map((row) => normalizeStudentRow(row))
-    .filter((row) => row.username || row.github_id || row.email)
+    .filter(isKeptRosterRow)
 
   return { rows, problems }
 }
@@ -185,7 +201,7 @@ export const FORMULA_GUARDED_FIELDS = [
 export function stringifyStudentsCsv(rows: StudentCsvRow[]) {
   const normalizedRows = rows
     .map((row) => normalizeStudentRow(row))
-    .filter((row) => row.username || row.github_id || row.email)
+    .filter(isKeptRosterRow)
     .map((row) => {
       const guarded = { ...row }
       for (const field of FORMULA_GUARDED_FIELDS) {

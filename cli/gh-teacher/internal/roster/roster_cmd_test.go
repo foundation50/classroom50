@@ -895,8 +895,8 @@ func TestRunRosterImport(t *testing.T) {
 		if !strings.Contains(out, "1 skipped") {
 			t.Errorf("stdout should count the skipped row:\n%s", out)
 		}
-		if !strings.Contains(mock.blobs[0], storedCargo) {
-			t.Errorf("the stored github_id-only row must round-trip byte-identical:\n%s", mock.blobs[0])
+		if !strings.Contains(mock.blobs[0], ",Cargo,C,,,555,student\n") {
+			t.Errorf("the stored github_id-only row must round-trip verbatim:\n%s", mock.blobs[0])
 		}
 	})
 
@@ -922,8 +922,8 @@ func TestRunRosterImport(t *testing.T) {
 		if !strings.Contains(out, "1 skipped") {
 			t.Errorf("stdout should count the skipped row:\n%s", out)
 		}
-		if !strings.Contains(mock.blobs[0], storedCargo) {
-			t.Errorf("the stored row must round-trip byte-identical:\n%s", mock.blobs[0])
+		if !strings.Contains(mock.blobs[0], ",Cargo,C,,,0,student\n") {
+			t.Errorf("the stored row must round-trip unchanged:\n%s", mock.blobs[0])
 		}
 		if alice := committedRow(t, mock, "alice", ""); alice.LastName != "Anderson" {
 			t.Errorf("the rest of the import must still apply: %#v", alice)

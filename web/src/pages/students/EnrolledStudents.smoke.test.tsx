@@ -52,6 +52,11 @@ let mockLastUpdated: Date | null = null
 vi.mock("@/hooks/useRosterLastUpdated", () => ({
   useRosterLastUpdated: () => mockLastUpdated,
 }))
+// The identity-directory hook is demand-gated real react-query; stub it so
+// the smoke test stays provider-free (its own behavior has unit tests).
+vi.mock("@/hooks/useIdentityDirectory", () => ({
+  useIdentityDirectory: () => ({ data: undefined, isLoading: false }),
+}))
 vi.mock("@/hooks/mutations/useReinviteFailedInvite", () => ({
   useReinviteFailedInvite: () => inertMutation,
 }))
@@ -74,7 +79,8 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 // Child surfaces with their own tests + provider needs; stub so the smoke test
 // renders EnrolledStudents' own markup provider-free. RosterMemberModal's stub
 // captures its canManage prop so the owner-gate wiring test can assert it; the
-// bulk bar's stub captures `disabled` so the sync-lock wiring is assertable.
+// bulk bar's stub captures `disabled` to pin that a running sync no longer
+// freezes it.
 let capturedCanManage: boolean | undefined
 vi.mock("@/pages/students/RosterMemberModal", () => ({
   default: (props: { canManage?: boolean }) => {
@@ -124,6 +130,7 @@ const suppressedLogins: SuppressedLogins = {
   remember: vi.fn(),
   forget: vi.fn(),
   has: () => false,
+  snapshot: () => new Set<string>(),
   clear: vi.fn(),
 }
 
@@ -140,6 +147,7 @@ const emptyRoster = {
   csvMissingLogins: [],
   backfillNeededLogins: [],
   orgMembersKnown: true,
+  orgMembers: [],
   refetch: vi.fn(),
 }
 
@@ -374,9 +382,11 @@ describe("EnrolledStudents — rendered phase views", () => {
   })
 
   // While the on-entry reconcile runs, the Sync button doubles as the progress
-  // indicator (label swaps, disabled) and the roster locks: table region inert
-  // (dimmed + pointer-events off + aria-busy), bulk bar fieldset-disabled.
-  it("swaps the Sync button to its syncing state and locks the table while the reconcile runs", () => {
+  // indicator (label swaps, disabled) — and that is ALL that locks. The table
+  // stays interactive (no inert region, no veil, selection and bulk actions
+  // usable): every roster write rebases onto a concurrent sync commit, so
+  // freezing the page bought nothing but a stalled teacher (#800).
+  it("swaps the Sync button to its syncing state while the table stays interactive", () => {
     mockReconcilePending = true
     useTeamRoster.mockReturnValue(populatedRoster)
     const { container } = render(renderView())
@@ -384,12 +394,20 @@ describe("EnrolledStudents — rendered phase views", () => {
     const button = screen.getByRole("button", { name: /students\.syncActive/ })
     expect((button as HTMLButtonElement).disabled).toBe(true)
     expect(screen.queryByText("students.syncNow")).toBeNull()
-    const locked = container.querySelector(".pointer-events-none")
-    expect(locked).not.toBeNull()
-    expect(locked?.getAttribute("aria-busy")).toBe("true")
-    // The translucent skeleton shimmer overlays the frozen table.
-    expect(screen.getByTestId("roster-sync-veil")).not.toBeNull()
-    expect(capturedBulkDisabled).toBe(true)
+    // The refresh is announced (aria-busy), never enforced: no pointer lock,
+    // no overlay, bulk bar not disabled.
+    expect(container.querySelector("[aria-busy='true']")).not.toBeNull()
+    expect(container.querySelector(".pointer-events-none")).toBeNull()
+    expect(container.querySelector("[inert]")).toBeNull()
+    expect(screen.queryByTestId("roster-sync-veil")).toBeNull()
+    expect(capturedBulkDisabled).toBeUndefined()
+    // Selection still works mid-sync — the actionable half of "interactive".
+    const selectAll = screen.getByRole("checkbox", {
+      name: "students.bulk.selectAll",
+    }) as HTMLInputElement
+    expect(selectAll.disabled).toBe(false)
+    fireEvent.click(selectAll)
+    expect(capturedSelectedKeys).toEqual(["alice"])
     expect(syncMutate).not.toHaveBeenCalled()
   })
 
@@ -400,7 +418,7 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(screen.queryByText("students.syncActive")).toBeNull()
     expect(container.querySelector(".pointer-events-none")).toBeNull()
     expect(screen.queryByTestId("roster-sync-veil")).toBeNull()
-    expect(capturedBulkDisabled).toBe(false)
+    expect(capturedBulkDisabled).toBeUndefined()
   })
 
   // The Refresh caption: roster.csv's last-commit age plus, once a refresh
@@ -415,8 +433,7 @@ describe("EnrolledStudents — rendered phase views", () => {
       data: {
         noop: false,
         addedUsernames: ["a"],
-        recoveredEmails: [],
-        removedEmails: ["b@x.io"],
+        recoveredEmails: ["b@x.io"],
         recordedRecoveries: [],
       },
     }
@@ -436,7 +453,6 @@ describe("EnrolledStudents — rendered phase views", () => {
         noop: true,
         addedUsernames: [],
         recoveredEmails: [],
-        removedEmails: [],
         recordedRecoveries: [],
       },
     }
@@ -451,8 +467,8 @@ describe("EnrolledStudents — rendered phase views", () => {
 
   // The add-students actions live on the toolbar's right edge (not in the
   // table's bulk bar anymore): present when the page provides them, wired to
-  // their modal openers, and frozen while a sync rewrites the roster.
-  it("hosts the add-students actions in the toolbar and freezes them while syncing", () => {
+  // their modal openers, and still usable while a sync runs.
+  it("hosts the add-students actions in the toolbar and keeps them usable while syncing", () => {
     const addActions = {
       onAddStudent: vi.fn(),
       onUploadRoster: vi.fn(),
@@ -499,10 +515,14 @@ describe("EnrolledStudents — rendered phase views", () => {
         addActions={addActions}
       />,
     )
+    // Adding students mid-sync stays open — the pass rebases around any
+    // roster commit the add lands.
     const add = screen.getByRole("button", {
       name: "students.addTitle",
     }) as HTMLButtonElement
-    expect(add.disabled).toBe(true)
+    expect(add.disabled).toBe(false)
+    fireEvent.click(add)
+    expect(addActions.onAddStudent).toHaveBeenCalledTimes(2)
   })
 
   // Select-all moved from the bulk bar into the select-column header: toggling

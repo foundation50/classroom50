@@ -53,6 +53,8 @@ import {
   Modal,
   Select,
 } from "@/components/ui"
+import UnlinkedRowSection from "@/pages/students/UnlinkedRowSection"
+import type { DirectoryMember } from "@/domain/students"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -75,7 +77,7 @@ const RosterMemberModal = ({
   teamSlugByRole,
   row: rowProp,
   canManage: canManageProp = true,
-  frozen = false,
+  linkCandidates = [],
   isSelf = false,
   onClose,
   onSaved,
@@ -99,10 +101,11 @@ const RosterMemberModal = ({
   // hidden), so those actions are hidden with an explanatory note rather than
   // rendered as buttons that silently no-op.
   canManage?: boolean
-  // A roster sync is rewriting the state these actions read and write: keep an
-  // already-open modal readable but withdraw every write affordance until the
-  // pass lands (the page's table lock can't reach a modal that is already up).
-  frozen?: boolean
+  // Directory members the link picker may offer for an UNLINKED row (the
+  // parent already excludes members claiming another roster row). Sourced from
+  // the classroom identity directory — team members across the org's
+  // classrooms — so `classrooms` names where each candidate was seen.
+  linkCandidates?: DirectoryMember[]
   // True when this row IS the signed-in viewer. A viewer can't change their own
   // role here: demoting yourself off teacher would revoke your own org-owner
   // access mid-change (the mutation refuses it too — this hides the control so
@@ -123,9 +126,7 @@ const RosterMemberModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  // Every write gate below derives from canManage, so folding the sync freeze
-  // in here withdraws all of them at once while the modal stays readable.
-  const canManage = canManageProp && !frozen
+  const canManage = canManageProp
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
@@ -136,6 +137,10 @@ const RosterMemberModal = ({
   const [submitting, setSubmitting] = useState(false)
   const [resolving, setResolving] = useState(false)
   const [changingRole, setChangingRole] = useState(false)
+  // Mirrored from UnlinkedRowSection: true while its link/remove write is in
+  // flight, so `busy` keeps the modal non-closeable (the section owns the rest
+  // of its state and remounts per row/open — see its `key` below).
+  const [linkWorking, setLinkWorking] = useState(false)
   // The role selected in the enrolled-row role dropdown (null = matches current,
   // no pending change). Teacher target requires the owner-grant confirmation.
   const [pendingRole, setPendingRole] = useState<ClassroomRole | null>(null)
@@ -154,7 +159,8 @@ const RosterMemberModal = ({
     resending ||
     cancelling ||
     resolving ||
-    changingRole
+    changingRole ||
+    linkWorking
 
   const handleClose = () => {
     if (busy) return
@@ -254,6 +260,10 @@ const RosterMemberModal = ({
     typeof row.invitation_id === "number"
   const needsRole = canManage && row.state === "needs_attention_in_org"
   const needsInvite = canManage && row.state === "needs_attention_not_in_org"
+  // An UNLINKED row (no GitHub identity) offers exactly two actions: link it
+  // to an org member, or remove it. Everything identity-keyed above is
+  // structurally unavailable (no username/id, no invitation).
+  const canLink = canManage && row.state === "unlinked"
   // Unenroll drops a roster.csv row + student-team membership — a student-only
   // action. Hidden for a staff-only row (nothing to unenroll from the roster),
   // and for a row unenroll could never match: a pending email invite carries
@@ -627,6 +637,25 @@ const RosterMemberModal = ({
           <p className="text-sm text-base-content/70">
             {t("students.manageOwnerOnly")}
           </p>
+        ) : null}
+
+        {/* Unlinked-row reconciliation: link the row to an org member, or
+            remove it. Keyed on open + row identity so the section's own state
+            (picker text/selection, remove confirm) resets the way the modal's
+            other per-row drafts do — by remount instead of hand-resets. */}
+        {canLink ? (
+          <UnlinkedRowSection
+            key={`${open}:${row.key}`}
+            org={org}
+            classroom={classroom}
+            row={row}
+            linkCandidates={linkCandidates}
+            busy={busy}
+            onWorkingChange={setLinkWorking}
+            onChanged={onChanged}
+            onClose={onClose}
+            onError={onError}
+          />
         ) : null}
 
         {/* Inline confirmations for the enrollment actions above. */}

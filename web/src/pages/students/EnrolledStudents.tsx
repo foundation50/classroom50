@@ -15,7 +15,6 @@ import {
   SkeletonRows,
   SortableTh,
   TableShell,
-  cx,
 } from "@/components/ui"
 import { EmptyState } from "@/components/list"
 import type { Student } from "@/types/classroom"
@@ -33,6 +32,7 @@ import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/gith
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
+import { useIdentityDirectory } from "@/hooks/useIdentityDirectory"
 import { useRosterLastUpdated } from "@/hooks/useRosterLastUpdated"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
@@ -67,11 +67,12 @@ import {
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import AddStudentButtons from "@/pages/students/AddStudentButtons"
+import RosterEditMode from "@/pages/students/RosterEditMode"
 import RosterToolbar, {
   type RosterGrouping,
 } from "@/pages/students/RosterToolbar"
 import type { AddStudentActions } from "@/pages/students/RosterBulkActionsBar"
-import type { StudentCsvRow } from "@/domain/students"
+import type { ApplyRosterEditsResult, StudentCsvRow } from "@/domain/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
 import { useMemo, useState } from "react"
@@ -102,6 +103,14 @@ const SKELETON_BARS = [
 // One value per (column, direction) pair for the table-header sort controls.
 type RosterTableSortValue =
   `${RosterTableSortColumn}-asc` | `${RosterTableSortColumn}-desc`
+
+// applyRosterEdits' stable miss tokens -> teacher-actionable copy.
+const EDIT_MISS_REASON_KEY: Record<string, string> = {
+  "row-gone": "students.editRoster.reasonRowGone",
+  ambiguous: "students.editRoster.reasonAmbiguous",
+  "identity-claimed": "students.editRoster.reasonIdentityClaimed",
+  "member-not-active": "students.editRoster.reasonMemberNotActive",
+}
 
 const EnrolledStudents = ({
   students = [],
@@ -171,6 +180,10 @@ const EnrolledStudents = ({
   // Session-only banner dismissal — a page refresh re-derives roster state and
   // shows them again.
   const [pendingDismissed, setPendingDismissed] = useState(false)
+  const [unlinkedDismissed, setUnlinkedDismissed] = useState(false)
+  // Batch Edit mode: RosterEditMode renders in place of the roster table while
+  // active (owner-only entry via the toolbar's Edit button).
+  const [editing, setEditing] = useState(false)
 
   const {
     rows,
@@ -250,8 +263,12 @@ const EnrolledStudents = ({
   // un-bulk-cancellable.
   const isSelectable = (row: TeamRosterRow) =>
     !isSelf(row) &&
-    hasStudentEnrollment(row) &&
-    (canTargetForUnenroll(row) || canCancelInviteFor(row))
+    // An unlinked row has no enrollment or invitation to act on, but it IS the
+    // bulk remove-rows target — selection admits it and the bar's per-action
+    // eligibility filters keep it out of the other three actions.
+    (row.state === "unlinked" ||
+      (hasStudentEnrollment(row) &&
+        (canTargetForUnenroll(row) || canCancelInviteFor(row))))
 
   // Distinct sections present across all rows (status-independent so switching
   // status never empties the section dropdown), sorted with "No section" last.
@@ -406,7 +423,8 @@ const EnrolledStudents = ({
   // Status-filter options; hide "Pending" when invites are owner-only and this
   // viewer can't read them (avoids a dead, always-empty filter). The two
   // needs-attention options only exist when org membership is known (else those
-  // rows are suppressed, so the filters would be dead).
+  // rows are suppressed, so the filters would be dead). "Unlinked" appears only
+  // while such rows exist — most classrooms never have any.
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: "all", label: t("students.filterAll") },
     { value: "enrolled", label: t("students.filterEnrolled") },
@@ -425,12 +443,40 @@ const EnrolledStudents = ({
           },
         ]
       : []),
+    ...(counts.unlinked > 0 || statusFilter === "unlinked"
+      ? [{ value: "unlinked" as const, label: t("students.filterUnlinked") }]
+      : []),
   ]
+
+  // The link picker's candidates: the classroom identity directory's member
+  // pool (every classroom team's members — deliberately NOT the org member
+  // list, which in a shared org contains other teachers' people), minus
+  // identities already claiming a roster row. The directory is built on
+  // demand: a roster with nothing to link never pays for it.
+  const identityDirectory = useIdentityDirectory(org, counts.unlinked > 0)
+  const linkCandidates = useMemo(() => {
+    const members = identityDirectory.data?.members ?? []
+    const claimedIds = new Set<string>()
+    const claimedLogins = new Set<string>()
+    for (const row of rows) {
+      if (row.github_id.trim()) claimedIds.add(row.github_id.trim())
+      if (row.username.trim()) claimedLogins.add(row.username.toLowerCase())
+    }
+    return members.filter(
+      (m) =>
+        !claimedIds.has(String(m.id)) &&
+        !claimedLogins.has(m.login.toLowerCase()),
+    )
+  }, [rows, identityDirectory.data])
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live
-  // here so they skip when unmounted.
-  const syncMutation = useSyncRoster(org, classroom)
+  // here so they skip when unmounted. The suppressed-logins snapshot keeps a
+  // pass from re-appending a student unenrolled while it runs (the roster
+  // stays interactive during a sync).
+  const syncMutation = useSyncRoster(org, classroom, () =>
+    suppressedLogins.snapshot(),
+  )
   const runSync = () => {
     setSyncError(null)
     syncMutation.mutate(undefined, {
@@ -455,9 +501,10 @@ const EnrolledStudents = ({
   }
 
   // A roster synchronization is underway — the on-entry classroom reconcile,
-  // the drift auto-sync, or the manual Sync button. While true the sync button
-  // shows progress and the table below is inert: the sync rewrites the very
-  // state (teams, invitations, roster.csv) these actions read and write.
+  // the drift auto-sync, or the manual Sync button. Feeds the Sync button's
+  // progress state and keeps a second pass from stacking on this one; the
+  // table stays fully interactive, since every roster writer rebases onto a
+  // concurrent sync commit (withGitConflictRetry) rather than racing it.
   const syncing = reconcilePending || syncMutation.isPending
 
   // The Refresh caption's inputs: roster.csv's latest commit timestamp, and —
@@ -469,8 +516,7 @@ const EnrolledStudents = ({
       ? syncMutation.data.noop
         ? 0
         : syncMutation.data.addedUsernames.length +
-          syncMutation.data.recoveredEmails.length +
-          syncMutation.data.removedEmails.length
+          syncMutation.data.recoveredEmails.length
       : null
 
   // Auto-sync on open (see useRosterAutoSync): append team members lacking a
@@ -522,13 +568,18 @@ const EnrolledStudents = ({
   }
 
   // After a bulk run, clear the selection and refresh the caches the run
-  // touched (roster team membership + pending invites).
+  // touched (roster team membership + pending invites; roster.csv itself for a
+  // row removal, which is a CSV-only write nothing team-scoped reflects).
   const onBulkDone = (
-    action: "unenroll" | "invite" | "cancel",
+    action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => {
     setSelectedKeys(new Set())
     invalidateInviteQueries()
+    if (action === "removeRows") {
+      onRecheckRoster?.()
+      return
+    }
     // Unenroll changes team membership; invite changes org-invite state and may
     // team-add an already-active member; cancel removes pending invites — refresh
     // the enrolled roster for all three.
@@ -539,6 +590,57 @@ const EnrolledStudents = ({
     // suppressed by mistake.
     if (action === "unenroll" && removed)
       suppressedLogins.remember(removed.map((r) => r.username))
+  }
+
+  // Batch Edit mode saved: toast the outcome (applied count, plus any misses
+  // or failed team adds as warnings), refresh every cache the commit touched,
+  // and exit the mode. Misses are stale-view skips the domain reported, not
+  // errors — the refreshed table is the retry surface.
+  const onEditSaved = (result: ApplyRosterEditsResult) => {
+    setEditing(false)
+    if (result.applied > 0) {
+      notify({
+        tone: "success",
+        durationMs: 5000,
+        message: t("students.editRoster.savedToast", {
+          count: result.applied,
+        }),
+      })
+    }
+    if (result.missed.length > 0) {
+      notify({
+        tone: "warning",
+        message: t("students.editRoster.missedToast", {
+          count: result.missed.length,
+          details: result.missed
+            .map((m) =>
+              t(
+                EDIT_MISS_REASON_KEY[m.reason] ??
+                  EDIT_MISS_REASON_KEY["row-gone"],
+                {
+                  label: m.label,
+                },
+              ),
+            )
+            .join("; "),
+        }),
+      })
+    }
+    if (result.teamAddFailedLogins.length > 0) {
+      notify({
+        tone: "warning",
+        message: t("students.editRoster.teamAddFailed", {
+          count: result.teamAddFailedLogins.length,
+          logins: result.teamAddFailedLogins.join(", "),
+        }),
+      })
+    }
+    invalidateInviteQueries()
+    invalidateTeamRoster()
+    refetchRoster()
+    // Metadata/link edits rewrite roster.csv itself; the team-scoped
+    // refetches above don't re-read the file.
+    onRecheckRoster?.()
   }
 
   // The Section column exists only when some row carries a section label —
@@ -597,7 +699,6 @@ const EnrolledStudents = ({
       onToggle={handleToggleRow}
       showSection={showSection}
       showStatus={showStatus}
-      disabled={syncing}
     />
   )
 
@@ -657,6 +758,41 @@ const EnrolledStudents = ({
         </div>
       </AnimatedAlert>
 
+      {/* Unlinked-rows banner: rows with no GitHub account for the teacher to
+          reconcile (link to a member, or remove) — "Review" applies the
+          Unlinked filter. Dismissable for the session. */}
+      <AnimatedAlert
+        tone="info"
+        show={
+          !isLoading && !isError && !unlinkedDismissed && counts.unlinked > 0
+        }
+        className="flex items-center justify-between gap-3"
+      >
+        <span className="flex items-center gap-2 text-sm">
+          <PeopleIcon aria-hidden="true" className="size-4 shrink-0" />
+          {t("students.unlinkedBanner", { count: counts.unlinked })}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => onShowChange("unlinked")}
+          >
+            {t("students.pendingReview")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            shape="square"
+            aria-label={t("students.dismiss")}
+            title={t("students.dismiss")}
+            onClick={() => setUnlinkedDismissed(true)}
+          >
+            <XIcon aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
+      </AnimatedAlert>
+
       {/* Non-owner: pending invites are owner-only. */}
       {!isLoading && !isError && pendingHidden ? (
         <Alert tone="unavailable">
@@ -664,16 +800,15 @@ const EnrolledStudents = ({
         </Alert>
       ) : null}
 
-      {/* Failed/expired invitations (owner-only). Frozen while a sync runs —
-          this banner sits outside the locked table region, but Re-invite and
-          Dismiss write the very invitations the sync is reconciling. */}
+      {/* Failed/expired invitations (owner-only). Usable during a sync — a
+          concurrent re-invite/dismiss commit simply rebases (or is folded by
+          the pass's own conflict retry), so only the per-action pending
+          states gate the buttons. */}
       {!isLoading && !isError && failedInvitations.length > 0 ? (
         <FailedInvitationsList
           failedInvitations={failedInvitations}
           actionsDisabled={
-            syncing ||
-            reinviteFailedInvite.isPending ||
-            dismissFailedInvite.isPending
+            reinviteFailedInvite.isPending || dismissFailedInvite.isPending
           }
           onReinvite={reinvite}
           actionError={inviteActionError}
@@ -701,12 +836,12 @@ const EnrolledStudents = ({
       {/* Toolbar: Sync leading on the left (mirroring the submissions
           toolbar's collect affordance) and doubling as the sync-in-progress
           indicator — label swaps to "Syncing…" while the on-entry reconcile,
-          drift auto-sync, or a manual run is underway (the table below goes
-          inert at the same time). The selection cluster (count + Actions +
+          drift auto-sync, or a manual run is underway; the table stays
+          interactive throughout. The selection cluster (count + Actions +
           Clear) joins it on the left while rows are selected; search +
           filters + sort + add actions stay right-aligned like the submissions
           controls. */}
-      {!isLoading && !isError && !isEmpty ? (
+      {!isLoading && !isError && !isEmpty && !editing ? (
         <RosterToolbar
           org={org}
           classroom={classroom}
@@ -740,6 +875,9 @@ const EnrolledStudents = ({
           grouping={effectiveGrouping}
           onGroupingChange={setGrouping}
           addActions={addActions ?? null}
+          // Batch Edit mode is owner-only: it links rows (team writes) and
+          // rewrites roster.csv.
+          onEditRoster={isOwner ? () => setEditing(true) : undefined}
         />
       ) : null}
 
@@ -772,232 +910,228 @@ const EnrolledStudents = ({
       {/* The roster table: Primer DataTable treatment via the shared
           TableShell frame (matching the assignments/submissions tables);
           select-all lives in the header row and the selection actions in the
-          toolbar above. While a sync is underway the whole region is inert —
-          `inert` blocks keyboard/focus wholesale (pointer-events/opacity are
-          the visual half), and the row/select-all controls are also disabled
-          so the freeze holds in DOMs that don't implement inert. A translucent
-          skeleton shimmer overlays the dimmed rows so the freeze reads as
-          "refreshing" rather than broken. */}
-      <div
-        aria-busy={syncing || undefined}
-        inert={syncing || undefined}
-        className={cx(
-          "relative transition-opacity",
-          syncing && "pointer-events-none opacity-60",
-        )}
-      >
-        {syncing ? (
-          <div
-            aria-hidden="true"
-            data-testid="roster-sync-veil"
-            className="skeleton absolute inset-0 z-10 rounded-box opacity-40"
-          />
-        ) : null}
-        <TableShell animate={false} padded ariaBusy={isLoading}>
-          <caption className="sr-only">{t("students.table.caption")}</caption>
-          <thead>
-            <tr>
-              <th scope="col" className="w-0">
-                {/* Select-all lives in the select-column header (aligned above
+          toolbar above. A running sync only announces itself (aria-busy +
+          the toolbar indicator) — the table stays interactive, because every
+          roster write already rebases onto a concurrent sync commit. While
+          Edit mode is active, RosterEditMode replaces the whole table (the
+          domain re-proves every staged edit at save, so a concurrent sync
+          costs at most a reported miss). */}
+      {editing ? (
+        <RosterEditMode
+          org={org}
+          classroom={classroom}
+          rows={rows}
+          linkCandidates={linkCandidates}
+          onCancel={() => setEditing(false)}
+          onSaved={onEditSaved}
+        />
+      ) : (
+        <div aria-busy={syncing || undefined}>
+          <TableShell animate={false} padded ariaBusy={isLoading}>
+            <caption className="sr-only">{t("students.table.caption")}</caption>
+            <thead>
+              <tr>
+                <th scope="col" className="w-0">
+                  {/* Select-all lives in the select-column header (aligned above
                   the row checkboxes), replacing the old idle bulk bar. */}
-                {!isLoading && !isError && !isEmpty ? (
-                  <SelectAllCheckbox
-                    className="align-middle"
-                    ariaLabel={t("students.bulk.selectAll")}
-                    disabled={syncing}
-                    allSelected={allSelected}
-                    someSelected={someSelected}
-                    onToggle={handleToggleSelectAll}
-                  />
-                ) : (
-                  <span className="sr-only">
-                    {t("students.table.colSelect")}
-                  </span>
-                )}
-              </th>
-              {/* Sortable column headers — sorting lives here, not in the
+                  {!isLoading && !isError && !isEmpty ? (
+                    <SelectAllCheckbox
+                      className="align-middle"
+                      ariaLabel={t("students.bulk.selectAll")}
+                      allSelected={allSelected}
+                      someSelected={someSelected}
+                      onToggle={handleToggleSelectAll}
+                    />
+                  ) : (
+                    <span className="sr-only">
+                      {t("students.table.colSelect")}
+                    </span>
+                  )}
+                </th>
+                {/* Sortable column headers — sorting lives here, not in the
                   toolbar. An inactive table falls back to the default order
                   (enrollment state, then name). */}
-              <SortableTh
-                label={t("students.table.colMember")}
-                sort={tableSort ?? undefined}
-                asc="member-asc"
-                desc="member-desc"
-                onSortChange={setTableSort}
-              />
-              <SortableTh
-                label={t("students.table.colUsername")}
-                sort={tableSort ?? undefined}
-                asc="username-asc"
-                desc="username-desc"
-                onSortChange={setTableSort}
-              />
-              <SortableTh
-                label={t("students.table.colRoles")}
-                sort={tableSort ?? undefined}
-                asc="role-asc"
-                desc="role-desc"
-                onSortChange={setTableSort}
-              />
-              {showSection ? (
                 <SortableTh
-                  label={t("students.table.colSection")}
+                  label={t("students.table.colMember")}
                   sort={tableSort ?? undefined}
-                  asc="section-asc"
-                  desc="section-desc"
+                  asc="member-asc"
+                  desc="member-desc"
                   onSortChange={setTableSort}
                 />
-              ) : null}
-              {showStatus ? (
                 <SortableTh
-                  label={t("students.table.colStatus")}
+                  label={t("students.table.colUsername")}
                   sort={tableSort ?? undefined}
-                  asc="status-asc"
-                  desc="status-desc"
+                  asc="username-asc"
+                  desc="username-desc"
                   onSortChange={setTableSort}
                 />
-              ) : null}
-              <th scope="col" className="w-0">
-                <span className="sr-only">
-                  {t("students.table.colActions")}
-                </span>
-              </th>
-            </tr>
-          </thead>
-          {isLoading ? (
-            // Skeleton rows shaped like the loaded columns, so content fades
-            // into place instead of jumping in to replace a centered spinner.
-            <tbody>
-              <SkeletonRows rows={5} bars={SKELETON_BARS} />
-            </tbody>
-          ) : isError ? (
-            <tbody>
-              <tr>
-                <td colSpan={colCount} className="px-6 py-10 text-center">
-                  <span
-                    role="alert"
-                    className="inline-flex items-center gap-2 text-sm text-error"
-                  >
-                    <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
-                    {t("students.rosterLoadError")}
+                <SortableTh
+                  label={t("students.table.colRoles")}
+                  sort={tableSort ?? undefined}
+                  asc="role-asc"
+                  desc="role-desc"
+                  onSortChange={setTableSort}
+                />
+                {showSection ? (
+                  <SortableTh
+                    label={t("students.table.colSection")}
+                    sort={tableSort ?? undefined}
+                    asc="section-asc"
+                    desc="section-desc"
+                    onSortChange={setTableSort}
+                  />
+                ) : null}
+                {showStatus ? (
+                  <SortableTh
+                    label={t("students.table.colStatus")}
+                    sort={tableSort ?? undefined}
+                    asc="status-asc"
+                    desc="status-desc"
+                    onSortChange={setTableSort}
+                  />
+                ) : null}
+                <th scope="col" className="w-0">
+                  <span className="sr-only">
+                    {t("students.table.colActions")}
                   </span>
-                  <div className="mt-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => refetchRoster()}
+                </th>
+              </tr>
+            </thead>
+            {isLoading ? (
+              // Skeleton rows shaped like the loaded columns, so content fades
+              // into place instead of jumping in to replace a centered spinner.
+              <tbody>
+                <SkeletonRows rows={5} bars={SKELETON_BARS} />
+              </tbody>
+            ) : isError ? (
+              <tbody>
+                <tr>
+                  <td colSpan={colCount} className="px-6 py-10 text-center">
+                    <span
+                      role="alert"
+                      className="inline-flex items-center gap-2 text-sm text-error"
                     >
-                      {t("students.rosterRetry")}
-                    </Button>
-                  </div>
-                </td>
-              </tr>
-            </tbody>
-          ) : isEmpty ? (
-            <tbody>
-              <tr>
-                <td colSpan={colCount}>
-                  <EmptyState
-                    variant="bare"
-                    className="py-12"
-                    icon={PeopleIcon}
-                    titleAs="h3"
-                    title={t("students.emptyTitle")}
-                    body={t("students.emptyBody")}
-                    action={
-                      addActions ? (
-                        <div className="flex flex-col items-center gap-3">
-                          {/* The toolbar (and its syncing indicator) is hidden
+                      <AlertIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0"
+                      />
+                      {t("students.rosterLoadError")}
+                    </span>
+                    <div className="mt-3">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => refetchRoster()}
+                      >
+                        {t("students.rosterRetry")}
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            ) : isEmpty ? (
+              <tbody>
+                <tr>
+                  <td colSpan={colCount}>
+                    <EmptyState
+                      variant="bare"
+                      className="py-12"
+                      icon={PeopleIcon}
+                      titleAs="h3"
+                      title={t("students.emptyTitle")}
+                      body={t("students.emptyBody")}
+                      action={
+                        addActions ? (
+                          <div className="flex flex-col items-center gap-3">
+                            {/* The toolbar (and its syncing indicator) is hidden
                               on an empty roster, so say it here too. */}
-                          {syncing ? (
-                            <span
-                              className="flex items-center gap-2 text-sm text-base-content/70"
-                              aria-live="polite"
-                            >
-                              <SyncIcon
-                                aria-hidden="true"
-                                className="size-4 animate-spin"
-                              />
-                              {t("students.syncActive")}
-                            </span>
-                          ) : null}
-                          <div className="flex justify-center gap-2">
-                            <AddStudentButtons
-                              addActions={addActions}
-                              disabled={syncing}
-                            />
+                            {syncing ? (
+                              <span
+                                className="flex items-center gap-2 text-sm text-base-content/70"
+                                aria-live="polite"
+                              >
+                                <SyncIcon
+                                  aria-hidden="true"
+                                  className="size-4 animate-spin"
+                                />
+                                {t("students.syncActive")}
+                              </span>
+                            ) : null}
+                            <div className="flex justify-center gap-2">
+                              <AddStudentButtons addActions={addActions} />
+                            </div>
                           </div>
-                        </div>
-                      ) : null
-                    }
-                  />
-                </td>
-              </tr>
-            </tbody>
-          ) : filtered.length === 0 ? (
-            <tbody>
-              <tr>
-                <td colSpan={colCount}>
-                  <EmptyState
-                    variant="bare"
-                    body={
-                      query.trim()
-                        ? t("students.noMatch")
-                        : effectiveSection !== "all" && statusFilter === "all"
-                          ? t("students.noneInSection", {
-                              section:
-                                effectiveSection === NO_SECTION
-                                  ? t("students.noSection")
-                                  : effectiveSection,
-                            })
-                          : t("students.noneWithStatus", {
-                              status:
-                                statusOptions.find(
-                                  (o) => o.value === statusFilter,
-                                )?.label ?? statusFilter,
-                            })
-                    }
-                  />
-                </td>
-              </tr>
-            </tbody>
-          ) : groupedRows ? (
-            // One <tbody> per group (role or section), opened by a full-width
-            // rowgroup header — the table equivalent of the old
-            // section-divider list headers.
-            groupedRows.map(({ key, label, rows: group }) => (
+                        ) : null
+                      }
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            ) : filtered.length === 0 ? (
+              <tbody>
+                <tr>
+                  <td colSpan={colCount}>
+                    <EmptyState
+                      variant="bare"
+                      body={
+                        query.trim()
+                          ? t("students.noMatch")
+                          : effectiveSection !== "all" && statusFilter === "all"
+                            ? t("students.noneInSection", {
+                                section:
+                                  effectiveSection === NO_SECTION
+                                    ? t("students.noSection")
+                                    : effectiveSection,
+                              })
+                            : t("students.noneWithStatus", {
+                                status:
+                                  statusOptions.find(
+                                    (o) => o.value === statusFilter,
+                                  )?.label ?? statusFilter,
+                              })
+                      }
+                    />
+                  </td>
+                </tr>
+              </tbody>
+            ) : groupedRows ? (
+              // One <tbody> per group (role or section), opened by a full-width
+              // rowgroup header — the table equivalent of the old
+              // section-divider list headers.
+              groupedRows.map(({ key, label, rows: group }) => (
+                <motion.tbody
+                  key={key}
+                  variants={blockEnter}
+                  initial="initial"
+                  animate="animate"
+                >
+                  <tr className="bg-base-200/60">
+                    <th
+                      scope="rowgroup"
+                      colSpan={colCount}
+                      className="py-2 text-sm font-semibold text-base-content/70"
+                    >
+                      <div className="flex items-center justify-between">
+                        {label}
+                        <Badge ghost>{group.length}</Badge>
+                      </div>
+                    </th>
+                  </tr>
+                  {group.map((row) => renderRow(row))}
+                </motion.tbody>
+              ))
+            ) : (
               <motion.tbody
-                key={key}
                 variants={blockEnter}
                 initial="initial"
                 animate="animate"
               >
-                <tr className="bg-base-200/60">
-                  <th
-                    scope="rowgroup"
-                    colSpan={colCount}
-                    className="py-2 text-sm font-semibold text-base-content/70"
-                  >
-                    <div className="flex items-center justify-between">
-                      {label}
-                      <Badge ghost>{group.length}</Badge>
-                    </div>
-                  </th>
-                </tr>
-                {group.map((row) => renderRow(row))}
+                {filtered.map((row) => renderRow(row))}
               </motion.tbody>
-            ))
-          ) : (
-            <motion.tbody
-              variants={blockEnter}
-              initial="initial"
-              animate="animate"
-            >
-              {filtered.map((row) => renderRow(row))}
-            </motion.tbody>
-          )}
-        </TableShell>
-      </div>
+            )}
+          </TableShell>
+        </div>
+      )}
 
       <RosterMemberModal
         open={Boolean(selected)}
@@ -1006,7 +1140,7 @@ const EnrolledStudents = ({
         teamSlugByRole={teamSlugByRole}
         row={selected}
         canManage={isOwner}
-        frozen={syncing}
+        linkCandidates={linkCandidates}
         isSelf={selected ? isSelf(selected) : false}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}
@@ -1030,6 +1164,9 @@ const EnrolledStudents = ({
           invalidateInviteQueries()
           invalidateTeamRoster()
           refetchRoster()
+          // Link/remove on an UNLINKED row rewrites roster.csv itself; the
+          // team-scoped refetches above don't re-read the file.
+          onRecheckRoster?.()
         }}
         onError={(rowKey, message) => setWarning(rowKey, message)}
       />

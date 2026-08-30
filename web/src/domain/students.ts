@@ -94,6 +94,33 @@ export {
   type UpdateStudentInput,
   type UpdateStudentResult,
 } from "./students/updateStudent"
+export {
+  linkRosterRowToMember,
+  removeUnlinkedRows,
+  appendUnlinkedRows,
+  applyRosterEdits,
+  unlinkedRowRef,
+  UnlinkedRowNotFoundError,
+  UnlinkedRowAmbiguousError,
+  MemberNotActiveError,
+  MemberAlreadyOnRosterError,
+  type UnlinkedRowRef,
+  type UnlinkedRowInput,
+  type LinkRosterRowResult,
+  type RemoveUnlinkedRowsResult,
+  type RosterEdit,
+  type ApplyRosterEditsResult,
+} from "./students/linkRosterRow"
+export {
+  buildIdentityDirectory,
+  type IdentityDirectory,
+  type DirectoryMember,
+  type DirectoryIdentity,
+} from "./students/identityDirectory"
+export {
+  resolveEmailRows,
+  type ResolvedEmailLink,
+} from "./students/resolveEmailRows"
 
 // The roster.csv parse/serialize layer lives in util/rosterCsv (pure, no
 // GitHubClient dependency). Re-exported here so existing importers of these

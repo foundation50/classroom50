@@ -363,11 +363,13 @@ GitHub organization.
 > Students must accept the organization invitation before they can work on
 > assignments.
 
-**Add member** — add one student by GitHub username (name and email
+**Add member** (in the **Upload roster** button's dropdown menu) — add one
+student by GitHub username (name and email
 optional). You can enter an email instead of a username; that student then
 completes a separate onboarding process (see below).
 
-**Upload** — bulk-add students from a file. Roster CSV is how every upload is
+**Upload roster** — bulk-add
+students from a file. Roster CSV is how every upload is
 read, and it handles all three shapes; the other two entries in **Read the file
 as** are overrides that force one interpretation:
 
@@ -380,15 +382,20 @@ as** are overrides that force one interpretation:
   an address and no columns at all. Either one is you telling the app what every
   line is, so a line that doesn't fit is reported rather than read the other way.
 
+Not sure what the file should look like? **Download template** on the upload
+dialog saves a five-row example CSV — rows with a username only, an email only,
+and both — to fill in with your own students.
+
 If any row carries a value the upload can't use — an address that isn't valid, a
 `github_id` matching no account, a line that's neither a handle nor an address —
 it lists those rows with their line numbers and imports none of them. Fix the
 file and upload it again; re-uploading is safe, because students already in the
 classroom are left alone. That check covers every identity column independently, so
-a shifted column is caught even when the row's other cells look fine. The one
-exception is a row with no identifying column at all, usually a student who hasn't
-given you a GitHub account yet: that row is reported and skipped, and everyone else
-is imported.
+a shifted column is caught even when the row's other cells look fine. A row with a
+name but no identifying column — usually a student who hasn't given you a GitHub
+account yet — is kept on the roster as an **Unlinked** row you can link or remove
+later; only a row with nothing usable at all is reported and skipped, and everyone
+else is imported.
 
 ### Roster CSV fields
 
@@ -475,7 +482,8 @@ Here `octocat` is found by id (even after a rename), `hubot` by username, and
 > address.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
-or `github_id`. Either tool reads that file back: **Upload** matches those rows
+or `github_id`. Either tool reads that file back: **Upload roster** matches
+those rows
 by email, and `gh teacher roster import` corrects a pending row's name and
 section by address without touching the invitation. A row identified only by
 `github_id` is the exception, since `import` resolves students by username: it
@@ -507,31 +515,42 @@ The table lists everyone in this classroom, one row per member, with
 a column header to sort by it, and click a row to open the member's detail.
 **Section** appears only when at least one member carries a section label, and
 **Status** only while a row has something to report: a pending invitation, a
-member who needs a role, or someone not in the organization.
+member who needs a role, someone not in the organization, or an **unlinked**
+row (one with no GitHub account attached — a name-only upload, or an address
+that couldn't be invited). Click an unlinked row to link it to an organization
+member or remove it.
 
 The toolbar narrows and groups the table:
 
 - **Search** — match members by name, username, or email.
 - **Show** — one filter covering both status (**Enrolled**, **Pending**,
-  **Needs a role**, **Not in org**) and role (**Student**, **Teacher**,
-  **Head TA**, **TA**).
+  **Needs a role**, **Not in org**, **Unlinked** while such rows exist) and
+  role (**Student**, **Teacher**, **Head TA**, **TA**).
 - A **section filter**, shown when members have sections.
 - **Group by** — group the rows by role or by section.
 
 Selecting rows (with the row checkboxes, or the select-all in the header)
 replaces the toolbar's left side with a selection bar carrying one
 **Actions** menu: **Invite** re-sends the selected students' organization
-invitations, **Cancel** cancels their pending invitations, and **Unenroll**
-removes them from the classroom. Each action asks you to confirm, then
-reports its results. Bulk actions apply to students only; staff are managed
-in the classroom's **Settings**.
+invitations, **Cancel** cancels their pending invitations, **Unenroll**
+removes them from the classroom, and — when the selection includes unlinked
+rows — **Remove rows** deletes those rows from roster.csv. Each action asks
+you to confirm, then reports its results. Bulk actions apply to students only;
+staff are managed in the classroom's **Settings**.
+
+**Edit** (owners only) switches the table into an editing surface:
+names and sections become inputs, and unlinked rows offer a username picker
+drawn from your classrooms' history. Stage as many changes as you like, then
+**Save changes** applies them all in a single commit — a row that changed
+underneath you (for example, a student accepted an invitation meanwhile) is
+skipped and reported rather than overwritten.
 
 **Refresh roster** checks the classroom's GitHub teams and invitations for
 anything new (members who joined or left, accepted invitations, role changes)
 and updates the roster to match; the same check runs when you open the page.
-While it runs, the button reads **Refreshing roster…** and the table locks
-until it finishes. The caption beside the button shows when the roster last
-changed and what the last refresh found.
+It runs in the background — the roster stays fully usable — with the button
+reading **Refreshing roster…** while it works. The caption beside the button
+shows when the roster last changed and what the last refresh found.
 
 ## Manage organization members
 

@@ -403,7 +403,7 @@ func TestParseRoster_RejectsBadInputs(t *testing.T) {
 		{"missing github_id column", "username,first_name,last_name,email,section\nalice,A,A,a@x,s\n", "unexpected header"},
 		{"missing email column", "username,first_name,last_name,section,github_id\nalice,A,A,s,1\n", "unexpected header"},
 		{"renamed first column", "user,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,1,student\n", "unexpected header"},
-		{"no identity columns", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,,student\n", "no username, github_id, or email"},
+		{"no identity or name columns", "username,first_name,last_name,email,section,github_id,role\n,,,,s,,student\n", "no username, github_id, email, or name"},
 		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,nope,student\n", "invalid github_id"},
 		{"wrong field count", "username,first_name,last_name,email,section,github_id,role\nalice,A,A\n", "wrong number"},
 	}
@@ -1325,15 +1325,16 @@ func TestEncodeRoster_DefangsEveryColumnButGitHubID(t *testing.T) {
 // round-trip it.
 func TestParseRosterLenient_PreservesMalformedRow(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		",Ghost,G,,,,\n" + // no identity column at all: strict ParseRoster rejects this
+		",,,,s1,,\n" + // section-only: identifies and describes nobody — strict ParseRoster rejects this
 		"alice,Alice,A,alice@example.edu,s1,12345,student\n")
 
 	// Strict parse still rejects, proving lenient is the behavior change. Note
-	// the row is rejected for having NO identity column (no username, no
-	// github_id, no email) — an email-only row is valid and parses (see
-	// TestParseRoster_KeepsEmailOnlyPendingRow).
+	// the row is rejected for carrying NEITHER an identity column (username,
+	// github_id, email) NOR a name — an email-only row is valid and parses
+	// (see TestParseRoster_KeepsEmailOnlyPendingRow), and a name-only row is a
+	// first-class unlinked candidate (see TestNameOnlyRosterRows).
 	if _, err := ParseRoster(in); err == nil {
-		t.Fatal("strict ParseRoster must still reject a row with no identity column")
+		t.Fatal("strict ParseRoster must still reject a row with no identity or name")
 	}
 
 	rows, err := ParseRosterLenient(in)
@@ -1356,7 +1357,7 @@ func TestParseRosterLenient_PreservesMalformedRow(t *testing.T) {
 // a write command never drops or corrupts a student it didn't touch.
 func TestParseRosterLenient_RoundTripsMalformedRow(t *testing.T) {
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		",Ghost,G,,,,\n" +
+		",,,,s1,,\n" +
 		"alice,Alice,A,alice@example.edu,s1,12345,student\n")
 
 	rows, err := ParseRosterLenient(in)
@@ -1617,6 +1618,57 @@ func TestBackfillRosterGitHubID(t *testing.T) {
 	t.Run("no match is a no-op", func(t *testing.T) {
 		if _, ok := BackfillRosterGitHubID([]RosterRow{{Username: "bob"}}, "ada", 101); ok {
 			t.Error("filled a row for a different student")
+		}
+	})
+}
+
+// Name-only rows: a teacher-kept row with no GitHub identity (a SIS export
+// without emails). First-class in the parser — a strict parse must not abort a
+// roster the web wrote — and round-tripped untouched. A `status` column an
+// older release wrote is no longer canonical: it reads as an extra column and
+// round-trips verbatim through RosterRow.Extra.
+func TestNameOnlyRosterRows(t *testing.T) {
+	t.Run("a name-only row parses first-class and round-trips", func(t *testing.T) {
+		in := []byte(FullRosterHeader + "\n,Grace,Hopper,,s1,,\n")
+		rows, err := ParseRoster(in)
+		if err != nil {
+			t.Fatalf("ParseRoster: %v", err)
+		}
+		if len(rows) != 1 || rows[0].isRaw() {
+			t.Fatalf("want one first-class row, got %#v", rows)
+		}
+		if rows[0].FirstName != "Grace" || rows[0].LastName != "Hopper" || rows[0].Username != "" {
+			t.Fatalf("row = %#v, want a name-only Grace", rows[0])
+		}
+		encoded, err := EncodeRoster(rows)
+		if err != nil {
+			t.Fatalf("EncodeRoster: %v", err)
+		}
+		if !bytes.Equal(encoded, in) {
+			t.Fatalf("round-trip changed the file.\ngot:\n%s\nwant:\n%s", encoded, in)
+		}
+	})
+
+	t.Run("an 8-column file with a status column still parses and round-trips", func(t *testing.T) {
+		in := []byte(FullRosterHeader + ",status\n" +
+			",Grace,Hopper,,s1,,,unlinked\n" +
+			"alice,,,,,1,student,\n")
+		rows, err := ParseRoster(in)
+		if err != nil {
+			t.Fatalf("ParseRoster: %v", err)
+		}
+		if len(rows) != 2 || rows[0].isRaw() {
+			t.Fatalf("want two first-class rows, got %#v", rows)
+		}
+		if rows[0].Extra["status"] != "unlinked" || rows[1].Extra["status"] != "" {
+			t.Fatalf("status must be carried as an extra column: %#v", rows)
+		}
+		encoded, err := EncodeRoster(rows)
+		if err != nil {
+			t.Fatalf("EncodeRoster: %v", err)
+		}
+		if !bytes.Equal(encoded, in) {
+			t.Fatalf("round-trip changed the file.\ngot:\n%s\nwant:\n%s", encoded, in)
 		}
 	})
 }

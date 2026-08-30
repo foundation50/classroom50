@@ -44,6 +44,11 @@ export {
 //    this classroom's teams — the teacher assigns them a team/role.
 //  - needs_attention_not_in_org: on roster.csv, NOT an org member and no pending
 //    invite — the teacher invites them to the org.
+//  - unlinked: a roster.csv row with NO GitHub identity at all (no username, no
+//    github_id) and nothing backing its email — a name-only row, or an email
+//    row whose invitation died or could never be sent. The sync never removes a
+//    row, so these wait for the teacher to link them to an org member or
+//    delete them — the manual-reconciliation state.
 //
 // The two needs-attention states require org membership to be known. When it
 // isn't (a non-owner who can't read members, or the read failed), those rows
@@ -56,6 +61,7 @@ export type TeamRosterRowState =
   | "pending"
   | "needs_attention_in_org"
   | "needs_attention_not_in_org"
+  | "unlinked"
 
 export type TeamRosterRow = {
   // Stable identity for React keys and joins: github_id || login || email.
@@ -378,6 +384,53 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     }
   }
 
+  // Unlinked pass: identity-less rows render as their own rows so the teacher
+  // can link or delete them — the sync never removes a row, so these are the
+  // rows only a teacher action can resolve. Two kinds:
+  //   - a name-only row (no email): nothing can ever back it, always emitted;
+  //   - an email row NO rendered row borrows (no pending invitation carries
+  //     the address, no enrolled row claims it) — the invitation died, or the
+  //     address could never be invited. Suppressed when pendingHidden: without
+  //     the invitation lists, "unbacked" is unknowable, and mislabeling a
+  //     pending student is worse than hiding a row from a non-owner.
+  {
+    const renderedEmails = new Set(
+      rows.map((row) => row.email.trim().toLowerCase()).filter(Boolean),
+    )
+    const seenKeys = new Set<string>()
+    for (const student of students) {
+      if (student.github_id?.trim() || student.username?.trim()) continue
+      const email = student.email?.trim().toLowerCase() ?? ""
+      if (email && (pendingHidden || renderedEmails.has(email))) continue
+      // Stable-ish key from the row's own cells; duplicates get an index
+      // suffix so React keys stay unique (actions on such twins fail closed
+      // on the ambiguous match — see unlinkedRowRef).
+      const base = `unlinked:${
+        email ||
+        [
+          student.first_name?.trim(),
+          student.last_name?.trim(),
+          student.section?.trim(),
+        ]
+          .map((part) => part ?? "")
+          .join("|")
+          .toLowerCase()
+      }`
+      let key = base
+      for (let n = 2; seenKeys.has(key); n++) key = `${base}#${n}`
+      seenKeys.add(key)
+      rows.push({
+        key,
+        state: "unlinked",
+        roles: ["student"],
+        username: "",
+        github_id: "",
+        avatar_url: "",
+        ...metadataFrom(student),
+      })
+    }
+  }
+
   return sortTeamRosterRows(rows)
 }
 
@@ -428,6 +481,7 @@ const STATE_ORDER: Record<TeamRosterRowState, number> = {
   pending: 1,
   needs_attention_in_org: 2,
   needs_attention_not_in_org: 3,
+  unlinked: 4,
 }
 
 // The roster table's header sorts — one comparator per sortable column:
@@ -510,6 +564,7 @@ export function countByState(
       pending: 0,
       needs_attention_in_org: 0,
       needs_attention_not_in_org: 0,
+      unlinked: 0,
     } as Record<TeamRosterRowState, number>,
   )
 }

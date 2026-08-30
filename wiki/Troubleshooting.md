@@ -262,11 +262,24 @@ To enroll students who are already org members:
 
 Uploading a **roster CSV** or a plain list of usernames on the **Roster** page
 also enrolls existing members: the invite is skipped, but they're still added to
-the roster and team. A row identified only by an **email address** can't, because
-GitHub won't invite an existing member, and Classroom 50 has no way to tell which
-account owns that address: the email is skipped instead. From the CLI,
-`gh teacher roster add <org> <classroom> <username>` (or `roster import`)
-enrolls an existing member the same way.
+the roster and team. A row identified only by an **email address** can't be
+enrolled that way, because GitHub won't invite an existing member and Classroom
+50 has no way to tell which account owns that address — instead the row is
+**kept on the roster as "Unlinked"**. The same happens to a row that carries
+only a **name** (an SIS export before students have GitHub accounts). Open the
+roster's **Unlinked** filter to reconcile them yourself: click a row and use
+**Link to organization member** to attach the right account (which also enrolls
+them on the classroom team), or select rows and use **Actions → Remove rows**
+to delete the ones you don't need. Unlinked rows are never removed
+automatically — Classroom 50's roster sync never deletes a row, so a row whose
+invitation expired (or was never sendable) waits visibly under **Unlinked**
+instead of disappearing; only linking or an explicit delete ends it. From the
+CLI, `gh teacher roster add <org> <classroom> <username>` (or `roster import`)
+enrolls an existing member the same way. **Keep `gh teacher` up to date** if
+you use both tools: releases older than this behavior error on name-only rows
+in read commands like `roster list`, and their `roster sync --write` still
+carries the old automatic cleanup that can delete an email row nothing backs.
+Rows are recoverable from the `classroom50` repository's commit history.
 
 ### Invitations or accepts fail on an organization with SAML SSO
 

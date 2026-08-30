@@ -53,13 +53,14 @@ export function RosterToolbar({
   grouping,
   onGroupingChange,
   addActions,
+  onEditRoster,
 }: {
   org: string
   classroom: string
   client: GitHubClient
   // True while any sync writer runs (entry reconcile, drift auto-sync, or the
-  // manual run): the Sync button becomes the progress indicator and every
-  // roster-writing control in the toolbar freezes.
+  // manual run): the Sync button becomes the progress indicator. Nothing else
+  // freezes — roster writes rebase onto a concurrent sync commit.
   syncing: boolean
   onSync: () => void
   // When roster.csv last changed (its latest commit) — null while unknown.
@@ -71,7 +72,7 @@ export function RosterToolbar({
   selectedRows: TeamRosterRow[]
   onClearSelection: () => void
   onBulkDone: (
-    action: "unenroll" | "invite" | "cancel",
+    action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => void
   query: string
@@ -92,6 +93,8 @@ export function RosterToolbar({
   onGroupingChange: (grouping: RosterGrouping) => void
   // null when the viewer can't manage the roster (buttons are simply absent).
   addActions: AddStudentActions | null
+  // Enters the batch Edit mode; absent (owner-only) hides the button.
+  onEditRoster?: () => void
 }) {
   const { t } = useTranslation()
   // "Updated x ago · no changes" — the last-commit timestamp plus, after a
@@ -115,7 +118,8 @@ export function RosterToolbar({
     <Toolbar>
       {/* The refresh cluster (caption + button + help) yields its spot to the
           selection cluster while rows are selected — one left-side context at
-          a time. An active sync still freezes everything via `syncing`. */}
+          a time. An active sync only disables the Sync button itself (it is
+          the progress indicator; a second pass would just stack). */}
       {selectedRows.length === 0 ? (
         <div className="flex items-center gap-1">
           {!syncing && captionParts.length > 0 ? (
@@ -155,7 +159,6 @@ export function RosterToolbar({
         selectedRows={selectedRows}
         onClearSelection={onClearSelection}
         onDone={onBulkDone}
-        disabled={syncing}
       />
       <Toolbar.Trailing>
         <Toolbar.Search
@@ -233,10 +236,12 @@ export function RosterToolbar({
         {/* The add-students actions: prominent text buttons on the toolbar's
             right edge (see AddStudentButtons — shared with the empty state so
             labels can't drift). Kept in place while rows are selected (the
-            selection cluster lives on the left); disabled while a sync
-            rewrites the roster. */}
+            selection cluster lives on the left) and usable during a sync. */}
         {addActions ? (
-          <AddStudentButtons addActions={addActions} disabled={syncing} />
+          <AddStudentButtons
+            addActions={addActions}
+            onEditRoster={onEditRoster}
+          />
         ) : null}
       </Toolbar.Trailing>
     </Toolbar>

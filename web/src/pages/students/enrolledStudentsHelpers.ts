@@ -2,13 +2,12 @@ import { NO_SECTION } from "@/pages/students/rosterFilter"
 import { ROLE_RANK, type ClassroomRole } from "@/util/teamRoster"
 
 // The parts of a roster sync worth reporting, in the order they're announced.
-// One commit can append team members, complete an accepted email invitation, and
-// drop an address whose invitation is gone, so a single count would under-report
-// (and read as "Added 0 members" for an invite-only pass).
+// One commit can append team members and complete accepted email invitations,
+// so a single count would under-report (and read as "Added 0 members" for an
+// invite-only pass).
 export function rosterSyncMessageKeys(result: {
   addedUsernames: string[]
   recoveredEmails: string[]
-  removedEmails: string[]
   noop: boolean
 }): Array<{ key: string; count: number }> {
   if (result.noop) return []
@@ -19,7 +18,6 @@ export function rosterSyncMessageKeys(result: {
         key: "students.syncMatchedEmails",
         count: result.recoveredEmails.length,
       },
-      { key: "students.syncRemovedEmails", count: result.removedEmails.length },
     ] as const
   ).filter((part) => part.count > 0)
 }

@@ -310,6 +310,14 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 			rowErrs = append(rowErrs, err)
 			continue
 		}
+		// Import input must IDENTIFY a student: the stored-file keep-rule also
+		// admits name-only/unlinked rows (recordToRow), but the CLI import has
+		// no action for a row it can't address, so those stay per-line errors
+		// here rather than silently passing through.
+		if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" {
+			rowErrs = append(rowErrs, fmt.Errorf("line %d: row has no username, github_id, or email — at least one is required to identify a student", line))
+			continue
+		}
 		// Canonicalize rather than only validate: the parsed address is what a
 		// later invite, join, or team-name hash uses.
 		canonical, err := CanonicalRosterEmail(row.Email)
@@ -347,19 +355,19 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 		Email:     strings.TrimSpace(undefangCSVCell(record[3])),
 		Section:   undefangCSVCell(record[4]),
 	}
-	// A row needs at least ONE identity column. An identity-less row addresses
-	// nobody, so it stays an error (lenient parsing preserves it raw). A row
-	// with only an email is valid and deliberate: the web writes it when a
-	// teacher invites by email, and fills in the account once the student
-	// accepts. Rejecting it would abort the whole file for `roster list` while
-	// any invite is outstanding. Keep-rule mirrors the web's parseRosterCsv
-	// filter (web/src/util/rosterCsv.ts) — non-empty raw cell, not a resolvable
-	// id, so a present-but-unusable github_id (0, or above 2^53) still counts.
-	// Note an UNPARSEABLE github_id still hard-errors just below, for any row:
-	// that predates this rule and is deliberate. Shared cases:
+	// A row needs at least one cell that identifies or DESCRIBES a student. An
+	// identity column (username, github_id, email) has always sufficed; a row
+	// with only a NAME is kept too — the teacher-kept "unlinked" row the web
+	// renders for manual reconciliation. A row with none of these (blank, or
+	// only section/role noise) addresses and describes nobody: it stays an
+	// error (lenient parsing preserves it raw). An email-only row is valid and
+	// deliberate: the web writes it when a teacher invites by email, and fills
+	// in the account once the student accepts. Keep-rule mirrors the web's
+	// parseRosterCsv filter (web/src/util/rosterCsv.ts); shared cases:
 	// cli/shared/testdata/roster_row_cases.json.
-	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" {
-		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, or email — at least one is required to identify a student", line)
+	hasName := strings.TrimSpace(row.FirstName) != "" || strings.TrimSpace(row.LastName) != ""
+	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" && !hasName {
+		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, email, or name — at least one is required to identify a student", line)
 	}
 	if trimmed := strings.TrimSpace(record[5]); trimmed != "" {
 		id, err := parseGitHubID(trimmed)
@@ -619,8 +627,10 @@ func UpdatePendingEmailRow(rows []RosterRow, email string, p RosterPatch) (out [
 	return rows, true
 }
 
-// RemovePendingEmailRow drops the pending email-invite row for email. Returns
-// the slice and whether a row was removed.
+// RemovePendingEmailRow drops the pending email-invite row for email — used by
+// the EXPLICIT cancel/retire paths only. The sync never removes rows: an
+// email-only row nothing backs stays on the roster (the web renders it as
+// "unlinked" for the teacher to link or delete by hand).
 func RemovePendingEmailRow(rows []RosterRow, email string) (out []RosterRow, removed bool) {
 	i := findPendingEmailRow(rows, email)
 	if i < 0 {

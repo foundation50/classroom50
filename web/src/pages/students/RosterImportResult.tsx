@@ -106,6 +106,8 @@ export const RosterImportResult = ({
   roleChangeOutcome,
   emailResult = null,
   emailError = null,
+  unlinkedKept = 0,
+  linked = [],
 }: {
   result: BulkImportResult
   inviteError: string | null
@@ -113,6 +115,12 @@ export const RosterImportResult = ({
   roleChangeOutcome: RoleChangeOutcome | null
   emailResult?: BulkInviteByEmailResult | null
   emailError?: string | null
+  // Rows kept on the roster as UNLINKED (name-only rows, plus email rows whose
+  // invitation couldn't be sent) — reconciled later from the roster page.
+  unlinkedKept?: number
+  // Addresses linked to a verified member of a previous classroom and enrolled
+  // directly instead of invited.
+  linked?: { email: string; login: string; classroom: string }[]
 }) => {
   const { t } = useTranslation()
   const emailInvitedCount = emailResult?.invited.length ?? 0
@@ -239,6 +247,17 @@ export const RosterImportResult = ({
         />
       )}
 
+      {linked.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailLinked")}
+          rows={linked.map((l) => ({
+            key: l.email,
+            label: l.email,
+            detail: `@${l.login} · ${l.classroom}`,
+          }))}
+        />
+      )}
+
       {/* The email pass's buckets, under titles distinct from the account ones so
           "invited" by address never reads as "invited" by handle. */}
       {emailResult
@@ -251,6 +270,14 @@ export const RosterImportResult = ({
             <ImportResultSection key={section.title} {...section} />
           ))
         : null}
+
+      {unlinkedKept > 0 && (
+        <Alert tone="info">
+          <span>
+            {t("students.unlinkedKeptNotice", { count: unlinkedKept })}
+          </span>
+        </Alert>
+      )}
     </div>
   )
 }

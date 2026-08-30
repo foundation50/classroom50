@@ -25,12 +25,13 @@ export type RecoveredInvite = {
 export type InviteReconcileState = {
   recovered: RecoveredInvite[]
   // Normalized emails whose invite team is still live (invite pending, or an
-  // anomaly we refuse to touch). An email-only roster row backed by one of
-  // these must be KEPT by the sync's removal pass.
+  // anomaly we refuse to touch). Rows are never removed by the sync; these
+  // emails mark rows as invitation-backed (Pending, not Unlinked).
   liveInviteEmails: Set<string>
   // True only when the invite-team enumeration AND every per-team read
-  // completed. When false the sync must not remove email-only rows — an
-  // unreadable team can't prove its row is dead.
+  // completed. When false the sync must not act on liveness conclusions — an
+  // unreadable team can't prove anything about its row. Still gates
+  // invite-team deletion.
   trusted: boolean
   // Teams deleted without a recovery: an accepted invitee no longer on any
   // classroom team (unenrolled — must not resurrect a row), or a member-less
@@ -56,10 +57,17 @@ const emptyState = (): InviteReconcileState => ({
 // one-sided shortening would let one tool reap invites the other just created.
 export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 
+// How many invite teams the collect pass classifies at once. High enough to
+// take a large classroom's pass from minutes to seconds, low enough to stay
+// clear of GitHub's secondary (concurrency-sensitive) rate limits.
+const INVITE_TEAM_READ_CONCURRENCY = 5
+
 // Read-only-on-CSV half of the invite reconcile: enumerate this classroom's
 // invite-<hash> teams and classify each one, WITHOUT writing roster.csv (the
-// roster sync folds the result into its single commit). For each team that
-// belongs to THIS classroom (by its validated description):
+// roster sync folds the result into its single commit). A team whose slug a
+// pending org invitation still maps to is counted live from the invitation
+// alone — no per-team read (#800). For each remaining team that belongs to
+// THIS classroom (by its validated description):
 //   - verify the description's email hashes back to the team name (the team is
 //     invitee-editable after acceptance, so this is the trust boundary);
 //   - with exactly one member (of any role — the team holds no teacher, so
@@ -84,7 +92,10 @@ export const INVITE_TEAM_GC_MIN_AGE_MS = 24 * 60 * 60 * 1000
 //
 // Never throws. Fail-safe: any read failure (enumeration, a team, the org
 // invitation list) flips `trusted` off so the sync skips row removals; a rate
-// limit stops the pass early the same way.
+// limit stops the pass early the same way (workers stop pulling teams, and
+// what was already in flight finishes). Non-skipped teams are classified by a
+// small concurrent pool — their reads are independent, and running them
+// serially dominated large classrooms' sync time.
 export async function collectInviteRecoveries(
   client: GitHubClient,
   input: { org: string; classroom: string; readOnly?: boolean },
@@ -103,30 +114,78 @@ export async function collectInviteRecoveries(
     return emptyState()
   }
 
+  // Pending org invitations read ONCE, up front, each address hashed to its
+  // deterministic team slug — so the loop can classify a still-pending team as
+  // live WITHOUT reading it: an outstanding org invitation proves nobody
+  // accepted, so the team holds no email↔account mapping to recover (#800).
+  // The address comes from GitHub's invitation record — stronger than the
+  // invitee-editable description — but it does mean a tampered description on
+  // a skipped team goes unlogged this pass; it is caught as soon as the
+  // invitation resolves and the team is read. Null after a failed read: the
+  // GC reap is off (uncertainty never reaps) and the loop falls back to
+  // reading every team the long way, with `trusted` already cleared so no row
+  // is removed either. Skipped entirely with no teams to classify, so a broken
+  // invitations endpoint can't degrade a pass with nothing to prove.
+  let pendingBySlug: Map<string, string> | null = null
+  if (inviteTeams.length > 0) {
+    try {
+      const pending = await listOrgInvitations(client, org)
+      pendingBySlug = new Map(
+        await Promise.all(
+          pending
+            .filter((inv) => !inv.login && inv.email)
+            .map(async (inv) => {
+              const email = normalizeInviteEmail(inv.email as string)
+              return [await inviteTeamName(classroom, email), email] as const
+            }),
+        ),
+      )
+    } catch (err) {
+      trusted = false
+      log.error("invite reconcile: pending invitation read failed", {
+        org,
+        err,
+      })
+    }
+  }
+
   // The invitee must still be on a classroom team (student or staff) for a
   // recovery to count; fetched lazily once. Reads the AUTHORITATIVE slugs from
   // classroom.json (GitHub can rewrite a team slug on name collision, so a
   // derived slug would 404 -> [] and make an enrolled invitee look unenrolled).
   // A read failure propagates to the per-team catch, never silently reads as
-  // "member of nothing".
-  let classroomSlugs: Awaited<
-    ReturnType<typeof resolveClassroomTeamSlugs>
+  // "member of nothing". The PROMISE is memoized so concurrent team
+  // classifications share one in-flight read; a rejection clears the slot so
+  // one transient failure doesn't poison every later team.
+  let classroomSlugsPromise: ReturnType<
+    typeof resolveClassroomTeamSlugs
   > | null = null
-  const loadClassroomSlugs = async () => {
-    classroomSlugs ??= await resolveClassroomTeamSlugs(client, org, classroom)
-    return classroomSlugs
+  const loadClassroomSlugs = () => {
+    classroomSlugsPromise ??= resolveClassroomTeamSlugs(
+      client,
+      org,
+      classroom,
+    ).catch((err: unknown) => {
+      classroomSlugsPromise = null
+      throw err
+    })
+    return classroomSlugsPromise
   }
-  let enrolledIds: Set<number> | null = null
-  const loadEnrolledIds = async (): Promise<Set<number>> => {
-    if (enrolledIds) return enrolledIds
-    const slugs = await loadClassroomSlugs()
-    const rosters = await Promise.all(
-      [slugs.student, ...Object.values(slugs.staff)].map((slug) =>
-        listTeamMembers(client, org, slug),
-      ),
-    )
-    enrolledIds = new Set(rosters.flat().map((m) => m.id))
-    return enrolledIds
+  let enrolledIdsPromise: Promise<Set<number>> | null = null
+  const loadEnrolledIds = (): Promise<Set<number>> => {
+    enrolledIdsPromise ??= (async () => {
+      const slugs = await loadClassroomSlugs()
+      const rosters = await Promise.all(
+        [slugs.student, ...Object.values(slugs.staff)].map((slug) =>
+          listTeamMembers(client, org, slug),
+        ),
+      )
+      return new Set(rosters.flat().map((m) => m.id))
+    })().catch((err: unknown) => {
+      enrolledIdsPromise = null
+      throw err
+    })
+    return enrolledIdsPromise
   }
 
   // Decision-time proof for the ONE irreversible action in this pass: is this
@@ -148,33 +207,33 @@ export async function collectInviteRecoveries(
       return "unenrolled"
     } catch (err) {
       // A rate limit must stop the whole pass (the per-team catch below
-      // breaks on it), not read as one team's "unknown".
+      // handles it), not read as one team's "unknown".
       if (err instanceof GitHubAPIError && err.isRateLimited) throw err
       log.error("invite reconcile: enrollment re-check failed", { login, err })
       return "unknown"
     }
   }
 
-  // Live invite-team slugs, fetched lazily only when a member-less team is old
-  // enough to be a GC candidate. NOT error-tolerated — a degraded read
-  // propagates (skip).
-  let liveSlugs: Set<string> | null = null
-  const loadLiveInviteSlugs = async (): Promise<Set<string>> => {
-    if (liveSlugs) return liveSlugs
-    liveSlugs = await liveInviteSlugsFor(client, org, classroom)
-    return liveSlugs
-  }
-
-  for (const team of inviteTeams) {
-    const slug = team.slug
-    if (!slug) continue
+  // One team's classification, isolated so a bounded pool can run several at
+  // once. Never throws; every shared-state effect is carried in the returned
+  // outcome (except `enrolled`, whose mid-pass add only ever widens the set)
+  // so the caller can fold outcomes in team order and keep `recovered`
+  // deterministic.
+  type TeamOutcome =
+    | { kind: "none" }
+    | { kind: "live"; email: string }
+    | { kind: "recovered"; value: RecoveredInvite }
+    | { kind: "deletedStale" }
+    | { kind: "untrusted" }
+    | { kind: "rateLimited" }
+  const classifyTeam = async (slug: string): Promise<TeamOutcome> => {
     try {
       const state = await readInviteTeam(client, org, slug)
-      if (!state) continue // already deleted
+      if (!state) return { kind: "none" } // already deleted
       const record = state.description
       // Not a valid v1 record, or belongs to another classroom — leave it for
       // that classroom's own reconcile (or manual cleanup); never touch it.
-      if (!record || record.classroom !== classroom) continue
+      if (!record || record.classroom !== classroom) return { kind: "none" }
 
       // Trust boundary: only act on a description whose recorded email still
       // hashes back to this team's name. A tampered team is kept (and its
@@ -184,35 +243,36 @@ export async function collectInviteRecoveries(
         log.error("invite team email does not match its name hash; skipping", {
           slug,
         })
-        liveInviteEmails.add(record.email)
-        continue
+        return { kind: "live", email: record.email }
       }
 
       const invitees = state.members
       if (invitees.length === 0) {
-        // Pending — or abandoned. Reap only when BOTH hold: old enough that a
-        // mid-creation race is impossible, and no pending org invitation still
-        // maps to this slug. Uncertainty always keeps the team (and the row).
+        // Pending — or abandoned. Reap only when ALL hold: the invitation
+        // list was readable (a null map is uncertainty, and uncertainty
+        // always keeps the team and the row), old enough that a mid-creation
+        // race is impossible, and no pending invitation still maps to this
+        // slug (already ruled out by the loop-top skip; re-checked here so
+        // the reap never rests on that ordering).
         if (
+          pendingBySlug !== null &&
           isPastGcAge(state.createdAt) &&
-          !(await loadLiveInviteSlugs()).has(slug)
+          !pendingBySlug.has(slug)
         ) {
           if (!readOnly) {
             await deleteInviteTeam(client, org, slug)
-            deletedStale += 1
+            return { kind: "deletedStale" }
           }
-        } else {
-          liveInviteEmails.add(record.email)
+          return { kind: "none" }
         }
-        continue
+        return { kind: "live", email: record.email }
       }
       if (invitees.length > 1) {
         log.error("invite team has multiple members; skipping", {
           slug,
           count: invitees.length,
         })
-        liveInviteEmails.add(record.email)
-        continue
+        return { kind: "live", email: record.email }
       }
 
       const invitee = invitees[0]
@@ -221,47 +281,111 @@ export async function collectInviteRecoveries(
         // This member accepted an invite carrying a classroom team, so a
         // classroom with zero visible members means the read was degraded, not
         // that they were unenrolled. Can't prove either state: keep the team.
-        trusted = false
         log.error("invite reconcile: no classroom members visible; skipping", {
           slug,
         })
-        continue
+        return { kind: "untrusted" }
       }
       if (!enrolled.has(invitee.id)) {
         // Absent from the snapshot is NOT proof of unenrollment (see
         // confirmEnrollment); a confirmed stale snapshot means they enrolled
         // mid-pass, so recover them.
         const confirmed = await confirmEnrollment(invitee.login)
-        if (confirmed === "unknown") {
-          trusted = false
-          continue
-        }
+        if (confirmed === "unknown") return { kind: "untrusted" }
         if (confirmed === "unenrolled") {
           // Accepted, then removed from the classroom: the invite lifecycle is
           // over. Delete the team so its record can't resurrect the row later.
           if (!readOnly) {
             await deleteInviteTeam(client, org, slug)
-            deletedStale += 1
+            return { kind: "deletedStale" }
           }
-          continue
+          return { kind: "none" }
         }
         enrolled.add(invitee.id)
       }
 
-      recovered.push({
-        email: record.email,
-        invitee: { id: invitee.id, login: invitee.login },
-        slug,
-      })
+      return {
+        kind: "recovered",
+        value: {
+          email: record.email,
+          invitee: { id: invitee.id, login: invitee.login },
+          slug,
+        },
+      }
     } catch (err) {
       // An unreadable team can't prove its row is dead — removals are off for
       // this pass either way.
-      trusted = false
       if (err instanceof GitHubAPIError && err.isRateLimited) {
         log.error("invite reconcile rate-limited; stopping pass", { slug })
-        break
+        return { kind: "rateLimited" }
       }
       log.error("invite reconcile failed for team", { slug, err })
+      return { kind: "untrusted" }
+    }
+  }
+
+  // Teams still needing a read, after the invitation-list skip above.
+  const toRead: string[] = []
+  for (const team of inviteTeams) {
+    const slug = team.slug
+    if (!slug) continue
+    const pendingEmail = pendingBySlug?.get(slug)
+    if (pendingEmail !== undefined) {
+      // This slug can only be the hash of a pending address for THIS
+      // classroom (another classroom's hash never collides into it), so the
+      // invitation itself proves the invite is live and unaccepted: no team
+      // read, no members read.
+      liveInviteEmails.add(pendingEmail)
+      continue
+    }
+    toRead.push(slug)
+  }
+
+  // Bounded worker pool: the per-team reads dominated large classrooms when
+  // run serially, and they are independent. A rate limit stops workers from
+  // PULLING further teams (in-flight classifications finish) — the parallel
+  // equivalent of the old serial break. Outcomes fold in team order below so
+  // `recovered` stays deterministic regardless of completion order.
+  const outcomes = new Array<TeamOutcome | undefined>(toRead.length)
+  let nextIndex = 0
+  let rateLimited = false
+  const worker = async () => {
+    while (!rateLimited) {
+      const i = nextIndex++
+      if (i >= toRead.length) return
+      const outcome = await classifyTeam(toRead[i])
+      outcomes[i] = outcome
+      if (outcome.kind === "rateLimited") rateLimited = true
+    }
+  }
+  await Promise.all(
+    Array.from(
+      { length: Math.min(INVITE_TEAM_READ_CONCURRENCY, toRead.length) },
+      worker,
+    ),
+  )
+
+  for (const outcome of outcomes) {
+    // A slot never scheduled (pool stopped on a rate limit): the unread team
+    // can't prove anything, which `trusted` — already cleared by the
+    // rateLimited outcome that stopped the pool — accounts for.
+    if (!outcome) continue
+    switch (outcome.kind) {
+      case "live":
+        liveInviteEmails.add(outcome.email)
+        break
+      case "recovered":
+        recovered.push(outcome.value)
+        break
+      case "deletedStale":
+        deletedStale += 1
+        break
+      case "untrusted":
+      case "rateLimited":
+        trusted = false
+        break
+      case "none":
+        break
     }
   }
 

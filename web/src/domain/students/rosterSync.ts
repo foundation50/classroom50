@@ -29,18 +29,13 @@ import {
   listClassroomMembersWithRoles,
 } from "./rosterPrimitives"
 import type { InviteReconcileState, RecoveredInvite } from "./inviteRecoveries"
-import {
-  collectInviteRecoveries,
-  pendingInviteEmails,
-} from "./inviteRecoveries"
+import { collectInviteRecoveries } from "./inviteRecoveries"
 
 export type SyncRosterFromTeamResult = {
   // Team members newly appended to roster.csv as metadata rows.
   addedUsernames: string[]
   // Recovered invited emails folded onto rows (identity filled or appended).
   recoveredEmails: string[]
-  // Email-only rows removed because no live invite team backs them.
-  removedEmails: string[]
   // The recovered mappings (the caller's and the in-closure re-collect's) that
   // the roster provably records after this pass — the only teams safe for
   // reconcileRoster to finalize (delete). An unrecorded mapping keeps its team
@@ -55,22 +50,16 @@ export type SyncRosterFromTeamResult = {
 // SAME single commit (see reconcileRoster):
 //   1. upgrade rows matched by a recovered invite (fill username/github_id
 //      onto the email row written at invite time);
-//   2. remove email-only rows (no username, no valid github_id) that no live
-//      invite backs — the invite expired, was GC'd, or was cancelled by a path
-//      whose own row write failed. A cancel normally drops the row itself, so
-//      this is the backstop, not the mechanism. Gated on `invites.trusted` so a
-//      degraded read can never wipe pending rows, and every candidate is
-//      re-confirmed against GitHub's current pending invitations inside this
-//      closure (collect's snapshot predates the CSV read, so an invite sent in
-//      between must not be reaped);
-//   3. the pre-existing team sync: ensure every active member has an IDENTITY
+//   2. the pre-existing team sync: ensure every active member has an IDENTITY
 //      row (username + github_id) carrying their team-derived `role`, refresh
 //      changed roles, and backfill resolvable ids.
-// The teams are the source of truth for enrollment and role; the CSV holds
-// teacher-supplied metadata plus this best-effort snapshot, so identity, role,
-// and the recovered email are the only fields written — never name/section
-// fabricated from a GitHub profile. Identity rows are never removed (CSV-only
-// identity rows are drift, not deletions); only dead email-ONLY rows are.
+// The sync NEVER removes a row. An email-only row nothing backs stays on the
+// roster and renders as "unlinked" for the teacher to link or delete by hand —
+// a failed cancel-drop or an expired invitation fails visible instead of being
+// silently cleaned. The teams are the source of truth for enrollment and role;
+// the CSV holds teacher-supplied metadata plus this best-effort snapshot, so
+// identity, role, and the recovered email are the only fields written — never
+// name/section fabricated from a GitHub profile.
 //
 // The diff is recomputed INSIDE the retried closure (re-reading both teams and
 // CSV each attempt) so a 409 retry or concurrent edit can't reintroduce or
@@ -87,12 +76,19 @@ export async function syncRosterFromTeam(
     org: string
     classroom: string
     // Invite-reconcile state from collectInviteRecoveries. Omitted = plain
-    // team sync: no removals, and folds only what a decision-time re-collect
-    // (triggered by an unknown member) proves.
+    // team sync: folds only what a decision-time re-collect (triggered by an
+    // unknown member) proves.
     invites?: InviteReconcileState
+    // Normalized logins whose APPEND must be skipped this pass: students the
+    // teacher just unenrolled, whom a team read taken before the drop (or an
+    // eventually-consistent one) would otherwise resurrect as a fresh row. An
+    // accessor, read inside the retried closure, so a suppression added while
+    // the pass is already in flight still lands on the retry. Appends only —
+    // edits to existing rows are harmless and stay untouched.
+    excludeLogins?: () => Set<string>
   },
 ): Promise<SyncRosterFromTeamResult> {
-  const { org, classroom, invites } = input
+  const { org, classroom, invites, excludeLogins } = input
   log.info("sync roster from team: started", { org, classroom })
   await assertClassroomNotArchived(client, org, classroom)
 
@@ -183,8 +179,7 @@ export async function syncRosterFromTeam(
     // The re-collect only ever ADDS knowledge — merge, never replace. A
     // degraded re-collect (empty, untrusted) must not discard the caller's
     // trusted recoveries: dropping them would skip their folds while the
-    // caller still finalizes their teams, losing the mappings. Removals demand
-    // BOTH states trusted; live emails union (keeping a row is always safe).
+    // caller still finalizes their teams, losing the mappings.
     const hasUnknownMember = (f: ReturnType<typeof foldInvites>) => {
       const { ids, logins } = rosterClaimSet(f.foldedStudents)
       const recIds = new Set(f.recovered.map((r) => String(r.invitee.id)))
@@ -214,67 +209,34 @@ export async function syncRosterFromTeam(
       }
       fold = foldInvites(inviteState.recovered)
     }
-    const { foldedStudents, recByEmail, recoveredEmails, unclaimed } = fold
+    const { foldedStudents, recoveredEmails, unclaimed } = fold
     const inviteFolds = fold.inviteFolds
 
-    // --- Dead email-row removal ---------------------------------------------
-    // An email-ONLY row (no username, no valid github_id) exists on the roster
-    // only while a live invite backs it; once the invite is cancelled, expired,
-    // or GC'd, the row goes too — in this same commit. Removals are exclusive
-    // to the full reconcile (the caller passed its invite state): a plain team
-    // sync proves nothing about the invite lifecycle. Two further gates keep
-    // one from eating a legitimate row: the invite-reconcile state must be
-    // trustworthy (a degraded invite-team read must never masquerade as "no
-    // live invites"), and every candidate is confirmed against GitHub's CURRENT
-    // pending invitations. That confirmation is read HERE, inside the retried
-    // closure, because the collect pass snapshotted teams BEFORE this CSV read
-    // — an invite sent in between has its fresh row in `currentStudents` but no
-    // entry in the snapshot, and must not be reaped for it.
-    const deadRows = new Set<StudentCsvRow>()
-    if (invites && inviteState?.trusted) {
-      for (const s of foldedStudents) {
-        if (s.username.trim()) continue
-        if (resolveGitHubId(s.github_id) !== null) continue
-        const emailKey = normalizeInviteEmail(s.email ?? "")
-        if (!emailKey) continue // a blank junk row is not this pass's call
-        if (inviteState.liveInviteEmails.has(emailKey)) continue
-        if (recByEmail.has(emailKey)) continue
-        deadRows.add(s)
-      }
-    }
-    // Only pay for the confirmation read when something is actually up for
-    // removal. A failed read yields null and keeps every row (fail closed).
-    const stillPending =
-      deadRows.size > 0 ? await pendingInviteEmails(client, org) : null
-    const removedEmails: string[] = []
-    const keptStudents = foldedStudents.filter((s) => {
-      if (!deadRows.has(s)) return true
-      const emailKey = normalizeInviteEmail(s.email ?? "")
-      if (!stillPending || stillPending.has(emailKey)) return true
-      removedEmails.push(emailKey)
-      return false
-    })
-
-    const { ids, logins } = rosterClaimSet(keptStudents)
+    const { ids, logins } = rosterClaimSet(foldedStudents)
     // Email set mirrors buildTeamRoster's indexCsv.byEmail fold: a member whose
     // GitHub email matches an existing (e.g., pre-resolution, id/login-less) CSV
     // row is the SAME person the view folds by email, so appending would create
     // a duplicate email-colliding row the view masks but that breaks email-keyed
     // logic (match-by-email, invite dedupe).
     const emails = new Set(
-      keptStudents
+      foldedStudents
         .map((s) => s.email?.trim().toLowerCase())
         .filter((e): e is string => Boolean(e)),
     )
 
     // A member is "missing" when their numeric id, login, AND email are all
     // unclaimed by any CSV row (the same id -> login -> email fallback join the
-    // roster view uses, so append and display can't diverge).
+    // roster view uses, so append and display can't diverge). A just-unenrolled
+    // login (excludeLogins) is never appended: its team-drop may not be visible
+    // to this closure's team read yet, and re-adding the row would undo the
+    // removal the teacher just made.
+    const excluded = excludeLogins?.() ?? null
     const missing = members.filter(
       (m) =>
         !ids.has(String(m.id)) &&
         !logins.has(m.login.toLowerCase()) &&
-        !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
+        !(m.email ? emails.has(m.email.trim().toLowerCase()) : false) &&
+        !excluded?.has(m.login.trim().toLowerCase()),
     )
 
     // Reconcile the recorded role on existing rows to match live team
@@ -313,7 +275,7 @@ export async function syncRosterFromTeam(
     )
     let roleChanges = 0
     let idBackfills = 0
-    const reconciledStudents = keptStudents.map((s) => {
+    const reconciledStudents = foldedStudents.map((s) => {
       const loginKey = s.username.trim().toLowerCase()
       const emailKey = s.email?.trim().toLowerCase()
       const teamRole =
@@ -374,8 +336,7 @@ export async function syncRosterFromTeam(
       missing.length === 0 &&
       roleChanges === 0 &&
       idBackfills === 0 &&
-      inviteFolds === 0 &&
-      removedEmails.length === 0
+      inviteFolds === 0
     ) {
       log.info("sync roster from team: completed (up to date)", {
         org,
@@ -384,7 +345,6 @@ export async function syncRosterFromTeam(
       return {
         addedUsernames: [],
         recoveredEmails: [],
-        removedEmails: [],
         // No commit, but the file on disk already records these (that is what
         // made the fold a no-op), so their teams are safe to retire.
         recordedRecoveries: recordedRecoveries(reconciledStudents),
@@ -438,12 +398,10 @@ export async function syncRosterFromTeam(
       roleChanges,
       idBackfills,
       inviteFolds,
-      removedEmails: removedEmails.length,
     })
     return {
       addedUsernames: addedRows.map((r) => r.username),
       recoveredEmails,
-      removedEmails,
       recordedRecoveries: recordedRecoveries([
         ...reconciledStudents,
         ...addedRows,

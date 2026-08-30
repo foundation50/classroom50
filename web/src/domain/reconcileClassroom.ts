@@ -107,6 +107,9 @@ export async function reconcileClassroom(
   org: string,
   classroom: string,
   creator?: string,
+  // Threaded to the roster sync's append filter: just-unenrolled logins this
+  // pass must not resurrect (see useSuppressedLogins).
+  excludeLogins?: () => Set<string>,
 ): Promise<ClassroomReconcileResult> {
   const archivedRecord = await readArchivedRecord(client, org, classroom)
   if (archivedRecord) {
@@ -173,7 +176,11 @@ export async function reconcileClassroom(
   let rosterChanged = false
   let invitesBackfilled: string[] = []
   try {
-    const roster = await reconcileRoster(client, { org, classroom })
+    const roster = await reconcileRoster(client, {
+      org,
+      classroom,
+      excludeLogins,
+    })
     rosterChanged = !roster.noop
     invitesBackfilled = roster.recoveredEmails
   } catch (err) {
