@@ -288,7 +288,7 @@ export function RosterEditMode({
                       getItemLabel={(m) => m.login}
                       renderItem={(m) => (
                         <span className="flex flex-col">
-                          <span className="font-mono text-sm">@{m.login}</span>
+                          <span className="font-mono text-sm">{m.login}</span>
                           {m.classrooms.length > 0 ? (
                             <span className="text-xs text-base-content/60">
                               {m.classrooms.join(", ")}
@@ -307,7 +307,7 @@ export function RosterEditMode({
                     />
                   ) : (
                     <span className="font-mono text-sm">
-                      {row.username ? `@${row.username}` : "—"}
+                      {row.username || "—"}
                     </span>
                   )}
                 </td>

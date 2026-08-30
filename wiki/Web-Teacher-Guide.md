@@ -530,7 +530,7 @@ rows — **Remove rows** deletes those rows from roster.csv. Each action asks
 you to confirm, then reports its results. Bulk actions apply to students only;
 staff are managed in the classroom's **Settings**.
 
-**Edit roster** (owners only) switches the table into an editing surface:
+**Edit** (owners only) switches the table into an editing surface:
 names and sections become inputs, and unlinked rows offer a username picker
 drawn from your classrooms' history. Stage as many changes as you like, then
 **Save changes** applies them all in a single commit — a row that changed

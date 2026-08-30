@@ -1,17 +1,27 @@
 import { useTranslation } from "react-i18next"
-import { PlusIcon, ShareAndroidIcon, UploadIcon } from "@/components/ui/icons"
+import {
+  PencilIcon,
+  PlusIcon,
+  ShareAndroidIcon,
+  UploadIcon,
+} from "@/components/ui/icons"
 
 import { Button } from "@/components/ui"
 import type { AddStudentActions } from "@/pages/students/RosterBulkActionsBar"
 
-// The roster's add-students trigger triplet — Share (classroom links),
-// icon-only Upload, and Add member as the primary action — rendered by both
-// the toolbar and the empty state so the labels and order can't drift.
+// The roster's add-students trigger cluster — Share (classroom links), Edit
+// (batch edit mode, owner-only and toolbar-only), icon-only Upload, and Add
+// member as the primary action — rendered by both the toolbar and the empty
+// state so the labels and order can't drift.
 export function AddStudentButtons({
   addActions,
+  onEditRoster,
   disabled = false,
 }: {
   addActions: AddStudentActions
+  // Enters batch Edit mode; absent (non-owner, or the empty state where
+  // there's nothing to edit) hides the button.
+  onEditRoster?: () => void
   // Frozen while a sync rewrites the roster these actions feed.
   disabled?: boolean
 }) {
@@ -28,6 +38,17 @@ export function AddStudentButtons({
         <ShareAndroidIcon aria-hidden="true" className="size-4" />
         {t("students.share")}
       </Button>
+      {onEditRoster ? (
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={onEditRoster}
+        >
+          <PencilIcon aria-hidden="true" className="size-4" />
+          {t("students.editRoster.button")}
+        </Button>
+      ) : null}
       <Button
         variant="outline"
         size="sm"

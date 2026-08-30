@@ -778,7 +778,7 @@
       "section": "Group by section"
     },
     "editRoster": {
-      "button": "Edit roster",
+      "button": "Edit",
       "title": "Edit roster",
       "hint": "Edit names and sections, and link rows without a GitHub account. Nothing is written until you save — all staged changes land in one commit.",
       "stagedCount_one": "{{count}} staged change",

@@ -1,11 +1,6 @@
 import { useTranslation } from "react-i18next"
 
-import {
-  FilterIcon,
-  PencilIcon,
-  RowsIcon,
-  SyncIcon,
-} from "@/components/ui/icons"
+import { FilterIcon, RowsIcon, SyncIcon } from "@/components/ui/icons"
 import {
   Button,
   HelpTooltip,
@@ -242,18 +237,12 @@ export function RosterToolbar({
             right edge (see AddStudentButtons — shared with the empty state so
             labels can't drift). Kept in place while rows are selected (the
             selection cluster lives on the left) and usable during a sync. */}
-        {onEditRoster ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-base-content/70"
-            onClick={onEditRoster}
-          >
-            <PencilIcon aria-hidden="true" className="size-4" />
-            {t("students.editRoster.button")}
-          </Button>
+        {addActions ? (
+          <AddStudentButtons
+            addActions={addActions}
+            onEditRoster={onEditRoster}
+          />
         ) : null}
-        {addActions ? <AddStudentButtons addActions={addActions} /> : null}
       </Toolbar.Trailing>
     </Toolbar>
   )
