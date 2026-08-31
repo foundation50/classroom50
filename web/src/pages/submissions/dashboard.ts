@@ -22,7 +22,11 @@ import {
   studentSortKeyFor,
   type StudentSortMode,
 } from "@/util/students"
-import { studentRepoName } from "@/util/studentRepo"
+import {
+  studentRepoName,
+  parseGroupRepoCounter,
+  GROUP_REPO_SEGMENT,
+} from "@/util/studentRepo"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 
 // Whether a row's grade still belongs to a current roster member. A row is
@@ -691,14 +695,27 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
 // lowercased to match the org repo list. Empty when the inputs aren't ready.
 export function assignmentRepoNames(params: {
   isGroup: boolean
+  isTeam?: boolean
   repos: GitHubRepo[] | null | undefined
   classroom: string
   assignment: string
   students: Student[]
   siblingSlugs?: string[]
 }): string[] {
-  const { isGroup, repos, classroom, assignment, students, siblingSlugs } =
-    params
+  const {
+    isGroup,
+    isTeam,
+    repos,
+    classroom,
+    assignment,
+    students,
+    siblingSlugs,
+  } = params
+  if (isTeam) {
+    return existingTeamRepos(repos, classroom, assignment).map(
+      (r) => r.repoName,
+    )
+  }
   if (isGroup) {
     return existingGroupRepos(repos, classroom, assignment, siblingSlugs).map(
       (r) => r.repoName,
@@ -751,6 +768,29 @@ export function existingGroupRepos(
   return out
 }
 
+// Team-mode repos that exist for the assignment — the team analog of
+// existingGroupRepos, keyed by the `group-<n>` owner segment. MODE-GATED by
+// the caller: the parse is shape-exact (`<classroom>-<assignment>-group-<n>`,
+// counters start at 1), and only the assignment's mode decides that the
+// `group-<n>` segment is a counter rather than a login.
+export function existingTeamRepos(
+  repos: GitHubRepo[] | null | undefined,
+  classroom: string,
+  assignment: string,
+): GroupRepo[] {
+  if (!repos) return []
+  const out: GroupRepo[] = []
+  for (const repo of repos) {
+    const n = parseGroupRepoCounter(repo.name, classroom, assignment)
+    if (n === null) continue
+    out.push({
+      owner: `${GROUP_REPO_SEGMENT}${n}`,
+      repoName: repo.name.toLowerCase(),
+    })
+  }
+  return out
+}
+
 // Roster students with no submission, with group-repo members excluded (#245).
 // "Credited" = login appears in any score row's `usernames` (member_usernames
 // for groups, else [owner]). A login in `groupRepoMembers` (an existing group
@@ -773,24 +813,35 @@ export function reconcileNonSubmitters(
 }
 
 // Per-row status for a roster student with no submission row. Distinguishes the
-// three states that would otherwise collapse into a flat "Not submitted":
-//   - no-group: group assignment — the student isn't credited on any submitting
-//     group's repo (group repos are named after the founder, so a never-joined
-//     student has nothing to reconcile against).
+// states that would otherwise collapse into a flat "Not submitted":
+//   - no-team: team assignment — the student is on no group team.
+//   - no-group: legacy group assignment — the student isn't credited on any
+//     submitting group's repo (group repos are named after the founder, so a
+//     never-joined student has nothing to reconcile against).
 //   - accepted-not-submitted: individual — a repo exists (accepted) but no push.
 //   - not-accepted: individual — never accepted, so no repo.
 //   - not-submitted: acceptance data unavailable (repos not loaded yet) — a
 //     neutral fallback so a transient empty repo list can't mislabel everyone.
 export type NonSubmitterStatus =
-  "no-group" | "accepted-not-submitted" | "not-accepted" | "not-submitted"
+  | "no-group"
+  | "no-team"
+  | "accepted-not-submitted"
+  | "not-accepted"
+  | "not-submitted"
 
 export function nonSubmitterStatus(
   username: string,
   {
     isGroup,
+    isTeam,
     acceptedUsernames,
-  }: { isGroup: boolean; acceptedUsernames?: Set<string> },
+  }: {
+    isGroup: boolean
+    isTeam?: boolean
+    acceptedUsernames?: Set<string>
+  },
 ): NonSubmitterStatus {
+  if (isTeam) return "no-team"
   if (isGroup) return "no-group"
   if (!acceptedUsernames) return "not-submitted"
   return hasAccepted(username, acceptedUsernames)

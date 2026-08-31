@@ -34,8 +34,7 @@ export const groupRepoName = (
   classroom: string,
   assignment: string,
   n: number,
-): string =>
-  studentRepoName(classroom, assignment, `${GROUP_REPO_SEGMENT}${n}`)
+): string => studentRepoName(classroom, assignment, `${GROUP_REPO_SEGMENT}${n}`)
 
 // Recover the counter from a team-mode repo name for a KNOWN
 // classroom+assignment, or null when the name isn't that assignment's

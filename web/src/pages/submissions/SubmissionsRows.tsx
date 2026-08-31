@@ -109,14 +109,20 @@ export const PublicRepoBadge = () => {
 const NonSubmitterStatusBadge = ({
   username,
   isGroup,
+  isTeam,
   acceptedUsernames,
 }: {
   username: string
   isGroup: boolean
+  isTeam?: boolean
   acceptedUsernames?: Set<string>
 }) => {
   const { t } = useTranslation()
-  const status = nonSubmitterStatus(username, { isGroup, acceptedUsernames })
+  const status = nonSubmitterStatus(username, {
+    isGroup,
+    isTeam,
+    acceptedUsernames,
+  })
   switch (status) {
     case "accepted-not-submitted":
       return (
@@ -135,6 +141,16 @@ const NonSubmitterStatusBadge = ({
           <span className="sr-only">
             {t("submissions.table.notAcceptedTitle")}
           </span>
+        </Badge>
+      )
+    case "no-team":
+      return (
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.noTeamTitle")}
+        >
+          {t("submissions.table.noTeam")}
         </Badge>
       )
     case "no-group":
@@ -169,6 +185,7 @@ export const GroupMembers = ({
   students,
   repoHref,
   repoLabel,
+  memberLoginsOverride,
 }: {
   org: string
   repoName: string
@@ -176,6 +193,9 @@ export const GroupMembers = ({
   students: Student[]
   repoHref: string
   repoLabel: string
+  // Team mode: live team membership (the authoritative link) replaces the
+  // collaborators-cache/snapshot fallback entirely.
+  memberLoginsOverride?: string[]
 }) => {
   const { t } = useTranslation()
   // enabled: false — reads the cache the Members modal populates, never fetches.
@@ -183,9 +203,10 @@ export const GroupMembers = ({
     enabled: false,
   })
   const memberLogins =
-    liveCollaborators && liveCollaborators.length > 0
+    memberLoginsOverride ??
+    (liveCollaborators && liveCollaborators.length > 0
       ? liveCollaborators.map((c) => c.login)
-      : usernames
+      : usernames)
 
   const visible = memberLogins.slice(0, MAX_VISIBLE_AVATARS)
   const overflow = memberLogins.length - visible.length
@@ -269,6 +290,7 @@ export const NonSubmitterRow = ({
   student,
   students,
   isGroup,
+  isTeam,
   acceptedUsernames,
   onProfile,
   actions,
@@ -282,6 +304,7 @@ export const NonSubmitterRow = ({
   student: Student
   students: Student[]
   isGroup: boolean
+  isTeam?: boolean
   acceptedUsernames?: Set<string>
   onProfile: (username: string) => void
   actions?: React.ReactNode
@@ -333,6 +356,7 @@ export const NonSubmitterRow = ({
           <NonSubmitterStatusBadge
             username={student.username}
             isGroup={isGroup}
+            isTeam={isTeam}
             acceptedUsernames={acceptedUsernames}
           />
           {publicRepo ? <PublicRepoBadge /> : null}
@@ -393,6 +417,8 @@ export const GroupRepoRow = ({
   actions,
   onManage,
   publicRepo = false,
+  memberLogins,
+  label,
 }: {
   org: string
   classroom: string
@@ -407,6 +433,9 @@ export const GroupRepoRow = ({
   // Whether this group repo is currently public — renders the warning badge
   // beside the status chip.
   publicRepo?: boolean
+  // Team mode: live team membership + the team's display name.
+  memberLogins?: string[]
+  label?: string
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
@@ -419,7 +448,8 @@ export const GroupRepoRow = ({
           usernames={[]}
           students={students}
           repoHref={repoHref}
-          repoLabel={repoName}
+          repoLabel={label ?? repoName}
+          memberLoginsOverride={memberLogins}
         />
       </td>
       <td>

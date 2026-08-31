@@ -8,6 +8,7 @@ export {
   githubKeys,
   invalidateInviteQueries,
   invalidateClassroomTeam,
+  invalidateGroupTeams,
   invalidateViewerOrgs,
 } from "./queries/keys"
 export {

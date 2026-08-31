@@ -143,6 +143,7 @@ const EditAssignmentForm = ({
                 due_date: values.due_date,
                 available_from_date: values.available_from_date,
                 max_group_size: values.max_group_size,
+                team_formation: values.team_formation,
                 feedback_pr: values.feedback_pr,
                 feedback_pr_template: values.feedback_pr_template,
                 empty_repo: values.empty_repo,

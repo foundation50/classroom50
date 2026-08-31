@@ -12,6 +12,7 @@ const base: CreateAssignmentFormValues = {
   due_date: "",
   available_from_date: "",
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,

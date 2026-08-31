@@ -39,7 +39,7 @@ import {
   type StudentAssignmentFilters,
   type StudentAssignmentSort,
 } from "@/components/org/studentAssignmentFilters"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, parseGroupRepoCounter } from "@/util/studentRepo"
 import type { Assignment } from "@/types/classroom"
 
 // The accept/view-submission CTA, the row's primary action.
@@ -402,7 +402,18 @@ export function StudentAssignmentList({
         .map((repo) => repo.name.toLowerCase()),
     )
     for (const a of assignments ?? []) {
-      if (writableNames.has(studentRepoName(classroom, a.slug, login))) {
+      if (a.mode === "team") {
+        // A team-mode repo is named after the group counter, not the login;
+        // the viewer's push on any `<classroom>-<slug>-group-<n>` repo (via
+        // the team attachment) means their group accepted. Mode-gated parse —
+        // `group-3` is also a valid username shape.
+        for (const name of writableNames) {
+          if (parseGroupRepoCounter(name, classroom, a.slug) !== null) {
+            set.add(a.slug)
+            break
+          }
+        }
+      } else if (writableNames.has(studentRepoName(classroom, a.slug, login))) {
         set.add(a.slug)
       }
     }

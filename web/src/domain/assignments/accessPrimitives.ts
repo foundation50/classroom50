@@ -50,6 +50,7 @@ export type AcceptStepId =
   | "account"
   | "membership"
   | "assignment"
+  | "team"
   | "autograder"
   | "repo"
   | "access"

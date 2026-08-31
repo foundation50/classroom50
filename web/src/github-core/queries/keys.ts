@@ -66,6 +66,20 @@ export const githubKeys = {
 
   myTeams: () => [...githubKeys.all, "my-teams"] as const,
 
+  // One assignment's group teams (team-mode), from the org team listing.
+  groupTeams: (org: string, classroom: string, assignment: string) =>
+    [...githubKeys.all, "group-teams", org, classroom, assignment] as const,
+
+  // The viewer's OWN group team for one assignment (from /user/teams).
+  myGroupTeam: (org: string, classroom: string, assignment: string) =>
+    [...githubKeys.all, "my-group-team", org, classroom, assignment] as const,
+
+  // The <classroom>/teams.json snapshot (classroom50/teams/v1). Distinct from
+  // jsonFile: the read tolerates an absent file (a classroom has no teams.json
+  // until the first snapshot write).
+  teamsFile: (org: string, classroom: string) =>
+    [...githubKeys.all, "teams-file", org, classroom] as const,
+
   repo: (owner: string, repo: string) =>
     [...githubKeys.all, "repo", owner, repo] as const,
 
@@ -226,6 +240,35 @@ export function invalidateClassroomTeam(
   queryClient.invalidateQueries({
     queryKey: githubKeys.teamInvitations(org, teamSlug),
   })
+}
+
+// Refresh everything derived from one assignment's group teams after a team
+// mutation (create/delete/membership/snapshot): the teacher listing, the
+// viewer's own-team resolution, the raw /user/teams cache behind it, the
+// per-team member lists, and the members fan-out. Single-sourced so a new
+// team mutation can't silently miss a cache.
+export function invalidateGroupTeams(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+  assignment: string,
+  teamSlug?: string,
+) {
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.groupTeams(org, classroom, assignment),
+  })
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.myGroupTeam(org, classroom, assignment),
+  })
+  void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
+  void queryClient.invalidateQueries({
+    queryKey: [...githubKeys.all, "group-team-members", org],
+  })
+  if (teamSlug) {
+    void queryClient.invalidateQueries({
+      queryKey: githubKeys.teamMembers(org, teamSlug),
+    })
+  }
 }
 
 // Refresh roster invite-status lists after enroll/resend/unenroll: invites move

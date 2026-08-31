@@ -58,6 +58,7 @@ import type {
   RepoVisibility,
   SubmissionMode,
   GradingMode,
+  TeamFormation,
 } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
@@ -70,6 +71,7 @@ import {
   SUBMISSION_MODES,
   GRADING_MODES,
   GRADING_MAX_POINTS_MIN,
+  TEAM_FORMATIONS,
 } from "@/types/classroom"
 
 // Default manual max-points shown when a teacher first picks manual grading.
@@ -93,12 +95,17 @@ export type CreateAssignmentFormValues = {
   // URL/repo slug for the assignment (edited on create only).
   slug: string
   description: string
-  mode: "group" | "individual"
+  mode: "group" | "individual" | "team"
   template_repo: string
   due_date: string
   // Release date (datetime-local wall-clock, "" when unset).
   available_from_date: string
   max_group_size: number
+  // Who forms the groups of a team assignment (teacher-assigned vs
+  // student-formed). Only meaningful when mode === "team"; reset to the
+  // "teacher" default on submit otherwise so a stale pick can't reach the
+  // wire. Editable on edit (unlike mode).
+  team_formation: TeamFormation
   feedback_pr: boolean
   // Use the template repo's native pull_request_template.md as the Feedback PR
   // body instead of the built-in body. Only meaningful with feedback_pr on and
@@ -361,7 +368,7 @@ export function validateAssignmentForm(
   if (!Number(value.max_group_size)) {
     errors.max_group_size = t("assignments.form.validation.maxGroupSizeInvalid")
   } else if (
-    value.mode === "group" &&
+    (value.mode === "group" || value.mode === "team") &&
     (!Number.isInteger(Number(value.max_group_size)) ||
       Number(value.max_group_size) < GROUP_SIZE_MIN ||
       Number(value.max_group_size) > GROUP_SIZE_MAX)
@@ -372,6 +379,17 @@ export function validateAssignmentForm(
       min: GROUP_SIZE_MIN,
       max: GROUP_SIZE_MAX,
     })
+  }
+
+  // Team mode requires a formation; guard the radio against a hand-tampered
+  // value (mirrors buildAssignmentEntry's assertTeamFormation).
+  if (
+    value.mode === "team" &&
+    !TEAM_FORMATIONS.includes(value.team_formation)
+  ) {
+    errors.team_formation = t(
+      "assignments.form.validation.teamFormationInvalid",
+    )
   }
 
   // Mirror gh-teacher's write-time validation so a bad test is caught in the
@@ -631,6 +649,9 @@ export function toSubmitValues(
     due_date: value.due_date.trim(),
     available_from_date: value.available_from_date.trim(),
     max_group_size: value.max_group_size,
+    // Formation only belongs to a team assignment; reset to the default
+    // otherwise so a stale pick can't reach the wire.
+    team_formation: value.mode === "team" ? value.team_formation : "teacher",
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
     // Only meaningful with a template source and the Feedback PR on; clear it
     // otherwise so a stale toggle can't reach the wire (buildAssignmentEntry
@@ -722,6 +743,7 @@ export const useAssignmentForm = (
         defaultValues?.available_from_date,
       ),
       max_group_size: defaultValues?.max_group_size || 2,
+      team_formation: defaultValues?.team_formation ?? "teacher",
       feedback_pr: defaultValues?.feedback_pr ?? true,
       // Default off; on the create form the template probe auto-checks it when
       // a pull_request_template.md is detected. On edit it reflects the saved
@@ -824,7 +846,10 @@ export const assignmentToFormValues = (
     name: assignment.name,
     slug: assignment.slug,
     description: assignment.description ?? "",
-    mode: assignment.mode === "group" ? "group" : "individual",
+    mode:
+      assignment.mode === "group" || assignment.mode === "team"
+        ? assignment.mode
+        : "individual",
     // A custom source branch isn't supported (#673); the stored branch is always
     // the template's own default, so surface just `owner/repo`.
     template_repo: assignment.template
@@ -833,6 +858,7 @@ export const assignmentToFormValues = (
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
     available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
     max_group_size: assignment.max_group_size ?? 2,
+    team_formation: assignment.team_formation ?? "teacher",
     feedback_pr: assignment.feedback_pr ?? true,
     feedback_pr_template: assignment.feedback_pr_template ?? false,
     empty_repo: assignment.empty_repo ?? false,

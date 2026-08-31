@@ -1136,7 +1136,7 @@
       "availableFromTz": "Times are in your local timezone ({{tz}}).",
       "type": "Assignment type",
       "typeIndividual": "Individual",
-      "typeGroup": "Group project",
+      "typeGroup": "Group (legacy)",
       "typeLockedHelp": "Can't be changed after creation. Switching it would invalidate existing submissions.",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
@@ -1357,8 +1357,16 @@
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
         "releaseAssetsInvalidBasename": "{{basename}} is not a safe Release filename or is reserved.",
         "releaseAssetsDuplicatePath": "{{path}} is listed more than once; each release file path must be unique.",
-        "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique."
-      }
+        "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique.",
+        "teamFormationInvalid": "Choose who forms the groups."
+      },
+      "typeTeam": "Group",
+      "typeTeamRecommended": "Recommended",
+      "teamFormation": "Group formation",
+      "teamFormationTeacher": "Teacher assigns groups",
+      "teamFormationTeacherHelp": "You create the groups and add students on the assignment settings page. Students who aren't in a group can't accept.",
+      "teamFormationStudent": "Students form groups",
+      "teamFormationStudentHelp": "The first student creates the group when accepting, then adds teammates up to the max group size."
     },
     "autograder": {
       "heading": "Autograding tests",
@@ -1809,6 +1817,38 @@
       "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the collected scores; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to resolve any inconsistency yourself.",
       "confirm": "Save changes anyway",
       "cancel": "Cancel"
+    },
+    "teams": {
+      "heading": "Groups",
+      "teacherFormationHint": "You assign the groups for this assignment. Create a group, then add students from the roster. Students who aren't in a group can't accept.",
+      "studentFormationHint": "Students form their own groups when they accept. Groups appear here as students create them, and you can fix membership if needed.",
+      "refreshSnapshot": "Update snapshot",
+      "namePlaceholder": "Group name (optional)",
+      "nameAriaLabel": "Name for the new group",
+      "createButton": "Create group",
+      "loading": "Loading groups…",
+      "emptyTeacher": "No groups yet. Create the first group, then add students.",
+      "emptyStudent": "No groups yet. Groups appear here as students create them.",
+      "defaultName": "Group {{n}}",
+      "memberCountOfMax_one": "{{count}} of {{max}} members",
+      "memberCountOfMax_other": "{{count}} of {{max}} members",
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "driftBadge": "Membership changed since the snapshot",
+      "deleteAriaLabel": "Delete {{name}}",
+      "removeAriaLabel": "Remove {{username}} from the group",
+      "addMemberAriaLabel": "Add a student to {{name}}",
+      "addMemberPlaceholder": "Choose a student",
+      "addMemberButton": "Add",
+      "groupFull": "Group is full ({{max}} members max).",
+      "noMembers": "No members yet",
+      "deleteTitle": "Delete group",
+      "deleteConfirm": "Delete group",
+      "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
+      "errors": {
+        "createForbidden": "GitHub blocked creating the team. This organization restricts team creation to owners. Ask an owner to allow members to create teams, or have an owner create the groups.",
+        "membershipForbidden": "GitHub blocked the membership change. This team's membership may be managed by your identity provider. Update membership there, or ask an organization owner."
+      }
     }
   },
   "serviceTokenHealth": {
@@ -2425,7 +2465,8 @@
       "repo": "Creating your repository",
       "access": "Setting your repository access",
       "setup": "Setting up autograding",
-      "feedback": "Opening feedback pull request"
+      "feedback": "Opening feedback pull request",
+      "team": "Finding your group"
     },
     "stepDone": {
       "account": "Checked your GitHub account",
@@ -2442,7 +2483,8 @@
       "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
       "feedback": "Feedback pull request ready",
       "feedbackSkipped": "No feedback pull request for this assignment",
-      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry (or it opens on your first submission if autograding is enabled)"
+      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry (or it opens on your first submission if autograding is enabled)",
+      "team": "Group found"
     },
     "stepActions": {
       "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
@@ -2451,7 +2493,8 @@
       "autograder": "Couldn't resolve the autograder for \"{{assignmentSlug}}\". Ask your teacher to confirm it's published, then accept again.",
       "repo": "Couldn't create {{org}}/{{repo}}. Confirm you're a member of {{org}} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.",
       "access": "Your repository {{org}}/{{repo}} was created, but setting your ({{username}}) access on it failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
-      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\"."
+      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\".",
+      "team": "Check that you're in a group for this assignment, then try again."
     },
     "stepErrors": {
       "rateLimited": "{{label}} hit GitHub's rate limit. Wait a minute, then try accepting again.",
@@ -2463,7 +2506,9 @@
       "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
       "noAutograderWithEmptyRepo": "Assignment \"{{assignmentSlug}}\" sets both no built-in autograder and an empty repository, which isn't valid. Ask your teacher to re-run assignment setup.",
       "initShimInvalidCombo": "Assignment \"{{assignmentSlug}}\" combines the built-in-autograder-on-an-empty-repo setting with a template, an empty repository, or no built-in autograder, which isn't valid. Ask your teacher to re-run assignment setup.",
-      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup."
+      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
+      "teamTeacherAssigns": "You're not in a group for this assignment yet. Your teacher assigns the groups. Ask your teacher to add you to a group, then open this link again.",
+      "teamRequired": "You're not in a group for this assignment yet. Create a group, or ask a teammate to add you, then try again."
     },
     "progress": {
       "error": "Setup failed. Review the steps.",
@@ -2476,6 +2521,21 @@
       "havingTrouble": "Having trouble?",
       "hint": "Autograding not running, or setup files missing? Re-run setup to repair your repository.",
       "rerun": "Re-run setup"
+    },
+    "modeTeam": "Group assignment",
+    "teamBlocked": {
+      "badge": "Waiting for your group",
+      "title": "You're not in a group yet",
+      "body": "Your teacher assigns the groups for this assignment. Ask your teacher to add you to a group, then open this link again."
+    },
+    "createGroup": {
+      "body": "This is a group assignment for up to {{max}} people. Create a group to get started: you become its first member and can add teammates after you accept.",
+      "bodyNoMax": "This is a group assignment. Create a group to get started: you become its first member and can add teammates after you accept.",
+      "nameLabel": "Group name (optional)",
+      "namePlaceholder": "e.g. The Segfaults",
+      "nameHelp": "Shown to your teacher and teammates. Leave blank to use the group number.",
+      "createButton": "Create group",
+      "createForbidden": "Your organization doesn't allow members to create teams, so Classroom 50 can't create your group. Ask your teacher to create the group for you."
     }
   },
   "submissions": {
@@ -2714,7 +2774,10 @@
       "noGroup": "Not in a credited group",
       "noGroupTitle": "This student isn't credited on any group's repository. Membership is read from each repository's collaborators at collection time, so a student who never joined a group, or whose group's membership couldn't be read on the last collection, appears here. Open the group repositories to confirm before grading.",
       "review": "Review",
-      "reviewAria": "Open feedback pull request"
+      "reviewAria": "Open feedback pull request",
+      "noTeam": "Not in a group",
+      "noTeamTitle": "This student isn't a member of any group team for this assignment. Add them to a group on the assignment settings page.",
+      "teamDefaultName": "Group {{n}}"
     },
     "scoreOverride": {
       "notGraded": "Not graded",
@@ -3137,7 +3200,8 @@
         "reservedPath": "Skipped \"{{path}}\": that path is managed by Classroom 50 and can't be uploaded."
       },
       "fallbackTitle": "Submission",
-      "missingParams": "This link is missing its classroom or assignment. Ask your teacher for a fresh link."
+      "missingParams": "This link is missing its classroom or assignment. Ask your teacher for a fresh link.",
+      "modeTeam": "Group"
     }
   },
   "orgActivity": {
@@ -3519,9 +3583,34 @@
         "slugLabel": "Slug in {{classroom}} (the short name used in repository names)",
         "uniqueHint": "Must be unique within this classroom."
       }
+    },
+    "groupTeamMembers": {
+      "title": "Group members",
+      "memberCountOfMax_one": "{{count}} of {{max}} members",
+      "memberCountOfMax_other": "{{count}} of {{max}} members",
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "loading": "Loading group members…",
+      "youBadge": "You",
+      "removeUser": "Remove {{username}} from the group",
+      "noMembers": "No members yet",
+      "groupFull": "Group is full ({{max}} members max). Remove someone to add another.",
+      "addPlaceholder": "GitHub username",
+      "addAriaLabel": "Add a teammate by GitHub username",
+      "add": "Add"
     }
   },
   "formatDate": {
     "invalidDate": "Invalid date"
+  },
+  "groupTeams": {
+    "errors": {
+      "counterExhausted": "Couldn't find a free group number after {{attempts}} tries. Try again in a moment.",
+      "groupFull": "This group is full ({{max}} members max). Remove a member to add another.",
+      "notOnRoster": "{{username}} isn't on the classroom roster. Add them to the roster first, then add them to the group.",
+      "notAGroupTeam": "{{slug}} isn't a group team this app created, so it wasn't deleted.",
+      "idMismatch": "The team {{slug}} isn't the one this assignment created, so it wasn't deleted. Remove it on GitHub if you're sure.",
+      "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure."
+    }
   }
 }

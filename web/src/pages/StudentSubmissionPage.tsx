@@ -17,7 +17,8 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import {
   formatDueDateTime,
   formatRelativeToNow,
@@ -30,7 +31,11 @@ import {
   submissionModeCountKey,
   latestDetectedAt,
 } from "@/domain/assignments/submissionDetection"
-import type { Assignment, SubmissionMode } from "@/types/classroom"
+import type {
+  Assignment,
+  AssignmentMode,
+  SubmissionMode,
+} from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Markdown, TableShell } from "@/components/ui"
@@ -108,10 +113,14 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
     <div>
       <MetaStrip
         items={[
-          assignment.mode === "group" ? (
+          assignment.mode === "group" || assignment.mode === "team" ? (
             <MetaItem>
               <PeopleIcon aria-hidden="true" className="size-4" />
-              {t("submissions.student.modeGroup")}
+              {t(
+                assignment.mode === "team"
+                  ? "submissions.student.modeTeam"
+                  : "submissions.student.modeGroup",
+              )}
             </MetaItem>
           ) : assignment.mode === "individual" ? (
             <MetaItem>
@@ -147,6 +156,7 @@ const SubmissionBody = ({
   classroom,
   assignment,
   secret,
+  mode,
   submissionMode,
   submissionTags,
 }: {
@@ -156,12 +166,33 @@ const SubmissionBody = ({
   // Capability-URL secret for a protected classroom; threads into the accept
   // link. Undefined for unprotected.
   secret?: string
+  // Assignment mode: team mode resolves the shared group repo through the
+  // viewer's team membership instead of the username formula.
+  mode?: AssignmentMode
   submissionMode?: SubmissionMode
   submissionTags?: string[]
 }) => {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
   const isTagMode = submissionMode === "tag"
+
+  // Team mode: the repo is `<classroom>-<assignment>-group-<n>`, so the
+  // owner segment comes from MY group team's counter, not my username. Not on
+  // a team (settled null) leaves the owner unset, which reads as "not
+  // accepted" below — the accept page owns the join/create flow.
+  const isTeamMode = mode === "team"
+  const { data: myTeam, isLoading: myTeamLoading } = useMyGroupTeam(
+    org,
+    classroom,
+    assignment,
+    { enabled: isTeamMode && Boolean(user?.login) },
+  )
+  const repoOwnerSegment = isTeamMode
+    ? myTeam
+      ? `${GROUP_REPO_SEGMENT}${myTeam.n}`
+      : undefined
+    : user?.login
+
   const {
     releases,
     tags: taggedSubmissions,
@@ -171,7 +202,7 @@ const SubmissionBody = ({
     releasesErrorObj,
     submissionListError,
     submissionListLoading,
-  } = useMySubmissions(org, classroom, assignment, user?.login, {
+  } = useMySubmissions(org, classroom, assignment, repoOwnerSegment, {
     mode: submissionMode,
     submissionTags,
   })
@@ -181,12 +212,17 @@ const SubmissionBody = ({
   // the "haven't accepted yet" CTA and misdirects the student.
   const {
     assignment: studentRepo,
-    isLoading: repoLoading,
+    isLoading: repoQueryLoading,
     isError: repoIsError,
     error: repoError,
-  } = useGetAssignmentRepo(org, classroom, assignment, user?.login)
+  } = useGetAssignmentRepo(org, classroom, assignment, repoOwnerSegment)
+  const repoLoading = repoQueryLoading || (isTeamMode && myTeamLoading)
 
-  const repoName = studentRepoName(classroom, assignment, user?.login ?? "")
+  const repoName = studentRepoName(
+    classroom,
+    assignment,
+    repoOwnerSegment ?? "",
+  )
 
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -551,6 +587,7 @@ const StudentSubmissionPage = () => {
             classroom={classroom}
             assignment={assignment}
             secret={secret}
+            mode={assignmentData?.mode}
             submissionMode={submissionMode}
             submissionTags={submissionTags}
           />

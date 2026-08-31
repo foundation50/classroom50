@@ -52,6 +52,13 @@ vi.mock("@/hooks/useGetAssignmentRepo", () => ({
   }),
 }))
 
+// Team mode resolves the shared group repo through the viewer's team; these
+// tests exercise individual/group assignments, so it stays settled-empty.
+vi.mock("@/hooks/useMyGroupTeam", () => ({
+  default: () => ({ data: null, isLoading: false, isError: false }),
+  useMyGroupTeam: () => ({ data: null, isLoading: false, isError: false }),
+}))
+
 // The page consumes one consolidated submissions hook; drive its return
 // directly (per-hook gating is covered by useMySubmissions' own test).
 let releasesData: GitHubRelease[] = []

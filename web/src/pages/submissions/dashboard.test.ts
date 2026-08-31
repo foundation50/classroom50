@@ -23,6 +23,7 @@ import {
   distinctSections,
   effectiveCollectedAt,
   existingGroupRepos,
+  existingTeamRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
@@ -1173,6 +1174,49 @@ describe("nonSubmitterStatus", () => {
         acceptedUsernames: accepted,
       }),
     ).toBe("not-accepted")
+  })
+
+  it("is no-team for team assignments (wins over the group and acceptance axes)", () => {
+    expect(nonSubmitterStatus("alice", { isGroup: true, isTeam: true })).toBe(
+      "no-team",
+    )
+    expect(
+      nonSubmitterStatus("alice", {
+        isGroup: true,
+        isTeam: true,
+        acceptedUsernames: new Set(["alice"]),
+      }),
+    ).toBe("no-team")
+  })
+})
+
+describe("existingTeamRepos", () => {
+  const repo = (name: string) => ({ name }) as GitHubRepo
+
+  it("keys team repos by their group-<n> owner segment", () => {
+    const repos = [
+      repo("cs101-hw1-group-1"),
+      repo("cs101-hw1-group-12"),
+      repo("cs101-hw1-alice"), // an individual-shaped name: not a counter
+      repo("cs101-hw1-group-0"), // counters start at 1
+      repo("cs101-hw1-group-02"), // no leading zeros
+      repo("cs101-hw2-group-1"), // another assignment
+    ]
+    expect(existingTeamRepos(repos, "cs101", "hw1")).toEqual([
+      { owner: "group-1", repoName: "cs101-hw1-group-1" },
+      { owner: "group-12", repoName: "cs101-hw1-group-12" },
+    ])
+  })
+
+  it("does not capture a slug-extending sibling's team repos", () => {
+    // parseGroupRepoCounter is shape-exact: `cs101-hw1-bonus-group-1` never
+    // matches assignment "hw1" (the segment after `hw1-` isn't `group-<n>`).
+    const repos = [repo("cs101-hw1-bonus-group-1")]
+    expect(existingTeamRepos(repos, "cs101", "hw1")).toEqual([])
+  })
+
+  it("is empty for a missing repo list", () => {
+    expect(existingTeamRepos(null, "cs101", "hw1")).toEqual([])
   })
 })
 

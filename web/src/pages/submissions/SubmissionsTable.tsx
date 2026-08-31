@@ -130,6 +130,8 @@ type OverrideModalRow = {
   // asks the teacher to enter the max.
   maxPoints?: number
   memberUsernames?: string[]
+  // Team mode: recorded on a new override entry (scores-v1 `team_slug`).
+  teamSlug?: string
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
@@ -247,6 +249,10 @@ const SubmissionsTable = ({
   nonSubmitters = [],
   unsubmittedGroupRepos = [],
   isGroup = false,
+  isTeam = false,
+  groupDisplayNames,
+  groupMemberLogins,
+  teamSlugsByOwner,
   org,
   classroom,
   assignment,
@@ -283,6 +289,15 @@ const SubmissionsTable = ({
   // Rendered as extra rows so teachers see teams that formed before any push.
   unsubmittedGroupRepos?: GroupRepo[]
   isGroup?: boolean
+  // TEAM mode (a group flavor): members come from live team membership, the
+  // display name from the team record, and the legacy collaborators modal is
+  // never offered. isGroup is also true for team rows.
+  isTeam?: boolean
+  // Team mode: owner segment ("group-<n>", lowercased) -> the team's display
+  // name / live member logins / team slug (recorded on override entries).
+  groupDisplayNames?: ReadonlyMap<string, string>
+  groupMemberLogins?: ReadonlyMap<string, string[]>
+  teamSlugsByOwner?: ReadonlyMap<string, string>
   org: string
   classroom: string
   assignment: string
@@ -473,6 +488,16 @@ const SubmissionsTable = ({
   const isPublicRepo = (repoName: string) =>
     Boolean(publicRepoNames?.has(repoName.toLowerCase()))
 
+  // A group row's display label: the team's record name for team mode
+  // ("Group <n>" default supplied by the page), else the repo name.
+  const groupLabel = (owner: string, repo: string) =>
+    groupDisplayNames?.get(owner.toLowerCase()) ?? repo
+
+  // Team mode: a row's live member logins, or undefined while membership is
+  // still unresolved (which blocks the override editor — see below).
+  const teamMembers = (owner: string) =>
+    groupMemberLogins?.get(owner.toLowerCase())
+
   // One submitted/pending row. Extracted so the paginated sequence can render
   // it inline alongside non-submitter and group-repo rows without duplicating
   // this markup. Keyed by owner by the caller.
@@ -492,7 +517,9 @@ const SubmissionsTable = ({
     const openDetails = () =>
       setDetailsContext({
         owner: rest.owner,
-        title: isGroup ? repo : getName(rest.owner, students) || rest.owner,
+        title: isGroup
+          ? groupLabel(rest.owner, repo)
+          : getName(rest.owner, students) || rest.owner,
         subtitle: isGroup
           ? undefined
           : identitySubtitle(
@@ -518,12 +545,13 @@ const SubmissionsTable = ({
           ? {
               owner: rest.owner,
               isGroup: true,
-              title: repo,
+              title: groupLabel(rest.owner, repo),
               repo,
               repoHref,
               hasRepo: true,
               commit: rest.commit,
               release: rest.release,
+              displayName: groupDisplayNames?.get(rest.owner.toLowerCase()),
             }
           : {
               owner: rest.owner,
@@ -556,6 +584,11 @@ const SubmissionsTable = ({
         <td>
           {isGroup ? (
             <div className="flex flex-col items-start gap-1.5">
+              {isTeam && (
+                <span className="text-sm font-medium">
+                  {groupLabel(rest.owner, repo)}
+                </span>
+              )}
               <GroupMembers
                 org={org}
                 repoName={repo}
@@ -563,6 +596,9 @@ const SubmissionsTable = ({
                 students={students}
                 repoHref={repoHref}
                 repoLabel={repo}
+                memberLoginsOverride={
+                  isTeam ? teamMembers(rest.owner) : undefined
+                }
               />
               {isPublicRepo(repo) ? <PublicRepoBadge /> : null}
             </div>
@@ -600,7 +636,12 @@ const SubmissionsTable = ({
               isGroup,
               skipsGrading,
             )
-            if (cell) {
+            // Team rows credit LIVE team members on an override write, so the
+            // editor is blocked until membership resolves — the team analog of
+            // the pending-group guard inside resolveOverrideCell.
+            const liveTeamMembers = isTeam ? teamMembers(rest.owner) : undefined
+            const teamMembersUnresolved = isTeam && !liveTeamMembers
+            if (cell && !teamMembersUnresolved) {
               return (
                 <ScoreCell
                   owner={rest.owner}
@@ -614,7 +655,7 @@ const SubmissionsTable = ({
                     setOverrideRow({
                       owner: rest.owner,
                       displayName: isGroup
-                        ? repo
+                        ? groupLabel(rest.owner, repo)
                         : getName(rest.owner, students) || undefined,
                       hasGrade: cell.hasGrade,
                       score,
@@ -622,7 +663,11 @@ const SubmissionsTable = ({
                       autogradedScore: rest.autogradedScore,
                       autogradedMax: rest.autogradedMax,
                       maxPoints: cell.maxPoints,
-                      memberUsernames: usernames,
+                      memberUsernames: liveTeamMembers ?? usernames,
+                      teamSlug: isTeam
+                        ? (rest.teamSlug ??
+                          teamSlugsByOwner?.get(rest.owner.toLowerCase()))
+                        : undefined,
                     })
                   }
                 />
@@ -906,6 +951,7 @@ const SubmissionsTable = ({
                   student={student}
                   students={students}
                   isGroup={isGroup}
+                  isTeam={isTeam}
                   acceptedUsernames={acceptedUsernames}
                   onProfile={setProfileUsername}
                   actions={actions}
@@ -946,10 +992,11 @@ const SubmissionsTable = ({
               setManageSubmission({
                 owner,
                 isGroup: true,
-                title: repoName,
+                title: groupLabel(owner, repoName),
                 repo: repoName,
                 repoHref: groupRepoHref,
                 hasRepo: true,
+                displayName: groupDisplayNames?.get(owner.toLowerCase()),
               })
             return (
               <GroupRepoRow
@@ -962,6 +1009,8 @@ const SubmissionsTable = ({
                 students={students}
                 onManage={openManage}
                 publicRepo={isPublicRepo(repoName)}
+                memberLogins={isTeam ? teamMembers(owner) : undefined}
+                label={isTeam ? groupLabel(owner, repoName) : undefined}
                 actions={
                   <RepoRowActions
                     owner={owner}
@@ -1039,7 +1088,9 @@ const SubmissionsTable = ({
             manageOwner === manageSubmission.owner
           }
           onManageMembers={
-            manageSubmission.isGroup
+            // Team-mode membership is managed through the group team (the
+            // assignment settings page), not direct collaborators.
+            manageSubmission.isGroup && !isTeam
               ? () => setManageOwner(manageSubmission.owner)
               : undefined
           }
@@ -1067,7 +1118,7 @@ const SubmissionsTable = ({
         />
       )}
 
-      {isGroup && manageOwner && (
+      {isGroup && !isTeam && manageOwner && (
         <GroupCollaboratorsModal
           key={manageOwner}
           open
@@ -1117,6 +1168,7 @@ const SubmissionsTable = ({
             mode: overrideGrade.mode,
             maxPoints: overrideRow.maxPoints,
             memberUsernames: overrideRow.memberUsernames,
+            teamSlug: overrideRow.teamSlug,
           }}
         />
       )}

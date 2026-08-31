@@ -310,7 +310,7 @@ describe("assignment slug field", () => {
     )
     const modeRadios =
       container.querySelectorAll<HTMLInputElement>('input[name="mode"]')
-    expect(modeRadios.length).toBe(2)
+    expect(modeRadios.length).toBe(3)
     modeRadios.forEach((radio) => expect(radio.disabled).toBe(true))
     expect(screen.getByText("assignments.form.typeLockedHelp")).not.toBeNull()
   })
@@ -321,7 +321,7 @@ describe("assignment slug field", () => {
     )
     const modeRadios =
       container.querySelectorAll<HTMLInputElement>('input[name="mode"]')
-    expect(modeRadios.length).toBe(2)
+    expect(modeRadios.length).toBe(3)
     modeRadios.forEach((radio) => expect(radio.disabled).toBe(false))
     expect(screen.queryByText("assignments.form.typeLockedHelp")).toBeNull()
   })

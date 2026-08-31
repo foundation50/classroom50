@@ -1,8 +1,19 @@
 import { useTranslation } from "react-i18next"
 import { nextAvailableSlug, slugify } from "@/util/slug"
 import { assignmentSlugBudget } from "@/util/repoNameBudget"
-import { Alert, FormField, Input, Radio, Textarea } from "@/components/ui"
-import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
+import {
+  Alert,
+  Badge,
+  FormField,
+  Input,
+  Radio,
+  Textarea,
+} from "@/components/ui"
+import {
+  GROUP_SIZE_MAX,
+  GROUP_SIZE_MIN,
+  TEAM_FORMATIONS,
+} from "@/types/classroom"
 import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
@@ -216,10 +227,11 @@ export function DetailsSection({
       </form.Field>
 
       {/* Assignment type is the repo-shape identity (individual = one repo per
-          student; group = a shared repo). Immutable on edit: switching it after
-          students accept invalidates every existing submission at collection
-          (the assignment_type check rejects them), so the radios lock like the
-          slug and a caveat says so up-front. */}
+          student; team = a shared repo backed by a GitHub Team; group = the
+          legacy shared repo backed by direct collaborators). Immutable on
+          edit: switching it after students accept invalidates every existing
+          submission at collection (the assignment_type check rejects them), so
+          the radios lock like the slug and a caveat says so up-front. */}
       <form.Field name="mode">
         {(field) => (
           <fieldset className="mt-4">
@@ -227,7 +239,7 @@ export function DetailsSection({
               {t("assignments.form.type")}
             </legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {(["individual", "group"] as const).map((value) => (
+              {(["individual", "team", "group"] as const).map((value) => (
                 <label
                   key={value}
                   htmlFor={`${field.name}-${value}`}
@@ -245,8 +257,15 @@ export function DetailsSection({
                   {t(
                     value === "individual"
                       ? "assignments.form.typeIndividual"
-                      : "assignments.form.typeGroup",
+                      : value === "team"
+                        ? "assignments.form.typeTeam"
+                        : "assignments.form.typeGroup",
                   )}
+                  {value === "team" ? (
+                    <Badge tone="primary" size="sm">
+                      {t("assignments.form.typeTeamRecommended")}
+                    </Badge>
+                  ) : null}
                 </label>
               ))}
             </div>
@@ -258,6 +277,72 @@ export function DetailsSection({
           </fieldset>
         )}
       </form.Field>
+
+      {/* Formation (team mode only): who forms the groups. Editable on edit,
+          unlike the mode itself — changing it only affects how not-yet-formed
+          groups come to exist. */}
+      <form.Subscribe
+        selector={(state) => deriveFormShape(state.values).showTeamFormation}
+      >
+        {(showTeamFormation) =>
+          showTeamFormation ? (
+            <form.Field name="team_formation">
+              {(field) => {
+                const formationError =
+                  field.state.meta.errors.length > 0
+                    ? String(field.state.meta.errors[0])
+                    : undefined
+                return (
+                  <fieldset className="mt-4 border-s-2 border-base-300 ps-4">
+                    <legend className="label font-bold mb-2">
+                      {t("assignments.form.teamFormation")}
+                    </legend>
+                    <div className="flex flex-col gap-2">
+                      {TEAM_FORMATIONS.map((value) => (
+                        <label
+                          key={value}
+                          htmlFor={`${field.name}-${value}`}
+                          className="label cursor-pointer items-start gap-2 p-0"
+                        >
+                          <Radio
+                            id={`${field.name}-${value}`}
+                            name={field.name}
+                            value={value}
+                            checked={field.state.value === value}
+                            onBlur={field.handleBlur}
+                            onChange={() => field.handleChange(value)}
+                          />
+                          <span>
+                            <span className="block">
+                              {t(
+                                value === "teacher"
+                                  ? "assignments.form.teamFormationTeacher"
+                                  : "assignments.form.teamFormationStudent",
+                              )}
+                            </span>
+                            <span className="block text-sm text-base-content/70">
+                              {t(
+                                value === "teacher"
+                                  ? "assignments.form.teamFormationTeacherHelp"
+                                  : "assignments.form.teamFormationStudentHelp",
+                              )}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                    {formationError ? (
+                      <p className="mt-2 text-sm text-error">
+                        {formationError}
+                      </p>
+                    ) : null}
+                  </fieldset>
+                )
+              }}
+            </form.Field>
+          ) : null
+        }
+      </form.Subscribe>
 
       {/* Max group size sits directly under Assignment type (feedback: related
           settings grouped together). Shows only for a group assignment. */}
