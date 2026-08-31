@@ -60,11 +60,18 @@ export const isClassroomArchived = (cl: { active?: boolean }): boolean =>
 export const GROUP_SIZE_MIN = 2
 export const GROUP_SIZE_MAX = 100
 
-// The two assignment modes (classroom50/assignments/v1). `individual` = one
-// repo per student; `group` = a shared repo (requires max_group_size).
-export type AssignmentMode = "individual" | "group"
+// The assignment modes (classroom50/assignments/v1). `individual` = one repo
+// per student; `group` = the LEGACY shared repo backed by direct collaborators
+// (requires max_group_size); `team` = a shared repo backed by a per-assignment
+// GitHub Team (requires max_group_size and team_formation). In lockstep with
+// the CLI's assignments-v1 schema enum and contract.AssignmentModes.
+export type AssignmentMode = "individual" | "group" | "team"
 
-const ASSIGNMENT_MODES: readonly AssignmentMode[] = ["individual", "group"]
+const ASSIGNMENT_MODES: readonly AssignmentMode[] = [
+  "individual",
+  "group",
+  "team",
+]
 
 // Narrow a form/string value to AssignmentMode, throwing on a value the CLI
 // schema would reject.
@@ -74,6 +81,26 @@ export function assertAssignmentMode(value: string): AssignmentMode {
   }
   throw new Error(
     `mode: must be one of ${ASSIGNMENT_MODES.join(", ")} (got "${value}").`,
+  )
+}
+
+// Who forms the groups of a `team` assignment: the teacher (org owner creates
+// teams and memberships — fully enforceable) or the students (the first
+// student founds a team and adds roster teammates — drift is detectable, not
+// preventable). Required for mode: team, forbidden otherwise. In lockstep with
+// the CLI's assignments-v1 schema enum and contract.TeamFormations.
+export type TeamFormation = "teacher" | "student"
+
+export const TEAM_FORMATIONS: readonly TeamFormation[] = ["teacher", "student"]
+
+// Narrow a form/string value to TeamFormation, throwing on a value the CLI
+// schema would reject.
+export function assertTeamFormation(value: string): TeamFormation {
+  if ((TEAM_FORMATIONS as readonly string[]).includes(value)) {
+    return value as TeamFormation
+  }
+  throw new Error(
+    `team_formation: must be one of ${TEAM_FORMATIONS.join(", ")} (got "${value}").`,
   )
 }
 
@@ -94,8 +121,10 @@ export const REPO_PERMISSIONS: readonly RepoPermission[] = [
 ]
 
 // The accept-time role a student gets on their own repo when an assignment sets
-// no student_permission: least-privilege push for individual, admin for group
-// (a group founder must manage collaborators). Mirrors the CLI default.
+// no student_permission: least-privilege push for individual, admin only for
+// the LEGACY group mode (its founder manages direct collaborators), and push
+// again for team mode (access flows through the GitHub Team attachment).
+// Mirrors the CLI default.
 export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
   return mode === "group" ? "admin" : "push"
 }
@@ -171,6 +200,9 @@ export type Assignment = {
   // Workflow-shim name (`default` for the universal shim), not the grading logic.
   autograder: string
   max_group_size?: number
+  // Who forms the groups of a `team` assignment (required there, absent
+  // otherwise). In lockstep with the CLI's assignments-v1 schema enum.
+  team_formation?: TeamFormation
   feedback_pr?: boolean
   // Use the TEMPLATE repo's native pull request template
   // (.github/pull_request_template.md -> pull_request_template.md ->

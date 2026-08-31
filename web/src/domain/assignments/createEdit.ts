@@ -109,6 +109,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   mode: "classroom50-owned",
   autograder: "classroom50-owned",
   max_group_size: "classroom50-owned",
+  team_formation: "classroom50-owned",
   feedback_pr: "classroom50-owned",
   // Rebuilt from input and MUTABLE: an edit may flip empty_repo now (the UI
   // warns when students already accepted, since existing repos aren't
