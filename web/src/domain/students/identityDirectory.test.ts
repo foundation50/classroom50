@@ -22,7 +22,10 @@ vi.mock("./rosterPrimitives", () => ({
   log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
 
-import { buildIdentityDirectory } from "./identityDirectory"
+import {
+  buildIdentityDirectory,
+  mergeOrgMembersIntoPool,
+} from "./identityDirectory"
 import { rosterPath } from "@/util/rosterPath"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
@@ -289,6 +292,41 @@ describe("buildIdentityDirectory", () => {
     expect(directory.members).toEqual([
       { id: 6, login: "ann", classrooms: ["cs102"] },
       { id: 5, login: "zed", classrooms: ["cs101", "cs102"] },
+    ])
+  })
+})
+
+describe("mergeOrgMembersIntoPool", () => {
+  const directoryPool = [
+    { id: 6, login: "ann", classrooms: ["cs102"] },
+    { id: 5, login: "zed", classrooms: ["cs101", "cs102"] },
+  ]
+
+  it("keeps directory entries (with classrooms) first and appends org-only members by login", () => {
+    const merged = mergeOrgMembersIntoPool(directoryPool, [
+      { id: 5, login: "zed" },
+      { id: 9, login: "walt" },
+      { id: 7, login: "bea" },
+    ])
+    expect(merged).toEqual([
+      { id: 6, login: "ann", classrooms: ["cs102"] },
+      { id: 5, login: "zed", classrooms: ["cs101", "cs102"] },
+      { id: 7, login: "bea", classrooms: [] },
+      { id: 9, login: "walt", classrooms: [] },
+    ])
+  })
+
+  it("dedupes by id even when the logins drifted (directory entry wins)", () => {
+    const merged = mergeOrgMembersIntoPool(directoryPool, [
+      { id: 5, login: "zed-renamed" },
+    ])
+    expect(merged).toEqual(directoryPool)
+  })
+
+  it("passes through an empty org list and an empty directory pool", () => {
+    expect(mergeOrgMembersIntoPool(directoryPool, [])).toEqual(directoryPool)
+    expect(mergeOrgMembersIntoPool([], [{ id: 1, login: "solo" }])).toEqual([
+      { id: 1, login: "solo", classrooms: [] },
     ])
   })
 })

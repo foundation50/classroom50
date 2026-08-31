@@ -10,6 +10,11 @@ import type { DirectoryMember } from "@/domain/students"
 // Cap what one keystroke renders; typing narrows the list, so nothing is lost.
 const MAX_ITEMS = 30
 
+// Availability of the optional org-wide widening pool the callers' toggle
+// exposes: "unavailable" (failed/forbidden member read) hides the toggle so
+// the picker behaves exactly as the classroom-scoped default.
+export type OrgPoolStatus = "ready" | "loading" | "unavailable"
+
 export function MemberLinkPicker({
   id,
   label,
@@ -21,6 +26,7 @@ export function MemberLinkPicker({
   frozen = false,
   inputSize,
   className,
+  notInClassroomLabel,
   onInputChange,
   onOpenChange,
   onSelect,
@@ -37,6 +43,10 @@ export function MemberLinkPicker({
   frozen?: boolean
   inputSize?: InputSize
   className?: string
+  // Subtitle for a member on no classroom team (an org-wide pool entry), so
+  // widened results are tellable from classroom-known candidates. Unset when
+  // the caller offers only classroom members (empty classrooms can't happen).
+  notInClassroomLabel?: string
   onInputChange: (value: string) => void
   onOpenChange: (open: boolean) => void
   onSelect: (member: DirectoryMember) => void
@@ -74,6 +84,10 @@ export function MemberLinkPicker({
           {m.classrooms.length > 0 ? (
             <span className="text-xs text-base-content/60">
               {m.classrooms.join(", ")}
+            </span>
+          ) : notInClassroomLabel ? (
+            <span className="text-xs text-base-content/60">
+              {notInClassroomLabel}
             </span>
           ) : null}
         </span>

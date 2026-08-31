@@ -8,7 +8,7 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { GitHubClient } from "@/github-core/client"
-import { githubKeys } from "@/github-core/queries"
+import { githubKeys, orgMembersAllQuery } from "@/github-core/queries"
 import { buildIdentityDirectory } from "@/domain/students/identityDirectory"
 import {
   resolveEmailRows,
@@ -43,6 +43,16 @@ export function fetchIdentityDirectory(
 export function useIdentityDirectory(org: string, enabled: boolean) {
   const client = useGitHubClient()
   return useQuery({ ...identityDirectoryQuery(client, org), enabled })
+}
+
+// The optional org-wide picker pool: the full active member list, demand-gated
+// like the directory above. Shares the `orgMembersAll` cache entry with the
+// roster classification and the org Members page, so enabling it on a roster
+// that already loaded is a cache hit, not a refetch.
+export function useOrgMemberPool(org: string, enabled: boolean) {
+  const client = useGitHubClient()
+  const base = orgMembersAllQuery(client, org)
+  return useQuery({ ...base, enabled: enabled && Boolean(org) })
 }
 
 // A stable resolver that pulls the directory through the query cache instead
