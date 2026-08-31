@@ -1,4 +1,4 @@
-import { GlobeIcon, RepoIcon } from "@/components/ui/icons"
+import { GlobeIcon, PeopleIcon, RepoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { getName, getDisplayName, getInitials } from "@/util/students"
@@ -213,8 +213,10 @@ export const GroupMembers = ({
 
   // Team rows link the group's DISPLAY name instead of the long
   // `<classroom>-<assignment>-group-<n>` repo name; the repo name stays
-  // discoverable on hover. A repo-name label keeps the mono face.
+  // discoverable on hover. A repo-name label keeps the mono face and the repo
+  // icon; a display-name label reads as a group, so it carries the people icon.
   const labelIsRepoName = repoLabel === repoName
+  const LabelIcon = labelIsRepoName ? RepoIcon : PeopleIcon
 
   return (
     <div className="flex flex-col gap-2">
@@ -227,7 +229,7 @@ export const GroupMembers = ({
           labelIsRepoName ? t("submissions.table.openGroupRepo") : repoName
         }
       >
-        <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
+        <LabelIcon aria-hidden="true" className="size-4 shrink-0" />
         <span className={labelIsRepoName ? "font-mono text-sm" : "text-sm"}>
           {repoLabel}
         </span>
