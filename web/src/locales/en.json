@@ -1667,28 +1667,20 @@
   "published": {
     "pageHeading": "Published resources",
     "pageSubheading": "Everything publicly served from <orgLink>{{org}}</orgLink>'s GitHub Pages site.",
+    "publicNote": "These files are public: students and the autograder fetch them without signing in. Everything else in the classroom50 repository stays private.",
     "copyUrl": "Copy URL",
     "openUrl": "Open URL",
     "optional": "Optional",
-    "publicPath": "Public path",
-    "resourceCount_one": "{{count}} published resource",
-    "resourceCount_other": "{{count}} published resources",
-    "servedUnlistedNote": " · served at an unlisted URL",
-    "banner": {
-      "title": "Everything below is served publicly over the internet",
-      "body": "Your classroom50 repository is private, but its GitHub Pages site is public by design: students and the autograder fetch these files without authenticating. Only the allow-listed files below are published; anything else in the repository (your roster, internal classroom fields, service token) stays private. A classroom can use an unlisted URL to make its files harder to find, but that's obscurity, not access control. The files are still public to anyone who has the link."
-    },
-    "orgLevel": "Organization-level",
-    "orgLevelServed": "Served at the root of <path>{{base}}/</path>.",
-    "perClassroom": "Per-classroom",
-    "perClassroomDescription": "Assignment manifests and autograders for each classroom.",
-    "noClassrooms": "No classrooms yet. Once you create one and it publishes, its resources will appear here.",
-    "kind": {
-      "engine": "Engine",
-      "data": "Classroom data"
-    },
+    "public": "Public",
+    "unlisted": "Unlisted",
+    "unlistedNote": "This classroom's files are served at an unlisted URL. Anyone who has the link can still read them, so share each assignment's invite link only with your students.",
+    "fileCount_one": "{{count}} file",
+    "fileCount_other": "{{count}} files",
+    "siteTitle": "Your public site",
+    "customBase": "This classroom publishes to <path>{{base}}/</path> instead of the site above.",
+    "noClassrooms": "No classrooms yet. Files appear here after a classroom publishes.",
     "status": {
-      "checking": "Checking",
+      "checking": "Checking…",
       "public": "Public",
       "notPublished": "Not published",
       "notPublishedTitle": "Not published yet",
@@ -1697,40 +1689,33 @@
     },
     "resources": {
       "classroomsIndex": {
-        "label": "Classrooms index",
-        "description": "Public list of this organization's classrooms with allow-listed fields only (name, term, short name). Internal data such as the GitHub team is deliberately stripped. Lets students confirm this is a real Classroom 50 organization."
+        "label": "Classroom list",
+        "description": "Names and terms of this organization's classrooms. Students use it to confirm the organization runs Classroom 50."
       },
       "runner": {
-        "label": "Autograde runner engine",
-        "description": "The generic grading bootstrap fetched by every student repository's autograde workflow. It's organization-agnostic, identical for every organization, and contains no classroom data."
+        "label": "Autograding script",
+        "description": "Runs the tests when a student's work is autograded. Identical for every organization and contains no classroom data."
       },
       "feedbackPr": {
-        "label": "Feedback pull request helper",
-        "description": "Generic helper that opens and refreshes the per-submission feedback pull request. It's organization-agnostic and contains no classroom data."
+        "label": "Feedback pull request script",
+        "description": "Opens and refreshes each submission's feedback pull request. Identical for every organization and contains no classroom data."
       },
       "assignmentsManifest": {
-        "label": "Assignments manifest",
-        "description": "Every assignment's slug, mode, template, autograder, runtime, declarative tests, and allowed-files list for this classroom. Read by students (accept and submit) and the autograde runner."
+        "label": "Assignment list",
+        "description": "Each assignment's settings, tests, and allowed files. Read when students accept and submit, and when work is autograded."
       },
       "classroomAutograder": {
         "label": "Classroom default autograder",
-        "description": "The fallback grading script used when an assignment has no per-assignment autograder. Only present if you ran autograder set-default."
+        "description": "Grading script used when an assignment doesn't have its own. Published only after you set a classroom default."
       },
       "autograderBundle": {
-        "label": "Autograder bundle: {{name}}",
-        "description": "Per-assignment grading bundle (autograder.py plus fixtures plus materialized tests) downloaded by the autograde runner at grade time."
+        "label": "Autograder files: {{name}}",
+        "description": "The grading script, tests, and fixtures for this assignment, downloaded when work is autograded."
       },
       "autograderShim": {
-        "label": "Autograder workflow shim: {{name}}",
-        "description": "Non-default autograder workflow shim fetched when a student accepts an assignment that overrides the default runner."
+        "label": "Workflow file: {{name}}",
+        "description": "The GitHub Actions workflow added to a student's repository when they accept an assignment that uses this autograder."
       }
-    },
-    "unlisted": "Unlisted",
-    "unlistedNote": {
-      "intro": "This classroom uses an unlisted URL. Resources sit at an unguessable path, which is obscurity, not access control.",
-      "point1": "The link is the only thing guarding the data. Anyone who has it can read the file.",
-      "point2": "Links leak through browser history, referrers, and search crawlers.",
-      "share": "Share the per-assignment invite link or CLI command from each assignment's page. Both include the key."
     }
   },
   "getStarted": {
