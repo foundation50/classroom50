@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.39.1](https://github.com/foundation50/classroom50/compare/cli-v1.39.0...cli-v1.39.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **cli:** rewrite user-facing copy in GitHub's voice ([#818](https://github.com/foundation50/classroom50/issues/818)) ([f014a90](https://github.com/foundation50/classroom50/commit/f014a902fdbd3751f498b15d52ad1fe47ecbb3a0))
+
 ## [1.39.0](https://github.com/foundation50/classroom50/compare/cli-v1.38.0...cli-v1.39.0) (2026-08-30)
 
 
