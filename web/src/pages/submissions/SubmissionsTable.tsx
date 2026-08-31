@@ -44,6 +44,7 @@ import {
   GroupRepoRow,
   NonSubmitterRow,
   PublicRepoBadge,
+  TeamMembersCountCell,
   identitySubtitle,
 } from "@/pages/submissions/SubmissionsRows"
 import {
@@ -238,6 +239,16 @@ function resolveOverrideCell(
 
 const SKELETON_BARS = [
   "h-4 w-40",
+  "h-6 w-20",
+  "h-6 w-16",
+  "h-4 w-32",
+  "h-8 w-24",
+]
+
+// Team mode adds the Members column between the name and Submissions.
+const TEAM_SKELETON_BARS = [
+  "h-4 w-40",
+  "h-6 w-10",
   "h-6 w-20",
   "h-6 w-16",
   "h-4 w-32",
@@ -608,6 +619,8 @@ const SubmissionsTable = ({
                 memberLoginsOverride={
                   isTeam ? teamMembers(rest.owner) : undefined
                 }
+                // Team mode: members render in their own count column.
+                showAvatars={!isTeam}
               />
               {isPublicRepo(repo) ? <PublicRepoBadge /> : null}
             </div>
@@ -628,6 +641,19 @@ const SubmissionsTable = ({
             </div>
           )}
         </td>
+        {isTeam && (
+          // Quarantined from the row's manage click like the actions cell, so
+          // the count button is the only click target inside it.
+          <td onClick={(event) => event.stopPropagation()}>
+            <TeamMembersCountCell
+              count={teamMembers(rest.owner)?.length}
+              label={t("submissions.table.manageMembersLabel", {
+                name: groupLabel(rest.owner, repo),
+              })}
+              onClick={() => setManageOwner(rest.owner)}
+            />
+          </td>
+        )}
         <td>
           <SubmissionCountCell
             mode={assignmentMode}
@@ -795,7 +821,7 @@ const SubmissionsTable = ({
                 clump at the far edge. */}
           <tr>
             <SortableTh
-              className="w-[26%]"
+              className={isTeam ? "w-[22%]" : "w-[26%]"}
               label={
                 isGroup
                   ? t("submissions.table.colGroup")
@@ -807,7 +833,12 @@ const SubmissionsTable = ({
               onSortChange={onSortChange}
               title={t("submissions.table.sortByName")}
             />
-            <th scope="col" className="w-[24%]">
+            {isTeam && (
+              <th scope="col" className="w-[10%]">
+                {t("submissions.table.colMembers")}
+              </th>
+            )}
+            <th scope="col" className={isTeam ? "w-[18%]" : "w-[24%]"}>
               {t("submissions.table.colSubmissions")}
             </th>
             <th scope="col" className="w-[13%]">
@@ -837,7 +868,9 @@ const SubmissionsTable = ({
           initial="initial"
           animate="animate"
         >
-          {initialLoading && <SkeletonRows bars={SKELETON_BARS} />}
+          {initialLoading && (
+            <SkeletonRows bars={isTeam ? TEAM_SKELETON_BARS : SKELETON_BARS} />
+          )}
           {/* Group mode renders group rows only — the reconciled "no group"
               non-submitters never appear as rows here — so they must not
               suppress the empty state (a groupless class would otherwise get
@@ -848,7 +881,7 @@ const SubmissionsTable = ({
             !unsubmittedGroupRepos.length &&
             !nonSubmittersLoading && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={isTeam ? 6 : 5}>
                   {filtered ? (
                     <EmptyState
                       variant="bare"
@@ -1020,6 +1053,17 @@ const SubmissionsTable = ({
                 publicRepo={isPublicRepo(repoName)}
                 memberLogins={isTeam ? teamMembers(owner) : undefined}
                 label={isTeam ? groupLabel(owner, repoName) : undefined}
+                membersCell={
+                  isTeam ? (
+                    <TeamMembersCountCell
+                      count={teamMembers(owner)?.length}
+                      label={t("submissions.table.manageMembersLabel", {
+                        name: groupLabel(owner, repoName),
+                      })}
+                      onClick={() => setManageOwner(owner)}
+                    />
+                  ) : undefined
+                }
                 actions={
                   <RepoRowActions
                     owner={owner}
@@ -1040,7 +1084,7 @@ const SubmissionsTable = ({
           {nonSubmittersLoading && (
             <tr>
               <td
-                colSpan={5}
+                colSpan={isTeam ? 6 : 5}
                 className="py-4 text-center text-sm text-base-content/60"
               >
                 <span role="status" className="inline-flex items-center gap-2">

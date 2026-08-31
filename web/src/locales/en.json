@@ -2781,7 +2781,9 @@
       "reviewAria": "Open feedback pull request",
       "noTeam": "Not in a group",
       "noTeamTitle": "This student isn't a member of any group team for this assignment. Add them to a group on the assignment settings page.",
-      "teamDefaultName": "Group {{n}}"
+      "teamDefaultName": "Group {{n}}",
+      "colMembers": "Members",
+      "manageMembersLabel": "View and manage members of {{name}}"
     },
     "manageTeam": {
       "title": "Manage {{name}}",

@@ -186,6 +186,7 @@ export const GroupMembers = ({
   repoHref,
   repoLabel,
   memberLoginsOverride,
+  showAvatars = true,
 }: {
   org: string
   repoName: string
@@ -196,6 +197,9 @@ export const GroupMembers = ({
   // Team mode: live team membership (the authoritative link) replaces the
   // collaborators-cache/snapshot fallback entirely.
   memberLoginsOverride?: string[]
+  // Team mode: members moved to their own count column, so the cell renders
+  // just the linked group name.
+  showAvatars?: boolean
 }) => {
   const { t } = useTranslation()
   // enabled: false — reads the cache the Members modal populates, never fetches.
@@ -235,37 +239,70 @@ export const GroupMembers = ({
         </span>
       </a>
 
-      <div className="avatar-group -space-x-3">
-        {visible.map((username) => {
-          const name = getName(username, students)
-          return (
+      {showAvatars && (
+        <div className="avatar-group -space-x-3">
+          {visible.map((username) => {
+            const name = getName(username, students)
+            return (
+              <div
+                key={username}
+                className="avatar avatar-placeholder"
+                title={name ? `${name} (${username})` : username}
+              >
+                <div className="bg-base-200 text-primary rounded-full w-7 border-2 border-base-100">
+                  <span className="text-xs">
+                    {getInitials(username, students) ||
+                      username.at(0)?.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+
+          {overflow > 0 && (
             <div
-              key={username}
               className="avatar avatar-placeholder"
-              title={name ? `${name} (${username})` : username}
+              title={memberLogins.slice(MAX_VISIBLE_AVATARS).join(", ")}
             >
-              <div className="bg-base-200 text-primary rounded-full w-7 border-2 border-base-100">
-                <span className="text-xs">
-                  {getInitials(username, students) ||
-                    username.at(0)?.toUpperCase()}
-                </span>
+              <div className="bg-neutral text-neutral-content rounded-full w-7 border-2 border-base-100">
+                <span className="text-xs">+{overflow}</span>
               </div>
             </div>
-          )
-        })}
-
-        {overflow > 0 && (
-          <div
-            className="avatar avatar-placeholder"
-            title={memberLogins.slice(MAX_VISIBLE_AVATARS).join(", ")}
-          >
-            <div className="bg-neutral text-neutral-content rounded-full w-7 border-2 border-base-100">
-              <span className="text-xs">+{overflow}</span>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+// Team mode's Members cell: the live member count as a click-through to the
+// group management modal (members + display name). Renders a muted em-dash
+// while membership is still resolving.
+export const TeamMembersCountCell = ({
+  count,
+  label,
+  onClick,
+}: {
+  count?: number
+  // Accessible name carrying the group's display name.
+  label: string
+  onClick: () => void
+}) => {
+  if (count === undefined) {
+    return <span className="text-base-content/50">—</span>
+  }
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="gap-1.5 font-medium"
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+    >
+      <PeopleIcon aria-hidden="true" className="size-4" />
+      {count}
+    </Button>
   )
 }
 
@@ -362,6 +399,8 @@ export const NonSubmitterRow = ({
           }
         />
       </td>
+      {/* Team mode's Members column: a student on no team has no count. */}
+      {isTeam && <td>—</td>}
       <td>
         <div className="flex flex-wrap items-center gap-1.5">
           <NonSubmitterStatusBadge
@@ -430,6 +469,7 @@ export const GroupRepoRow = ({
   publicRepo = false,
   memberLogins,
   label,
+  membersCell,
 }: {
   org: string
   classroom: string
@@ -447,6 +487,9 @@ export const GroupRepoRow = ({
   // Team mode: live team membership + the team's display name.
   memberLogins?: string[]
   label?: string
+  // Team mode: the Members-column cell (count click-through); its presence
+  // also moves the avatars out of the name cell.
+  membersCell?: React.ReactNode
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
@@ -461,8 +504,12 @@ export const GroupRepoRow = ({
           repoHref={repoHref}
           repoLabel={label ?? repoName}
           memberLoginsOverride={memberLogins}
+          showAvatars={membersCell === undefined}
         />
       </td>
+      {membersCell !== undefined && (
+        <td onClick={(event) => event.stopPropagation()}>{membersCell}</td>
+      )}
       <td>
         <div className="flex flex-wrap items-center gap-1.5">
           <Badge tone="warning" className="whitespace-nowrap">
