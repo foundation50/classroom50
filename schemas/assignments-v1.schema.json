@@ -98,18 +98,22 @@
           "description": "Write-side provenance for `available_from` (same shape as `due_meta`), for auditing a wrong-zone release date. Advisory metadata only."
         },
         "mode": {
-          "enum": ["individual", "group"],
-          "description": "`individual` = one repo per student. `group` = a shared repo: the first accepter creates it and becomes its admin, then adds teammates with `gh student invite`. Group size is advisory — `max_group_size` is a coordination hint the founder is expected to respect, NOT a hard security cap. `gh student invite` does apply it as a best-effort guardrail (it refuses to add a collaborator past the cap when run from inside the founder's own group repo), but it is bypassable (the GitHub UI, or simply not running the CLI) — the joiner-driven `gh student group join` that once enforced it was removed. Group mode still REQUIRES `max_group_size` (>= 2) as a contract field for clients like the GUI; individual mode must omit it. See the conditional at the assignment level."
+          "enum": ["individual", "group", "team"],
+          "description": "`individual` = one repo per student. `group` = the LEGACY shared repo: the first accepter creates it and becomes its admin, then adds teammates as direct repo collaborators with `gh student invite`. Group size is advisory — `max_group_size` is a coordination hint the founder is expected to respect, NOT a hard security cap. `gh student invite` does apply it as a best-effort guardrail (it refuses to add a collaborator past the cap when run from inside the founder's own group repo), but it is bypassable (the GitHub UI, or simply not running the CLI) — the joiner-driven `gh student group join` that once enforced it was removed. Group mode still REQUIRES `max_group_size` (>= 2) as a contract field for clients like the GUI; individual mode must omit it. `team` = a shared repo owned by a per-assignment GitHub Team named `classroom50-group-<hash>-<n>` (hash = 16-hex SHA-256 prefix over the lowercased classroom and assignment slugs; n = a counter from 1): membership lives on the team, the repo is named `<classroom>-<assignment>-group-<n>` and linked authoritatively by the team->repo attachment, and grading credits team members — not repo collaborators. Team mode REQUIRES `max_group_size` AND `team_formation`; see the conditionals at the assignment level. Old clients reject unknown modes, which is the intended fail-safe for files written by newer releases."
         },
         "autograder": {
           "$ref": "#/$defs/shortName",
           "description": "Workflow-shim name; `default` for the universal shim. NOT the grading logic — that's autograder.py or `tests`."
         },
+        "team_formation": {
+          "enum": ["teacher", "student"],
+          "description": "Who forms the groups of a `team` assignment. `teacher` = only the teacher (an org owner) creates the group teams and their memberships (from the Teams page or `gh teacher team`); accept clients refuse to found a team, so membership is locked from the students' side and no student ever holds team-maintainer or repo-admin rights. `student` = self-service: the first student founds the team through a Classroom 50 client (becoming its GitHub team maintainer), names it via the display-name record, and adds roster teammates; the app enforces `max_group_size` and roster membership at add time, but GitHub itself cannot prevent a maintainer from drifting membership later — clients surface drift against the committed teams.json snapshot instead. REQUIRED for `mode: team` and MUST be omitted otherwise (see the conditional at the assignment level)."
+        },
         "max_group_size": {
           "type": "integer",
           "minimum": 2,
           "maximum": 100,
-          "description": "Advisory maximum collaborators on a group repo. REQUIRED for `mode: group` (>= 2) and MUST be omitted for `mode: individual`. This is a CONTRACT field, not a hard security ceiling: `gh student invite` enforces it as a best-effort guardrail (refusing to add a collaborator past the cap when run from inside the founder's own group repo), but the check is advisory and bypassable (e.g., adding collaborators via the GitHub UI) — the joiner-side enforcement in `gh student group join` was removed. The founder coordinates actual group size when adding teammates with `gh student invite`. Retained in the schema/assignments.json so clients such as the GUI can display and (optionally) enforce it client-side."
+          "description": "Advisory maximum group size. REQUIRED for `mode: group` and `mode: team` (>= 2) and MUST be omitted for `mode: individual`. This is a CONTRACT field, not a hard security ceiling. Legacy group mode: `gh student invite` enforces it as a best-effort guardrail (refusing to add a collaborator past the cap when run from inside the founder's own group repo), but the check is advisory and bypassable (e.g., adding collaborators via the GitHub UI). Team mode: every Classroom 50 client refuses to add a member past the cap at team-formation time, but a student-formed team's maintainer can still bypass it on GitHub directly — clients surface the oversize instead. Retained in the schema/assignments.json so clients such as the GUI can display and enforce it client-side."
         },
         "runtime": { "$ref": "#/$defs/runtime" },
         "tests": {
@@ -231,7 +235,7 @@
         },
         "student_permission": {
           "enum": ["pull", "triage", "push", "maintain", "admin"],
-          "description": "The collaborator role the enrolled student is granted on their OWN assignment repo at accept time (the old GitHub Classroom \"grant students admin access\" checkbox, generalized to GitHub's full ladder). ABSENT means the built-in default: `push` for `individual`, `admin` for `group`. This is accept-time provisioning only — it governs what NEW accepters get; it does not retroactively change repos already accepted (teachers adjust those with the gradebook's per-repo/bulk access controls). Group coherence: a group founder must hold at least `admin` to add teammates via `gh student invite`, so for `mode: group` any configured value below `admin` is clamped up to `admin` by every accept client — prefer omitting it (or writing `admin`) for group assignments. Caution: `admin` lets the student manage the repo's settings and collaborators; changing repo visibility stays blocked by the org-level lockdown setup applies (members_can_change_repo_visibility=false) while that lockdown is intact (verify with the audit)."
+          "description": "The collaborator role the enrolled student is granted on their OWN assignment repo at accept time (the old GitHub Classroom \"grant students admin access\" checkbox, generalized to GitHub's full ladder). ABSENT means the built-in default: `push` for `individual`, `admin` for legacy `group`, and `push` for `team` (access flows through the GitHub Team attachment, so no student needs repo admin). This is accept-time provisioning only — it governs what NEW accepters get; it does not retroactively change repos already accepted (teachers adjust those with the gradebook's per-repo/bulk access controls). Group coherence: a LEGACY group founder must hold at least `admin` to add teammates via `gh student invite`, so for `mode: group` any configured value below `admin` is clamped up to `admin` by every accept client — prefer omitting it (or writing `admin`) for group assignments. Team mode never clamps: the founding accepter's transient creator-admin is dropped to this role once the team is attached. Caution: `admin` lets the student manage the repo's settings and collaborators; changing repo visibility stays blocked by the org-level lockdown setup applies (members_can_change_repo_visibility=false) while that lockdown is intact (verify with the audit)."
         },
         "repo_visibility": {
           "enum": ["private", "public"],
@@ -266,9 +270,26 @@
       },
       "allOf": [
         {
+          "if": { "properties": { "mode": { "const": "individual" } } },
+          "then": {
+            "allOf": [
+              { "not": { "required": ["max_group_size"] } },
+              { "not": { "required": ["team_formation"] } }
+            ]
+          }
+        },
+        {
           "if": { "properties": { "mode": { "const": "group" } } },
-          "then": { "required": ["max_group_size"] },
-          "else": { "not": { "required": ["max_group_size"] } }
+          "then": {
+            "allOf": [
+              { "required": ["max_group_size"] },
+              { "not": { "required": ["team_formation"] } }
+            ]
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "team" } } },
+          "then": { "required": ["max_group_size", "team_formation"] }
         },
         {
           "if": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] },

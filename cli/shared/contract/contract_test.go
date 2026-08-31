@@ -57,6 +57,29 @@ func TestContractLiterals(t *testing.T) {
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
 		{"ModeGroup", ModeGroup, "group"},
+		// ModeTeam + TeamFormation values are mirrored, with NO compile-time
+		// link, in the assignments-v1 schema enums, the web ASSIGNMENT_MODES /
+		// TEAM_FORMATIONS, and the Python collector's accepted-mode set. Update
+		// every copy in lockstep.
+		{"ModeTeam", ModeTeam, "team"},
+		{"TeamFormationTeacher", TeamFormationTeacher, "teacher"},
+		{"TeamFormationStudent", TeamFormationStudent, "student"},
+		// GroupTeamPrefix / GroupTeamPattern are mirrored, with NO compile-time
+		// link, in web/src/util/teamSlug.ts and collect_scores.py. The prefix
+		// must stay inside the `classroom50-` namespace — the web delete guard
+		// (isDeletableClassroomTeamRef) trusts exactly that namespace.
+		{"GroupTeamPrefix", GroupTeamPrefix, "classroom50-group-"},
+		{"GroupTeamPattern", GroupTeamPattern, `^classroom50-group-[0-9a-f]{16}-[1-9][0-9]*$`},
+		// GroupSchemaV1 is mirrored, with NO compile-time link, in
+		// schemas/group-team-v1.schema.json and the web reader. The record is
+		// what makes a group team attributable after assignments.json is gone,
+		// so a one-sided bump would strand every existing team at cleanup.
+		{"GroupSchemaV1", GroupSchemaV1, "classroom50/group/v1"},
+		// TeamsSchemaV1 / TeamsFilename are mirrored, with NO compile-time
+		// link, in schemas/teams-v1.schema.json and the web GUI.
+		{"TeamsSchemaV1", TeamsSchemaV1, "classroom50/teams/v1"},
+		{"TeamsFilename", TeamsFilename, "teams.json"},
+		{"GroupRepoSegment", GroupRepoSegment, "group-"},
 		// SubmissionMode values are mirrored, with NO compile-time link, in the
 		// assignments-v1 schema enum (parity-pinned by
 		// TestSubmissionModeEnumParity in gh-teacher), the web SUBMISSION_MODES,
@@ -429,6 +452,9 @@ func TestFeedbackLabelForMode(t *testing.T) {
 	}{
 		{ModeGroup, "Group Assignment", "5319E7"},
 		{"  GROUP ", "Group Assignment", "5319E7"},
+		// Team mode is a shared-repo mode; it carries the same Group label so
+		// teachers see one label per shared/solo axis, not one per mechanism.
+		{ModeTeam, "Group Assignment", "5319E7"},
 		{ModeIndividual, "Individual Assignment", "0E8A16"},
 		{"", "Individual Assignment", "0E8A16"},     // unknown -> individual,
 		{"solo", "Individual Assignment", "0E8A16"}, // like label_for_mode
@@ -571,5 +597,211 @@ func TestParseScopeList(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestGroupHashHexLen pins the numeric half of the group-team name shape (the
+// string table above can't carry an int). Mirrored, with NO compile-time link,
+// in web/src/util/teamSlug.ts GROUP_HASH_HEX_LEN and collect_scores.py.
+// Load-bearing for destructive sweeps: the full
+// `classroom50-group-<16 hex>-<counter>` shape is part of the delete gate.
+func TestGroupHashHexLen(t *testing.T) {
+	if GroupHashHexLen != 16 {
+		t.Errorf("GroupHashHexLen = %d, want 16", GroupHashHexLen)
+	}
+}
+
+// sharedGroupVectorsPath locates the cross-language group-team name fixture,
+// also consumed by the web mirror (teamSlug.test.ts) and the Python collector
+// tests (skeleton_tests).
+const sharedGroupVectorsPath = "../testdata/group_vectors.json"
+
+// TestGroupTeamName_SharedFixtureParity runs the shared golden vectors so the
+// Go formula and the TS/Python mirrors can't drift: a one-sided edit fails on
+// the other language's copy of these same cases.
+func TestGroupTeamName_SharedFixtureParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Clean(sharedGroupVectorsPath))
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	var doc struct {
+		HashHexLen int    `json:"hash_hex_len"`
+		Prefix     string `json:"prefix"`
+		Cases      []struct {
+			Classroom  string `json:"classroom"`
+			Assignment string `json:"assignment"`
+			Hash       string `json:"hash"`
+			Team1      string `json:"team_1"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse shared fixture: %v", err)
+	}
+	if doc.HashHexLen != GroupHashHexLen {
+		t.Errorf("fixture hash_hex_len = %d, want %d", doc.HashHexLen, GroupHashHexLen)
+	}
+	if doc.Prefix != GroupTeamPrefix {
+		t.Errorf("fixture prefix = %q, want %q", doc.Prefix, GroupTeamPrefix)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("shared fixture has no cases")
+	}
+	for _, c := range doc.Cases {
+		if got := GroupTeamHash(c.Classroom, c.Assignment); got != c.Hash {
+			t.Errorf("GroupTeamHash(%q,%q) = %q, want %q", c.Classroom, c.Assignment, got, c.Hash)
+		}
+		if got := GroupTeamName(c.Classroom, c.Assignment, 1); got != c.Team1 {
+			t.Errorf("GroupTeamName(%q,%q,1) = %q, want %q", c.Classroom, c.Assignment, got, c.Team1)
+		}
+		if !IsGroupTeamSlug(c.Team1) {
+			t.Errorf("IsGroupTeamSlug(%q) = false, want true", c.Team1)
+		}
+		if n, ok := ParseGroupTeamCounter(c.Team1, c.Classroom, c.Assignment); !ok || n != 1 {
+			t.Errorf("ParseGroupTeamCounter(%q) = (%d,%t), want (1,true)", c.Team1, n, ok)
+		}
+	}
+}
+
+// TestIsGroupTeamSlug pins the FULL-shape gate destructive ops rely on: the
+// prefix alone is a namespace a pathological classroom short-name could land
+// in (a classroom literally named `group-...`), so the hex length and the
+// no-leading-zero counter are load-bearing.
+func TestIsGroupTeamSlug(t *testing.T) {
+	hash := GroupTeamHash("cs50", "project")
+	cases := []struct {
+		slug string
+		want bool
+	}{
+		{GroupTeamName("cs50", "project", 1), true},
+		{GroupTeamName("cs50", "project", 42), true},
+		{GroupTeamPrefix + hash + "-0", false},   // counters start at 1
+		{GroupTeamPrefix + hash + "-01", false},  // no leading zeros
+		{GroupTeamPrefix + hash + "-", false},    // no counter
+		{GroupTeamPrefix + hash, false},          // no counter segment
+		{GroupTeamPrefix + "nothexnothexnot0-1", false},   // non-hex hash
+		{GroupTeamPrefix + hash[:15] + "-1", false},       // short hash
+		{"classroom50-group-theory", false},               // human team in the namespace
+		{"classroom50-cs50", false},                       // classroom student team
+		{"invite-" + hash, false},                         // invite team
+		{"x" + GroupTeamName("cs50", "project", 1), false}, // anchored
+	}
+	for _, tc := range cases {
+		if got := IsGroupTeamSlug(tc.slug); got != tc.want {
+			t.Errorf("IsGroupTeamSlug(%q) = %t, want %t", tc.slug, got, tc.want)
+		}
+	}
+}
+
+// TestGroupRepoName pins the `<classroom>-<assignment>-group-<n>` team-repo
+// formula and its mode-gated inverse. The counter is what maps a repo back to
+// its team (GroupTeamName) by pure function; the parse must reject the shapes
+// the name never produces (0, leading zeros, a bare `group-`), because
+// `group-3` is a syntactically valid GitHub login and only the assignment's
+// mode — never the shape — decides which parse applies.
+func TestGroupRepoName(t *testing.T) {
+	if got := GroupRepoName("CS101", "HW1", 3); got != "cs101-hw1-group-3" {
+		t.Errorf("GroupRepoName = %q, want %q", got, "cs101-hw1-group-3")
+	}
+	if n, ok := ParseGroupRepoCounter("cs101-hw1-group-3", "cs101", "hw1"); !ok || n != 3 {
+		t.Errorf("ParseGroupRepoCounter = (%d,%t), want (3,true)", n, ok)
+	}
+	// Case-insensitive like every repo-name consumer.
+	if n, ok := ParseGroupRepoCounter("CS101-HW1-GROUP-3", "cs101", "hw1"); !ok || n != 3 {
+		t.Errorf("ParseGroupRepoCounter(upper) = (%d,%t), want (3,true)", n, ok)
+	}
+	for _, bad := range []string{
+		"cs101-hw1-group-0",
+		"cs101-hw1-group-03",
+		"cs101-hw1-group-",
+		"cs101-hw1-group-x",
+		"cs101-hw1-alice",
+		"cs101-hw2-group-3", // other assignment
+	} {
+		if _, ok := ParseGroupRepoCounter(bad, "cs101", "hw1"); ok {
+			t.Errorf("ParseGroupRepoCounter(%q) = ok, want reject", bad)
+		}
+	}
+	// The team-repo suffix must stay under the worst-case login segment so the
+	// existing repo-name budget (RepoNameSlugBudget) covers team repos too.
+	if worst := len(GroupRepoSegment) + 10; worst > GitHubLoginMaxLen {
+		t.Errorf("group repo segment worst case %d exceeds the login budget %d", worst, GitHubLoginMaxLen)
+	}
+}
+
+// TestGroupTeamNameWithinNamespace pins that group teams live inside the
+// `classroom50-` namespace the web delete guard (isDeletableClassroomTeamRef)
+// trusts, and never collide with the classroom/staff team formulas (a staff
+// role is a fixed word, never 16 hex).
+func TestGroupTeamNameWithinNamespace(t *testing.T) {
+	name := GroupTeamName("cs101", "hw1", 1)
+	if !strings.HasPrefix(name, ConfigRepoName+"-") {
+		t.Errorf("GroupTeamName %q must live in the %q- namespace", name, ConfigRepoName)
+	}
+	// A group team slug must never parse as a bare classroom or staff slug
+	// collision in practice: the fixed `group-<16 hex>` middle is not a legal
+	// staff role and is vanishingly unlikely as a real short-name, and the
+	// full-pattern gate (IsGroupTeamSlug) is what destructive ops key on.
+	if IsGroupTeamSlug(ClassroomStudentTeamSlug("cs101")) {
+		t.Error("classroom student team slug must not match the group-team shape")
+	}
+	if IsGroupTeamSlug(StaffTeamSlug("cs101", RoleTeacher)) {
+		t.Error("staff team slug must not match the group-team shape")
+	}
+}
+
+// TestTeamFormations pins the allow-list mirrored by the assignments-v1 schema
+// enum and the web TEAM_FORMATIONS.
+func TestTeamFormations(t *testing.T) {
+	want := []string{"teacher", "student"}
+	if len(TeamFormations) != len(want) {
+		t.Fatalf("TeamFormations = %v, want %v", TeamFormations, want)
+	}
+	for i := range want {
+		if TeamFormations[i] != want[i] {
+			t.Errorf("TeamFormations[%d] = %q, want %q", i, TeamFormations[i], want[i])
+		}
+	}
+	for _, f := range want {
+		if !IsValidTeamFormation(f) {
+			t.Errorf("IsValidTeamFormation(%q) = false, want true", f)
+		}
+	}
+	if IsValidTeamFormation("") || IsValidTeamFormation("Teacher") {
+		t.Error("IsValidTeamFormation must reject empty and non-canonical case")
+	}
+}
+
+// TestAssignmentModes pins the mode allow-list mirrored by the assignments-v1
+// schema enum and the web ASSIGNMENT_MODES.
+func TestAssignmentModes(t *testing.T) {
+	want := []string{"individual", "group", "team"}
+	if len(AssignmentModes) != len(want) {
+		t.Fatalf("AssignmentModes = %v, want %v", AssignmentModes, want)
+	}
+	for i := range want {
+		if AssignmentModes[i] != want[i] {
+			t.Errorf("AssignmentModes[%d] = %q, want %q", i, AssignmentModes[i], want[i])
+		}
+	}
+	if !IsValidAssignmentMode(ModeTeam) || IsValidAssignmentMode("solo") {
+		t.Error("IsValidAssignmentMode allow-list drifted")
+	}
+}
+
+// TestDefaultStudentPermission pins the accept-time defaults per mode: push
+// for individual, admin only for the LEGACY group mode (its founder manages
+// direct collaborators), and push again for team mode (access flows through
+// the GitHub Team attachment — no student needs repo admin).
+func TestDefaultStudentPermission(t *testing.T) {
+	cases := []struct{ mode, want string }{
+		{ModeIndividual, PermissionPush},
+		{ModeGroup, PermissionAdmin},
+		{ModeTeam, PermissionPush},
+		{"", PermissionPush},
+	}
+	for _, tc := range cases {
+		if got := DefaultStudentPermission(tc.mode); got != tc.want {
+			t.Errorf("DefaultStudentPermission(%q) = %q, want %q", tc.mode, got, tc.want)
+		}
 	}
 }

@@ -28,15 +28,17 @@ import (
 )
 
 // Assignment modes, single-sourced from the shared contract: `individual`
-// (one repo per student) and `group` (a shared repo, bounded by
-// max_group_size).
+// (one repo per student), `group` (the legacy shared repo backed by direct
+// collaborators, bounded by max_group_size), and `team` (a shared repo backed
+// by a per-assignment GitHub Team, formed per team_formation).
 const (
 	ModeIndividual = contract.ModeIndividual
 	ModeGroup      = contract.ModeGroup
+	ModeTeam       = contract.ModeTeam
 )
 
 // AssignmentModes is the allow-list, sorted so error messages stay stable.
-var AssignmentModes = []string{ModeGroup, ModeIndividual}
+var AssignmentModes = []string{ModeGroup, ModeIndividual, ModeTeam}
 
 func IsValidAssignmentMode(m string) bool {
 	for _, allowed := range AssignmentModes {
@@ -55,6 +57,16 @@ func ValidateStudentPermission(p string) error {
 	}
 	if !contract.IsValidRepoPermission(p) {
 		return fmt.Errorf("invalid student_permission %q: must be one of %v", p, contract.RepoPermissions)
+	}
+	return nil
+}
+
+// ValidateTeamFormation checks a team assignment's team_formation against the
+// contract allow-list. Empty is invalid for team mode (the field is required
+// there); callers gate presence per mode via the mode/size/formation coupling.
+func ValidateTeamFormation(f string) error {
+	if !contract.IsValidTeamFormation(f) {
+		return fmt.Errorf("invalid team_formation %q: must be one of %v", f, contract.TeamFormations)
 	}
 	return nil
 }
@@ -184,6 +196,7 @@ type AssignmentEntry struct {
 	Mode               string           `json:"mode"`
 	Autograder         string           `json:"autograder"`
 	MaxGroupSize       int              `json:"max_group_size,omitempty"`
+	TeamFormation      string           `json:"team_formation,omitempty"`
 	Runtime            *RuntimeRef      `json:"runtime,omitempty"`
 	Tests              []TestSpec       `json:"tests,omitempty"`
 	TestDefaults       *TestDefaults    `json:"test_defaults,omitempty"`
@@ -226,6 +239,7 @@ type AssignmentEntry struct {
 var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
+	"team_formation": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"test_defaults": {},
 	"locked":        {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
@@ -986,15 +1000,29 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateMaxGroupSize(entry.MaxGroupSize); err != nil {
 		return err
 	}
-	// Group must carry a usable limit (>= 2); individual must carry none.
+	// Group and team must carry a usable limit (>= 2); individual must carry
+	// none. team_formation is required for team mode and forbidden otherwise.
 	switch entry.Mode {
 	case ModeGroup:
 		if entry.MaxGroupSize < 2 {
 			return fmt.Errorf("group assignment %q must set max_group_size >= 2 (got %d)", entry.Slug, entry.MaxGroupSize)
 		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("group assignment %q must not set team_formation (got %q; team_formation is team-mode only)", entry.Slug, entry.TeamFormation)
+		}
+	case ModeTeam:
+		if entry.MaxGroupSize < 2 {
+			return fmt.Errorf("team assignment %q must set max_group_size >= 2 (got %d)", entry.Slug, entry.MaxGroupSize)
+		}
+		if err := ValidateTeamFormation(entry.TeamFormation); err != nil {
+			return fmt.Errorf("team assignment %q: %w", entry.Slug, err)
+		}
 	case ModeIndividual:
 		if entry.MaxGroupSize != 0 {
 			return fmt.Errorf("individual assignment %q must not set max_group_size (got %d)", entry.Slug, entry.MaxGroupSize)
+		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("individual assignment %q must not set team_formation (got %q)", entry.Slug, entry.TeamFormation)
 		}
 	}
 	if entry.Runtime != nil {
@@ -1243,9 +1271,22 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		if entry.MaxGroupSize < 2 {
 			return fmt.Errorf("entry %q is group mode but max_group_size is %d (must be >= 2)", entry.Slug, entry.MaxGroupSize)
 		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("entry %q is group mode but sets team_formation %q (team-mode only)", entry.Slug, entry.TeamFormation)
+		}
+	case ModeTeam:
+		if entry.MaxGroupSize < 2 {
+			return fmt.Errorf("entry %q is team mode but max_group_size is %d (must be >= 2)", entry.Slug, entry.MaxGroupSize)
+		}
+		if err := ValidateTeamFormation(entry.TeamFormation); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
 	case ModeIndividual:
 		if entry.MaxGroupSize != 0 {
 			return fmt.Errorf("entry %q is individual mode but sets max_group_size %d", entry.Slug, entry.MaxGroupSize)
+		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("entry %q is individual mode but sets team_formation %q", entry.Slug, entry.TeamFormation)
 		}
 	}
 	if entry.Runtime != nil {

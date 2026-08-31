@@ -72,6 +72,14 @@ class TestSchemaAccepts:
         )
         assert _errors(_manifest(entry)) == []
 
+    def test_team_mode_accepted(self):
+        # mode: team requires BOTH max_group_size and team_formation.
+        for formation in ("teacher", "student"):
+            entry = _entry(
+                mode="team", max_group_size=4, team_formation=formation
+            )
+            assert _errors(_manifest(entry)) == []
+
     def test_run_test_with_exit_code(self):
         tests = [{"name": "t", "type": "run", "run": "x", "exit-code": 42, "points": 1}]
         assert _errors(_manifest(_entry(tests=tests))) == []
@@ -325,6 +333,29 @@ class TestSchemaRejects:
     def test_individual_mode_forbids_max_group_size(self):
         # mode: individual must NOT carry max_group_size.
         assert _errors(_manifest(_entry(max_group_size=3))) != []
+
+    def test_team_mode_requires_size_and_formation(self):
+        # mode: team requires max_group_size AND team_formation.
+        assert _errors(_manifest(_entry(mode="team", max_group_size=4))) != []
+        assert _errors(_manifest(_entry(mode="team", team_formation="teacher"))) != []
+        assert _errors(_manifest(_entry(mode="team"))) != []
+
+    @pytest.mark.parametrize("formation", ["Teacher", "anyone", "", None, True])
+    def test_team_mode_bad_formation_rejected(self, formation):
+        entry = _entry(mode="team", max_group_size=4, team_formation=formation)
+        assert _errors(_manifest(entry)) != []
+
+    def test_non_team_modes_forbid_team_formation(self):
+        # team_formation is team-mode only.
+        assert _errors(_manifest(_entry(team_formation="teacher"))) != []
+        assert (
+            _errors(
+                _manifest(
+                    _entry(mode="group", max_group_size=3, team_formation="teacher")
+                )
+            )
+            != []
+        )
 
     def test_autograder_must_be_written_explicitly(self):
         # Same documented strictness: the CLI's parser normalizes a

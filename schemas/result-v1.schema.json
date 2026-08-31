@@ -33,13 +33,13 @@
       "description": "Assignment slug. Must equal the source repo's assignment (enforced in code)."
     },
     "assignment_type": {
-      "enum": ["individual", "group"],
+      "enum": ["individual", "group", "team"],
       "description": "The assignment's mode, stamped by the runner from the MODE env. Collection cross-checks it against assignments.json `mode` and warns-and-skips on mismatch."
     },
     "owner": {
       "type": "string",
       "minLength": 1,
-      "description": "The repo owner login (the <username> from <classroom>-<assignment>-<username>). The identity anchor the validators check; for an individual assignment it is the sole credited student, for a group it is the founder whose repo was graded."
+      "description": "The repo owner login (the <username> from <classroom>-<assignment>-<username>). The identity anchor the validators check; for an individual assignment it is the sole credited student, for a legacy group it is the founder whose repo was graded. For a `team` assignment the repo carries no username — `owner` is the repo-name tail `group-<n>` (the team counter segment), which stays the stable per-bucket key while collection resolves the credited members from the GitHub Team."
     },
     "submission": {
       "type": "string",
