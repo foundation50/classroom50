@@ -27,16 +27,17 @@ func initCmd() *cobra.Command {
 		Use:   "init <org>",
 		Short: "Bootstrap the classroom50 repository in an organization",
 		Long: "Bootstrap the classroom50 repository for a teaching organization.\n" +
-			"Run once per org; safe to re-run (idempotent).\n\n" +
-			"What it sets up (in order):\n" +
-			"  1.  Org member-privilege lockdown (least-privilege: the only\n" +
-			"      enabled member capabilities are private-repo creation and\n" +
-			"      public Pages creation).\n" +
+			"Run once per organization; re-running is safe and picks up where a\n" +
+			"prior run left off.\n\n" +
+			"What it sets up, in order:\n" +
+			"  1.  Org member-privilege lockdown (least-privilege: members keep\n" +
+			"      only private-repo creation and public Pages creation).\n" +
 			"  2.  GitHub Actions enabled for the org.\n" +
 			"  3.  A $0 GitHub Actions spending cap (created only if none exists;\n" +
 			"      an existing teacher-set budget is left untouched).\n" +
 			"  4.  Actions allowed to create pull requests (for Feedback PRs).\n" +
-			"  5.  Branch rulesets protecting submission history + Feedback base.\n" +
+			"  5.  Branch rulesets protecting submission history and the\n" +
+			"      Feedback base.\n" +
 			"  6.  The private classroom50 repository (auto-initialized).\n" +
 			"  7.  Repo-level Actions re-enabled.\n" +
 			"  8.  The embedded workflow and script files (single commit).\n" +
@@ -45,39 +46,40 @@ func initCmd() *cobra.Command {
 			"  11. Workflow GITHUB_TOKEN permissions.\n" +
 			"  12. Reusable-workflow access for the org.\n" +
 			"  13. The repo-level CLASSROOM50_SERVICE_TOKEN secret.\n\n" +
-			"Setup checks: before any change, init verifies your OAuth scopes,\n" +
-			"org access and ownership, the org plan, and that a service token\n" +
-			"is available — and stops without mutating if a hard check fails.\n\n" +
-			"Service token: read from the CLASSROOM50_SERVICE_TOKEN environment\n" +
-			"variable, else a hidden interactive prompt on first setup. There\n" +
-			"is no --token flag (PATs on the command line leak via shell\n" +
-			"history, process listings, and CI logs). Create a fine-grained PAT\n" +
-			"with Resource owner = your org, Repository access = All\n" +
-			"repositories, Contents: Read and write, Actions: Read and\n" +
-			"write, and Organization permissions -> Members: Read AND\n" +
-			"Administration: Read and write — student repos are created on\n" +
-			"demand, so an \"Only select repositories\" scope silently misses\n" +
-			"them. Contents read is needed to collect scores; Contents write\n" +
-			"pushes submit/* tags and Actions write re-runs autograde workflows\n" +
-			"when regrading; Members: Read is needed to list the classroom team\n" +
-			"(collection is team-driven); Organization Administration is needed\n" +
-			"to set the $0 Actions spending cap. Since init requires you to be\n" +
-			"an org owner, your own PAT is auto-approved.\n" +
-			"init validates the token before storing it (and a re-run leaves\n" +
-			"an already-configured token untouched; replace it with\n" +
-			"`gh teacher rotate-service-token <org>`).\n\n" +
-			"Re-running is safe: init picks up where a prior run left off and\n" +
-			"refreshes workflow and script files that differ from this CLI's\n" +
-			"embedded version (so orgs gain new features) after a confirmation\n" +
-			"prompt; --yes skips that prompt for scripted runs.\n\n" +
+			"Setup checks run first: init verifies your OAuth scopes, your\n" +
+			"organization access and ownership, the organization plan, and that\n" +
+			"a service token is available. If a hard check fails, init stops\n" +
+			"before changing anything.\n\n" +
+			"Service token:\n" +
+			"  - Read from the CLASSROOM50_SERVICE_TOKEN environment variable,\n" +
+			"    or a hidden interactive prompt on first setup. There is no\n" +
+			"    --token flag: a token on the command line leaks via shell\n" +
+			"    history, process listings, and CI logs.\n" +
+			"  - Create a fine-grained personal access token with Resource\n" +
+			"    owner = your organization, Repository access = All repositories,\n" +
+			"    Contents: Read and write, Actions: Read and write, and\n" +
+			"    Organization permissions -> Members: Read and Administration:\n" +
+			"    Read and write. Student repos are created on demand, so an\n" +
+			"    \"Only select repositories\" scope silently misses them.\n" +
+			"  - Why each permission: Contents read collects scores; Contents\n" +
+			"    write pushes submit/* tags; Actions write re-runs autograde\n" +
+			"    workflows when regrading; Members read lists the classroom\n" +
+			"    team (collection is team-driven); Organization Administration\n" +
+			"    sets the $0 Actions spending cap.\n" +
+			"  - init validates the token before storing it. A re-run leaves an\n" +
+			"    already-configured token untouched; replace it with\n" +
+			"    `gh teacher rotate-service-token <org>`.\n" +
+			"  - Since init requires you to be an org owner, your own token is\n" +
+			"    auto-approved.\n\n" +
+			"Re-running:\n" +
+			"  - init picks up where a prior run left off.\n" +
+			"  - Workflow and script files that differ from this CLI's embedded\n" +
+			"    version are refreshed (so orgs gain new features) after a\n" +
+			"    confirmation prompt; --yes skips that prompt for scripted runs.\n\n" +
 			"Four org member-privilege settings have no REST API; init reports\n" +
 			"them as a manual checklist (and in --json's\n" +
 			"manual_hardening_required). See the CLI Teacher Guide for the full\n" +
-			"hardening context.\n\n" +
-			"Flags: --dry-run (setup checks + planned steps, no changes),\n" +
-			"--json (machine-readable summary on stdout, implies --quiet),\n" +
-			"--quiet/-q (suppress progress chatter), --yes (skip the refresh\n" +
-			"prompt).",
+			"hardening context.",
 		Example: "  CLASSROOM50_SERVICE_TOKEN=github_pat_xxx gh teacher init cs50-fall-2026\n" +
 			"  gh teacher init cs50-fall-2026              # interactive prompt for the token\n" +
 			"  gh teacher init cs50-fall-2026 --dry-run    # preview without changes\n" +
@@ -189,7 +191,7 @@ func initCmd() *cobra.Command {
 				// The org-level locks defang the repo-admin `student accept`
 				// grants each founder. Record the warning; the checklist is
 				// rendered at the end so it isn't lost above the progress line.
-				summary.addWarning("%s: org member-privilege lockdown INCOMPLETE — %d setting(s) need to be set by hand at %s (see the summary checklist). Until then, the repo-admin that `gh student accept` grants founders is not fully defanged org-wide.", org, len(unenforced), settingsURL)
+				summary.addWarning("%s: org member-privilege lockdown is incomplete: %d setting(s) must be set by hand at %s (see the summary checklist). Until then, the repo admin access that `gh student accept` grants founders is not fully contained org-wide.", org, len(unenforced), settingsURL)
 			}
 
 			// On Team/Free, "private repos only" doesn't exist: GitHub couples
@@ -319,7 +321,7 @@ func initCmd() *cobra.Command {
 				if !rulesetsReady {
 					missing = append(missing, "the submission-history / feedback-base rulesets")
 				}
-				summary.addWarning("%s: Feedback PR prerequisites incomplete — %s could not be applied. Assignments created with `--feedback-pr` may not open PRs or may leave submissions unprotected until you apply these at https://github.com/organizations/%s/settings, then re-run `gh teacher init`.",
+				summary.addWarning("%s: Feedback PR prerequisites are incomplete: %s could not be applied. Assignments created with `--feedback-pr` may not open PRs or may leave submissions unprotected until you apply these at https://github.com/organizations/%s/settings, then re-run `gh teacher init`.",
 					org, strings.Join(missing, " and "), org)
 			}
 

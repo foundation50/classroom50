@@ -18,7 +18,7 @@ func LoadAssignments(client githubapi.Client, org, classroom, ref string) (assig
 		return assignment.AssignmentsJSON{}, err
 	}
 	if !ok {
-		return assignment.AssignmentsJSON{}, fmt.Errorf("%s/%s/%s not found — run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
+		return assignment.AssignmentsJSON{}, fmt.Errorf("%s/%s/%s not found: run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
 			org, ConfigRepoName, path, org, classroom)
 	}
 	file, err := assignment.ParseAssignments(data)

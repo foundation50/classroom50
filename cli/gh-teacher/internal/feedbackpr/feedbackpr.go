@@ -36,13 +36,13 @@ func NewCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "feedback-pr <org> <classroom> <assignment>",
-		Short: "Open or repair the Feedback PR on every student repo for an assignment",
+		Short: "Open or repair the Feedback PR on student repos",
 		Long: "Open (or repair) the Feedback PR on every existing student repo for an\n" +
 			"assignment, retroactively and idempotently.\n\n" +
 			"The Feedback PR is normally opened at accept time (by `gh student\n" +
 			"accept` / the web app) or by the autograde runner. A GitHub outage, a\n" +
 			"transient error, or a repo that predates the feature can leave a student\n" +
-			"without one. This command re-runs the SAME idempotent ensure flow with\n" +
+			"without one. This command re-runs the same idempotent ensure flow with\n" +
 			"your (teacher) token: base = the frozen `feedback` branch at the repo's\n" +
 			"accept commit, head = the default branch. The PR it produces is\n" +
 			"byte-identical to an accept-time or runner-opened one, so the runner\n" +
@@ -53,7 +53,7 @@ func NewCmd() *cobra.Command {
 			"(not accepted). Pass --user to target a single student's repo.\n\n" +
 			"Idempotent: a repo that already has a Feedback PR (in any state) is left\n" +
 			"as-is, so re-running only fills the gaps. A student-precreated `feedback`\n" +
-			"branch frozen at the wrong commit is reported as BLOCKED — an org admin\n" +
+			"branch frozen at the wrong commit is reported as blocked: an org admin\n" +
 			"must delete that branch before the PR can open; re-running never fixes\n" +
 			"it. Requires owner/admin access to the org's repos.",
 		Example: "  gh teacher assignment feedback-pr cs50-fall-2026 cs-principles hello\n" +
@@ -137,7 +137,7 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 	}
 	entry, ok := findAssignment(assignments, p.assignment)
 	if !ok {
-		return fmt.Errorf("assignment %q is not registered in %s/%s/%s — run `gh teacher assignment add %s %s %s --name <name> --template <owner>/<repo>` first",
+		return fmt.Errorf("assignment %q is not registered in %s/%s/%s: run `gh teacher assignment add %s %s %s --name <name> --template <owner>/<repo>` first",
 			p.assignment, p.org, configrepo.ConfigRepoName, assignment.AssignmentsFilePath(p.classroom), p.org, p.classroom, p.assignment)
 	}
 
@@ -187,9 +187,9 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 			// On the explicit --user path the teacher named this one repo, so a
 			// missing repo is the answer they asked for: report it unconditionally.
 			if p.user != "" {
-				_, _ = fmt.Fprintf(out, "%s does not exist — %s has not accepted %s yet\n", repo, p.user, p.assignment)
+				_, _ = fmt.Fprintf(out, "%s does not exist: %s has not accepted %s yet\n", repo, p.user, p.assignment)
 			} else if p.verbose && !p.quiet {
-				_, _ = fmt.Fprintf(out, "Skipped %s (no repo — not accepted yet?)\n", repo)
+				_, _ = fmt.Fprintf(out, "Skipped %s (no repo; not accepted yet?)\n", repo)
 			}
 			continue
 		}
@@ -349,7 +349,7 @@ func summarize(out, errOut io.Writer, p runParams, results []repoResult) error {
 		}
 	}
 	if len(failed) > 0 {
-		_, _ = fmt.Fprintln(errOut, "Failed (transient — re-run to retry just these):")
+		_, _ = fmt.Fprintln(errOut, "Failed (transient; re-run to retry just these):")
 		for _, r := range failed {
 			_, _ = fmt.Fprintf(errOut, "  %s: %s\n", r.repo, r.reason)
 		}

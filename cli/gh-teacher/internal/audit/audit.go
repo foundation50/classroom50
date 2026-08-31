@@ -43,8 +43,8 @@ func NewCmd() *cobra.Command {
 		Long: "Re-read an organization and report whether the least-privilege\n" +
 			"member-privilege lockdown that `gh teacher init` applies is\n" +
 			"actually in effect. Read-only: makes no changes.\n\n" +
-			"Use it to confirm a manual fix took hold — e.g., after you\n" +
-			"unchecked the boxes from init's \"Action required\" list — without\n" +
+			"Use it to confirm a manual fix took hold (after you unchecked\n" +
+			"the boxes from init's \"Action required\" list, say) without\n" +
 			"re-running init.\n\n" +
 			"Reports two groups:\n" +
 			"  - API-readable settings: audit reads each live value and flags\n" +
@@ -52,11 +52,11 @@ func NewCmd() *cobra.Command {
 			"  - The four web-UI-only settings (app access requests, repo-admin\n" +
 			"    GitHub App installs, Projects base permissions, branch renames):\n" +
 			"    GitHub exposes no REST API to read these, so audit can't\n" +
-			"    confirm them — it lists them for you to eyeball by hand.\n\n" +
-			"Exit status is non-zero when ANY API-readable lockdown field\n" +
+			"    confirm them; it lists them for you to eyeball by hand.\n\n" +
+			"Exit status is non-zero when any API-readable lockdown field\n" +
 			"is unenforced (scriptable); the unreadable manual items\n" +
 			"never fail the command.\n\n" +
-			"Flags: --json (machine-readable report on stdout).",
+			"Pass --json for a machine-readable report on stdout.",
 		Example: "  gh teacher audit cs50-fall-2026\n" +
 			"  gh teacher audit cs50-fall-2026 --json",
 		Args: cobra.ExactArgs(1),
@@ -92,7 +92,7 @@ func NewCmd() *cobra.Command {
 				report.renderHuman(ui.New(cmd.ErrOrStderr()))
 			}
 			if !report.LockdownComplete {
-				return errors.New("org member-privilege lockdown INCOMPLETE — see the report above")
+				return errors.New("org member-privilege lockdown is incomplete: see the report above")
 			}
 			return nil
 		},
@@ -311,7 +311,7 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 	}
 
 	if len(r.Unenforced) > 0 || r.BudgetCap.isCritical() {
-		u.Heading("Action required — these are NOT locked down")
+		u.Heading("Action required: these are not locked down")
 		for _, s := range r.Unenforced {
 			label := s.Fix
 			if label == "" {

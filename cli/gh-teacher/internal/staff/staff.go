@@ -32,7 +32,7 @@ func NewCmd() *cobra.Command {
 			"Staff roles are GitHub Teams. The teacher and head-TA (hta) teams\n" +
 			"get write on the classroom50 repository so members can author assignments; the\n" +
 			"ta team gets read-only. Head TAs are org members, never org owners.\n" +
-			"This mirrors the web GUI's \"Staff & roles\" section — a classroom\n" +
+			"This mirrors the web GUI's \"Staff & roles\" section: a classroom\n" +
 			"managed from either surface has the same staff.\n\n" +
 			"Subcommands:\n" +
 			"  add     add a user to a classroom's teacher, hta, or ta team\n" +
@@ -194,7 +194,7 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 	if _, ok, err := configrepo.LoadClassroom(client, org, classroom, branch); err != nil {
 		return configrepo.TeamRef{}, err
 	} else if !ok {
-		return configrepo.TeamRef{}, fmt.Errorf("%s: classroom %s not found in %s — run `gh teacher classroom add %s %s` first",
+		return configrepo.TeamRef{}, fmt.Errorf("%s: classroom %s not found in %s: run `gh teacher classroom add %s %s` first",
 			org, classroom, configrepo.ConfigRepoName, org, classroom)
 	}
 	team, err := configrepo.EnsureClassroomStaffTeam(client, org, classroom, role)
@@ -264,7 +264,7 @@ func runStaffRemove(client githubapi.Client, out io.Writer, org, classroom, user
 		return err
 	}
 	if !ok {
-		return fmt.Errorf("%s: classroom %s has no %s staff team recorded in classroom.json — nothing to remove",
+		return fmt.Errorf("%s: classroom %s has no %s staff team recorded in classroom.json: nothing to remove",
 			org, classroom, role)
 	}
 	if err := configrepo.RemoveTeamMembership(client, org, team.Slug, login); err != nil {

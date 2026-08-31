@@ -50,19 +50,19 @@ func rosterListCmd() *cobra.Command {
 			"The `role` column is a display snapshot of the account's\n" +
 			"highest team-derived role (teacher/hta/ta/student, or empty\n" +
 			"when unknown), refreshed whenever the web app syncs the\n" +
-			"roster; the classroom's GitHub teams — not this column —\n" +
+			"roster; the classroom's GitHub teams, not this column,\n" +
 			"remain the enrollment/role authority. An account\n" +
 			"holding several roles (dual roles aren't disallowed) reads as\n" +
 			"its highest one here while still being an enrolled student.\n\n" +
 			"Pass --json for the full array of\n" +
 			"{username, first_name, last_name, email, section, github_id, role}\n" +
 			"objects. Pass --quiet for one username per line on stdout (no\n" +
-			"table, no stderr summary) -- pipeable into `xargs`, `grep`, or\n" +
+			"table, no stderr summary), pipeable into `xargs`, `grep`, or\n" +
 			"an agent loop. --json takes precedence over --quiet.\n\n" +
 			"An empty roster is a clean exit-0 (empty stdout under --json /\n" +
 			"--quiet, a 'no students' note on stderr otherwise). A missing\n" +
 			"roster points at `gh teacher classroom add`. This is a\n" +
-			"read-only command; no commit lands on the repo.",
+			"read-only command; no commit lands on the repository.",
 		Example: "  gh teacher roster list cs50-fall-2026 cs-principles\n" +
 			"  gh teacher roster list cs50-fall-2026 cs-principles --json\n" +
 			"  gh teacher roster list cs50-fall-2026 cs-principles --quiet",
@@ -178,7 +178,7 @@ func dashIfEmpty(s string) string {
 func summarizeRosterList(org, classroom string, count int) string {
 	path := fmt.Sprintf("%s/%s/%s", org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom))
 	if count == 0 {
-		return fmt.Sprintf("%s: no students on the roster — add some with `gh teacher roster add %s %s <username>`", path, org, classroom)
+		return fmt.Sprintf("%s: no students on the roster. Add some with `gh teacher roster add %s %s <username>`", path, org, classroom)
 	}
 	return fmt.Sprintf("%s: %d student(s)", path, count)
 }

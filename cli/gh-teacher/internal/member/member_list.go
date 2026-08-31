@@ -45,15 +45,15 @@ func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "member",
 		Short: "Inspect organization and repository membership",
-		Long: "Read-only views of who is actually a member of an org or a\n" +
-			"collaborator on a repo -- the counterpart to `gh teacher\n" +
+		Long: "Read-only views of who is actually a member of an organization or\n" +
+			"a collaborator on a repository: the counterpart to `gh teacher\n" +
 			"invite` / `gh teacher remove`.\n\n" +
-			"The roster (roster.csv) is the INTENDED membership; this\n" +
-			"command shows ACTUAL GitHub membership, so you can spot\n" +
+			"The roster (roster.csv) is the intended membership; this\n" +
+			"command shows actual GitHub membership, so you can spot\n" +
 			"mismatches (a student on the roster who never\n" +
 			"accepted their invite, or a collaborator added out of band).\n\n" +
 			"Subcommands:\n" +
-			"  list   list org members + pending invitations, or repo collaborators",
+			"  list   list org members and pending invitations, or repo collaborators",
 	}
 	cmd.AddCommand(memberListCmd())
 	return cmd
@@ -66,7 +66,7 @@ func memberListCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "list <org>[/<repo>]",
-		Short: "List org members + pending invitations, or repo collaborators",
+		Short: "List org members and pending invitations, or collaborators",
 		Long: "List actual GitHub membership for a target.\n\n" +
 			"Forms:\n" +
 			"  gh teacher member list <org>         # org members + pending invitations, with role\n" +
@@ -75,10 +75,10 @@ func memberListCmd() *cobra.Command {
 			"role, github_id) with a one-line `<target>: N member(s)`\n" +
 			"summary on stderr. Pass --json for the full array of\n" +
 			"{login, kind, role, github_id} objects, or --quiet for one\n" +
-			"login per line (no table, no stderr summary) -- pipeable into\n" +
+			"login per line (no table, no stderr summary), pipeable into\n" +
 			"`xargs`, `grep`, or an agent loop. --json takes precedence.\n\n" +
-			"For an org, `kind` is `member` (active) or `invitation`\n" +
-			"(pending -- needs the admin:org scope to read). For a repo,\n" +
+			"For an organization, `kind` is `member` (active) or `invitation`\n" +
+			"(pending; needs the admin:org scope to read). For a repository,\n" +
 			"`kind` is `collaborator` and `role` is the permission level\n" +
 			"(read/triage/write/maintain/admin). Read-only; no write lands.",
 		Example: "  gh teacher member list cs50-fall-2026\n" +

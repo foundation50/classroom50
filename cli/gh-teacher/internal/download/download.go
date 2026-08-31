@@ -97,31 +97,35 @@ func NewCmd() *cobra.Command {
 		Use:   "download <org> <classroom> <assignment>",
 		Short: "Clone every student submission repo for an assignment",
 		Long: "Clone every student submission repo for an assignment under <org>/classroom50.\n\n" +
-			"Default (team-driven): lists the classroom GitHub team's members (the\n" +
-			"source of truth for enrollment), derives the expected\n" +
-			"<classroom>-<assignment>-<username> repo for each, clones whichever\n" +
-			"ones exist, and refreshes <repo>/result.json\n" +
-			"and <repo>/results.json from the repo's submit-tag releases alongside\n" +
-			"the clone — results.json holds every submission (newest first), result.json\n" +
-			"the latest. Team members\n" +
-			"with no repo on the org are reported as `not yet accepted` and don't\n" +
-			"fail the run. A scores.csv summary is written at the destination root\n" +
-			"with one line per submission (newest first) for each team member —\n" +
-			"group members repeat the shared submission's lines under their own\n" +
-			"username, and non-submitters get one line with blank score columns.\n" +
-			"roster.csv (if present) supplies optional\n" +
-			"name/section/email metadata for that summary; it never decides who is\n" +
-			"cloned.\n\n" +
-			"Pass --by-pattern to skip the team lookup and clone every <org> repo\n" +
-			"whose name starts with <classroom>-<assignment>-. No result.json fetch,\n" +
-			"no scores.csv summary — useful when the classroom50 repository isn't bootstrapped\n" +
-			"yet or when you want every matching repo regardless of the roster.\n\n" +
-			"Clones go through `gh repo clone`, so authentication flows through the\n" +
-			"current gh session. The default destination is\n" +
+			"Default (team-driven):\n" +
+			"  - Lists the classroom GitHub team's members (the source of truth\n" +
+			"    for enrollment) and derives the expected\n" +
+			"    <classroom>-<assignment>-<username> repo for each.\n" +
+			"  - Clones whichever repos exist, and refreshes <repo>/result.json\n" +
+			"    and <repo>/results.json from the repo's submit-tag releases\n" +
+			"    alongside the clone: results.json holds every submission\n" +
+			"    (newest first), result.json the latest.\n" +
+			"  - Team members with no repo on the org are reported as\n" +
+			"    `not yet accepted` and don't fail the run.\n" +
+			"  - A scores.csv summary is written at the destination root with\n" +
+			"    one line per submission (newest first) for each team member.\n" +
+			"    Group members repeat the shared submission's lines under\n" +
+			"    their own username, and non-submitters get one line with\n" +
+			"    blank score columns.\n" +
+			"  - roster.csv (if present) supplies optional name/section/email\n" +
+			"    metadata for that summary; it never decides who is cloned.\n\n" +
+			"Pass --by-pattern to skip the team lookup and clone every <org>\n" +
+			"repo whose name starts with <classroom>-<assignment>-. No\n" +
+			"result.json fetch, no scores.csv summary. Useful when the\n" +
+			"classroom50 repository isn't bootstrapped yet or when you want\n" +
+			"every matching repo regardless of the roster.\n\n" +
+			"Clones go through `gh repo clone`, so authentication flows through\n" +
+			"the current gh session. The default destination is\n" +
 			"<classroom>-<assignment>_submissions_<timestamp>/. Pass -d/--dir to\n" +
-			"override (value used literally, no timestamp). Existing clones on disk\n" +
-			"are skipped on the clone step, but result.json is still refreshed so a\n" +
-			"re-run after the next collect run picks up the newest scores.",
+			"override (value used literally, no timestamp). Existing clones on\n" +
+			"disk are skipped on the clone step, but result.json is still\n" +
+			"refreshed so a re-run after the next collect run picks up the\n" +
+			"newest scores.",
 		Example: "  gh teacher download cs50-fall-2026 cs-principles hello\n" +
 			"  gh teacher download -d submissions cs50-fall-2026 cs-principles hello\n" +
 			"  gh teacher download --by-pattern cs50-fall-2026 cs-principles hello",
@@ -188,7 +192,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		return err
 	}
 	if !assignmentRegistered(assignments, assignment) {
-		return fmt.Errorf("assignment %q is not registered in %s/%s/%s — run `gh teacher assignment add %s %s %s --name <name> --template <owner>/<repo>` first, or pass --by-pattern to skip the team lookup",
+		return fmt.Errorf("assignment %q is not registered in %s/%s/%s: run `gh teacher assignment add %s %s %s --name <name> --template <owner>/<repo>` first, or pass --by-pattern to skip the team lookup",
 			assignment, org, configrepo.ConfigRepoName, assignmentsPath(classroom), org, classroom, assignment)
 	}
 
@@ -213,7 +217,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 
 	if len(teamLogins) == 0 {
 		if !quiet {
-			_, _ = fmt.Fprintf(out, "%s: classroom team %q has no members — nothing to download\n", classroom, teamSlug)
+			_, _ = fmt.Fprintf(out, "%s: classroom team %q has no members, nothing to download\n", classroom, teamSlug)
 		}
 		return nil
 	}
@@ -283,13 +287,13 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 				// Group assignment, no own repo, not credited — a genuine
 				// non-participant. Still report.
 				if !quiet {
-					_, _ = fmt.Fprintf(out, "Missing: %s (group assignment — no own repo and not yet credited via a teammate)\n", username)
+					_, _ = fmt.Fprintf(out, "Missing: %s (group assignment; no own repo and not yet credited via a teammate)\n", username)
 				}
 				missing = append(missing, username)
 				continue
 			}
 			if !quiet {
-				_, _ = fmt.Fprintf(out, "Missing: %s (no repo at %s/%s — not accepted yet?)\n", username, org, repoName)
+				_, _ = fmt.Fprintf(out, "Missing: %s (no repo at %s/%s; not accepted yet?)\n", username, org, repoName)
 			}
 			missing = append(missing, username)
 			continue
@@ -1019,7 +1023,7 @@ func rewriteAssetURL(assetURL, apiBase string) string {
 // belt-and-suspenders, mirroring collect_scores.py's _AuthStrippingRedirect.
 func downloadAssetBytes(token, assetURL string) ([]byte, error) {
 	if token == "" {
-		return nil, errors.New("no GitHub token available — run `gh auth login` or `gh teacher login`")
+		return nil, errors.New("no GitHub token available: run `gh auth login` or `gh teacher login`")
 	}
 	c := &http.Client{
 		Timeout: assetDownloadTimeout,

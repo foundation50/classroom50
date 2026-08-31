@@ -31,7 +31,7 @@ func rosterInviteCmd() *cobra.Command {
 		Use:   "invite <org> <classroom> [email]",
 		Short: "Invite one student (or a whole list with --file) by email address",
 		Long: "Send a GitHub organization invitation to <email> and record it as a\n" +
-			"pending row in <org>/classroom50/<classroom>/roster.csv — the same\n" +
+			"pending row in <org>/classroom50/<classroom>/roster.csv, the same\n" +
 			"three artifacts the web app's email invite creates, so either tool\n" +
 			"can complete the invitation.\n\n" +
 			"Use this when the student has no GitHub account yet (or you only have\n" +
@@ -47,18 +47,25 @@ func rosterInviteCmd() *cobra.Command {
 			"Once the student accepts, run `gh teacher roster sync` to fill in\n" +
 			"their username and github_id (the web app does this on its own).\n\n" +
 			"Bulk mode: pass --file <path> instead of an email to invite a whole\n" +
-			"list. The file is plaintext, one address per line; blank lines and\n" +
-			"lines starting with `#` are ignored. Every address is validated first,\n" +
-			"and if any line is unusable nothing is sent. Successful invitations are\n" +
-			"retained as pending rows in one commit. --file carries no names or\n" +
-			"sections (fill those later with `roster import`, or `roster update`\n" +
-			"once the student has accepted; a sync never writes either), so the\n" +
-			"--first-name/--last-name/--section flags are rejected with it.\n" +
-			"Each address is reported as it resolves, then a summary counts them.\n\n" +
-			"Bulk exit codes follow `roster sync`: 0 every address was invited or\n" +
-			"cleanly skipped, 2 nothing failed but a GitHub rate limit left\n" +
-			"addresses uninvited (re-run to continue — already-invited addresses are\n" +
-			"skipped), 1 an address genuinely failed or the roster write failed.\n\n" +
+			"list.\n" +
+			"  - The file is plaintext, one address per line; blank lines and\n" +
+			"    lines starting with `#` are ignored.\n" +
+			"  - Every address is validated first, and if any line is unusable\n" +
+			"    nothing is sent.\n" +
+			"  - Successful invitations are retained as pending rows in one\n" +
+			"    commit.\n" +
+			"  - --file carries no names or sections (fill those later with\n" +
+			"    `roster import`, or `roster update` once the student has\n" +
+			"    accepted; a sync never writes either), so the\n" +
+			"    --first-name/--last-name/--section flags are rejected with it.\n" +
+			"  - Each address is reported as it resolves, then a summary\n" +
+			"    counts them.\n\n" +
+			"Bulk exit codes follow `roster sync`:\n" +
+			"  0  every address was invited or cleanly skipped\n" +
+			"  2  nothing failed but a GitHub rate limit left addresses\n" +
+			"     uninvited (re-run to continue; already-invited addresses\n" +
+			"     are skipped)\n" +
+			"  1  an address genuinely failed or the roster write failed\n\n" +
 			"A single address returns non-zero on: classroom missing a GitHub team,\n" +
 			"an address the roster already lists as invited, or a failed\n" +
 			"invitation. With --file that same already-listed address is reported\n" +
@@ -162,7 +169,7 @@ func readTeacherFile(errOut io.Writer, path, what string) (string, []byte, error
 	}
 	normalized, transcoded := configrepo.NormalizeTeacherText(data)
 	if transcoded {
-		_, _ = fmt.Fprintf(errOut, "Notice: %s is not UTF-8 encoded and was read as Windows-1252 — double-check any non-ASCII names\n", abs)
+		_, _ = fmt.Fprintf(errOut, "Notice: %s is not UTF-8 encoded and was read as Windows-1252. Double-check any non-ASCII names\n", abs)
 	}
 	return abs, normalized, nil
 }
@@ -174,7 +181,7 @@ func readTeacherFile(errOut io.Writer, path, what string) (string, []byte, error
 // unusable, since the invitation carries team ids rather than slugs. Shared so
 // the single and bulk paths refuse identically.
 func errClassroomTeamUnusable(org, classroom string) error {
-	return fmt.Errorf("%s: classroom %s has no usable team recorded in classroom.json, so an invitation would enroll nobody — nothing was sent; run `gh teacher classroom add %s %s` to create the team, then retry",
+	return fmt.Errorf("%s: classroom %s has no usable team recorded in classroom.json, so an invitation would enroll nobody and nothing was sent. Run `gh teacher classroom add %s %s` to create the team, then retry",
 		org, classroom, org, classroom)
 }
 
@@ -222,7 +229,7 @@ func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroo
 		return outcomePendingBlocked, configrepo.TeamRef{}, nil
 	}
 	if holder != "" {
-		_, _ = fmt.Fprintf(errOut, "Note: %s already appears on the %s roster on %s's row. An address can be shared (a parent or a lab contact), so the invitation is still being sent — but no second row is written for it, matching the web app. If that row is the same person, cancel this invite and run `gh teacher roster update %s %s %s` instead.\n",
+		_, _ = fmt.Fprintf(errOut, "Note: %s already appears on the %s roster on %s's row. An address can be shared (a parent or a lab contact), so the invitation is still being sent, but no second row is written for it, matching the web app. If that row is the same person, cancel this invite and run `gh teacher roster update %s %s %s` instead.\n",
 			email, classroom, holder, org, classroom, holder)
 	}
 
@@ -289,7 +296,7 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	// name the sync/cancel-invite remedies; the helper's own check stays
 	// authoritative for the bulk path.
 	if _, pending := rosterEmailClaim(rows, email); pending {
-		return fmt.Errorf("%s is already invited to %s — run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it; nothing was sent",
+		return fmt.Errorf("%s is already invited to %s and nothing was sent. Run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it",
 			email, classroom, org, classroom, org, classroom, email)
 	}
 
@@ -306,7 +313,7 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 		_, _ = fmt.Fprintf(out, "%s: invited %s as direct_member (teams %s, %s)\n",
 			org, email, classroomTeam.Slug, inviteTeam.Slug)
 	case outcomeSkippedAlready:
-		_, _ = fmt.Fprintf(out, "%s: skipped %s — already a member of the org or already invited\n", org, email)
+		_, _ = fmt.Fprintf(out, "%s: skipped %s (already a member of the org or already invited)\n", org, email)
 		_, _ = fmt.Fprintf(errOut, "If they accepted an earlier invitation, run `gh teacher roster sync %s %s` to record them on the roster.\n", org, classroom)
 		return nil
 	case outcomeRateLimited, outcomeFailed:

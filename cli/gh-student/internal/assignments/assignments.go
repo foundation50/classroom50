@@ -266,7 +266,7 @@ func FetchEntry(ctx context.Context, org, classroom, secret, assignment string) 
 	// scope.
 	if errors.Is(err, errManifestNotFound) {
 		if secret != "" {
-			return entry, fmt.Errorf("%w; the access key (--key) may be wrong — double-check the key your teacher gave you", err)
+			return entry, fmt.Errorf("%w; the access key (--key) may be wrong, so double-check the key your teacher gave you", err)
 		}
 		return entry, fmt.Errorf("%w; if this is an unlisted classroom, you must pass the access key your teacher gave you with `--key <key>`", err)
 	}
@@ -286,12 +286,12 @@ func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, e
 	client := &http.Client{Timeout: PagesFetchTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return Entry{}, fmt.Errorf("GET %s: %w (the classroom50 Pages site may not be deployed yet — ask your teacher to verify `publish-pages.yaml` has run successfully)", rawURL, err)
+		return Entry{}, fmt.Errorf("GET %s: %w (the classroom's published site may not be live yet; ask your teacher to check that the publish-pages workflow has run)", rawURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return Entry{}, fmt.Errorf("%s returned 404 — the classroom may not exist yet, or `publish-pages.yaml` may not have run; ask your teacher to confirm the Pages site has deployed: %w", rawURL, errManifestNotFound)
+		return Entry{}, fmt.Errorf("%s returned 404: the classroom may not exist yet, or its publish-pages workflow may not have run; ask your teacher to confirm the classroom is published: %w", rawURL, errManifestNotFound)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return Entry{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
@@ -307,7 +307,7 @@ func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, e
 		return Entry{}, fmt.Errorf("parse %s: %w", rawURL, err)
 	}
 	if file.Schema != assignmentsSchemaV1 {
-		return Entry{}, fmt.Errorf("%s: schema = %q, want %q — this gh-student version is older than the assignments.json shape; update gh-student and try again",
+		return Entry{}, fmt.Errorf("%s: schema = %q, want %q; this version of gh-student is too old to read the classroom's assignment list, so update gh-student and try again",
 			rawURL, file.Schema, assignmentsSchemaV1)
 	}
 
@@ -338,10 +338,10 @@ type NotFoundError struct {
 
 func (e *NotFoundError) Error() string {
 	if e.Org != "" && e.Classroom != "" {
-		return fmt.Sprintf("assignment %q is not registered in %s — ask your teacher to run `gh teacher assignment add %s %s %s`",
+		return fmt.Sprintf("assignment %q isn't in the classroom's published assignment list (%s); check the assignment name, or ask your teacher to run `gh teacher assignment add %s %s %s`",
 			e.Assignment, e.URL, e.Org, e.Classroom, e.Assignment)
 	}
-	return fmt.Sprintf("assignment %q is not registered in %s — ask your teacher to run `gh teacher assignment add`",
+	return fmt.Sprintf("assignment %q isn't in the classroom's published assignment list (%s); check the assignment name, or ask your teacher to run `gh teacher assignment add`",
 		e.Assignment, e.URL)
 }
 
@@ -382,12 +382,12 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 	client := &http.Client{Timeout: PagesFetchTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("GET %s: %w (the classroom50 Pages site may not be deployed yet — ask your teacher to verify `publish-pages.yaml` has run successfully)", rawURL, err)
+		return AutogradeWorkflow{}, fmt.Errorf("GET %s: %w (the classroom's published site may not be live yet; ask your teacher to check that the publish-pages workflow has run)", rawURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404) — ask your teacher to confirm that file exists in the classroom50 repository and that `publish-pages.yaml` has run", name, rawURL)
+		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404); ask your teacher to confirm the file exists in the classroom50 repository and that the publish-pages workflow has run", name, rawURL)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return AutogradeWorkflow{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
@@ -398,7 +398,7 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 		return AutogradeWorkflow{}, fmt.Errorf("read %s: %w", rawURL, err)
 	}
 	if len(bytes.TrimSpace(body)) == 0 {
-		return AutogradeWorkflow{}, fmt.Errorf("GET %s: empty body — the Pages deployment may still be in flight; retry in a minute", rawURL)
+		return AutogradeWorkflow{}, fmt.Errorf("GET %s: empty body; the site may still be deploying, so retry in a minute", rawURL)
 	}
 
 	// Decode into `any` to validate YAML well-formedness without imposing
@@ -407,7 +407,7 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 	// release asset, `classroom50/autograde` commit status).
 	var sink any
 	if err := yaml.Unmarshal(body, &sink); err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (parsed from %s) — ask your teacher to check the file in the classroom50 repository: %w", name, rawURL, err)
+		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (fetched from %s); ask your teacher to check the file in the classroom50 repository: %w", name, rawURL, err)
 	}
 
 	return AutogradeWorkflow{Content: string(body)}, nil

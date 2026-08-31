@@ -23,7 +23,7 @@ func NewLoginCmd() *cobra.Command {
 			"endpoints (`gh teacher invite`), and workflow lets `gh teacher\n" +
 			"init` commit the classroom50 repository's `.github/workflows/` files\n" +
 			"(GitHub 404s that Git Data API write without it).\n\n" +
-			"delete_repo is NOT requested by default — opt in with\n" +
+			"delete_repo is not requested by default; opt in with\n" +
 			"`gh teacher login -s delete_repo` for `gh teacher teardown`.\n\n" +
 			"Additional scopes can be added with -s; they are appended to the\n" +
 			"login request the same way `gh auth login -s` accepts them.",

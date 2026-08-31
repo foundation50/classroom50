@@ -106,7 +106,7 @@ func checkGroupSizeBeforeInvite(ctx context.Context, client githubapi.Client, or
 		}
 	}
 	if len(members) >= maxGroupSize {
-		return fmt.Errorf("group is full: %s/%s already has %d member(s), at the max of %d for this assignment — ask your teacher to raise the assignment's max group size if you need more",
+		return fmt.Errorf("group is full: %s/%s already has %d member(s), the maximum of %d for this assignment; ask your teacher to raise the assignment's maximum group size if you need more",
 			org, repo, len(members), maxGroupSize)
 	}
 	return nil

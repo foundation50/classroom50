@@ -631,7 +631,7 @@ func TestVerifyProvisioned(t *testing.T) {
 		if err == nil {
 			t.Fatal("expected an error when the accept marker is persistently missing, got nil")
 		}
-		if !strings.Contains(err.Error(), "re-run") {
+		if !strings.Contains(err.Error(), "run `gh student accept") || !strings.Contains(err.Error(), "again") {
 			t.Errorf("error should carry a re-run hint, got: %v", err)
 		}
 	})

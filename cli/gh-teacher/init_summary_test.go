@@ -150,8 +150,10 @@ func TestInitSummary_RenderHuman_IncompleteListsActions(t *testing.T) {
 	var buf bytes.Buffer
 	s.renderHuman(ui.NewForced(&buf, false))
 	out := buf.String()
-	if !strings.Contains(out, "INCOMPLETE") {
-		t.Errorf("incomplete run should banner INCOMPLETE:\n%s", out)
+	// Assert on the banner line specifically: a bare "incomplete" also matches
+	// the always-rendered feedback-PR checklist item.
+	if !strings.Contains(out, "init incomplete, action needed") {
+		t.Errorf("incomplete run should banner incomplete:\n%s", out)
 	}
 	// The lockdown manual fix is merged into the action checklist as a
 	// checkbox, ahead of the always-manual hardening steps.

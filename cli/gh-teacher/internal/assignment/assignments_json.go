@@ -537,7 +537,7 @@ func validateRFC3339Field(field, value, example string) error {
 		return nil
 	}
 	if _, err := time.Parse(time.RFC3339, value); err != nil {
-		return fmt.Errorf("%s %q is not an RFC 3339 timestamp with timezone (e.g., %s)", field, value, example)
+		return fmt.Errorf("%s %q is not an RFC 3339 timestamp with timezone (for example %s)", field, value, example)
 	}
 	return nil
 }
@@ -880,14 +880,14 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 		maxLen = slugMaxLen
 	}
 	if maxLen < 2 {
-		return "", fmt.Errorf("cannot derive a slug for %q: the target classroom leaves %d characters for a slug (student repo names are capped at %d by GitHub) — reuse into a classroom with a shorter short-name",
+		return "", fmt.Errorf("cannot derive a slug for %q: the target classroom leaves %d characters for a slug (student repo names are capped at %d by GitHub); reuse into a classroom with a shorter short-name",
 			slug, maxLen, slugMaxLen)
 	}
 	base := trimSlugTo(slug, maxLen)
 	if len(base) < 2 {
 		// A hyphen just inside the cut can trim the base below ShortName's
 		// 2-char minimum even when maxLen >= 2 (e.g. "a-..." at budget 2).
-		return "", fmt.Errorf("cannot derive a slug for %q within the %d-character budget (trimming leaves less than the 2-character minimum) — pass an explicit, shorter --slug",
+		return "", fmt.Errorf("cannot derive a slug for %q within the %d-character budget (trimming leaves less than the 2-character minimum); pass an explicit, shorter --slug",
 			slug, maxLen)
 	}
 	if !taken(base) {
@@ -907,7 +907,7 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 		suffix := fmt.Sprintf("-%d", n)
 		room := maxLen - len(suffix)
 		if room < 1 || len(trimSlugTo(stem, room)) < 1 {
-			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget — pass an explicit, shorter --slug", slug, maxLen)
+			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget; pass an explicit, shorter --slug", slug, maxLen)
 		}
 		candidate := trimSlugTo(stem, room) + suffix
 		if !taken(candidate) {
@@ -1099,7 +1099,7 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 // --no-autograder flag; the parse path wraps with the entry context.
 func validateNoAutograderExclusions(entry AssignmentEntry) error {
 	if entry.Template == nil {
-		return errors.New("no_autograder requires a template: it marks a TEMPLATED assignment as teacher-supplied CI (the template carries its own workflows); a template-less repo has no CI to run — use empty_repo for a bare repo instead")
+		return errors.New("no_autograder requires a template: it marks a templated assignment as teacher-supplied CI (the template carries its own workflows), and a template-less repo has no CI to run; use empty_repo for a bare repo instead")
 	}
 	if entry.EmptyRepo {
 		return errors.New("no_autograder is mutually exclusive with empty_repo: a bare repo already commits no shim")

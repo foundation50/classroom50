@@ -27,19 +27,18 @@ func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "invite <org>/<repo> <username>",
 		Short: "Invite a classmate or TA to push to your assignment repo",
-		Long: "Add <username> as a `push`-level collaborator on <org>/<repo>. The\n" +
-			"invitee receives a GitHub invitation they must accept before they can\n" +
-			"push. Re-running on an existing collaborator is a no-op (GitHub upserts\n" +
-			"the permission).\n\n" +
-			"When run from inside a group-assignment repo (one with a\n" +
-			".classroom50.yaml for a `mode: group` assignment), invite checks the\n" +
-			"assignment's configured maximum group size (read from the teacher's\n" +
-			"published assignments.json) and refuses to add a new teammate once the\n" +
-			"group is full. This is an advisory guardrail for the honest case — it\n" +
-			"can be bypassed (e.g., via the GitHub UI), and the authoritative\n" +
-			"size/credit boundary is collection time. Run outside such a repo (or\n" +
-			"for an individual assignment / a TA invite), it just adds the\n" +
-			"collaborator.",
+		Long: "Add <username> as a collaborator with push access on <org>/<repo>.\n" +
+			"They receive a GitHub invitation and can push once they accept it.\n\n" +
+			"  - Inviting someone who is already a collaborator is safe and\n" +
+			"    changes nothing.\n" +
+			"  - Run from inside a group-assignment repository, invite checks the\n" +
+			"    assignment's maximum group size (from the classroom's published\n" +
+			"    assignment list) and refuses to add a new teammate once the\n" +
+			"    group is full. The limit is advisory: it can be bypassed, for\n" +
+			"    example via the GitHub UI, and the group size that counts is\n" +
+			"    checked again when your teacher collects the work.\n" +
+			"  - Run anywhere else (or for an individual assignment or a TA\n" +
+			"    invite), it just adds the collaborator.",
 		Example: "  gh student invite cs50/cs50-fall-2026-hello-alice cs50-duck\n",
 		Args:    cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -47,7 +46,7 @@ func NewCmd() *cobra.Command {
 			target := strings.TrimSpace(args[0])
 			username := strings.TrimSpace(args[1])
 			if target == "" {
-				return errors.New("target must not be empty")
+				return errors.New("repository must not be empty; expected <org>/<repo>")
 			}
 			if username == "" {
 				return errors.New("username must not be empty")
@@ -56,7 +55,7 @@ func NewCmd() *cobra.Command {
 			// Exactly two non-empty components.
 			parts := strings.SplitN(target, "/", 3)
 			if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-				return fmt.Errorf("invalid target %q: expected <org>/<repo>", target)
+				return fmt.Errorf("invalid repository %q: expected <org>/<repo>", target)
 			}
 			org, repo := parts[0], parts[1]
 
@@ -136,7 +135,7 @@ func enforceGroupSize(cmd *cobra.Command, client githubapi.Client, org, repo, in
 		var nf *assignments.NotFoundError
 		if !errors.As(err, &nf) {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-				"Warning: couldn't check the group size for %s/%s (%v); proceeding with the invite — the size limit is advisory and enforced again at collection time.\n",
+				"Warning: couldn't check the group size for %s/%s (%v); proceeding with the invite. The size limit is advisory and is checked again when your teacher collects the work.\n",
 				org, repo, err)
 		}
 		return nil
@@ -177,7 +176,7 @@ func inviteUserToPush(client githubapi.Client, out io.Writer, org, repo, usernam
 		return err
 	}
 
-	_, _ = fmt.Fprintf(out, "invited %s to %s/%s with push permission\n", username, org, repo)
+	_, _ = fmt.Fprintf(out, "Invited %s to %s/%s with push access\n", username, org, repo)
 
 	return nil
 }

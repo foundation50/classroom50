@@ -210,7 +210,7 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 	// Guard the slug==name invariant (see CanonicalTeamSlugShortName):
 	// ShortNamePattern alone permits hyphens GitHub would slugify away.
 	if !CanonicalTeamSlugShortName(shortName) {
-		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
+		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
 	}
 	return ensureSecretTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled)
 }
@@ -222,7 +222,7 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 // (#335).
 func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole) (TeamRef, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
-		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
+		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
@@ -471,13 +471,13 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 	}
 	// Namespace guard: only ever delete a `classroom50-`-prefixed team.
 	if !strings.HasPrefix(team.Slug, "classroom50-") {
-		return fmt.Errorf("refusing to delete team %q at %s — not a classroom50-namespaced team; remove it by hand if intended", team.Slug, org)
+		return fmt.Errorf("refusing to delete team %q at %s: not a classroom50-namespaced team; remove it by hand if intended", team.Slug, org)
 	}
 	// Fail closed on a non-positive id: without a recorded id we can't confirm
 	// the live team at this slug is the one this classroom created. (The
 	// load-bearing half of the web's guard an earlier port dropped.)
 	if team.ID <= 0 {
-		return fmt.Errorf("refusing to delete team %q at %s — no recorded id to verify it against; remove it by hand if intended", team.Slug, org)
+		return fmt.Errorf("refusing to delete team %q at %s: no recorded id to verify it against; remove it by hand if intended", team.Slug, org)
 	}
 	// Defense-in-depth: confirm the team at this slug is the one we recorded
 	// (same id) before deleting.
@@ -492,7 +492,7 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 		return fmt.Errorf("GET %s (verify team before delete): %w", getPath, err)
 	}
 	if live.ID != team.ID {
-		return fmt.Errorf("team %q at %s now has id %d, not the recorded %d — refusing to delete a team that isn't the one this classroom created; remove it by hand if intended",
+		return fmt.Errorf("team %q at %s now has id %d, not the recorded %d: refusing to delete a team that isn't the one this classroom created; remove it by hand if intended",
 			team.Slug, org, live.ID, team.ID)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(team.Slug))
@@ -573,7 +573,7 @@ func DeleteInviteTeam(client githubapi.Client, org, slug string) error {
 		return nil
 	}
 	if !IsInviteTeamSlug(slug) {
-		return fmt.Errorf("refusing to delete team %q at %s — not a %s<hash> invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
+		return fmt.Errorf("refusing to delete team %q at %s: not a %s<hash> invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	resp, err := client.Request(http.MethodDelete, path, nil)

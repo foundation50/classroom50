@@ -146,7 +146,7 @@ func ListSubtreeBlobPaths(client githubapi.Client, owner, repo, commitSHA, prefi
 		return nil, fmt.Errorf("GET %s: %w", path, err)
 	}
 	if resp.Truncated {
-		return nil, fmt.Errorf("GET %s: tree listing truncated — too many files to enumerate the %q subtree safely", path, prefix)
+		return nil, fmt.Errorf("GET %s: tree listing truncated, too many files to enumerate the %q subtree safely", path, prefix)
 	}
 	want := prefix + "/"
 	var paths []string

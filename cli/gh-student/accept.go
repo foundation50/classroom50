@@ -117,49 +117,43 @@ func acceptCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "accept <org> <classroom> <assignment>",
 		Short: "Accept an assignment from an organization's classroom",
-		Long: "Accept an assignment by creating a repo at\n" +
-			"<org>/<classroom>-<assignment>-<username> (lowercased). The\n" +
-			"assignment is looked up in the published assignments.json on the\n" +
-			"classroom's GitHub Pages site (no token required). The repo is\n" +
-			"private unless the assignment opts into public repos\n" +
-			"(repo_visibility: public — for peer-review or showcase work), in\n" +
-			"which case it is created PUBLIC and you are told before it is\n" +
-			"created.\n\n" +
-			"If the classroom uses an unlisted URL, your teacher will give\n" +
-			"you an access key; pass it with `--key <key>`. The key is part\n" +
-			"of the published URL (`<classroom>/<key>/...`); without it the\n" +
-			"classroom's assignments can't be found. Normal classrooms need\n" +
-			"no key.\n\n" +
-			"If the assignment has a template repo (which may live outside\n" +
-			"<org>), the new repo is a copy generated from it. If it\n" +
-			"has no template, an empty repo is created carrying only\n" +
-			"the autograder workflow shim.\n\n" +
-			"The autograder workflow shim is dropped at\n" +
-			"`.github/workflows/autograde.yaml` in the new repo. For the\n" +
-			"default autograder it's the universal shim embedded in this\n" +
-			"CLI; for a non-default `--autograder <name>` (registered via\n" +
-			"`gh teacher assignment add --autograder <name>`) the shim is\n" +
-			"fetched from Pages instead. The shim is intentionally inert —\n" +
-			"it `uses:` the reusable autograde-runner workflow in the\n" +
-			"teacher's classroom50 repository, and that workflow fetches the\n" +
-			"runner-side bootstrap and the autograder at workflow runtime.\n" +
-			"Teacher edits to runtime, dependencies, or grading logic\n" +
-			"propagate on the next submission without ever touching the\n" +
-			"student repo.\n\n" +
-			"If the student has a pending org invite it is auto-accepted first.\n" +
-			"After creating the repo, the student is added as a collaborator on\n" +
-			"their own repo (`push` for an individual assignment; `admin` for a\n" +
-			"group assignment, so the founder can add teammates), and\n" +
-			"`.classroom50.yaml` and the autograde workflow are written in a\n" +
-			"single Tree commit, then verified.\n\n" +
-			"Re-running is safe and self-healing: an already-accepted repo\n" +
-			"that is fully provisioned is left in place (its founder role is\n" +
-			"updated best-effort), but one whose setup never finished (a\n" +
-			"prior run interrupted after the repo was created but before the\n" +
-			"control files landed) is repaired by re-running the idempotent\n" +
-			"provisioning. accept only reports\n" +
-			"success once both control files are confirmed present, so an\n" +
-			"\"accepted\" repo always autogrades.",
+		Long: "Accept an assignment by creating your own repository for it at\n" +
+			"<org>/<classroom>-<assignment>-<username> (all lowercase). The\n" +
+			"assignment is looked up in the classroom's published assignment list,\n" +
+			"which is public, so the lookup needs no special access.\n\n" +
+			"What accept does:\n\n" +
+			"  - Accepts any pending invitation to the organization first.\n" +
+			"  - Creates the repository. If the assignment has starter code (a\n" +
+			"    template repository, which may live outside <org>), your\n" +
+			"    repository starts as a copy of it; with no starter code, it\n" +
+			"    starts empty with only the autograding setup.\n" +
+			"  - Adds the autograding workflow at .github/workflows/autograde.yaml.\n" +
+			"    This CLI carries the standard one; if your teacher registered a\n" +
+			"    custom autograder for the assignment, that one is downloaded from\n" +
+			"    the classroom's published site instead. Either way the file only\n" +
+			"    points at the grading logic your teacher manages, so grading\n" +
+			"    updates apply on your next submission without ever changing your\n" +
+			"    repository.\n" +
+			"  - Adds you as a collaborator on your own repository: push access\n" +
+			"    for an individual assignment, admin for a group assignment so\n" +
+			"    you can add teammates with `gh student invite`.\n" +
+			"  - Writes the classroom marker file (.classroom50.yaml) and the\n" +
+			"    autograding workflow in a single commit, then verifies both are\n" +
+			"    in place before reporting success, so an accepted repository\n" +
+			"    always autogrades.\n\n" +
+			"Visibility and access:\n\n" +
+			"  - The repository is private unless the assignment opts into public\n" +
+			"    repositories (for peer review or showcase work). You are warned\n" +
+			"    before a public repository is created.\n" +
+			"  - If the classroom uses an unlisted URL, your teacher will give\n" +
+			"    you an access key; pass it with `--key <key>`. The key is part\n" +
+			"    of the published URL (`<classroom>/<key>/...`); without it the\n" +
+			"    classroom's assignments can't be found. Normal classrooms need\n" +
+			"    no key.\n\n" +
+			"Running accept again is safe:\n\n" +
+			"  - A repository that is fully set up is left in place (your access\n" +
+			"    level is refreshed when possible).\n" +
+			"  - A repository whose setup was interrupted partway is repaired.",
 		Example: "  gh student accept cs50 cs50-fall-2026 hello\n" +
 			"  gh student accept cs50 cs50-fall-2026 hello --key dhkrm4ih\n",
 		Args: cobra.ExactArgs(3),
@@ -213,28 +207,28 @@ func acceptCmd() *cobra.Command {
 					case http.StatusOK:
 						return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner)
 					case http.StatusNotFound:
-						return fmt.Errorf("%s: no membership found for accept", org)
+						return fmt.Errorf("%s: couldn't find your invitation to this organization; ask your teacher to invite you again", org)
 					case http.StatusForbidden:
-						return fmt.Errorf("%s: blocked from accepting invite", org)
+						return fmt.Errorf("%s: GitHub blocked accepting the organization invitation; ask your teacher for help", org)
 					case http.StatusUnprocessableEntity:
-						return fmt.Errorf("%s: spam detection (422) triggered for accept", org)
+						return fmt.Errorf("%s: GitHub's spam detection (status 422) blocked accepting the invitation; ask your teacher for help", org)
 					default:
-						return fmt.Errorf("%s: unknown accept status received (%d)", org, acceptStatus.StatusCode)
+						return fmt.Errorf("%s: unexpected response (status %d) while accepting the organization invitation", org, acceptStatus.StatusCode)
 					}
 				}
 			case http.StatusNotFound:
-				return fmt.Errorf("%s: no membership found", org)
+				return fmt.Errorf("%s: you're not a member of this organization; ask your teacher for an invitation", org)
 			case http.StatusForbidden:
-				return fmt.Errorf("%s: forbidden", org)
+				return fmt.Errorf("%s: GitHub denied the membership check (status 403); ask your teacher for help", org)
 			default:
-				return fmt.Errorf("%s: unknown status received (%d)", org, status.StatusCode)
+				return fmt.Errorf("%s: unexpected response (status %d) while checking your organization membership", org, status.StatusCode)
 			}
 
 			return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner)
 		},
 	}
 
-	cmd.Flags().StringVar(&key, "key", "", "Access key for a classroom that uses an unlisted URL (provided by your teacher); omit for normal classrooms")
+	cmd.Flags().StringVar(&key, "key", "", "Access key from your teacher for a classroom that uses an unlisted URL; omit for normal classrooms")
 	return cmd
 }
 
@@ -350,10 +344,10 @@ func checkAcceptableMode(assignment, mode string) error {
 // enforceable boundary is the teacher's template/collaborator changes.
 func assertAssignmentAcceptable(entry assignments.Entry, assignment string) error {
 	if entry.Locked {
-		return fmt.Errorf("assignment %q is locked by your teacher and can't be accepted right now — ask them to unlock it", assignment)
+		return fmt.Errorf("assignment %q is locked by your teacher and can't be accepted right now; ask them to unlock it", assignment)
 	}
 	if entry.Closed {
-		return fmt.Errorf("assignment %q is closed to new submissions — ask your teacher to reopen it", assignment)
+		return fmt.Errorf("assignment %q is closed to new submissions; ask your teacher to reopen it", assignment)
 	}
 	return nil
 }
@@ -364,7 +358,7 @@ func assertAssignmentAcceptable(entry assignments.Entry, assignment string) erro
 // still reconcile even if a later-published entry drifted incoherent.
 func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int) error {
 	if maxGroupSize > 0 && mode != contract.ModeGroup {
-		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q) — its published metadata is inconsistent; ask your teacher to re-run `gh teacher assignment add`",
+		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q): its published details are inconsistent; ask your teacher to re-run `gh teacher assignment add`",
 			assignment, maxGroupSize, mode, contract.ModeGroup)
 	}
 	return nil
@@ -377,7 +371,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// accept time alongside the login (rename-safe github_id identity).
 	username, ownerID, err := githubapi.CurrentUser(client)
 	if err != nil {
-		return fmt.Errorf("retrieving authed user: %w", err)
+		return fmt.Errorf("looking up the signed-in GitHub user: %w", err)
 	}
 
 	// Enrollment gate: a plain org member who isn't on this classroom's student
@@ -420,7 +414,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// autograder shim — see the hasTemplate fork below.
 	hasTemplate := entry.HasTemplate()
 	if entry.Template != nil && !hasTemplate {
-		return fmt.Errorf("assignment %q has an incomplete template ref (owner=%q repo=%q branch=%q) — ask your teacher to re-run `gh teacher assignment add`",
+		return fmt.Errorf("assignment %q has an incomplete template reference (owner=%q repo=%q branch=%q); ask your teacher to re-run `gh teacher assignment add`",
 			assignment, entry.Template.Owner, entry.Template.Repo, entry.Template.Branch)
 	}
 	// empty_repo and template are mutually exclusive at write time, but
@@ -429,13 +423,13 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// fork would generate starter content, then the bare fork would skip every
 	// control file — a templated repo the grading pipeline ignores).
 	if entry.EmptyRepo && entry.Template != nil {
-		return fmt.Errorf("assignment %q sets both empty_repo and a template — the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets both empty_repo and a template, which is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 	// no_autograder is a templated, shim-less state; empty_repo is a bare
 	// shim-less state. Both being set is an invalid hand-edited entry — fail
 	// closed rather than pick one. (Mirrors the empty_repo+template guard.)
 	if entry.NoAutograder && entry.EmptyRepo {
-		return fmt.Errorf("assignment %q sets both no_autograder and empty_repo — the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets both no_autograder and empty_repo, which is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 	// no_autograder is the TEMPLATED teacher-supplied-CI state: the template
 	// carries its own workflows. A template-less no_autograder entry (only
@@ -443,20 +437,20 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// template) would produce a bare marker-only repo with no CI at all — use
 	// empty_repo for that. Fail closed rather than silently contradict the docs.
 	if entry.NoAutograder && !hasTemplate {
-		return fmt.Errorf("assignment %q sets no_autograder without a template — teacher-supplied CI needs a template that carries the workflows; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets no_autograder without a template: teacher-supplied CI needs a template that carries the workflows, so the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 	// init_shim is the built-in-autograder-on-an-empty-repo state: template-less,
 	// commits the default shim onto an initialized repo. A hand-edited manifest
 	// could contradict that; fail closed rather than half-apply (mirrors the
 	// empty_repo+template and no_autograder+empty_repo guards above).
 	if entry.InitShim && entry.Template != nil {
-		return fmt.Errorf("assignment %q sets both init_shim and a template — init_shim is the template-less shim-only state; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets both init_shim and a template: init_shim is the template-less shim-only state, so the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 	if entry.InitShim && entry.EmptyRepo {
-		return fmt.Errorf("assignment %q sets both init_shim and empty_repo — init_shim commits the shim, empty_repo commits nothing; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets both init_shim and empty_repo: init_shim commits the shim, empty_repo commits nothing, so the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 	if entry.InitShim && entry.NoAutograder {
-		return fmt.Errorf("assignment %q sets both init_shim and no_autograder — one commits the default shim, the other commits none; the entry is invalid, ask your teacher to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets both init_shim and no_autograder: one commits the default shim, the other commits none, so the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 
 	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
@@ -500,9 +494,9 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	visibilityWord := "private"
 	if wantPublic {
 		visibilityWord = "public"
-		u.Warn("this assignment creates a PUBLIC repository — your work (code, commits, name) will be visible to anyone on the internet")
+		u.Warn("this assignment creates a PUBLIC repository: your work (code, commits, name) will be visible to anyone on the internet")
 	}
-	createMsg := fmt.Sprintf("Creating %s repo for %s", visibilityWord, assignment)
+	createMsg := fmt.Sprintf("Creating %s repository for %s", visibilityWord, assignment)
 	createSp := u.Spinner(createMsg)
 	createSp.Start()
 	createRepo := func(public bool) (htmlURL, fullName, branch string, alreadyExisted bool, err error) {
@@ -516,7 +510,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	}
 	htmlURL, fullName, commitBranch, alreadyExisted, err = createRepo(wantPublic)
 	if err != nil && wantPublic && isPublicRepoCreationDenied(err) {
-		u.Warn("`%s` does not allow you to create public repositories; creating a private repository instead — your teacher can make it public later", org)
+		u.Warn("`%s` does not allow you to create public repositories; creating a private repository instead. Your teacher can make it public later", org)
 		htmlURL, fullName, commitBranch, alreadyExisted, err = createRepo(false)
 	}
 	if err != nil {
@@ -658,7 +652,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
 				u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
-			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
+			p.createSp.Stop(fmt.Sprintf("Repository already exists: %s", p.fullName))
 			// Ensure the Feedback PR exists even on the healthy path: repos
 			// accepted before the accept-time-PR feature (issue #228) get
 			// their PR by re-accepting — the only Actions-free route. The
@@ -721,7 +715,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 // asserts mode/size coherence.
 func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
 	if p.alreadyExisted {
-		p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
+		p.createSp.Stop(fmt.Sprintf("Repository already exists: %s", p.fullName))
 
 		// Already accepted: reconcile the role best-effort, matching the
 		// templated already-accepted path. The bare repo is already healthy
@@ -844,7 +838,7 @@ func verifyProvisioned(client githubapi.Client, org, repoName string) error {
 		if ok {
 			return nil
 		}
-		lastErr = fmt.Errorf("%s/%s was created but %s is missing after setup — re-run `gh student accept %s %s %s` to finish provisioning (it is safe to re-run)",
+		lastErr = fmt.Errorf("%s/%s was created but %s is missing after setup; run `gh student accept %s %s %s` again to finish the setup (running it again is safe)",
 			org, repoName, classroomcfg.MetadataPath, org, classroomFromRepo(repoName), repoName)
 		if attempt < verifyProvisionAttempts-1 {
 			time.Sleep(time.Duration(attempt+1) * verifyProvisionBackoff)
@@ -894,8 +888,8 @@ func is422NameTooLong(httpErr *githubapi.HTTPError) bool {
 // assignment slug) rather than surfacing GitHub's raw validation error.
 func repoNameTooLongError(repoName string, cause error) error {
 	return fmt.Errorf("the repository name %q is %d characters, over GitHub's 100-character "+
-		"limit, so it couldn't be created. Ask your teacher to shorten the classroom or "+
-		"assignment slug, then run accept again: %w", repoName, len(repoName), cause)
+		"limit, so it couldn't be created. Ask your teacher to shorten the classroom "+
+		"short-name or assignment slug, then run accept again: %w", repoName, len(repoName), cause)
 }
 
 // has422Message gates httpErrorMentions on a 422 status, so a caller that isn't
@@ -1072,8 +1066,8 @@ func printCloneInstructions(u *ui.UI, out io.Writer, htmlURL string) error {
 		return err
 	}
 	if insideRepo {
-		u.Warn("you are currently inside a Git repository (%s) — clone from a parent/workspace directory to avoid nesting repositories", root)
-		_, _ = fmt.Fprintln(out, "Clone from a parent/workspace directory to avoid nesting repositories:")
+		u.Warn("you are currently inside a Git repository (%s); clone from a parent or workspace directory to avoid nesting repositories", root)
+		_, _ = fmt.Fprintln(out, "Clone from a parent or workspace directory to avoid nesting repositories:")
 	} else {
 		_, _ = fmt.Fprintln(out, "Clone it with:")
 	}
@@ -1280,7 +1274,7 @@ func createTemplatedAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbo
 						return "", "", "", false, forkParentRestrictedError(parent, tmpl, err)
 					}
 				}
-				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your teacher to make it public or grant your account access",
+				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you; ask your teacher to make it public or grant your account access",
 					tmpl.Owner, tmpl.Repo)
 			case http.StatusForbidden:
 				// The refusal is about the destination org, not the template, so

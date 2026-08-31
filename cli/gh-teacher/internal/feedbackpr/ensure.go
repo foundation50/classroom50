@@ -259,7 +259,7 @@ func verifyFeedbackBaseRef(client githubapi.Client, org, repoName, acceptSHA str
 		return err
 	}
 	if sha != acceptSHA {
-		return fmt.Errorf("%w: %s branch is at %s, not the expected baseline %s — an org admin must delete it so it can be re-frozen correctly",
+		return fmt.Errorf("%w: %s branch is at %s, not the expected baseline %s; an org admin must delete it so it can be re-frozen correctly",
 			errBaseMismatch, contract.FeedbackBaseBranch, sha, acceptSHA)
 	}
 	return nil

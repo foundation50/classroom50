@@ -26,10 +26,13 @@ func assignmentTestCmd() *cobra.Command {
 		Use:   "test",
 		Short: "Add, list, or remove declarative tests on an assignment",
 		Long: "Manage the declarative `tests` block on an assignment in\n" +
-			"<org>/classroom50/<classroom>/assignments.json. Each test is one\n" +
-			"of three types -- io (compare stdout), run (check exit code), or\n" +
-			"python (run pytest) -- mirroring GitHub Classroom's autograding.\n" +
-			"Describe tests here instead of writing an autograder.py: the\n" +
+			"<org>/classroom50/<classroom>/assignments.json.\n\n" +
+			"Each test is one of three types, mirroring GitHub Classroom's\n" +
+			"autograding:\n" +
+			"  - io      compare stdout\n" +
+			"  - run     check the exit code\n" +
+			"  - python  run pytest\n\n" +
+			"Describe tests here instead of writing an autograder script: the\n" +
 			"publish-pages workflow materializes them into the assignment's\n" +
 			"Pages bundle and runner.py grades them on every submission. See\n" +
 			"the Autograding-Basics wiki page for the field reference.\n\n" +
@@ -67,19 +70,21 @@ func assignmentTestAddCmd() *cobra.Command {
 		Long: "Add a test to the assignment's `tests` block, or replace the\n" +
 			"existing test with the same --name (names are unique within an\n" +
 			"assignment). Required: --name, --type, --run.\n\n" +
-			"--type io: feed --input (or --input-file) on stdin, compare the\n" +
-			"  command's stdout against --expected (or --expected-file) using\n" +
-			"  --comparison (included | exact | regex).\n" +
-			"--type run: pass iff the command's exit code matches --exit-code\n" +
-			"  (default 0).\n" +
-			"--type python: run pytest; points are split across discovered\n" +
-			"  cases at grade time.\n\n" +
+			"Types:\n" +
+			"  - io: feed --input (or --input-file) on stdin, compare the\n" +
+			"    command's stdout against --expected (or --expected-file)\n" +
+			"    using --comparison (included | exact | regex).\n" +
+			"  - run: pass only when the command's exit code matches\n" +
+			"    --exit-code (default 0).\n" +
+			"  - python: run pytest; points are split across discovered cases\n" +
+			"    at grade time.\n\n" +
 			"--input-file / --expected-file name a fixture file the teacher\n" +
 			"has committed alongside the assignment at\n" +
-			"<classroom>/autograders/<slug>/ in the classroom50 repository; it is bundled\n" +
-			"and read at grade time. Fails if the assignment slug isn't\n" +
-			"registered yet, or if the assignment already has a hand-written\n" +
-			"per-assignment autograder.py (the two are mutually exclusive).",
+			"<classroom>/autograders/<slug>/ in the classroom50 repository; it\n" +
+			"is bundled and read at grade time.\n\n" +
+			"Fails if the assignment slug isn't registered yet, or if the\n" +
+			"assignment already has a hand-written per-assignment autograder\n" +
+			"(the two are mutually exclusive).",
 		Example: "  gh teacher assignment test add cs50-fall-2026 cs-principles hello \\\n" +
 			"      --name compiles --type run --run \"gcc -o hello hello.c\" --points 1\n" +
 			"  gh teacher assignment test add cs50-fall-2026 cs-principles hello \\\n" +
@@ -142,7 +147,7 @@ func assignmentTestAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Test name, unique within the assignment (required)")
 	cmd.Flags().StringVar(&ttype, "type", "", "Test type: io | run | python (required)")
 	cmd.Flags().StringVar(&run, "run", "", "Command to run (required)")
-	cmd.Flags().StringVar(&setup, "setup", "", "Optional command run before --run (e.g., compile)")
+	cmd.Flags().StringVar(&setup, "setup", "", "Optional command run before --run (a compile step, for example)")
 	cmd.Flags().StringVar(&input, "input", "", "io only: inline stdin for the run command")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "io only: bundled fixture file fed on stdin")
 	cmd.Flags().StringVar(&expected, "expected", "", "io only: inline expected stdout")
@@ -180,7 +185,7 @@ func runAssignmentTestAdd(client githubapi.Client, out io.Writer, org, classroom
 		}
 		idx, ok := assignment.FindAssignment(file.Assignments, slug)
 		if !ok {
-			return nil, fmt.Errorf("assignment %q is not registered in %s/%s/%s — run `gh teacher assignment add %s %s %s ...` first",
+			return nil, fmt.Errorf("assignment %q is not registered in %s/%s/%s: run `gh teacher assignment add %s %s %s ...` first",
 				slug, org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), org, classroom, slug)
 		}
 		entry := file.Assignments[idx]
@@ -287,7 +292,7 @@ func runAssignmentTestList(client githubapi.Client, out, errOut io.Writer, org, 
 		path := fmt.Sprintf("%s/%s/%s [%s]", org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), slug)
 		switch len(tests) {
 		case 0:
-			_, _ = fmt.Fprintf(errOut, "%s: no declarative tests — add one with `gh teacher assignment test add %s %s %s ...`\n", path, org, classroom, slug)
+			_, _ = fmt.Fprintf(errOut, "%s: no declarative tests. Add one with `gh teacher assignment test add %s %s %s ...`\n", path, org, classroom, slug)
 		case 1:
 			_, _ = fmt.Fprintf(errOut, "%s: 1 test\n", path)
 		default:
@@ -398,7 +403,7 @@ func ensureDeclarativeTestsSupported(client githubapi.Client, org, ref string) e
 		return fmt.Errorf("check %s/%s/%s: %w", org, configrepo.ConfigRepoName, materializeScriptPath, err)
 	}
 	if !exists {
-		return fmt.Errorf("%s/%s is missing %s, so declarative tests would never run — re-run `gh teacher init %s` to update the workflow files, then retry",
+		return fmt.Errorf("%s/%s is missing %s, so declarative tests would never run: re-run `gh teacher init %s` to update the workflow files, then retry",
 			org, configrepo.ConfigRepoName, materializeScriptPath, org)
 	}
 	return nil
@@ -414,7 +419,7 @@ func ensureNoPerAssignmentAutograder(client githubapi.Client, org, classroom, sl
 		return fmt.Errorf("check %s/%s/%s: %w", org, configrepo.ConfigRepoName, path, err)
 	}
 	if exists {
-		return fmt.Errorf("assignment %q has a per-assignment autograder at %s/%s/%s — declarative tests and a hand-written autograder.py are mutually exclusive (the runner prefers autograder.py); remove it before adding tests",
+		return fmt.Errorf("assignment %q has a per-assignment autograder at %s/%s/%s: declarative tests and a hand-written autograder.py are mutually exclusive (the runner prefers autograder.py); remove it before adding tests",
 			slug, org, configrepo.ConfigRepoName, path)
 	}
 	return nil

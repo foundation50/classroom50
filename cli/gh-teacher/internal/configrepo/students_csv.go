@@ -315,7 +315,7 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		// no action for a row it can't address, so those stay per-line errors
 		// here rather than silently passing through.
 		if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" {
-			rowErrs = append(rowErrs, fmt.Errorf("line %d: row has no username, github_id, or email — at least one is required to identify a student", line))
+			rowErrs = append(rowErrs, fmt.Errorf("line %d: row has no username, github_id, or email; at least one is required to identify a student", line))
 			continue
 		}
 		// Canonicalize rather than only validate: the parsed address is what a
@@ -367,7 +367,7 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 	// cli/shared/testdata/roster_row_cases.json.
 	hasName := strings.TrimSpace(row.FirstName) != "" || strings.TrimSpace(row.LastName) != ""
 	if row.Username == "" && row.Email == "" && strings.TrimSpace(record[5]) == "" && !hasName {
-		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, email, or name — at least one is required to identify a student", line)
+		return RosterRow{}, fmt.Errorf("line %d: row has no username, github_id, email, or name; at least one is required to identify a student", line)
 	}
 	if trimmed := strings.TrimSpace(record[5]); trimmed != "" {
 		id, err := parseGitHubID(trimmed)
@@ -757,7 +757,7 @@ func CanonicalRosterEmail(email string) (string, error) {
 		return "", fmt.Errorf("invalid email %q: %w", email, err)
 	}
 	if parsed.Name != "" {
-		return "", fmt.Errorf("invalid email %q: include only the address (e.g., alice@example.edu), not a display name", email)
+		return "", fmt.Errorf("invalid email %q: include only the address (like alice@example.edu), not a display name", email)
 	}
 	return NormalizeInviteEmail(parsed.Address), nil
 }

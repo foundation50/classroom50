@@ -40,10 +40,10 @@ func assignmentRenameCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "rename <org> <classroom> <old-slug> <new-slug>",
-		Short: "Rename an over-budget assignment slug and its student repos (one-shot)",
+		Short: "Rename an over-budget assignment slug and its repos (one-shot)",
 		Long: "Rename an assignment whose composed student-repo name\n" +
 			"`<classroom>-<slug>-<username>` can exceed GitHub's 100-character\n" +
-			"limit, renaming EVERY existing student repo to match. Offered only\n" +
+			"limit, renaming every existing student repo to match. Offered only\n" +
 			"for that remediation, and only once per assignment: the old slug is\n" +
 			"recorded as renamed_from and permanently reserved, because creating\n" +
 			"a new repo at a renamed repo's old name would sever the automatic\n" +
@@ -52,18 +52,18 @@ func assignmentRenameCmd() *cobra.Command {
 			"  1. One config commit: the slug changes, renamed_from records the\n" +
 			"     old slug, the scores.json bucket is re-keyed, a per-assignment\n" +
 			"     autograders/<slug>/ directory moves, and the assignment is\n" +
-			"     LOCKED so nobody accepts mid-rename.\n" +
-			"  2. Each student repo (matched by prefix AND verified by its\n" +
+			"     locked so nobody accepts mid-rename.\n" +
+			"  2. Each student repo (matched by prefix and verified by its\n" +
 			"     .classroom50.yaml marker): the marker's `assignment` field is\n" +
 			"     rewritten ([skip ci]), then the repo is renamed. GitHub\n" +
 			"     redirects git/web/API traffic from the old name indefinitely,\n" +
 			"     so student clones keep working; grading picks up the new slug\n" +
 			"     on the next run.\n" +
 			"  3. The lock is restored to its pre-rename state.\n\n" +
-			"Per-repo failures never abort the batch — they're reported with\n" +
-			"fixes, and RE-RUNNING THE SAME COMMAND resumes: already-renamed\n" +
+			"Per-repo failures never abort the batch: they're reported with\n" +
+			"fixes, and re-running the same command resumes. Already-renamed\n" +
 			"repos are skipped, stragglers are healed. Historical submissions\n" +
-			"keep their grades (collection accepts the pre-rename slug embedded\n" +
+			"keep their scores (collection accepts the pre-rename slug embedded\n" +
 			"in old result.json payloads via renamed_from).\n\n" +
 			"Students only need `git pull` once before their next\n" +
 			"`gh student submit` (the local marker must catch up); plain pushes\n" +
@@ -91,7 +91,7 @@ func assignmentRenameCmd() *cobra.Command {
 				return err
 			}
 			if strings.EqualFold(oldSlug, newSlug) {
-				return errors.New("old-slug and new-slug are the same — nothing to rename")
+				return errors.New("old-slug and new-slug are the same: nothing to rename")
 			}
 			if err := validate.ComposedRepoNameBudget(classroom, newSlug); err != nil {
 				return err
@@ -169,16 +169,16 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	if idx, ok := assignment.FindAssignment(preFile.Assignments, p.oldSlug); ok {
 		entry := preFile.Assignments[idx]
 		if entry.RenamedFrom != "" {
-			return fmt.Errorf("assignment %q was already renamed once (from %q) — a rename is one-shot, so it can't be renamed again", p.oldSlug, entry.RenamedFrom)
+			return fmt.Errorf("assignment %q was already renamed once (from %q); a rename is one-shot, so it can't be renamed again", p.oldSlug, entry.RenamedFrom)
 		}
 		if _, fits := contract.ComposedRepoNameFits(p.classroom, p.oldSlug); fits {
-			return fmt.Errorf("assignment %q fits the composed repo-name budget — rename is offered only to remediate a slug whose `<classroom>-<slug>-<username>` student-repo names can exceed GitHub's %d-character limit", p.oldSlug, contract.GitHubRepoNameMaxLen)
+			return fmt.Errorf("assignment %q fits the composed repo-name budget: rename is offered only to remediate a slug whose `<classroom>-<slug>-<username>` student-repo names can exceed GitHub's %d-character limit", p.oldSlug, contract.GitHubRepoNameMaxLen)
 		}
 		if assignment.SlugExistsFold(preFile.Assignments, p.newSlug) {
-			return fmt.Errorf("slug %q already exists in classroom %q — choose a different new-slug", p.newSlug, p.classroom)
+			return fmt.Errorf("slug %q already exists in classroom %q: choose a different new-slug", p.newSlug, p.classroom)
 		}
 		if current, reserved := assignment.SlugReservedFold(preFile.Assignments, p.newSlug); reserved {
-			return fmt.Errorf("slug %q is reserved: it is the pre-rename slug of assignment %q — choose a different new-slug", p.newSlug, current)
+			return fmt.Errorf("slug %q is reserved: it is the pre-rename slug of assignment %q. Choose a different new-slug", p.newSlug, current)
 		}
 		prevLocked = entry.Locked
 	} else if idx, ok := assignment.FindAssignment(preFile.Assignments, p.newSlug); ok &&
@@ -187,7 +187,7 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 		// this is a deliberate re-run to heal stragglers).
 		resume = true
 	} else {
-		return fmt.Errorf("assignment %q not found in %s/%s/%s — run `gh teacher assignment list %s %s` to see available slugs",
+		return fmt.Errorf("assignment %q not found in %s/%s/%s: run `gh teacher assignment list %s %s` to see available slugs",
 			p.oldSlug, p.org, configrepo.ConfigRepoName, assignmentsFilePath(p.classroom), p.org, p.classroom)
 	}
 
@@ -218,7 +218,7 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 		if resume {
 			mode = "resume"
 		}
-		_, _ = fmt.Fprintf(out, "%s %s/%s: %s %q -> %q — %d repo(s) to rename, %d to re-check\n",
+		_, _ = fmt.Fprintf(out, "%s %s/%s: %s %q -> %q: %d repo(s) to rename, %d to re-check\n",
 			p.org, configrepo.ConfigRepoName, p.classroom, mode, p.oldSlug, p.newSlug, len(toRename), len(toHeal))
 	}
 	if p.dryRun {
@@ -229,7 +229,7 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 		for _, repo := range toHeal {
 			_, _ = fmt.Fprintf(out, "  would re-check the marker of %s\n", repo)
 		}
-		_, _ = fmt.Fprintln(errOut, "Dry-run complete — no API writes performed.")
+		_, _ = fmt.Fprintln(errOut, "Dry run complete. No API writes performed.")
 		return nil
 	}
 
@@ -242,7 +242,7 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 			return fmt.Errorf("read confirmation: %w", err)
 		}
 		if strings.TrimSpace(line) != p.newSlug {
-			return errors.New("confirmation did not match the new slug — aborted with nothing written")
+			return errors.New("confirmation did not match the new slug: aborted with nothing written")
 		}
 	}
 
@@ -280,19 +280,19 @@ func runAssignmentRename(client githubapi.Client, in io.Reader, out, errOut io.W
 	// unknowable, so it is left alone with a note rather than guessed.
 	if !resume && !prevLocked {
 		if failed > 0 {
-			_, _ = fmt.Fprintf(errOut, "Note: %q stays LOCKED while %d repo(s) are unrenamed — an accept now would occupy a new repo name and strand a student's work. Re-run to heal them; the lock is restored when everything lands.\n",
+			_, _ = fmt.Fprintf(errOut, "Note: %q stays locked while %d repo(s) are unrenamed: an accept now would occupy a new repo name and strand a student's work. Re-run to heal them; the lock is restored when everything lands.\n",
 				p.newSlug, failed)
 		} else if err := setRenamedEntryLocked(client, p, branch, false); err != nil {
-			_, _ = fmt.Fprintf(errOut, "Warning: restoring the lock failed (%v) — unlock manually: gh teacher assignment lock %s %s %s --unlock\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: restoring the lock failed (%v). Unlock manually: gh teacher assignment lock %s %s %s --unlock\n",
 				err, p.org, p.classroom, p.newSlug)
 		}
 	}
 	if resume {
 		if failed == 0 {
-			_, _ = fmt.Fprintf(errOut, "Note: resumed run complete — if the original rename locked %q, unlock it with `gh teacher assignment lock %s %s %s --unlock`.\n",
+			_, _ = fmt.Fprintf(errOut, "Note: resumed run complete. If the original rename locked %q, unlock it with `gh teacher assignment lock %s %s %s --unlock`.\n",
 				p.newSlug, p.org, p.classroom, p.newSlug)
 		} else {
-			_, _ = fmt.Fprintf(errOut, "Note: %q should stay locked while %d repo(s) are unrenamed — re-run to heal them before unlocking.\n",
+			_, _ = fmt.Fprintf(errOut, "Note: %q should stay locked while %d repo(s) are unrenamed. Re-run to heal them before unlocking.\n",
 				p.newSlug, failed)
 		}
 	}
@@ -317,18 +317,18 @@ func commitRenameConfig(client githubapi.Client, p renameParams, branch string) 
 		}
 		idx, ok := assignment.FindAssignment(file.Assignments, p.oldSlug)
 		if !ok {
-			return change, fmt.Errorf("assignment %q disappeared from %s during the rename — retry", p.oldSlug, assignmentsFilePath(p.classroom))
+			return change, fmt.Errorf("assignment %q disappeared from %s during the rename: retry", p.oldSlug, assignmentsFilePath(p.classroom))
 		}
 		// Re-assert the preflight invariants against this attempt's parent:
 		// a concurrent write must lose cleanly, never half-apply.
 		if file.Assignments[idx].RenamedFrom != "" {
-			return change, fmt.Errorf("assignment %q was renamed concurrently — nothing written", p.oldSlug)
+			return change, fmt.Errorf("assignment %q was renamed concurrently: nothing written", p.oldSlug)
 		}
 		if assignment.SlugExistsFold(file.Assignments, p.newSlug) {
-			return change, fmt.Errorf("slug %q was taken concurrently — nothing written", p.newSlug)
+			return change, fmt.Errorf("slug %q was taken concurrently: nothing written", p.newSlug)
 		}
 		if current, reserved := assignment.SlugReservedFold(file.Assignments, p.newSlug); reserved {
-			return change, fmt.Errorf("slug %q is reserved (pre-rename slug of %q) — nothing written", p.newSlug, current)
+			return change, fmt.Errorf("slug %q is reserved (pre-rename slug of %q): nothing written", p.newSlug, current)
 		}
 		file.Assignments[idx].Slug = p.newSlug
 		file.Assignments[idx].RenamedFrom = p.oldSlug
@@ -372,7 +372,7 @@ func commitRenameConfig(client githubapi.Client, p renameParams, branch string) 
 				return change, err
 			}
 			if !exists {
-				return change, fmt.Errorf("%s: listed but unreadable — retry", path)
+				return change, fmt.Errorf("%s: listed but unreadable, retry", path)
 			}
 			change.Upserts[newDir+strings.TrimPrefix(path, oldDir)] = string(content)
 			change.Deletes = append(change.Deletes, path)
@@ -401,7 +401,7 @@ func rekeyScoresBucket(raw []byte, oldSlug, newSlug string) ([]byte, bool, error
 		return nil, false, nil
 	}
 	if _, exists := buckets[newSlug]; exists {
-		return nil, false, fmt.Errorf("bucket %q already exists — refusing to overwrite it with the %q bucket", newSlug, oldSlug)
+		return nil, false, fmt.Errorf("bucket %q already exists: refusing to overwrite it with the %q bucket", newSlug, oldSlug)
 	}
 	buckets[newSlug] = bucket
 	delete(buckets, oldSlug)
@@ -428,7 +428,7 @@ func setRenamedEntryLocked(client githubapi.Client, p renameParams, branch strin
 		}
 		idx, ok := assignment.FindAssignment(file.Assignments, p.newSlug)
 		if !ok {
-			return nil, fmt.Errorf("assignment %q disappeared from %s — unlock manually", p.newSlug, assignmentsFilePath(p.classroom))
+			return nil, fmt.Errorf("assignment %q disappeared from %s: unlock manually", p.newSlug, assignmentsFilePath(p.classroom))
 		}
 		if file.Assignments[idx].Locked == locked {
 			return nil, nil
@@ -470,7 +470,7 @@ func renameOneRepo(client githubapi.Client, p renameParams, repo, oldPrefix, new
 	if notFound {
 		// The org listing said it exists; a 404 now means it was deleted (or
 		// renamed) concurrently — nothing to do, a re-run re-classifies.
-		res.outcome, res.reason = repoFailed, "repo disappeared during the rename — re-run to re-check"
+		res.outcome, res.reason = repoFailed, "repo disappeared during the rename; re-run to re-check"
 		return res
 	}
 
@@ -484,16 +484,16 @@ func renameOneRepo(client githubapi.Client, p renameParams, repo, oldPrefix, new
 			return nil, err
 		}
 		if !exists {
-			missing = "no " + contract.MetadataPath + " — ownership can't be verified, repo left untouched (re-accept heals the marker, then re-run)"
+			missing = "no " + contract.MetadataPath + ": ownership can't be verified, repo left untouched (re-accept heals the marker, then re-run)"
 			return nil, nil
 		}
 		rewritten, changed, current, err := rewriteMarkerAssignment(raw, p.oldSlug, p.newSlug)
 		if err != nil {
-			missing = fmt.Sprintf("unparseable %s (%v) — repo left untouched", contract.MetadataPath, err)
+			missing = fmt.Sprintf("unparseable %s (%v); repo left untouched", contract.MetadataPath, err)
 			return nil, nil
 		}
 		if current != "" {
-			foreign = fmt.Sprintf("marker names assignment %q — a sibling slug sharing the prefix, not %q; left untouched", current, p.oldSlug)
+			foreign = fmt.Sprintf("marker names assignment %q, a sibling slug sharing the prefix, not %q; left untouched", current, p.oldSlug)
 			return nil, nil
 		}
 		if !changed {
@@ -588,10 +588,10 @@ func renameRepoAPI(client githubapi.Client, org, repo, newName string) error {
 	resp, err := client.Request(http.MethodPatch, path, bytes.NewReader(body))
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
-			return fmt.Errorf("rename to %q needs admin on the repo (or org ownership) — re-run as an owner: %w", newName, err)
+			return fmt.Errorf("rename to %q needs admin on the repo (or org ownership); re-run as an owner: %w", newName, err)
 		}
 		if cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			return fmt.Errorf("rename to %q rejected — a repo may already exist at that name (https://github.com/%s/%s); resolve it and re-run: %w", newName, org, newName, err)
+			return fmt.Errorf("rename to %q rejected: a repo may already exist at that name (https://github.com/%s/%s); resolve it and re-run: %w", newName, org, newName, err)
 		}
 		return fmt.Errorf("PATCH %s: %w", path, err)
 	}
@@ -632,11 +632,11 @@ func summarizeRenameResults(out, errOut io.Writer, p renameParams, results []rep
 		}
 	}
 	if !p.quiet {
-		_, _ = fmt.Fprintf(out, "%s/%s: rename summary — %d renamed, %d marker(s) healed, %d already current, %d sibling(s) skipped, %d unverifiable, %d failed\n",
+		_, _ = fmt.Fprintf(out, "%s/%s: rename summary: %d renamed, %d marker(s) healed, %d already current, %d sibling(s) skipped, %d unverifiable, %d failed\n",
 			p.org, p.classroom, renamed, healed, current, foreign, noMarker, failed)
 	}
 	if failed > 0 {
-		return fmt.Errorf("%d repo(s) failed — the rename is idempotent, so fix the causes above and re-run the same command to heal them", failed)
+		return fmt.Errorf("%d repo(s) failed: the rename is idempotent, so fix the causes above and re-run the same command to heal them", failed)
 	}
 	return nil
 }

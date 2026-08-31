@@ -31,15 +31,15 @@ func NewCmd() *cobra.Command {
 		Use:   "teardown <org>",
 		Short: "Delete every repo in a Classroom 50 org (development reset)",
 		Long: "Delete every repository in <org> after confirming the org is a\n" +
-			"Classroom 50 setup (i.e., <org>/classroom50 exists). Intended for\n" +
-			"resetting a development org between iterations — production\n" +
+			"Classroom 50 setup (<org>/classroom50 exists). Intended for\n" +
+			"resetting a development org between iterations; production\n" +
 			"teachers should use the GitHub web UI for selective deletion.\n\n" +
-			"Before any deletion, the command lists every repo it would\n" +
+			"Before any deletion, the command lists every repository it would\n" +
 			"remove and requires you to type the org name to confirm.\n" +
 			"Pass --yes to skip the prompt (scripted runs only).\n\n" +
 			"<org>/classroom50 is deleted last so a mid-run failure leaves\n" +
-			"the marker repo behind — re-running teardown stays safe.\n\n" +
-			"Requires the `delete_repo` OAuth scope, which is NOT part of\n" +
+			"the marker repository behind and re-running teardown stays safe.\n\n" +
+			"Requires the `delete_repo` OAuth scope, which is not part of\n" +
 			"the default `gh teacher login` scope set. Opt in once with\n" +
 			"`gh teacher login -s delete_repo` before running teardown.\n" +
 			"This is intentional: teachers who haven't explicitly opted in\n" +
@@ -189,7 +189,7 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	sweepInviteTeams(client, org, out, errOut)
 
 	if failed > 0 {
-		return fmt.Errorf("%d repo(s) failed to delete — see stderr for per-repo errors", failed)
+		return fmt.Errorf("%d repo(s) failed to delete; see stderr for per-repo errors", failed)
 	}
 	return nil
 }
@@ -265,7 +265,7 @@ func requireConfigRepo(client githubapi.Client, org string) error {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), configrepo.ConfigRepoName)
 	if err := client.Get(path, nil); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return fmt.Errorf("%s/%s not found — refusing teardown on an org without the Classroom 50 marker repo. Run `gh teacher init %s` first if this is intended, or delete repos manually via the web UI",
+			return fmt.Errorf("%s/%s not found: refusing teardown on an org without the Classroom 50 marker repository. Run `gh teacher init %s` first if this is intended, or delete repos manually via the web UI",
 				org, configrepo.ConfigRepoName, org)
 		}
 		return fmt.Errorf("GET %s: %w", path, err)
@@ -299,7 +299,7 @@ func deleteRepo(client githubapi.Client, owner, repo string) error {
 	resp, err := client.Request(http.MethodDelete, path, nil)
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
-			return fmt.Errorf("403 Forbidden — typically your token lacks the `delete_repo` OAuth scope (opt in with `gh teacher login -s delete_repo`); 403 can also mean your account doesn't have delete permission on this repo")
+			return fmt.Errorf("403 Forbidden: typically your token lacks the `delete_repo` OAuth scope (opt in with `gh teacher login -s delete_repo`); 403 can also mean your account doesn't have delete permission on this repo")
 		}
 		return fmt.Errorf("DELETE %s: %w", path, err)
 	}
@@ -321,7 +321,7 @@ func confirmTeardown(in io.Reader, out io.Writer, org string) error {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
 	if strings.TrimSpace(line) != org {
-		return errors.New("confirmation did not match org name — aborted without deleting anything")
+		return errors.New("confirmation did not match the org name: aborted without deleting anything")
 	}
 	return nil
 }
