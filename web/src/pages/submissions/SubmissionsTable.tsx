@@ -59,6 +59,7 @@ import {
   type ScoreOverrideCapability,
 } from "@/pages/submissions/ScoreOverrideModal"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
+import { ManageGroupTeamModal } from "./ManageGroupTeamModal"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import {
@@ -78,7 +79,7 @@ import {
 } from "@/components/submissions/SubmissionRowCells"
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
-import type { Student, SubmissionMode } from "@/types/classroom"
+import type { Student, SubmissionMode, TeamFormation } from "@/types/classroom"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { blockEnter } from "@/lib/motion"
@@ -253,6 +254,8 @@ const SubmissionsTable = ({
   groupDisplayNames,
   groupMemberLogins,
   teamSlugsByOwner,
+  teamRawNamesByOwner,
+  teamFormation,
   org,
   classroom,
   assignment,
@@ -298,6 +301,14 @@ const SubmissionsTable = ({
   groupDisplayNames?: ReadonlyMap<string, string>
   groupMemberLogins?: ReadonlyMap<string, string[]>
   teamSlugsByOwner?: ReadonlyMap<string, string>
+  // Team mode: owner segment -> the RAW display name from the team record
+  // (absent when the group has none) — groupDisplayNames bakes in the
+  // "Group <n>" fallback, which the rename editor must not mistake for a
+  // teacher-chosen name.
+  teamRawNamesByOwner?: ReadonlyMap<string, string>
+  // Team mode: the assignment's team_formation, recorded on the teams.json
+  // snapshot writes the manage modal triggers.
+  teamFormation?: TeamFormation
   org: string
   classroom: string
   assignment: string
@@ -1088,9 +1099,10 @@ const SubmissionsTable = ({
             manageOwner === manageSubmission.owner
           }
           onManageMembers={
-            // Team-mode membership is managed through the group team (the
-            // assignment settings page), not direct collaborators.
-            manageSubmission.isGroup && !isTeam
+            // Group flavors both get a members editor: legacy group edits
+            // direct collaborators, team mode edits the live GitHub Team
+            // (and the display name) in ManageGroupTeamModal.
+            manageSubmission.isGroup
               ? () => setManageOwner(manageSubmission.owner)
               : undefined
           }
@@ -1132,6 +1144,30 @@ const SubmissionsTable = ({
           students={students}
         />
       )}
+
+      {isTeam &&
+        manageOwner &&
+        (() => {
+          const slug = teamSlugsByOwner?.get(manageOwner.toLowerCase())
+          if (!slug) return null
+          return (
+            <ManageGroupTeamModal
+              key={manageOwner}
+              org={org}
+              classroom={classroom}
+              assignment={assignment}
+              teamSlug={slug}
+              displayName={teamRawNamesByOwner?.get(manageOwner.toLowerCase())}
+              fallbackLabel={groupLabel(
+                manageOwner,
+                studentRepoName(classroom, assignment, manageOwner),
+              )}
+              maxGroupSize={maxGroupSize}
+              formation={teamFormation ?? "teacher"}
+              onClose={() => setManageOwner(null)}
+            />
+          )
+        })()}
 
       {accessOwner && (
         <RepoAccessModal

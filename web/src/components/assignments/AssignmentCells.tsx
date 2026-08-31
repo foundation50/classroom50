@@ -14,13 +14,22 @@ import type { Assignment } from "@/types/classroom"
 // two lists read as one design (one recipe, one source).
 
 // The individual/group type chip: fixed width so the column aligns down the
-// rows; info vs secondary distinguishes the modes at a glance.
+// rows; info vs secondary distinguishes the modes at a glance. Team mode is
+// the product's "Group" — the legacy collaborator-based mode is labeled
+// "Group (legacy)" (wider chip: the longer label would clip at w-20).
 export function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
   const { t } = useTranslation()
-  if (mode === "group") {
+  if (mode === "team") {
     return (
       <Badge tone="secondary" className="w-20 justify-center max-xl:w-16">
         {t("assignments.table.group")}
+      </Badge>
+    )
+  }
+  if (mode === "group") {
+    return (
+      <Badge tone="secondary" soft className="w-28 justify-center max-xl:w-24">
+        {t("assignments.table.groupLegacy")}
       </Badge>
     )
   }

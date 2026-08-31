@@ -29,6 +29,7 @@ export function GroupTeamMembersPanel({
   teamName,
   maxGroupSize,
   viewerLogin,
+  onMembershipChange,
 }: {
   org: string
   classroom: string
@@ -37,6 +38,9 @@ export function GroupTeamMembersPanel({
   teamName?: string
   maxGroupSize?: number
   viewerLogin?: string
+  // Fired after a successful add/remove, for callers that maintain a
+  // membership snapshot (the teacher surfaces); the student panel omits it.
+  onMembershipChange?: () => void
 }) {
   const { t } = useTranslation()
   const client = useGitHubClient()
@@ -68,6 +72,7 @@ export function GroupTeamMembersPanel({
         maxGroupSize,
       })
       setNewMember("")
+      onMembershipChange?.()
     } catch (err) {
       setActionError(errorText(t, err))
     }
@@ -78,6 +83,7 @@ export function GroupTeamMembersPanel({
     setActionError(null)
     try {
       await removeMember.mutateAsync({ teamSlug, username })
+      onMembershipChange?.()
     } catch (err) {
       setActionError(errorText(t, err))
     }

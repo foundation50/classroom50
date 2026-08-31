@@ -344,6 +344,16 @@ const SubmissionsPageContent = () => {
     for (const [owner, team] of teamByOwner) map.set(owner, team.slug)
     return map
   }, [isTeamAssignment, teamByOwner])
+  // RAW display names (no "Group <n>" fallback), for the manage modal's
+  // rename editor — absent means the group has no teacher/student-chosen name.
+  const teamRawNamesByOwner = useMemo(() => {
+    if (!isTeamAssignment) return undefined
+    const map = new Map<string, string>()
+    for (const [owner, team] of teamByOwner) {
+      if (team.name) map.set(owner, team.name)
+    }
+    return map
+  }, [isTeamAssignment, teamByOwner])
   const groupRepoFounders = useMemo(
     () =>
       new Set([
@@ -1639,6 +1649,10 @@ const SubmissionsPageContent = () => {
           groupDisplayNames={groupDisplayNames}
           groupMemberLogins={groupMemberLogins}
           teamSlugsByOwner={teamSlugsByOwner}
+          teamRawNamesByOwner={teamRawNamesByOwner}
+          teamFormation={
+            isTeamAssignment ? assignmentInfo?.team_formation : undefined
+          }
           org={org}
           classroom={classroom}
           assignment={assignment}

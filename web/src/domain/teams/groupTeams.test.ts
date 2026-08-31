@@ -9,6 +9,7 @@ import {
   findMyGroupTeam,
   lowestFreeCounter,
   takenCounters,
+  updateGroupTeamDisplayName,
 } from "./groupTeams"
 import { groupTeamAssignmentPrefix, groupTeamName } from "@/util/teamSlug"
 import { marshalGroupDescription } from "@/util/groupTeam"
@@ -380,5 +381,81 @@ describe("deleteGroupTeam guards", () => {
       }),
     ).resolves.toBeUndefined()
     expect(deletes).toEqual([])
+  })
+})
+
+describe("updateGroupTeamDisplayName", () => {
+  function makeClient() {
+    const patches: { url: string; body: unknown }[] = []
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        if (init?.method === "PATCH") {
+          patches.push({ url, body: init.body })
+          return undefined
+        }
+        throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`)
+      },
+    )
+    return { client: { request } as unknown as GitHubClient, patches }
+  }
+
+  it("PATCHes only the description, re-derived with the new name", async () => {
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 2)
+    const { client, patches } = makeClient()
+    await updateGroupTeamDisplayName(client, ORG, {
+      slug,
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      name: "The Sharks",
+    })
+    expect(patches).toEqual([
+      {
+        url: `/orgs/${ORG}/teams/${slug}`,
+        body: {
+          description: marshalGroupDescription({
+            classroom: CLASSROOM,
+            assignment: ASSIGNMENT,
+            name: "The Sharks",
+          }),
+        },
+      },
+    ])
+    // The team NAME (== slug) must never be part of the patch — renaming the
+    // display name is rename-proof for repos, grading, and cleanup only
+    // because the slug stays put.
+    expect(patches[0].body).not.toHaveProperty("name")
+  })
+
+  it("clears the display name when given an empty string", async () => {
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 2)
+    const { client, patches } = makeClient()
+    await updateGroupTeamDisplayName(client, ORG, {
+      slug,
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      name: "",
+    })
+    expect(patches[0].body).toEqual({
+      description: marshalGroupDescription({
+        classroom: CLASSROOM,
+        assignment: ASSIGNMENT,
+      }),
+    })
+  })
+
+  it("refuses a slug outside the full group-team shape", async () => {
+    const { client, patches } = makeClient()
+    await expect(
+      updateGroupTeamDisplayName(client, ORG, {
+        slug: "classroom50-cs-fall",
+        classroom: CLASSROOM,
+        assignment: ASSIGNMENT,
+        name: "The Sharks",
+      }),
+    ).rejects.toSatisfy(
+      (err) =>
+        localizedMessageOf(err)?.key === "groupTeams.errors.notAGroupTeam",
+    )
+    expect(patches).toEqual([])
   })
 })

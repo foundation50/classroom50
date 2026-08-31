@@ -1082,7 +1082,8 @@
         "typeAria": "Filter by type",
         "typeAll": "All types",
         "typeIndividual": "Individual",
-        "typeGroup": "Group",
+        "typeTeam": "Group",
+        "typeGroup": "Group (legacy)",
         "dueAria": "Filter by due date",
         "dueAll": "Any due date",
         "dueOverdue": "Overdue",
@@ -1453,6 +1454,7 @@
       "retry": "Retry",
       "individual": "Individual",
       "group": "Group",
+      "groupLegacy": "Group (legacy)",
       "noDueDate": "No due date",
       "scheduled": "Releases {{date}}",
       "releaseNotSet": "Not set · link-only",
@@ -1525,7 +1527,8 @@
       "typeAria": "Filter by type",
       "typeAll": "All types",
       "typeIndividual": "Individual",
-      "typeGroup": "Group",
+      "typeTeam": "Group",
+      "typeGroup": "Group (legacy)",
       "dueAria": "Filter by due date",
       "dueAll": "All due dates",
       "dueHas": "Has due date",
@@ -2282,6 +2285,7 @@
       "classroomLabel": "Classroom:",
       "individual": "Individual",
       "group": "Group",
+      "groupLegacy": "Group (legacy)",
       "openRepo": "Open repository",
       "details": "Details",
       "descriptionModalTitle": "Assignment description",
@@ -2778,6 +2782,12 @@
       "noTeam": "Not in a group",
       "noTeamTitle": "This student isn't a member of any group team for this assignment. Add them to a group on the assignment settings page.",
       "teamDefaultName": "Group {{n}}"
+    },
+    "manageTeam": {
+      "title": "Manage {{name}}",
+      "nameLabel": "Group name",
+      "saveName": "Save name",
+      "nameHelp": "Shown on this page and to the group's members. The repository name doesn't change."
     },
     "scoreOverride": {
       "notGraded": "Not graded",

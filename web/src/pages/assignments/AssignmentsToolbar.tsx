@@ -79,6 +79,7 @@ const AssignmentsToolbar = ({
           <option value="individual">
             {t("assignments.toolbar.typeIndividual")}
           </option>
+          <option value="team">{t("assignments.toolbar.typeTeam")}</option>
           <option value="group">{t("assignments.toolbar.typeGroup")}</option>
         </Toolbar.FilterSelect>
 

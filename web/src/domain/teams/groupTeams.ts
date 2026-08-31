@@ -297,6 +297,39 @@ export async function attachRepoToGroupTeam(
   })
 }
 
+// Update a group team's DISPLAY name: re-derive the classroom50/group/v1
+// description record with the new name and PATCH only the description — the
+// team NAME (== slug) is the naming contract and never changes, so repos,
+// grading, and cleanup are rename-proof by construction. An empty name clears
+// the display name (the UI falls back to "Group <n>").
+export async function updateGroupTeamDisplayName(
+  client: GitHubClient,
+  org: string,
+  input: {
+    slug: string
+    classroom: string
+    assignment: string
+    name: string
+  },
+): Promise<void> {
+  const { slug, classroom, assignment, name } = input
+  if (!isGroupTeamSlug(slug)) {
+    throw localizedError({
+      key: "groupTeams.errors.notAGroupTeam",
+      params: { slug },
+    })
+  }
+  await client.request(
+    `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,
+    {
+      method: "PATCH",
+      body: {
+        description: marshalGroupDescription({ classroom, assignment, name }),
+      },
+    },
+  )
+}
+
 // Delete a group team, fail-closed like deleteClassroomTeam plus the group
 // record gate: the slug must match the FULL group-team shape, the live team
 // must carry a classroom50/group/v1 record that verifies back to the slug AND

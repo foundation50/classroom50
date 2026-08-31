@@ -299,6 +299,9 @@ function StudentAssignmentsToolbar({
         <option value="individual">
           {t("assignments.discover.toolbar.typeIndividual")}
         </option>
+        <option value="team">
+          {t("assignments.discover.toolbar.typeTeam")}
+        </option>
         <option value="group">
           {t("assignments.discover.toolbar.typeGroup")}
         </option>
