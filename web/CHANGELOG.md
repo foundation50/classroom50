@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.40.0](https://github.com/foundation50/classroom50/compare/web-v1.39.1...web-v1.40.0) (2026-08-31)
+
+
+### Features
+
+* **web:** let roster link pickers search all organization members ([#820](https://github.com/foundation50/classroom50/issues/820)) ([81109e7](https://github.com/foundation50/classroom50/commit/81109e7e4405d15e3b44876dbd1ef24f687f9be1))
+
 ## [1.39.1](https://github.com/foundation50/classroom50/compare/web-v1.39.0...web-v1.39.1) (2026-08-31)
 
 
