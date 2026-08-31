@@ -4,25 +4,28 @@ import { useParams } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
 import {
   CheckIcon,
-  ChevronDownIcon,
+  ChevronRightIcon,
   CopyIcon,
+  FileDirectoryFillIcon,
+  FileIcon,
   GlobeIcon,
-  InfoIcon,
   LinkExternalIcon,
   ShieldXIcon,
+  rtlFlip,
 } from "@/components/ui/icons"
-import { motion } from "motion/react"
 import { Trans, useTranslation } from "react-i18next"
-import { enterExit, staggerTransition } from "@/lib/motion"
 
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import {
   Badge,
   Button,
+  Collapse,
+  HelpTooltip,
+  InlineMessage,
   MonoLtr,
-  type BadgeTone,
   Heading,
+  cx,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireRole from "@/components/RequireRole"
@@ -34,35 +37,18 @@ import { classroomPagesSegment } from "@/util/secret"
 import { githubOrgUrl } from "@/util/orgUrl"
 import { defaultPagesBaseUrl } from "@/github-core/queries"
 
-// "engine" = generic, org-agnostic bootstrap code (identical for every org);
-// "data" = org-specific content (classrooms, assignments, autograders).
-type ResourceKind = "engine" | "data"
-
 type Resource = {
   url: string
+  // Path shown in the file list, relative to the base the page establishes
+  // up top (the repo-browser idiom: the base appears once, rows stay short).
+  path: string
   // What the file is, in teacher-facing terms.
   label: string
-  // Why it's published / who reads it.
+  // Why it's published / who reads it. Shown in a help tooltip, not inline.
   description: string
-  kind: ResourceKind
   // Some artifacts exist only once a teacher configures them (e.g., a classroom
   // default autograder), so a 404 is expected, not a problem.
   optional?: boolean
-}
-
-const KIND_BADGE: Record<
-  ResourceKind,
-  { labelKey: string; tone: BadgeTone; ghost?: boolean }
-> = {
-  engine: {
-    labelKey: "published.kind.engine",
-    tone: "neutral",
-    ghost: true,
-  },
-  data: {
-    labelKey: "published.kind.data",
-    tone: "primary",
-  },
 }
 
 // Live reachability probe for a published URL. Anonymous GET (exactly how
@@ -182,29 +168,48 @@ function StatusBadge({ url }: { url: string }) {
   )
 }
 
-function ResourceRow({ resource }: { resource: Resource }) {
+// One file per row, repo-browser style: the mono path is the primary text
+// (the base URL is shown once at the top of the page), the friendly label is
+// the muted second line, and the "what is this" prose stays behind a help
+// tooltip so the list reads like a file listing.
+function FileRow({
+  resource,
+  nested = false,
+}: {
+  resource: Resource
+  nested?: boolean
+}) {
   const { t } = useTranslation()
-  const badge = KIND_BADGE[resource.kind]
   return (
-    <div className="flex flex-col gap-2 rounded-box border border-base-300 bg-base-200 p-4 sm:flex-row sm:items-start sm:justify-between">
-      <div className="min-w-0">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-base-content">
-            {resource.label}
-          </span>
-          <Badge tone={badge.tone} ghost={badge.ghost}>
-            {t(badge.labelKey)}
-          </Badge>
-          {resource.optional && <Badge ghost>{t("published.optional")}</Badge>}
+    <div
+      className={cx(
+        "flex flex-col gap-2 py-2.5 pe-4 sm:flex-row sm:items-center sm:justify-between",
+        nested ? "ps-10" : "ps-4",
+      )}
+    >
+      <div className="flex min-w-0 items-start gap-3">
+        <FileIcon
+          aria-hidden="true"
+          className="mt-1 size-4 shrink-0 text-base-content/50"
+        />
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <MonoLtr className="truncate text-sm text-base-content">
+              {resource.path}
+            </MonoLtr>
+            {resource.optional && (
+              <Badge ghost size="xs">
+                {t("published.optional")}
+              </Badge>
+            )}
+          </div>
+          <div className="mt-0.5 flex items-center gap-1 text-xs text-base-content/70">
+            <span className="truncate">{resource.label}</span>
+            <HelpTooltip help={resource.description} />
+          </div>
         </div>
-        <p className="mt-1 text-sm text-base-content/70">
-          {resource.description}
-        </p>
-        <code className="mt-2 block truncate text-xs text-base-content/70">
-          {resource.url}
-        </code>
       </div>
-      <div className="flex shrink-0 items-center gap-1 sm:flex-col sm:items-end">
+      <div className="flex shrink-0 items-center gap-2 ps-7 sm:ps-0">
         <StatusBadge url={resource.url} />
         <div className="flex items-center gap-1">
           <CopyButton value={resource.url} />
@@ -226,18 +231,16 @@ function ResourceRow({ resource }: { resource: Resource }) {
   )
 }
 
-// Per-classroom artifacts. Reads published assignments.json to enumerate the
-// exact per-assignment bundles/shims so the list reflects reality. A classroom
-// that hasn't published yet still shows its index/manifest rows (as "Not
-// published").
-function ClassroomResources({
+// A classroom rendered as a folder row in the unified file list. Reads
+// published assignments.json to enumerate the exact per-assignment
+// bundles/shims so the list reflects reality. A classroom that hasn't
+// published yet still shows its index/manifest rows (as "Not published").
+function ClassroomFolder({
   org,
   classroom,
-  index = 0,
 }: {
   org: string
   classroom: string
-  index?: number
 }) {
   const { t } = useTranslation()
   const { data: classroomData, isLoading: classroomLoading } = useGetClassroom(
@@ -247,7 +250,7 @@ function ClassroomResources({
   const secret = classroomData?.secret
   // Classroom-scoped rows live at the custom Pages base when the classroom
   // declares one (github.io only redirects there, and CORS-fails in a
-  // browser); the org-level pane below stays on the github.io default, which
+  // browser); the site-root files above stay on the github.io default, which
   // is where the engine files are canonically addressed.
   const base = classroomData?.pages_base_url || defaultPagesBaseUrl(org)
   // Gate on the classroom read: fetching before the secret resolves would hit
@@ -258,149 +261,152 @@ function ClassroomResources({
       enabled: !classroomLoading,
       pagesBaseUrl: classroomData?.pages_base_url,
     })
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
 
   // Hold skeletons until both reads settle so the resource rows and the "N
-  // resources" count don't pop in one by one as each query resolves.
+  // files" count don't pop in one by one as each query resolves.
   const loading = classroomLoading || assignmentsPending
 
   // When protected, everything is served under the capability-URL segment; else
   // the plain classroom path. Same segment builder the Pages URL helpers use.
-  const classroomBase = `${base}/${classroomPagesSegment(classroom, secret)}`
+  const segment = classroomPagesSegment(classroom, secret)
 
   const resources = useMemo<Resource[]>(() => {
+    const file = (path: string): { url: string; path: string } => ({
+      url: `${base}/${segment}/${path}`,
+      path: `${segment}/${path}`,
+    })
     const rows: Resource[] = [
       {
-        url: `${classroomBase}/assignments.json`,
+        ...file("assignments.json"),
         label: t("published.resources.assignmentsManifest.label"),
         description: t("published.resources.assignmentsManifest.description"),
-        kind: "data",
       },
       {
-        url: `${classroomBase}/autograder.py`,
+        ...file("autograder.py"),
         label: t("published.resources.classroomAutograder.label"),
         description: t("published.resources.classroomAutograder.description"),
-        kind: "data",
         optional: true,
       },
     ]
 
     for (const a of assignments ?? []) {
       rows.push({
-        url: `${classroomBase}/autograders/${a.slug}.tar.gz`,
+        ...file(`autograders/${a.slug}.tar.gz`),
         label: t("published.resources.autograderBundle.label", {
           name: a.name || a.slug,
         }),
         description: t("published.resources.autograderBundle.description"),
-        kind: "data",
       })
       // Only assignments using a non-default named autograder publish a
       // workflow shim; the default uses the embedded shim instead.
       if (a.autograder && a.autograder !== "default") {
         rows.push({
-          url: `${classroomBase}/autograders/${a.autograder}.yaml`,
+          ...file(`autograders/${a.autograder}.yaml`),
           label: t("published.resources.autograderShim.label", {
             name: a.autograder,
           }),
           description: t("published.resources.autograderShim.description"),
-          kind: "data",
           optional: true,
         })
       }
     }
 
     return rows
-  }, [assignments, classroomBase, t])
+  }, [assignments, base, segment, t])
 
   return (
-    <motion.div
-      className="rounded-box border border-base-300 bg-base-200"
-      variants={enterExit}
-      initial="initial"
-      animate="animate"
-      transition={staggerTransition(index)}
-      aria-busy={loading || undefined}
-    >
+    <div aria-busy={loading || undefined}>
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-start"
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-start hover:bg-base-300/40"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="truncate font-semibold">{classroom}</h3>
-            {loading ? (
-              <span
-                aria-hidden="true"
-                className="skeleton skeleton-shimmer h-5 w-16 rounded-full"
-              />
-            ) : secret ? (
-              <Badge tone="warning" className="gap-1">
-                <ShieldXIcon aria-hidden="true" className="size-3" />
-                {t("published.unlisted")}
-              </Badge>
-            ) : (
-              <Badge ghost>{t("published.publicPath")}</Badge>
-            )}
-          </div>
-          <p className="text-xs text-base-content/70">
-            {loading ? (
-              <span
-                aria-hidden="true"
-                className="skeleton skeleton-shimmer inline-block h-3 w-32 align-middle"
-              />
-            ) : (
-              <>
-                {t("published.resourceCount", { count: resources.length })}
-                {secret ? t("published.servedUnlistedNote") : ""}
-              </>
-            )}
-          </p>
-        </div>
-        <ChevronDownIcon
+        <ChevronRightIcon
           aria-hidden="true"
-          className={`size-5 shrink-0 text-base-content/70 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
+          className={cx(
+            "size-4 shrink-0 text-base-content/50 transition-transform",
+            rtlFlip,
+            open && "rotate-90",
+          )}
         />
-      </button>
-      {open && (
-        <div className="flex flex-col gap-3 border-t border-base-200 p-5">
+        <FileDirectoryFillIcon
+          aria-hidden="true"
+          className="size-4 shrink-0 text-base-content/50"
+        />
+        <span className="truncate text-sm font-semibold">
+          {classroomData?.name || classroom}
+        </span>
+        {classroomData?.name && classroomData.name !== classroom && (
+          <MonoLtr className="hidden truncate text-xs text-base-content/60 sm:inline">
+            {classroom}
+          </MonoLtr>
+        )}
+        {loading ? (
+          <span
+            aria-hidden="true"
+            className="skeleton skeleton-shimmer h-5 w-16 shrink-0 rounded-full"
+          />
+        ) : secret ? (
+          <Badge tone="warning" size="xs" className="shrink-0 gap-1">
+            <ShieldXIcon aria-hidden="true" className="size-3" />
+            {t("published.unlisted")}
+          </Badge>
+        ) : (
+          <Badge tone="info" size="xs" className="shrink-0 gap-1">
+            <GlobeIcon aria-hidden="true" className="size-3" />
+            {t("published.public")}
+          </Badge>
+        )}
+        <span className="ms-auto shrink-0 text-xs text-base-content/70">
           {loading ? (
-            Array.from({ length: 2 }).map((_, i) => (
-              <div
-                key={i}
-                aria-hidden="true"
-                className="skeleton skeleton-shimmer h-24 rounded-box"
-              />
-            ))
+            <span
+              aria-hidden="true"
+              className="skeleton skeleton-shimmer inline-block h-3 w-12 align-middle"
+            />
+          ) : (
+            t("published.fileCount", { count: resources.length })
+          )}
+        </span>
+      </button>
+      <Collapse open={open}>
+        <div className="border-t border-base-300">
+          {loading ? (
+            <div className="flex flex-col gap-3 p-4" aria-hidden="true">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="skeleton skeleton-shimmer h-12 rounded-box"
+                />
+              ))}
+            </div>
           ) : (
             <>
               {secret && (
-                <div className="flex items-start gap-2 rounded-field border border-warning/30 bg-warning/10 p-3 text-xs text-base-content/70">
-                  <ShieldXIcon
-                    aria-hidden="true"
-                    className="mt-0.5 size-4 shrink-0 text-warning"
-                  />
-                  <div className="flex flex-col gap-1">
-                    <span>{t("published.unlistedNote.intro")}</span>
-                    <ul className="ms-4 list-disc space-y-0.5">
-                      <li>{t("published.unlistedNote.point1")}</li>
-                      <li>{t("published.unlistedNote.point2")}</li>
-                    </ul>
-                    <span>{t("published.unlistedNote.share")}</span>
-                  </div>
-                </div>
+                <InlineMessage tone="warning" className="px-4 pt-3">
+                  {t("published.unlistedNote")}
+                </InlineMessage>
               )}
-              {resources.map((r) => (
-                <ResourceRow key={r.url} resource={r} />
-              ))}
+              {classroomData?.pages_base_url && (
+                <p className="px-4 pt-3 text-xs text-base-content/70">
+                  <Trans
+                    i18nKey="published.customBase"
+                    values={{ base }}
+                    components={{ path: <MonoLtr /> }}
+                  />
+                </p>
+              )}
+              <div className="divide-y divide-base-300">
+                {resources.map((r) => (
+                  <FileRow key={r.url} resource={r} nested />
+                ))}
+              </div>
             </>
           )}
         </div>
-      )}
-    </motion.div>
+      </Collapse>
+    </div>
   )
 }
 
@@ -409,107 +415,86 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
   const base = defaultPagesBaseUrl(org)
   const { classes, isLoading: classesLoading } = useGetClasses(org)
 
-  // Org-level resources are classroom-independent: the public index and the two
+  // Site-root files are classroom-independent: the public index and the two
   // generic engine scripts served at the Pages site root.
-  const orgResources: Resource[] = [
+  const rootResources: Resource[] = [
     {
       url: `${base}/classrooms-index.json`,
+      path: "classrooms-index.json",
       label: t("published.resources.classroomsIndex.label"),
       description: t("published.resources.classroomsIndex.description"),
-      kind: "data",
     },
     {
       url: `${base}/runner.py`,
+      path: "runner.py",
       label: t("published.resources.runner.label"),
       description: t("published.resources.runner.description"),
-      kind: "engine",
     },
     {
       url: `${base}/ensure_feedback_pr.py`,
+      path: "ensure_feedback_pr.py",
       label: t("published.resources.feedbackPr.label"),
       description: t("published.resources.feedbackPr.description"),
-      kind: "engine",
     },
   ]
 
   return (
-    <div className="mt-8 flex flex-col gap-8">
-      <div className="flex items-start gap-3 rounded-box border border-info/30 bg-info/10 p-4 text-sm">
-        <InfoIcon
-          aria-hidden="true"
-          className="mt-0.5 size-4 shrink-0 text-info"
-        />
-        <div>
-          <p className="font-semibold text-base-content">
-            {t("published.banner.title")}
-          </p>
-          <p className="mt-1 text-base-content/70">
-            {t("published.banner.body")}
-          </p>
+    <div className="mt-8 flex flex-col gap-4">
+      {/* The one mental model the page needs: your org serves a single public
+          Pages site. The base URL appears here once; every row below shows
+          only its path relative to this base. */}
+      <section className="rounded-box border border-base-300 bg-base-200 px-4 py-4 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+          <div className="min-w-0">
+            <Heading as="h2">{t("published.siteTitle")}</Heading>
+            <MonoLtr className="mt-1 block truncate text-sm">{base}</MonoLtr>
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            <CopyButton value={base} />
+            <Button
+              as="a"
+              variant="ghost"
+              size="xs"
+              href={base}
+              target="_blank"
+              rel="noreferrer"
+              aria-label={t("published.openUrl")}
+              title={t("published.openUrl")}
+            >
+              <LinkExternalIcon aria-hidden="true" className="size-4" />
+            </Button>
+          </div>
         </div>
-      </div>
-
-      <section>
-        <div className="flex items-center gap-2">
-          <GlobeIcon
-            aria-hidden="true"
-            className="size-4 text-base-content/70"
-          />
-          <Heading as="h2">{t("published.orgLevel")}</Heading>
-        </div>
-        <p className="mt-1 text-sm text-base-content/70">
-          <Trans
-            i18nKey="published.orgLevelServed"
-            values={{ base }}
-            components={{ path: <MonoLtr className="text-xs" /> }}
-          />
+        <p className="mt-2 text-sm text-base-content/70">
+          {t("published.publicNote")}
         </p>
-        <div className="mt-4 flex flex-col gap-3">
-          {orgResources.map((r) => (
-            <ResourceRow key={r.url} resource={r} />
-          ))}
-        </div>
       </section>
 
-      <section>
-        <div className="flex items-center gap-2">
-          <ShieldXIcon
-            aria-hidden="true"
-            className="size-4 text-base-content/70"
-          />
-          <Heading as="h2">{t("published.perClassroom")}</Heading>
-        </div>
-        <p className="mt-1 text-sm text-base-content/70">
-          {t("published.perClassroomDescription")}
-        </p>
+      <section className="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100">
+        {rootResources.map((r) => (
+          <FileRow key={r.url} resource={r} />
+        ))}
         {/* Hold the skeleton while the class list loads — the empty-while-
             loading array is indistinguishable from a genuinely empty org, so
             rendering on it flashes the "no classrooms" empty state. */}
         {classesLoading ? (
-          <div className="mt-4 flex flex-col gap-4" aria-busy="true">
+          <div className="flex flex-col gap-3 p-4" aria-busy="true">
             {Array.from({ length: 2 }).map((_, i) => (
               <div
                 key={i}
                 aria-hidden="true"
-                className="skeleton skeleton-shimmer h-20 rounded-box"
+                className="skeleton skeleton-shimmer h-10 rounded-box"
               />
             ))}
           </div>
         ) : classes.length === 0 ? (
-          <div className="mt-4 rounded-box border border-dashed border-base-300 bg-base-100 p-6 text-center text-sm text-base-content/70">
+          <p className="px-4 py-4 text-sm text-base-content/70">
             {t("published.noClassrooms")}
-          </div>
+          </p>
         ) : (
-          <div className="mt-4 flex flex-col gap-4">
-            {classes.map((cl, i) => (
-              <ClassroomResources
-                key={cl.path}
-                org={org}
-                classroom={cl.path}
-                index={i}
-              />
-            ))}
-          </div>
+          classes.map((cl) => (
+            <ClassroomFolder key={cl.path} org={org} classroom={cl.path} />
+          ))
         )}
       </section>
     </div>
