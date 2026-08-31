@@ -595,18 +595,16 @@ const SubmissionsTable = ({
         <td>
           {isGroup ? (
             <div className="flex flex-col items-start gap-1.5">
-              {isTeam && (
-                <span className="text-sm font-medium">
-                  {groupLabel(rest.owner, repo)}
-                </span>
-              )}
               <GroupMembers
                 org={org}
                 repoName={repo}
                 usernames={usernames}
                 students={students}
                 repoHref={repoHref}
-                repoLabel={repo}
+                // Team rows title the group by its display name; the long
+                // repo name stays on the link's hover title. Legacy group
+                // rows keep the repo name as the label.
+                repoLabel={isTeam ? groupLabel(rest.owner, repo) : repo}
                 memberLoginsOverride={
                   isTeam ? teamMembers(rest.owner) : undefined
                 }

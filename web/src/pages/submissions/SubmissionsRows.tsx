@@ -211,6 +211,11 @@ export const GroupMembers = ({
   const visible = memberLogins.slice(0, MAX_VISIBLE_AVATARS)
   const overflow = memberLogins.length - visible.length
 
+  // Team rows link the group's DISPLAY name instead of the long
+  // `<classroom>-<assignment>-group-<n>` repo name; the repo name stays
+  // discoverable on hover. A repo-name label keeps the mono face.
+  const labelIsRepoName = repoLabel === repoName
+
   return (
     <div className="flex flex-col gap-2">
       <a
@@ -218,10 +223,14 @@ export const GroupMembers = ({
         href={repoHref}
         target="_blank"
         rel="noreferrer"
-        title={t("submissions.table.openGroupRepo")}
+        title={
+          labelIsRepoName ? t("submissions.table.openGroupRepo") : repoName
+        }
       >
         <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
-        <span className="font-mono text-sm">{repoLabel}</span>
+        <span className={labelIsRepoName ? "font-mono text-sm" : "text-sm"}>
+          {repoLabel}
+        </span>
       </a>
 
       <div className="avatar-group -space-x-3">
