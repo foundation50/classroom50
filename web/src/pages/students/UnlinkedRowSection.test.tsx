@@ -78,11 +78,24 @@ const candidates = [
   { id: 43, login: "other", classrooms: [] },
 ]
 
+// The widened pool: the classroom candidates plus a direct org joiner no
+// classroom team has seen.
+const orgCandidates = [
+  ...candidates,
+  { id: 44, login: "lonewolf", classrooms: [] },
+]
+
 const renderSection = ({
   onWorkingChange = vi.fn(),
   onChanged = vi.fn(),
   onClose = vi.fn(),
   onError = vi.fn(),
+  orgLinkCandidates = [] as {
+    id: number
+    login: string
+    classrooms: string[]
+  }[],
+  orgPoolStatus = "unavailable" as "ready" | "loading" | "unavailable",
 } = {}) => {
   render(
     <UnlinkedRowSection
@@ -90,6 +103,8 @@ const renderSection = ({
       classroom="cs101"
       row={row}
       linkCandidates={candidates}
+      orgLinkCandidates={orgLinkCandidates}
+      orgPoolStatus={orgPoolStatus}
       busy={false}
       onWorkingChange={onWorkingChange}
       onChanged={onChanged}
@@ -190,5 +205,38 @@ describe("UnlinkedRowSection", () => {
     })
     expect(onChanged).toHaveBeenCalledWith("unlinked:grace")
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("hides the org-wide toggle when the member list is unavailable", () => {
+    renderSection({ orgPoolStatus: "unavailable" })
+    expect(screen.queryByText("students.linkIncludeOrgMembers")).toBeNull()
+  })
+
+  it("offers org-only members only after the toggle is checked", () => {
+    renderSection({ orgLinkCandidates: orgCandidates, orgPoolStatus: "ready" })
+
+    const picker = screen.getByLabelText("students.linkMemberLabel")
+    fireEvent.focus(picker)
+    expect(screen.queryByRole("option", { name: "lonewolf" })).toBeNull()
+
+    fireEvent.click(screen.getByRole("checkbox"))
+    fireEvent.focus(picker)
+    expect(
+      screen.getByRole("option", { name: /lonewolf/ }).textContent,
+    ).toContain("students.linkNotInClassroom")
+  })
+
+  it("unchecking the toggle drops a staged org-only pick", () => {
+    renderSection({ orgLinkCandidates: orgCandidates, orgPoolStatus: "ready" })
+
+    const toggle = screen.getByRole("checkbox")
+    fireEvent.click(toggle)
+    const picker = screen.getByLabelText("students.linkMemberLabel")
+    fireEvent.focus(picker)
+    fireEvent.pointerDown(screen.getByRole("option", { name: /lonewolf/ }))
+    expect(linkButton().disabled).toBe(false)
+
+    fireEvent.click(toggle)
+    expect(linkButton().disabled).toBe(true)
   })
 })

@@ -55,6 +55,7 @@ import {
   Select,
 } from "@/components/ui"
 import UnlinkedRowSection from "@/pages/students/UnlinkedRowSection"
+import type { OrgPoolStatus } from "@/pages/students/MemberLinkPicker"
 import type { DirectoryMember } from "@/domain/students"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
@@ -79,6 +80,8 @@ const RosterMemberModal = ({
   row: rowProp,
   canManage: canManageProp = true,
   linkCandidates = [],
+  orgLinkCandidates = [],
+  orgPoolStatus = "unavailable",
   isSelf = false,
   onClose,
   onSaved,
@@ -107,6 +110,10 @@ const RosterMemberModal = ({
   // the classroom identity directory — team members across the org's
   // classrooms — so `classrooms` names where each candidate was seen.
   linkCandidates?: DirectoryMember[]
+  // Opt-in widening for the same picker: every active org member (same
+  // exclusions). Defaults pair with orgPoolStatus "unavailable" — no toggle.
+  orgLinkCandidates?: DirectoryMember[]
+  orgPoolStatus?: OrgPoolStatus
   // True when this row IS the signed-in viewer. A viewer can't change their own
   // role here: demoting yourself off teacher would revoke your own org-owner
   // access mid-change (the mutation refuses it too — this hides the control so
@@ -648,6 +655,8 @@ const RosterMemberModal = ({
             classroom={classroom}
             row={row}
             linkCandidates={linkCandidates}
+            orgLinkCandidates={orgLinkCandidates}
+            orgPoolStatus={orgPoolStatus}
             busy={busy}
             onWorkingChange={setLinkWorking}
             onChanged={onChanged}

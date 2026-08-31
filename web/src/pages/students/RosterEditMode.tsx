@@ -1,9 +1,18 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Badge, Button, Input, TableShell } from "@/components/ui"
+import {
+  Alert,
+  Badge,
+  Button,
+  Checkbox,
+  Input,
+  TableShell,
+} from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
-import MemberLinkPicker from "@/pages/students/MemberLinkPicker"
+import MemberLinkPicker, {
+  type OrgPoolStatus,
+} from "@/pages/students/MemberLinkPicker"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
@@ -36,6 +45,8 @@ export function RosterEditMode({
   classroom,
   rows,
   linkCandidates,
+  orgLinkCandidates = [],
+  orgPoolStatus = "unavailable",
   onCancel,
   onSaved,
 }: {
@@ -45,6 +56,11 @@ export function RosterEditMode({
   // Directory members the link pickers may offer (the parent already excludes
   // identities claiming a roster row); staged picks exclude each other too.
   linkCandidates: DirectoryMember[]
+  // Opt-in widening for every row's picker at once (the header toggle): all
+  // active org members, same exclusions. Defaults pair with orgPoolStatus
+  // "unavailable" — no toggle, classic behavior.
+  orgLinkCandidates?: DirectoryMember[]
+  orgPoolStatus?: OrgPoolStatus
   onCancel: () => void
   onSaved: (result: ApplyRosterEditsResult) => void
 }) {
@@ -62,6 +78,10 @@ export function RosterEditMode({
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
+  // One mode-wide widening (not per row): a teacher reconciling several rows
+  // flips it once. Staged org-only links survive a flip back — the domain
+  // re-proves membership at save; only future picks narrow.
+  const [includeOrgMembers, setIncludeOrgMembers] = useState(false)
 
   const setDraft = (key: string, patch: Partial<RowDraft>) => {
     setDrafts((prev) => {
@@ -159,10 +179,13 @@ export function RosterEditMode({
   // filter and item cap live in MemberLinkPicker.
   const pickerPool = (row: TeamRosterRow) => {
     const selected = stagedLink(row)
-    return linkCandidates.filter(
+    const base = includeOrgMembers ? orgLinkCandidates : linkCandidates
+    return base.filter(
       (m) => !stagedMemberIds.has(m.id) || m.id === selected?.id,
     )
   }
+
+  const hasUnlinkedRows = editRows.some((row) => row.state === "unlinked")
 
   const handleSave = async () => {
     if (saving || stagedCount === 0) return
@@ -234,6 +257,25 @@ export function RosterEditMode({
         {t("students.editRoster.hint")}
       </p>
 
+      {hasUnlinkedRows && orgPoolStatus !== "unavailable" ? (
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            className="mt-0.5"
+            checked={includeOrgMembers}
+            disabled={saving}
+            onChange={(e) => setIncludeOrgMembers(e.currentTarget.checked)}
+          />
+          <span>
+            {t("students.editRoster.includeOrgMembers")}
+            {includeOrgMembers && orgPoolStatus === "loading" ? (
+              <span className="block text-xs text-base-content/60">
+                {t("students.editRoster.orgMembersLoading")}
+              </span>
+            ) : null}
+          </span>
+        </label>
+      ) : null}
+
       {saveError ? (
         <Alert tone="error" className="text-sm">
           {saveError}
@@ -271,7 +313,16 @@ export function RosterEditMode({
                       id={`roster-edit-link-${index}`}
                       label={t("students.editRoster.linkLabel")}
                       placeholder={t("students.editRoster.linkPlaceholder")}
-                      emptyState={t("students.editRoster.linkEmpty")}
+                      emptyState={
+                        !includeOrgMembers && orgPoolStatus !== "unavailable"
+                          ? t("students.editRoster.linkEmptyWiden")
+                          : t("students.editRoster.linkEmpty")
+                      }
+                      notInClassroomLabel={
+                        includeOrgMembers
+                          ? t("students.editRoster.notInClassroom")
+                          : undefined
+                      }
                       inputSize="sm"
                       // The metadata Inputs disable while saving; the picker
                       // must freeze too or a keystroke mutates mid-save.

@@ -113,6 +113,7 @@ export {
 } from "./students/linkRosterRow"
 export {
   buildIdentityDirectory,
+  mergeOrgMembersIntoPool,
   type IdentityDirectory,
   type DirectoryMember,
   type DirectoryIdentity,

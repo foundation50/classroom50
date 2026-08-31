@@ -270,7 +270,10 @@ only a **name** (an SIS export before students have GitHub accounts). Open the
 roster's **Unlinked** filter to reconcile them yourself: click a row and use
 **Link to organization member** to attach the right account (which also enrolls
 them on the classroom team), or select rows and use **Actions → Remove rows**
-to delete the ones you don't need. Unlinked rows are never removed
+to delete the ones you don't need. The picker suggests members of your
+classrooms first. To search every member of the organization, such as a
+student who joined the organization directly on GitHub, select **Include
+organization members not in any classroom**. Unlinked rows are never removed
 automatically — Classroom 50's roster sync never deletes a row, so a row whose
 invitation expired (or was never sendable) waits visibly under **Unlinked**
 instead of disappearing; only linking or an explicit delete ends it. From the

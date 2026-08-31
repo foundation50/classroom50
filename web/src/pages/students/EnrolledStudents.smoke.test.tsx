@@ -56,6 +56,11 @@ vi.mock("@/hooks/useRosterLastUpdated", () => ({
 // the smoke test stays provider-free (its own behavior has unit tests).
 vi.mock("@/hooks/useIdentityDirectory", () => ({
   useIdentityDirectory: () => ({ data: undefined, isLoading: false }),
+  useOrgMemberPool: () => ({
+    data: undefined,
+    isSuccess: false,
+    isError: false,
+  }),
 }))
 vi.mock("@/hooks/mutations/useReinviteFailedInvite", () => ({
   useReinviteFailedInvite: () => inertMutation,

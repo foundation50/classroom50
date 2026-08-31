@@ -95,12 +95,22 @@ const candidates = [
   { id: 43, login: "other", classrooms: [] },
 ]
 
+// The widened pool: the classroom candidates plus a direct org joiner.
+const orgCandidates = [
+  ...candidates,
+  { id: 44, login: "lonewolf", classrooms: [] },
+]
+
 const renderMode = ({
   rows = [enrolled, unlinked],
+  orgLinkCandidates,
+  orgPoolStatus,
   onCancel = vi.fn(),
   onSaved = vi.fn(),
 }: {
   rows?: TeamRosterRow[]
+  orgLinkCandidates?: { id: number; login: string; classrooms: string[] }[]
+  orgPoolStatus?: "ready" | "loading" | "unavailable"
   onCancel?: () => void
   onSaved?: (result: unknown) => void
 } = {}) =>
@@ -110,6 +120,8 @@ const renderMode = ({
       classroom="cs101"
       rows={rows}
       linkCandidates={candidates}
+      orgLinkCandidates={orgLinkCandidates}
+      orgPoolStatus={orgPoolStatus}
       onCancel={onCancel}
       onSaved={onSaved}
     />,
@@ -276,5 +288,36 @@ describe("RosterEditMode", () => {
 
     expect(onSaved).not.toHaveBeenCalled()
     expect(screen.getByText("students.editRoster.saveFailed")).not.toBeNull()
+  })
+
+  it("hides the org-wide toggle by default and when no row is unlinked", () => {
+    renderMode()
+    expect(
+      screen.queryByText("students.editRoster.includeOrgMembers"),
+    ).toBeNull()
+
+    cleanup()
+    renderMode({
+      rows: [enrolled],
+      orgLinkCandidates: orgCandidates,
+      orgPoolStatus: "ready",
+    })
+    expect(
+      screen.queryByText("students.editRoster.includeOrgMembers"),
+    ).toBeNull()
+  })
+
+  it("the header toggle widens every picker to the org pool", () => {
+    renderMode({ orgLinkCandidates: orgCandidates, orgPoolStatus: "ready" })
+
+    const picker = screen.getByLabelText("students.editRoster.linkLabel")
+    fireEvent.focus(picker)
+    expect(screen.queryByRole("option", { name: /lonewolf/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole("checkbox"))
+    fireEvent.focus(picker)
+    expect(
+      screen.getByRole("option", { name: /lonewolf/ }).textContent,
+    ).toContain("students.editRoster.notInClassroom")
   })
 })

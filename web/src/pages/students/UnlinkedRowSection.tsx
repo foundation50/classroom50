@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui"
+import { Button, Checkbox } from "@/components/ui"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   linkRosterRowToMember,
@@ -16,7 +16,9 @@ import {
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { nameFromParts } from "@/util/students"
 import type { TeamRosterRow } from "@/util/teamRoster"
-import MemberLinkPicker from "@/pages/students/MemberLinkPicker"
+import MemberLinkPicker, {
+  type OrgPoolStatus,
+} from "@/pages/students/MemberLinkPicker"
 
 // The member modal's unlinked-row reconciliation section: link the row to an
 // org member, or remove it. The picker offers only unclaimed active members;
@@ -28,6 +30,8 @@ const UnlinkedRowSection = ({
   classroom,
   row,
   linkCandidates,
+  orgLinkCandidates,
+  orgPoolStatus,
   busy,
   onWorkingChange,
   onChanged,
@@ -40,6 +44,12 @@ const UnlinkedRowSection = ({
   // Directory members the link picker may offer (the parent already excludes
   // members claiming another roster row).
   linkCandidates: DirectoryMember[]
+  // The opt-in widening behind the toggle: the classroom pool plus every
+  // other active org member (same claimed-row exclusion). Deliberately not
+  // the default — a shared org contains other teachers' members.
+  orgLinkCandidates: DirectoryMember[]
+  // "unavailable" (member list unreadable) hides the toggle entirely.
+  orgPoolStatus: OrgPoolStatus
   // The modal-wide in-flight guard — any pending write disables these actions.
   busy: boolean
   // Mirrors this section's in-flight link/remove up, so the parent modal can
@@ -57,6 +67,7 @@ const UnlinkedRowSection = ({
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTarget, setLinkTarget] = useState<DirectoryMember | null>(null)
   const [linking, setLinking] = useState(false)
+  const [includeOrgMembers, setIncludeOrgMembers] = useState(false)
   const [removingRow, setRemovingRow] = useState(false)
   const [confirmingRemoveRow, setConfirmingRemoveRow] = useState(false)
 
@@ -154,8 +165,15 @@ const UnlinkedRowSection = ({
           className="grow"
           label={t("students.linkMemberLabel")}
           placeholder={t("students.linkMemberPlaceholder")}
-          emptyState={t("students.linkMemberEmpty")}
-          items={linkCandidates}
+          emptyState={
+            !includeOrgMembers && orgPoolStatus !== "unavailable"
+              ? t("students.linkMemberEmptyWiden")
+              : t("students.linkMemberEmpty")
+          }
+          items={includeOrgMembers ? orgLinkCandidates : linkCandidates}
+          notInClassroomLabel={
+            includeOrgMembers ? t("students.linkNotInClassroom") : undefined
+          }
           value={linkQuery}
           onInputChange={(value) => {
             setLinkQuery(value)
@@ -178,6 +196,37 @@ const UnlinkedRowSection = ({
           {t("students.linkMemberAction")}
         </Button>
       </div>
+      {orgPoolStatus !== "unavailable" ? (
+        <label className="flex items-start gap-2 text-sm">
+          <Checkbox
+            className="mt-0.5"
+            checked={includeOrgMembers}
+            disabled={busy || linking}
+            onChange={(e) => {
+              const next = e.currentTarget.checked
+              setIncludeOrgMembers(next)
+              // Narrowing back can strand an org-only pick the classroom pool
+              // no longer offers; drop it rather than link something unseen.
+              if (
+                !next &&
+                linkTarget &&
+                !linkCandidates.some((m) => m.id === linkTarget.id)
+              ) {
+                setLinkTarget(null)
+                setLinkQuery("")
+              }
+            }}
+          />
+          <span>
+            {t("students.linkIncludeOrgMembers")}
+            {includeOrgMembers && orgPoolStatus === "loading" ? (
+              <span className="block text-xs text-base-content/60">
+                {t("students.linkOrgMembersLoading")}
+              </span>
+            ) : null}
+          </span>
+        </label>
+      ) : null}
       {confirmingRemoveRow ? (
         <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
           <p className="text-base-content/80">

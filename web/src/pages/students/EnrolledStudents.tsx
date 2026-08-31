@@ -33,7 +33,10 @@ import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/gith
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
-import { useIdentityDirectory } from "@/hooks/useIdentityDirectory"
+import {
+  useIdentityDirectory,
+  useOrgMemberPool,
+} from "@/hooks/useIdentityDirectory"
 import { useRosterLastUpdated } from "@/hooks/useRosterLastUpdated"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
@@ -69,11 +72,17 @@ import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import AddStudentButtons from "@/pages/students/AddStudentButtons"
 import RosterEditMode from "@/pages/students/RosterEditMode"
+import type { OrgPoolStatus } from "@/pages/students/MemberLinkPicker"
 import RosterToolbar, {
   type RosterGrouping,
 } from "@/pages/students/RosterToolbar"
 import type { AddStudentActions } from "@/pages/students/RosterBulkActionsBar"
-import type { ApplyRosterEditsResult, StudentCsvRow } from "@/domain/students"
+import {
+  mergeOrgMembersIntoPool,
+  type ApplyRosterEditsResult,
+  type DirectoryMember,
+  type StudentCsvRow,
+} from "@/domain/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
 import { useMemo, useState } from "react"
@@ -456,9 +465,13 @@ const EnrolledStudents = ({
   // pool (every classroom team's members — deliberately NOT the org member
   // list, which in a shared org contains other teachers' people), minus
   // identities already claiming a roster row. The directory is built on
-  // demand: a roster with nothing to link never pays for it.
+  // demand: a roster with nothing to link never pays for it. The org-wide
+  // pool is the OPT-IN widening behind the pickers' toggle — same claimed-row
+  // exclusion, sourced from the shared orgMembersAll cache (already loaded by
+  // the roster's needs-attention classification, so usually a cache hit).
   const identityDirectory = useIdentityDirectory(org, counts.unlinked > 0)
-  const linkCandidates = useMemo(() => {
+  const orgMemberPool = useOrgMemberPool(org, counts.unlinked > 0)
+  const { linkCandidates, orgLinkCandidates } = useMemo(() => {
     const members = identityDirectory.data?.members ?? []
     const claimedIds = new Set<string>()
     const claimedLogins = new Set<string>()
@@ -466,12 +479,26 @@ const EnrolledStudents = ({
       if (row.github_id.trim()) claimedIds.add(row.github_id.trim())
       if (row.username.trim()) claimedLogins.add(row.username.toLowerCase())
     }
-    return members.filter(
-      (m) =>
-        !claimedIds.has(String(m.id)) &&
-        !claimedLogins.has(m.login.toLowerCase()),
-    )
-  }, [rows, identityDirectory.data])
+    const unclaimed = (pool: DirectoryMember[]) =>
+      pool.filter(
+        (m) =>
+          !claimedIds.has(String(m.id)) &&
+          !claimedLogins.has(m.login.toLowerCase()),
+      )
+    return {
+      linkCandidates: unclaimed(members),
+      orgLinkCandidates: unclaimed(
+        mergeOrgMembersIntoPool(members, orgMemberPool.data ?? []),
+      ),
+    }
+  }, [rows, identityDirectory.data, orgMemberPool.data])
+  // A failed/forbidden member read hides the widening toggle entirely (the
+  // pickers behave exactly as before) rather than offering a broken option.
+  const orgPoolStatus: OrgPoolStatus = orgMemberPool.isSuccess
+    ? "ready"
+    : orgMemberPool.isError
+      ? "unavailable"
+      : "loading"
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live
@@ -934,6 +961,8 @@ const EnrolledStudents = ({
           classroom={classroom}
           rows={rows}
           linkCandidates={linkCandidates}
+          orgLinkCandidates={orgLinkCandidates}
+          orgPoolStatus={orgPoolStatus}
           onCancel={() => setEditing(false)}
           onSaved={onEditSaved}
         />
@@ -1153,6 +1182,8 @@ const EnrolledStudents = ({
         row={selected}
         canManage={isOwner}
         linkCandidates={linkCandidates}
+        orgLinkCandidates={orgLinkCandidates}
+        orgPoolStatus={orgPoolStatus}
         isSelf={selected ? isSelf(selected) : false}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}

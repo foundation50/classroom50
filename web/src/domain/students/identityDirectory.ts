@@ -197,3 +197,21 @@ export async function buildIdentityDirectory(
   )
   return { byEmail, members, degraded }
 }
+
+// Widen a picker pool with the full org member list (an OPT-IN broadening:
+// the directory pool stays the default because a shared org contains other
+// teachers' members). Directory entries win a duplicate id — they carry the
+// classrooms the account was seen in; an org-only member gets an empty list.
+// Order is directory-first (unchanged), then org-only members by login, so
+// classroom-known candidates surface before strangers.
+export function mergeOrgMembersIntoPool(
+  directoryMembers: DirectoryMember[],
+  orgMembers: { id: number; login: string }[],
+): DirectoryMember[] {
+  const known = new Set(directoryMembers.map((m) => m.id))
+  const orgOnly = orgMembers
+    .filter((m) => !known.has(m.id))
+    .map((m) => ({ id: m.id, login: m.login, classrooms: [] as string[] }))
+    .toSorted((a, b) => a.login.localeCompare(b.login))
+  return [...directoryMembers, ...orgOnly]
+}
