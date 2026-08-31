@@ -44,6 +44,12 @@ type Entry struct {
 	Autograder   string       `json:"autograder"`
 	AllowedFiles []string     `json:"allowed_files,omitempty"`
 
+	// TeamFormation is who forms the groups of a `team` assignment:
+	// "teacher" (the teacher creates the teams; accept refuses to found one)
+	// or "student" (the first student founds the team and adds teammates).
+	// Required for mode team, absent otherwise.
+	TeamFormation string `json:"team_formation,omitempty"`
+
 	// StudentPermission is the accept-time role the student gets on their own
 	// repo (the assignment's optional student_permission). Empty means the mode
 	// default (push individual / admin group). See accept.go's founderPermission.

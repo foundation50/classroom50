@@ -94,29 +94,36 @@ func TestAssignmentRegistered(t *testing.T) {
 	}
 }
 
-func TestAssignmentIsGroup(t *testing.T) {
+func TestAssignmentSharedRepoModes(t *testing.T) {
 	file := assignment.AssignmentsJSON{
 		Schema: contract.AssignmentsSchemaV1,
 		Assignments: []assignment.AssignmentEntry{
 			{Slug: "solo", Mode: "individual"},
 			{Slug: "team", Mode: "group"},
-			{Slug: "blank"}, // no mode → not group
+			{Slug: "squad", Mode: "team"},
+			{Slug: "blank"}, // no mode → not shared
 		},
 	}
 	cases := []struct {
-		in   string
-		want bool
+		in         string
+		wantShared bool
+		wantTeam   bool
 	}{
-		{"team", true},
-		{"TEAM", true}, // case-insensitive
-		{"solo", false},
-		{"blank", false},
-		{"missing", false},
+		{"team", true, false},
+		{"TEAM", true, false}, // case-insensitive
+		{"squad", true, true},
+		{"SQUAD", true, true},
+		{"solo", false, false},
+		{"blank", false, false},
+		{"missing", false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.in, func(t *testing.T) {
-			if got := assignmentIsGroup(file, tc.in); got != tc.want {
-				t.Fatalf("assignmentIsGroup(%q) = %v, want %v", tc.in, got, tc.want)
+			if got := assignmentIsSharedRepo(file, tc.in); got != tc.wantShared {
+				t.Fatalf("assignmentIsSharedRepo(%q) = %v, want %v", tc.in, got, tc.wantShared)
+			}
+			if got := assignmentIsTeam(file, tc.in); got != tc.wantTeam {
+				t.Fatalf("assignmentIsTeam(%q) = %v, want %v", tc.in, got, tc.wantTeam)
 			}
 		})
 	}

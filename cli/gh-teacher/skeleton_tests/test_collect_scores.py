@@ -1055,6 +1055,312 @@ class TestGroupCollectClassroom:
         assert "classroom team" in err
 
 
+class _FakeRepoIndex:
+    """A RepoIndex stand-in with a fixed listing, so team-mode collection
+    resolves its poll targets without HTTP."""
+
+    def __init__(self, repo_names):
+        self._names = [n.lower() for n in repo_names]
+
+    def names(self):
+        return list(self._names)
+
+    def contains(self, repo_name):
+        return repo_name.lower() in self._names
+
+    def is_private(self, repo_name):
+        return True
+
+
+class TestTeamCollectClassroom:
+    """The team-mode attribution suite, mirroring TestGroupCollectClassroom:
+    the owner is the repo-name tail `group-<n>` (not a person), members come
+    from the GROUP TEAM intersected with the classroom enrollment, and a
+    failed team read SKIPS the repo (preserving prior credit) instead of
+    degrading to owner-only."""
+
+    CLASSROOM = "cs-principles"
+    SLUG = "project"
+    STUDENT_TEAM = "classroom50-cs-principles"
+
+    def _team_assignments(self):
+        return {"assignments": [{
+            "slug": self.SLUG, "mode": "team", "max_group_size": 3,
+            "team_formation": "teacher",
+        }]}
+
+    def _group_slug(self, counter=1):
+        return cs.group_team_slug(self.CLASSROOM, self.SLUG, counter)
+
+    def _repo_index(self):
+        return _FakeRepoIndex([f"{self.CLASSROOM}-{self.SLUG}-group-1"])
+
+    def _stub_release(self, monkeypatch):
+        def fake_all(*args, **kwargs):
+            return [{
+                "tag_name": "submit/2026-09-16T04-00-00Z",
+                "assets": [{"name": "result.json", "url": "https://api.github.com/assets/1"}],
+            }]
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+
+    def _stub_result(self, monkeypatch):
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(classroom=self.CLASSROOM, assignment=self.SLUG,
+                                        username="group-1", assignment_type="team"),
+        )
+
+    def _collect(self, monkeypatch=None):
+        return cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short=self.CLASSROOM,
+            classroom_meta={},
+            assignments=self._team_assignments(),
+            service_token="token",
+            repo_index=self._repo_index(),
+        )
+
+    def test_team_score_credits_team_members_and_writes_team_slug(self, monkeypatch):
+        self._stub_release(monkeypatch)
+        self._stub_result(monkeypatch)
+        stub_team_members_by_slug(monkeypatch, {
+            self.STUDENT_TEAM: ["alice", "bob", "carol"],
+            self._group_slug(): ["Bob", "alice"],
+        })
+
+        results, _, collected, _ = self._collect()
+        assert len(results) == 1
+        entry = results[0]
+        # The owner is the counter segment, the stable per-bucket key.
+        assert entry["owner"] == "group-1"
+        assert entry["_type"] == "team"
+        # Members: the group team's live members, lowercased and sorted.
+        assert entry["member_usernames"] == ["alice", "bob"]
+        assert entry["team_slug"] == self._group_slug()
+        assert collected[self.SLUG] == "team"
+
+    def test_team_member_not_enrolled_is_not_credited(self, monkeypatch):
+        # The roster intersection: a team member off the classroom team
+        # (dropped the class, out-of-band add) is never credited.
+        self._stub_release(monkeypatch)
+        self._stub_result(monkeypatch)
+        stub_team_members_by_slug(monkeypatch, {
+            self.STUDENT_TEAM: ["alice"],
+            self._group_slug(): ["alice", "intruder"],
+        })
+
+        results, _, _, _ = self._collect()
+        assert results[0]["member_usernames"] == ["alice"]
+        assert "intruder" not in results[0]["member_usernames"]
+
+    def test_team_read_failure_skips_repo_and_preserves_credit(self, monkeypatch, capsys):
+        # NO owner-only degrade: "group-1" is not a person, so a failed team
+        # read must skip the repo (leaving the prior entry intact) and count
+        # toward the aggregate warning naming the token permission fix.
+        self._stub_release(monkeypatch)
+        self._stub_result(monkeypatch)
+        group_slug = self._group_slug()
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == group_slug:
+                raise http_error(403)
+            return ["alice", "bob"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+
+        results, _, _, _ = self._collect()
+        assert results == [], "a failed team read must not write any entry"
+        err = capsys.readouterr().err
+        assert "existing member credit is preserved" in err
+        assert "team submission(s) were skipped" in err
+        assert "Organization -> Members: Read" in err
+
+    def test_team_mode_flip_is_first_class(self, monkeypatch, capsys):
+        # A group/individual-typed payload under a team assignment is a mode
+        # flip: rejected by validation and reported through the same guard.
+        self._stub_release(monkeypatch)
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(classroom=self.CLASSROOM, assignment=self.SLUG,
+                                        username="group-1", assignment_type="group"),
+        )
+        stub_team_members_by_slug(monkeypatch, {
+            self.STUDENT_TEAM: ["alice"],
+            self._group_slug(): ["alice"],
+        })
+
+        results, mode_flip, _, _ = self._collect()
+        assert results == []
+        assert mode_flip == 1
+        assert "individual/group/team" in capsys.readouterr().err
+
+    def test_unreadable_poll_targets_skip_the_assignment(self, monkeypatch, capsys):
+        # No repo index AND an unreadable org team listing: the assignment is
+        # skipped un-stamped so prior state (and freshness) is preserved.
+        self._stub_release(monkeypatch)
+        stub_team_members(monkeypatch, ["alice"])
+
+        def boom(*a, **k):
+            raise http_error(404)
+
+        monkeypatch.setattr(cs, "list_assignment_team_counters", boom)
+        results, _, collected, _ = cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short=self.CLASSROOM,
+            classroom_meta={},
+            assignments=self._team_assignments(),
+            service_token="token",
+            repo_index=None,
+        )
+        assert results == []
+        assert self.SLUG not in collected
+        assert "skipping this team assignment" in capsys.readouterr().err
+
+
+class TestTeamHelpers:
+    def test_group_team_hash_shared_fixture_parity(self):
+        # The same golden vectors the Go contract test and the web mirror pin,
+        # so the Python leg of the hash derivation can't drift.
+        repo_root = pathlib.Path(__file__).resolve().parents[3]
+        fixture = repo_root / "cli" / "shared" / "testdata" / "group_vectors.json"
+        doc = json.loads(fixture.read_text())
+        assert doc["cases"], "shared fixture has no cases"
+        assert doc["prefix"] == cs.GROUP_TEAM_PREFIX
+        assert doc["hash_hex_len"] == cs.GROUP_HASH_HEX_LEN
+        for case in doc["cases"]:
+            assert cs.group_team_hash(case["classroom"], case["assignment"]) == case["hash"], case
+            assert cs.group_team_slug(case["classroom"], case["assignment"], 1) == case["team_1"], case
+
+    def test_team_repo_counter(self):
+        assert cs.team_repo_counter("group-1") == 1
+        assert cs.team_repo_counter("group-42") == 42
+        # Mirrors contract.ParseGroupRepoCounter: counters start at 1, no
+        # leading zeros, digits only.
+        for bad in ("group-0", "group-01", "group-", "group-x", "alice", "grouper-1"):
+            assert cs.team_repo_counter(bad) is None, bad
+
+    def test_normalize_assignment_type(self):
+        assert cs.normalize_assignment_type("team") == "team"
+        assert cs.normalize_assignment_type("group") == "group"
+        assert cs.normalize_assignment_type("individual") == "individual"
+        # Fail closed: absent/typo'd modes read as the strictest type.
+        for other in (None, "", "TEAMWORK", 7):
+            assert cs.normalize_assignment_type(other) == "individual", other
+        # Case-insensitive like the old is_group derivation.
+        assert cs.normalize_assignment_type("TEAM") == "team"
+
+    def test_team_poll_owners_from_repo_index(self):
+        index = _FakeRepoIndex([
+            "cs-principles-project-group-2",
+            "cs-principles-project-group-1",
+            "cs-principles-project-group-01",  # leading zero: not a team repo
+            "cs-principles-project-alice",     # a username, not a counter
+            "cs-principles-other-group-9",     # another assignment
+        ])
+        owners, ok = cs.team_poll_owners(
+            "https://api.github.com", "cs50", "cs-principles", "project", "token", index
+        )
+        assert ok
+        assert owners == ["group-1", "group-2"]
+
+    def test_validate_result_expected_type_team(self):
+        # Team mode is a first-class expected type: a team payload passes, a
+        # group/individual one is rejected (and vice versa).
+        payload = make_result(username="group-1", assignment_type="team")
+        cs.validate_result(payload, "cs-principles", "hello", "group-1", expected_type="team")
+        with pytest.raises(ValueError):
+            cs.validate_result(payload, "cs-principles", "hello", "group-1", expected_type="group")
+        group_payload = make_result(username="group-1", assignment_type="group")
+        with pytest.raises(ValueError):
+            cs.validate_result(group_payload, "cs-principles", "hello", "group-1", expected_type="team")
+
+
+class TestTeamCollectDetected:
+    """The detected-records path for a no_autograder TEAM assignment: same
+    counter-derived poll targets and team-member resolution as the graded
+    path, with member_usernames + team_slug written onto each record."""
+
+    CLASSROOM = "cs-principles"
+    SLUG = "notebook"
+    STUDENT_TEAM = "classroom50-cs-principles"
+
+    def _entry(self):
+        return {
+            "slug": self.SLUG, "mode": "team", "max_group_size": 3,
+            "team_formation": "student", "no_autograder": True,
+            "template": {"owner": "cs50", "repo": "t", "branch": "main"},
+        }
+
+    def _detect(self, monkeypatch, member_stub):
+        monkeypatch.setattr(
+            cs, "detect_repo_submissions",
+            lambda *a, **k: [{"branch": "main", "count": 2}],
+        )
+        monkeypatch.setattr(cs, "list_team_member_logins", member_stub)
+        return cs.collect_detected(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short=self.CLASSROOM,
+            slug=self.SLUG,
+            entry=self._entry(),
+            team_usernames=["alice", "bob"],
+            repo_index=_FakeRepoIndex([f"{self.CLASSROOM}-{self.SLUG}-group-1"]),
+            service_token="token",
+        )
+
+    def test_detected_records_credit_team_members(self, monkeypatch):
+        group_slug = cs.group_team_slug(self.CLASSROOM, self.SLUG, 1)
+
+        def members(api_url, org, team_slug, token):
+            assert team_slug == group_slug
+            return ["Bob", "alice", "intruder"]
+
+        atype, records, visited = self._detect(monkeypatch, members)
+        assert atype == "team"
+        assert len(records) == 1
+        record = records[0]
+        assert record["owner"] == "group-1"
+        assert record["member_usernames"] == ["alice", "bob"]
+        assert record["team_slug"] == group_slug
+        assert "group-1" in visited
+
+    def test_detected_team_read_failure_skips_unvisited(self, monkeypatch, capsys):
+        def boom(*a, **k):
+            raise http_error(403)
+
+        atype, records, visited = self._detect(monkeypatch, boom)
+        assert atype == "team"
+        assert records == []
+        # NOT visited: the prior detected record survives the merge in main().
+        assert "group-1" not in visited
+        assert "existing member credit is preserved" in capsys.readouterr().err
+
+
+class TestTeamApplyUpdates:
+    def test_team_bucket_type_is_first_class(self):
+        scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
+        scores["assignments"] = cs.normalize_assignments(scores["assignments"])
+        update = make_update(assignment="project", assignment_type="team",
+                             username="group-1")
+        update["team_slug"] = cs.group_team_slug("cs-principles", "project", 1)
+        changed = cs.apply_updates(scores, [update])
+        assert changed == 1
+        bucket = scores["assignments"]["project"]
+        assert bucket["type"] == "team"
+        assert bucket["entries"][0]["team_slug"] == update["team_slug"]
+
+    def test_normalize_assignments_accepts_team_bucket(self):
+        normalized = cs.normalize_assignments({
+            "project": {"type": "team", "entries": []},
+        })
+        assert normalized["project"]["type"] == "team"
+        with pytest.raises(ValueError):
+            cs.normalize_assignments({"project": {"type": "squad", "entries": []}})
+
+
 # assignment_repo_name --------------------------------------------------------
 
 
@@ -2865,7 +3171,7 @@ class TestCollectClassroomModeFlip:
         assert mode_flip == 1
         err = capsys.readouterr().err
         assert "NONE were creditable" in err
-        assert "individual<->group" in err
+        assert "individual/group/team" in err
         # The affected repo is named explicitly in the consolidated warning.
         assert "cs-principles-hello-alice" in err
 

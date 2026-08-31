@@ -196,7 +196,12 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 			assignment, org, configrepo.ConfigRepoName, assignmentsPath(classroom), org, classroom, assignment)
 	}
 
-	isGroup := assignmentIsGroup(assignments, assignment)
+	// Shared-repo modes: legacy group (the founder's login-derived repo) and
+	// team (repos named <classroom>-<assignment>-group-<n>, owned by a GitHub
+	// Team). Both fan a shared submission out to member_usernames, so a
+	// member without their own derived repo is credited, not missing.
+	isGroup := assignmentIsSharedRepo(assignments, assignment)
+	isTeam := assignmentIsTeam(assignments, assignment)
 
 	scores, err := loadScores(client, org, classroom, branch)
 	if err != nil {
@@ -245,7 +250,69 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		failed          []string
 		assetErrs       int
 	)
+
+	// cloneOne clones (or skips) one repo into dir and refreshes its
+	// result.json history, recording the outcome in the tallies above.
+	cloneOne := func(repoName string) {
+		target := filepath.Join(dir, repoName)
+		switch existsOnDisk, statErr := targetExists(target); {
+		case statErr != nil:
+			_, _ = fmt.Fprintf(errOut, "%s: stat %s: %v\n", repoName, target, statErr)
+			failed = append(failed, repoName)
+			return
+		case existsOnDisk:
+			if !quiet {
+				_, _ = fmt.Fprintf(out, "Skipped %s (already exists)\n", repoName)
+			}
+			skippedExisting = append(skippedExisting, repoName)
+		default:
+			if err := cloneWithProgress(out, errOut, org, repoName, target, quiet, verbose); err != nil {
+				failed = append(failed, repoName)
+				return
+			}
+			clonedNew = append(clonedNew, repoName)
+		}
+		if err := refreshResultJSON(client, token, apiBase, org, repoName, target); err != nil {
+			_, _ = fmt.Fprintf(errOut, "%s: result.json: %v\n", repoName, err)
+			assetErrs++
+		}
+	}
+
+	// A team assignment's repos carry no username — they are the
+	// `<classroom>-<assignment>-group-<n>` repos, enumerated from the org
+	// (the counter is mode-gated: this only runs on a team assignment).
+	// Clone them all first; the per-member loop below then only reports
+	// credited/missing coverage.
+	if isTeam {
+		names, err := orgrepos.ListNames(client, org)
+		if err != nil {
+			return err
+		}
+		for _, name := range names {
+			if _, ok := contract.ParseGroupRepoCounter(name, classroom, assignment); !ok {
+				continue
+			}
+			cloneOne(strings.ToLower(name))
+		}
+	}
+
 	for _, username := range teamLogins {
+		if isTeam {
+			// No login-derived repo exists in team mode; coverage is read
+			// entirely off the gradebook's credited members.
+			if _, ok := credited[strings.ToLower(username)]; ok {
+				if verbose && !quiet {
+					_, _ = fmt.Fprintf(out, "Credited via team repo: %s\n", username)
+				}
+				continue
+			}
+			if !quiet {
+				_, _ = fmt.Fprintf(out, "Missing: %s (team assignment; not yet credited via a team repo)\n", username)
+			}
+			missing = append(missing, username)
+			continue
+		}
+
 		repoName := assignmentRepoName(classroom, assignment, username)
 		target := filepath.Join(dir, repoName)
 
@@ -461,17 +528,32 @@ func assignmentRegistered(assignments assignment.AssignmentsJSON, slug string) b
 	return false
 }
 
-// assignmentIsGroup reports whether the assignment slug is a group assignment.
-// For a group assignment only the first accepter owns a derived repo;
-// teammates join it, so their own derived repo legitimately doesn't exist and a
-// 404 on it isn't a "missing submission".
-func assignmentIsGroup(assignments assignment.AssignmentsJSON, slug string) bool {
+// assignmentMode returns the assignment's mode ("" when unregistered),
+// matched case-insensitively like assignmentRegistered.
+func assignmentMode(assignments assignment.AssignmentsJSON, slug string) string {
 	for _, entry := range assignments.Assignments {
 		if strings.EqualFold(entry.Slug, slug) {
-			return strings.EqualFold(entry.Mode, assignment.ModeGroup)
+			return strings.ToLower(entry.Mode)
 		}
 	}
-	return false
+	return ""
+}
+
+// assignmentIsSharedRepo reports whether the assignment's repos are SHARED
+// (legacy group or team). For a shared assignment a member without their own
+// derived repo is legitimately credited via the shared entry's
+// member_usernames, so a 404 on their derived name isn't a missing
+// submission.
+func assignmentIsSharedRepo(assignments assignment.AssignmentsJSON, slug string) bool {
+	mode := assignmentMode(assignments, slug)
+	return mode == assignment.ModeGroup || mode == assignment.ModeTeam
+}
+
+// assignmentIsTeam reports whether the assignment is team mode, whose repos
+// are the `<classroom>-<assignment>-group-<n>` team repos (no username in the
+// name at all).
+func assignmentIsTeam(assignments assignment.AssignmentsJSON, slug string) bool {
+	return assignmentMode(assignments, slug) == assignment.ModeTeam
 }
 
 // assignmentRepoName: canonical lowercased <classroom>-<assignment>-<username>
@@ -578,11 +660,11 @@ func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentB
 		m = map[string]scoresschema.AssignmentBucket{}
 	}
 	// Validate each bucket's `type` for parity with Python's
-	// normalize_assignments: it must be "individual" or "group". (A
+	// normalize_assignments: it must be "individual", "group", or "team". (A
 	// non-array `entries` already fails the Unmarshal above.)
 	for slug, bucket := range m {
-		if bucket.Type != "individual" && bucket.Type != "group" {
-			return nil, fmt.Errorf("assignments[%q].type must be \"individual\" or \"group\", got %q", slug, bucket.Type)
+		if bucket.Type != "individual" && bucket.Type != "group" && bucket.Type != "team" {
+			return nil, fmt.Errorf("assignments[%q].type must be \"individual\", \"group\", or \"team\", got %q", slug, bucket.Type)
 		}
 	}
 	return m, nil

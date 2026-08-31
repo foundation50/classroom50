@@ -1728,7 +1728,7 @@ class TestFinalizeResult:
         # them and the result validates (rc 0).
         (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
         f = self._finalizer(tmp_path, submitted_by={"username": "bob", "id": 222})
-        assert ag.finalize_result(f, is_group=False) == 0
+        assert ag.finalize_result(f) == 0
         result = json.loads((tmp_path / "result.json").read_text())
         assert result["owner"] == "alice"
         assert result["assignment_type"] == "individual"
@@ -1741,7 +1741,7 @@ class TestFinalizeResult:
             self._autograder_result(owner="victim", assignment_type="group")
         ))
         f = self._finalizer(tmp_path)
-        assert ag.finalize_result(f, is_group=False) == 0
+        assert ag.finalize_result(f) == 0
         result = json.loads((tmp_path / "result.json").read_text())
         assert result["owner"] == "alice"
         assert result["assignment_type"] == "individual"
@@ -1762,7 +1762,7 @@ class TestFinalizeResult:
         f.submitted_at = datetime.datetime(
             2026, 6, 1, 14, 33, 11, tzinfo=datetime.timezone.utc
         )
-        assert ag.finalize_result(f, is_group=False) == 0
+        assert ag.finalize_result(f) == 0
         result = json.loads((tmp_path / "result.json").read_text())
         # The autograder's forged far-future datetime is replaced by the
         # committer-date submission instant; graded_at records "now".
@@ -1778,7 +1778,7 @@ class TestFinalizeResult:
         (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
         (tmp_path / ag.RELEASE_BODY_FILENAME).write_text("### custom body\n")
         f = self._finalizer(tmp_path)
-        assert ag.finalize_result(f, is_group=False) == 0
+        assert ag.finalize_result(f) == 0
         ag.mirror_body_to_step_summary(tmp_path)
         assert summary.read_text() == "### custom body\n"
 
@@ -1791,7 +1791,7 @@ class TestFinalizeResult:
         (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
         (tmp_path / ag.RELEASE_BODY_FILENAME).write_bytes(b"### body \xff\xfe raw\n")
         f = self._finalizer(tmp_path)
-        assert ag.finalize_result(f, is_group=False) == 0
+        assert ag.finalize_result(f) == 0
         ag.mirror_body_to_step_summary(tmp_path)  # must not raise
         assert "### body" in summary.read_text()
 
@@ -1817,7 +1817,7 @@ class TestFinalizeResult:
             self._autograder_result(submitted_by={"username": "forged", "id": 999})
         ))
         f = self._finalizer(tmp_path, submitted_by=None)
-        assert ag.finalize_result(f, is_group=False) == 0
+        assert ag.finalize_result(f) == 0
         result = json.loads((tmp_path / "result.json").read_text())
         assert "submitted_by" not in result
 

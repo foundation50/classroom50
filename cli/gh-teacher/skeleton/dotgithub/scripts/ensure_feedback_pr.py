@@ -70,9 +70,12 @@ BASE_BRANCH = "feedback"
 STATUS_CONTEXT = "classroom50/feedback-pr"
 
 # Mode -> (PR label, color). Mirrors GitHub Classroom's Individual/Group
-# feedback labels so a teacher can tell them apart.
+# feedback labels so a teacher can tell them apart. Both shared-repo modes
+# (legacy group and team) carry the Group label — keep in lockstep with
+# contract.FeedbackLabelForMode.
 _LABELS = {
     "group": ("Group Assignment", "5319E7"),
+    "team": ("Group Assignment", "5319E7"),
     "individual": ("Individual Assignment", "0E8A16"),
 }
 

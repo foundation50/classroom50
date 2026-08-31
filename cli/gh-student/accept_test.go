@@ -13,9 +13,9 @@ import (
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
-// TestCheckAcceptableMode pins the accept mode gate: individual, group, and
-// empty (defaults to individual) are accepted; only an unknown mode errors.
-// Group-shape coherence is a separate check (TestAssertModeCoherentForCreate).
+// TestCheckAcceptableMode pins the accept mode gate: individual, group, team,
+// and empty (defaults to individual) are accepted; only an unknown mode errors.
+// Shape coherence is a separate check (TestAssertModeCoherentForCreate).
 func TestCheckAcceptableMode(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -25,8 +25,10 @@ func TestCheckAcceptableMode(t *testing.T) {
 		{"empty", "", false},
 		{"individual", "individual", false},
 		{"group", "group", false},
-		{"unknown mode", "team", true},
+		{"team", "team", false},
+		{"unknown mode", "squad", true},
 		{"uppercase group is not canonical", "GROUP", true},
+		{"uppercase team is not canonical", "TEAM", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -88,30 +90,39 @@ func TestAssertAssignmentAcceptable(t *testing.T) {
 }
 
 // TestAssertModeCoherentForCreate pins the fresh-create coherence gate: a
-// group-shaped entry (max_group_size >= 2) whose mode isn't `group` is rejected
-// (the founder would be under-privileged), while coherent and non-group-shaped
-// entries pass. This gate must NOT run on the already-accepted reconcile path.
+// group-shaped entry (max_group_size >= 2) whose mode isn't `group`/`team` is
+// rejected (the founder would be under-privileged); a team entry needs a
+// usable size AND a valid team_formation; a team_formation outside team mode
+// is drift. This gate must NOT run on the already-accepted reconcile path.
 func TestAssertModeCoherentForCreate(t *testing.T) {
 	cases := []struct {
-		name         string
-		mode         string
-		maxGroupSize int
-		wantErr      bool
+		name          string
+		mode          string
+		maxGroupSize  int
+		teamFormation string
+		wantErr       bool
 	}{
-		{"individual no size", "individual", 0, false},
-		{"group with size", "group", 3, false},
-		{"empty no size", "", 0, false},
-		{"group size but empty mode is inconsistent", "", 3, true},
-		{"group size but individual mode is inconsistent", "individual", 2, true},
+		{"individual no size", "individual", 0, "", false},
+		{"group with size", "group", 3, "", false},
+		{"empty no size", "", 0, "", false},
+		{"group size but empty mode is inconsistent", "", 3, "", true},
+		{"group size but individual mode is inconsistent", "individual", 2, "", true},
+		{"team with size and teacher formation", "team", 3, "teacher", false},
+		{"team with size and student formation", "team", 3, "student", false},
+		{"team without formation is incomplete", "team", 3, "", true},
+		{"team with unknown formation is incomplete", "team", 3, "committee", true},
+		{"team without a usable size is incomplete", "team", 0, "teacher", true},
+		{"formation outside team mode is drift", "individual", 0, "teacher", true},
+		{"formation on group mode is drift", "group", 3, "student", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := assertModeCoherentForCreate("hello", tc.mode, tc.maxGroupSize)
+			err := assertModeCoherentForCreate("hello", tc.mode, tc.maxGroupSize, tc.teamFormation)
 			if tc.wantErr && err == nil {
-				t.Errorf("mode %q size %d: expected an error, got nil", tc.mode, tc.maxGroupSize)
+				t.Errorf("mode %q size %d formation %q: expected an error, got nil", tc.mode, tc.maxGroupSize, tc.teamFormation)
 			}
 			if !tc.wantErr && err != nil {
-				t.Errorf("mode %q size %d: unexpected error %v", tc.mode, tc.maxGroupSize, err)
+				t.Errorf("mode %q size %d formation %q: unexpected error %v", tc.mode, tc.maxGroupSize, tc.teamFormation, err)
 			}
 		})
 	}
@@ -177,7 +188,7 @@ func TestFounderPermission(t *testing.T) {
 	}{
 		{"individual default", "individual", "", "push"},
 		{"empty mode default", "", "", "push"},
-		{"unknown mode default", "team", "", "push"}, // defaults to individual (least privilege)
+		{"unknown mode default", "squad", "", "push"}, // defaults to individual (least privilege)
 		{"group default", "group", "", "admin"},
 		{"individual configured admin", "individual", "admin", "admin"},
 		{"individual configured pull", "individual", "pull", "pull"},
@@ -185,6 +196,12 @@ func TestFounderPermission(t *testing.T) {
 		{"group clamps push up to admin", "group", "push", "admin"},
 		{"group clamps pull up to admin", "group", "pull", "admin"},
 		{"group configured admin", "group", "admin", "admin"},
+		// Team mode NEVER clamps: access flows through the GitHub Team
+		// attachment, so no student needs repo admin. Default push; a
+		// configured value is honored verbatim.
+		{"team default", "team", "", "push"},
+		{"team configured pull is honored (no clamp)", "team", "pull", "pull"},
+		{"team configured admin is honored", "team", "admin", "admin"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
