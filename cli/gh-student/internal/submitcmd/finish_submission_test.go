@@ -214,7 +214,7 @@ func TestFinishSubmission_TagPushFailureIsFatal(t *testing.T) {
 	if err == nil {
 		t.Fatal("want the wrapped tag-push error")
 	}
-	if !strings.Contains(err.Error(), "re-run `gh student submit`") {
+	if !strings.Contains(err.Error(), "run `gh student submit` again") {
 		t.Errorf("error missing the re-run guidance: %v", err)
 	}
 	if out := h.buf.String(); strings.Contains(out, "CONFIRM") {
@@ -238,7 +238,7 @@ func TestFinishSubmission_RetryThenTagPushFailure(t *testing.T) {
 	if h.retryCalls != 1 {
 		t.Errorf("retryCalls = %d, want 1", h.retryCalls)
 	}
-	if !strings.Contains(err.Error(), "re-run `gh student submit`") {
+	if !strings.Contains(err.Error(), "run `gh student submit` again") {
 		t.Errorf("error missing the re-run guidance: %v", err)
 	}
 	if out := h.buf.String(); strings.Contains(out, "CONFIRM") {

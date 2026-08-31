@@ -127,7 +127,7 @@ func verifyOrgDefaults(client githubapi.Client, errOut io.Writer, org, plan stri
 func unenforcedCause(plan string) string {
 	switch plan {
 	case "enterprise":
-		return "These are likely pinned at the enterprise level; an org owner can't change them from org settings — ask an enterprise owner, or set them by hand below."
+		return "These are likely pinned at the enterprise level; an org owner can't change them from org settings. Ask an enterprise owner, or set them by hand below."
 	case "team", "free", "":
 		return "GitHub doesn't expose these settings via the API on your plan, so set them by hand below."
 	default:
@@ -239,7 +239,7 @@ func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpol
 		appliedList = strings.Join(applied, ", ")
 	}
 	_, _ = fmt.Fprintf(errOut,
-		"Warning: %s: org member-privilege lockdown was left PARTIALLY APPLIED by a transient error. Applied: %s. Not yet attempted (including the field that errored): %s. The org is in a half-locked state — re-run `gh teacher init` to finish, or set the remaining policies at %s.\n",
+		"Warning: %s: org member-privilege lockdown was left partially applied by a transient error. Applied: %s. Not yet attempted (including the field that errored): %s. The org is in a half-locked state: re-run `gh teacher init` to finish, or set the remaining policies at %s.\n",
 		org, appliedList, strings.Join(notAttempted, ", "), settingsURL)
 }
 
@@ -267,7 +267,7 @@ func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, o
 		_, _ = fmt.Fprintf(out, "%s: Actions budget cap already in place ($%d)\n", org, v.Amount)
 		return "present"
 	case orgpolicy.BudgetWarn:
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: an Actions budget over $%d ($%d) is set; leaving it untouched — lower it to $0 at %s to hard-stop paid Actions minutes.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: an Actions budget over $%d ($%d) is set; leaving it untouched. Lower it to $0 at %s to hard-stop paid Actions minutes.\n",
 			org, orgpolicy.BudgetWarnThreshold, v.Amount, settingsURL)
 		return "warn"
 	case orgpolicy.BudgetMissing:
@@ -309,7 +309,7 @@ func ensureOrgActionsEnabled(client githubapi.Client, out, errOut io.Writer, org
 
 	var perms orgActionsPermissions
 	if err := client.Get(path, &perms); err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't read Actions permissions (%v); make sure GitHub Actions is enabled for the org at https://github.com/organizations/%s/settings/actions — Classroom50's autograde, publish-pages, and collect-scores workflows won't run without it.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't read Actions permissions (%v); make sure GitHub Actions is enabled for the org at https://github.com/organizations/%s/settings/actions. Classroom50's autograde, publish-pages, and collect-scores workflows won't run without it.\n",
 			org, err, org)
 		return nil
 	}
@@ -319,14 +319,14 @@ func ensureOrgActionsEnabled(client githubapi.Client, out, errOut io.Writer, org
 		_, _ = fmt.Fprintf(out, "%s: Actions already enabled (all repositories)\n", org)
 		return nil
 	case "selected":
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: Actions is enabled only for selected repositories; ensure the classroom50 repository and the <classroom>-* student repos are included (or switch to All repositories) at https://github.com/organizations/%s/settings/actions — Classroom50's autograde, publish-pages, and collect-scores workflows won't run in any repo left out.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: Actions is enabled only for selected repositories; ensure the classroom50 repository and the <classroom>-* student repos are included (or switch to All repositories) at https://github.com/organizations/%s/settings/actions. Classroom50's autograde, publish-pages, and collect-scores workflows won't run in any repo left out.\n",
 			org, org)
 		return nil
 	case "none":
 		// Off org-wide — enable below.
 	default:
 		// Empty/unknown: warn, don't touch the policy.
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: unexpected Actions enabled_repositories value %q; leaving it unchanged — verify GitHub Actions is enabled for the org at https://github.com/organizations/%s/settings/actions, or Classroom50's workflows may not run.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: unexpected Actions enabled_repositories value %q; leaving it unchanged. Verify GitHub Actions is enabled for the org at https://github.com/organizations/%s/settings/actions, or Classroom50's workflows may not run.\n",
 			org, perms.EnabledRepositories, org)
 		return nil
 	}
@@ -340,7 +340,7 @@ func ensureOrgActionsEnabled(client githubapi.Client, out, errOut io.Writer, org
 	resp, err := client.Request(http.MethodPut, path, bytes.NewReader(body))
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) || cliutil.IsHTTPStatus(err, http.StatusConflict) || cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't enable GitHub Actions (%v); this is often an enterprise-level policy an org admin can't override — ask an enterprise admin to enable Actions for the org at https://github.com/organizations/%s/settings/actions. Classroom50 workflows won't run until then.\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't enable GitHub Actions (%v); this is often an enterprise-level policy an org admin can't override. Ask an enterprise admin to enable Actions for the org at https://github.com/organizations/%s/settings/actions. Classroom50 workflows won't run until then.\n",
 				org, err, org)
 			return nil
 		}
@@ -433,7 +433,7 @@ func ensureRepoActionsEnabled(client githubapi.Client, out, errOut io.Writer, ow
 
 	var perms repoActionsPermissions
 	if err := client.Get(path, &perms); err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't read Actions permissions (%v); make sure Actions is enabled at https://github.com/%s/%s/settings/actions — Classroom50's publish-pages and collect-scores workflows won't run without it.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't read Actions permissions (%v); make sure Actions is enabled at https://github.com/%s/%s/settings/actions. Classroom50's publish-pages and collect-scores workflows won't run without it.\n",
 			owner, repo, err, owner, repo)
 		return nil
 	}
@@ -451,7 +451,7 @@ func ensureRepoActionsEnabled(client githubapi.Client, out, errOut io.Writer, ow
 	resp, err := client.Request(http.MethodPut, path, bytes.NewReader(body))
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) || cliutil.IsHTTPStatus(err, http.StatusConflict) || cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't enable Actions (%v); this is often an org or enterprise policy — enable it at https://github.com/%s/%s/settings/actions. Classroom50's publish-pages and collect-scores workflows won't run until then.\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't enable Actions (%v); this is often an org or enterprise policy. Enable it at https://github.com/%s/%s/settings/actions. Classroom50's publish-pages and collect-scores workflows won't run until then.\n",
 				owner, repo, err, owner, repo)
 			return nil
 		}
@@ -558,14 +558,14 @@ func setPagesPublic(client githubapi.Client, out, errOut io.Writer, owner, repo 
 				owner, repo)
 			return nil
 		}
-		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't set Pages visibility to public (%v); toggle it manually at https://github.com/%s/%s/settings/pages → Visibility if students see 404s on the Pages URL\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't set Pages visibility to public (%v); toggle it manually at https://github.com/%s/%s/settings/pages -> Visibility if students see 404s on the Pages URL\n",
 			owner, repo, err, owner, repo)
 		return nil
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode != http.StatusNoContent {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: PUT /pages returned HTTP %d while setting visibility; toggle it manually at https://github.com/%s/%s/settings/pages → Visibility if students see 404s on the Pages URL\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: PUT /pages returned HTTP %d while setting visibility; toggle it manually at https://github.com/%s/%s/settings/pages -> Visibility if students see 404s on the Pages URL\n",
 			owner, repo, resp.StatusCode, owner, repo)
 		return nil
 	}
@@ -574,7 +574,7 @@ func setPagesPublic(client githubapi.Client, out, errOut io.Writer, owner, repo 
 	// and a read failure is silent (the PUT reported success), mirroring the
 	// org-lockdown read-back.
 	if public, known := readPagesPublic(client, owner, repo); known && !public {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: set Pages visibility to public but a read-back shows it still private — likely pinned by an org or enterprise policy. Students fetch assignments.json unauthenticated, so a private Pages site breaks `gh student accept`. Set it manually at https://github.com/%s/%s/settings/pages → Visibility.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: set Pages visibility to public but a read-back shows it still private, likely pinned by an org or enterprise policy. Students fetch assignments.json unauthenticated, so a private Pages site breaks `gh student accept`. Set it manually at https://github.com/%s/%s/settings/pages -> Visibility.\n",
 			owner, repo, owner, repo)
 		return nil
 	}
@@ -746,7 +746,7 @@ func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org
 			// Reconcile: PUT the current definition so a re-run picks up a
 			// changed branch pattern/rules instead of skipping it.
 			if err := updateOrgRuleset(client, org, id, rs); err != nil {
-				_, _ = fmt.Fprintf(errOut, "Warning: %s: could not update org ruleset %q (%v); review it at https://github.com/organizations/%s/settings/rules — a stale ruleset may %s.\n",
+				_, _ = fmt.Fprintf(errOut, "Warning: %s: could not update org ruleset %q (%v); review it at https://github.com/organizations/%s/settings/rules. A stale ruleset may %s.\n",
 					org, rs.Name, err, org, rulesetMissDescription(rs.Name))
 				allReady = false
 				continue
@@ -755,7 +755,7 @@ func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org
 			continue
 		}
 		if err := createOrgRuleset(client, org, rs); err != nil {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not create org ruleset %q (%v); apply it manually at https://github.com/organizations/%s/settings/rules — without it students could %s.\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not create org ruleset %q (%v); apply it manually at https://github.com/organizations/%s/settings/rules. Without it students could %s.\n",
 				org, rs.Name, err, org, rulesetMissDescription(rs.Name))
 			allReady = false
 			continue
@@ -912,7 +912,7 @@ func enableReusableWorkflowAccess(client githubapi.Client, out, errOut io.Writer
 	resp, err := client.Request(http.MethodPut, path, bytes.NewReader(body))
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) || cliutil.IsHTTPStatus(err, http.StatusConflict) {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't enable reusable-workflow access for the org (%v); student-repo autograde workflows may 403 on `uses:`. Retry with an org-admin token: gh api -X PUT /repos/%s/%s/actions/permissions/access -f access_level=organization — or toggle manually at https://github.com/%s/%s/settings/actions → Access if students see workflow-resolution errors.\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: couldn't enable reusable-workflow access for the org (%v); student-repo autograde workflows may 403 on `uses:`. Retry with an org-admin token: gh api -X PUT /repos/%s/%s/actions/permissions/access -f access_level=organization. Or toggle it manually at https://github.com/%s/%s/settings/actions -> Access if students see workflow-resolution errors.\n",
 				owner, repo, err, owner, repo, owner, repo)
 			return nil
 		}
@@ -921,7 +921,7 @@ func enableReusableWorkflowAccess(client githubapi.Client, out, errOut io.Writer
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	if resp.StatusCode != http.StatusNoContent {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: PUT /actions/permissions/access returned HTTP %d while enabling reusable-workflow access; retry with an org-admin token: gh api -X PUT /repos/%s/%s/actions/permissions/access -f access_level=organization — or toggle manually at https://github.com/%s/%s/settings/actions → Access if students see `uses:` errors.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: PUT /actions/permissions/access returned HTTP %d while enabling reusable-workflow access; retry with an org-admin token: gh api -X PUT /repos/%s/%s/actions/permissions/access -f access_level=organization. Or toggle it manually at https://github.com/%s/%s/settings/actions -> Access if students see `uses:` errors.\n",
 			owner, repo, resp.StatusCode, owner, repo, owner, repo)
 		return nil
 	}

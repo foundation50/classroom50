@@ -35,13 +35,13 @@ func NewCmd() *cobra.Command {
 			"  update   correct fields on an existing student (roster-only; never invites)\n" +
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
 			"  import   bulk upsert from a local CSV (the stored 7-column roster.csv, or 6/5-column forms)\n\n" +
-			"All writes use a single Tree commit on <org>/classroom50's\n" +
+			"All writes use a single commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +
 			"(up to 5 attempts) so concurrent edits don't silently lose\n" +
 			"each other's work. Each row that names an account stores the\n" +
-			"student's immutable numeric github_id — resolved from\n" +
+			"student's immutable numeric github_id (resolved from\n" +
 			"GET /users/{username} on add/import, or from the classroom team\n" +
-			"on sync — so a username change mid-class doesn't desynchronize\n" +
+			"on sync), so a username change mid-class doesn't desynchronize\n" +
 			"records. A row awaiting an email invitation carries only the\n" +
 			"address until a sync records the account.",
 	}
@@ -87,7 +87,7 @@ func rosterAddCmd() *cobra.Command {
 			"Adding a user who is already a teacher/TA on this classroom is\n" +
 			"not disallowed: they become an enrolled student too and show\n" +
 			"both roles in the app. The roster's `role` column records only\n" +
-			"their highest role (e.g. teacher), so a later sync rewriting it\n" +
+			"their highest role (teacher, say), so a later sync rewriting it\n" +
 			"doesn't change the student enrollment.\n\n" +
 			"Returns non-zero on: classroom directory missing, roster\n" +
 			"missing or malformed, GitHub user not found, or after 5\n" +
@@ -123,7 +123,7 @@ func rosterAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&firstName, "first-name", "", "Student's first name (written into the first_name column)")
 	cmd.Flags().StringVar(&lastName, "last-name", "", "Student's last name (written into the last_name column)")
-	cmd.Flags().StringVar(&email, "email", "", "Student's email address (written into the email column; bare local@domain form, e.g., alice@example.edu; optional)")
+	cmd.Flags().StringVar(&email, "email", "", "Student's email address (written into the email column; bare local@domain form like alice@example.edu; optional)")
 	cmd.Flags().StringVar(&section, "section", "", "Section identifier (free-form text, written into the section column)")
 	return cmd
 }
@@ -142,8 +142,8 @@ func rosterUpdateCmd() *cobra.Command {
 		Long: "Update fields on an existing row in\n" +
 			"<org>/classroom50/<classroom>/roster.csv, matched by\n" +
 			"<username> (case-insensitive).\n\n" +
-			"Only the flags you pass are changed; every other column —\n" +
-			"including the immutable github_id — is left untouched. This is\n" +
+			"Only the flags you pass are changed; every other column,\n" +
+			"including the immutable github_id, is left untouched. This is\n" +
 			"the key difference from `roster add`, which rewrites the whole\n" +
 			"row and blanks any field you don't re-supply.\n\n" +
 			"Roster-only: unlike `roster add`, this never sends an org invite\n" +
@@ -190,7 +190,7 @@ func rosterUpdateCmd() *cobra.Command {
 				patch.Section = &v
 			}
 			if patch.FirstName == nil && patch.LastName == nil && patch.Email == nil && patch.Section == nil {
-				return errors.New("nothing to update — pass --first-name, --last-name, --email, and/or --section")
+				return errors.New("nothing to update: pass --first-name, --last-name, --email, and/or --section")
 			}
 
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -213,8 +213,8 @@ func rosterRemoveCmd() *cobra.Command {
 		Short: "Remove one student from roster.csv",
 		Long: "Drop the row whose username matches <username> (case-insensitive)\n" +
 			"from <org>/classroom50/<classroom>/roster.csv.\n\n" +
-			"Does NOT remove the student from the org. Use\n" +
-			"`gh teacher remove <org> <username>` for that — it's a\n" +
+			"Does not remove the student from the org. Use\n" +
+			"`gh teacher remove <org> <username>` for that: it's a\n" +
 			"deliberate two-step process so an off-by-one roster edit\n" +
 			"can't accidentally revoke a student's access to every repo\n" +
 			"in the org.\n\n" +
@@ -250,7 +250,7 @@ func rosterImportCmd() *cobra.Command {
 			"<org>/classroom50/<classroom>/roster.csv. The header may be\n" +
 			"the stored roster shape\n" +
 			"`username,first_name,last_name,email,section,github_id,role`,\n" +
-			"the same without `role`, or just the first five columns — so\n" +
+			"the same without `role`, or just the first five columns, so\n" +
 			"a roster.csv exported from the web app imports as-is. The\n" +
 			"`email` column may be empty per row.\n\n" +
 			"github_id is re-resolved from `GET /users/{username}` so the\n" +
@@ -261,7 +261,7 @@ func rosterImportCmd() *cobra.Command {
 			"already-recorded role is never overwritten.\n\n" +
 			"A row with only an email is a pending email invitation: it\n" +
 			"updates that invitation's stored name/section and nothing\n" +
-			"else — import never sends or cancels an invitation. A row with\n" +
+			"else; import never sends or cancels an invitation. A row with\n" +
 			"a github_id but no username is skipped with a notice.\n\n" +
 			"Every unusable line is reported in one pass and nothing is\n" +
 			"committed. The whole file is written in one Tree commit, not\n" +
@@ -428,7 +428,7 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 	// — the add already landed). See staffRoleForLogin for the rationale.
 	if staffRole, ok := staffRoleForLogin(client, org, classroom, branch, login); ok {
 		_, _ = fmt.Fprintf(errOut,
-			"Note: %s is also a %s on classroom %s. Dual roles aren't disallowed — they'll show both roles in the app and stay an enrolled student, but the automatic sync records their highest role (%s) in the roster's `role` column. That doesn't change the student enrollment.\n",
+			"Note: %s is also a %s on classroom %s. Dual roles aren't disallowed: they'll show both roles in the app and stay an enrolled student, but the automatic sync records their highest role (%s) in the roster's `role` column. That doesn't change the student enrollment.\n",
 			login, staffRole, classroom, staffRole)
 	}
 	return nil
@@ -486,7 +486,7 @@ func runRosterUpdate(client githubapi.Client, out io.Writer, org, classroom, use
 		}
 		next, found, changed := configrepo.UpdateRosterRow(rows, username, patch)
 		if !found {
-			return configwrite.CommitChange{}, fmt.Errorf("%s not in %s roster — add them with `gh teacher roster add %s %s %s` first",
+			return configwrite.CommitChange{}, fmt.Errorf("%s not in %s roster: add them with `gh teacher roster add %s %s %s` first",
 				username, classroom, org, classroom, username)
 		}
 		if !changed {
@@ -594,7 +594,7 @@ func planRosterImport(client githubapi.Client, imported []configrepo.RosterRow, 
 			// naming an account AND a different id addresses two students, so
 			// guessing which one the teacher meant is worse than refusing.
 			if row.GitHubID != 0 && row.GitHubID != userID {
-				failures = append(failures, fmt.Errorf("line %d (%s): github_id %d in the file is not this account's id (%s is github_id %d) — fix the username or clear the github_id cell",
+				failures = append(failures, fmt.Errorf("line %d (%s): github_id %d in the file is not this account's id (%s is github_id %d); fix the username or clear the github_id cell",
 					line, row.Username, row.GitHubID, login, userID))
 				continue
 			}
@@ -613,13 +613,13 @@ func planRosterImport(client githubapi.Client, imported []configrepo.RosterRow, 
 			// Round-trip cargo: import resolves students by username and has no
 			// id→account lookup, so acting on an id alone would guess. Skipping
 			// leaves any stored row for that id exactly as it is.
-			cargoNotices = append(cargoNotices, fmt.Sprintf("line %d: row has a github_id but no username — skipped; `roster import` resolves students by username, so import id-keyed rows with the web app's roster Upload instead. Any stored row for that id is untouched.", line))
+			cargoNotices = append(cargoNotices, fmt.Sprintf("line %d: row has a github_id but no username, so it was skipped. `roster import` resolves students by username; import id-keyed rows with the web app's roster Upload instead. Any stored row for that id is untouched.", line))
 		case row.Email != "":
 			pending = append(pending, importedPendingRow{line: line, row: row})
 		default:
 			// ParseImportCSV enforces one identity column, so this is a row whose
 			// only identity is an unusable github_id cell — cargo as well.
-			cargoNotices = append(cargoNotices, fmt.Sprintf("line %d: row has no username and no usable github_id — skipped; nothing stored was changed.", line))
+			cargoNotices = append(cargoNotices, fmt.Sprintf("line %d: row has no username and no usable github_id, so it was skipped; nothing stored was changed.", line))
 		}
 	}
 	if len(failures) > 0 {
@@ -719,7 +719,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 				pendingUpdated++
 				continue
 			}
-			pendingMissing = append(pendingMissing, fmt.Sprintf("line %d (%s): no pending email-invite row with this address — skipped; import never sends an invitation, so it can't create one.", p.line, p.row.Email))
+			pendingMissing = append(pendingMissing, fmt.Sprintf("line %d (%s): no pending email-invite row with this address, so it was skipped; import never sends an invitation, so it can't create one.", p.line, p.row.Email))
 		}
 		// Reachable with a file of nothing but cargo and unmatched addresses:
 		// the rows come back untouched, and committing their re-encoding lands a

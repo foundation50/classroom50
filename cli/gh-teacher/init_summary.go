@@ -107,7 +107,7 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 	case s.LockdownComplete:
 		u.Result(preflightWarn, "%s: init finished with warnings", s.Org)
 	default:
-		u.Result(preflightFail, "%s: init INCOMPLETE — action needed", s.Org)
+		u.Result(preflightFail, "%s: init incomplete, action needed", s.Org)
 	}
 
 	// 2. Terse setup summary.
@@ -128,7 +128,7 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 	if s.FeedbackPRReady {
 		u.Item("feedback PR prerequisites: ready")
 	} else {
-		u.Item("feedback PR prerequisites: incomplete — assignments using --feedback-pr may not open PRs")
+		u.Item("feedback PR prerequisites: incomplete; assignments using --feedback-pr may not open PRs")
 	}
 	switch s.BudgetCap {
 	case "created":
@@ -136,7 +136,7 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 	case "present":
 		u.Item("actions budget cap: in place")
 	case "warn":
-		u.Item("actions budget cap: a budget over $%d is set — left as-is; lower it to $0 to hard-stop paid Actions minutes", orgpolicy.BudgetWarnThreshold)
+		u.Item("actions budget cap: a budget over $%d is set and was left as-is; lower it to $0 to hard-stop paid Actions minutes", orgpolicy.BudgetWarnThreshold)
 	case "unreadable":
 		u.Item("actions budget cap: couldn't verify (token lacks Organization Administration: Read); set a $0 Actions budget by hand")
 	case "failed":
@@ -157,7 +157,7 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 	settingsURL := manualSettingsURL(s)
 	manual := s.manualActions()
 	if len(manual) > 0 {
-		u.Heading("Action required — set these by hand (org owner)")
+		u.Heading("Action required: set these by hand (org owner)")
 		// When incomplete, lead with the plan-aware reason.
 		if !s.LockdownComplete {
 			u.Detail("%s", unenforcedCause(s.Plan))

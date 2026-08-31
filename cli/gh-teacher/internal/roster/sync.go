@@ -87,14 +87,14 @@ func rosterSyncCmd() *cobra.Command {
 			"record the students who accepted an email invitation and fill in\n" +
 			"any missing github_id. The web app runs this same sync when a\n" +
 			"teacher opens the roster (and additionally refreshes recorded\n" +
-			"roles) — here it is explicit and script-callable.\n\n" +
+			"roles); here it is explicit and script-callable.\n\n" +
 			"Reports by default and changes nothing: a dry run issues no write\n" +
 			"request at all. Pass --write to apply what it found.\n\n" +
 			"An accepted email invitation is the case that needs this: GitHub\n" +
 			"stops reporting the invited address once it's accepted, so the\n" +
 			"per-invite `secret` metadata team holds the only record of which\n" +
 			"address the new account came from. This folds that mapping onto the\n" +
-			"pending row and then retires the team — in that order, so a failed\n" +
+			"pending row and then retires the team, in that order, so a failed\n" +
 			"cleanup never loses the address.\n\n" +
 			"The sync never REMOVES a roster row. An email row nothing backs\n" +
 			"stays on the roster for the teacher to link or delete by hand (the\n" +
@@ -210,7 +210,7 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 		}
 		if !found {
 			idx.ok = false
-			return idx, fmt.Errorf("team %s is recorded for classroom %s but GitHub has no such team — it was renamed or deleted, so who is enrolled cannot be read; restore the team (or correct %s in the config repo) before syncing",
+			return idx, fmt.Errorf("team %s is recorded for classroom %s but GitHub has no such team (renamed or deleted), so who is enrolled cannot be read; restore the team (or correct %s in the config repo) before syncing",
 				team.slug, classroom, configrepo.ClassroomFilePath(classroom))
 		}
 		for _, m := range members {
@@ -249,7 +249,7 @@ func scanInviteTeams(client githubapi.Client, errOut io.Writer, org, classroom s
 	// contract turns on.
 	if pending, err := pendingEmailInvitations(client, org); err != nil {
 		scan.trusted = false
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: reading the pending invitations failed (%v); no metadata team will be deleted this pass — liveness can't be proven without them.\n", org, err)
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: reading the pending invitations failed (%v); no metadata team will be deleted this pass, since liveness can't be proven without them.\n", org, err)
 	} else {
 		scan.pendingEmails = pending
 	}
@@ -289,7 +289,7 @@ scanLoop:
 			// An unreadable team can't prove any team is redundant.
 			scan.trusted = false
 			if cliutil.IsRateLimited(err) {
-				_, _ = fmt.Fprintf(errOut, "Warning: %s: rate-limited while reading %s; stopping the invite pass early — re-run later.\n", org, team.Slug)
+				_, _ = fmt.Fprintf(errOut, "Warning: %s: rate-limited while reading %s; stopping the invite pass early. Re-run later.\n", org, team.Slug)
 				break
 			}
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: reading invite team %s failed (%v); leaving it alone.\n", org, team.Slug, err)
@@ -305,7 +305,7 @@ scanLoop:
 			// run of either tool still in flight, and its team holds no address
 			// to lose.
 			if !state.Provisional {
-				scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: description is no longer a readable invite record — left alone; delete it by hand once you've checked it", team.Slug))
+				scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: description is no longer a readable invite record; left alone; delete it by hand once you've checked it", team.Slug))
 				scan.trusted = false
 			}
 			continue
@@ -320,7 +320,7 @@ scanLoop:
 		// after accepting, so only a record whose address still hashes back to
 		// this team's name may bind a roster row.
 		if configrepo.InviteTeamName(classroom, email) != team.Slug {
-			scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: stored address does not match the team name hash — left alone; delete it by hand once you've checked it", team.Slug))
+			scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: stored address does not match the team name hash; left alone; delete it by hand once you've checked it", team.Slug))
 			continue
 		}
 
@@ -341,7 +341,7 @@ scanLoop:
 				scan.staleSlugs = append(scan.staleSlugs, team.Slug)
 			}
 		case len(members) > 1:
-			scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: %d members, so no single invitee can be identified — left alone", team.Slug, len(members)))
+			scan.anomalies = append(scan.anomalies, fmt.Sprintf("%s: %d members, so no single invitee can be identified; left alone", team.Slug, len(members)))
 		default:
 			invitee := members[0]
 			if !idx.ok || len(idx.enrolled) == 0 {
@@ -365,7 +365,7 @@ scanLoop:
 				if confErr != nil {
 					scan.trusted = false
 					if cliutil.IsRateLimited(confErr) {
-						_, _ = fmt.Fprintf(errOut, "Warning: %s: rate-limited while re-checking %s's classroom membership; stopping the invite pass early — re-run later.\n", org, invitee.Login)
+						_, _ = fmt.Fprintf(errOut, "Warning: %s: rate-limited while re-checking %s's classroom membership; stopping the invite pass early. Re-run later.\n", org, invitee.Login)
 						break scanLoop
 					}
 					_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking %s's classroom membership failed (%v); leaving %s alone.\n", org, invitee.Login, confErr, team.Slug)
@@ -605,7 +605,7 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 	// assertClassroomNotArchived), but a dry run stays allowed so the leftovers
 	// remain inspectable.
 	if write && idx.archived {
-		return fmt.Errorf("classroom %q is archived (classroom.json active:false) — its roster is frozen, so `roster sync --write` is refused; run `gh teacher classroom unarchive %s %s` first, or re-run without --write to see what is pending",
+		return fmt.Errorf("classroom %q is archived (classroom.json active:false) and its roster is frozen, so `roster sync --write` is refused. Run `gh teacher classroom unarchive %s %s` first, or re-run without --write to see what is pending",
 			classroom, org, classroom)
 	}
 
@@ -650,7 +650,7 @@ func runRosterSync(client githubapi.Client, out, errOut io.Writer, org, classroo
 		return err
 	}
 	if !scan.trusted {
-		_, _ = fmt.Fprintf(errOut, "Note: %s: no metadata team was deleted — this pass could not read enough to prove one is redundant.\n", org)
+		_, _ = fmt.Fprintf(errOut, "Note: %s: no metadata team was deleted; this pass could not read enough to prove one is redundant.\n", org)
 		return syncDegradedError(org, classroom)
 	}
 	if !deleteRetiredInviteTeams(client, out, errOut, org, classroom, scan, retired) {
@@ -702,7 +702,7 @@ func retirableSlugs(rows []configrepo.RosterRow, scan inviteScan) []string {
 func syncDegradedError(org, classroom string) error {
 	return &cliutil.ExitCodeError{
 		Code: syncExitDegraded,
-		Err:  fmt.Errorf("%s: the %s sync was incomplete — a read was degraded, so no metadata team was deleted; re-run once GitHub is healthy", org, classroom),
+		Err:  fmt.Errorf("%s: the %s sync was incomplete: a read was degraded, so no metadata team was deleted; re-run once GitHub is healthy", org, classroom),
 	}
 }
 
@@ -716,13 +716,13 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 		_, _ = fmt.Fprintf(out, "%s: up to date (no invites to record, no ids to fill)\n", path)
 	}
 	for _, rec := range plan.folds {
-		_, _ = fmt.Fprintf(out, "%s: %s accepted — record as %s (github_id %d)\n", path, rec.Email, rec.Login, rec.ID)
+		_, _ = fmt.Fprintf(out, "%s: %s accepted: record as %s (github_id %d)\n", path, rec.Email, rec.Login, rec.ID)
 	}
 	for _, rec := range plan.emailFills {
-		_, _ = fmt.Fprintf(out, "%s: %s accepted — record that address on %s's row (github_id %d)\n", path, rec.Email, rec.Login, rec.ID)
+		_, _ = fmt.Fprintf(out, "%s: %s accepted: record that address on %s's row (github_id %d)\n", path, rec.Email, rec.Login, rec.ID)
 	}
 	for _, rec := range plan.appends {
-		_, _ = fmt.Fprintf(out, "%s: %s accepted but has no row — add %s (github_id %d)\n", path, rec.Email, rec.Login, rec.ID)
+		_, _ = fmt.Fprintf(out, "%s: %s accepted but has no row: add %s (github_id %d)\n", path, rec.Email, rec.Login, rec.ID)
 	}
 	for _, username := range plan.backfills {
 		_, _ = fmt.Fprintf(out, "%s: fill in %s's github_id from the classroom team\n", path, username)
@@ -731,10 +731,10 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 		_, _ = fmt.Fprintf(out, "%s: delete the leftover metadata team %s\n", org, slug)
 	}
 	for _, slug := range retirable {
-		_, _ = fmt.Fprintf(out, "%s: retire the metadata team %s — the roster already records its address\n", org, slug)
+		_, _ = fmt.Fprintf(out, "%s: retire the metadata team %s (the roster already records its address)\n", org, slug)
 	}
 	for _, username := range plan.findings.dupLogins {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: left a second row for %q alone — more than one row carries that username, and only the first can be filled in, so which student the id belongs to is not this pass's guess. Remove the duplicate row (or give it its own username) to let the sync finish it.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: left a second row for %q alone: more than one row carries that username, and only the first can be filled in, so which student the id belongs to is not this pass's guess. Remove the duplicate row (or give it its own username) to let the sync finish it.\n",
 			path, username)
 	}
 	for _, anomaly := range scan.anomalies {
@@ -842,7 +842,7 @@ func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, or
 	slugs := make([]string, 0, len(retired)+len(scan.staleSlugs))
 	for _, rec := range scan.recovered {
 		if !recordedSlug[rec.Slug] {
-			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s — no row records %s against %s's account, so this team is still the only record of that address. Add it to their row (or clear the address they carry) and re-run.\n",
+			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s: no row records %s against %s's account, so this team is still the only record of that address. Add it to their row (or clear the address they carry) and re-run.\n",
 				org, rec.Slug, rec.Email, rec.Login)
 			continue
 		}
@@ -856,13 +856,13 @@ func deleteRetiredInviteTeams(client githubapi.Client, out, errOut io.Writer, or
 
 	live, err := liveInviteSlugs(client, org, classroom)
 	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking the pending invitations failed (%v); every metadata team was left in place — a leftover is collected next pass, whereas a wrong delete loses the address for good.\n", org, err)
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: re-checking the pending invitations failed (%v); every metadata team was left in place. A leftover is collected next pass, whereas a wrong delete loses the address for good.\n", org, err)
 		return false
 	}
 	ok := true
 	for _, slug := range slugs {
 		if live[slug] {
-			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s — a same-email re-invite now maps to it, so deleting it would strip a live invitation.\n", org, slug)
+			_, _ = fmt.Fprintf(errOut, "Note: %s: kept metadata team %s: a same-email re-invite now maps to it, so deleting it would strip a live invitation.\n", org, slug)
 			continue
 		}
 		if err := configrepo.DeleteInviteTeam(client, org, slug); err != nil {

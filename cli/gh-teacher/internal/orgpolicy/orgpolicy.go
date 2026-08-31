@@ -66,14 +66,14 @@ var nonEnterpriseOverrides = map[string]MemberDefaultSetting{
 	"members_can_create_private_repositories": {
 		Value:      true,
 		Desc:       "private repo creation enabled",
-		ManualFix:  `under "Repository creation", allow members to create repositories — on this plan "Private" is enabled together with "Public"`,
+		ManualFix:  `under "Repository creation", allow members to create repositories; on this plan "Private" is enabled together with "Public"`,
 		Critical:   false,
 		VerifyOnly: true,
 	},
 	"members_can_create_public_repositories": {
 		Value:     true,
 		Desc:      "public repo creation enabled (Team/Free couples it to private)",
-		ManualFix: `under "Repository creation", allow members to create repositories — on this plan "Public" cannot be unchecked while "Private" is checked`,
+		ManualFix: `under "Repository creation", allow members to create repositories; on this plan "Public" cannot be unchecked while "Private" is checked`,
 		// An enabling field, like private-repo creation: the master switch
 		// already carries the critical verdict for repo creation being off.
 		Critical:   false,
@@ -156,7 +156,7 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			Field:     "members_can_create_private_repositories",
 			Value:     true,
 			Desc:      "private repo creation enabled",
-			ManualFix: `under "Repository creation", check "Private" — without it, gh student accept can't create student repos`,
+			ManualFix: `under "Repository creation", check "Private"; without it, gh student accept can't create student repos`,
 		},
 		{
 			// Enterprise Cloud only: narrows repo creation to private-only. On

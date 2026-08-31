@@ -1418,7 +1418,7 @@ func TestRunRosterSync_RowWithAnUnusableGitHubIDFoldsLikeTheWeb(t *testing.T) {
 	if got := exitCode(err); got != 2 {
 		t.Fatalf("dry-run exit code = %d (err %v), want 2 for a fold pending", got, err)
 	}
-	if !strings.Contains(out, "accepted — record as") {
+	if !strings.Contains(out, "accepted: record as") {
 		t.Errorf("dry run must report the fold:\n%s", out)
 	}
 	if writes := writeCalls(dry.calls); len(writes) != 0 {

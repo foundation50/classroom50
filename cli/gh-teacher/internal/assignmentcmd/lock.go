@@ -27,16 +27,16 @@ func assignmentLockCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "lock <org> <classroom> <slug>",
 		Short: "Lock (or --unlock) an assignment against student access",
-		Long: "Lock an assignment so students can no longer access it — the web\n" +
+		Long: "Lock an assignment so students can no longer access it: the web\n" +
 			"accept page, the student assignments list, the submission view, and\n" +
-			"`gh student accept` all refuse a locked assignment for EVERY student,\n" +
+			"`gh student accept` all refuse a locked assignment for every student,\n" +
 			"including ones who already accepted.\n\n" +
 			"Because assignments.json is published publicly to GitHub Pages, the\n" +
-			"client-side gates are best-effort UX. The ENFORCEABLE boundary applies\n" +
-			"only to a PRIVATE, in-org template: locking also removes the classroom\n" +
-			"STUDENT team's read on that template repo, so no new student can\n" +
+			"client-side gates are best-effort UX. The enforceable boundary applies\n" +
+			"only to a private, in-org template: locking also removes the classroom\n" +
+			"student team's read on that template repository, so no new student can\n" +
 			"generate a repo from it while locked. The teacher, head-TA, and TA\n" +
-			"teams are left untouched. Existing student repos are NOT deleted.\n\n" +
+			"teams are left untouched. Existing student repos are not deleted.\n\n" +
 			"Pass --unlock to reverse it: the flag is cleared and, for a private\n" +
 			"in-org template, the student team's read is re-granted so students\n" +
 			"can accept again.",
@@ -124,7 +124,7 @@ func runAssignmentLock(client githubapi.Client, out, errOut io.Writer, org, clas
 	}
 
 	if !found {
-		return fmt.Errorf("assignment %q not found in %s/%s/%s — nothing to %s",
+		return fmt.Errorf("assignment %q not found in %s/%s/%s: nothing to %s",
 			slug, org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), verb)
 	}
 
@@ -186,7 +186,7 @@ func revokeClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Wri
 	}
 	if err := configrepo.RemoveTeamRepo(client, org, team.Slug, tmplOwner, tmplRepo); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) && !cliutil.IsRateLimited(err) {
-			_, _ = fmt.Fprintf(errOut, "Warning: locked %q, but removing the student team %s read on the private template %s/%s needs an organization owner. Students may still be able to accept until an owner revokes it — re-run as an owner, use the web app, or remove the %s team from %s/%s in GitHub (Settings -> Collaborators and teams).\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: locked %q, but removing the student team %s read on the private template %s/%s needs an organization owner. Students may still be able to accept until an owner revokes it: re-run as an owner, use the web app, or remove the %s team from %s/%s in GitHub (Settings -> Collaborators and teams).\n",
 				slug, team.Slug, tmplOwner, tmplRepo, team.Slug, tmplOwner, tmplRepo)
 			return nil
 		}

@@ -44,7 +44,7 @@ var (
 func main() {
 	root := &cobra.Command{
 		Use:     "gh-teacher",
-		Short:   "Teacher-facing GitHub CLI extension",
+		Short:   "Manage Classroom 50 classrooms, rosters, and assignments",
 		Version: versionString(),
 	}
 	root.SetErrPrefix("gh-teacher:")

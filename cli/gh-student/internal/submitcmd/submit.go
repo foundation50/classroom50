@@ -37,30 +37,30 @@ import (
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "submit",
-		Short: "Submit the current assignment to its remote",
-		Long: "Snapshot the current branch and push it as a new commit on top\n" +
-			"of the assignment repo's default branch. For an every-push\n" +
-			"assignment (the default) the autograde workflow listens for\n" +
-			"pushes to that branch and (a) creates its own\n" +
-			"`submit/<UTC-timestamp>-<short-sha>` tag at the pushed commit\n" +
-			"and (b) publishes a scored Release at that tag a minute or two\n" +
-			"later.\n\n" +
-			"For a tag-mode assignment (submission_mode: tag) plain pushes\n" +
-			"are not graded; this command additionally pushes the\n" +
-			"`submit/<UTC-timestamp>-<short-sha>` tag itself, which is what\n" +
-			"triggers grading. (Pushing your own `submit/*` tag by hand\n" +
-			"works too.)\n\n" +
-			"Before snapshotting, the latest teacher `.gitignore` and\n" +
-			"`.github/` (both optional) are fetched from the template repo\n" +
-			"recorded in `.classroom50.yaml` so any teacher-side updates\n" +
-			"flow through. The autograder workflow shim itself is set\n" +
-			"once at accept time and never refreshed — runtime, dependency,\n" +
-			"and grading-logic changes propagate via the runner workflow\n" +
-			"and assignments.json on the teacher's side, both fetched\n" +
-			"fresh by the runner on every submission.\n\n" +
+		Short: "Submit your work on the current assignment",
+		Long: "Snapshot your work and push it as a new commit on top of the\n" +
+			"assignment repository's default branch. Run it from inside your\n" +
+			"assignment repository clone.\n\n" +
+			"How grading is triggered:\n\n" +
+			"  - Most assignments grade every push: the autograding workflow\n" +
+			"    creates its own `submit/<UTC-timestamp>-<short-sha>` tag at the\n" +
+			"    pushed commit and publishes a scored release at that tag a\n" +
+			"    minute or two later.\n" +
+			"  - Some assignments grade only on submission tags (your teacher\n" +
+			"    configures this). Plain pushes aren't graded there, so this\n" +
+			"    command also pushes the `submit/...` tag itself, which is what\n" +
+			"    triggers grading. Pushing your own `submit/*` tag by hand works\n" +
+			"    too.\n\n" +
+			"Before the snapshot:\n\n" +
+			"  - The latest teacher `.gitignore` and `.github/` files (both\n" +
+			"    optional) are fetched from the starter-code repository recorded\n" +
+			"    in `.classroom50.yaml`, so teacher-side updates flow through.\n" +
+			"  - The autograding workflow itself is set once at accept time and\n" +
+			"    never refreshed: changes to the grading logic, runtime, or\n" +
+			"    dependencies reach you through the teacher-side setup, fetched\n" +
+			"    fresh on every submission.\n\n" +
 			"Functionally equivalent to `git commit -am 'Submit' && git push`,\n" +
-			"with the template `.gitignore`/`.github/` refresh as the only\n" +
-			"delta.",
+			"plus the teacher file refresh.",
 		Example: "  gh student submit",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
@@ -88,7 +88,7 @@ func NewCmd() *cobra.Command {
 // through unchanged.
 func annotateMissingConfig(err error) error {
 	if errors.Is(err, fs.ErrNotExist) {
-		return fmt.Errorf("%w — if this is an empty-repository assignment, autograding is disabled and `gh student submit` is not used; commit and `git push` directly", err)
+		return fmt.Errorf("%w; if this is an empty-repository assignment, autograding is disabled and `gh student submit` isn't used, so commit and `git push` directly", err)
 	}
 	return err
 }
@@ -103,7 +103,7 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		return err
 	}
 	if !inside {
-		return fmt.Errorf("not inside a Git repository")
+		return fmt.Errorf("not inside a Git repository; run this from your assignment repository clone")
 	}
 
 	config, err := classroomcfg.ReadConfig(filepath.Join(root, classroomcfg.MetadataPath))
@@ -301,7 +301,7 @@ func finishSubmission(
 		if err != nil {
 			return fmt.Errorf(
 				"submission pushed (%s/commit/%s) but the submit tag failed: %w\n"+
-					"this assignment grades only on submit/* tags — re-run `gh student submit` to retry (the pushed work is safe)",
+					"this assignment grades only on submit/* tags, so run `gh student submit` again to retry (the pushed work is safe)",
 				repoHTMLURL, sha, err,
 			)
 		}
@@ -313,7 +313,7 @@ func finishSubmission(
 	announce()
 
 	if entry == nil && entryErr != nil {
-		u.Warn("could not determine the assignment's submission mode (%v); if this assignment grades on submit tags, re-run `gh student submit`", entryErr)
+		u.Warn("could not determine the assignment's submission mode (%v); if this assignment grades on submit tags, run `gh student submit` again", entryErr)
 	}
 
 	return nil
@@ -337,7 +337,7 @@ func fetchSubmitEntry(ctx context.Context, org string, config *classroomcfg.Conf
 	entry, err := fetchEntryFn(ctx, org, config.Classroom, config.Secret, config.Assignment)
 	if err != nil {
 		if verbose {
-			u.Detail("Could not resolve the assignment entry (%v); submitting all files — the autograder enforces allowed_files", err)
+			u.Detail("Could not resolve the assignment entry (%v); submitting all files (the autograder enforces allowed_files)", err)
 		}
 		return nil, err
 	}

@@ -43,7 +43,7 @@ func provisionServiceToken(cmd *cobra.Command, client githubapi.Client, summary 
 	// 2. Re-run with the secret already present: don't re-prompt.
 	if secretExists {
 		summary.ServiceToken = "already configured"
-		_, _ = fmt.Fprintf(errOut, "Service token: already configured — left as-is. To replace it, run `gh teacher rotate-service-token %s` (or set %s and re-run).\n", org, servicetoken.EnvServiceToken)
+		_, _ = fmt.Fprintf(errOut, "Service token: already configured, left as-is. To replace it, run `gh teacher rotate-service-token %s` (or set %s and re-run).\n", org, servicetoken.EnvServiceToken)
 		return nil
 	}
 

@@ -620,7 +620,7 @@ func TestApplyOrgMemberDefaults_FallbackTransportFailurePropagates(t *testing.T)
 	}
 	// #8: a transient mid-loop failure must surface the partial state
 	// (what landed / what was never attempted), not just a bare error.
-	if !strings.Contains(errOut.String(), "PARTIALLY APPLIED") {
+	if !strings.Contains(errOut.String(), "partially applied") {
 		t.Errorf("expected a partial-state warning on transient mid-loop failure, got: %q", errOut.String())
 	}
 

@@ -204,7 +204,7 @@ func openFeedbackPRStep(client githubapi.Client, u *ui.UI, verbose bool, p accep
 // Pointing only at "your first submission" would be false in exactly the
 // Actions-disabled classroom this feature exists for — the runner never runs
 // there, so re-accepting is the only route. Mirrors the GUI's deferred message.
-const feedbackPRDeferredHint = "could not open the Feedback PR now; run accept again to retry (or it opens on your first submission if autograding is enabled)"
+const feedbackPRDeferredHint = "could not open the feedback pull request now; run accept again to retry (or it opens on your first submission if autograding is enabled)"
 
 // acceptCommitSHA recovers the accept commit — the earliest commit touching
 // the .classroom50.yaml marker — for a repo provisioned by an earlier accept.
@@ -287,7 +287,7 @@ func verifyFeedbackBaseRef(client githubapi.Client, org, repoName, acceptSHA str
 		return err
 	}
 	if sha != acceptSHA {
-		return fmt.Errorf("%s branch is at %s, not the expected baseline %s — an org admin must delete it so it can be re-frozen correctly",
+		return fmt.Errorf("%s branch is at %s, not the expected baseline %s; an org admin must delete it so it can be re-frozen correctly",
 			contract.FeedbackBaseBranch, sha, acceptSHA)
 	}
 	return nil

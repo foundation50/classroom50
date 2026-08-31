@@ -13,8 +13,8 @@ func NewLogoutCmd() *cobra.Command {
 		Use:   "logout",
 		Short: "Log out of GitHub",
 		Long: "Wrapper around `gh auth logout`. Removes the local gh\n" +
-			"authentication so subsequent classroom50 commands require a\n" +
-			"fresh `gh student login`.",
+			"authentication, so later commands need a fresh\n" +
+			"`gh student login`.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
