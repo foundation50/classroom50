@@ -285,6 +285,12 @@ describe("acceptAssignment team mode", () => {
           // Marker + workflow both present: the healthy already-accepted path.
           return { type: "file" }
         }
+        if (method === "GET" && url.includes("/memberships/")) {
+          // The teacher-formation gate's role read: a plain member (a
+          // teacher-created team) passes; see the self-created test for the
+          // maintainer rejection.
+          return { state: "active", role: "member" }
+        }
         if (method === "PUT" && url.includes("/teams/")) {
           return undefined
         }
@@ -366,6 +372,46 @@ describe("acceptAssignment team mode", () => {
       }),
     ).rejects.toSatisfy(
       (err) => localizedMessageOf(err)?.key === "accept.errors.teamRequired",
+    )
+  })
+
+  it("rejects a self-created team under teacher formation (maintainer role)", async () => {
+    // The group-team name is derivable from public data, so a student could
+    // found a shape-matching team and bypass "your teacher assigns the
+    // groups"; the maintainer role is the tell (teacher-created teams never
+    // leave a student maintainer).
+    mocked.assignment = ASSIGNMENT_ENTRY
+    const slug = await groupTeamName(CLASSROOM, SLUG, 5)
+    const rogueTeam = {
+      slug,
+      id: 99,
+      description: marshalGroupDescription({
+        classroom: CLASSROOM,
+        assignment: SLUG,
+      }),
+      organization: { login: ORG, id: 1 },
+    }
+    const base = makeClient({ myTeams: [rogueTeam], repoExists: true })
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        if ((init?.method ?? "GET") === "GET" && url.includes("/memberships/"))
+          return { state: "active", role: "maintainer" }
+        return (
+          base.client as unknown as {
+            request: (u: string, i?: unknown) => Promise<unknown>
+          }
+        ).request(url, init)
+      },
+    )
+    await expect(
+      acceptAssignment({
+        client: { request } as unknown as GitHubClient,
+        org: ORG,
+        classroom: CLASSROOM,
+        assignmentSlug: SLUG,
+      }),
+    ).rejects.toSatisfy(
+      (err) => localizedMessageOf(err)?.key === "accept.errors.teamSelfCreated",
     )
   })
 })

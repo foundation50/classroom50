@@ -405,7 +405,7 @@ func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int, team
 //   - not on a team, student formation → --new-team founds a team (the
 //     student becomes its GitHub team maintainer), else an error explains
 //     the two ways to get one.
-func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, assignment string, entry assignments.Entry, newTeam bool, teamName string) (groupteam.Membership, error) {
+func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, assignment, username string, entry assignments.Entry, newTeam bool, teamName string) (groupteam.Membership, error) {
 	membership, found, err := groupteam.MyTeam(client, org, classroom, assignment)
 	if err != nil {
 		return groupteam.Membership{}, err
@@ -414,6 +414,23 @@ func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, as
 		if newTeam {
 			u.Warn("you are already in group %d for this assignment; ignoring --new-team", membership.Counter)
 		}
+		// Teacher formation never makes a student a maintainer (the teacher
+		// creates the team and drops out; students are added as members), so
+		// a maintainer membership marks a self-created team: the group-team
+		// name is derivable from public data, and accepting through it would
+		// bypass "your teacher assigns the groups" entirely. Fail closed on
+		// the role read too — an unverifiable membership must not become the
+		// bypass. Advisory like every client-side gate, but it keeps honest
+		// students off a path the teacher tooling would flag as drift.
+		if entry.TeamFormation == contract.TeamFormationTeacher {
+			role, err := groupteam.MembershipRole(context.Background(), client, org, membership.Slug, username)
+			if err != nil {
+				return groupteam.Membership{}, fmt.Errorf("could not verify your group membership: %w; run accept again in a moment", err)
+			}
+			if role == "maintainer" {
+				return groupteam.Membership{}, fmt.Errorf("your teacher assigns the groups for this assignment, and group %d was not created by your teacher (you maintain it). Ask your teacher to add you to one of their groups, then run accept again", membership.Counter)
+			}
+		}
 		return membership, nil
 	}
 	if entry.TeamFormation == contract.TeamFormationTeacher {
@@ -421,6 +438,13 @@ func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, as
 	}
 	if !newTeam {
 		return groupteam.Membership{}, fmt.Errorf("you are not in a group for this assignment yet. Run accept again with --new-team to create one (you become its founder and can add teammates with `gh student team add`), or ask a teammate who already has a group to add you, then run accept again")
+	}
+	// The coherence gate runs on the FOUNDING path only: founding against an
+	// incoherent entry would mint a team (and later a repo) the contract
+	// forbids, but a student already on a team must still reconcile a healthy
+	// repo even if a later-published entry drifted incoherent.
+	if err := assertModeCoherentForCreate(assignment, entry.Mode, entry.MaxGroupSize, entry.TeamFormation); err != nil {
+		return groupteam.Membership{}, err
 	}
 	created, err := groupteam.Create(client, org, classroom, assignment, teamName)
 	if err != nil {
@@ -489,10 +513,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	ownerSegment := username
 	teamSlug := ""
 	if entry.Mode == contract.ModeTeam {
-		if err := assertModeCoherentForCreate(assignment, entry.Mode, entry.MaxGroupSize, entry.TeamFormation); err != nil {
-			return err
-		}
-		membership, err := resolveTeamMembership(client, u, org, classroom, assignment, entry, newTeam, teamName)
+		membership, err := resolveTeamMembership(client, u, org, classroom, assignment, username, entry, newTeam, teamName)
 		if err != nil {
 			return err
 		}
@@ -747,6 +768,12 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			return perr
 		}
 		if provisioned {
+			// Heal the team attach BEFORE any role reconcile: the attach PUT
+			// needs repo admin — the founder's transient creator-admin — and
+			// the team-mode founder role is push, so reconciling the role
+			// first would self-downgrade the founder and strand the attach
+			// forever (the exact half-accept this branch exists to repair).
+			attachTeamBestEffort(client, u, verbose, p)
 			// Already accepted: reconcile the role best-effort. The repo is
 			// already healthy, so a transient/SSO-403/left-org failure must not
 			// fail a re-run that previously always succeeded — warn and report.
@@ -754,9 +781,6 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 				u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repository already exists: %s", p.fullName))
-			// Best-effort team re-attach: a prior accept may have died between
-			// the repo landing and the team grant, and the PUT is idempotent.
-			attachTeamBestEffort(client, u, verbose, p)
 			// Ensure the Feedback PR exists even on the healthy path: repos
 			// accepted before the accept-time-PR feature (issue #228) get
 			// their PR by re-accepting — the only Actions-free route. The
@@ -867,10 +891,17 @@ func attachTeamStep(client githubapi.Client, p acceptRepoParams) error {
 
 // attachTeamBestEffort re-issues the idempotent team attach on an
 // already-accepted repo, healing a prior accept that died between the repo
-// landing and the grant. Best-effort: the repo is healthy, so a transient
-// failure must not fail a re-run — warn instead.
+// landing and the grant. Probe-first: any team member can read the
+// attachment, so a healthy re-run — including a teammate's, who could never
+// issue the PUT (it needs repo admin) — skips silently instead of warning on
+// every run. Best-effort throughout: the repo is healthy, so a failure must
+// not fail a re-run — warn instead.
 func attachTeamBestEffort(client githubapi.Client, u *ui.UI, _ bool, p acceptRepoParams) {
 	if p.teamSlug == "" {
+		return
+	}
+	attached, err := groupteam.TeamHasRepo(context.Background(), client, p.org, p.teamSlug, p.repoName)
+	if err == nil && attached {
 		return
 	}
 	if err := groupteam.AttachRepo(context.Background(), client, p.org, p.teamSlug, p.repoName); err != nil {

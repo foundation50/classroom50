@@ -113,17 +113,31 @@ func MyTeam(client githubapi.Client, org, classroom, assignment string) (Members
 // founding student left as GitHub's auto-added maintainer. Visible because
 // student-formed groups must be browsable — classmates discover teams and use
 // GitHub's native request-to-join, which only exists on visible teams
-// (teacher-formed teams stay secret; they're never browsed). Counters are
-// allocated create-first: start at 1 and on a 422 (the name is taken — even
-// by a team this student can't see) retry with the next counter, bounded by
-// counterCap. Never a visibility probe.
+// (teacher-formed teams stay secret; they're never browsed).
+//
+// Counter allocation mirrors the teacher side: the org team listing seeds the
+// lowest free counter (student-formed teams are closed, so classmates' teams
+// are visible — without the seed, founding group N would cost N sequential
+// 422s and the retry budget would cap an assignment at counterCap groups),
+// then the create's 422 stays the authority for anything the listing can't
+// see, retrying with the next free counter bounded by counterCap ATTEMPTS.
+// The seed is best-effort: a failed listing falls back to counter 1.
 func Create(client githubapi.Client, org, classroom, assignment, displayName string) (Membership, error) {
 	record, err := MarshalDescription(classroom, assignment, displayName)
 	if err != nil {
 		return Membership{}, err
 	}
+	taken := takenCounters(client, org, classroom, assignment)
+	nextFree := func(from int) int {
+		for c := from; ; c++ {
+			if !taken[c] {
+				return c
+			}
+		}
+	}
 	createPath := fmt.Sprintf("orgs/%s/teams", url.PathEscape(org))
-	for counter := 1; counter <= counterCap; counter++ {
+	counter := nextFree(1)
+	for attempt := 0; attempt < counterCap; attempt++ {
 		name := contract.GroupTeamName(classroom, assignment, counter)
 		body, err := json.Marshal(map[string]any{
 			"name":                 name,
@@ -141,7 +155,11 @@ func Create(client githubapi.Client, org, classroom, assignment, displayName str
 			var httpErr *githubapi.HTTPError
 			if errors.As(err, &httpErr) {
 				if httpErr.StatusCode == http.StatusUnprocessableEntity {
-					continue // counter taken; the next one may be free
+					// Counter taken by a team the listing didn't show; the
+					// next free one may work.
+					taken[counter] = true
+					counter = nextFree(counter + 1)
+					continue
 				}
 				if httpErr.StatusCode == http.StatusForbidden {
 					return Membership{}, fmt.Errorf("GitHub refused to create the team (HTTP 403): the organization may not allow members to create teams; ask your teacher for help: %w", err)
@@ -156,6 +174,36 @@ func Create(client githubapi.Client, org, classroom, assignment, displayName str
 		return Membership{Slug: slug, Counter: counter}, nil
 	}
 	return Membership{}, fmt.Errorf("could not create a team after %d attempts: every candidate name was taken; ask your teacher for help", counterCap)
+}
+
+// takenCounters seeds Create's allocation from the org team listing: the
+// counters of this assignment's teams visible to the caller. Best-effort — a
+// listing failure returns an empty map and Create starts at 1, exactly the
+// pre-seed behavior.
+func takenCounters(client githubapi.Client, org, classroom, assignment string) map[int]bool {
+	type orgTeam struct {
+		Slug string `json:"slug"`
+	}
+	taken := map[int]bool{}
+	teams, err := githubapi.PaginateAll[orgTeam](
+		client, myTeamsPerPage, myTeamsPagesMax,
+		func(page int) string {
+			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
+				url.PathEscape(org), myTeamsPerPage, page)
+		},
+		func(path string, err error) error {
+			return fmt.Errorf("GET %s: %w", path, err)
+		},
+	)
+	if err != nil {
+		return taken
+	}
+	for _, team := range teams {
+		if counter, ok := contract.ParseGroupTeamCounter(team.Slug, classroom, assignment); ok {
+			taken[counter] = true
+		}
+	}
+	return taken
 }
 
 // AttachRepo grants the group team push on <org>/<repo> — the authoritative
@@ -175,6 +223,51 @@ func AttachRepo(ctx context.Context, client githubapi.Client, org, slug, repo st
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
+}
+
+// TeamHasRepo reports whether the group team is already attached to
+// <org>/<repo> (GET returns 204/200 for an attached repo, 404 for a detached
+// one). Any member of the team can ask, which lets a healed accept re-run
+// skip the attach — the PUT needs repo admin, which only the founder holds
+// transiently at create time.
+func TeamHasRepo(ctx context.Context, client githubapi.Client, org, slug, repo string) (bool, error) {
+	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(org), url.PathEscape(repo))
+	resp, err := client.RequestWithContext(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		var httpErr *githubapi.HTTPError
+		if errors.As(err, &httpErr) && httpErr.StatusCode == http.StatusNotFound {
+			return false, nil
+		}
+		return false, fmt.Errorf("GET %s (checking your team's repository access): %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return true, nil
+}
+
+// MembershipRole returns the caller's role on the team ("member" or
+// "maintainer"). Teacher-formed groups never make a student a maintainer (the
+// teacher creates the team and is dropped; students are added as members), so
+// a maintainer membership on a teacher-formation assignment marks a
+// self-created team — the accept gate refuses it rather than letting a
+// student bypass "your teacher assigns the groups" by founding a
+// shape-matching team.
+func MembershipRole(ctx context.Context, client githubapi.Client, org, slug, username string) (string, error) {
+	path := fmt.Sprintf("orgs/%s/teams/%s/memberships/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(username))
+	resp, err := client.RequestWithContext(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return "", fmt.Errorf("GET %s (checking your team role): %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var membership struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&membership); err != nil {
+		return "", fmt.Errorf("decode team membership: %w", err)
+	}
+	return membership.Role, nil
 }
 
 // AddMember adds username to the group team as a plain member. For a

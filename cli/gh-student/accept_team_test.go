@@ -76,7 +76,7 @@ func TestResolveTeamMembership_AlreadyOnTeam(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, teamEntry(), true, "")
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), true, "")
 	if err != nil {
 		t.Fatalf("resolveTeamMembership: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestResolveTeamMembership_TeacherFormationNotOnTeam(t *testing.T) {
 	entry := teamEntry()
 	entry.TeamFormation = contract.TeamFormationTeacher
 	var errOut bytes.Buffer
-	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, entry, true, "")
+	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, true, "")
 	if err == nil || !strings.Contains(err.Error(), "teacher assigns the groups") {
 		t.Fatalf("err = %v, want the teacher-assigns-groups message", err)
 	}
@@ -114,7 +114,7 @@ func TestResolveTeamMembership_StudentFormationNeedsNewTeam(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, teamEntry(), false, "")
+	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), false, "")
 	if err == nil || !strings.Contains(err.Error(), "--new-team") {
 		t.Fatalf("err = %v, want the --new-team hint", err)
 	}
@@ -128,6 +128,12 @@ func TestResolveTeamMembership_NewTeamCreatesWith422Retry(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/user/teams", userTeamsHandler())
 	mux.HandleFunc("/orgs/"+teamTestOrg+"/teams", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			// Create's best-effort counter seed: nothing visible here, so
+			// allocation starts at 1 and the 422 stays the authority.
+			_, _ = w.Write([]byte(`[]`))
+			return
+		}
 		var body map[string]any
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		createBodies = append(createBodies, body)
@@ -145,7 +151,7 @@ func TestResolveTeamMembership_NewTeamCreatesWith422Retry(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var errOut bytes.Buffer
-	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, teamEntry(), true, "The Sharks")
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), true, "The Sharks")
 	if err != nil {
 		t.Fatalf("resolveTeamMembership(--new-team): %v", err)
 	}
@@ -298,13 +304,19 @@ func TestAcceptIntoRepo_TeamMode(t *testing.T) {
 		}
 	})
 
-	t.Run("already on team + repo exists (marker present): no create, best-effort re-attach", func(t *testing.T) {
+	t.Run("already on team + repo exists (marker present): no create, heals a detached team", func(t *testing.T) {
 		var attachPut, treeWrite bool
 		mux := http.NewServeMux()
 		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
 		})
 		mux.HandleFunc(attachPath, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodGet {
+				// The probe says detached — the prior accept died between the
+				// repo landing and the team grant.
+				http.NotFound(w, r)
+				return
+			}
 			if r.Method == http.MethodPut {
 				attachPut = true
 			}
@@ -326,7 +338,7 @@ func TestAcceptIntoRepo_TeamMode(t *testing.T) {
 			t.Fatalf("acceptIntoRepo (team already accepted): %v", err)
 		}
 		if !attachPut {
-			t.Error("an already-accepted team repo should still re-issue the idempotent attach")
+			t.Error("an already-accepted team repo with a detached team should re-issue the attach")
 		}
 		if treeWrite {
 			t.Error("an already-provisioned team repo must not re-provision files")
@@ -335,4 +347,129 @@ func TestAcceptIntoRepo_TeamMode(t *testing.T) {
 			t.Errorf("expected the already-accepted report:\n%s", out.String())
 		}
 	})
+
+	t.Run("already on team + repo exists + team attached: probe skips the PUT", func(t *testing.T) {
+		// A teammate's healthy re-run can't issue the attach PUT (it needs
+		// repo admin); the probe must skip it silently instead of warning on
+		// every run.
+		var attachPut bool
+		mux := http.NewServeMux()
+		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+		})
+		mux.HandleFunc(attachPath, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodPut {
+				attachPut = true
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+		mux.HandleFunc("/repos/"+teamTestOrg+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, teamParams(true)); err != nil {
+			t.Fatalf("acceptIntoRepo (team attached): %v", err)
+		}
+		if attachPut {
+			t.Error("an already-attached team must not be re-attached (the probe should skip the PUT)")
+		}
+		if strings.Contains(out.String(), "could not confirm your team") {
+			t.Errorf("a healthy attached team must not warn:\n%s", out.String())
+		}
+	})
+}
+
+// Teacher formation + on a teacher-created team (role member): membership
+// resolves normally — the maintainer gate only refuses self-created teams.
+func TestResolveTeamMembership_TeacherFormationMemberAllowed(t *testing.T) {
+	mine := contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/user/teams", userTeamsHandler(mine))
+	mux.HandleFunc("/orgs/"+teamTestOrg+"/teams/"+mine+"/memberships/alice",
+		func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "active", "role": "member"})
+		})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	entry := teamEntry()
+	entry.TeamFormation = contract.TeamFormationTeacher
+	var errOut bytes.Buffer
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, "")
+	if err != nil {
+		t.Fatalf("resolveTeamMembership: %v", err)
+	}
+	if membership.Counter != 1 {
+		t.Errorf("membership = %+v, want counter 1", membership)
+	}
+}
+
+// Teacher formation + a team the student MAINTAINS: refused. The group-team
+// name is derivable from public data, so a student could otherwise found a
+// shape-matching team and bypass "your teacher assigns the groups" — the
+// role is the tell (teacher-created teams never leave a student maintainer).
+func TestResolveTeamMembership_TeacherFormationRejectsSelfCreatedTeam(t *testing.T) {
+	mine := contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 1)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/user/teams", userTeamsHandler(mine))
+	mux.HandleFunc("/orgs/"+teamTestOrg+"/teams/"+mine+"/memberships/alice",
+		func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"state": "active", "role": "maintainer"})
+		})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	entry := teamEntry()
+	entry.TeamFormation = contract.TeamFormationTeacher
+	var errOut bytes.Buffer
+	_, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", entry, false, "")
+	if err == nil || !strings.Contains(err.Error(), "was not created by your teacher") {
+		t.Fatalf("err = %v, want the self-created-team refusal", err)
+	}
+}
+
+// Create seeds its counter from the org team listing (closed student-formed
+// teams are visible), so founding group N never costs N sequential 422s and
+// the retry budget bounds only genuine races — not the assignment's size.
+func TestGroupTeamCreate_SeedsCounterFromListing(t *testing.T) {
+	var createNames []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/user/teams", userTeamsHandler())
+	mux.HandleFunc("/orgs/"+teamTestOrg+"/teams", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			if r.URL.Query().Get("page") != "1" {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			_ = json.NewEncoder(w).Encode([]map[string]any{
+				{"slug": contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 1)},
+				{"slug": contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 2)},
+				{"slug": "classroom50-" + teamTestClassroom}, // not a group team
+			})
+			return
+		}
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		name, _ := body["name"].(string)
+		createNames = append(createNames, name)
+		_ = json.NewEncoder(w).Encode(map[string]any{"slug": name})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	var errOut bytes.Buffer
+	membership, err := resolveTeamMembership(newTestRESTClient(t, server), ui.NewForced(&errOut, false), teamTestOrg, teamTestClassroom, teamTestAssignment, "alice", teamEntry(), true, "")
+	if err != nil {
+		t.Fatalf("resolveTeamMembership(--new-team): %v", err)
+	}
+	if membership.Counter != 3 {
+		t.Errorf("membership = %+v, want the listing-seeded counter 3", membership)
+	}
+	want := []string{contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 3)}
+	if len(createNames) != 1 || createNames[0] != want[0] {
+		t.Errorf("creates = %v, want exactly %v (no sequential 422 walk)", createNames, want)
+	}
 }

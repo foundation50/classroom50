@@ -2570,7 +2570,8 @@
       "initShimInvalidCombo": "Assignment \"{{assignmentSlug}}\" combines the built-in-autograder-on-an-empty-repo setting with a template, an empty repository, or no built-in autograder, which isn't valid. Ask your teacher to re-run assignment setup.",
       "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
       "teamTeacherAssigns": "You're not in a group for this assignment yet. Your teacher assigns the groups. Ask your teacher to add you to a group, then open this link again.",
-      "teamRequired": "You're not in a group for this assignment yet. Create a group, or ask a teammate to add you, then try again."
+      "teamRequired": "You're not in a group for this assignment yet. Create a group, or ask a teammate to add you, then try again.",
+      "teamSelfCreated": "Your teacher assigns the groups for this assignment, and group {{n}} wasn't created by your teacher. Ask your teacher to add you to one of their groups, then open this link again."
     },
     "progress": {
       "error": "Setup failed. Review the steps.",

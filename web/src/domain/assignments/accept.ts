@@ -848,6 +848,26 @@ export async function acceptAssignment(params: {
               : { key: "accept.errors.teamRequired" },
           )
         }
+        // Teacher formation never makes a student a maintainer (the teacher
+        // creates the team and drops out; students are added as members), so
+        // a maintainer membership marks a self-created team: the group-team
+        // name is derivable from public data, and accepting through it would
+        // bypass "your teacher assigns the groups" entirely. Fail closed on
+        // the role read too — an unverifiable membership must not become the
+        // bypass.
+        if ((assignment.team_formation ?? "teacher") === "teacher") {
+          const membership = await client.request<{ role?: string }>(
+            `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+              team.slug,
+            )}/memberships/${encodeURIComponent(username)}`,
+          )
+          if (membership.role === "maintainer") {
+            throw new AcceptStepError({
+              key: "accept.errors.teamSelfCreated",
+              params: { n: team.n },
+            })
+          }
+        }
         return team
       },
     )
