@@ -3,6 +3,7 @@ import {
   FileAddedIcon,
   FileCheckIcon,
   GearIcon,
+  OrganizationIcon,
   PeopleIcon,
 } from "@/components/ui/icons"
 import { Link, useMatchRoute } from "@tanstack/react-router"
@@ -94,6 +95,7 @@ export const AssignmentSidebarMenu = ({
   const onSettings = onRoute(
     "/$org/$classroom/assignments/$assignment/settings",
   )
+  const onGroups = onRoute("/$org/$classroom/assignments/$assignment/groups")
   const onAccept = onRoute("/$org/$classroom/assignments/$assignment/accept")
 
   // Students only: surface "Accept" until they have their repo. Hidden while
@@ -167,6 +169,21 @@ export const AssignmentSidebarMenu = ({
             </>
           ) : showTeacherUi ? (
             <>
+              {isTeamAssignment && (
+                <SidebarNavItem label={t("nav.manageGroups")}>
+                  <Link
+                    to="/$org/$classroom/assignments/$assignment/groups"
+                    params={{ org, classroom, assignment }}
+                  >
+                    <SidebarItemBody
+                      label={t("nav.manageGroups")}
+                      icon={<OrganizationIcon aria-hidden="true" />}
+                      active={onGroups}
+                      groupId="assignment"
+                    />
+                  </Link>
+                </SidebarNavItem>
+              )}
               <SidebarNavItem label={t("nav.submissions")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submissions"

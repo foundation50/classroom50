@@ -23,7 +23,6 @@ import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import { GROUP_REPO_SEGMENT } from "@/util/studentRepo"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
 import RenameSlugSection from "./assignments/RenameSlugSection"
-import ManageGroupsCard from "./manageGroups/ManageGroupsCard"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -331,15 +330,6 @@ const AssignmentSettingsPage = () => {
               classroom={classroom}
               assignment={assignmentData}
               assignments={assignments?.assignments ?? []}
-            />
-          )}
-          {/* Team-mode group management moved to its own routed page; this is
-              the compact pointer with the current group count. */}
-          {!archived && assignmentData?.mode === "team" && (
-            <ManageGroupsCard
-              org={org}
-              classroom={classroom}
-              assignmentSlug={assignmentData.slug}
             />
           )}
           <EditAssignmentForm

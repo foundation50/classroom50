@@ -213,6 +213,7 @@
     "submissions": "Submissions",
     "mySubmission": "My submission",
     "manageGroup": "Manage group",
+    "manageGroups": "Manage groups",
     "acceptAssignment": "Accept assignment",
     "myClasses": "My classrooms",
     "published": "Published",
@@ -1854,11 +1855,6 @@
     "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
     "notTeamMode": "This assignment doesn't use groups, so there is nothing to manage here. Review its setup in <settingsLink>assignment settings</settingsLink>.",
     "archivedNotice": "This classroom is archived, so its groups are read-only. Unarchive it in <settingsLink>Classroom settings</settingsLink> to manage groups.",
-    "settingsCard": {
-      "description": "Create groups, manage members and visibility, and keep the snapshot up to date.",
-      "groupCount_one": "{{count}} group so far.",
-      "groupCount_other": "{{count}} groups so far."
-    },
     "rename": {
       "editAriaLabel": "Rename {{name}}",
       "nameAriaLabel": "New name for {{name}}",
