@@ -187,6 +187,7 @@ const EditAssignmentFormStudent = ({
             teamName={myTeam.name}
             maxGroupSize={assignmentData?.max_group_size}
             viewerLogin={user?.login}
+            formation={assignmentData?.team_formation}
           />
         </Card.Body>
       </Card>

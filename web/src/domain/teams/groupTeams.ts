@@ -21,6 +21,7 @@ import {
   verifyGroupDescription,
 } from "@/util/groupTeam"
 import { localizedError } from "@/types/localizedMessage"
+import type { TeamFormation } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("domain:groupTeams")
@@ -137,6 +138,13 @@ const CREATE_ATTEMPTS = 50
 // can add teammates). Teacher formation passes no founderLogin: the teacher is
 // dropped after create so the team holds only real group members (best-effort;
 // an org owner keeps full team control either way).
+//
+// Visibility follows the assignment's formation, not the caller: a
+// student-formed team is created `closed` (visible to every org member) so
+// classmates can browse existing groups and use GitHub's native
+// request-to-join — which only exists on visible teams. A teacher-formed team
+// stays `secret`: nobody browses it, and secrecy hides memberships from other
+// classes sharing the org.
 export async function createGroupTeam(
   client: GitHubClient,
   org: string,
@@ -146,10 +154,17 @@ export async function createGroupTeam(
     displayName?: string
     creatorLogin: string
     founderLogin?: string
+    formation: TeamFormation
   },
 ): Promise<GroupTeamRef> {
-  const { classroom, assignment, displayName, creatorLogin, founderLogin } =
-    input
+  const {
+    classroom,
+    assignment,
+    displayName,
+    creatorLogin,
+    founderLogin,
+    formation,
+  } = input
   const prefix = await groupTeamAssignmentPrefix(classroom, assignment)
   const visible = await listOrgTeams(client, org)
   const taken = takenCounters(visible, prefix)
@@ -168,7 +183,7 @@ export async function createGroupTeam(
         org,
         name,
         description,
-        privacy: "secret",
+        privacy: formation === "student" ? "closed" : "secret",
         notification_setting: "notifications_disabled",
       })
       break
@@ -278,6 +293,40 @@ export async function removeGroupTeamMember(
     teamSlug: input.teamSlug,
     username: input.username,
   })
+}
+
+// A member leaves their own group team. Same DELETE as a removal, but the
+// failure story differs: the REST docs only promise removal to team
+// maintainers and org owners (self-removal works like GitHub's own Leave
+// button in practice), so a 403 — an IdP-synced team, or a policy change —
+// maps to a localized error pointing at the team page instead of a dead end.
+export async function leaveGroupTeam(
+  client: GitHubClient,
+  org: string,
+  input: { teamSlug: string; username: string },
+): Promise<void> {
+  try {
+    await removeUserFromTeam(client, {
+      org,
+      teamSlug: input.teamSlug,
+      username: input.username,
+    })
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isForbidden) {
+      throw localizedError({
+        key: "groupTeams.errors.leaveForbidden",
+        params: { slug: input.teamSlug },
+      })
+    }
+    throw err
+  }
+}
+
+// The team's page on GitHub — where the native request-to-join button lives
+// for a visible (closed) team, and where maintainers review pending requests.
+// The REST API exposes none of that flow, so both sides deep-link here.
+export function groupTeamUrl(org: string, teamSlug: string): string {
+  return `https://github.com/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(teamSlug)}`
 }
 
 // Attach the group's repo to its team with push — the authoritative repo<->team

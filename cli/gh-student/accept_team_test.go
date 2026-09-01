@@ -159,8 +159,10 @@ func TestResolveTeamMembership_NewTeamCreatesWith422Retry(t *testing.T) {
 	if first["name"] != contract.GroupTeamName(teamTestClassroom, teamTestAssignment, 1) {
 		t.Errorf("first attempt name = %v, want counter 1", first["name"])
 	}
-	if first["privacy"] != "secret" || first["notification_setting"] != "notifications_disabled" {
-		t.Errorf("create body = %v, want a secret notifications-disabled team", first)
+	// Student-formed teams are closed (visible): classmates must be able to
+	// browse groups and use GitHub's native request-to-join.
+	if first["privacy"] != "closed" || first["notification_setting"] != "notifications_disabled" {
+		t.Errorf("create body = %v, want a closed notifications-disabled team", first)
 	}
 	wantRecord, _ := groupteam.MarshalDescription(teamTestClassroom, teamTestAssignment, "The Sharks")
 	if first["description"] != wantRecord {

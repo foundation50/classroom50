@@ -2540,6 +2540,19 @@
       "nameHelp": "Shown to your teacher and teammates. Leave blank to use the group number.",
       "createButton": "Create group",
       "createForbidden": "Your organization doesn't allow members to create teams, so Classroom 50 can't create your group. Ask your teacher to create the group for you."
+    },
+    "joinGroup": {
+      "title": "Join a group",
+      "defaultName": "Group {{n}}",
+      "memberCountOfMax_one": "{{count}}/{{max}}",
+      "memberCountOfMax_other": "{{count}}/{{max}}",
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "full": "Full",
+      "request": "Ask to join",
+      "help": "Asking to join opens the group's page on GitHub. Select \"Request to join\" there; the group reviews requests on that page, where you can also cancel yours. Once you're in, come back here.",
+      "recheck": "I've been added, check again",
+      "or": "or"
     }
   },
   "submissions": {
@@ -3609,7 +3622,12 @@
       "groupFull": "Group is full ({{max}} members max). Remove someone to add another.",
       "addPlaceholder": "GitHub username",
       "addAriaLabel": "Add a teammate by GitHub username",
-      "add": "Add"
+      "add": "Add",
+      "reviewJoinRequests": "Review join requests on GitHub",
+      "leave": "Leave group",
+      "leaveTitle": "Leave {{name}}?",
+      "leaveBody": "You lose access to the group's repository and your work stays with the group. Rejoining takes extra steps: you must request to join again on GitHub and wait for the group or your teacher to approve it.",
+      "leaveConfirm": "Leave group"
     }
   },
   "formatDate": {
@@ -3622,7 +3640,8 @@
       "notOnRoster": "{{username}} isn't on the classroom roster. Add them to the roster first, then add them to the group.",
       "notAGroupTeam": "{{slug}} isn't a group team this app created, so it wasn't deleted.",
       "idMismatch": "The team {{slug}} isn't the one this assignment created, so it wasn't deleted. Remove it on GitHub if you're sure.",
-      "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure."
+      "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure.",
+      "leaveForbidden": "GitHub blocked leaving the group. The team's membership may be managed by your school. Ask your teacher to remove you, or leave from the team's page on GitHub."
     }
   }
 }

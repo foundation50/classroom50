@@ -100,7 +100,7 @@ func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope teamSco
 // message can point at `team add` to finish rather than re-running create
 // (which would mint a second team).
 func createTeamWithMembers(client githubapi.Client, errOut io.Writer, ctx teamContext, name string, members []string) (slug string, id int64, counter int, err error) {
-	slug, id, counter, err = configrepo.CreateGroupTeam(client, ctx.Org, ctx.Classroom, ctx.Assignment, name, nil)
+	slug, id, counter, err = configrepo.CreateGroupTeam(client, ctx.Org, ctx.Classroom, ctx.Assignment, name, nil, ctx.Entry.TeamFormation)
 	if err != nil {
 		return "", 0, 0, err
 	}

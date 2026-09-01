@@ -166,6 +166,7 @@ export function GroupTeamsSection({
       await createTeam.mutateAsync({
         displayName: displayName.trim() || undefined,
         creatorLogin: user.login,
+        formation,
       })
       setDisplayName("")
       await resync()

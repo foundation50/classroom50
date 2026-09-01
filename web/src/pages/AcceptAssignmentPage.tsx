@@ -4,9 +4,11 @@ import {
   CheckCircleIcon,
   ChevronDownIcon,
   GlobeIcon,
+  LinkExternalIcon,
   LockIcon,
   MarkGithubIcon,
   MortarBoardIcon,
+  PeopleIcon,
   PersonIcon,
 } from "@/components/ui/icons"
 
@@ -58,6 +60,9 @@ import {
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
+import useGroupTeams from "@/hooks/useGroupTeams"
+import { useGroupTeamMembers } from "@/hooks/useGroupTeamMembers"
+import { groupTeamUrl } from "@/domain/teams/groupTeams"
 import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { GroupTeamMembersPanel } from "@/components/assignments/GroupTeamMembersPanel"
@@ -469,6 +474,8 @@ const CreateGroupCard = ({
   maxGroupSize,
   username,
   user,
+  onRecheck,
+  recheckPending = false,
 }: {
   org: string
   classroom: string
@@ -477,10 +484,24 @@ const CreateGroupCard = ({
   maxGroupSize?: number
   username?: string
   user: GitHubUser | null
+  // Re-runs the viewer's own-team resolution — the "I was approved on GitHub,
+  // check again" affordance under the join list.
+  onRecheck?: () => void
+  recheckPending?: boolean
 }) => {
   const { t } = useTranslation()
   const [displayName, setDisplayName] = useState("")
   const createTeam = useCreateGroupTeam({ org, classroom, assignment })
+  // Student-formed teams are closed (visible), so classmates can browse them
+  // here and request to join through GitHub's native flow — the REST API
+  // exposes no join requests, so requesting, cancelling, and reviewing all
+  // happen on the team's GitHub page.
+  const teamsQuery = useGroupTeams(org, classroom, assignment)
+  const teams = teamsQuery.data ?? []
+  const { membersBySlug } = useGroupTeamMembers(
+    org,
+    teams.map((team) => team.slug),
+  )
   // An org that restricts team creation to owners 403s the create; name that
   // case for the student instead of surfacing GitHub's raw message.
   const createError = createTeam.error
@@ -514,6 +535,83 @@ const CreateGroupCard = ({
             </Alert>
           ) : null}
 
+          {teams.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="label p-0 text-sm font-medium">
+                {t("accept.joinGroup.title")}
+              </span>
+              <ul className="divide-y divide-base-200 rounded-box border border-base-200">
+                {teams.map((team) => {
+                  const members = membersBySlug.get(team.slug)
+                  const count = members?.length
+                  const isFull =
+                    maxGroupSize !== undefined &&
+                    count !== undefined &&
+                    count >= maxGroupSize
+                  return (
+                    <li
+                      key={team.slug}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                    >
+                      <PeopleIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-base-content/70"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {team.name ||
+                          t("accept.joinGroup.defaultName", { n: team.n })}
+                      </span>
+                      <span className="text-xs text-base-content/70">
+                        {count === undefined
+                          ? "—"
+                          : maxGroupSize !== undefined
+                            ? t("accept.joinGroup.memberCountOfMax", {
+                                count,
+                                max: maxGroupSize,
+                              })
+                            : t("accept.joinGroup.memberCount", { count })}
+                      </span>
+                      {isFull ? (
+                        <Badge ghost>{t("accept.joinGroup.full")}</Badge>
+                      ) : (
+                        <Button
+                          as="a"
+                          href={groupTeamUrl(org, team.slug)}
+                          target="_blank"
+                          rel="noreferrer"
+                          variant="outline"
+                          size="sm"
+                        >
+                          {t("accept.joinGroup.request")}
+                          <LinkExternalIcon
+                            aria-hidden="true"
+                            className="size-3.5"
+                          />
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="text-xs text-base-content/70">
+                {t("accept.joinGroup.help")}
+              </p>
+              {onRecheck && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit"
+                  disabled={recheckPending}
+                  loading={recheckPending}
+                  onClick={onRecheck}
+                >
+                  {t("accept.joinGroup.recheck")}
+                </Button>
+              )}
+              <div className="divider my-0">{t("accept.joinGroup.or")}</div>
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             <label
               className="label p-0 text-sm font-medium"
@@ -544,6 +642,7 @@ const CreateGroupCard = ({
                 displayName: displayName.trim() || undefined,
                 creatorLogin: username ?? "",
                 founderLogin: username ?? "",
+                formation: "student",
               })
             }
           >
@@ -960,6 +1059,8 @@ const AcceptAssignmentPage = () => {
     data: myTeam,
     isLoading: loadingMyTeam,
     isError: myTeamError,
+    refetch: refetchMyTeam,
+    isFetching: fetchingMyTeam,
   } = useMyGroupTeam(org, classroom, assignment, {
     enabled: isTeamMode && Boolean(username),
   })
@@ -1186,6 +1287,8 @@ const AcceptAssignmentPage = () => {
           maxGroupSize={assignmentData.max_group_size}
           username={username}
           user={user}
+          onRecheck={() => void refetchMyTeam()}
+          recheckPending={fetchingMyTeam}
         />
       )
     }
@@ -1378,6 +1481,7 @@ const AcceptAssignmentPage = () => {
                   teamName={myTeam.name}
                   maxGroupSize={assignmentData.max_group_size}
                   viewerLogin={username}
+                  formation={teamFormation}
                 />
               )}
 

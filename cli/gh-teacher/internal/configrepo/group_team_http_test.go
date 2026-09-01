@@ -72,7 +72,7 @@ func TestCreateGroupTeam_FirstCounter(t *testing.T) {
 	server, posts := groupTeamServer(t, nil, 0)
 	client := githubtest.NewTestClient(t, server)
 
-	slug, id, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "The Sharks", []string{"ms-frizzle"})
+	slug, id, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "The Sharks", []string{"ms-frizzle"}, contract.TeamFormationTeacher)
 	if err != nil {
 		t.Fatalf("CreateGroupTeam: %v", err)
 	}
@@ -108,7 +108,7 @@ func TestCreateGroupTeam_SkipsTakenAndRetriesOn422(t *testing.T) {
 	server, posts := groupTeamServer(t, existing, 1)
 	client := githubtest.NewTestClient(t, server)
 
-	slug, _, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil)
+	slug, _, n, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher)
 	if err != nil {
 		t.Fatalf("CreateGroupTeam: %v", err)
 	}
@@ -129,7 +129,7 @@ func TestCreateGroupTeam_BoundedRetries(t *testing.T) {
 	server, posts := groupTeamServer(t, nil, 1_000_000)
 	client := githubtest.NewTestClient(t, server)
 
-	_, _, _, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil)
+	_, _, _, err := CreateGroupTeam(client, testGroupOrg, testGroupClassroom, testGroupAssignment, "", nil, contract.TeamFormationTeacher)
 	if err == nil || !strings.Contains(err.Error(), "could not allocate a group team counter") {
 		t.Fatalf("err = %v, want the bounded-allocation failure", err)
 	}

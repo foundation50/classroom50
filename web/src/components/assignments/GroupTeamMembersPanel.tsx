@@ -3,19 +3,25 @@ import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
 
 import {
+  LinkExternalIcon,
   MarkGithubIcon,
   PeopleIcon,
   PlusIcon,
+  SignOutIcon,
   TrashIcon,
 } from "@/components/ui/icons"
 import { Alert, Badge, Button, Input } from "@/components/ui"
+import { ConfirmModal } from "@/components/modals"
 import { Spinner } from "@/components/Spinner"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { teamMembersQuery } from "@/github-core/queries"
 import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
 import useRemoveGroupTeamMember from "@/hooks/mutations/useRemoveGroupTeamMember"
+import useLeaveGroupTeam from "@/hooks/mutations/useLeaveGroupTeam"
+import { groupTeamUrl } from "@/domain/teams/groupTeams"
 import { errorText } from "@/types/localizedMessage"
 import { normalizeUsername } from "@/components/modals/collaboratorHelpers"
+import type { TeamFormation } from "@/types/classroom"
 
 // Member management for a TEAM-mode group: the group is a real GitHub Team, so
 // members come from live team membership (not repo collaborators — that is
@@ -29,6 +35,7 @@ export function GroupTeamMembersPanel({
   teamName,
   maxGroupSize,
   viewerLogin,
+  formation,
   onMembershipChange,
 }: {
   org: string
@@ -38,6 +45,12 @@ export function GroupTeamMembersPanel({
   teamName?: string
   maxGroupSize?: number
   viewerLogin?: string
+  // Student-formed groups gain the join-request affordances: a review link to
+  // the team's GitHub page (the REST API exposes no join requests, so
+  // requesting and approving live there) and the viewer's typed-confirmation
+  // "Leave group". Teacher-formed groups show neither — the teacher owns
+  // membership there.
+  formation?: TeamFormation
   // Fired after a successful add/remove, for callers that maintain a
   // membership snapshot (the teacher surfaces); the student panel omits it.
   onMembershipChange?: () => void
@@ -46,15 +59,25 @@ export function GroupTeamMembersPanel({
   const client = useGitHubClient()
   const [newMember, setNewMember] = useState("")
   const [actionError, setActionError] = useState<string | null>(null)
+  const [confirmingLeave, setConfirmingLeave] = useState(false)
 
   const membersQuery = useQuery(teamMembersQuery(client, org, teamSlug))
   const members = membersQuery.data ?? []
 
   const addMember = useAddGroupTeamMember({ org, classroom, assignment })
   const removeMember = useRemoveGroupTeamMember({ org, classroom, assignment })
-  const busy = addMember.isPending || removeMember.isPending
+  const leaveTeam = useLeaveGroupTeam({ org, classroom, assignment })
+  const busy =
+    addMember.isPending || removeMember.isPending || leaveTeam.isPending
 
   const isFull = maxGroupSize !== undefined && members.length >= maxGroupSize
+  const viewerIsMember =
+    Boolean(viewerLogin) &&
+    members.some(
+      (m) => normalizeUsername(m.login) === normalizeUsername(viewerLogin!),
+    )
+  const studentFormed = formation === "student"
+  const groupName = teamName || t("components.groupTeamMembers.title")
 
   const handleAdd = async () => {
     const username = normalizeUsername(newMember)
@@ -89,12 +112,22 @@ export function GroupTeamMembersPanel({
     }
   }
 
+  // Typed-confirmation leave (ConfirmModal renders and validates the phrase):
+  // rejoining needs a fresh request-and-approval round on GitHub, so leaving
+  // must never be one accidental click. Errors surface inside the modal.
+  const handleLeave = async () => {
+    if (!viewerLogin) return
+    await leaveTeam.mutateAsync({ teamSlug, username: viewerLogin })
+    setConfirmingLeave(false)
+    onMembershipChange?.()
+  }
+
   return (
     <div className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-100 p-4">
       <div className="flex items-center justify-between gap-4">
         <span className="flex items-center gap-2 text-sm font-medium">
           <PeopleIcon aria-hidden="true" className="size-4" />
-          {teamName || t("components.groupTeamMembers.title")}
+          {groupName}
         </span>
         <span className="text-xs text-base-content/70">
           {maxGroupSize !== undefined
@@ -205,6 +238,49 @@ export function GroupTeamMembersPanel({
           </Button>
         </div>
       )}
+
+      {studentFormed && (
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-200 pt-3">
+          {/* Join requests exist only on GitHub: a visible team's page carries
+              the native request-to-join flow, and the REST API exposes none of
+              it — so both requesting and reviewing deep-link there. */}
+          <a
+            className="link link-hover inline-flex items-center gap-1.5 text-sm"
+            href={groupTeamUrl(org, teamSlug)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("components.groupTeamMembers.reviewJoinRequests")}
+            <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+          </a>
+          {viewerIsMember && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-error"
+              disabled={busy}
+              onClick={() => setConfirmingLeave(true)}
+            >
+              <SignOutIcon aria-hidden="true" className="size-4" />
+              {t("components.groupTeamMembers.leave")}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <ConfirmModal
+        open={confirmingLeave}
+        title={t("components.groupTeamMembers.leaveTitle", {
+          name: groupName,
+        })}
+        description={t("components.groupTeamMembers.leaveBody", {
+          name: groupName,
+        })}
+        confirmText={groupName}
+        confirmLabel={t("components.groupTeamMembers.leaveConfirm")}
+        onConfirm={handleLeave}
+        onClose={() => setConfirmingLeave(false)}
+      />
     </div>
   )
 }

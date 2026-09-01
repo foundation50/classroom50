@@ -7,6 +7,7 @@ import {
   createGroupTeam,
   deleteGroupTeam,
   findMyGroupTeam,
+  leaveGroupTeam,
   lowestFreeCounter,
   takenCounters,
   updateGroupTeamDisplayName,
@@ -106,6 +107,7 @@ describe("createGroupTeam counter allocation", () => {
     conflictNames?: Set<string>
   }) {
     const created: string[] = []
+    const createdBodies: Record<string, unknown>[] = []
     const memberships: string[] = []
     const request = vi.fn(
       async (
@@ -128,6 +130,7 @@ describe("createGroupTeam counter allocation", () => {
             throw apiError(422, "Name must be unique for this org")
           }
           created.push(name)
+          createdBodies.push(init?.body ?? {})
           return { id: 999, slug: name, name, description: null }
         }
         if (method === "DELETE" && url.includes("/memberships/")) {
@@ -144,6 +147,7 @@ describe("createGroupTeam counter allocation", () => {
     return {
       client: { request } as unknown as GitHubClient,
       created,
+      createdBodies,
       memberships,
     }
   }
@@ -158,6 +162,7 @@ describe("createGroupTeam counter allocation", () => {
       assignment: ASSIGNMENT,
       creatorLogin: "alice",
       founderLogin: "alice",
+      formation: "student",
     })
     expect(result.n).toBe(3)
     expect(created).toEqual([await groupTeamName(CLASSROOM, ASSIGNMENT, 3)])
@@ -177,6 +182,7 @@ describe("createGroupTeam counter allocation", () => {
       assignment: ASSIGNMENT,
       creatorLogin: "alice",
       founderLogin: "alice",
+      formation: "student",
     })
     expect(result.n).toBe(3)
     expect(created).toEqual([`${prefix}3`])
@@ -189,6 +195,7 @@ describe("createGroupTeam counter allocation", () => {
       assignment: ASSIGNMENT,
       creatorLogin: "alice",
       founderLogin: "alice",
+      formation: "student",
     })
     expect(memberships).toEqual([])
   })
@@ -199,9 +206,34 @@ describe("createGroupTeam counter allocation", () => {
       classroom: CLASSROOM,
       assignment: ASSIGNMENT,
       creatorLogin: "teacher",
+      formation: "teacher",
     })
     expect(memberships).toHaveLength(1)
     expect(memberships[0]).toMatch(/^DELETE .*\/memberships\/teacher$/)
+  })
+
+  it("visibility follows the formation: student closed, teacher secret", async () => {
+    // Student-formed teams must be browsable (and carry GitHub's native
+    // request-to-join, which only exists on visible teams); teacher-formed
+    // teams stay hidden from other classes sharing the org.
+    const student = makeClient({ visibleSlugs: [] })
+    await createGroupTeam(student.client, ORG, {
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      creatorLogin: "alice",
+      founderLogin: "alice",
+      formation: "student",
+    })
+    expect(student.createdBodies[0].privacy).toBe("closed")
+
+    const teacher = makeClient({ visibleSlugs: [] })
+    await createGroupTeam(teacher.client, ORG, {
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      creatorLogin: "teacher",
+      formation: "teacher",
+    })
+    expect(teacher.createdBodies[0].privacy).toBe("secret")
   })
 
   it("propagates a 403 (org restricts team creation)", async () => {
@@ -217,6 +249,7 @@ describe("createGroupTeam counter allocation", () => {
         assignment: ASSIGNMENT,
         creatorLogin: "alice",
         founderLogin: "alice",
+        formation: "student",
       }),
     ).rejects.toMatchObject({ status: 403 })
   })
@@ -457,5 +490,42 @@ describe("updateGroupTeamDisplayName", () => {
         localizedMessageOf(err)?.key === "groupTeams.errors.notAGroupTeam",
     )
     expect(patches).toEqual([])
+  })
+})
+
+describe("leaveGroupTeam", () => {
+  it("DELETEs the viewer's own membership", async () => {
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+    const deletes: string[] = []
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      if (init?.method === "DELETE") {
+        deletes.push(url)
+        return undefined
+      }
+      throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`)
+    })
+    await leaveGroupTeam({ request } as unknown as GitHubClient, ORG, {
+      teamSlug: slug,
+      username: "alice",
+    })
+    expect(deletes).toEqual([`/orgs/${ORG}/teams/${slug}/memberships/alice`])
+  })
+
+  it("maps a 403 to the localized leave-forbidden error", async () => {
+    // The REST docs only promise removal to maintainers/owners; an IdP-synced
+    // team 403s a self-removal, which must never dead-end the student.
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+    const request = vi.fn(async () => {
+      throw apiError(403, "Forbidden")
+    })
+    await expect(
+      leaveGroupTeam({ request } as unknown as GitHubClient, ORG, {
+        teamSlug: slug,
+        username: "alice",
+      }),
+    ).rejects.toSatisfy(
+      (err) =>
+        localizedMessageOf(err)?.key === "groupTeams.errors.leaveForbidden",
+    )
   })
 })

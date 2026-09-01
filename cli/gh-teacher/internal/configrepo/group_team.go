@@ -140,11 +140,17 @@ func listOrgGroupTeams(client githubapi.Client, org, prefix string) ([]groupTeam
 	return out, nil
 }
 
-// CreateGroupTeam creates the next free `classroom50-group-<hash>-<n>` SECRET
-// team for (classroom, assignment), carrying the classroom50/group/v1 record
-// in its description and notifications disabled (assignment-repo churn would
+// CreateGroupTeam creates the next free `classroom50-group-<hash>-<n>` team
+// for (classroom, assignment), carrying the classroom50/group/v1 record in
+// its description and notifications disabled (assignment-repo churn would
 // spam the group). `maintainers` (optional logins) ride the create body so a
 // teacher-formed team can seed its membership in one request.
+//
+// Visibility follows the assignment's team_formation, not the caller: a
+// student-formed assignment's teams are `closed` (visible) so classmates can
+// browse them and use GitHub's native request-to-join — which only exists on
+// visible teams — even when the teacher creates or repairs a team. A
+// teacher-formed assignment's teams stay `secret`.
 //
 // Counter allocation: the visible teams pick the lowest free n as a starting
 // guess, then the create's 422 is the authority — a name collision means
@@ -152,10 +158,14 @@ func listOrgGroupTeams(client githubapi.Client, org, prefix string) ([]groupTeam
 // can't see), so retry with n+1, bounded by groupTeamCounterCap. NEVER a
 // visibility probe: a secret team is invisible to non-members, so a listing
 // can't prove a counter free.
-func CreateGroupTeam(client githubapi.Client, org, classroom, assignment, displayName string, maintainers []string) (slug string, id int64, n int, err error) {
+func CreateGroupTeam(client githubapi.Client, org, classroom, assignment, displayName string, maintainers []string, formation string) (slug string, id int64, n int, err error) {
 	description, err := MarshalGroupDescription(classroom, assignment, displayName)
 	if err != nil {
 		return "", 0, 0, err
+	}
+	privacy := "secret"
+	if formation == contract.TeamFormationStudent {
+		privacy = "closed"
 	}
 
 	prefix := contract.GroupTeamAssignmentPrefix(classroom, assignment)
@@ -183,7 +193,7 @@ func CreateGroupTeam(client githubapi.Client, org, classroom, assignment, displa
 		name := contract.GroupTeamName(classroom, assignment, counter)
 		teamBody := map[string]any{
 			"name":                 name,
-			"privacy":              "secret",
+			"privacy":              privacy,
 			"notification_setting": notificationsDisabled,
 			"description":          description,
 		}

@@ -108,12 +108,15 @@ func MyTeam(client githubapi.Client, org, classroom, assignment string) (Members
 	return best, found, nil
 }
 
-// Create founds a new group team for the assignment: a SECRET team with
-// notifications disabled carrying the classroom50/group/v1 record, the
-// founding student left as GitHub's auto-added maintainer. Counters are
+// Create founds a new group team for the assignment: a CLOSED (visible) team
+// with notifications disabled carrying the classroom50/group/v1 record, the
+// founding student left as GitHub's auto-added maintainer. Visible because
+// student-formed groups must be browsable — classmates discover teams and use
+// GitHub's native request-to-join, which only exists on visible teams
+// (teacher-formed teams stay secret; they're never browsed). Counters are
 // allocated create-first: start at 1 and on a 422 (the name is taken — even
-// by a secret team this student can't see) retry with the next counter,
-// bounded by counterCap. Never a visibility probe.
+// by a team this student can't see) retry with the next counter, bounded by
+// counterCap. Never a visibility probe.
 func Create(client githubapi.Client, org, classroom, assignment, displayName string) (Membership, error) {
 	record, err := MarshalDescription(classroom, assignment, displayName)
 	if err != nil {
@@ -124,7 +127,7 @@ func Create(client githubapi.Client, org, classroom, assignment, displayName str
 		name := contract.GroupTeamName(classroom, assignment, counter)
 		body, err := json.Marshal(map[string]any{
 			"name":                 name,
-			"privacy":              "secret",
+			"privacy":              "closed",
 			"notification_setting": "notifications_disabled",
 			"description":          record,
 		})
