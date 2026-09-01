@@ -1,16 +1,20 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Card, Heading, Select } from "@/components/ui"
-import { PeopleIcon, PlusIcon } from "@/components/ui/icons"
-import { Spinner } from "@/components/Spinner"
+import { Badge, Button, Heading, Select } from "@/components/ui"
+import { CheckCircleIcon, PlusIcon } from "@/components/ui/icons"
+import { EmptyState, ListSkeletonRows, SkeletonRegion } from "@/components/list"
 
-// One roster student not yet on any group team, with the display label the
-// list rows use ("First Last (login)" or the bare login).
+// One roster student not yet on any group team, with the display metadata the
+// list rows use: full name (may be blank), initials for the avatar fallback,
+// and the combined label the add pickers show.
 export type UnassignedStudent = {
   key: string
   username: string
   label: string
+  name: string
+  initials: string
+  avatarUrl?: string
 }
 
 // One join target: a group with room left. Full groups are omitted by the
@@ -44,94 +48,120 @@ export function UnassignedStudentsPanel({
   )
 
   return (
-    <Card bordered={false} className="mb-6 w-full border border-base-200">
-      <Card.Body className="gap-4">
-        <div>
-          <Heading
-            as="h2"
-            variant="title-small"
-            className="flex items-center gap-2"
-          >
-            <PeopleIcon aria-hidden="true" className="size-5" />
+    <section className="flex flex-col gap-3">
+      <div>
+        <div className="flex items-center gap-2">
+          <Heading as="h2" variant="title-small">
             {t("manageGroups.unassigned.heading")}
           </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("manageGroups.unassigned.hint")}
-          </p>
+          {!pending && (
+            <Badge ghost size="sm">
+              {students.length}
+            </Badge>
+          )}
         </div>
+        <p className="mt-1 text-sm text-base-content/70">
+          {t("manageGroups.unassigned.hint")}
+        </p>
+      </div>
 
-        {pending ? (
-          <div className="flex py-6">
-            <Spinner
-              className="m-auto"
-              label={t("manageGroups.unassigned.loading")}
-            />
-          </div>
-        ) : students.length === 0 ? (
-          <p className="py-4 text-center text-sm text-base-content/70">
-            {t("manageGroups.unassigned.empty")}
-          </p>
-        ) : (
-          <ul className="divide-y divide-base-200 rounded-box border border-base-200">
-            {students.map((student) => {
-              const chosen = groupByStudent[student.key] ?? ""
-              return (
-                <li
-                  key={student.key}
-                  className="flex flex-col gap-2 px-4 py-2.5 sm:flex-row sm:items-center"
-                >
-                  <span className="min-w-0 flex-1 truncate text-sm">
-                    {student.label}
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      selectSize="sm"
-                      value={chosen}
-                      aria-label={t("manageGroups.unassigned.selectAriaLabel", {
-                        name: student.label,
-                      })}
-                      onChange={(e) =>
-                        setGroupByStudent((prev) => ({
-                          ...prev,
-                          [student.key]: e.target.value,
-                        }))
-                      }
+      {pending ? (
+        <SkeletonRegion
+          label={t("manageGroups.unassigned.loading")}
+          className="rounded-box border border-base-200"
+        >
+          <ListSkeletonRows rows={3} />
+        </SkeletonRegion>
+      ) : students.length === 0 ? (
+        <EmptyState
+          icon={CheckCircleIcon}
+          body={t("manageGroups.unassigned.empty")}
+        />
+      ) : (
+        <ul className="divide-y divide-base-200 rounded-box border border-base-200">
+          {students.map((student) => {
+            const chosen = groupByStudent[student.key] ?? ""
+            return (
+              <li
+                key={student.key}
+                className="flex flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center"
+              >
+                <div className="flex min-w-0 flex-1 items-center gap-3">
+                  {student.avatarUrl ? (
+                    <img
+                      src={student.avatarUrl}
+                      alt=""
+                      className="size-8 shrink-0 rounded-full"
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-base-200 text-xs text-primary"
                     >
-                      <option value="">
-                        {t("manageGroups.unassigned.groupPlaceholder")}
-                      </option>
-                      {groups.map((group) => (
-                        <option key={group.slug} value={group.slug}>
-                          {group.label}
-                        </option>
-                      ))}
-                    </Select>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={busy || !chosen}
-                      aria-label={t("manageGroups.unassigned.addAriaLabel", {
-                        name: student.label,
-                      })}
-                      onClick={() => {
-                        onAdd(student.username, chosen)
-                        setGroupByStudent((prev) => ({
-                          ...prev,
-                          [student.key]: "",
-                        }))
-                      }}
-                    >
-                      <PlusIcon aria-hidden="true" className="size-4" />
-                      {t("manageGroups.unassigned.addButton")}
-                    </Button>
+                      {student.initials ||
+                        student.username.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {student.name || student.username}
+                    </div>
+                    {student.name && (
+                      <div className="truncate text-xs text-base-content/70">
+                        {student.username}
+                      </div>
+                    )}
                   </div>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card.Body>
-    </Card>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Select
+                    selectSize="sm"
+                    className="w-auto"
+                    value={chosen}
+                    aria-label={t("manageGroups.unassigned.selectAriaLabel", {
+                      name: student.label,
+                    })}
+                    onChange={(e) =>
+                      setGroupByStudent((prev) => ({
+                        ...prev,
+                        [student.key]: e.target.value,
+                      }))
+                    }
+                  >
+                    <option value="">
+                      {t("manageGroups.unassigned.groupPlaceholder")}
+                    </option>
+                    {groups.map((group) => (
+                      <option key={group.slug} value={group.slug}>
+                        {group.label}
+                      </option>
+                    ))}
+                  </Select>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={busy || !chosen}
+                    aria-label={t("manageGroups.unassigned.addAriaLabel", {
+                      name: student.label,
+                    })}
+                    onClick={() => {
+                      onAdd(student.username, chosen)
+                      setGroupByStudent((prev) => ({
+                        ...prev,
+                        [student.key]: "",
+                      }))
+                    }}
+                  >
+                    <PlusIcon aria-hidden="true" className="size-4" />
+                    {t("manageGroups.unassigned.addButton")}
+                  </Button>
+                </div>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 

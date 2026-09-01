@@ -1,9 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, Card, Heading, Input, Modal, cx } from "@/components/ui"
+import {
+  Alert,
+  Badge,
+  Button,
+  FormField,
+  Heading,
+  Input,
+  Modal,
+  ModalIcon,
+  cx,
+} from "@/components/ui"
 import { PeopleIcon, PlusIcon, SyncIcon } from "@/components/ui/icons"
-import { Spinner } from "@/components/Spinner"
+import { EmptyState, ListSkeletonRows, SkeletonRegion } from "@/components/list"
+import PageHeader from "@/components/PageHeader"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GitHubAPIError } from "@/github-core/errors"
 import { errorText } from "@/types/localizedMessage"
@@ -25,7 +36,7 @@ import { snapshotDrift } from "@/domain/teams/teamsFile"
 import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
 import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
-import { GroupCard } from "./GroupCard"
+import { GroupRow } from "./GroupRow"
 import { UnassignedStudentsPanel } from "./UnassignedStudentsPanel"
 
 // The two guardrail 403s named in copy instead of a raw GitHub message: an org
@@ -45,12 +56,13 @@ function describeTeamWriteError(
   return fallback
 }
 
-// Teacher-side management of a team-mode assignment's group teams: list, form
-// (create + membership), rename, visibility, delete, the unassigned-students
-// panel, and keeping the teams.json snapshot in step. For teacher formation
-// this is where groups come to exist; for student formation it's read-mostly
-// (teams appear as students form them) with the same controls available to
-// fix membership.
+// Teacher-side management of a team-mode assignment's group teams: list,
+// create dialog, membership, rename, visibility, delete, the
+// unassigned-students panel, and keeping the teams.json snapshot in step. For
+// teacher formation this is where groups come to exist; for student formation
+// it's read-mostly (teams appear as students form them) with the same controls
+// available to fix membership. Owns the page header too, so the title, the
+// formation hint, and the page-level actions form one block.
 export function GroupsManager({
   org,
   classroom,
@@ -100,14 +112,20 @@ export function GroupsManager({
   // and the unassigned panel's rows.
   const availableStudents = useMemo(
     () =>
-      unassignedRosterStudents(enrolled, assignedLogins).map((row) => ({
-        key: row.key,
-        username: row.username,
-        label:
-          row.first_name || row.last_name
-            ? `${row.first_name} ${row.last_name} (${row.username})`.trim()
-            : row.username,
-      })),
+      unassignedRosterStudents(enrolled, assignedLogins).map((row) => {
+        const name = `${row.first_name} ${row.last_name}`.trim()
+        const initials = (
+          row.first_name.trim().charAt(0) + row.last_name.trim().charAt(0)
+        ).toUpperCase()
+        return {
+          key: row.key,
+          username: row.username,
+          name,
+          initials,
+          avatarUrl: row.avatar_url || undefined,
+          label: name ? `${name} (${row.username})` : row.username,
+        }
+      }),
     [enrolled, assignedLogins],
   )
 
@@ -167,6 +185,7 @@ export function GroupsManager({
   })
 
   const [displayName, setDisplayName] = useState("")
+  const [createOpen, setCreateOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<GroupTeamRef | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
@@ -205,6 +224,14 @@ export function GroupsManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshotQuery.isLoading, teamsQuery.isLoading, membersPending, drift])
 
+  // Reset when OPENING, not when closing: the dialog keeps painting through
+  // its fade-out (see Modal), so clearing at close would blank it mid-fade.
+  const openCreate = () => {
+    setDisplayName("")
+    setActionError(null)
+    setCreateOpen(true)
+  }
+
   const handleCreate = async () => {
     if (!user?.login || busy) return
     setActionError(null)
@@ -214,7 +241,7 @@ export function GroupsManager({
         creatorLogin: user.login,
         formation,
       })
-      setDisplayName("")
+      setCreateOpen(false)
       await resync()
     } catch (err) {
       setActionError(
@@ -271,7 +298,7 @@ export function GroupsManager({
   }
 
   // Display-name only: the team NAME (== slug) never changes, so the group's
-  // repository keeps its name. True on success so the card closes its editor.
+  // repository keeps its name. True on success so the row closes its editor.
   const handleRename = async (team: GroupTeamRef, name: string) => {
     if (busy) return false
     setActionError(null)
@@ -324,28 +351,29 @@ export function GroupsManager({
     if (team) void handleAdd(team, username)
   }
 
+  const createGroupButton = (
+    <Button
+      variant="primary"
+      size="sm"
+      disabled={busy || !user?.login}
+      onClick={openCreate}
+    >
+      <PlusIcon aria-hidden="true" className="size-4" />
+      {t("manageGroups.createButton")}
+    </Button>
+  )
+
   return (
     <>
-      <Card bordered={false} className="mb-6 w-full border border-base-200">
-        <Card.Body className="gap-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <Heading
-                as="h2"
-                variant="title-small"
-                className="flex items-center gap-2"
-              >
-                <PeopleIcon aria-hidden="true" className="size-5" />
-                {t("manageGroups.heading")}
-              </Heading>
-              <p className="mt-1 text-sm text-base-content/70">
-                {t(
-                  formation === "teacher"
-                    ? "manageGroups.teacherFormationHint"
-                    : "manageGroups.studentFormationHint",
-                )}
-              </p>
-            </div>
+      <PageHeader
+        title={t("manageGroups.title")}
+        subtitle={t(
+          formation === "teacher"
+            ? "manageGroups.teacherFormationHint"
+            : "manageGroups.studentFormationHint",
+        )}
+        action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Button
               variant="ghost"
               size="sm"
@@ -365,117 +393,79 @@ export function GroupsManager({
               />
               {t("manageGroups.refreshSnapshot")}
             </Button>
+            {createGroupButton}
           </div>
+        }
+      />
 
-          {actionError ? (
-            <Alert tone="error" className="text-sm">
-              {actionError}
-            </Alert>
-          ) : null}
+      {actionError && !createOpen ? (
+        <Alert tone="error" className="text-sm">
+          {actionError}
+        </Alert>
+      ) : null}
 
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <Input
-              className="flex-1"
-              value={displayName}
-              maxLength={80}
-              placeholder={t("manageGroups.namePlaceholder")}
-              aria-label={t("manageGroups.nameAriaLabel")}
-              onChange={(e) => setDisplayName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  void handleCreate()
-                }
-              }}
-            />
-            <Button
-              variant="primary"
-              disabled={busy || !user?.login}
-              loading={createTeam.isPending}
-              loadingLabel={t("manageGroups.createButton")}
-              onClick={() => void handleCreate()}
-            >
-              <PlusIcon aria-hidden="true" className="size-4" />
-              {t("manageGroups.createButton")}
-            </Button>
-          </div>
-
-          {teamsQuery.isLoading ? (
-            <div className="flex py-10">
-              <Spinner className="m-auto" label={t("manageGroups.loading")} />
-            </div>
-          ) : teams.length === 0 ? (
-            <p className="py-6 text-center text-sm text-base-content/70">
-              {t(
-                formation === "teacher"
-                  ? "manageGroups.emptyTeacher"
-                  : "manageGroups.emptyStudent",
-              )}
-            </p>
-          ) : (
-            <ul className="flex flex-col gap-4">
-              {teams.map((team) => (
-                <GroupCard
-                  key={team.slug}
-                  team={team}
-                  displayName={teamDisplayName(team)}
-                  members={membersBySlug.get(team.slug) ?? []}
-                  maxGroupSize={maxGroupSize}
-                  drifted={
-                    drift.changed.has(team.slug) || drift.missing.has(team.slug)
-                  }
-                  busy={busy}
-                  repo={repoForTeam(team)}
-                  availableStudents={availableStudents}
-                  onAddMember={(target, username) =>
-                    void handleAdd(target, username)
-                  }
-                  onRemoveMember={(target, username) =>
-                    void handleRemove(target, username)
-                  }
-                  onDelete={setPendingDelete}
-                  onRename={handleRename}
-                  onPrivacyChange={(target, privacy) =>
-                    void handlePrivacy(target, privacy)
-                  }
-                />
-              ))}
-            </ul>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <Heading as="h2" variant="title-small">
+            {t("manageGroups.heading")}
+          </Heading>
+          {!teamsQuery.isLoading && (
+            <Badge ghost size="sm">
+              {teams.length}
+            </Badge>
           )}
-        </Card.Body>
+        </div>
 
-        <Modal
-          open={pendingDelete !== null}
-          onClose={() => setPendingDelete(null)}
-          title={t("manageGroups.deleteTitle")}
-          footer={
-            <>
-              <Button
-                variant="ghost"
-                disabled={deleteTeam.isPending}
-                onClick={() => setPendingDelete(null)}
-              >
-                {t("common.cancel")}
-              </Button>
-              <Button
-                variant="error"
-                disabled={deleteTeam.isPending}
-                loading={deleteTeam.isPending}
-                loadingLabel={t("manageGroups.deleteConfirm")}
-                onClick={() => void handleDelete()}
-              >
-                {t("manageGroups.deleteConfirm")}
-              </Button>
-            </>
-          }
-        >
-          <p className="text-sm">
-            {t("manageGroups.deleteBody", {
-              name: pendingDelete ? teamDisplayName(pendingDelete) : "",
-            })}
-          </p>
-        </Modal>
-      </Card>
+        {teamsQuery.isLoading ? (
+          <SkeletonRegion
+            label={t("manageGroups.loading")}
+            className="rounded-box border border-base-200"
+          >
+            <ListSkeletonRows rows={3} />
+          </SkeletonRegion>
+        ) : teams.length === 0 ? (
+          <EmptyState
+            icon={PeopleIcon}
+            title={t("manageGroups.emptyTitle")}
+            titleAs="h3"
+            body={t(
+              formation === "teacher"
+                ? "manageGroups.emptyTeacher"
+                : "manageGroups.emptyStudent",
+            )}
+            action={formation === "teacher" ? createGroupButton : undefined}
+          />
+        ) : (
+          <ul className="divide-y divide-base-200 rounded-box border border-base-200">
+            {teams.map((team) => (
+              <GroupRow
+                key={team.slug}
+                team={team}
+                displayName={teamDisplayName(team)}
+                members={membersBySlug.get(team.slug) ?? []}
+                maxGroupSize={maxGroupSize}
+                drifted={
+                  drift.changed.has(team.slug) || drift.missing.has(team.slug)
+                }
+                busy={busy}
+                repo={repoForTeam(team)}
+                availableStudents={availableStudents}
+                onAddMember={(target, username) =>
+                  void handleAdd(target, username)
+                }
+                onRemoveMember={(target, username) =>
+                  void handleRemove(target, username)
+                }
+                onDelete={setPendingDelete}
+                onRename={handleRename}
+                onPrivacyChange={(target, privacy) =>
+                  void handlePrivacy(target, privacy)
+                }
+              />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <UnassignedStudentsPanel
         students={availableStudents}
@@ -484,6 +474,99 @@ export function GroupsManager({
         busy={busy}
         onAdd={handleUnassignedAdd}
       />
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        closeDisabled={createTeam.isPending}
+        size="md"
+        title={t("manageGroups.createTitle")}
+        headerVisual={
+          <ModalIcon tone="primary">
+            <PeopleIcon aria-hidden="true" className="size-4" />
+          </ModalIcon>
+        }
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              disabled={createTeam.isPending}
+              onClick={() => setCreateOpen(false)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              disabled={busy || !user?.login}
+              loading={createTeam.isPending}
+              loadingLabel={t("manageGroups.createButton")}
+              onClick={() => void handleCreate()}
+            >
+              {t("manageGroups.createButton")}
+            </Button>
+          </>
+        }
+      >
+        <div className="mt-4 flex flex-col gap-4">
+          {actionError ? (
+            <Alert tone="error" className="text-sm">
+              {actionError}
+            </Alert>
+          ) : null}
+          <FormField
+            label={t("manageGroups.createNameLabel")}
+            hint={t("manageGroups.createNameHint")}
+          >
+            {({ id, describedById }) => (
+              <Input
+                id={id}
+                aria-describedby={describedById}
+                value={displayName}
+                maxLength={80}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    void handleCreate()
+                  }
+                }}
+              />
+            )}
+          </FormField>
+        </div>
+      </Modal>
+
+      <Modal
+        open={pendingDelete !== null}
+        onClose={() => setPendingDelete(null)}
+        title={t("manageGroups.deleteTitle")}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              disabled={deleteTeam.isPending}
+              onClick={() => setPendingDelete(null)}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="error"
+              disabled={deleteTeam.isPending}
+              loading={deleteTeam.isPending}
+              loadingLabel={t("manageGroups.deleteConfirm")}
+              onClick={() => void handleDelete()}
+            >
+              {t("manageGroups.deleteConfirm")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-sm">
+          {t("manageGroups.deleteBody", {
+            name: pendingDelete ? teamDisplayName(pendingDelete) : "",
+          })}
+        </p>
+      </Modal>
     </>
   )
 }

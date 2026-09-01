@@ -50,7 +50,6 @@ const ManageGroupsContent = ({
         endpoint={t("documentTitle.manageGroups")}
         assignmentName={assignmentData?.name}
       />
-      <PageHeader title={t("manageGroups.title")} />
       {archived && (
         <ArchivedClassroomNotice>
           <Trans
@@ -69,29 +68,39 @@ const ManageGroupsContent = ({
       )}
       <OrgRepoCreationNotice org={org} />
       {isLoading || !assignments ? (
-        <div className="flex py-10">
-          <Spinner className="m-auto" label={t("manageGroups.loading")} />
-        </div>
+        <>
+          <PageHeader title={t("manageGroups.title")} />
+          <div className="flex py-10">
+            <Spinner className="m-auto" label={t("manageGroups.loading")} />
+          </div>
+        </>
       ) : !assignmentData || assignmentData.mode !== "team" ? (
         // Groups only exist for team-mode assignments; point everything else
         // back at the assignment's settings.
-        <Alert tone="info">
-          <div>
-            <Trans
-              i18nKey="manageGroups.notTeamMode"
-              components={{
-                settingsLink: (
-                  <Link
-                    className="underline"
-                    to="/$org/$classroom/assignments/$assignment/settings"
-                    params={{ org, classroom, assignment }}
-                  />
-                ),
-              }}
-            />
-          </div>
-        </Alert>
-      ) : archived ? null : (
+        <>
+          <PageHeader title={t("manageGroups.title")} />
+          <Alert tone="info">
+            <div>
+              <Trans
+                i18nKey="manageGroups.notTeamMode"
+                components={{
+                  settingsLink: (
+                    <Link
+                      className="underline"
+                      to="/$org/$classroom/assignments/$assignment/settings"
+                      params={{ org, classroom, assignment }}
+                    />
+                  ),
+                }}
+              />
+            </div>
+          </Alert>
+        </>
+      ) : archived ? (
+        <PageHeader title={t("manageGroups.title")} />
+      ) : (
+        // The manager renders the page header itself so the formation hint
+        // and the page actions (refresh, create) live in the same block.
         <GroupsManager
           org={org}
           classroom={classroom}

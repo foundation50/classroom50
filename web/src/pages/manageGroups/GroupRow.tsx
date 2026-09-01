@@ -1,22 +1,16 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Badge,
-  Button,
-  HelpTooltip,
-  Input,
-  MonoLtr,
-  Select,
-} from "@/components/ui"
+import { Badge, Button, Input, Select } from "@/components/ui"
 import {
   CheckIcon,
+  LinkExternalIcon,
   PencilIcon,
   PlusIcon,
+  RepoIcon,
   TrashIcon,
   XIcon,
 } from "@/components/ui/icons"
-import { GitHubLink } from "@/components/GitHubLink"
 import type { GitHubUser } from "@/github-core/types"
 import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
 
@@ -27,11 +21,12 @@ export type GroupPickerStudent = {
   label: string
 }
 
-// One group's management card: display name (+ inline rename), counter/slug,
-// member count vs cap, drift badge, repo status, visibility control, member
-// chips with remove, roster add picker, and the delete trigger. All writes are
-// delegated to the page, which owns the mutations and the shared error alert.
-export function GroupCard({
+// One row of the groups list: display name (+ inline rename), counter chip,
+// drift badge, delete trigger, then a muted metadata line (member count, repo
+// status, visibility) and the member chips with the quiet add picker. All
+// writes are delegated to the page, which owns the mutations and the shared
+// error alert.
+export function GroupRow({
   team,
   displayName,
   members,
@@ -59,7 +54,7 @@ export function GroupCard({
   onAddMember: (team: GroupTeamRef, username: string) => void
   onRemoveMember: (team: GroupTeamRef, username: string) => void
   onDelete: (team: GroupTeamRef) => void
-  // Resolves true on success so the card can close the edit form; the page
+  // Resolves true on success so the row can close the edit form; the page
   // surfaces failures in its shared alert and the form stays open.
   onRename: (team: GroupTeamRef, name: string) => Promise<boolean>
   onPrivacyChange: (team: GroupTeamRef, privacy: GroupTeamPrivacy) => void
@@ -82,7 +77,7 @@ export function GroupCard({
   }
 
   return (
-    <li className="rounded-box border border-base-200 p-4">
+    <li className="flex flex-col gap-3 p-4">
       <div className="flex flex-wrap items-center gap-2">
         {editing ? (
           <div className="flex min-w-0 flex-1 flex-col gap-1">
@@ -134,7 +129,14 @@ export function GroupCard({
           </div>
         ) : (
           <>
-            <span className="font-medium">{displayName}</span>
+            {/* The canonical team slug stays out of the row copy; it lives in
+                the hover title for anyone who needs the exact name. */}
+            <span className="font-semibold" title={team.slug}>
+              {displayName}
+            </span>
+            <Badge ghost size="sm">
+              #{team.n}
+            </Badge>
             <Button
               variant="ghost"
               size="xs"
@@ -150,11 +152,30 @@ export function GroupCard({
             </Button>
           </>
         )}
-        <Badge tone="neutral" size="sm">
-          #{team.n}
-        </Badge>
-        <MonoLtr className="text-xs text-base-content/60">{team.slug}</MonoLtr>
-        <span className="ms-auto text-xs text-base-content/70">
+        <span className="ms-auto flex items-center gap-2">
+          {drifted && (
+            <Badge tone="warning" size="sm">
+              {t("manageGroups.driftBadge")}
+            </Badge>
+          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="square"
+            className="text-base-content/70 hover:text-error"
+            disabled={busy}
+            aria-label={t("manageGroups.deleteAriaLabel", {
+              name: displayName,
+            })}
+            onClick={() => onDelete(team)}
+          >
+            <TrashIcon aria-hidden="true" className="size-4" />
+          </Button>
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-base-content/70">
+        <span>
           {maxGroupSize !== undefined
             ? t("manageGroups.memberCountOfMax", {
                 count: members.length,
@@ -162,45 +183,40 @@ export function GroupCard({
               })
             : t("manageGroups.memberCount", { count: members.length })}
         </span>
-        {drifted && (
-          <Badge tone="warning" size="sm">
-            {t("manageGroups.driftBadge")}
+        {repo === undefined ? null : repo ? (
+          <a
+            href={repo.htmlUrl}
+            target="_blank"
+            rel="noreferrer"
+            title={repo.name}
+            className="shrink-0 hover:opacity-80"
+          >
+            <Badge tone="success" size="sm" className="gap-1">
+              <RepoIcon aria-hidden="true" className="size-3" />
+              {t("manageGroups.repo.createdBadge")}
+              <LinkExternalIcon aria-hidden="true" className="size-3" />
+            </Badge>
+          </a>
+        ) : (
+          <Badge
+            ghost
+            size="sm"
+            className="gap-1 text-base-content/60"
+            title={t("manageGroups.repo.noRepoHelp")}
+          >
+            <RepoIcon aria-hidden="true" className="size-3" />
+            {t("manageGroups.repo.noRepoBadge")}
           </Badge>
         )}
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="square"
-          className="text-base-content/70 hover:text-error"
-          disabled={busy}
-          aria-label={t("manageGroups.deleteAriaLabel", { name: displayName })}
-          onClick={() => onDelete(team)}
-        >
-          <TrashIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </div>
-
-      <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-2">
-        {repo === undefined ? null : repo ? (
-          <GitHubLink
-            href={repo.htmlUrl}
-            label={t("manageGroups.repo.openRepository")}
-            title={repo.name}
-            className="shrink-0"
-          />
-        ) : (
-          <span className="inline-flex items-center gap-1">
-            <Badge ghost size="sm" className="text-base-content/60">
-              {t("manageGroups.repo.noRepoBadge")}
-            </Badge>
-            <HelpTooltip help={t("manageGroups.repo.noRepoHelp")} />
-          </span>
-        )}
         {team.privacy && (
-          <label className="inline-flex items-center gap-2 text-xs text-base-content/70">
+          <label
+            className="inline-flex items-center gap-2"
+            title={t("manageGroups.visibility.help")}
+          >
             {t("manageGroups.visibility.label")}
             <Select
               selectSize="sm"
+              className="w-auto"
               value={team.privacy}
               disabled={busy}
               aria-label={t("manageGroups.visibility.ariaLabel", {
@@ -217,29 +233,35 @@ export function GroupCard({
                 {t("manageGroups.visibility.hidden")}
               </option>
             </Select>
-            <HelpTooltip help={t("manageGroups.visibility.help")} />
           </label>
         )}
       </div>
 
-      <ul className="mt-3 flex flex-wrap gap-2">
+      <ul className="flex flex-wrap items-center gap-2">
         {members.map((member) => (
           <li
             key={member.login}
-            className="flex items-center gap-2 rounded-full border border-base-200 py-1 ps-1 pe-2 text-sm"
+            className="flex items-center gap-1.5 rounded-full border border-base-200 py-0.5 ps-0.5 pe-1 text-sm"
           >
             {member.avatar_url ? (
               <img
                 src={member.avatar_url}
                 alt=""
-                className="size-5 rounded-full"
+                className="size-6 rounded-full"
               />
-            ) : null}
+            ) : (
+              <span
+                aria-hidden="true"
+                className="flex size-6 items-center justify-center rounded-full bg-base-200 text-xs text-primary"
+              >
+                {member.login.charAt(0).toUpperCase()}
+              </span>
+            )}
             <span>{member.login}</span>
             <Button
               variant="ghost"
               size="xs"
-              shape="square"
+              shape="circle"
               className="text-base-content/60 hover:text-error"
               disabled={busy}
               aria-label={t("manageGroups.removeAriaLabel", {
@@ -247,7 +269,7 @@ export function GroupCard({
               })}
               onClick={() => onRemoveMember(team, member.login)}
             >
-              <TrashIcon aria-hidden="true" className="size-3" />
+              <XIcon aria-hidden="true" className="size-3" />
             </Button>
           </li>
         ))}
@@ -259,14 +281,14 @@ export function GroupCard({
       </ul>
 
       {isFull ? (
-        <p className="mt-3 text-xs text-base-content/70">
+        <p className="text-xs text-base-content/70">
           {t("manageGroups.groupFull", { max: maxGroupSize ?? 0 })}
         </p>
       ) : (
-        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+        <div className="flex items-center gap-2">
           <Select
-            className="flex-1"
             selectSize="sm"
+            className="select-ghost max-w-xs"
             value={picked}
             aria-label={t("manageGroups.addMemberAriaLabel", {
               name: displayName,
@@ -281,7 +303,7 @@ export function GroupCard({
             ))}
           </Select>
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             disabled={busy || !picked}
             onClick={() => {
@@ -298,4 +320,4 @@ export function GroupCard({
   )
 }
 
-export default GroupCard
+export default GroupRow
