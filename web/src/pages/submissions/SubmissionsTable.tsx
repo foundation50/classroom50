@@ -67,6 +67,7 @@ import {
 } from "@/pages/submissions/ScoreOverrideModal"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { ManageGroupDialog } from "@/pages/manageGroups/ManageGroupDialog"
+import { RecoverGroupDialog } from "@/pages/manageGroups/RecoverGroupDialog"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import {
@@ -684,6 +685,9 @@ const SubmissionsTable = ({
               })}
               onClick={() => setManageOwner(rest.owner)}
               missing={teamMissing(rest.owner)}
+              missingLabel={t("submissions.table.recoverTeamLabel", {
+                name: groupLabel(rest.owner, repo),
+              })}
             />
           </td>
         )}
@@ -1122,6 +1126,9 @@ const SubmissionsTable = ({
                       })}
                       onClick={() => setManageOwner(owner)}
                       missing={teamMissing(owner)}
+                      missingLabel={t("submissions.table.recoverTeamLabel", {
+                        name: groupLabel(owner, repoName),
+                      })}
                     />
                   ) : undefined
                 }
@@ -1251,15 +1258,32 @@ const SubmissionsTable = ({
       {isTeam &&
         manageOwner &&
         (() => {
+          // Team present -> the shared manage dialog; team MISSING (settled,
+          // deleted on GitHub) -> the recovery dialog. Both entry points (the
+          // members-column badge and the hub's Manage group action) land here.
           const team = teamsByOwner?.get(manageOwner.toLowerCase())
-          if (!team) return null
+          if (team) {
+            return (
+              <ManageGroupDialog
+                key={manageOwner}
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                team={team}
+                formation={teamFormation ?? "teacher"}
+                maxGroupSize={maxGroupSize}
+                onClose={() => setManageOwner(null)}
+              />
+            )
+          }
+          if (!teamMissing(manageOwner)) return null
           return (
-            <ManageGroupDialog
-              key={manageOwner}
+            <RecoverGroupDialog
+              key={`recover-${manageOwner}`}
               org={org}
               classroom={classroom}
               assignment={assignment}
-              team={team}
+              owner={manageOwner}
               formation={teamFormation ?? "teacher"}
               maxGroupSize={maxGroupSize}
               onClose={() => setManageOwner(null)}

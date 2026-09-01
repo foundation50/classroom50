@@ -107,18 +107,24 @@ export const PublicRepoBadge = () => {
 // Error badge for a team-mode row whose GitHub team no longer exists (state 2
 // of the team/repo mismatch pair): grading can't credit members until the
 // teacher recreates the group. Rendered only once the teams query has settled,
-// so it never flashes while the listing loads.
-export const TeamMissingBadge = () => {
+// so it never flashes while the listing loads. `plain` drops the badge's own
+// title + sr-only detail when an interactive parent (the members-column
+// recover click-through) owns the accessible name.
+export const TeamMissingBadge = ({ plain = false }: { plain?: boolean }) => {
   const { t } = useTranslation()
   return (
     <Badge
       tone="error"
       size="sm"
       className="whitespace-nowrap"
-      title={t("submissions.table.teamMissingTitle")}
+      title={plain ? undefined : t("submissions.table.teamMissingTitle")}
     >
       {t("submissions.table.teamMissing")}
-      <span className="sr-only">{t("submissions.table.teamMissingTitle")}</span>
+      {!plain && (
+        <span className="sr-only">
+          {t("submissions.table.teamMissingTitle")}
+        </span>
+      )}
     </Badge>
   )
 }
@@ -299,12 +305,14 @@ export const GroupMembers = ({
 // group management modal (members + display name). Renders a muted em-dash
 // while membership is still resolving; a MISSING team (deleted on GitHub) can
 // never resolve, so `missing` renders the error badge in this column instead
-// of that dash-forever.
+// of that dash-forever — as a click-through to the recovery dialog when the
+// caller supplies `missingLabel` (the recover affordance's accessible name).
 export const TeamMembersCountCell = ({
   count,
   label,
   onClick,
   missing = false,
+  missingLabel,
 }: {
   count?: number
   // Accessible name carrying the group's display name.
@@ -313,9 +321,24 @@ export const TeamMembersCountCell = ({
   // Set when the row's GitHub team no longer exists — the error badge
   // replaces the count (there is no team left to count or manage).
   missing?: boolean
+  // Accessible name for the missing state's recover click-through. Absent,
+  // the badge renders inert (a host without a recovery flow).
+  missingLabel?: string
 }) => {
   if (missing) {
-    return <TeamMissingBadge />
+    if (!missingLabel) return <TeamMissingBadge />
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1.5"
+        aria-label={missingLabel}
+        title={missingLabel}
+        onClick={onClick}
+      >
+        <TeamMissingBadge plain />
+      </Button>
+    )
   }
   if (count === undefined) {
     return <span className="text-base-content/50">—</span>

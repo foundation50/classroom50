@@ -243,6 +243,213 @@ export async function createGroupTeam(
   return { slug: created.slug, id: created.id, n }
 }
 
+// Recreate a group team whose GitHub team was deleted, at a KNOWN counter n —
+// never the lowest-free allocation: the surviving repo's name pins the
+// counter, and creating any other n would orphan the repo again. Privacy is
+// the caller's input (derived from the assignment's formation like
+// createGroupTeam: student -> "closed", teacher -> "secret" — the formation
+// isn't known here). Created notifications-disabled so recovery setup can't
+// spam anyone. A 422 means the name is taken — the team exists again (another
+// teacher raced the recovery) — so it maps to a refresh-and-recheck error
+// instead of a dead end.
+export async function recreateGroupTeam(
+  client: GitHubClient,
+  org: string,
+  input: {
+    classroom: string
+    assignment: string
+    n: number
+    displayName?: string
+    privacy: GroupTeamPrivacy
+  },
+): Promise<GroupTeamRef> {
+  const { classroom, assignment, n, displayName, privacy } = input
+  const name = await groupTeamName(classroom, assignment, n)
+  const description = marshalGroupDescription({
+    classroom,
+    assignment,
+    name: displayName,
+  })
+  let created: GitHubTeam
+  try {
+    created = await createTeam(client, {
+      org,
+      name,
+      description,
+      privacy,
+      notification_setting: "notifications_disabled",
+    })
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 422) {
+      throw localizedError({
+        key: "groupTeams.errors.recreateNameTaken",
+        params: { slug: name },
+      })
+    }
+    throw err
+  }
+  return { slug: created.slug, id: created.id, n }
+}
+
+// One chosen member of a recovery: at most one of them is the designated
+// maintainer (the optional group founder-equivalent).
+export type RecoverGroupTeamMember = {
+  username: string
+  role: "member" | "maintainer"
+}
+
+// A best-effort recovery step that failed. The team itself was created; the
+// teacher finishes the step by hand (the dialog renders the remedy).
+export type RecoverGroupTeamWarning = {
+  step: "addMember" | "attachRepo" | "teacherDrop" | "notifications"
+  username?: string
+  error: unknown
+}
+
+export type RecoverGroupTeamResult = {
+  team: GroupTeamRef
+  warnings: RecoverGroupTeamWarning[]
+}
+
+// Recover a deleted group team behind a surviving group repo, in this exact
+// order: (a) create the team notifications-disabled at the repo's counter;
+// (b) add the chosen members; (c) attach the repo with push; (d) remove the
+// creating teacher (GitHub auto-added them as maintainer); (e) re-enable the
+// team's notifications now that the teacher is off the team. The order is the
+// point — the teacher must never linger on the team, and nobody may be
+// notification-spammed during setup, so notifications flip on only as the
+// last step. Step (a) failing aborts (nothing exists yet); (b)-(e) are each
+// best-effort with collected warnings, so a partial failure never loses the
+// created team.
+export async function recoverGroupTeam(
+  client: GitHubClient,
+  org: string,
+  input: {
+    classroom: string
+    assignment: string
+    n: number
+    displayName?: string
+    privacy: GroupTeamPrivacy
+    members: readonly RecoverGroupTeamMember[]
+    repo: string
+    creatorLogin: string
+  },
+): Promise<RecoverGroupTeamResult> {
+  const team = await recreateGroupTeam(client, org, input)
+  const warnings: RecoverGroupTeamWarning[] = []
+
+  for (const member of input.members) {
+    try {
+      await addUserToTeam(client, {
+        org,
+        teamSlug: team.slug,
+        username: member.username,
+        role: member.role,
+      })
+    } catch (err) {
+      warnings.push({
+        step: "addMember",
+        username: member.username,
+        error: err,
+      })
+    }
+  }
+
+  try {
+    await attachRepoToGroupTeam(client, org, team.slug, input.repo)
+  } catch (err) {
+    warnings.push({ step: "attachRepo", error: err })
+  }
+
+  try {
+    await removeUserFromTeam(client, {
+      org,
+      teamSlug: team.slug,
+      username: input.creatorLogin,
+    })
+  } catch (err) {
+    log.warn("group team recovery: teacher drop failed (non-fatal)", {
+      org,
+      slug: team.slug,
+      err,
+    })
+    warnings.push({ step: "teacherDrop", error: err })
+  }
+
+  try {
+    await client.request(
+      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
+      {
+        method: "PATCH",
+        body: { notification_setting: "notifications_enabled" },
+      },
+    )
+  } catch (err) {
+    warnings.push({ step: "notifications", error: err })
+  }
+
+  return { team, warnings }
+}
+
+const COMMIT_SUGGESTION_PER_PAGE = 100
+const COMMIT_SUGGESTION_MAX_PAGES = 3
+
+// Automation identities never suggested as group members: GitHub Apps
+// ("[bot]" suffix), Actions pushes, and GitHub's web-merge committer.
+function isBotLogin(login: string): boolean {
+  const lower = login.toLowerCase()
+  return (
+    lower.endsWith("[bot]") ||
+    lower === "github-actions" ||
+    lower === "web-flow"
+  )
+}
+
+// Suggest recovery members from the repo's commit history: a bounded read
+// (per_page=100, at most 3 pages) collecting author + committer logins in
+// first-seen order, dropping bots and deduping case-insensitively. The result
+// is INTERSECTED with `rosterLogins` (lowercased) — a non-roster committer
+// (a TA, an outside collaborator) is never suggested. An unreadable or empty
+// repo (404/409) reads as no suggestions.
+export async function suggestMembersFromCommits(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+  input: { rosterLogins: ReadonlySet<string> },
+): Promise<string[]> {
+  type CommitEntry = {
+    author?: { login?: string } | null
+    committer?: { login?: string } | null
+  }
+  const seen = new Set<string>()
+  const suggested: string[] = []
+  for (let page = 1; page <= COMMIT_SUGGESTION_MAX_PAGES; page++) {
+    const commits = await tolerateGitHubError(
+      () =>
+        client.request<CommitEntry[]>(
+          `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/commits?per_page=${COMMIT_SUGGESTION_PER_PAGE}&page=${page}`,
+        ),
+      [] as CommitEntry[],
+      // 409 = empty repository (no commits yet).
+      { predicate: (err) => err.isNotFound || err.status === 409 },
+    )
+    for (const commit of commits) {
+      for (const login of [commit.author?.login, commit.committer?.login]) {
+        const trimmed = login?.trim()
+        if (!trimmed) continue
+        const lower = trimmed.toLowerCase()
+        if (seen.has(lower)) continue
+        seen.add(lower)
+        if (isBotLogin(trimmed)) continue
+        if (!input.rosterLogins.has(lower)) continue
+        suggested.push(trimmed)
+      }
+    }
+    if (commits.length < COMMIT_SUGGESTION_PER_PAGE) break
+  }
+  return suggested
+}
+
 // Roster minus grouped members: the students still needing a group — the add
 // picker's options and the "Unassigned students" panel. `assignedLogins` is
 // the lowercased union of every group team's member logins; a row with a

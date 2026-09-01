@@ -10,6 +10,9 @@ import {
   leaveGroupTeam,
   listAssignmentGroupTeams,
   lowestFreeCounter,
+  recoverGroupTeam,
+  recreateGroupTeam,
+  suggestMembersFromCommits,
   takenCounters,
   unassignedRosterStudents,
   updateGroupTeamDisplayName,
@@ -669,5 +672,253 @@ describe("leaveGroupTeam", () => {
       (err) =>
         localizedMessageOf(err)?.key === "groupTeams.errors.leaveForbidden",
     )
+  })
+})
+
+describe("recreateGroupTeam", () => {
+  // A client recording every request in order; the create 422s when
+  // `conflict` is set.
+  function makeClient(opts: { conflict?: boolean } = {}) {
+    const calls: { method: string; url: string; body?: unknown }[] = []
+    const request = vi.fn(
+      async (
+        url: string,
+        init?: { method?: string; body?: Record<string, unknown> },
+      ) => {
+        const method = init?.method ?? "GET"
+        calls.push({ method, url, body: init?.body })
+        if (method === "POST" && url === `/orgs/${ORG}/teams`) {
+          if (opts.conflict) {
+            throw apiError(422, "Name must be unique for this org")
+          }
+          const name = String(init?.body?.name)
+          return { id: 777, slug: name, name, description: null }
+        }
+        return undefined
+      },
+    )
+    return { client: { request } as unknown as GitHubClient, calls }
+  }
+
+  it("creates at the EXACT counter, never a lowest-free allocation", async () => {
+    // Counter 5 (the repo name's counter) even though 1..4 are free — a
+    // recovery at any other n would orphan the repo again.
+    const { client, calls } = makeClient()
+    const result = await recreateGroupTeam(client, ORG, {
+      classroom: CLASSROOM,
+      assignment: ASSIGNMENT,
+      n: 5,
+      displayName: "The Sharks",
+      privacy: "closed",
+    })
+    const expectedName = await groupTeamName(CLASSROOM, ASSIGNMENT, 5)
+    expect(result).toEqual({ slug: expectedName, id: 777, n: 5 })
+    // No listing read seeds the counter: one POST, notifications disabled,
+    // carrying the caller's privacy and the group record.
+    expect(calls).toEqual([
+      {
+        method: "POST",
+        url: `/orgs/${ORG}/teams`,
+        body: {
+          name: expectedName,
+          description: marshalGroupDescription({
+            classroom: CLASSROOM,
+            assignment: ASSIGNMENT,
+            name: "The Sharks",
+          }),
+          privacy: "closed",
+          notification_setting: "notifications_disabled",
+        },
+      },
+    ])
+  })
+
+  it("maps a 422 (name taken: the team exists again) to a localized refresh error", async () => {
+    const { client } = makeClient({ conflict: true })
+    await expect(
+      recreateGroupTeam(client, ORG, {
+        classroom: CLASSROOM,
+        assignment: ASSIGNMENT,
+        n: 2,
+        privacy: "secret",
+      }),
+    ).rejects.toSatisfy(
+      (err) =>
+        localizedMessageOf(err)?.key === "groupTeams.errors.recreateNameTaken",
+    )
+  })
+})
+
+describe("recoverGroupTeam", () => {
+  // A client recording every request in order, with per-step failure taps.
+  function makeClient(
+    opts: {
+      failCreate?: boolean
+      failAddFor?: Set<string>
+      failDrop?: boolean
+    } = {},
+  ) {
+    const calls: { method: string; url: string; body?: unknown }[] = []
+    const request = vi.fn(
+      async (
+        url: string,
+        init?: { method?: string; body?: Record<string, unknown> },
+      ) => {
+        const method = init?.method ?? "GET"
+        calls.push({ method, url, body: init?.body })
+        if (method === "POST" && url === `/orgs/${ORG}/teams`) {
+          if (opts.failCreate) throw apiError(403, "Must have admin rights")
+          const name = String(init?.body?.name)
+          return { id: 777, slug: name, name, description: null }
+        }
+        if (method === "PUT" && url.includes("/memberships/")) {
+          const username = decodeURIComponent(url.split("/memberships/")[1])
+          if (opts.failAddFor?.has(username)) {
+            throw apiError(422, "Cannot add member")
+          }
+          return undefined
+        }
+        if (method === "PUT" && url.includes("/repos/")) return undefined
+        if (method === "DELETE" && url.includes("/memberships/")) {
+          if (opts.failDrop) throw apiError(403, "Forbidden")
+          return undefined
+        }
+        if (method === "PATCH") return undefined
+        throw new Error(`unexpected request: ${method} ${url}`)
+      },
+    )
+    return { client: { request } as unknown as GitHubClient, calls }
+  }
+
+  const INPUT = {
+    classroom: CLASSROOM,
+    assignment: ASSIGNMENT,
+    n: 3,
+    privacy: "closed" as const,
+    members: [
+      { username: "alice", role: "maintainer" as const },
+      { username: "bob", role: "member" as const },
+    ],
+    repo: "cs-fall-hw1-group-3",
+    creatorLogin: "teacher",
+  }
+
+  it("runs the exact sequence: create, adds, attach, teacher drop, notifications PATCH", async () => {
+    const { client, calls } = makeClient()
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 3)
+    const result = await recoverGroupTeam(client, ORG, INPUT)
+    expect(result.team).toEqual({ slug, id: 777, n: 3 })
+    expect(result.warnings).toEqual([])
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+      `POST /orgs/${ORG}/teams`,
+      `PUT /orgs/${ORG}/teams/${slug}/memberships/alice`,
+      `PUT /orgs/${ORG}/teams/${slug}/memberships/bob`,
+      `PUT /orgs/${ORG}/teams/${slug}/repos/${ORG}/cs-fall-hw1-group-3`,
+      `DELETE /orgs/${ORG}/teams/${slug}/memberships/teacher`,
+      `PATCH /orgs/${ORG}/teams/${slug}`,
+    ])
+    // Created silent; notifications re-enabled only AFTER the teacher drop.
+    expect(calls[0].body).toMatchObject({
+      notification_setting: "notifications_disabled",
+    })
+    expect(calls[1].body).toEqual({ role: "maintainer" })
+    expect(calls[2].body).toEqual({ role: "member" })
+    expect(calls[3].body).toEqual({ permission: "push" })
+    expect(calls[5].body).toEqual({
+      notification_setting: "notifications_enabled",
+    })
+  })
+
+  it("a failed create aborts before any other step", async () => {
+    const { client, calls } = makeClient({ failCreate: true })
+    await expect(recoverGroupTeam(client, ORG, INPUT)).rejects.toMatchObject({
+      status: 403,
+    })
+    expect(calls).toHaveLength(1)
+  })
+
+  it("collects per-step warnings without losing the created team", async () => {
+    const { client, calls } = makeClient({
+      failAddFor: new Set(["bob"]),
+      failDrop: true,
+    })
+    const result = await recoverGroupTeam(client, ORG, INPUT)
+    expect(result.warnings.map((w) => [w.step, w.username])).toEqual([
+      ["addMember", "bob"],
+      ["teacherDrop", undefined],
+    ])
+    // Every later step still ran: the attach and the notifications PATCH.
+    expect(calls.some((call) => call.url.includes("/repos/"))).toBe(true)
+    expect(calls.map((call) => call.method)).toContain("PATCH")
+  })
+})
+
+describe("suggestMembersFromCommits", () => {
+  const REPO = "cs-fall-hw1-group-3"
+
+  function commit(author?: string | null, committer?: string | null) {
+    return {
+      author: author ? { login: author } : author,
+      committer: committer ? { login: committer } : committer,
+    }
+  }
+
+  function makeClient(pages: unknown[][]) {
+    const urls: string[] = []
+    const request = vi.fn(async (url: string) => {
+      urls.push(url)
+      const page = Number(new URLSearchParams(url.split("?")[1]).get("page"))
+      return pages[page - 1] ?? []
+    })
+    return { client: { request } as unknown as GitHubClient, urls }
+  }
+
+  it("keeps first-seen roster committers, dropping bots and non-roster logins", async () => {
+    const { client } = makeClient([
+      [
+        commit("Alice", "web-flow"),
+        commit("github-actions[bot]", "github-actions"),
+        commit("bob", "alice"), // alice again: deduped case-insensitively
+        commit("mallory", "carol"), // mallory isn't on the roster
+        commit(null, null), // unlinked author/committer
+      ],
+    ])
+    const suggestions = await suggestMembersFromCommits(client, ORG, REPO, {
+      rosterLogins: new Set(["alice", "bob", "carol"]),
+    })
+    expect(suggestions).toEqual(["Alice", "bob", "carol"])
+  })
+
+  it("caps the read at 3 pages of 100", async () => {
+    const fullPage = Array.from({ length: 100 }, () => commit("alice", null))
+    const { client, urls } = makeClient([fullPage, fullPage, fullPage])
+    await suggestMembersFromCommits(client, ORG, REPO, {
+      rosterLogins: new Set(["alice"]),
+    })
+    expect(urls).toEqual([
+      `/repos/${ORG}/${REPO}/commits?per_page=100&page=1`,
+      `/repos/${ORG}/${REPO}/commits?per_page=100&page=2`,
+      `/repos/${ORG}/${REPO}/commits?per_page=100&page=3`,
+    ])
+  })
+
+  it("stops after a short page", async () => {
+    const { client, urls } = makeClient([[commit("alice", null)]])
+    await suggestMembersFromCommits(client, ORG, REPO, {
+      rosterLogins: new Set(["alice"]),
+    })
+    expect(urls).toHaveLength(1)
+  })
+
+  it("reads an empty repo (409) as no suggestions", async () => {
+    const request = vi.fn(async () => {
+      throw apiError(409, "Git Repository is empty.")
+    })
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      suggestMembersFromCommits(client, ORG, REPO, {
+        rosterLogins: new Set(["alice"]),
+      }),
+    ).resolves.toEqual([])
   })
 })
