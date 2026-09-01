@@ -112,11 +112,18 @@ export function parseStudentClassroomSlug(
 // student team of a role-suffixed classroom (`ml-ta`) — proven by a
 // classroom50/team/v1 record on the team (staff teams carry none). The caller
 // gates on that record; on its own this does not distinguish student from staff.
+//
+// A per-assignment group team (`classroom50-group-<hash>-<n>`) shares the
+// namespace but is never a classroom: without this exclusion, a student's
+// group membership would render a phantom classroom named `group-<hash>-<n>`
+// on their classrooms list. Full-shape gated, so a real classroom short-name
+// that merely starts with `group-` still parses.
 export function parseBareClassroomSlug(
   slug: string,
 ): { classroom: string } | null {
   const prefix = `${CONFIG_REPO}-`
   if (!slug.startsWith(prefix)) return null
+  if (isGroupTeamSlug(slug)) return null
   const classroom = slug.slice(prefix.length)
   if (classroom.length === 0) return null
   return { classroom }
