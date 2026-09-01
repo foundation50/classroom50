@@ -36,6 +36,7 @@ import { snapshotDrift } from "@/domain/teams/teamsFile"
 import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
 import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
+import { GroupManageModal } from "./GroupManageModal"
 import { GroupRow } from "./GroupRow"
 import { UnassignedStudentsPanel } from "./UnassignedStudentsPanel"
 
@@ -56,8 +57,9 @@ function describeTeamWriteError(
   return fallback
 }
 
-// Teacher-side management of a team-mode assignment's group teams: list,
-// create dialog, membership, rename, visibility, delete, the
+// Teacher-side management of a team-mode assignment's group teams: a
+// glanceable list of read-only summary rows, a create dialog, a per-group
+// manage dialog (membership, rename, visibility, delete), the
 // unassigned-students panel, and keeping the teams.json snapshot in step. For
 // teacher formation this is where groups come to exist; for student formation
 // it's read-mostly (teams appear as students form them) with the same controls
@@ -108,6 +110,16 @@ export function GroupsManager({
     () => new Set(enrolled.map((row) => row.username.trim().toLowerCase())),
     [enrolled],
   )
+  // Lowercased login -> roster full name, so the group rows and the manage
+  // dialog can show real names instead of bare logins.
+  const fullNameByLogin = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const row of enrolled) {
+      const name = `${row.first_name} ${row.last_name}`.trim()
+      if (name) map.set(row.username.trim().toLowerCase(), name)
+    }
+    return map
+  }, [enrolled])
   // Students not on ANY of this assignment's teams — the add pickers' options
   // and the unassigned panel's rows.
   const availableStudents = useMemo(
@@ -187,7 +199,22 @@ export function GroupsManager({
   const [displayName, setDisplayName] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<GroupTeamRef | null>(null)
+  const [manageOpen, setManageOpen] = useState(false)
+  // Counter keyed onto the manage dialog so each open remounts it with fresh
+  // draft state (the Modal invariant: reset at open, not close).
+  const [manageSession, setManageSession] = useState(0)
+  // The team as it was when the dialog opened. The live lookup below keeps
+  // renames/privacy changes current; the snapshot keeps the dialog painting
+  // through its close fade after a delete removes the team from the list.
+  const [managedAtOpen, setManagedAtOpen] = useState<GroupTeamRef | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+
+  const manageTeam = useMemo(() => {
+    if (!managedAtOpen) return null
+    return (
+      teams.find((team) => team.slug === managedAtOpen.slug) ?? managedAtOpen
+    )
+  }, [teams, managedAtOpen])
 
   const busy =
     createTeam.isPending ||
@@ -230,6 +257,13 @@ export function GroupsManager({
     setDisplayName("")
     setActionError(null)
     setCreateOpen(true)
+  }
+
+  const openManage = (team: GroupTeamRef) => {
+    setActionError(null)
+    setManagedAtOpen(team)
+    setManageSession((session) => session + 1)
+    setManageOpen(true)
   }
 
   const handleCreate = async () => {
@@ -290,6 +324,9 @@ export function GroupsManager({
     try {
       await deleteTeam.mutateAsync({ slug: target.slug, id: target.id })
       setPendingDelete(null)
+      // The manage dialog (which triggered the confirm) has nothing left to
+      // manage once its group is gone.
+      if (target.slug === managedAtOpen?.slug) setManageOpen(false)
       await resync()
     } catch (err) {
       setPendingDelete(null)
@@ -298,7 +335,8 @@ export function GroupsManager({
   }
 
   // Display-name only: the team NAME (== slug) never changes, so the group's
-  // repository keeps its name. True on success so the row closes its editor.
+  // repository keeps its name. True on success so the dialog can settle its
+  // draft.
   const handleRename = async (team: GroupTeamRef, name: string) => {
     if (busy) return false
     setActionError(null)
@@ -398,7 +436,7 @@ export function GroupsManager({
         }
       />
 
-      {actionError && !createOpen ? (
+      {actionError && !createOpen && !manageOpen ? (
         <Alert tone="error" className="text-sm">
           {actionError}
         </Alert>
@@ -447,20 +485,9 @@ export function GroupsManager({
                 drifted={
                   drift.changed.has(team.slug) || drift.missing.has(team.slug)
                 }
-                busy={busy}
                 repo={repoForTeam(team)}
-                availableStudents={availableStudents}
-                onAddMember={(target, username) =>
-                  void handleAdd(target, username)
-                }
-                onRemoveMember={(target, username) =>
-                  void handleRemove(target, username)
-                }
-                onDelete={setPendingDelete}
-                onRename={handleRename}
-                onPrivacyChange={(target, privacy) =>
-                  void handlePrivacy(target, privacy)
-                }
+                fullNameByLogin={fullNameByLogin}
+                onManage={openManage}
               />
             ))}
           </ul>
@@ -474,6 +501,30 @@ export function GroupsManager({
         busy={busy}
         onAdd={handleUnassignedAdd}
       />
+
+      {manageTeam && (
+        <GroupManageModal
+          key={manageSession}
+          open={manageOpen}
+          team={manageTeam}
+          membersBySlug={membersBySlug}
+          maxGroupSize={maxGroupSize}
+          fullNameByLogin={fullNameByLogin}
+          availableStudents={availableStudents}
+          busy={busy}
+          error={actionError}
+          onClose={() => setManageOpen(false)}
+          onRename={handleRename}
+          onPrivacyChange={(target, privacy) =>
+            void handlePrivacy(target, privacy)
+          }
+          onAddMember={(target, username) => void handleAdd(target, username)}
+          onRemoveMember={(target, username) =>
+            void handleRemove(target, username)
+          }
+          onDelete={setPendingDelete}
+        />
+      )}
 
       <Modal
         open={createOpen}

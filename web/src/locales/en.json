@@ -1845,22 +1845,27 @@
     "memberCount_one": "{{count}} member",
     "memberCount_other": "{{count}} members",
     "driftBadge": "Members changed since the last refresh",
-    "deleteAriaLabel": "Delete {{name}}",
+    "manageButton": "Manage",
+    "manageAriaLabel": "Manage {{name}}",
     "removeAriaLabel": "Remove {{username}} from the group",
     "addMemberAriaLabel": "Add a student to {{name}}",
     "addMemberPlaceholder": "Choose a student",
     "addMemberButton": "Add",
     "groupFull": "Group is full ({{max}} members max).",
     "noMembers": "No members yet",
+    "manage": {
+      "title": "Manage {{name}}",
+      "membersHeading": "Members",
+      "dangerHeading": "Danger zone",
+      "dangerBody": "Deleting this group removes its GitHub team and the access it granted. The group's repository is not deleted."
+    },
     "deleteTitle": "Delete group",
     "deleteConfirm": "Delete group",
     "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
     "notTeamMode": "This assignment doesn't use groups, so there is nothing to manage here. Review its setup in <settingsLink>assignment settings</settingsLink>.",
     "archivedNotice": "This classroom is archived, so its groups are read-only. Unarchive it in <settingsLink>Classroom settings</settingsLink> to manage groups.",
     "rename": {
-      "editAriaLabel": "Rename {{name}}",
-      "nameAriaLabel": "New name for {{name}}",
-      "saveAriaLabel": "Save the name for {{name}}",
+      "saveButton": "Save name",
       "help": "Shown on this page and to the group's members. The repository name doesn't change."
     },
     "repo": {
@@ -1872,7 +1877,6 @@
       "label": "Visibility",
       "visible": "Visible",
       "hidden": "Hidden",
-      "ariaLabel": "Visibility for {{name}}",
       "help": "Visible groups can be browsed by classmates and receive join requests on GitHub. Hidden groups are visible only to their members and organization owners."
     },
     "unassigned": {
