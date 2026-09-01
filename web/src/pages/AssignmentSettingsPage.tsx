@@ -23,7 +23,7 @@ import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import { GROUP_REPO_SEGMENT } from "@/util/studentRepo"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
 import RenameSlugSection from "./assignments/RenameSlugSection"
-import GroupTeamsSection from "./assignments/GroupTeamsSection"
+import ManageGroupsCard from "./manageGroups/ManageGroupsCard"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
@@ -333,16 +333,13 @@ const AssignmentSettingsPage = () => {
               assignments={assignments?.assignments ?? []}
             />
           )}
-          {/* Team-mode group management: for teacher formation this is the
-              only place groups come to exist; for student formation it's
-              read-mostly with the same controls to fix membership. */}
+          {/* Team-mode group management moved to its own routed page; this is
+              the compact pointer with the current group count. */}
           {!archived && assignmentData?.mode === "team" && (
-            <GroupTeamsSection
+            <ManageGroupsCard
               org={org}
               classroom={classroom}
               assignmentSlug={assignmentData.slug}
-              maxGroupSize={assignmentData.max_group_size}
-              formation={assignmentData.team_formation ?? "teacher"}
             />
           )}
           <EditAssignmentForm

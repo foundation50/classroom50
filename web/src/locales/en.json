@@ -356,7 +356,8 @@
     "classes": "Classrooms",
     "mySubmission": "My submission",
     "submissions": "Submissions",
-    "activity": "Activity"
+    "activity": "Activity",
+    "manageGroups": "Manage groups"
   },
   "students": {
     "addTitle": "Add member",
@@ -1820,38 +1821,75 @@
       "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the collected scores; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to resolve any inconsistency yourself.",
       "confirm": "Save changes anyway",
       "cancel": "Cancel"
+    }
+  },
+  "manageGroups": {
+    "title": "Manage groups",
+    "missingParams": "This link is missing its organization, classroom, or assignment. Check the address and try again.",
+    "heading": "Groups",
+    "teacherFormationHint": "You assign the groups for this assignment. Create a group, then add students from the roster. Students who aren't in a group can't accept.",
+    "studentFormationHint": "Students form their own groups when they accept. Groups appear here as students create them, and you can fix membership if needed.",
+    "refreshSnapshot": "Update snapshot",
+    "namePlaceholder": "Group name (optional)",
+    "nameAriaLabel": "Name for the new group",
+    "createButton": "Create group",
+    "loading": "Loading groups…",
+    "emptyTeacher": "No groups yet. Create the first group, then add students.",
+    "emptyStudent": "No groups yet. Groups appear here as students create them.",
+    "defaultName": "Group {{n}}",
+    "memberCountOfMax_one": "{{count}} of {{max}} members",
+    "memberCountOfMax_other": "{{count}} of {{max}} members",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "driftBadge": "Membership changed since the snapshot",
+    "deleteAriaLabel": "Delete {{name}}",
+    "removeAriaLabel": "Remove {{username}} from the group",
+    "addMemberAriaLabel": "Add a student to {{name}}",
+    "addMemberPlaceholder": "Choose a student",
+    "addMemberButton": "Add",
+    "groupFull": "Group is full ({{max}} members max).",
+    "noMembers": "No members yet",
+    "deleteTitle": "Delete group",
+    "deleteConfirm": "Delete group",
+    "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
+    "notTeamMode": "This assignment doesn't use groups, so there is nothing to manage here. Review its setup in <settingsLink>assignment settings</settingsLink>.",
+    "archivedNotice": "This classroom is archived, so its groups are read-only. Unarchive it in <settingsLink>Classroom settings</settingsLink> to manage groups.",
+    "settingsCard": {
+      "description": "Create groups, manage members and visibility, and keep the snapshot up to date.",
+      "groupCount_one": "{{count}} group so far.",
+      "groupCount_other": "{{count}} groups so far."
     },
-    "teams": {
-      "heading": "Groups",
-      "teacherFormationHint": "You assign the groups for this assignment. Create a group, then add students from the roster. Students who aren't in a group can't accept.",
-      "studentFormationHint": "Students form their own groups when they accept. Groups appear here as students create them, and you can fix membership if needed.",
-      "refreshSnapshot": "Update snapshot",
-      "namePlaceholder": "Group name (optional)",
-      "nameAriaLabel": "Name for the new group",
-      "createButton": "Create group",
-      "loading": "Loading groups…",
-      "emptyTeacher": "No groups yet. Create the first group, then add students.",
-      "emptyStudent": "No groups yet. Groups appear here as students create them.",
-      "defaultName": "Group {{n}}",
-      "memberCountOfMax_one": "{{count}} of {{max}} members",
-      "memberCountOfMax_other": "{{count}} of {{max}} members",
-      "memberCount_one": "{{count}} member",
-      "memberCount_other": "{{count}} members",
-      "driftBadge": "Membership changed since the snapshot",
-      "deleteAriaLabel": "Delete {{name}}",
-      "removeAriaLabel": "Remove {{username}} from the group",
-      "addMemberAriaLabel": "Add a student to {{name}}",
-      "addMemberPlaceholder": "Choose a student",
-      "addMemberButton": "Add",
-      "groupFull": "Group is full ({{max}} members max).",
-      "noMembers": "No members yet",
-      "deleteTitle": "Delete group",
-      "deleteConfirm": "Delete group",
-      "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
-      "errors": {
-        "createForbidden": "GitHub blocked creating the team. This organization restricts team creation to owners. Ask an owner to allow members to create teams, or have an owner create the groups.",
-        "membershipForbidden": "GitHub blocked the membership change. This team's membership may be managed by your identity provider. Update membership there, or ask an organization owner."
-      }
+    "rename": {
+      "editAriaLabel": "Rename {{name}}",
+      "nameAriaLabel": "New name for {{name}}",
+      "saveAriaLabel": "Save the name for {{name}}",
+      "help": "Shown on this page and to the group's members. The repository name doesn't change."
+    },
+    "repo": {
+      "openRepository": "Open repository",
+      "noRepoBadge": "No repository yet",
+      "noRepoHelp": "The repository is created when a group member accepts the assignment."
+    },
+    "visibility": {
+      "label": "Visibility",
+      "visible": "Visible",
+      "hidden": "Hidden",
+      "ariaLabel": "Visibility for {{name}}",
+      "help": "Visible groups can be browsed by classmates and receive join requests on GitHub. Hidden groups are visible only to their members and organization owners."
+    },
+    "unassigned": {
+      "heading": "Unassigned students",
+      "hint": "Students on the roster who aren't in a group yet. Choose a group with room, then add them.",
+      "loading": "Loading students…",
+      "empty": "Everyone on the roster is in a group.",
+      "groupPlaceholder": "Choose a group",
+      "selectAriaLabel": "Group for {{name}}",
+      "addAriaLabel": "Add {{name}} to the selected group",
+      "addButton": "Add"
+    },
+    "errors": {
+      "createForbidden": "GitHub blocked creating the team. This organization restricts team creation to owners. Ask an owner to allow members to create teams, or have an owner create the groups.",
+      "membershipForbidden": "GitHub blocked the membership change. This team's membership may be managed by your identity provider. Update membership there, or ask an organization owner."
     }
   },
   "serviceTokenHealth": {

@@ -26,16 +26,23 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("domain:groupTeams")
 
+// GitHub's two team privacy levels as group teams use them: `closed` is
+// browsable by every org member (and carries the native request-to-join flow),
+// `secret` is visible only to its members and org owners.
+export type GroupTeamPrivacy = "secret" | "closed"
+
 // One group team as the app consumes it: the canonical slug (== name), the
-// immutable id (delete guard), the counter n (maps to the repo name), and the
+// immutable id (delete guard), the counter n (maps to the repo name), the
 // students' display name — taken from the description record only when the
 // record verifies back to the slug (a maintainer-edited record must not
-// re-attribute or re-label another assignment's team).
+// re-attribute or re-label another assignment's team) — and the team's
+// privacy, carried through from the listing payload when present.
 export type GroupTeamRef = {
   slug: string
   id: number
   n: number
   name?: string
+  privacy?: GroupTeamPrivacy
 }
 
 // Counter allocation seed: the lowest n >= 1 not in `taken`. Only a seed — a
@@ -64,7 +71,8 @@ export function takenCounters(
 // isn't that assignment's group team. The display name is trusted only when
 // the description record verifies back to the slug's hash.
 async function toGroupTeamRef(
-  team: Pick<GitHubTeam, "slug" | "id" | "description">,
+  team: Pick<GitHubTeam, "slug" | "id" | "description"> &
+    Partial<Pick<GitHubTeam, "privacy">>,
   assignmentPrefix: string,
 ): Promise<GroupTeamRef | null> {
   const n = parseGroupTeamCounter(team.slug, assignmentPrefix)
@@ -77,6 +85,7 @@ async function toGroupTeamRef(
     id: team.id,
     n,
     ...(verified && record.name ? { name: record.name } : {}),
+    ...(team.privacy ? { privacy: team.privacy } : {}),
   }
 }
 
@@ -232,6 +241,20 @@ export async function createGroupTeam(
   }
 
   return { slug: created.slug, id: created.id, n }
+}
+
+// Roster minus grouped members: the students still needing a group — the add
+// picker's options and the "Unassigned students" panel. `assignedLogins` is
+// the lowercased union of every group team's member logins; a row with a
+// blank username (an unmatched roster entry) can't be added and is dropped.
+export function unassignedRosterStudents<T extends { username: string }>(
+  rows: readonly T[],
+  assignedLogins: ReadonlySet<string>,
+): T[] {
+  return rows.filter((row) => {
+    const login = row.username.trim().toLowerCase()
+    return login !== "" && !assignedLogins.has(login)
+  })
 }
 
 // Pure add-member gate: max_group_size (owner included) and the roster. Throws
@@ -393,6 +416,33 @@ export async function updateGroupTeamDisplayName(
       body: {
         description: marshalGroupDescription({ classroom, assignment, name }),
       },
+    },
+  )
+}
+
+// Flip a group team's privacy between visible (`closed`) and hidden
+// (`secret`) — e.g. a teacher opening teacher-formed groups to join requests,
+// or hiding student-formed ones from other classes sharing the org. Guarded
+// like the display-name update (only a real group team is patched), and the
+// PATCH carries privacy alone so the name (== slug) and the description
+// record are untouched.
+export async function updateGroupTeamPrivacy(
+  client: GitHubClient,
+  org: string,
+  input: { slug: string; privacy: GroupTeamPrivacy },
+): Promise<void> {
+  const { slug, privacy } = input
+  if (!isGroupTeamSlug(slug)) {
+    throw localizedError({
+      key: "groupTeams.errors.notAGroupTeam",
+      params: { slug },
+    })
+  }
+  await client.request(
+    `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,
+    {
+      method: "PATCH",
+      body: { privacy },
     },
   )
 }

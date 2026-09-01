@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertIcon, CalendarIcon, DownloadIcon } from "@/components/ui/icons"
+import {
+  AlertIcon,
+  CalendarIcon,
+  DownloadIcon,
+  PeopleIcon,
+} from "@/components/ui/icons"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
@@ -23,6 +28,7 @@ import {
   HelpTooltip,
   MetricBar,
   InlineSpinner,
+  RouterButton,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
@@ -1475,6 +1481,20 @@ const SubmissionsPageContent = () => {
           }
           trailing={
             <>
+              {/* Team-mode groups are managed on their own page (create,
+                  members, visibility, snapshot); the per-row Members modal
+                  stays for quick fixes. */}
+              {isTeamAssignment && (
+                <RouterButton
+                  variant="outline"
+                  size="sm"
+                  to="/$org/$classroom/assignments/$assignment/groups"
+                  params={{ org, classroom, assignment }}
+                >
+                  <PeopleIcon aria-hidden="true" className="size-4" />
+                  {t("manageGroups.title")}
+                </RouterButton>
+              )}
               {/* Clone submissions (CLI) — icon-only so the toolbar stays
                   compact; opens a modal with the `gh teacher download`
                   command. See https://github.com/foundation50/classroom50/issues/724. */}

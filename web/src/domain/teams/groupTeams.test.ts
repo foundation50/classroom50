@@ -8,9 +8,12 @@ import {
   deleteGroupTeam,
   findMyGroupTeam,
   leaveGroupTeam,
+  listAssignmentGroupTeams,
   lowestFreeCounter,
   takenCounters,
+  unassignedRosterStudents,
   updateGroupTeamDisplayName,
+  updateGroupTeamPrivacy,
 } from "./groupTeams"
 import { groupTeamAssignmentPrefix, groupTeamName } from "@/util/teamSlug"
 import { marshalGroupDescription } from "@/util/groupTeam"
@@ -95,6 +98,81 @@ describe("assertGroupMemberAddable", () => {
         rosterLogins: new Set(["alice"]),
       }),
     ).not.toThrow()
+  })
+})
+
+describe("listAssignmentGroupTeams privacy plumbing", () => {
+  it("carries each team's privacy through to the ref", async () => {
+    const closed = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+    const secret = await groupTeamName(CLASSROOM, ASSIGNMENT, 2)
+    const request = vi.fn(async (url: string) => {
+      if (url.startsWith(`/orgs/${ORG}/teams?`)) {
+        return [
+          { slug: closed, id: 1, description: null, privacy: "closed" },
+          { slug: secret, id: 2, description: null, privacy: "secret" },
+        ]
+      }
+      return []
+    })
+    const client = { request } as unknown as GitHubClient
+    const refs = await listAssignmentGroupTeams(
+      client,
+      ORG,
+      CLASSROOM,
+      ASSIGNMENT,
+    )
+    expect(refs).toEqual([
+      { slug: closed, id: 1, n: 1, privacy: "closed" },
+      { slug: secret, id: 2, n: 2, privacy: "secret" },
+    ])
+  })
+
+  it("omits privacy when the listing payload lacks it", async () => {
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+    const request = vi.fn(async (url: string) => {
+      if (url.startsWith(`/orgs/${ORG}/teams?`)) {
+        return [{ slug, id: 1, description: null }]
+      }
+      return []
+    })
+    const client = { request } as unknown as GitHubClient
+    const refs = await listAssignmentGroupTeams(
+      client,
+      ORG,
+      CLASSROOM,
+      ASSIGNMENT,
+    )
+    expect(refs).toHaveLength(1)
+    expect("privacy" in refs[0]).toBe(false)
+  })
+})
+
+describe("unassignedRosterStudents", () => {
+  const rows = [
+    { username: "Alice", name: "Alice A" },
+    { username: "bob", name: "Bob B" },
+    { username: "  ", name: "Unmatched" },
+    { username: "carol", name: "Carol C" },
+  ]
+
+  it("keeps only roster rows on no group team (case-insensitive)", () => {
+    const assigned = new Set(["alice", "carol"])
+    expect(unassignedRosterStudents(rows, assigned)).toEqual([
+      { username: "bob", name: "Bob B" },
+    ])
+  })
+
+  it("drops blank usernames even when nobody is assigned", () => {
+    expect(unassignedRosterStudents(rows, new Set())).toEqual([
+      { username: "Alice", name: "Alice A" },
+      { username: "bob", name: "Bob B" },
+      { username: "carol", name: "Carol C" },
+    ])
+  })
+
+  it("returns [] when everyone is grouped", () => {
+    const assigned = new Set(["alice", "bob", "carol"])
+    expect(unassignedRosterStudents(rows, assigned)).toEqual([])
   })
 })
 
@@ -484,6 +562,52 @@ describe("updateGroupTeamDisplayName", () => {
         classroom: CLASSROOM,
         assignment: ASSIGNMENT,
         name: "The Sharks",
+      }),
+    ).rejects.toSatisfy(
+      (err) =>
+        localizedMessageOf(err)?.key === "groupTeams.errors.notAGroupTeam",
+    )
+    expect(patches).toEqual([])
+  })
+})
+
+describe("updateGroupTeamPrivacy", () => {
+  function makeClient() {
+    const patches: { url: string; body: unknown }[] = []
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        if (init?.method === "PATCH") {
+          patches.push({ url, body: init.body })
+          return undefined
+        }
+        throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`)
+      },
+    )
+    return { client: { request } as unknown as GitHubClient, patches }
+  }
+
+  it("PATCHes only the privacy", async () => {
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 2)
+    const { client, patches } = makeClient()
+    await updateGroupTeamPrivacy(client, ORG, { slug, privacy: "closed" })
+    expect(patches).toEqual([
+      {
+        url: `/orgs/${ORG}/teams/${slug}`,
+        body: { privacy: "closed" },
+      },
+    ])
+    // Neither the team NAME (== slug, the naming contract) nor the description
+    // record may ride along — a privacy flip must not rename or re-label.
+    expect(patches[0].body).not.toHaveProperty("name")
+    expect(patches[0].body).not.toHaveProperty("description")
+  })
+
+  it("refuses a slug outside the full group-team shape", async () => {
+    const { client, patches } = makeClient()
+    await expect(
+      updateGroupTeamPrivacy(client, ORG, {
+        slug: "classroom50-cs-fall",
+        privacy: "secret",
       }),
     ).rejects.toSatisfy(
       (err) =>
