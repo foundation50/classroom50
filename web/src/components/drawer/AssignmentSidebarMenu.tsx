@@ -3,8 +3,8 @@ import {
   FileAddedIcon,
   FileCheckIcon,
   GearIcon,
-  OrganizationIcon,
   PeopleIcon,
+  RepoIcon,
 } from "@/components/ui/icons"
 import { Link, useMatchRoute } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
@@ -177,7 +177,7 @@ export const AssignmentSidebarMenu = ({
                   >
                     <SidebarItemBody
                       label={t("nav.manageGroups")}
-                      icon={<OrganizationIcon aria-hidden="true" />}
+                      icon={<PeopleIcon aria-hidden="true" />}
                       active={onGroups}
                       groupId="assignment"
                     />
@@ -191,7 +191,7 @@ export const AssignmentSidebarMenu = ({
                 >
                   <SidebarItemBody
                     label={t("nav.submissions")}
-                    icon={<PeopleIcon aria-hidden="true" />}
+                    icon={<RepoIcon aria-hidden="true" />}
                     active={onSubmissions}
                     groupId="assignment"
                   />
