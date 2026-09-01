@@ -769,8 +769,14 @@ const SubmissionsPageContent = () => {
   // Group mode additionally waits for the org repo list: its rows (and the
   // "No groups yet" empty state) are derived from repo existence, so painting
   // before the list resolves would flash a wrong affirmative claim.
+  // Team mode also waits for the group-teams listing: row titles come from the
+  // teams' display names and would first paint as raw repo names, then flip.
+  // isLoading (not isFetching) so a background refetch never blanks the table.
   const initialLoading =
-    !scoresLoaded || rosterLoading || (isGroupFlavor && orgReposLoading)
+    !scoresLoaded ||
+    rosterLoading ||
+    (isGroupFlavor && orgReposLoading) ||
+    (isTeamAssignment && groupTeamsQuery.isLoading)
   const nonSubmittersReady =
     scoresLoaded && !livePending && !detectedPending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
