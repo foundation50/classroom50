@@ -840,6 +840,8 @@ members.
 
 - Members must be on the classroom roster; usernames not on `roster.csv` are
   skipped with a warning.
+- A student can be on only one of the assignment's groups, so a member who is
+  already on another group is refused before the team is created.
 - The member count is capped by the assignment's `max_group_size`.
 - The new team is recorded in `<classroom>/teams.json`.
 - The team is attached to its shared repository when a student accepts;
@@ -871,11 +873,12 @@ gh teacher team add cs50-fall-2026 cs-principles project 2 alice
 ```
 
 `add` puts a rostered student on the group team and records them in
-`teams.json`. The student must be on the classroom roster, the team's live
-member count is capped by the assignment's `max_group_size`, and adding a
-student who is already on the team changes nothing. `remove` takes the
-student off the team and drops them from the snapshot; removing a student who
-is not on the team changes nothing.
+`teams.json`. The student must be on the classroom roster, a student already
+on another of the assignment's groups is refused (one student, one group),
+the team's live member count is capped by the assignment's `max_group_size`,
+and adding a student who is already on the team changes nothing. `remove`
+takes the student off the team and drops them from the snapshot; removing a
+student who is not on the team changes nothing.
 
 ### `team delete`
 
@@ -900,9 +903,11 @@ gh teacher team copy cs50-fall-2026 cs-principles project2 --from project
 Recreates the source assignment's group teams for the target assignment: same
 members and display names, fresh counters under the target's own team
 namespace. Both assignments must be team assignments in the same classroom.
-Members no longer on the roster are skipped with a warning, and a source team
-over the target's `max_group_size` fails the copy. The new teams are recorded
-in `<classroom>/teams.json`. The web app's **Copy groups** dialog is the same
+Members no longer on the roster, and members already on one of the target
+assignment's groups, are skipped with a warning; a source team whose members
+are all skipped is not recreated. A source team over the target's
+`max_group_size` fails the copy. The new teams are recorded in
+`<classroom>/teams.json`. The web app's **Copy groups** dialog is the same
 operation with an editable preview.
 
 ## `autograder`

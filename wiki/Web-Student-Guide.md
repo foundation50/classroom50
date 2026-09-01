@@ -97,8 +97,8 @@ assignment:
 - **Students form groups.** The accept page lists the existing groups with
   their member counts. **Ask to join** opens a group's page on GitHub: select
   **Request to join** there (the group reviews requests on that page, where
-  you can also cancel yours), then come back and click **I've been added,
-  check again**. Or click **Create group** to start your own: you become its
+  you can also cancel yours), then come back and click **Check again**. Or
+  click **Create group** to start your own: you become its
   first member and can add teammates after you accept.
 
 The group's shared repository is created when the first member accepts, and

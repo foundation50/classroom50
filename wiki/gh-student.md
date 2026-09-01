@@ -140,7 +140,8 @@ repository through the GitHub Team.
 
 - Only the group's founder (its team maintainer) can add members on a
   student-formed assignment.
-- The classmate must be enrolled in the classroom.
+- The classmate must be enrolled in the classroom, and can be in only one
+  group for the assignment.
 - The group size is capped by the assignment's maximum group size. The limit
   is advisory and is checked again when your teacher collects the work.
 - Adding someone who is already in the group changes nothing.

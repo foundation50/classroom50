@@ -624,7 +624,8 @@ gh teacher team copy cs50-fall-2026 cs-principles project2 --from project
 ```
 
 - Members must be on the classroom roster, and each team's size is capped by
-  the assignment's `max_group_size`.
+  the assignment's `max_group_size`. A student can be on only one of an
+  assignment's groups.
 - A team can be referenced by its counter (`2`) or by its full slug.
 - Membership writes also update the `<classroom>/teams.json` snapshot, the
   record of intended membership; `team list` shows each team's drift against

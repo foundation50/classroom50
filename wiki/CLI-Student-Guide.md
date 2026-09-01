@@ -111,7 +111,8 @@ on the assignment:
   gh student team add <org> <classroom> <assignment> <teammate-username>
   ```
 
-  Teammates must be enrolled in the classroom, and the group is capped at the
+  Teammates must be enrolled in the classroom and not already in another
+  group, and the group is capped at the
   size your teacher set. Once added, each teammate runs a plain
   `gh student accept` for the same assignment.
 
