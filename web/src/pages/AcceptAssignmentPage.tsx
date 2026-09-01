@@ -1320,8 +1320,16 @@ const AcceptAssignmentPage = () => {
           </Heading>
           <h2 className="text-lg">
             {repoExistsAlready
-              ? t("accept.alreadyAcceptedHeading")
-              : t("accept.acceptHeading")}
+              ? t(
+                  isTeamMode
+                    ? "accept.alreadyAcceptedHeadingTeam"
+                    : "accept.alreadyAcceptedHeading",
+                )
+              : t(
+                  isTeamMode
+                    ? "accept.acceptHeadingTeam"
+                    : "accept.acceptHeading",
+                )}
           </h2>
 
           {description ? (

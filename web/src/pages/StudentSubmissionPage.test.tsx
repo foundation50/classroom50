@@ -310,6 +310,16 @@ describe("StudentSubmissionPage submission type", () => {
     expect(gradeLink.getAttribute("href")).toContain("/releases/tag/")
   })
 
+  it("labels the identity column as the group repository for a team assignment", () => {
+    // Team mode shares one repo across the group, so the student column set
+    // swaps the second-person label for the group-phrased one.
+    assignmentData = assignment({ mode: "team", submission_mode: "every-push" })
+    pushData = [commit("aaa", "2026-06-20T10:00:00Z")]
+    render(<StudentSubmissionPage />)
+    expect(screen.getByText("submissions.student.colYourRepoTeam")).toBeTruthy()
+    expect(screen.queryByText("submissions.student.colYourRepo")).toBeNull()
+  })
+
   it("surfaces an error (not the submission table) when the assignment metadata read fails", () => {
     // A transient Pages metadata failure must surface rather than degrade to a
     // slug title + default push mode. The submission table should not render.

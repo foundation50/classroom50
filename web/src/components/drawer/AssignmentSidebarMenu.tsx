@@ -229,13 +229,23 @@ export const AssignmentSidebarMenu = ({
                   </Link>
                 </SidebarNavItem>
               )}
-              <SidebarNavItem label={t("nav.mySubmission")}>
+              <SidebarNavItem
+                label={t(
+                  isTeamAssignment
+                    ? "nav.mySubmissionTeam"
+                    : "nav.mySubmission",
+                )}
+              >
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submission"
                   params={{ org, classroom, assignment }}
                 >
                   <SidebarItemBody
-                    label={t("nav.mySubmission")}
+                    label={t(
+                      isTeamAssignment
+                        ? "nav.mySubmissionTeam"
+                        : "nav.mySubmission",
+                    )}
                     icon={<FileCheckIcon aria-hidden="true" />}
                     active={onSubmission}
                     groupId="assignment"
