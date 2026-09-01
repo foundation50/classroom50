@@ -12,6 +12,7 @@ import {
   renameConfigRepoToMain,
   resendOrgInvitation,
   triggerRegrade,
+  updateOrgTeamCreation,
   validateServiceToken,
 } from "./mutations"
 import { REGRADE_WORKFLOW } from "./workflows"
@@ -1445,6 +1446,37 @@ describe("resendOrgInvitation carries team_ids", () => {
       invitee_id: 1,
       team_ids: [4242],
       role: "admin",
+    })
+  })
+})
+
+describe("updateOrgTeamCreation", () => {
+  // The body must carry ONLY members_can_create_teams: PATCH /orgs/{org}
+  // applies every field it receives, so a stray field would silently rewrite
+  // an unrelated org setting.
+  it("PATCHes /orgs/{org} with just the team-creation flag", async () => {
+    const updated = { login: "acme", members_can_create_teams: true }
+    const request = vi.fn().mockResolvedValue(updated)
+    const client = { request } as unknown as GitHubClient
+
+    await expect(updateOrgTeamCreation(client, "acme", true)).resolves.toBe(
+      updated,
+    )
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith("/orgs/acme", {
+      method: "PATCH",
+      body: { members_can_create_teams: true },
+    })
+  })
+
+  it("sends false when disabling", async () => {
+    const request = vi.fn().mockResolvedValue({ login: "acme" })
+    const client = { request } as unknown as GitHubClient
+
+    await updateOrgTeamCreation(client, "acme", false)
+    expect(request).toHaveBeenCalledWith("/orgs/acme", {
+      method: "PATCH",
+      body: { members_can_create_teams: false },
     })
   })
 })

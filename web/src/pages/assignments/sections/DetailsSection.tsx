@@ -5,6 +5,7 @@ import {
   Alert,
   Badge,
   FormField,
+  HelpTooltip,
   Input,
   Radio,
   Textarea,
@@ -17,6 +18,7 @@ import {
 import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
+import useOrgTeamCreationAllowed from "@/hooks/useOrgTeamCreationAllowed"
 
 // Assignment Details (IA overhaul U4): the assignment's identity — name, slug,
 // description, and type. Repository source, autograding, features, and schedule
@@ -31,6 +33,7 @@ export function DetailsSection({
   takenSlugs,
   reservedSlugs,
   classroom,
+  org,
 }: {
   form: AssignmentForm
   edit: boolean
@@ -46,8 +49,19 @@ export function DetailsSection({
   // Classroom short-name; bounds the slug to the composed repo-name budget
   // (#691) so the auto-fill can't mint a name GitHub would reject at accept.
   classroom?: string
+  // Org slug, for the team-creation gate on the group (team) type. Absent
+  // leaves the gate open.
+  org?: string
 }) {
   const { t } = useTranslation()
+  // Group (team-mode) assignments need org members to be able to create
+  // teams: with team_formation: student the founding student creates the
+  // GitHub team at accept. When the org's live members_can_create_teams is an
+  // explicit false, the type can't work, so its radio locks on CREATE with a
+  // tooltip naming the fix. Fail-open (absent/unreadable allows) and
+  // create-only: on edit the type is immutable and already locked.
+  const teamCreationAllowed = useOrgTeamCreationAllowed(org)
+  const teamModeBlocked = !edit && !teamCreationAllowed
   // undefined (no classroom in context) leaves nextAvailableSlug at its
   // pattern-cap default.
   const slugBudget = classroom ? assignmentSlugBudget(classroom) : undefined
@@ -239,35 +253,43 @@ export function DetailsSection({
               {t("assignments.form.type")}
             </legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
-              {(["individual", "team", "group"] as const).map((value) => (
-                <label
-                  key={value}
-                  htmlFor={`${field.name}-${value}`}
-                  className="label cursor-pointer gap-2 p-0"
-                >
-                  <Radio
-                    id={`${field.name}-${value}`}
-                    name={field.name}
-                    value={value}
-                    checked={field.state.value === value}
-                    disabled={edit}
-                    onBlur={field.handleBlur}
-                    onChange={() => field.handleChange(value)}
-                  />
-                  {t(
-                    value === "individual"
-                      ? "assignments.form.typeIndividual"
-                      : value === "team"
-                        ? "assignments.form.typeTeam"
-                        : "assignments.form.typeGroup",
-                  )}
-                  {value === "team" ? (
-                    <Badge tone="primary" size="sm">
-                      {t("assignments.form.typeTeamRecommended")}
-                    </Badge>
-                  ) : null}
-                </label>
-              ))}
+              {(["individual", "team", "group"] as const).map((value) => {
+                const blocked = value === "team" && teamModeBlocked
+                return (
+                  <label
+                    key={value}
+                    htmlFor={`${field.name}-${value}`}
+                    className="label cursor-pointer gap-2 p-0"
+                  >
+                    <Radio
+                      id={`${field.name}-${value}`}
+                      name={field.name}
+                      value={value}
+                      checked={field.state.value === value}
+                      disabled={edit || blocked}
+                      onBlur={field.handleBlur}
+                      onChange={() => field.handleChange(value)}
+                    />
+                    {t(
+                      value === "individual"
+                        ? "assignments.form.typeIndividual"
+                        : value === "team"
+                          ? "assignments.form.typeTeam"
+                          : "assignments.form.typeGroup",
+                    )}
+                    {value === "team" ? (
+                      <Badge tone="primary" size="sm">
+                        {t("assignments.form.typeTeamRecommended")}
+                      </Badge>
+                    ) : null}
+                    {blocked ? (
+                      <HelpTooltip
+                        help={t("assignments.form.typeTeamDisabledHelp")}
+                      />
+                    ) : null}
+                  </label>
+                )
+              })}
             </div>
             {edit ? (
               <Alert tone="warning" role="status" className="mt-2 text-sm">

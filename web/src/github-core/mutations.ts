@@ -157,3 +157,4 @@ export {
   type InviteTeamState,
 } from "./mutations/inviteTeams"
 export { updateOrgProfile, type OrgProfileUpdate } from "./mutations/orgProfile"
+export { updateOrgTeamCreation } from "./mutations/orgTeamCreation"

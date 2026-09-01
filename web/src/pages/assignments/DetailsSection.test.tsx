@@ -33,7 +33,17 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useOptionalGitHubClient: () => useOptionalGitHubClient(),
 }))
 
+// The team-creation gate reads the shared org-details query; mock the hook
+// module so the gate tests can drive the live value directly.
+const orgPlanDetailsMock = vi.fn<() => { data?: unknown }>(() => ({
+  data: undefined,
+}))
+vi.mock("@/hooks/useGetOrgPlanDetails", () => ({
+  default: () => orgPlanDetailsMock(),
+}))
+
 import { RepoFeatureControls } from "./sections/RepositorySetupSection"
+import { DetailsSection } from "./sections/DetailsSection"
 import { useAssignmentForm } from "./assignmentFormModel"
 
 const t = ((key: string) => key) as unknown as TFunction
@@ -81,6 +91,7 @@ afterEach(() => {
   cleanup()
   getRepo.mockReset()
   useOptionalGitHubClient.mockReturnValue({ request: vi.fn() })
+  orgPlanDetailsMock.mockReturnValue({ data: undefined })
 })
 
 const inheritKey = "assignments.form.repoFeatures.choices.inherit"
@@ -272,5 +283,94 @@ describe("RepoFeatureControls — override warning", () => {
     const { container } = renderControls({ templateRepo: "", edit: true })
     forceIssuesOff(container)
     expect(screen.getByText(existingWarningKey, { exact: false })).toBeTruthy()
+  })
+})
+
+// The team-creation gate on the Assignment type radios: when the org's live
+// members_can_create_teams is an explicit false, the group (team-mode) radio
+// locks on create with a tooltip naming the fix. Fail-open on absent/unknown
+// data (GitHub omits the field for non-admin readers).
+describe("DetailsSection — team-creation gate", () => {
+  const tooltipKey = "assignments.form.typeTeamDisabledHelp"
+
+  function DetailsHarness({
+    edit = false,
+    org,
+  }: {
+    edit?: boolean
+    org?: string
+  }) {
+    const form = useAssignmentForm(undefined, () => {}, t)
+    return (
+      <DetailsSection
+        form={form}
+        edit={edit}
+        slugTouched={false}
+        setSlugTouched={() => {}}
+        org={org}
+      />
+    )
+  }
+
+  function renderDetails(props: { edit?: boolean; org?: string }) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const wrapper = ({ children }: PropsWithChildren) =>
+      createElement(QueryClientProvider, { client: queryClient }, children)
+    return render(createElement(DetailsHarness, props), { wrapper })
+  }
+
+  const modeRadio = (container: HTMLElement, value: string) =>
+    container.querySelector<HTMLInputElement>(`#mode-${value}`)!
+
+  it("disables only the team radio and shows the tooltip when team creation is off", () => {
+    orgPlanDetailsMock.mockReturnValue({
+      data: { members_can_create_teams: false },
+    })
+    const { container } = renderDetails({ org: "acme" })
+
+    expect(modeRadio(container, "team").disabled).toBe(true)
+    expect(modeRadio(container, "individual").disabled).toBe(false)
+    expect(modeRadio(container, "group").disabled).toBe(false)
+    expect(screen.getByLabelText(tooltipKey)).toBeTruthy()
+  })
+
+  it("fails open when the field is absent from the org read", () => {
+    orgPlanDetailsMock.mockReturnValue({ data: {} })
+    const { container } = renderDetails({ org: "acme" })
+
+    expect(modeRadio(container, "team").disabled).toBe(false)
+    expect(screen.queryByLabelText(tooltipKey)).toBeNull()
+  })
+
+  it("fails open while the org read hasn't resolved", () => {
+    orgPlanDetailsMock.mockReturnValue({ data: undefined })
+    const { container } = renderDetails({ org: "acme" })
+
+    expect(modeRadio(container, "team").disabled).toBe(false)
+    expect(screen.queryByLabelText(tooltipKey)).toBeNull()
+  })
+
+  it("keeps team creation allowed when the live value is true", () => {
+    orgPlanDetailsMock.mockReturnValue({
+      data: { members_can_create_teams: true },
+    })
+    const { container } = renderDetails({ org: "acme" })
+
+    expect(modeRadio(container, "team").disabled).toBe(false)
+  })
+
+  it("shows no gate tooltip on edit, where the type is already locked", () => {
+    orgPlanDetailsMock.mockReturnValue({
+      data: { members_can_create_teams: false },
+    })
+    const { container } = renderDetails({ edit: true, org: "acme" })
+
+    // Every type radio is disabled on edit (the type is immutable), so the
+    // gate must not add its create-time remedy tooltip on top.
+    expect(modeRadio(container, "team").disabled).toBe(true)
+    expect(modeRadio(container, "individual").disabled).toBe(true)
+    expect(screen.queryByLabelText(tooltipKey)).toBeNull()
   })
 })

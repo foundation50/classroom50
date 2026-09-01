@@ -150,11 +150,16 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
     enterpriseOnly: false,
   },
   {
+    // Enforced TRUE: load-bearing for student-formed group assignments
+    // (team_formation: student) — the founding student creates the GitHub
+    // team at accept. Non-critical like the other enabling fields: an org
+    // that keeps it off still works for everything else, and the assignment
+    // form gates the group mode on the live value.
     field: "members_can_create_teams",
-    value: false,
-    desc: "member team creation disabled",
-    manualFix: 'uncheck "Allow members to create teams"',
-    critical: true,
+    value: true,
+    desc: "member team creation enabled",
+    manualFix: 'check "Allow members to create teams"',
+    critical: false,
     enterpriseOnly: false,
   },
   {

@@ -1141,6 +1141,7 @@
       "typeIndividual": "Individual",
       "typeGroup": "Group (legacy)",
       "typeLockedHelp": "Can't be changed after creation. Switching it would invalidate existing submissions.",
+      "typeTeamDisabledHelp": "Group assignments need organization members to be able to create teams: the first student creates the group's team when accepting. Turn on \"Allow members to create teams\" in the Member team creation section of the organization settings page, or in the organization's member privileges on GitHub.",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
@@ -2027,6 +2028,22 @@
       "confirmBody": "This stops all workflows in student repositories, not just autograding, so any CI your students run stops too. Submissions aren't graded and get no autograde or feedback-pr checks until you resume. Feedback pull requests still open when students accept and continue to show new pushes.",
       "confirmButton": "Pause autograding",
       "toggleFailed": "Couldn't update Actions permissions: {{message}}"
+    },
+    "teamCreation": {
+      "title": "Member team creation",
+      "description": "Let organization members create teams. Group assignments where students form their own groups need this: the first student creates the group's team when accepting.",
+      "openSettings": "Open member privileges",
+      "statusOn": "On",
+      "statusOff": "Off",
+      "loading": "Checking status…",
+      "applying": "Updating…",
+      "toggleLabel": "Allow members to create teams",
+      "toggleHint": "Matches the \"Allow members to create teams\" setting in the organization's member privileges on GitHub.",
+      "offNotice": "Students can't create teams, so group assignments where students form their own groups can't work. The new-assignment form disables the Group type while this is off.",
+      "enabledToast": "Member team creation turned on.",
+      "disabledToast": "Member team creation turned off.",
+      "unknownNotice": "Couldn't read this setting from GitHub. Check it on the member privileges page instead.",
+      "toggleFailed": "Couldn't update member team creation: {{message}}"
     },
     "rerun": {
       "title": "Re-run setup",

@@ -21,6 +21,13 @@ vi.mock("./TemplateField", () => ({
   TemplateField: () => null,
 }))
 
+// DetailsSection's team-creation gate reads the org through the GitHub auth
+// context; irrelevant here, so stub it fail-open to keep the render
+// provider-free. The gate itself is covered in DetailsSection.test.tsx.
+vi.mock("@/hooks/useOrgTeamCreationAllowed", () => ({
+  default: () => true,
+}))
+
 import CreateAssignmentForm, {
   assignmentToFormValues,
 } from "./CreateAssignmentForm"

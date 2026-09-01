@@ -29,6 +29,7 @@ import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
 import OrgActionsSection from "@/pages/orgSettings/OrgActionsSection"
 import RerunOrgSetup from "@/pages/orgSettings/RerunOrgSetup"
 import TeardownSection from "@/pages/orgSettings/TeardownSection"
+import TeamCreationSection from "@/pages/orgSettings/TeamCreationSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
@@ -618,6 +619,13 @@ const OrgSettingsPage = () => {
               key={`actions-${org}`}
               org={org}
               highlighted={highlightedId === "github-actions"}
+            />
+          )}
+          {org && (
+            <TeamCreationSection
+              key={`team-creation-${org}`}
+              org={org}
+              highlighted={highlightedId === "member-team-creation"}
             />
           )}
           {org && (

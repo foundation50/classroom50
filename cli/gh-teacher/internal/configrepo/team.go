@@ -204,7 +204,7 @@ func CanonicalTeamSlugShortName(shortName string) bool {
 // access. Safe because the team is `secret` (members + owners only). Pass ""
 // to leave the description unset.
 //
-// `members_can_create_teams: false` (init's lockdown) doesn't block this — the
+// The org's `members_can_create_teams` setting is irrelevant here — the
 // teacher authenticates as an org owner.
 func EnsureClassroomTeam(client githubapi.Client, org, shortName, description string) (TeamRef, error) {
 	// Guard the slug==name invariant (see CanonicalTeamSlugShortName):
@@ -358,7 +358,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 // `description` is written on create AND reconciled on adopt so a rotated
 // secret / renamed classroom propagates to the student-facing record.
 //
-// `members_can_create_teams: false` (init's lockdown) doesn't block this — the
+// The org's `members_can_create_teams` setting is irrelevant here — the
 // teacher authenticates as an org owner.
 func ensureSecretTeamByName(client githubapi.Client, org, name, description, notificationSetting string) (TeamRef, error) {
 	teamBody := map[string]any{

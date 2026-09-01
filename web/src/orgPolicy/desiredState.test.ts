@@ -26,6 +26,7 @@ const NON_CRITICAL_FIELDS = [
   "members_can_create_private_repositories",
   "members_can_create_pages",
   "members_can_create_public_pages",
+  "members_can_create_teams",
 ]
 
 // A live org response with every in-scope field already at its desired value.
@@ -128,12 +129,27 @@ describe("memberDefaultSettings", () => {
     expect(afterOverride?.value).toBe(false)
   })
 
-  it("marks exactly the three enabling fields non-critical on enterprise, everything else critical", () => {
+  it("marks exactly the four enabling fields non-critical on enterprise, everything else critical", () => {
     for (const s of memberDefaultSettings("enterprise")) {
       const expectCritical = !NON_CRITICAL_FIELDS.includes(s.field)
       expect(s.critical, `${s.field} criticality`).toBe(expectCritical)
     }
   })
+
+  // Student-formed group assignments (team_formation: student) have the
+  // founding student create the GitHub team at accept, so member team creation
+  // must be enabled on every plan. Non-critical: an org that keeps it off only
+  // loses that mode, which the assignment form gates on the live value.
+  it.each(["enterprise", "team", "free", "", undefined])(
+    "enables member team creation (non-critical) on %s",
+    (plan) => {
+      const setting = memberDefaultSettings(plan).find(
+        (s) => s.field === "members_can_create_teams",
+      )
+      expect(setting?.value).toBe(true)
+      expect(setting?.critical).toBe(false)
+    },
+  )
 })
 
 describe("classifyDefaults", () => {

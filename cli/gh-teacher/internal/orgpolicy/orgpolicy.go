@@ -109,11 +109,12 @@ func MemberDefaultSettings(plan string) []MemberDefaultSetting {
 }
 
 // allMemberDefaultSettings: the full canonical list, in apply order. Intent: a
-// least-privilege org where the only member capability is private-repo
-// creation; every other privilege and dangerous repo-admin power is locked to
-// owners. Because `student accept` keeps the founder as repo `admin`, these
-// org-level locks are what defang that admin org-wide. MemberDefaultSettings
-// filters this by plan.
+// least-privilege org where the only member capabilities are private-repo
+// creation and team creation (the latter for student-formed group teams);
+// every other privilege and dangerous repo-admin power is locked to owners.
+// Because `student accept` keeps the founder as repo `admin`, these org-level
+// locks are what defang that admin org-wide. MemberDefaultSettings filters
+// this by plan.
 //
 // Notable entries:
 //   - default_repository_permission "none": no implicit read on other repos.
@@ -127,6 +128,8 @@ func MemberDefaultSettings(plan string) []MemberDefaultSetting {
 //   - members_can_create_pages / _public_pages true: ENFORCED so the config
 //     repo can publish its public Pages site (the unauthenticated
 //     assignments.json fetch). init resets a tightened setting on re-run.
+//   - members_can_create_teams true: student-formed group assignments
+//     (team_formation: student) have the founding student create the team.
 //   - everything else false: locks the privilege / repo-admin power to owners.
 //
 // The four web-UI-only privileges with no REST field are handled by
@@ -232,11 +235,15 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			Critical:  true,
 		},
 		{
+			// Enforced TRUE: load-bearing for student-formed group assignments
+			// (team_formation: student) — the founding student creates the
+			// GitHub team at accept. Non-critical like the other enabling
+			// fields: an org that keeps it off only loses that mode, which the
+			// web assignment form gates on the live value.
 			Field:     "members_can_create_teams",
-			Value:     false,
-			Desc:      "member team creation disabled",
-			ManualFix: `uncheck "Allow members to create teams"`,
-			Critical:  true,
+			Value:     true,
+			Desc:      "member team creation enabled",
+			ManualFix: `check "Allow members to create teams"`,
 		},
 		{
 			Field:          "members_can_view_dependency_insights",

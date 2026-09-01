@@ -242,11 +242,12 @@ export type GitHubOrgDetails = {
     filled_seats: number
     seats: number
   }
-  // Member-privilege repo-creation booleans. Like `plan`, GitHub omits these for
-  // a non-admin reader, so absent is distinct from false — a consumer that acts
-  // on "off" must check for an explicit `false`.
+  // Member-privilege booleans. Like `plan`, GitHub omits these for a non-admin
+  // reader, so absent is distinct from false — a consumer that acts on "off"
+  // must check for an explicit `false`.
   members_can_create_repositories?: boolean
   members_can_create_private_repositories?: boolean
+  members_can_create_teams?: boolean
 }
 
 export type GitHubWorkflowRun = {
