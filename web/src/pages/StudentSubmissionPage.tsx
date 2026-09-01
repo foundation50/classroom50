@@ -411,22 +411,50 @@ const SubmissionBody = ({
         <tbody>
           <tr>
             <td>
-              <Avatar
-                name={user?.name || user?.login || ""}
-                initials=""
-                github={user?.login || ""}
-                subtitle={
-                  <a
-                    className="link link-hover block max-w-72 truncate font-mono text-xs"
-                    href={repoHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={repoName}
-                  >
-                    {repoName}
-                  </a>
-                }
-              />
+              {isTeamMode ? (
+                // The repo belongs to the GROUP, so the row identity is the
+                // group — not the signed-in account (any teammate sees the
+                // same row).
+                <div className="flex items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-base-200 text-base-content/70">
+                    <PeopleIcon aria-hidden="true" className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {myTeam?.name ||
+                        t("components.groupTeamMembers.defaultName", {
+                          n: myTeam?.n ?? 0,
+                        })}
+                    </div>
+                    <a
+                      className="link link-hover block max-w-72 truncate font-mono text-xs"
+                      href={repoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={repoName}
+                    >
+                      {repoName}
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <Avatar
+                  name={user?.name || user?.login || ""}
+                  initials=""
+                  github={user?.login || ""}
+                  subtitle={
+                    <a
+                      className="link link-hover block max-w-72 truncate font-mono text-xs"
+                      href={repoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={repoName}
+                    >
+                      {repoName}
+                    </a>
+                  }
+                />
+              )}
             </td>
             <td>
               <SubmissionCountCell
