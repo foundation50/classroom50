@@ -2859,7 +2859,6 @@
       "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Collect now\" to grade and score it.",
       "notCollectedYet": "Not yet collected",
       "notCollectedYetTitle": "This student has pushed work that hasn't been collected yet, so there's no recorded submission time. Run \"Collect now\" to collect it.",
-      "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repository",
       "openFeedbackPrLabel": "Open feedback pull request for {{repo}}",
@@ -2891,12 +2890,6 @@
       "teamDefaultName": "Group {{n}}",
       "colMembers": "Members",
       "manageMembersLabel": "View and manage members of {{name}}"
-    },
-    "manageTeam": {
-      "title": "Manage {{name}}",
-      "nameLabel": "Group name",
-      "saveName": "Save name",
-      "nameHelp": "Shown on this page and to the group's members. The repository name doesn't change."
     },
     "scoreOverride": {
       "notGraded": "Not graded",
@@ -3260,6 +3253,7 @@
       "detailsDescription": "Open the autograder result on GitHub",
       "regradeDescription": "Re-run the autograder on the latest commit",
       "downloadDescription": "Save the submission as a zip archive",
+      "manageGroup": "Manage group",
       "membersDescription": "View and manage the group's members"
     },
     "publicRepo": {

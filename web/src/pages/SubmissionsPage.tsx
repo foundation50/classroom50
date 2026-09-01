@@ -344,22 +344,6 @@ const SubmissionsPageContent = () => {
     }
     return map
   }, [isTeamAssignment, teamByOwner, t])
-  const teamSlugsByOwner = useMemo(() => {
-    if (!isTeamAssignment) return undefined
-    const map = new Map<string, string>()
-    for (const [owner, team] of teamByOwner) map.set(owner, team.slug)
-    return map
-  }, [isTeamAssignment, teamByOwner])
-  // RAW display names (no "Group <n>" fallback), for the manage modal's
-  // rename editor — absent means the group has no teacher/student-chosen name.
-  const teamRawNamesByOwner = useMemo(() => {
-    if (!isTeamAssignment) return undefined
-    const map = new Map<string, string>()
-    for (const [owner, team] of teamByOwner) {
-      if (team.name) map.set(owner, team.name)
-    }
-    return map
-  }, [isTeamAssignment, teamByOwner])
   const groupRepoFounders = useMemo(
     () =>
       new Set([
@@ -1482,8 +1466,8 @@ const SubmissionsPageContent = () => {
           trailing={
             <>
               {/* Team-mode groups are managed on their own page (create,
-                  members, visibility, snapshot); the per-row Members modal
-                  stays for quick fixes. */}
+                  members, visibility, snapshot); the per-row manage-group
+                  dialog stays for quick fixes. */}
               {isTeamAssignment && (
                 <RouterButton
                   variant="outline"
@@ -1668,8 +1652,7 @@ const SubmissionsPageContent = () => {
           isTeam={isTeamAssignment}
           groupDisplayNames={groupDisplayNames}
           groupMemberLogins={groupMemberLogins}
-          teamSlugsByOwner={teamSlugsByOwner}
-          teamRawNamesByOwner={teamRawNamesByOwner}
+          teamsByOwner={isTeamAssignment ? teamByOwner : undefined}
           teamFormation={
             isTeamAssignment ? assignmentInfo?.team_formation : undefined
           }

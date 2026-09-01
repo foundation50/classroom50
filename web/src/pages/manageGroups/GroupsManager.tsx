@@ -16,7 +16,6 @@ import { CopyIcon, PeopleIcon, PlusIcon, SyncIcon } from "@/components/ui/icons"
 import { EmptyState, ListSkeletonRows, SkeletonRegion } from "@/components/list"
 import PageHeader from "@/components/PageHeader"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { GitHubAPIError } from "@/github-core/errors"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -27,43 +26,22 @@ import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useTeamsSnapshot from "@/hooks/useTeamsSnapshot"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
-import useDeleteGroupTeam from "@/hooks/mutations/useDeleteGroupTeam"
 import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
-import useRemoveGroupTeamMember from "@/hooks/mutations/useRemoveGroupTeamMember"
-import useRenameGroupTeam from "@/hooks/mutations/useRenameGroupTeam"
-import useUpdateGroupTeamPrivacy from "@/hooks/mutations/useUpdateGroupTeamPrivacy"
 import { useSyncTeamsSnapshot } from "@/hooks/mutations/useSaveTeamsSnapshot"
 import { snapshotDrift } from "@/domain/teams/teamsFile"
 import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
-import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
-import { GroupManageModal } from "./GroupManageModal"
-import type { MembershipSaveResult } from "./GroupManageModal"
+import { ManageGroupDialog, describeTeamWriteError } from "./ManageGroupDialog"
 import { CopyGroupsModal } from "./CopyGroupsModal"
 import { GroupRow } from "./GroupRow"
 import { UnassignedStudentsPanel } from "./UnassignedStudentsPanel"
 
-// The two guardrail 403s named in copy instead of a raw GitHub message: an org
-// that restricts team creation to owners, and a team-sync/IdP-managed team
-// that refuses membership writes.
-function describeTeamWriteError(
-  err: unknown,
-  kind: "create" | "membership",
-  t: (key: string) => string,
-  fallback: string,
-): string {
-  if (err instanceof GitHubAPIError && err.isForbidden) {
-    return kind === "create"
-      ? t("manageGroups.errors.createForbidden")
-      : t("manageGroups.errors.membershipForbidden")
-  }
-  return fallback
-}
-
 // Teacher-side management of a team-mode assignment's group teams: a
-// glanceable list of read-only summary rows, a create dialog, a per-group
-// manage dialog (membership, rename, visibility, delete), the
-// unassigned-students panel, and keeping the teams.json snapshot in step. For
+// glanceable list of read-only summary rows, a create dialog, the shared
+// per-group manage dialog (ManageGroupDialog — membership, rename,
+// visibility, delete), the unassigned-students panel, and keeping the
+// teams.json snapshot in step. For
 // teacher formation this is where groups come to exist; for student formation
 // it's read-mostly (teams appear as students form them) with the same controls
 // available to fix membership. Owns the page header too, so the title, the
@@ -181,27 +159,7 @@ export function GroupsManager({
     classroom,
     assignment: assignmentSlug,
   })
-  const deleteTeam = useDeleteGroupTeam({
-    org,
-    classroom,
-    assignment: assignmentSlug,
-  })
   const addMember = useAddGroupTeamMember({
-    org,
-    classroom,
-    assignment: assignmentSlug,
-  })
-  const removeMember = useRemoveGroupTeamMember({
-    org,
-    classroom,
-    assignment: assignmentSlug,
-  })
-  const renameTeam = useRenameGroupTeam({
-    org,
-    classroom,
-    assignment: assignmentSlug,
-  })
-  const updatePrivacy = useUpdateGroupTeamPrivacy({
     org,
     classroom,
     assignment: assignmentSlug,
@@ -214,35 +172,19 @@ export function GroupsManager({
 
   const [displayName, setDisplayName] = useState("")
   const [createOpen, setCreateOpen] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<GroupTeamRef | null>(null)
-  const [manageOpen, setManageOpen] = useState(false)
   // Counter keyed onto the manage dialog so each open remounts it with fresh
-  // draft state (the Modal invariant: reset at open, not close).
+  // draft state; the dialog is mounted only while a team is selected.
   const [manageSession, setManageSession] = useState(0)
   // Same remount-per-open key for the copy dialog: an abandoned plan must
   // never leak into the next open.
   const [copyOpen, setCopyOpen] = useState(false)
   const [copySession, setCopySession] = useState(0)
-  // The team as it was when the dialog opened. The live lookup below keeps
-  // renames/privacy changes current; the snapshot keeps the dialog painting
-  // through its close fade after a delete removes the team from the list.
-  const [managedAtOpen, setManagedAtOpen] = useState<GroupTeamRef | null>(null)
+  // The team whose manage dialog is open (the ref as of the open click; the
+  // dialog re-derives the live team itself), or null.
+  const [managedTeam, setManagedTeam] = useState<GroupTeamRef | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
 
-  const manageTeam = useMemo(() => {
-    if (!managedAtOpen) return null
-    return (
-      teams.find((team) => team.slug === managedAtOpen.slug) ?? managedAtOpen
-    )
-  }, [teams, managedAtOpen])
-
-  const busy =
-    createTeam.isPending ||
-    deleteTeam.isPending ||
-    addMember.isPending ||
-    removeMember.isPending ||
-    renameTeam.isPending ||
-    updatePrivacy.isPending
+  const busy = createTeam.isPending || addMember.isPending
 
   // Every teacher-side mutation is followed by a snapshot sync so teams.json
   // stays the source of truth (teacher formation) / drift baseline (student
@@ -271,8 +213,9 @@ export function GroupsManager({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshotQuery.isLoading, teamsQuery.isLoading, membersPending, drift])
 
-  // Reset when OPENING, not when closing: the dialog keeps painting through
-  // its fade-out (see Modal), so clearing at close would blank it mid-fade.
+  // Reset when OPENING, not when closing: the create dialog keeps painting
+  // through its fade-out (see Modal), so clearing at close would blank it
+  // mid-fade.
   const openCreate = () => {
     setDisplayName("")
     setActionError(null)
@@ -281,9 +224,8 @@ export function GroupsManager({
 
   const openManage = (team: GroupTeamRef) => {
     setActionError(null)
-    setManagedAtOpen(team)
     setManageSession((session) => session + 1)
-    setManageOpen(true)
+    setManagedTeam(team)
   }
 
   const openCopy = () => {
@@ -323,117 +265,6 @@ export function GroupsManager({
         rosterLogins,
       })
       await resync()
-    } catch (err) {
-      setActionError(
-        describeTeamWriteError(err, "membership", t, errorText(t, err)),
-      )
-    }
-  }
-
-  // Apply the manage dialog's membership DRAFT: removals first, then adds
-  // (mirrors GroupCollaboratorsModal — a swap at max group size frees a slot
-  // first), each item individually so one failure doesn't lose the rest, and
-  // ONE snapshot resync after the whole batch. Failed items go back to the
-  // dialog, which keeps them pending.
-  const handleSaveMembers = async (
-    team: GroupTeamRef,
-    changes: { toRemove: string[]; toAdd: string[] },
-  ): Promise<MembershipSaveResult> => {
-    setActionError(null)
-    const failedRemovals: string[] = []
-    const failedAdds: string[] = []
-    let firstError: unknown = null
-
-    let removed = 0
-    for (const username of changes.toRemove) {
-      try {
-        await removeMember.mutateAsync({ teamSlug: team.slug, username })
-        removed++
-      } catch (err) {
-        failedRemovals.push(username)
-        firstError ??= err
-      }
-    }
-
-    const liveCount = membersBySlug.get(team.slug)?.length ?? 0
-    let added = 0
-    for (const username of changes.toAdd) {
-      try {
-        await addMember.mutateAsync({
-          teamSlug: team.slug,
-          username,
-          // A failed remove keeps its slot, so the gate counts from what
-          // actually happened, not from the draft's assumption.
-          currentMemberCount: liveCount - removed + added,
-          maxGroupSize,
-          rosterLogins,
-        })
-        added++
-      } catch (err) {
-        failedAdds.push(username)
-        firstError ??= err
-      }
-    }
-
-    await resync()
-    return {
-      failedRemovals,
-      failedAdds,
-      message:
-        firstError === null
-          ? null
-          : t("manageGroups.manage.membersError", {
-              error: describeTeamWriteError(
-                firstError,
-                "membership",
-                t,
-                errorText(t, firstError),
-              ),
-            }),
-    }
-  }
-
-  const handleDelete = async () => {
-    if (!pendingDelete || busy) return
-    setActionError(null)
-    const target = pendingDelete
-    try {
-      await deleteTeam.mutateAsync({ slug: target.slug, id: target.id })
-      setPendingDelete(null)
-      // The manage dialog (which triggered the confirm) has nothing left to
-      // manage once its group is gone.
-      if (target.slug === managedAtOpen?.slug) setManageOpen(false)
-      await resync()
-    } catch (err) {
-      setPendingDelete(null)
-      setActionError(errorText(t, err))
-    }
-  }
-
-  // Display-name only: the team NAME (== slug) never changes, so the group's
-  // repository keeps its name. True on success so the dialog can settle its
-  // draft.
-  const handleRename = async (team: GroupTeamRef, name: string) => {
-    if (busy) return false
-    setActionError(null)
-    try {
-      await renameTeam.mutateAsync({ teamSlug: team.slug, name })
-      await resync()
-      return true
-    } catch (err) {
-      setActionError(errorText(t, err))
-      return false
-    }
-  }
-
-  const handlePrivacy = async (
-    team: GroupTeamRef,
-    privacy: GroupTeamPrivacy,
-  ) => {
-    if (busy || team.privacy === privacy) return
-    setActionError(null)
-    try {
-      await updatePrivacy.mutateAsync({ teamSlug: team.slug, privacy })
     } catch (err) {
       setActionError(
         describeTeamWriteError(err, "membership", t, errorText(t, err)),
@@ -534,7 +365,7 @@ export function GroupsManager({
         }
       />
 
-      {actionError && !createOpen && !manageOpen ? (
+      {actionError && !createOpen && !managedTeam ? (
         <Alert tone="error" className="text-sm">
           {actionError}
         </Alert>
@@ -608,24 +439,16 @@ export function GroupsManager({
         onAdd={handleUnassignedAdd}
       />
 
-      {manageTeam && (
-        <GroupManageModal
+      {managedTeam && (
+        <ManageGroupDialog
           key={manageSession}
-          open={manageOpen}
-          team={manageTeam}
-          membersBySlug={membersBySlug}
+          org={org}
+          classroom={classroom}
+          assignment={assignmentSlug}
+          team={managedTeam}
+          formation={formation}
           maxGroupSize={maxGroupSize}
-          fullNameByLogin={fullNameByLogin}
-          availableStudents={availableStudents}
-          busy={busy}
-          error={actionError}
-          onClose={() => setManageOpen(false)}
-          onRename={handleRename}
-          onPrivacyChange={(target, privacy) =>
-            void handlePrivacy(target, privacy)
-          }
-          onSaveMembers={handleSaveMembers}
-          onDelete={setPendingDelete}
+          onClose={() => setManagedTeam(null)}
         />
       )}
 
@@ -706,38 +529,6 @@ export function GroupsManager({
             )}
           </FormField>
         </div>
-      </Modal>
-
-      <Modal
-        open={pendingDelete !== null}
-        onClose={() => setPendingDelete(null)}
-        title={t("manageGroups.deleteTitle")}
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              disabled={deleteTeam.isPending}
-              onClick={() => setPendingDelete(null)}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="error"
-              disabled={deleteTeam.isPending}
-              loading={deleteTeam.isPending}
-              loadingLabel={t("manageGroups.deleteConfirm")}
-              onClick={() => void handleDelete()}
-            >
-              {t("manageGroups.deleteConfirm")}
-            </Button>
-          </>
-        }
-      >
-        <p className="text-sm">
-          {t("manageGroups.deleteBody", {
-            name: pendingDelete ? teamDisplayName(pendingDelete) : "",
-          })}
-        </p>
       </Modal>
     </>
   )

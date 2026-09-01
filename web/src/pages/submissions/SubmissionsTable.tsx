@@ -60,7 +60,7 @@ import {
   type ScoreOverrideCapability,
 } from "@/pages/submissions/ScoreOverrideModal"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
-import { ManageGroupTeamModal } from "./ManageGroupTeamModal"
+import { ManageGroupDialog } from "@/pages/manageGroups/ManageGroupDialog"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import {
@@ -80,6 +80,7 @@ import {
 } from "@/components/submissions/SubmissionRowCells"
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { Student, SubmissionMode, TeamFormation } from "@/types/classroom"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
@@ -264,8 +265,7 @@ const SubmissionsTable = ({
   isTeam = false,
   groupDisplayNames,
   groupMemberLogins,
-  teamSlugsByOwner,
-  teamRawNamesByOwner,
+  teamsByOwner,
   teamFormation,
   org,
   classroom,
@@ -308,17 +308,14 @@ const SubmissionsTable = ({
   // never offered. isGroup is also true for team rows.
   isTeam?: boolean
   // Team mode: owner segment ("group-<n>", lowercased) -> the team's display
-  // name / live member logins / team slug (recorded on override entries).
+  // name / live member logins.
   groupDisplayNames?: ReadonlyMap<string, string>
   groupMemberLogins?: ReadonlyMap<string, string[]>
-  teamSlugsByOwner?: ReadonlyMap<string, string>
-  // Team mode: owner segment -> the RAW display name from the team record
-  // (absent when the group has none) — groupDisplayNames bakes in the
-  // "Group <n>" fallback, which the rename editor must not mistake for a
-  // teacher-chosen name.
-  teamRawNamesByOwner?: ReadonlyMap<string, string>
+  // Team mode: owner segment -> the full team ref (slug recorded on override
+  // entries; the whole ref feeds the shared manage-group dialog).
+  teamsByOwner?: ReadonlyMap<string, GroupTeamRef>
   // Team mode: the assignment's team_formation, recorded on the teams.json
-  // snapshot writes the manage modal triggers.
+  // snapshot writes the manage dialog triggers.
   teamFormation?: TeamFormation
   org: string
   classroom: string
@@ -701,7 +698,7 @@ const SubmissionsTable = ({
                       memberUsernames: liveTeamMembers ?? usernames,
                       teamSlug: isTeam
                         ? (rest.teamSlug ??
-                          teamSlugsByOwner?.get(rest.owner.toLowerCase()))
+                          teamsByOwner?.get(rest.owner.toLowerCase())?.slug)
                         : undefined,
                     })
                   }
@@ -1142,8 +1139,8 @@ const SubmissionsTable = ({
           }
           onManageMembers={
             // Group flavors both get a members editor: legacy group edits
-            // direct collaborators, team mode edits the live GitHub Team
-            // (and the display name) in ManageGroupTeamModal.
+            // direct collaborators, team mode opens the shared manage-group
+            // dialog (ManageGroupDialog).
             manageSubmission.isGroup
               ? () => setManageOwner(manageSubmission.owner)
               : undefined
@@ -1190,22 +1187,17 @@ const SubmissionsTable = ({
       {isTeam &&
         manageOwner &&
         (() => {
-          const slug = teamSlugsByOwner?.get(manageOwner.toLowerCase())
-          if (!slug) return null
+          const team = teamsByOwner?.get(manageOwner.toLowerCase())
+          if (!team) return null
           return (
-            <ManageGroupTeamModal
+            <ManageGroupDialog
               key={manageOwner}
               org={org}
               classroom={classroom}
               assignment={assignment}
-              teamSlug={slug}
-              displayName={teamRawNamesByOwner?.get(manageOwner.toLowerCase())}
-              fallbackLabel={groupLabel(
-                manageOwner,
-                studentRepoName(classroom, assignment, manageOwner),
-              )}
-              maxGroupSize={maxGroupSize}
+              team={team}
               formation={teamFormation ?? "teacher"}
+              maxGroupSize={maxGroupSize}
               onClose={() => setManageOwner(null)}
             />
           )

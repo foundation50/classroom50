@@ -25,7 +25,7 @@ import {
   usedLogins,
 } from "@/domain/teams/copyGroupsPlan"
 import type { PlannedGroup } from "@/domain/teams/copyGroupsPlan"
-import type { GroupPickerStudent } from "./GroupManageModal"
+import type { GroupPickerStudent } from "./ManageGroupDialog"
 
 // Another team-mode assignment of this classroom, offered as a copy source.
 export type CopySourceOption = {

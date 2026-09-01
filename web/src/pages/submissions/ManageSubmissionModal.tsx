@@ -396,6 +396,17 @@ export const ManageSubmissionModal = ({
       ) : null}
 
       <div className="mt-4 divide-y divide-base-200">
+        {/* Team mode opens the shared manage-group dialog; a legacy group
+            opens the collaborators editor. Leads the list: for a group row,
+            the group itself is the primary thing to manage. */}
+        {isGroup && onManageMembers ? (
+          <ActionListRow
+            icon={PeopleIcon}
+            title={t("submissions.manageModal.manageGroup")}
+            description={t("submissions.manageModal.membersDescription")}
+            onClick={handleManageMembers}
+          />
+        ) : null}
         <SubmissionHubFeedbackContext.Provider value={publishFeedback}>
           <SubmissionActionList
             {...action}
@@ -406,14 +417,6 @@ export const ManageSubmissionModal = ({
             }
           />
         </SubmissionHubFeedbackContext.Provider>
-        {isGroup && onManageMembers ? (
-          <ActionListRow
-            icon={PeopleIcon}
-            title={t("submissions.table.members")}
-            description={t("submissions.manageModal.membersDescription")}
-            onClick={handleManageMembers}
-          />
-        ) : null}
       </div>
     </Modal>
   )

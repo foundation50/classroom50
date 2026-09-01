@@ -725,10 +725,13 @@ describe("SubmissionsTable hub action list", () => {
     expect(
       screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
     ).toBeTruthy()
-    // The group Members hand-off is present; the per-student Manage-access
-    // action is not (group access is managed via the Members modal).
+    // The group Manage-group hand-off is present; the per-student
+    // Manage-access action is not (group access is managed via the group
+    // members editor).
     expect(
-      screen.getByRole("button", { name: /submissions\.table\.members/ }),
+      screen.getByRole("button", {
+        name: /submissions\.manageModal\.manageGroup/,
+      }),
     ).toBeTruthy()
     expect(
       screen.queryByRole("button", {

@@ -398,9 +398,15 @@ describe("ManageSubmissionModal", () => {
         name: "submissions.table.manageAccessAria",
       }),
     ).toBeNull()
-    await user.click(
-      screen.getByRole("button", { name: /submissions\.table\.members/ }),
-    )
+    const manageGroup = screen.getByRole("button", {
+      name: /submissions\.manageModal\.manageGroup/,
+    })
+    // The manage-group hand-off leads the hub's action list.
+    const actionButtons = screen
+      .getAllByRole("button")
+      .filter((b) => b.closest(".divide-y"))
+    expect(actionButtons[0]).toBe(manageGroup)
+    await user.click(manageGroup)
     expect(onManageMembers).toHaveBeenCalledOnce()
   })
 
