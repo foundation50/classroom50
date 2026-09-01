@@ -240,7 +240,7 @@ var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"team_formation": {},
-	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
+	"runtime":        {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
 	"test_defaults": {},
 	"locked":        {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},

@@ -16,27 +16,31 @@ import {
   Select,
 } from "@/components/ui"
 import { PeopleIcon, PlusIcon, XIcon } from "@/components/ui/icons"
+import {
+  MemberNameLines,
+  PendingAddAvatar,
+} from "@/components/assignments/memberIdentity"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
-import useGetStudents from "@/hooks/useGetStudents"
-import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
+import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useRecoverGroupTeam from "@/hooks/mutations/useRecoverGroupTeam"
 import { useSyncTeamsSnapshot } from "@/hooks/mutations/useSaveTeamsSnapshot"
 import {
+  groupTeamPrivacyForFormation,
   suggestMembersFromCommits,
-  unassignedRosterStudents,
 } from "@/domain/teams/groupTeams"
 import type {
   RecoverGroupTeamMember,
   RecoverGroupTeamWarning,
 } from "@/domain/teams/groupTeams"
 import { parseGroupRepoCounter, studentRepoName } from "@/util/studentRepo"
+import { groupDefaultName } from "@/util/groupTeam"
 import { describeTeamWriteError } from "./ManageGroupDialog"
-import type { GroupPickerStudent } from "./ManageGroupDialog"
 
 // The missing-team RECOVERY dialog, sibling of ManageGroupDialog: a team-mode
 // group repo survives but its GitHub team was deleted, so grading can't
@@ -75,33 +79,14 @@ export function RecoverGroupDialog({
   const repo = studentRepoName(classroom, assignment, owner)
   const n = parseGroupRepoCounter(repo, classroom, assignment)
   // The repo name pins the counter; privacy follows the assignment's
-  // formation like createGroupTeam (student browsable, teacher hidden).
-  const privacy = formation === "student" ? "closed" : "secret"
+  // formation like createGroupTeam.
+  const privacy = groupTeamPrivacyForFormation(formation)
 
   // Roster (names + the roster gate) and the existing teams' member union,
   // for the "already on a group" exclusion — same plumbing as
   // ManageGroupDialog so both dialogs offer the same picker pool.
-  const { students: csvStudents } = useGetStudents(org, classroom)
-  const roster = useTeamRoster(org, classroom, csvStudents)
-  const enrolled = useMemo(
-    () =>
-      roster.rows.filter(
-        (row) => row.state === "enrolled" && row.username.trim() !== "",
-      ),
-    [roster.rows],
-  )
-  const rosterLogins = useMemo(
-    () => new Set(enrolled.map((row) => row.username.trim().toLowerCase())),
-    [enrolled],
-  )
-  const fullNameByLogin = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const row of enrolled) {
-      const name = `${row.first_name} ${row.last_name}`.trim()
-      if (name) map.set(row.username.trim().toLowerCase(), name)
-    }
-    return map
-  }, [enrolled])
+  const roster = useGroupRoster(org, classroom)
+  const { enrolled, rosterLogins, fullNameByLogin } = roster
 
   const teamsQuery = useGroupTeams(org, classroom, assignment)
   const teams = useMemo(() => teamsQuery.data ?? [], [teamsQuery.data])
@@ -109,15 +94,7 @@ export function RecoverGroupDialog({
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () =>
-      unassignedRosterStudents(enrolled, assignedLogins).map((row) => {
-        const name = `${row.first_name} ${row.last_name}`.trim()
-        return {
-          key: row.key,
-          username: row.username,
-          label: name ? `${name} (${row.username})` : row.username,
-        }
-      }),
+    () => toGroupPickerStudents(enrolled, assignedLogins),
     [enrolled, assignedLogins],
   )
 
@@ -265,7 +242,7 @@ export function RecoverGroupDialog({
     }
   }
 
-  const displayName = t("manageGroups.defaultName", { n: n ?? 0 })
+  const displayName = groupDefaultName(n ?? 0, t)
   const saveDisabled =
     saving || n === null || !creatorLogin || overCapacity || suggestionsLoading
 
@@ -386,23 +363,18 @@ export function RecoverGroupDialog({
                 const fullName = fullNameByLogin.get(login.toLowerCase())
                 return (
                   <li key={login} className="px-4 py-2">
-                    <label className="flex cursor-pointer items-center gap-3">
+                    <label
+                      htmlFor={`recover-suggestion-${login}`}
+                      className="flex cursor-pointer items-center gap-3"
+                    >
                       <Checkbox
+                        id={`recover-suggestion-${login}`}
                         tone="primary"
                         checked={!unchecked.has(login.toLowerCase())}
                         disabled={saving || done}
                         onChange={() => toggleSuggestion(login)}
                       />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">
-                          {fullName ?? login}
-                        </span>
-                        {fullName && (
-                          <span className="block truncate text-xs text-base-content/70">
-                            {login}
-                          </span>
-                        )}
-                      </span>
+                      <MemberNameLines name={fullName} login={login} />
                     </label>
                   </li>
                 )
@@ -415,22 +387,8 @@ export function RecoverGroupDialog({
                     key={`add-${login}`}
                     className="flex items-center gap-3 px-4 py-2"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success/10 text-xs text-success"
-                    >
-                      <PlusIcon className="size-4" />
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">
-                        {fullName ?? login}
-                      </span>
-                      {fullName && (
-                        <span className="block truncate text-xs text-base-content/70">
-                          {login}
-                        </span>
-                      )}
-                    </span>
+                    <PendingAddAvatar />
+                    <MemberNameLines name={fullName} login={login} />
                     <Button
                       variant="ghost"
                       size="sm"

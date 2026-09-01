@@ -24,12 +24,7 @@ func teamAddCmd() *cobra.Command {
 		Example: "  gh teacher team add cs50-fall-2026 cs-principles project 2 alice",
 		Args:    cobra.ExactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.SilenceUsage = true
-			scope, err := parseScope(args[:3])
-			if err != nil {
-				return err
-			}
-			client, err := githubapi.RequireAuthClient(cmd)
+			client, scope, err := authedScope(cmd, args)
 			if err != nil {
 				return err
 			}
@@ -39,10 +34,10 @@ func teamAddCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamAdd(client githubapi.Client, out io.Writer, scope teamScope, teamArg, username string) error {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return fmt.Errorf("username must not be empty")
+func runTeamAdd(client githubapi.Client, out io.Writer, scope teamScope, teamArg, usernameArg string) error {
+	username, err := requireUsername(usernameArg)
+	if err != nil {
+		return err
 	}
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {
@@ -105,12 +100,7 @@ func teamRemoveCmd() *cobra.Command {
 		Example: "  gh teacher team remove cs50-fall-2026 cs-principles project 2 alice",
 		Args:    cobra.ExactArgs(5),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.SilenceUsage = true
-			scope, err := parseScope(args[:3])
-			if err != nil {
-				return err
-			}
-			client, err := githubapi.RequireAuthClient(cmd)
+			client, scope, err := authedScope(cmd, args)
 			if err != nil {
 				return err
 			}
@@ -120,10 +110,10 @@ func teamRemoveCmd() *cobra.Command {
 	return cmd
 }
 
-func runTeamRemove(client githubapi.Client, out io.Writer, scope teamScope, teamArg, username string) error {
-	username = strings.TrimSpace(username)
-	if username == "" {
-		return fmt.Errorf("username must not be empty")
+func runTeamRemove(client githubapi.Client, out io.Writer, scope teamScope, teamArg, usernameArg string) error {
+	username, err := requireUsername(usernameArg)
+	if err != nil {
+		return err
 	}
 	ctx, err := loadTeamContext(client, scope)
 	if err != nil {

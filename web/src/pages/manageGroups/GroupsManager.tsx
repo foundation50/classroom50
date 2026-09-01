@@ -19,8 +19,7 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useGetStudents from "@/hooks/useGetStudents"
-import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useTeamsSnapshot from "@/hooks/useTeamsSnapshot"
@@ -29,9 +28,9 @@ import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
 import { useSyncTeamsSnapshot } from "@/hooks/mutations/useSaveTeamsSnapshot"
 import { snapshotDrift } from "@/domain/teams/teamsFile"
-import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
+import { groupDisplayName } from "@/util/groupTeam"
 import { ManageGroupDialog, describeTeamWriteError } from "./ManageGroupDialog"
 import { CopyGroupsModal } from "./CopyGroupsModal"
 import { GroupRow } from "./GroupRow"
@@ -78,47 +77,14 @@ export function GroupsManager({
     [snapshotTeams, membersBySlug],
   )
 
-  const { students: csvStudents } = useGetStudents(org, classroom)
-  const { rows: teamRows } = useTeamRoster(org, classroom, csvStudents)
-  const enrolled = useMemo(
-    () =>
-      teamRows.filter(
-        (row) => row.state === "enrolled" && row.username.trim() !== "",
-      ),
-    [teamRows],
+  const { enrolled, rosterLogins, fullNameByLogin } = useGroupRoster(
+    org,
+    classroom,
   )
-  const rosterLogins = useMemo(
-    () => new Set(enrolled.map((row) => row.username.trim().toLowerCase())),
-    [enrolled],
-  )
-  // Lowercased login -> roster full name, so the group rows and the manage
-  // dialog can show real names instead of bare logins.
-  const fullNameByLogin = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const row of enrolled) {
-      const name = `${row.first_name} ${row.last_name}`.trim()
-      if (name) map.set(row.username.trim().toLowerCase(), name)
-    }
-    return map
-  }, [enrolled])
   // Students not on ANY of this assignment's teams — the add pickers' options
   // and the unassigned panel's rows.
   const availableStudents = useMemo(
-    () =>
-      unassignedRosterStudents(enrolled, assignedLogins).map((row) => {
-        const name = `${row.first_name} ${row.last_name}`.trim()
-        const initials = (
-          row.first_name.trim().charAt(0) + row.last_name.trim().charAt(0)
-        ).toUpperCase()
-        return {
-          key: row.key,
-          username: row.username,
-          name,
-          initials,
-          avatarUrl: row.avatar_url || undefined,
-          label: name ? `${name} (${row.username})` : row.username,
-        }
-      }),
+    () => toGroupPickerStudents(enrolled, assignedLogins),
     [enrolled, assignedLogins],
   )
 
@@ -272,8 +238,7 @@ export function GroupsManager({
     }
   }
 
-  const teamDisplayName = (team: GroupTeamRef) =>
-    team.name || t("manageGroups.defaultName", { n: team.n })
+  const teamDisplayName = (team: GroupTeamRef) => groupDisplayName(team, t)
 
   // Join targets for the unassigned panel: groups with room left.
   const openGroups = useMemo(
@@ -286,7 +251,7 @@ export function GroupsManager({
         )
         .map((team) => ({
           slug: team.slug,
-          label: team.name || t("manageGroups.defaultName", { n: team.n }),
+          label: groupDisplayName(team, t),
         })),
     [teams, membersBySlug, maxGroupSize, t],
   )

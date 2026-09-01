@@ -1,4 +1,5 @@
 import { z } from "zod"
+import type { TranslateFn } from "@/types/localizedMessage"
 import { escapeForGoJsonParity } from "./goJsonEscape"
 import {
   groupTeamHash,
@@ -88,4 +89,20 @@ export function marshalGroupDescription(input: GroupMetadata): string {
       ...(name ? { name } : {}),
     }),
   )
+}
+
+// The numbered fallback name every surface shows for a group without a
+// display name ("Group <n>"). One key, one helper, so student and teacher
+// surfaces can never drift apart on the fallback.
+export function groupDefaultName(n: number, t: TranslateFn): string {
+  return t("groupTeams.defaultName", { n })
+}
+
+// A group team's display name: the students' chosen name when the record
+// carries one, else the numbered fallback.
+export function groupDisplayName(
+  team: { name?: string; n: number },
+  t: TranslateFn,
+): string {
+  return team.name || groupDefaultName(team.n, t)
 }

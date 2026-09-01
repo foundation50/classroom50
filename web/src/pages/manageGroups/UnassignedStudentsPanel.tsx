@@ -4,18 +4,11 @@ import { useTranslation } from "react-i18next"
 import { Badge, Button, Heading, Select } from "@/components/ui"
 import { CheckCircleIcon, PlusIcon } from "@/components/ui/icons"
 import { EmptyState, ListSkeletonRows, SkeletonRegion } from "@/components/list"
-
-// One roster student not yet on any group team, with the display metadata the
-// list rows use: full name (may be blank), initials for the avatar fallback,
-// and the combined label the add pickers show.
-export type UnassignedStudent = {
-  key: string
-  username: string
-  label: string
-  name: string
-  initials: string
-  avatarUrl?: string
-}
+import {
+  MemberAvatarCircle,
+  MemberNameLines,
+} from "@/components/assignments/memberIdentity"
+import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
 
 // One join target: a group with room left. Full groups are omitted by the
 // caller, so every option here is addable.
@@ -34,7 +27,7 @@ export function UnassignedStudentsPanel({
   busy,
   onAdd,
 }: {
-  students: UnassignedStudent[]
+  students: GroupPickerStudent[]
   groups: UnassignedGroupOption[]
   // Live team membership is still resolving, so "who is unassigned" is not
   // yet known — show a loading state instead of over-claiming.
@@ -87,31 +80,17 @@ export function UnassignedStudentsPanel({
                 className="flex flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center"
               >
                 <div className="flex min-w-0 flex-1 items-center gap-3">
-                  {student.avatarUrl ? (
-                    <img
-                      src={student.avatarUrl}
-                      alt=""
-                      className="size-8 shrink-0 rounded-full"
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-base-200 text-xs text-primary"
-                    >
-                      {student.initials ||
-                        student.username.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">
-                      {student.name || student.username}
-                    </div>
-                    {student.name && (
-                      <div className="truncate text-xs text-base-content/70">
-                        {student.username}
-                      </div>
-                    )}
-                  </div>
+                  <MemberAvatarCircle
+                    avatarUrl={student.avatarUrl}
+                    fallback={
+                      student.initials ||
+                      student.username.charAt(0).toUpperCase()
+                    }
+                  />
+                  <MemberNameLines
+                    name={student.name}
+                    login={student.username}
+                  />
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <Select

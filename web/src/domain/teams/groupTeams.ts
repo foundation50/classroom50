@@ -31,6 +31,17 @@ const log = logger.scope("domain:groupTeams")
 // `secret` is visible only to its members and org owners.
 export type GroupTeamPrivacy = "secret" | "closed"
 
+// The privacy an assignment's formation implies for its group teams: a
+// student-formed team is `closed` (browsable, so classmates can find it and
+// use GitHub's native request-to-join, which only exists on visible teams),
+// a teacher-formed team `secret` (nobody browses it, and secrecy hides
+// memberships from other classes sharing the org).
+export function groupTeamPrivacyForFormation(
+  formation: TeamFormation,
+): GroupTeamPrivacy {
+  return formation === "student" ? "closed" : "secret"
+}
+
 // One group team as the app consumes it: the canonical slug (== name), the
 // immutable id (delete guard), the counter n (maps to the repo name), the
 // students' display name — taken from the description record only when the
@@ -148,12 +159,9 @@ const CREATE_ATTEMPTS = 50
 // dropped after create so the team holds only real group members (best-effort;
 // an org owner keeps full team control either way).
 //
-// Visibility follows the assignment's formation, not the caller: a
-// student-formed team is created `closed` (visible to every org member) so
-// classmates can browse existing groups and use GitHub's native
-// request-to-join — which only exists on visible teams. A teacher-formed team
-// stays `secret`: nobody browses it, and secrecy hides memberships from other
-// classes sharing the org.
+// Visibility follows the assignment's formation, not the caller
+// (groupTeamPrivacyForFormation): a student-formed team is created `closed`,
+// a teacher-formed team stays `secret`.
 export async function createGroupTeam(
   client: GitHubClient,
   org: string,
@@ -192,7 +200,7 @@ export async function createGroupTeam(
         org,
         name,
         description,
-        privacy: formation === "student" ? "closed" : "secret",
+        privacy: groupTeamPrivacyForFormation(formation),
         notification_setting: "notifications_disabled",
       })
       break
@@ -246,12 +254,11 @@ export async function createGroupTeam(
 // Recreate a group team whose GitHub team was deleted, at a KNOWN counter n —
 // never the lowest-free allocation: the surviving repo's name pins the
 // counter, and creating any other n would orphan the repo again. Privacy is
-// the caller's input (derived from the assignment's formation like
-// createGroupTeam: student -> "closed", teacher -> "secret" — the formation
-// isn't known here). Created notifications-disabled so recovery setup can't
-// spam anyone. A 422 means the name is taken — the team exists again (another
-// teacher raced the recovery) — so it maps to a refresh-and-recheck error
-// instead of a dead end.
+// the caller's input (derived via groupTeamPrivacyForFormation — the
+// formation isn't known here). Created notifications-disabled so recovery
+// setup can't spam anyone. A 422 means the name is taken — the team exists
+// again (another teacher raced the recovery) — so it maps to a
+// refresh-and-recheck error instead of a dead end.
 export async function recreateGroupTeam(
   client: GitHubClient,
   org: string,

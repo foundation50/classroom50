@@ -105,6 +105,7 @@ import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { getName, sortStudentsByName } from "@/util/students"
 import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { groupDisplayName } from "@/util/groupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
@@ -343,10 +344,7 @@ const SubmissionsPageContent = () => {
     if (!isTeamAssignment) return undefined
     const map = new Map<string, string>()
     for (const [owner, team] of teamByOwner) {
-      map.set(
-        owner,
-        team.name || t("submissions.table.teamDefaultName", { n: team.n }),
-      )
+      map.set(owner, groupDisplayName(team, t))
     }
     return map
   }, [isTeamAssignment, teamByOwner, t])

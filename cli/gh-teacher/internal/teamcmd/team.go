@@ -79,6 +79,33 @@ func parseScope(args []string) (teamScope, error) {
 	return scope, nil
 }
 
+// authedScope is the RunE prelude every subcommand shares: silence usage (the
+// args parsed, so failures from here are real errors, not usage mistakes),
+// validate the scope triple, and authenticate. Subcommands with extra
+// positional args pass the full slice; only the first three are the scope.
+func authedScope(cmd *cobra.Command, args []string) (githubapi.Client, teamScope, error) {
+	cmd.SilenceUsage = true
+	scope, err := parseScope(args[:3])
+	if err != nil {
+		return nil, teamScope{}, err
+	}
+	client, err := githubapi.RequireAuthClient(cmd)
+	if err != nil {
+		return nil, teamScope{}, err
+	}
+	return client, scope, nil
+}
+
+// requireUsername trims and validates a positional username argument, shared
+// by the membership subcommands.
+func requireUsername(arg string) (string, error) {
+	username := strings.TrimSpace(arg)
+	if username == "" {
+		return "", errors.New("username must not be empty")
+	}
+	return username, nil
+}
+
 // teamContext is the resolved per-command state: the config-repo branch and
 // the (team-mode) assignment entry.
 type teamContext struct {

@@ -16,6 +16,7 @@ import { Spinner } from "@/components/Spinner"
 import { EmptyState } from "@/components/list"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
+import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useApplyGroupsPlan from "@/hooks/mutations/useApplyGroupsPlan"
@@ -25,7 +26,7 @@ import {
   usedLogins,
 } from "@/domain/teams/copyGroupsPlan"
 import type { PlannedGroup } from "@/domain/teams/copyGroupsPlan"
-import type { GroupPickerStudent } from "./ManageGroupDialog"
+import { groupDefaultName } from "@/util/groupTeam"
 
 // Another team-mode assignment of this classroom, offered as a copy source.
 export type CopySourceOption = {
@@ -158,7 +159,7 @@ export function CopyGroupsModal({
   }
 
   const groupDisplayName = (group: PlannedGroup, index: number) =>
-    group.name ?? t("manageGroups.defaultName", { n: index + 1 })
+    group.name ?? groupDefaultName(index + 1, t)
 
   const removeMember = (key: string, username: string) => {
     setPlan(

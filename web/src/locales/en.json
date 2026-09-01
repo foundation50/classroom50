@@ -1845,7 +1845,6 @@
     "emptyTitle": "No groups yet",
     "emptyTeacher": "Create the first group, then add students from the roster.",
     "emptyStudent": "Groups appear here as students create them.",
-    "defaultName": "Group {{n}}",
     "memberCountOfMax_one": "{{count}} of {{max}} members",
     "memberCountOfMax_other": "{{count}} of {{max}} members",
     "memberCount_one": "{{count}} member",
@@ -1877,8 +1876,8 @@
       "sourceLabel": "Source assignment",
       "sourcePlaceholder": "Choose an assignment",
       "sourceHint": "Each group's name and members are copied into a plan you can edit below. Nothing is created until you save.",
-      "noSources": "No other team assignments",
-      "noSourcesBody": "Groups can be copied from another assignment that uses teams. This classroom doesn't have one yet.",
+      "noSources": "No other group assignments",
+      "noSourcesBody": "Groups can be copied from another group assignment in this classroom. This classroom doesn't have one yet.",
       "loadingGroups": "Loading groups…",
       "sourceEmpty": "The selected assignment has no groups to copy.",
       "planHeading": "Planned groups",
@@ -2655,14 +2654,13 @@
       "body": "This is a group assignment for up to {{max}} people. Create a group to get started: you become its first member and can add teammates after you accept.",
       "bodyNoMax": "This is a group assignment. Create a group to get started: you become its first member and can add teammates after you accept.",
       "nameLabel": "Group name (optional)",
-      "namePlaceholder": "e.g. The Segfaults",
+      "namePlaceholder": "The Segfaults",
       "nameHelp": "Shown to your teacher and teammates. Leave blank to use the group number.",
       "createButton": "Create group",
       "createForbidden": "Your organization doesn't allow members to create teams, so Classroom 50 can't create your group. Ask your teacher to create the group for you."
     },
     "joinGroup": {
       "title": "Join a group",
-      "defaultName": "Group {{n}}",
       "memberCountOfMax_one": "{{count}}/{{max}}",
       "memberCountOfMax_other": "{{count}}/{{max}}",
       "memberCount_one": "{{count}} member",
@@ -2670,7 +2668,7 @@
       "full": "Full",
       "request": "Ask to join",
       "help": "Asking to join opens the group's page on GitHub. Select \"Request to join\" there; the group reviews requests on that page, where you can also cancel yours. Once you're in, come back here.",
-      "recheck": "I've been added, check again",
+      "recheck": "Check again",
       "or": "or"
     }
   },
@@ -2918,7 +2916,6 @@
       "teamMissingTitle": "The GitHub team behind this group no longer exists. It was likely deleted, so grading can't credit its members until it's recreated.",
       "recoverTeamLabel": "Recreate the group team for {{name}}",
       "openGroupTeam": "Open the group's team on GitHub",
-      "teamDefaultName": "Group {{n}}",
       "colMembers": "Members",
       "manageMembersLabel": "View and manage members of {{name}}"
     },
@@ -3735,7 +3732,6 @@
     },
     "groupTeamMembers": {
       "title": "Group members",
-      "defaultName": "Group {{n}}",
       "loadFailed": "Couldn't load the group's members. Refresh to try again.",
       "memberCountOfMax_one": "{{count}} of {{max}} members",
       "memberCountOfMax_other": "{{count}} of {{max}} members",
@@ -3762,11 +3758,12 @@
     "invalidDate": "Invalid date"
   },
   "groupTeams": {
+    "defaultName": "Group {{n}}",
     "errors": {
       "counterExhausted": "Couldn't find a free group number after {{attempts}} tries. Try again in a moment.",
       "groupFull": "This group is full ({{max}} members max). Remove a member to add another.",
       "notOnRoster": "{{username}} isn't on the classroom roster. Add them to the roster first, then add them to the group.",
-      "notAGroupTeam": "{{slug}} isn't a group team this app created, so it wasn't deleted.",
+      "notAGroupTeam": "{{slug}} isn't a group team Classroom 50 created, so it wasn't changed.",
       "recreateNameTaken": "The team {{slug}} already exists again, so nothing was recreated. Refresh the page to load the current groups.",
       "idMismatch": "The team {{slug}} isn't the one this assignment created, so it wasn't deleted. Remove it on GitHub if you're sure.",
       "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure.",

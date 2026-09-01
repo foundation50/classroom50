@@ -1382,7 +1382,7 @@ def collect_classroom(
             f"skipped because the group team's member list could not be read; their "
             f"existing gradebook entries are preserved. This usually means "
             f"CLASSROOM50_SERVICE_TOKEN lacks Organization -> Members: Read (a "
-            f"fine-grained PAT permission) — rotate it with `gh teacher rotate-service-token`."
+            f"fine-grained PAT permission). Rotate it with `gh teacher rotate-service-token`."
         )
 
     return results, mode_flip_assignments, collected, detected
@@ -1474,7 +1474,7 @@ def team_poll_owners(
                 f"group teams (HTTP {exc.code}, {exc.reason or 'no reason'}) and the "
                 f"org repo listing was unavailable; skipping this team assignment so "
                 f"its existing entries are preserved. Ensure CLASSROOM50_SERVICE_TOKEN "
-                f"has Organization -> Members: Read — rotate it with "
+                f"has Organization -> Members: Read. Rotate it with "
                 f"`gh teacher rotate-service-token {org}`."
             )
             return [], False
@@ -1509,7 +1509,7 @@ def attribute_team_members(
             f"{org}/{repo}: could not read team {team_slug!r} members "
             f"(HTTP {exc.code} {exc.reason or 'no reason'}); skipping this repo so "
             f"its existing member credit is preserved. Ensure "
-            f"CLASSROOM50_SERVICE_TOKEN has Organization -> Members: Read — rotate "
+            f"CLASSROOM50_SERVICE_TOKEN has Organization -> Members: Read. Rotate "
             f"it with `gh teacher rotate-service-token`."
         )
     except IncompleteListing as exc:

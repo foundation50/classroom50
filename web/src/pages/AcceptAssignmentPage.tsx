@@ -63,6 +63,7 @@ import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import { useGroupTeamMembers } from "@/hooks/useGroupTeamMembers"
 import { groupTeamUrl } from "@/domain/teams/groupTeams"
+import { groupDisplayName } from "@/util/groupTeam"
 import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { Input } from "@/components/ui"
@@ -557,8 +558,7 @@ const CreateGroupCard = ({
                         className="size-4 shrink-0 text-base-content/70"
                       />
                       <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                        {team.name ||
-                          t("accept.joinGroup.defaultName", { n: team.n })}
+                        {groupDisplayName(team, t)}
                       </span>
                       <span className="text-xs text-base-content/70">
                         {count === undefined

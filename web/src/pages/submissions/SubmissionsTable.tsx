@@ -88,6 +88,7 @@ import {
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { groupDisplayName } from "@/util/groupTeam"
 import type { Student, SubmissionMode, TeamFormation } from "@/types/classroom"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
@@ -1076,9 +1077,7 @@ const SubmissionsTable = ({
                 const team = item.team
                 const teamOwner = `${GROUP_REPO_SEGMENT}${team.n}`
                 const label =
-                  groupDisplayNames?.get(teamOwner) ??
-                  (team.name ||
-                    t("submissions.table.teamDefaultName", { n: team.n }))
+                  groupDisplayNames?.get(teamOwner) ?? groupDisplayName(team, t)
                 return (
                   <TeamWithoutRepoRow
                     key={`team-${team.slug}`}

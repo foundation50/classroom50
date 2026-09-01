@@ -33,12 +33,7 @@ func teamCreateCmd() *cobra.Command {
 		Example: "  gh teacher team create cs50-fall-2026 cs-principles project --name \"The Sharks\" --member alice --member bob",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.SilenceUsage = true
-			scope, err := parseScope(args)
-			if err != nil {
-				return err
-			}
-			client, err := githubapi.RequireAuthClient(cmd)
+			client, scope, err := authedScope(cmd, args)
 			if err != nil {
 				return err
 			}
@@ -130,12 +125,7 @@ func teamDeleteCmd() *cobra.Command {
 		Example: "  gh teacher team delete cs50-fall-2026 cs-principles project 2",
 		Args:    cobra.ExactArgs(4),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cmd.SilenceUsage = true
-			scope, err := parseScope(args[:3])
-			if err != nil {
-				return err
-			}
-			client, err := githubapi.RequireAuthClient(cmd)
+			client, scope, err := authedScope(cmd, args)
 			if err != nil {
 				return err
 			}

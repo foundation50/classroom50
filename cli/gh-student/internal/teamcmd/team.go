@@ -49,8 +49,16 @@ func scopeArgs(args []string) (org, classroom, assignment string, err error) {
 	return org, classroom, assignment, nil
 }
 
+// addKeyFlag registers the --key flag both subcommands take (the access key
+// for a classroom that uses an unlisted URL) and returns its destination.
+func addKeyFlag(cmd *cobra.Command) *string {
+	key := new(string)
+	cmd.Flags().StringVar(key, "key", "", "Access key from your teacher for a classroom that uses an unlisted URL; omit for normal classrooms")
+	return key
+}
+
 func teamListCmd() *cobra.Command {
-	var key string
+	var key *string
 	cmd := &cobra.Command{
 		Use:   "list <org> <classroom> <assignment>",
 		Short: "Show your group for a team assignment",
@@ -65,7 +73,7 @@ func teamListCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			secret := strings.TrimSpace(key)
+			secret := strings.TrimSpace(*key)
 			if err := validateKey(secret); err != nil {
 				return err
 			}
@@ -76,7 +84,7 @@ func teamListCmd() *cobra.Command {
 			return runTeamList(cmd.Context(), client, cmd.OutOrStdout(), org, classroom, assignment, secret)
 		},
 	}
-	cmd.Flags().StringVar(&key, "key", "", "Access key from your teacher for a classroom that uses an unlisted URL; omit for normal classrooms")
+	key = addKeyFlag(cmd)
 	return cmd
 }
 
@@ -122,7 +130,7 @@ func notOnTeamError(ctx context.Context, org, classroom, assignment, secret stri
 }
 
 func teamAddCmd() *cobra.Command {
-	var key string
+	var key *string
 	cmd := &cobra.Command{
 		Use:   "add <org> <classroom> <assignment> <username>",
 		Short: "Add a classmate to your group",
@@ -147,7 +155,7 @@ func teamAddCmd() *cobra.Command {
 			if username == "" {
 				return errors.New("username must not be empty")
 			}
-			secret := strings.TrimSpace(key)
+			secret := strings.TrimSpace(*key)
 			if err := validateKey(secret); err != nil {
 				return err
 			}
@@ -158,7 +166,7 @@ func teamAddCmd() *cobra.Command {
 			return runTeamAdd(cmd.Context(), client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, assignment, secret, username)
 		},
 	}
-	cmd.Flags().StringVar(&key, "key", "", "Access key from your teacher for a classroom that uses an unlisted URL; omit for normal classrooms")
+	key = addKeyFlag(cmd)
 	return cmd
 }
 

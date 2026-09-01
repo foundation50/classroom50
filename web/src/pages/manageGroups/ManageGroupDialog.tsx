@@ -14,13 +14,18 @@ import {
   Select,
 } from "@/components/ui"
 import { PeopleIcon, PlusIcon, XIcon } from "@/components/ui/icons"
+import {
+  MemberAvatarCircle,
+  MemberNameLines,
+  PendingAddAvatar,
+} from "@/components/assignments/memberIdentity"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { teamMembersQuery } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
-import useGetStudents from "@/hooks/useGetStudents"
-import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { toGroupPickerStudents, useGroupRoster } from "@/hooks/useGroupRoster"
+import type { GroupPickerStudent } from "@/hooks/useGroupRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
 import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
 import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
@@ -30,15 +35,8 @@ import useUpdateGroupTeamPrivacy from "@/hooks/mutations/useUpdateGroupTeamPriva
 import useDeleteGroupTeam from "@/hooks/mutations/useDeleteGroupTeam"
 import { useSyncTeamsSnapshot } from "@/hooks/mutations/useSaveTeamsSnapshot"
 import { resolveMembershipDraft } from "@/domain/teams/membershipDraft"
-import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
 import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
-
-// A roster student the add picker can offer (not on any group team yet).
-export type GroupPickerStudent = {
-  key: string
-  username: string
-  label: string
-}
+import { groupDefaultName, groupDisplayName } from "@/util/groupTeam"
 
 // The two guardrail 403s named in copy instead of a raw GitHub message: an org
 // that restricts team creation to owners, and a team-sync/IdP-managed team
@@ -108,39 +106,13 @@ export function ManageGroupDialog({
   const slugs = useMemo(() => teams.map((entry) => entry.slug), [teams])
   const { logins: assignedLogins } = useGroupTeamMembers(org, slugs)
 
-  const { students: csvStudents } = useGetStudents(org, classroom)
-  const { rows: teamRows } = useTeamRoster(org, classroom, csvStudents)
-  const enrolled = useMemo(
-    () =>
-      teamRows.filter(
-        (row) => row.state === "enrolled" && row.username.trim() !== "",
-      ),
-    [teamRows],
+  const { enrolled, rosterLogins, fullNameByLogin } = useGroupRoster(
+    org,
+    classroom,
   )
-  const rosterLogins = useMemo(
-    () => new Set(enrolled.map((row) => row.username.trim().toLowerCase())),
-    [enrolled],
-  )
-  // Lowercased login -> roster full name, for the members list.
-  const fullNameByLogin = useMemo(() => {
-    const map = new Map<string, string>()
-    for (const row of enrolled) {
-      const name = `${row.first_name} ${row.last_name}`.trim()
-      if (name) map.set(row.username.trim().toLowerCase(), name)
-    }
-    return map
-  }, [enrolled])
   // Students not on ANY of this assignment's teams — the add picker's options.
   const availableStudents: GroupPickerStudent[] = useMemo(
-    () =>
-      unassignedRosterStudents(enrolled, assignedLogins).map((row) => {
-        const name = `${row.first_name} ${row.last_name}`.trim()
-        return {
-          key: row.key,
-          username: row.username,
-          label: name ? `${name} (${row.username})` : row.username,
-        }
-      }),
+    () => toGroupPickerStudents(enrolled, assignedLogins),
     [enrolled, assignedLogins],
   )
 
@@ -185,7 +157,7 @@ export function ManageGroupDialog({
     deleteTeam.isPending
   const controlsDisabled = busy || saving
 
-  const displayName = team.name || t("manageGroups.defaultName", { n: team.n })
+  const displayName = groupDisplayName(team, t)
 
   const draft = useMemo(
     () =>
@@ -398,7 +370,7 @@ export function ManageGroupDialog({
                   className="flex-1"
                   value={nameDraft}
                   maxLength={80}
-                  placeholder={t("manageGroups.defaultName", { n: team.n })}
+                  placeholder={groupDefaultName(team.n, t)}
                   onChange={(e) => setNameDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
@@ -481,42 +453,15 @@ export function ManageGroupDialog({
                         : "flex items-center gap-3 px-4 py-2"
                     }
                   >
-                    {member.avatar_url ? (
-                      <img
-                        src={member.avatar_url}
-                        alt=""
-                        className="size-8 shrink-0 rounded-full"
-                      />
-                    ) : (
-                      <span
-                        aria-hidden="true"
-                        className="flex size-8 shrink-0 items-center justify-center rounded-full bg-base-200 text-xs text-primary"
-                      >
-                        {member.login.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div
-                        className={
-                          pendingRemoval
-                            ? "truncate text-sm font-medium text-error line-through opacity-70"
-                            : "truncate text-sm font-medium"
-                        }
-                      >
-                        {fullName ?? member.login}
-                      </div>
-                      {fullName && (
-                        <div
-                          className={
-                            pendingRemoval
-                              ? "truncate text-xs text-error/70 line-through"
-                              : "truncate text-xs text-base-content/70"
-                          }
-                        >
-                          {member.login}
-                        </div>
-                      )}
-                    </div>
+                    <MemberAvatarCircle
+                      avatarUrl={member.avatar_url || undefined}
+                      fallback={member.login.charAt(0).toUpperCase()}
+                    />
+                    <MemberNameLines
+                      name={fullName}
+                      login={member.login}
+                      removed={pendingRemoval}
+                    />
                     {pendingRemoval ? (
                       <>
                         <span className="text-xs font-medium text-error/70">
@@ -558,22 +503,8 @@ export function ManageGroupDialog({
                     key={`add-${username}`}
                     className="flex items-center gap-3 bg-success/5 px-4 py-2"
                   >
-                    <span
-                      aria-hidden="true"
-                      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-success/10 text-xs text-success"
-                    >
-                      <PlusIcon className="size-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {fullName ?? username}
-                      </div>
-                      {fullName && (
-                        <div className="truncate text-xs text-base-content/70">
-                          {username}
-                        </div>
-                      )}
-                    </div>
+                    <PendingAddAvatar />
+                    <MemberNameLines name={fullName} login={username} />
                     <Badge tone="success" size="sm">
                       {t("manageGroups.manage.willBeAdded")}
                     </Badge>

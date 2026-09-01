@@ -7,6 +7,7 @@ import { Spinner } from "@/components/Spinner"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { teamMembersQuery } from "@/github-core/queries"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
+import { groupDisplayName } from "@/util/groupTeam"
 import type { GitHubUser } from "@/github-core/types"
 
 // The team-member listing carries no display name in practice (simple user
@@ -82,9 +83,7 @@ export function GroupTeamMembersReadOnly({
     // Quiet omission: teammate visibility is a bonus on this surface and must
     // never block or degrade the submission view.
     if (failed || !myTeam) return null
-    const groupName =
-      myTeam.name ||
-      t("components.groupTeamMembers.defaultName", { n: myTeam.n })
+    const groupName = groupDisplayName(myTeam, t)
     return (
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-box border border-base-300 bg-base-100 px-4 py-2.5 text-sm">
         <span className="flex items-center gap-2 font-medium">
@@ -129,8 +128,7 @@ export function GroupTeamMembersReadOnly({
     )
   }
 
-  const groupName =
-    myTeam.name || t("components.groupTeamMembers.defaultName", { n: myTeam.n })
+  const groupName = groupDisplayName(myTeam, t)
 
   return (
     <div className="flex flex-col gap-3">

@@ -18,6 +18,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { groupDisplayName } from "@/util/groupTeam"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import {
   formatDueDateTime,
@@ -421,10 +422,10 @@ const SubmissionBody = ({
                   </div>
                   <div className="min-w-0">
                     <div className="truncate text-sm font-medium">
-                      {myTeam?.name ||
-                        t("components.groupTeamMembers.defaultName", {
-                          n: myTeam?.n ?? 0,
-                        })}
+                      {groupDisplayName(
+                        { name: myTeam?.name, n: myTeam?.n ?? 0 },
+                        t,
+                      )}
                     </div>
                     <a
                       className="link link-hover block max-w-72 truncate font-mono text-xs"
