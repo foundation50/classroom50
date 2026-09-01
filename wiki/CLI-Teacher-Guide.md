@@ -545,8 +545,9 @@ slug is too long.
 | `--template <owner>/<repo>[@branch]` | Starter-code repository (must be flagged as a template). A `@branch` suffix is ignored with a warning: the assignment always copies the template's default branch. |
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
-| `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
-| `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
+| `--mode individual\|group\|team` | `individual` (default), `team` (a group assignment: one shared repository per group, owned by a GitHub Team), or `group` (the legacy collaborator-based shared repository). Both group modes require `--max-group-size`; `team` also requires `--team-formation`. |
+| `--team-formation teacher\|student` | Who forms a team assignment's groups: `teacher` (you create the group teams; see [Manage group teams](#manage-group-teams)) or `student` (the first student founds a group with `gh student accept --new-team`). Required with `--mode team`. |
+| `--max-group-size <N>` | Maximum group size (2–100). Enforced by Classroom 50 clients when groups form; advisory beyond that. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.14. See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
 | `--submission-mode every-push\|tag` | When the autograder fires. `every-push` (default) grades every push; `tag` grades only on explicit submits (`gh student submit`, or a hand-pushed `submit/*` tag) — regular pushes cost no Actions minutes, the cost lever for large classrooms. |
@@ -606,6 +607,36 @@ calls stop finding the slug.
 gh teacher assignment list <org> <classroom>            # one slug per line
 gh teacher assignment list <org> <classroom> --json     # full entries
 ```
+
+### Manage group teams
+
+A `--mode team` assignment's groups are GitHub Teams named
+`classroom50-group-<hash>-<n>`, each owning the shared repository
+`<classroom>-<assignment>-group-<n>`. Manage them with `gh teacher team`:
+
+```sh
+gh teacher team create cs50-fall-2026 cs-principles project --name "The Sharks" --member alice --member bob
+gh teacher team list cs50-fall-2026 cs-principles project
+gh teacher team add cs50-fall-2026 cs-principles project 2 alice
+gh teacher team remove cs50-fall-2026 cs-principles project 2 alice
+gh teacher team delete cs50-fall-2026 cs-principles project 2
+gh teacher team copy cs50-fall-2026 cs-principles project2 --from project
+```
+
+- Members must be on the classroom roster, and each team's size is capped by
+  the assignment's `max_group_size`.
+- A team can be referenced by its counter (`2`) or by its full slug.
+- Membership writes also update the `<classroom>/teams.json` snapshot, the
+  record of intended membership; `team list` shows each team's drift against
+  it. GitHub Teams stay authoritative for who can push.
+- `team copy` recreates another assignment's teams for this one (same members
+  and display names, fresh numbering), useful for a project sequence with
+  stable groups.
+
+For a teacher-formed assignment (`--team-formation teacher`), create the
+groups before sharing the accept link: a student who isn't in a group can't
+accept. The web app's **Manage groups** page manages the same teams. See
+[`team`](gh-teacher#team) for every subcommand and flag.
 
 ## 8. Remove people when needed
 
@@ -672,8 +703,9 @@ once one of those triggers a run.
    who never accepted drops out here).
 3. Downloads and schema-validates each `result.json`, checking its identity
    against the source repo (a hostile payload can't land in another student's
-   scores). For a group assignment, it reads the repo's collaborators and
-   records the credited members.
+   scores). For a group assignment, it credits the group team's live rostered
+   members; for a legacy group assignment, it reads the repo's collaborators
+   and records the credited members.
 4. Upserts the results into `scores.json`, newest first. If the assignment has a
    `due`, each submission is marked `late` or not. Entries flagged
    `"override": true` are preserved verbatim.
@@ -692,9 +724,14 @@ once one of those triggers a run.
 > If the service token expires mid-semester, collection fails with a 401/403.
 > Rotate it with `gh teacher rotate-service-token <org>`.
 
-**Group assignments** are graded once, in the founder's repo. Collection reads
-that repo's collaborators, keeps those on the classroom team, and credits each
-with the same score. See [Autograders](Autograding-Basics#group-attribution-model) for
+**Group assignments** are graded once, in the group's shared repository.
+Collection credits the group team's live members who are on the classroom
+roster (recording the team slug with the entry); a group team it can't read is
+skipped, so the entry's previous credit is preserved rather than degraded. A
+**legacy group** assignment is graded once in the founder's repo: collection
+reads that repo's collaborators, keeps those on the classroom team, and
+credits each with the same score. See
+[Autograders](Autograding-Basics#group-attribution-model) for
 the full attribution model — and
 [Reading results](Autograding-Basics#reading-results) in Autograding Basics for where every
 result lives, per-test breakdowns, and past attempts.

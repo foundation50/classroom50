@@ -200,7 +200,7 @@ reads `result.json` from the workspace after the autograder exits.
 |---|---|---|
 | `schema` | string | Exactly `classroom50/result/v1`. |
 | `classroom` / `assignment` | string | Must match the source repository's identity (checked in code alongside `owner`). |
-| `assignment_type` | string | `individual` or `group`, stamped by the runner. |
+| `assignment_type` | string | `individual`, `group`, or `team`, stamped by the runner. |
 | `owner` | string | The repository owner login — the identity anchor. |
 | `submission` | string | The submit-tag name. |
 | `commit` / `release` / `review` | string | URLs. `review` is the full diff from starter code to the graded commit. |
@@ -219,9 +219,10 @@ payload can't land in another student's collected scores.
 <summary>scores.json shape</summary>
 
 `scores.json` is keyed by assignment slug under a root `assignments` object;
-each value is `{ "type": "individual"|"group", "entries": [...] }`. An `entry` is
+each value is `{ "type": "individual"|"group"|"team", "entries": [...] }`. An `entry` is
 one repository's record: `owner` (the stable key), `submissions` (full history, newest
-first), and — for a group — `member_usernames` (credited members). Each bucket
+first), and — for a group — `member_usernames` (credited members; a `team`
+bucket's entries also carry the credited group team's `team_slug`). Each bucket
 also carries a `collected_at` UTC timestamp stamped whenever a collection run
 walks that assignment (even if nothing changed), so per-assignment freshness is
 knowable — the web app's "Submission data collected" strip reads it.

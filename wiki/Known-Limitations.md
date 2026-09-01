@@ -85,10 +85,32 @@ their repositories, which includes the Actions tab, so **Pause autograding**
 re-enable the workflow. Treat grading controls as cost management, and use
 **Close submission** when you need actual enforcement.
 
-**Group repositories have no names.** A group repository is named after the
-founder (the first student to accept); there's no group-name concept and no
-pre-assigned teams. See
+**Legacy group repositories have no names.** A **Group (legacy)** assignment's
+repository is named after the founder (the first student to accept); that mode
+has no group-name concept and no pre-assigned groups. The current **Group**
+mode has both: each group is a GitHub team with a display name, and its
+repository is numbered. See
 [How group assignments work](FAQ#how-do-group-assignments-work).
+
+## Group assignments
+
+**Join requests happen on GitHub, not in the app.** GitHub's API exposes no
+endpoints for team join requests, so a student who wants to join an existing
+group requests it on the group team's GitHub page (the accept page's **Ask to
+join** opens it), and the group reviews and cancels requests there too.
+Classroom 50 can't list or approve join requests itself.
+
+**A group founder can change membership on GitHub.** In student formation the
+founding student maintains the group's team, and GitHub can't stop a
+maintainer from adding or removing members directly on GitHub. Classroom 50
+contains this instead of preventing it:
+
+- The teacher's group views flag the change as **Members changed since the
+  last refresh**, against the recorded group info.
+- Grading credits only team members who are on the classroom roster, so an
+  outside account is never credited.
+- The maximum group size is re-checked whenever a Classroom 50 client adds a
+  member.
 
 ## Timing
 

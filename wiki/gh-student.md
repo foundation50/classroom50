@@ -13,8 +13,10 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 | `whoami` | Print the authenticated GitHub user. |
 | `login` | Log in with the unified Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`) — the same set `gh teacher login` requests, so one sign-in covers both. A student only exercises `read:org`, `repo`, and `workflow`. |
 | `logout` | Log out via `gh auth logout`. |
-| `accept <org> <classroom> <assignment>` | Accept an assignment: auto-accept the org invite, create your assignment repo, and set up autograding. |
-| `invite <org>/<repo> <username>` | Invite a classmate or TA to your repo with `push` permission. |
+| `accept <org> <classroom> <assignment>` | Accept an assignment: auto-accept the org invite, create your assignment repo, and set up autograding. `--new-team` / `--team-name` create your group on a team assignment with student-formed groups. |
+| `invite <org>/<repo> <username>` | Invite a classmate or TA to your repo with `push` permission. Not for team assignments; use `team add` there. |
+| `team list <org> <classroom> <assignment>` | Show your group for a team assignment and who is on it. |
+| `team add <org> <classroom> <assignment> <username>` | Add a classmate to your group (founders only). |
 | `submit` | Snapshot the current branch and push it for grading. |
 
 ## `accept`
@@ -22,11 +24,14 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 ```sh
 gh student accept <org> <classroom> <assignment>
 gh student accept <org> <classroom> <assignment> --key <access-key>
+gh student accept <org> <classroom> <assignment> --new-team --team-name "The Sharks"
 ```
 
 Creates a repo at `<org>/<classroom>-<assignment>-<username>` (a copy of
 the assignment's template, or a README-initialized repo if it's template-less),
-then prints a `git clone` command. The repo is **private** unless the
+then prints a `git clone` command. On a team assignment the repo is instead
+the group's shared `<classroom>-<assignment>-group-<n>`, created by whichever
+group member accepts first. The repo is **private** unless the
 assignment opts into public repos (`repo_visibility: public`); then accept
 warns you before creating it that your work — code, commits, and name — will
 be visible to anyone on the internet. If the organization doesn't let you
@@ -35,6 +40,16 @@ that your teacher can make it public later.
 
 **`--key <access-key>`** — access key for a classroom that uses an unlisted
 URL (provided by your teacher); omit for normal classrooms.
+
+**`--new-team`** creates a new group for this assignment (team assignments
+with student-formed groups only) and makes you its founder, the group team's
+maintainer; add teammates with `gh student team add`. If you're already in a
+group, accept uses it and ignores the flag with a warning, so a re-run never
+creates a second group. On a teacher-formed assignment, accept refuses
+students who aren't in one of the teacher's groups.
+
+**`--team-name "<display name>"`** names the group created by `--new-team`,
+for example `"The Sharks"`.
 
 <details>
 <summary>What accept does, step by step</summary>
@@ -68,8 +83,10 @@ URL (provided by your teacher); omit for normal classrooms.
    fails, the autograde runner creates the PR on your first submission instead.
 8. Sets your repo role, last so a failed role change never leaves a
    half-set-up repo: `push` for an individual assignment, or `admin` for a
-   group assignment (so a group founder can invite teammates). The teacher can
-   override this per assignment (`student_permission`).
+   legacy group assignment (so its founder can invite teammates); on a team
+   assignment access flows through the group's GitHub Team, so no special
+   role is kept. The teacher can override this per assignment
+   (`student_permission`).
 9. Prints the `git clone` command.
 
 </details>
@@ -87,8 +104,46 @@ in Troubleshooting.
 gh student invite <org>/<repo> <username>
 ```
 
-Adds a classmate or TA to your repo with `push` permission. For a group
-assignment, the founder uses this to add each teammate.
+Adds a classmate or TA to your repo with `push` permission. For a legacy group
+assignment, the founder uses this to add each teammate. On a team assignment
+it refuses: teammates join through your GitHub team, with
+`gh student team add`.
+
+## `team`
+
+Team assignments use one shared repository per group, owned by a GitHub Team.
+These commands work on **your** group for an assignment. Create a group in the
+first place with `gh student accept --new-team` (student-formed groups only;
+otherwise your teacher assigns them). Both subcommands accept
+`--key <access-key>` for a classroom that uses an unlisted URL.
+
+### `team list`
+
+```sh
+gh student team list <org> <classroom> <assignment>
+```
+
+Shows the group you are in for a team assignment, who is on it, and the
+group's shared repository. Your group is resolved from your own GitHub team
+memberships, so no special access is needed. Not in a group yet? The error
+explains how to get one for this assignment's formation mode.
+
+### `team add`
+
+```sh
+gh student team add <org> <classroom> <assignment> <username>
+gh student team add cs50 cs50-fall-2026 project cs50-duck
+```
+
+Adds `<username>` to your group. They get push access to the group's shared
+repository through the GitHub Team.
+
+- Only the group's founder (its team maintainer) can add members on a
+  student-formed assignment.
+- The classmate must be enrolled in the classroom.
+- The group size is capped by the assignment's maximum group size. The limit
+  is advisory and is checked again when your teacher collects the work.
+- Adding someone who is already in the group changes nothing.
 
 ## `submit`
 

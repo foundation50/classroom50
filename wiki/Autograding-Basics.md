@@ -450,7 +450,29 @@ Students sometimes ask you to grade a particular commit, not their latest:
 
 ### Group attribution model
 
-A group assignment is graded once, in the founder's repository. `collect-scores`
+A group assignment is graded once, in the group's shared repository; the score
+fans out to members at collection time. How they're resolved depends on the
+mode.
+
+**Group** assignments credit the group team's live members, intersected with
+the classroom roster, recorded as the entry's `member_usernames` next to the
+team's `team_slug`:
+
+- **The team is authoritative.** Repository collaborators are never read;
+  membership in the group's GitHub team is what counts, so an account off the
+  roster is never credited.
+- **A failed team read skips the repository.** If the team's member list can't
+  be read, or the team was deleted, collection skips that repository and
+  preserves its previous entry and credit rather than degrading to an
+  owner-only credit (the repository's owner is the group, not a person). The
+  submissions page flags a deleted team as **Group team missing** so you can
+  recreate it.
+- **An empty credit is loud.** A team whose live members are all unenrolled
+  still writes its entry, with nobody credited and a warning, so the drift is
+  visible rather than silent.
+
+**Group (legacy)** assignments are graded in the founder's repository.
+`collect-scores`
 credits the shared score to every collaborator **on the classroom team** (the
 owner is always included), recorded as the entry's `member_usernames`.
 
