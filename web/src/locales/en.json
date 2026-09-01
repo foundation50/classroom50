@@ -2469,6 +2469,7 @@
     "openRepository": "Open repository",
     "goToClassroom": "Go to my classroom",
     "editCollaborators": "Edit collaborators",
+    "manageGroupButton": "Manage my group",
     "acceptButton": "Accept assignment",
     "templateErrors": {
       "githubSaid": " GitHub said: \"{{message}}\".",

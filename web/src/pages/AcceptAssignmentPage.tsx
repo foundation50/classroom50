@@ -65,7 +65,6 @@ import { useGroupTeamMembers } from "@/hooks/useGroupTeamMembers"
 import { groupTeamUrl } from "@/domain/teams/groupTeams"
 import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
-import { GroupTeamMembersPanel } from "@/components/assignments/GroupTeamMembersPanel"
 import { Input } from "@/components/ui"
 import { errorText as resolveErrorText } from "@/types/localizedMessage"
 import { LanguageDialog } from "@/components/LanguageDialog"
@@ -1466,23 +1465,26 @@ const AcceptAssignmentPage = () => {
                 )}
             </AnimatePresence>
 
-            {/* Team mode: the group's live member panel replaces the legacy
-                collaborators modal — members flow through the GitHub Team, not
-                direct repo collaborators. */}
+            {/* Team mode: group management lives on the dedicated Manage
+                group view (the assignment settings student branch), so the
+                accept card stays a lightweight confirmation — one button in
+                the post-accept action stack instead of an inline panel. */}
             {isTeamMode &&
               myTeam &&
               (acceptMutation.data || repoExistsAlready) &&
-              !acceptMutation.isPending && (
-                <GroupTeamMembersPanel
-                  org={org ?? ""}
-                  classroom={classroom ?? ""}
-                  assignment={assignment ?? ""}
-                  teamSlug={myTeam.slug}
-                  teamName={myTeam.name}
-                  maxGroupSize={assignmentData.max_group_size}
-                  viewerLogin={username}
-                  formation={teamFormation}
-                />
+              !acceptMutation.isPending &&
+              org &&
+              classroom &&
+              assignment && (
+                <RouterButton
+                  to="/$org/$classroom/assignments/$assignment/settings"
+                  params={{ org, classroom, assignment }}
+                  variant="outline"
+                  className="w-full text-lg p-5"
+                >
+                  <PeopleIcon aria-hidden="true" className="size-5" />
+                  {t("accept.manageGroupButton")}
+                </RouterButton>
               )}
 
             {!acceptMutation.data &&
