@@ -138,7 +138,8 @@ func teamAddCmd() *cobra.Command {
 			"access to the group's shared repository through the GitHub Team.\n\n" +
 			"  - Only the group's founder (its team maintainer) can add members\n" +
 			"    on a student-formed assignment.\n" +
-			"  - The classmate must be enrolled in the classroom.\n" +
+			"  - The classmate must be enrolled in the classroom, and can be in\n" +
+			"    only one group for the assignment.\n" +
 			"  - The group size is capped by the assignment's maximum group\n" +
 			"    size. The limit is advisory and is checked again when your\n" +
 			"    teacher collects the work.\n" +
@@ -197,6 +198,17 @@ func runTeamAdd(ctx context.Context, client githubapi.Client, out, errOut io.Wri
 		return fmt.Errorf("%s is not enrolled in %s: ask your teacher to add them to the classroom first, then re-run", username, classroom)
 	}
 
+	// One student, one group: refuse when the classmate is already in another
+	// of the assignment's visible groups. Best-effort like the enrollment
+	// gate — a failed read warns and proceeds (collection re-checks and the
+	// teacher's snapshot diff surfaces any overlap that slips through).
+	if otherCounter, taken, err := inAnotherGroup(client, org, classroom, assignment, username, membership.Slug); err != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: couldn't check whether %s is already in another group (%v); adding them anyway.\n", username, err)
+	} else if taken {
+		return fmt.Errorf("%s is already in group %d for %s, and a student can be in only one group. They can leave that group from its page on GitHub, or ask your teacher to move them, then re-run",
+			username, otherCounter, assignment)
+	}
+
 	members, err := groupteam.ListMembers(client, org, membership.Slug)
 	if err != nil {
 		return err
@@ -216,6 +228,30 @@ func runTeamAdd(ctx context.Context, client githubapi.Client, out, errOut io.Wri
 	_, _ = fmt.Fprintf(out, "Added %s to group %d for %s\n", username, membership.Counter, assignment)
 	_, _ = fmt.Fprintf(out, "They can now run: gh student accept %s %s %s\n", org, classroom, assignment)
 	return nil
+}
+
+// inAnotherGroup reports whether username holds an active or pending
+// membership on one of the assignment's group teams other than ownSlug,
+// returning that group's counter for the refusal message.
+func inAnotherGroup(client githubapi.Client, org, classroom, assignment, username, ownSlug string) (counter int, taken bool, err error) {
+	slugs, err := groupteam.VisibleTeamSlugs(client, org, classroom, assignment)
+	if err != nil {
+		return 0, false, err
+	}
+	for _, slug := range slugs {
+		if strings.EqualFold(slug, ownSlug) {
+			continue
+		}
+		state, found, err := teamMembershipState(client, org, slug, username)
+		if err != nil {
+			return 0, false, err
+		}
+		if found && (state == "active" || state == "pending") {
+			counter, _ := contract.ParseGroupTeamCounter(slug, classroom, assignment)
+			return counter, true, nil
+		}
+	}
+	return 0, false, nil
 }
 
 // checkTeamCapacity applies the max_group_size cap to a prospective add:

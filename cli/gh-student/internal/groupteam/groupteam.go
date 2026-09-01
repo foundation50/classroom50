@@ -176,15 +176,13 @@ func Create(client githubapi.Client, org, classroom, assignment, displayName str
 	return Membership{}, fmt.Errorf("could not create a team after %d attempts: every candidate name was taken; ask your teacher for help", counterCap)
 }
 
-// takenCounters seeds Create's allocation from the org team listing: the
-// counters of this assignment's teams visible to the caller. Best-effort — a
-// listing failure returns an empty map and Create starts at 1, exactly the
-// pre-seed behavior.
-func takenCounters(client githubapi.Client, org, classroom, assignment string) map[int]bool {
+// VisibleTeamSlugs lists this assignment's group-team slugs visible to the
+// caller: closed (student-formed) teams for any org member, plus secret teams
+// the caller is on.
+func VisibleTeamSlugs(client githubapi.Client, org, classroom, assignment string) ([]string, error) {
 	type orgTeam struct {
 		Slug string `json:"slug"`
 	}
-	taken := map[int]bool{}
 	teams, err := githubapi.PaginateAll[orgTeam](
 		client, myTeamsPerPage, myTeamsPagesMax,
 		func(page int) string {
@@ -196,10 +194,29 @@ func takenCounters(client githubapi.Client, org, classroom, assignment string) m
 		},
 	)
 	if err != nil {
+		return nil, err
+	}
+	var slugs []string
+	for _, team := range teams {
+		if _, ok := contract.ParseGroupTeamCounter(team.Slug, classroom, assignment); ok {
+			slugs = append(slugs, team.Slug)
+		}
+	}
+	return slugs, nil
+}
+
+// takenCounters seeds Create's allocation from the org team listing: the
+// counters of this assignment's teams visible to the caller. Best-effort — a
+// listing failure returns an empty map and Create starts at 1, exactly the
+// pre-seed behavior.
+func takenCounters(client githubapi.Client, org, classroom, assignment string) map[int]bool {
+	taken := map[int]bool{}
+	slugs, err := VisibleTeamSlugs(client, org, classroom, assignment)
+	if err != nil {
 		return taken
 	}
-	for _, team := range teams {
-		if counter, ok := contract.ParseGroupTeamCounter(team.Slug, classroom, assignment); ok {
+	for _, slug := range slugs {
+		if counter, ok := contract.ParseGroupTeamCounter(slug, classroom, assignment); ok {
 			taken[counter] = true
 		}
 	}
