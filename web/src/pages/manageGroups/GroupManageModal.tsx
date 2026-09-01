@@ -369,7 +369,7 @@ export function GroupManageModal({
                       variant="ghost"
                       size="sm"
                       shape="square"
-                      className="text-base-content/60 hover:text-error"
+                      className="text-error/70 hover:text-error"
                       disabled={controlsDisabled}
                       aria-label={t("manageGroups.removeAriaLabel", {
                         username: member.login,

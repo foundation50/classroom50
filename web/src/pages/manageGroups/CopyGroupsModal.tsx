@@ -436,7 +436,7 @@ export function CopyGroupsModal({
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="shrink-0 text-base-content/60 hover:text-error"
+                              className="shrink-0 text-error"
                               disabled={applying}
                               aria-label={t(
                                 "manageGroups.copy.dropGroupAriaLabel",
@@ -471,7 +471,10 @@ export function CopyGroupsModal({
                                     className={
                                       taken
                                         ? "flex items-center gap-1 rounded-full border border-error/60 bg-error/5 py-0.5 pe-1 ps-3 text-sm text-error"
-                                        : "flex items-center gap-1 rounded-full border border-base-200 py-0.5 pe-1 ps-3 text-sm"
+                                        : // Info (blue) tint so student chips read
+                                          // as people at a glance, distinct from
+                                          // the neutral surfaces around them.
+                                          "flex items-center gap-1 rounded-full border border-info/40 bg-info/10 py-0.5 pe-1 ps-3 text-sm"
                                     }
                                   >
                                     {fullName
