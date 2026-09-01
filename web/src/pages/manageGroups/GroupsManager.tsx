@@ -12,13 +12,14 @@ import {
   ModalIcon,
   cx,
 } from "@/components/ui"
-import { PeopleIcon, PlusIcon, SyncIcon } from "@/components/ui/icons"
+import { CopyIcon, PeopleIcon, PlusIcon, SyncIcon } from "@/components/ui/icons"
 import { EmptyState, ListSkeletonRows, SkeletonRegion } from "@/components/list"
 import PageHeader from "@/components/PageHeader"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GitHubAPIError } from "@/github-core/errors"
 import { errorText } from "@/types/localizedMessage"
 import type { TeamFormation } from "@/types/classroom"
+import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import useGroupTeams from "@/hooks/useGroupTeams"
@@ -37,6 +38,8 @@ import { unassignedRosterStudents } from "@/domain/teams/groupTeams"
 import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
 import { GroupManageModal } from "./GroupManageModal"
+import type { MembershipSaveResult } from "./GroupManageModal"
+import { CopyGroupsModal } from "./CopyGroupsModal"
 import { GroupRow } from "./GroupRow"
 import { UnassignedStudentsPanel } from "./UnassignedStudentsPanel"
 
@@ -141,6 +144,19 @@ export function GroupsManager({
     [enrolled, assignedLogins],
   )
 
+  // The classroom's OTHER team-mode assignments: the "Copy groups" sources.
+  const { data: assignmentsData } = useGetClassroomAssignments(org, classroom)
+  const copySourceOptions = useMemo(
+    () =>
+      (assignmentsData?.assignments ?? [])
+        .filter(
+          (candidate) =>
+            candidate.mode === "team" && candidate.slug !== assignmentSlug,
+        )
+        .map((candidate) => ({ slug: candidate.slug, name: candidate.name })),
+    [assignmentsData, assignmentSlug],
+  )
+
   // Repo existence per group, from the already-listed org repos matched
   // against the canonical `<classroom>-<assignment>-group-<n>` name.
   const { data: orgRepos } = useGetOrgRepos(org)
@@ -203,6 +219,10 @@ export function GroupsManager({
   // Counter keyed onto the manage dialog so each open remounts it with fresh
   // draft state (the Modal invariant: reset at open, not close).
   const [manageSession, setManageSession] = useState(0)
+  // Same remount-per-open key for the copy dialog: an abandoned plan must
+  // never leak into the next open.
+  const [copyOpen, setCopyOpen] = useState(false)
+  const [copySession, setCopySession] = useState(0)
   // The team as it was when the dialog opened. The live lookup below keeps
   // renames/privacy changes current; the snapshot keeps the dialog painting
   // through its close fade after a delete removes the team from the list.
@@ -266,6 +286,12 @@ export function GroupsManager({
     setManageOpen(true)
   }
 
+  const openCopy = () => {
+    setActionError(null)
+    setCopySession((session) => session + 1)
+    setCopyOpen(true)
+  }
+
   const handleCreate = async () => {
     if (!user?.login || busy) return
     setActionError(null)
@@ -304,16 +330,66 @@ export function GroupsManager({
     }
   }
 
-  const handleRemove = async (team: GroupTeamRef, username: string) => {
-    if (busy) return
+  // Apply the manage dialog's membership DRAFT: removals first, then adds
+  // (mirrors GroupCollaboratorsModal — a swap at max group size frees a slot
+  // first), each item individually so one failure doesn't lose the rest, and
+  // ONE snapshot resync after the whole batch. Failed items go back to the
+  // dialog, which keeps them pending.
+  const handleSaveMembers = async (
+    team: GroupTeamRef,
+    changes: { toRemove: string[]; toAdd: string[] },
+  ): Promise<MembershipSaveResult> => {
     setActionError(null)
-    try {
-      await removeMember.mutateAsync({ teamSlug: team.slug, username })
-      await resync()
-    } catch (err) {
-      setActionError(
-        describeTeamWriteError(err, "membership", t, errorText(t, err)),
-      )
+    const failedRemovals: string[] = []
+    const failedAdds: string[] = []
+    let firstError: unknown = null
+
+    let removed = 0
+    for (const username of changes.toRemove) {
+      try {
+        await removeMember.mutateAsync({ teamSlug: team.slug, username })
+        removed++
+      } catch (err) {
+        failedRemovals.push(username)
+        firstError ??= err
+      }
+    }
+
+    const liveCount = membersBySlug.get(team.slug)?.length ?? 0
+    let added = 0
+    for (const username of changes.toAdd) {
+      try {
+        await addMember.mutateAsync({
+          teamSlug: team.slug,
+          username,
+          // A failed remove keeps its slot, so the gate counts from what
+          // actually happened, not from the draft's assumption.
+          currentMemberCount: liveCount - removed + added,
+          maxGroupSize,
+          rosterLogins,
+        })
+        added++
+      } catch (err) {
+        failedAdds.push(username)
+        firstError ??= err
+      }
+    }
+
+    await resync()
+    return {
+      failedRemovals,
+      failedAdds,
+      message:
+        firstError === null
+          ? null
+          : t("manageGroups.manage.membersError", {
+              error: describeTeamWriteError(
+                firstError,
+                "membership",
+                t,
+                errorText(t, firstError),
+              ),
+            }),
     }
   }
 
@@ -431,6 +507,16 @@ export function GroupsManager({
               />
               {t("manageGroups.refreshSnapshot")}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={busy || !user?.login}
+              onClick={openCopy}
+            >
+              <CopyIcon aria-hidden="true" className="size-4" />
+              {t("manageGroups.copy.button")}
+            </Button>
             {createGroupButton}
           </div>
         }
@@ -518,13 +604,28 @@ export function GroupsManager({
           onPrivacyChange={(target, privacy) =>
             void handlePrivacy(target, privacy)
           }
-          onAddMember={(target, username) => void handleAdd(target, username)}
-          onRemoveMember={(target, username) =>
-            void handleRemove(target, username)
-          }
+          onSaveMembers={handleSaveMembers}
           onDelete={setPendingDelete}
         />
       )}
+
+      <CopyGroupsModal
+        key={`copy-${copySession}`}
+        open={copyOpen}
+        onClose={() => setCopyOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignmentSlug={assignmentSlug}
+        formation={formation}
+        maxGroupSize={maxGroupSize}
+        existingGroupCount={teams.length}
+        takenLogins={assignedLogins}
+        availableStudents={availableStudents}
+        fullNameByLogin={fullNameByLogin}
+        rosterLogins={rosterLogins}
+        creatorLogin={user?.login ?? ""}
+        sourceOptions={copySourceOptions}
+      />
 
       <Modal
         open={createOpen}
