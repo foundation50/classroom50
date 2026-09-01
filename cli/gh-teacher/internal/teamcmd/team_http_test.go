@@ -29,6 +29,7 @@ type teamCmdServer struct {
 	mu            sync.Mutex
 	teamsJSON     string           // current committed teams.json ("" = absent)
 	orgTeams      []map[string]any // GET /orgs/{org}/teams page 1
+	membersBySlug map[string][]string
 	createdTeams  []map[string]any // POST bodies
 	memberPuts    []string         // "slug/username" PUT order
 	memberDeletes []string         // "slug/username" DELETE order
@@ -38,6 +39,8 @@ type teamCmdServer struct {
 func (s *teamCmdServer) assignmentsJSON() string {
 	return `{"schema":"` + contract.AssignmentsSchemaV1 + `","assignments":[{` +
 		`"slug":"` + cmdTestAssignment + `","name":"Project","mode":"team",` +
+		`"autograder":"default","max_group_size":3,"team_formation":"teacher"},` +
+		`{"slug":"project2","name":"Project 2","mode":"team",` +
 		`"autograder":"default","max_group_size":3,"team_formation":"teacher"},` +
 		`{"slug":"hello","name":"Hello","mode":"individual","autograder":"default"}]}`
 }
@@ -96,6 +99,16 @@ func (s *teamCmdServer) handler(t *testing.T) http.Handler {
 			s.memberDeletes = append(s.memberDeletes, strings.TrimPrefix(path, "/orgs/"+cmdTestOrg+"/teams/"))
 			w.WriteHeader(http.StatusNoContent)
 		case strings.HasSuffix(path, "/members") && r.Method == http.MethodGet:
+			if s.membersBySlug != nil {
+				slug := strings.TrimSuffix(strings.TrimPrefix(path, "/orgs/"+cmdTestOrg+"/teams/"), "/members")
+				logins := s.membersBySlug[slug]
+				members := make([]map[string]any, 0, len(logins))
+				for i, login := range logins {
+					members = append(members, map[string]any{"login": login, "id": i + 1})
+				}
+				_ = json.NewEncoder(w).Encode(members)
+				return
+			}
 			_ = json.NewEncoder(w).Encode([]map[string]any{
 				{"login": "alice", "id": 1}, {"login": "bob", "id": 2},
 			})
@@ -237,6 +250,125 @@ func TestRunTeamAdd_SizeCap(t *testing.T) {
 	}
 	if len(state.memberPuts) != 0 {
 		t.Errorf("member puts = %v, want none past the cap", state.memberPuts)
+	}
+}
+
+// A member already on another of the assignment's live groups is refused
+// before any team is created (one student, one team).
+func TestRunTeamCreate_RefusesAlreadyGrouped(t *testing.T) {
+	slug := contract.GroupTeamName(cmdTestClassroom, cmdTestAssignment, 1)
+	record, _ := configrepo.MarshalGroupDescription(cmdTestClassroom, cmdTestAssignment, "")
+	state := &teamCmdServer{
+		orgTeams:      []map[string]any{{"id": 501, "slug": slug, "description": record}},
+		membersBySlug: map[string][]string{slug: {"alice"}},
+	}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	err := runTeamCreate(client, &out, &errOut, scope, "", []string{"alice", "bob"})
+	if err == nil || !strings.Contains(err.Error(), "alice is already on group 1") {
+		t.Fatalf("err = %v, want the already-grouped refusal", err)
+	}
+	if len(state.createdTeams) != 0 {
+		t.Errorf("created teams = %v, want none", state.createdTeams)
+	}
+}
+
+// Adding a student who is on another of the assignment's groups is refused;
+// re-adding them to their own group stays a no-op.
+func TestRunTeamAdd_RefusesCrossGroup(t *testing.T) {
+	slug1 := contract.GroupTeamName(cmdTestClassroom, cmdTestAssignment, 1)
+	slug2 := contract.GroupTeamName(cmdTestClassroom, cmdTestAssignment, 2)
+	record, _ := configrepo.MarshalGroupDescription(cmdTestClassroom, cmdTestAssignment, "")
+	state := &teamCmdServer{
+		orgTeams: []map[string]any{
+			{"id": 501, "slug": slug1, "description": record},
+			{"id": 502, "slug": slug2, "description": record},
+		},
+		membersBySlug: map[string][]string{slug1: {"alice"}, slug2: {"bob"}},
+	}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out bytes.Buffer
+	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: cmdTestAssignment}
+	err := runTeamAdd(client, &out, scope, "2", "alice")
+	if err == nil || !strings.Contains(err.Error(), "alice is already on group 1") {
+		t.Fatalf("err = %v, want the cross-group refusal", err)
+	}
+	if len(state.memberPuts) != 0 {
+		t.Errorf("member puts = %v, want none", state.memberPuts)
+	}
+
+	if err := runTeamAdd(client, &out, scope, "1", "alice"); err != nil {
+		t.Fatalf("re-add to own group: %v", err)
+	}
+	if !strings.Contains(out.String(), "already on") {
+		t.Errorf("expected the nothing-to-do report:\n%s", out.String())
+	}
+}
+
+// Copy skips members already on one of the target's groups and drops a source
+// team whose members are all skipped, instead of minting a duplicate.
+func TestRunTeamCopy_SkipsAlreadyGrouped(t *testing.T) {
+	target := "project2"
+	sourceSlug1 := contract.GroupTeamName(cmdTestClassroom, cmdTestAssignment, 1)
+	sourceSlug2 := contract.GroupTeamName(cmdTestClassroom, cmdTestAssignment, 2)
+	targetSlug1 := contract.GroupTeamName(cmdTestClassroom, target, 1)
+	targetSlug2 := contract.GroupTeamName(cmdTestClassroom, target, 2)
+	sourceRecord, _ := configrepo.MarshalGroupDescription(cmdTestClassroom, cmdTestAssignment, "")
+	targetRecord, _ := configrepo.MarshalGroupDescription(cmdTestClassroom, target, "")
+	state := &teamCmdServer{
+		orgTeams: []map[string]any{
+			{"id": 501, "slug": sourceSlug1, "description": sourceRecord},
+			{"id": 502, "slug": sourceSlug2, "description": sourceRecord},
+			{"id": 601, "slug": targetSlug1, "description": targetRecord},
+		},
+		membersBySlug: map[string][]string{
+			sourceSlug1: {"alice", "bob"},
+			sourceSlug2: {"dave"},
+			// alice and dave are already grouped in the target assignment.
+			targetSlug1: {"alice", "dave"},
+		},
+	}
+	server := httptest.NewServer(state.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	scope := teamScope{Org: cmdTestOrg, Classroom: cmdTestClassroom, Assignment: target}
+	if err := runTeamCopy(client, &out, &errOut, scope, cmdTestAssignment); err != nil {
+		t.Fatalf("runTeamCopy: %v", err)
+	}
+
+	// Only one team created (source team 1 minus alice); source team 2 was
+	// skipped entirely because dave is already grouped.
+	if len(state.createdTeams) != 1 || state.createdTeams[0]["name"] != targetSlug2 {
+		t.Fatalf("created teams = %v, want only %q", state.createdTeams, targetSlug2)
+	}
+	wantPuts := []string{targetSlug2 + "/memberships/bob"}
+	if fmt.Sprint(state.memberPuts) != fmt.Sprint(wantPuts) {
+		t.Errorf("member puts = %v, want %v", state.memberPuts, wantPuts)
+	}
+	for _, want := range []string{`"alice" is already on group 1`, `"dave" is already on group 1`} {
+		if !strings.Contains(errOut.String(), want) {
+			t.Errorf("expected skip warning %q:\n%s", want, errOut.String())
+		}
+	}
+	if !strings.Contains(out.String(), "skipped "+sourceSlug2) {
+		t.Errorf("expected the skipped-team report:\n%s", out.String())
+	}
+	file, err := configrepo.ParseTeamsFile([]byte(state.teamsJSON))
+	if err != nil {
+		t.Fatalf("committed teams.json is invalid: %v\n%s", err, state.teamsJSON)
+	}
+	teams := file.Assignments[target].Teams
+	if len(teams) != 1 || teams[0].Slug != targetSlug2 || fmt.Sprint(teams[0].Members) != fmt.Sprint([]string{"bob"}) {
+		t.Errorf("committed records = %+v, want only %s with [bob]", teams, targetSlug2)
 	}
 }
 

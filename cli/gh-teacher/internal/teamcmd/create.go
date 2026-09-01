@@ -24,6 +24,8 @@ func teamCreateCmd() *cobra.Command {
 			"for the assignment and add the given members.\n\n" +
 			"  - Members must be on the classroom roster; usernames not on\n" +
 			"    roster.csv are skipped with a warning.\n" +
+			"  - A student can be on only one of the assignment's groups, so a\n" +
+			"    member who is already on another group is refused.\n" +
 			"  - The member count is capped by the assignment's max_group_size.\n" +
 			"  - The new team is recorded in <classroom>/teams.json.\n" +
 			"  - The team is attached to its shared repository when a student\n" +
@@ -58,6 +60,16 @@ func runTeamCreate(client githubapi.Client, out, errOut io.Writer, scope teamSco
 	for _, u := range unknown {
 		_, _ = fmt.Fprintf(errOut, "Warning: %q is not on %s/%s/%s; skipping. Add them with `gh teacher roster add`, then `gh teacher team add`.\n",
 			u, ctx.Org, configrepo.ConfigRepoName, configrepo.RosterFilePath(ctx.Classroom))
+	}
+	assigned, err := loadAssignedLogins(client, ctx)
+	if err != nil {
+		return err
+	}
+	for _, u := range rostered {
+		if other, taken := assigned[strings.ToLower(u)]; taken {
+			return fmt.Errorf("%s is already on %s and a student can be on only one of the assignment's groups. Remove them with `gh teacher team remove`, or leave them off this team, then re-run",
+				u, describeGroupSlug(ctx.Classroom, ctx.Assignment, other))
+		}
 	}
 	if limit := ctx.Entry.MaxGroupSize; limit > 0 && len(rostered) > limit {
 		return fmt.Errorf("cannot create a team with %d members: the assignment's max_group_size is %d", len(rostered), limit)
@@ -197,7 +209,9 @@ func teamCopyCmd() *cobra.Command {
 		Long: "Recreate the source assignment's group teams for the target assignment:\n" +
 			"same members and display names, fresh counters under the target's own\n" +
 			"team namespace. Both assignments must be team assignments in the same\n" +
-			"classroom. The new teams are recorded in <classroom>/teams.json.",
+			"classroom. Members already on one of the target assignment's groups\n" +
+			"are skipped with a warning, and a group whose members are all skipped\n" +
+			"is not created. The new teams are recorded in <classroom>/teams.json.",
 		Example: "  gh teacher team copy cs50-fall-2026 cs-principles project2 --from project",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -246,6 +260,12 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope
 	if err != nil {
 		return err
 	}
+	// Grows as the loop creates teams, so a student on two drifted source
+	// teams still lands on only one copy.
+	assigned, err := loadAssignedLogins(client, ctx)
+	if err != nil {
+		return err
+	}
 
 	var records []configrepo.TeamRecord
 	for _, sourceTeam := range sourceTeams {
@@ -253,23 +273,43 @@ func runTeamCopy(client githubapi.Client, out, errOut io.Writer, scope teamScope
 		for _, u := range unknown {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s member %q is not on the roster; skipping them in the copy.\n", sourceTeam.Slug, u)
 		}
-		if limit := ctx.Entry.MaxGroupSize; limit > 0 && len(rostered) > limit {
-			return fmt.Errorf("cannot copy %s: it has %d rostered member(s), over the target assignment's max_group_size %d",
-				sourceTeam.Slug, len(rostered), limit)
+		var free []string
+		for _, u := range rostered {
+			if other, taken := assigned[strings.ToLower(u)]; taken {
+				_, _ = fmt.Fprintf(errOut, "Warning: %s member %q is already on %s in %s; skipping them in the copy.\n",
+					sourceTeam.Slug, u, describeGroupSlug(ctx.Classroom, ctx.Assignment, other), ctx.Assignment)
+				continue
+			}
+			free = append(free, u)
 		}
-		slug, id, counter, err := createTeamWithMembers(client, errOut, ctx, sourceTeam.Record.Name, rostered)
+		if len(free) == 0 && len(sourceTeam.Members) > 0 {
+			_, _ = fmt.Fprintf(out, "%s: skipped %s, every member was skipped\n", ctx.Org, sourceTeam.Slug)
+			continue
+		}
+		if limit := ctx.Entry.MaxGroupSize; limit > 0 && len(free) > limit {
+			return fmt.Errorf("cannot copy %s: it has %d rostered member(s), over the target assignment's max_group_size %d",
+				sourceTeam.Slug, len(free), limit)
+		}
+		slug, id, counter, err := createTeamWithMembers(client, errOut, ctx, sourceTeam.Record.Name, free)
 		if err != nil {
 			return err
 		}
+		for _, u := range free {
+			assigned[strings.ToLower(u)] = slug
+		}
 		_, _ = fmt.Fprintf(out, "%s: created team %s (group %d, %d member(s), copied from %s)\n",
-			ctx.Org, slug, counter, len(rostered), sourceTeam.Slug)
+			ctx.Org, slug, counter, len(free), sourceTeam.Slug)
 		records = append(records, configrepo.TeamRecord{
 			Slug:      slug,
 			ID:        id,
 			Name:      sourceTeam.Record.Name,
-			Members:   rostered,
+			Members:   free,
 			Formation: ctx.Entry.TeamFormation,
 		})
+	}
+	if len(records) == 0 {
+		_, _ = fmt.Fprintf(out, "%s/%s: no teams copied\n", ctx.Classroom, source)
+		return nil
 	}
 
 	message := fmt.Sprintf("team: copy %d team(s) from %s to %s in %s (gh teacher team copy)",

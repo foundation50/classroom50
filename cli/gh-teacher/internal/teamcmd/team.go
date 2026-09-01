@@ -188,6 +188,34 @@ func splitRostered(usernames []string, rosterLogins map[string]bool) (rostered, 
 	return rostered, unknown
 }
 
+// loadAssignedLogins maps lowercased login -> team slug for every member on
+// one of the assignment's LIVE group teams. The membership commands gate on
+// it up front so the one-student-one-team invariant is enforced before any
+// GitHub write, not discovered later by the teams.json snapshot validator.
+func loadAssignedLogins(client githubapi.Client, ctx teamContext) (map[string]string, error) {
+	teams, err := configrepo.ListAssignmentGroupTeams(client, ctx.Org, ctx.Classroom, ctx.Assignment)
+	if err != nil {
+		return nil, err
+	}
+	assigned := map[string]string{}
+	for _, team := range teams {
+		for _, m := range team.Members {
+			assigned[strings.ToLower(m)] = team.Slug
+		}
+	}
+	return assigned, nil
+}
+
+// describeGroupSlug renders a team slug with its counter ("group 2
+// (classroom50-group-…-2)") so error messages can point at the counter form
+// the commands accept.
+func describeGroupSlug(classroom, assignmentSlug, slug string) string {
+	if counter, ok := contract.ParseGroupTeamCounter(slug, classroom, assignmentSlug); ok {
+		return fmt.Sprintf("group %d (%s)", counter, slug)
+	}
+	return slug
+}
+
 // loadRosterLogins reads the classroom roster and returns the lowercased
 // login set the membership commands gate on.
 func loadRosterLogins(client githubapi.Client, ctx teamContext) (map[string]bool, error) {

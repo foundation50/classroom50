@@ -18,6 +18,8 @@ func teamAddCmd() *cobra.Command {
 		Long: "Add a rostered student to the group team referenced by counter or\n" +
 			"slug, and record them in <classroom>/teams.json.\n\n" +
 			"  - The student must be on the classroom roster.\n" +
+			"  - A student can be on only one of the assignment's groups, so a\n" +
+			"    student who is already on another group is refused.\n" +
 			"  - The team's live member count is capped by the assignment's\n" +
 			"    max_group_size.\n" +
 			"  - Adding a student who is already on the team changes nothing.",
@@ -55,6 +57,14 @@ func runTeamAdd(client githubapi.Client, out io.Writer, scope teamScope, teamArg
 		return fmt.Errorf("%q is not on %s/%s/%s: add them with `gh teacher roster add %s %s %s`, then re-run",
 			username, ctx.Org, configrepo.ConfigRepoName, configrepo.RosterFilePath(ctx.Classroom),
 			ctx.Org, ctx.Classroom, username)
+	}
+	assigned, err := loadAssignedLogins(client, ctx)
+	if err != nil {
+		return err
+	}
+	if other, taken := assigned[strings.ToLower(username)]; taken && !strings.EqualFold(other, slug) {
+		return fmt.Errorf("%s is already on %s and a student can be on only one of the assignment's groups. Remove them with `gh teacher team remove`, then re-run",
+			username, describeGroupSlug(ctx.Classroom, ctx.Assignment, other))
 	}
 
 	members, err := configrepo.ListTeamMembers(client, ctx.Org, slug)
