@@ -494,35 +494,53 @@ describe("updateGroupTeamDisplayName", () => {
 })
 
 describe("leaveGroupTeam", () => {
-  it("DELETEs the viewer's own membership", async () => {
-    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+  function makeClient(role: string | null, opts?: { forbidDelete?: boolean }) {
     const deletes: string[] = []
     const request = vi.fn(async (url: string, init?: { method?: string }) => {
-      if (init?.method === "DELETE") {
+      const method = init?.method ?? "GET"
+      if (method === "GET" && url.includes("/memberships/")) {
+        if (role === null) throw apiError(404, "Not Found")
+        return { state: "active", role }
+      }
+      if (method === "DELETE") {
+        if (opts?.forbidDelete) throw apiError(403, "Forbidden")
         deletes.push(url)
         return undefined
       }
-      throw new Error(`unexpected request: ${init?.method ?? "GET"} ${url}`)
+      throw new Error(`unexpected request: ${method} ${url}`)
     })
-    await leaveGroupTeam({ request } as unknown as GitHubClient, ORG, {
-      teamSlug: slug,
-      username: "alice",
-    })
+    return { client: { request } as unknown as GitHubClient, deletes }
+  }
+
+  it("DELETEs the viewer's own membership", async () => {
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+    const { client, deletes } = makeClient("member")
+    await leaveGroupTeam(client, ORG, { teamSlug: slug, username: "alice" })
     expect(deletes).toEqual([`/orgs/${ORG}/teams/${slug}/memberships/alice`])
+  })
+
+  it("refuses the maintainer's own exit, fail-closed in the domain", async () => {
+    // The UI hides Leave for maintainers; this guard makes the rule hold for
+    // every caller — a maintainer-less group would have nobody to manage it.
+    const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
+    const { client, deletes } = makeClient("maintainer")
+    await expect(
+      leaveGroupTeam(client, ORG, { teamSlug: slug, username: "alice" }),
+    ).rejects.toSatisfy(
+      (err) =>
+        localizedMessageOf(err)?.key ===
+        "groupTeams.errors.maintainerCannotLeave",
+    )
+    expect(deletes).toEqual([])
   })
 
   it("maps a 403 to the localized leave-forbidden error", async () => {
     // The REST docs only promise removal to maintainers/owners; an IdP-synced
     // team 403s a self-removal, which must never dead-end the student.
     const slug = await groupTeamName(CLASSROOM, ASSIGNMENT, 1)
-    const request = vi.fn(async () => {
-      throw apiError(403, "Forbidden")
-    })
+    const { client } = makeClient("member", { forbidDelete: true })
     await expect(
-      leaveGroupTeam({ request } as unknown as GitHubClient, ORG, {
-        teamSlug: slug,
-        username: "alice",
-      }),
+      leaveGroupTeam(client, ORG, { teamSlug: slug, username: "alice" }),
     ).rejects.toSatisfy(
       (err) =>
         localizedMessageOf(err)?.key === "groupTeams.errors.leaveForbidden",

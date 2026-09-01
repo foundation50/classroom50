@@ -36,6 +36,7 @@ export function GroupTeamMembersPanel({
   maxGroupSize,
   viewerLogin,
   formation,
+  canManage: canManageOverride,
   onMembershipChange,
 }: {
   org: string
@@ -51,6 +52,12 @@ export function GroupTeamMembersPanel({
   // "Leave group". Teacher-formed groups show neither — the teacher owns
   // membership there.
   formation?: TeamFormation
+  // Management-controls override for surfaces whose viewer's power doesn't
+  // come from team membership (the teacher, an org owner). When absent, the
+  // controls follow the viewer's team role: only a maintainer sees add/remove
+  // — GitHub rejects a plain member's membership writes anyway, so a
+  // non-maintainer must not be shown controls that can only fail.
+  canManage?: boolean
   // Fired after a successful add/remove, for callers that maintain a
   // membership snapshot (the teacher surfaces); the student panel omits it.
   onMembershipChange?: () => void
@@ -71,11 +78,17 @@ export function GroupTeamMembersPanel({
     addMember.isPending || removeMember.isPending || leaveTeam.isPending
 
   const isFull = maxGroupSize !== undefined && members.length >= maxGroupSize
-  const viewerIsMember =
-    Boolean(viewerLogin) &&
-    members.some(
-      (m) => normalizeUsername(m.login) === normalizeUsername(viewerLogin!),
-    )
+  const viewerMember = viewerLogin
+    ? members.find(
+        (m) => normalizeUsername(m.login) === normalizeUsername(viewerLogin),
+      )
+    : undefined
+  const viewerIsMember = Boolean(viewerMember)
+  const viewerIsMaintainer = viewerMember?.role === "maintainer"
+  // Only a maintainer (or an override caller — the teacher) may manage
+  // membership; GitHub rejects a plain member's writes, so the controls are
+  // hidden rather than shown-to-fail.
+  const canManage = canManageOverride ?? viewerIsMaintainer
   const studentFormed = formation === "student"
   const groupName = teamName || t("components.groupTeamMembers.title")
 
@@ -176,6 +189,11 @@ export function GroupTeamMembersPanel({
               <span className="min-w-0 flex-1 truncate leading-tight">
                 {member.login}
               </span>
+              {member.role === "maintainer" && (
+                <Badge ghost>
+                  {t("components.groupTeamMembers.maintainerBadge")}
+                </Badge>
+              )}
               {viewerLogin &&
                 normalizeUsername(member.login) ===
                   normalizeUsername(viewerLogin) && (
@@ -183,19 +201,29 @@ export function GroupTeamMembersPanel({
                     {t("components.groupTeamMembers.youBadge")}
                   </Badge>
                 )}
-              <Button
-                variant="ghost"
-                size="sm"
-                shape="square"
-                className="text-base-content/70 hover:text-error"
-                disabled={busy}
-                aria-label={t("components.groupTeamMembers.removeUser", {
-                  username: member.login,
-                })}
-                onClick={() => void handleRemove(member.login)}
-              >
-                <TrashIcon aria-hidden="true" className="size-4" />
-              </Button>
+              {/* Membership writes are maintainer/owner-only, and a
+                  maintainer's own exit is Leave (blocked for them below), so
+                  the remove control never targets the viewer's own row. */}
+              {canManage &&
+                !(
+                  viewerLogin &&
+                  normalizeUsername(member.login) ===
+                    normalizeUsername(viewerLogin)
+                ) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    shape="square"
+                    className="text-base-content/70 hover:text-error"
+                    disabled={busy}
+                    aria-label={t("components.groupTeamMembers.removeUser", {
+                      username: member.login,
+                    })}
+                    onClick={() => void handleRemove(member.login)}
+                  >
+                    <TrashIcon aria-hidden="true" className="size-4" />
+                  </Button>
+                )}
             </li>
           ))}
           {members.length === 0 && (
@@ -206,54 +234,63 @@ export function GroupTeamMembersPanel({
         </ul>
       )}
 
-      {isFull ? (
-        <p className="text-xs text-base-content/70">
-          {t("components.groupTeamMembers.groupFull", {
-            max: maxGroupSize ?? 0,
-          })}
-        </p>
-      ) : (
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <Input
-            className="flex-1"
-            placeholder={t("components.groupTeamMembers.addPlaceholder")}
-            aria-label={t("components.groupTeamMembers.addAriaLabel")}
-            value={newMember}
-            onChange={(e) => setNewMember(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                e.preventDefault()
-                void handleAdd()
-              }
-            }}
-          />
-          <Button
-            variant="outline"
-            disabled={busy}
-            loading={addMember.isPending}
-            onClick={() => void handleAdd()}
-          >
-            <PlusIcon aria-hidden="true" className="size-4" />
-            {t("components.groupTeamMembers.add")}
-          </Button>
-        </div>
-      )}
+      {canManage &&
+        (isFull ? (
+          <p className="text-xs text-base-content/70">
+            {t("components.groupTeamMembers.groupFull", {
+              max: maxGroupSize ?? 0,
+            })}
+          </p>
+        ) : (
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              className="flex-1"
+              placeholder={t("components.groupTeamMembers.addPlaceholder")}
+              aria-label={t("components.groupTeamMembers.addAriaLabel")}
+              value={newMember}
+              onChange={(e) => setNewMember(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void handleAdd()
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              disabled={busy}
+              loading={addMember.isPending}
+              onClick={() => void handleAdd()}
+            >
+              <PlusIcon aria-hidden="true" className="size-4" />
+              {t("components.groupTeamMembers.add")}
+            </Button>
+          </div>
+        ))}
 
       {studentFormed && (
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-base-200 pt-3">
           {/* Join requests exist only on GitHub: a visible team's page carries
               the native request-to-join flow, and the REST API exposes none of
-              it — so both requesting and reviewing deep-link there. */}
-          <a
-            className="link link-hover inline-flex items-center gap-1.5 text-sm"
-            href={groupTeamUrl(org, teamSlug)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("components.groupTeamMembers.reviewJoinRequests")}
-            <LinkExternalIcon aria-hidden="true" className="size-3.5" />
-          </a>
-          {viewerIsMember && (
+              it — so both requesting and reviewing deep-link there. Reviewing
+              is a maintainer power, so only managers get the link. */}
+          {canManage ? (
+            <a
+              className="link link-hover inline-flex items-center gap-1.5 text-sm"
+              href={groupTeamUrl(org, teamSlug)}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("components.groupTeamMembers.reviewJoinRequests")}
+              <LinkExternalIcon aria-hidden="true" className="size-3.5" />
+            </a>
+          ) : (
+            <span />
+          )}
+          {/* A maintainer never leaves their own group: the group would be
+              left without anyone who can manage it. A plain member's only
+              membership control is leaving. */}
+          {viewerIsMember && !viewerIsMaintainer && (
             <Button
               variant="ghost"
               size="sm"
@@ -264,6 +301,11 @@ export function GroupTeamMembersPanel({
               <SignOutIcon aria-hidden="true" className="size-4" />
               {t("components.groupTeamMembers.leave")}
             </Button>
+          )}
+          {viewerIsMember && viewerIsMaintainer && (
+            <span className="text-xs text-base-content/70">
+              {t("components.groupTeamMembers.maintainerCannotLeave")}
+            </span>
           )}
         </div>
       )}

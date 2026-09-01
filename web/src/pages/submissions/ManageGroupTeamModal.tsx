@@ -120,6 +120,9 @@ export function ManageGroupTeamModal({
           teamSlug={teamSlug}
           teamName={displayName || fallbackLabel}
           maxGroupSize={maxGroupSize}
+          // The teacher's power comes from org ownership, not team
+          // membership, so the role-derived gate doesn't apply here.
+          canManage
           onMembershipChange={resyncSnapshot}
         />
       </div>

@@ -300,11 +300,29 @@ export async function removeGroupTeamMember(
 // maintainers and org owners (self-removal works like GitHub's own Leave
 // button in practice), so a 403 — an IdP-synced team, or a policy change —
 // maps to a localized error pointing at the team page instead of a dead end.
+// Fail-closed on role: the group's MAINTAINER may not leave (the group would
+// be left with nobody who can manage it) — enforced here, not only in the
+// view, via the membership read's role.
 export async function leaveGroupTeam(
   client: GitHubClient,
   org: string,
   input: { teamSlug: string; username: string },
 ): Promise<void> {
+  const membership = await tolerateGitHubError(
+    () =>
+      client.request<{ role?: string }>(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+          input.teamSlug,
+        )}/memberships/${encodeURIComponent(input.username)}`,
+      ),
+    null,
+  )
+  if (membership?.role === "maintainer") {
+    throw localizedError({
+      key: "groupTeams.errors.maintainerCannotLeave",
+      params: { slug: input.teamSlug },
+    })
+  }
   try {
     await removeUserFromTeam(client, {
       org,

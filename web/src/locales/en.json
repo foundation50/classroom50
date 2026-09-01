@@ -3624,6 +3624,8 @@
       "addAriaLabel": "Add a teammate by GitHub username",
       "add": "Add",
       "reviewJoinRequests": "Review join requests on GitHub",
+      "maintainerBadge": "Maintainer",
+      "maintainerCannotLeave": "You maintain this group, so you can't leave it. Ask your teacher to move you.",
       "leave": "Leave group",
       "leaveTitle": "Leave {{name}}?",
       "leaveBody": "You lose access to the group's repository and your work stays with the group. Rejoining takes extra steps: you must request to join again on GitHub and wait for the group or your teacher to approve it.",
@@ -3641,7 +3643,8 @@
       "notAGroupTeam": "{{slug}} isn't a group team this app created, so it wasn't deleted.",
       "idMismatch": "The team {{slug}} isn't the one this assignment created, so it wasn't deleted. Remove it on GitHub if you're sure.",
       "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure.",
-      "leaveForbidden": "GitHub blocked leaving the group. The team's membership may be managed by your school. Ask your teacher to remove you, or leave from the team's page on GitHub."
+      "leaveForbidden": "GitHub blocked leaving the group. The team's membership may be managed by your school. Ask your teacher to remove you, or leave from the team's page on GitHub.",
+      "maintainerCannotLeave": "You maintain this group, so you can't leave it. Ask your teacher to move you."
     }
   }
 }

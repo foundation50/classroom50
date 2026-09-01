@@ -160,6 +160,9 @@ export type GitHubUser = {
   name: string | null
   email: string | null
   bio: string | null
+  // Present on team-member listings only (GET /orgs/{org}/teams/{slug}/members
+  // returns each member's team role); absent on every other user-shaped read.
+  role?: "member" | "maintainer"
   permissions: {
     admin: boolean
     pull: boolean
