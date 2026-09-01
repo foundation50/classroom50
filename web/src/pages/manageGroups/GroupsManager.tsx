@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, Card, Heading, Input, Modal } from "@/components/ui"
+import { Alert, Button, Card, Heading, Input, Modal, cx } from "@/components/ui"
 import { PeopleIcon, PlusIcon, SyncIcon } from "@/components/ui/icons"
 import { Spinner } from "@/components/Spinner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -189,6 +189,22 @@ export function GroupsManager({
     }
   }
 
+  // Auto-refresh once per visit, but only when live membership actually
+  // drifted from the recorded snapshot — an unconditional sync would commit
+  // to the config repo on every page load. Waits for the snapshot and the
+  // members fan-out so a half-resolved read is never mistaken for drift.
+  const autoSynced = useRef(false)
+  useEffect(() => {
+    if (autoSynced.current) return
+    if (snapshotQuery.isLoading || teamsQuery.isLoading || membersPending)
+      return
+    if (drift.changed.size === 0 && drift.missing.size === 0) return
+    autoSynced.current = true
+    void resync()
+    // resync is recreated per render; the ref guarantees one shot regardless.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [snapshotQuery.isLoading, teamsQuery.isLoading, membersPending, drift])
+
   const handleCreate = async () => {
     if (!user?.login || busy) return
     setActionError(null)
@@ -335,10 +351,18 @@ export function GroupsManager({
               size="sm"
               className="gap-2"
               disabled={syncSnapshot.isPending}
-              loading={syncSnapshot.isPending}
               onClick={() => void resync()}
             >
-              <SyncIcon aria-hidden="true" className="size-4" />
+              {/* The sync icon doubles as the progress indicator (spinning in
+                  place) — the Button `loading` spinner would render a second
+                  one beside it. */}
+              <SyncIcon
+                aria-hidden="true"
+                className={cx(
+                  "size-4",
+                  syncSnapshot.isPending && "animate-spin",
+                )}
+              />
               {t("manageGroups.refreshSnapshot")}
             </Button>
           </div>
