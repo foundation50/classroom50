@@ -477,6 +477,23 @@ export function GroupsManager({
     </Button>
   )
 
+  const copyGroupsButton = (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-2"
+      disabled={busy || !user?.login}
+      onClick={openCopy}
+    >
+      <CopyIcon aria-hidden="true" className="size-4" />
+      {t("manageGroups.copy.button")}
+    </Button>
+  )
+
+  // With no groups yet, the blankslate owns the formation actions — repeating
+  // them in the header would give one action two competing entry points.
+  const noGroupsYet = !teamsQuery.isLoading && teams.length === 0
+
   return (
     <>
       <PageHeader
@@ -507,17 +524,12 @@ export function GroupsManager({
               />
               {t("manageGroups.refreshSnapshot")}
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="gap-2"
-              disabled={busy || !user?.login}
-              onClick={openCopy}
-            >
-              <CopyIcon aria-hidden="true" className="size-4" />
-              {t("manageGroups.copy.button")}
-            </Button>
-            {createGroupButton}
+            {!noGroupsYet && (
+              <>
+                {copyGroupsButton}
+                {createGroupButton}
+              </>
+            )}
           </div>
         }
       />
@@ -557,7 +569,15 @@ export function GroupsManager({
                 ? "manageGroups.emptyTeacher"
                 : "manageGroups.emptyStudent",
             )}
-            action={formation === "teacher" ? createGroupButton : undefined}
+            action={
+              // Both formations get the teacher tools here: student formation
+              // waits on students by default, but copying last term's groups
+              // or pre-seeding one is still the teacher's call.
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {copyGroupsButton}
+                {createGroupButton}
+              </div>
+            }
           />
         ) : (
           <ul className="divide-y divide-base-200 rounded-box border border-base-200">
