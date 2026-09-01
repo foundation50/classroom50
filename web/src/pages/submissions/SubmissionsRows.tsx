@@ -6,6 +6,7 @@ import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
+import { groupTeamUrl, type GroupTeamRef } from "@/domain/teams/groupTeams"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -99,6 +100,25 @@ export const PublicRepoBadge = () => {
     >
       <GlobeIcon aria-hidden="true" className="size-3" />
       {t("submissions.publicRepo.badge")}
+    </Badge>
+  )
+}
+
+// Error badge for a team-mode row whose GitHub team no longer exists (state 2
+// of the team/repo mismatch pair): grading can't credit members until the
+// teacher recreates the group. Rendered only once the teams query has settled,
+// so it never flashes while the listing loads.
+export const TeamMissingBadge = () => {
+  const { t } = useTranslation()
+  return (
+    <Badge
+      tone="error"
+      size="sm"
+      className="whitespace-nowrap"
+      title={t("submissions.table.teamMissingTitle")}
+    >
+      {t("submissions.table.teamMissing")}
+      <span className="sr-only">{t("submissions.table.teamMissingTitle")}</span>
     </Badge>
   )
 }
@@ -277,17 +297,26 @@ export const GroupMembers = ({
 
 // Team mode's Members cell: the live member count as a click-through to the
 // group management modal (members + display name). Renders a muted em-dash
-// while membership is still resolving.
+// while membership is still resolving; a MISSING team (deleted on GitHub) can
+// never resolve, so `missing` renders the error badge in this column instead
+// of that dash-forever.
 export const TeamMembersCountCell = ({
   count,
   label,
   onClick,
+  missing = false,
 }: {
   count?: number
   // Accessible name carrying the group's display name.
   label: string
   onClick: () => void
+  // Set when the row's GitHub team no longer exists — the error badge
+  // replaces the count (there is no team left to count or manage).
+  missing?: boolean
 }) => {
+  if (missing) {
+    return <TeamMissingBadge />
+  }
   if (count === undefined) {
     return <span className="text-base-content/50">—</span>
   }
@@ -523,6 +552,78 @@ export const GroupRepoRow = ({
       {/* Quarantined from the row's manage click — see the submitter row. */}
       <td onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-end gap-1">{actions}</div>
+      </td>
+    </>
+  )
+  if (!onManage) return <tr className="hover:bg-base-200">{cells}</tr>
+  return (
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        onManage()
+      }}
+    >
+      {cells}
+    </ClickableTr>
+  )
+}
+
+// A live group team whose repository doesn't exist yet (team mode, state 1 of
+// the team/repo mismatch pair): the team formed but no member has accepted the
+// assignment, so it has no repo or score row to surface it. The name cell
+// links to the team's GitHub page (a repo link would 404); the Members cell is
+// the shared count click-through; the Submissions cell explains why there's
+// nothing to grade yet.
+export const TeamWithoutRepoRow = ({
+  org,
+  team,
+  label,
+  membersCell,
+  onManage,
+}: {
+  org: string
+  team: GroupTeamRef
+  // The team's display name ("Group <n>" fallback supplied by the caller).
+  label: string
+  // The Members-column count cell (same click-through as the other team rows).
+  membersCell: React.ReactNode
+  // Row-level click target: the shared manage-group dialog.
+  onManage?: () => void
+}) => {
+  const { t } = useTranslation()
+  const cells = (
+    <>
+      <td>
+        <a
+          className="flex items-center gap-1.5 link link-hover w-fit font-medium"
+          href={groupTeamUrl(org, team.slug)}
+          target="_blank"
+          rel="noreferrer"
+          title={t("submissions.table.openGroupTeam")}
+        >
+          <PeopleIcon aria-hidden="true" className="size-4 shrink-0" />
+          <span className="text-sm">{label}</span>
+        </a>
+      </td>
+      {/* Quarantined from the row's manage click like the other team rows. */}
+      <td onClick={(event) => event.stopPropagation()}>{membersCell}</td>
+      <td>
+        <Badge
+          tone="warning"
+          className="whitespace-nowrap"
+          title={t("submissions.table.teamNoRepoTitle")}
+        >
+          {t("submissions.table.teamNoRepo")}
+          <span className="sr-only">
+            {t("submissions.table.teamNoRepoTitle")}
+          </span>
+        </Badge>
+      </td>
+      <td>—</td>
+      <td>—</td>
+      <td>
+        <div className="text-end">—</div>
       </td>
     </>
   )

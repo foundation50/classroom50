@@ -2887,6 +2887,11 @@
       "reviewAria": "Open feedback pull request",
       "noTeam": "Not in a group",
       "noTeamTitle": "This student isn't a member of any group team for this assignment. Add them to a group on the assignment settings page.",
+      "teamNoRepo": "No repository yet",
+      "teamNoRepoTitle": "The group's repository is created when a group member accepts the assignment. Share the assignment link so a member can accept.",
+      "teamMissing": "Group team missing",
+      "teamMissingTitle": "The GitHub team behind this group no longer exists. It was likely deleted, so grading can't credit its members until it's fixed. Recreate the group from the Manage groups view.",
+      "openGroupTeam": "Open the group's team on GitHub",
       "teamDefaultName": "Group {{n}}",
       "colMembers": "Members",
       "manageMembersLabel": "View and manage members of {{name}}"

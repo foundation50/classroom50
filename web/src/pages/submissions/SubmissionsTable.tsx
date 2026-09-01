@@ -11,7 +11,11 @@ import {
   getSection,
   resolveStudent,
 } from "@/util/students"
-import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
+import {
+  studentRepoName,
+  studentRepoUrl,
+  GROUP_REPO_SEGMENT,
+} from "@/util/studentRepo"
 import { repoCommitUrl } from "@/util/orgUrl"
 import Avatar from "@/components/avatar"
 import {
@@ -36,6 +40,7 @@ import {
   paginateDisplayItems,
   paginationRange,
   sortNameMode,
+  teamMissingForOwner,
   PAGE_SIZE_OPTIONS,
 } from "@/pages/submissions/dashboard"
 import {
@@ -45,6 +50,7 @@ import {
   NonSubmitterRow,
   PublicRepoBadge,
   TeamMembersCountCell,
+  TeamWithoutRepoRow,
   identitySubtitle,
 } from "@/pages/submissions/SubmissionsRows"
 import {
@@ -266,6 +272,8 @@ const SubmissionsTable = ({
   groupDisplayNames,
   groupMemberLogins,
   teamsByOwner,
+  teamsWithoutRepos = [],
+  teamsSettled = false,
   teamFormation,
   org,
   classroom,
@@ -314,6 +322,14 @@ const SubmissionsTable = ({
   // Team mode: owner segment -> the full team ref (slug recorded on override
   // entries; the whole ref feeds the shared manage-group dialog).
   teamsByOwner?: ReadonlyMap<string, GroupTeamRef>
+  // Team mode: live teams whose expected repo doesn't exist yet (and that have
+  // no score row). Rendered as their own "no repository yet" rows in the
+  // display sequence. Already filtered/gated by the page.
+  teamsWithoutRepos?: GroupTeamRef[]
+  // Team mode: whether the group-teams query has SETTLED (fetched at least
+  // once). Gates the "team missing" error state so it can't flash on every
+  // row while the listing loads.
+  teamsSettled?: boolean
   // Team mode: the assignment's team_formation, recorded on the teams.json
   // snapshot writes the manage dialog triggers.
   teamFormation?: TeamFormation
@@ -471,14 +487,27 @@ const SubmissionsTable = ({
             unsubmittedGroupRepos,
             students,
             sortNameMode(sort),
+            teamsWithoutRepos,
           )
-        : buildGroupDisplayItems(scores, unsubmittedGroupRepos)
+        : buildGroupDisplayItems(
+            scores,
+            unsubmittedGroupRepos,
+            teamsWithoutRepos,
+          )
     }
     if (isNameSort(sort)) {
       return buildRosterDisplayItems(students, scores, nonSubmitters)
     }
     return buildSortedDisplayItems(scores, nonSubmitters)
-  }, [isGroup, sort, students, scores, nonSubmitters, unsubmittedGroupRepos])
+  }, [
+    isGroup,
+    sort,
+    students,
+    scores,
+    nonSubmitters,
+    unsubmittedGroupRepos,
+    teamsWithoutRepos,
+  ])
   const bounds = pageBounds(displayItems.length, pageSize, page)
   const pageItems = useMemo(
     () => paginateDisplayItems(displayItems, pageSize, page),
@@ -516,6 +545,12 @@ const SubmissionsTable = ({
   // still unresolved (which blocks the override editor — see below).
   const teamMembers = (owner: string) =>
     groupMemberLogins?.get(owner.toLowerCase())
+
+  // Team mode: whether a row's owner segment has no live team behind it (the
+  // GitHub team was likely deleted). Settled-gated so it can't flash while
+  // the teams listing loads.
+  const teamMissing = (owner: string) =>
+    isTeam && teamMissingForOwner(owner, teamsByOwner, teamsSettled)
 
   // One submitted/pending row. Extracted so the paginated sequence can render
   // it inline alongside non-submitter and group-repo rows without duplicating
@@ -648,6 +683,7 @@ const SubmissionsTable = ({
                 name: groupLabel(rest.owner, repo),
               })}
               onClick={() => setManageOwner(rest.owner)}
+              missing={teamMissing(rest.owner)}
             />
           </td>
         )}
@@ -876,6 +912,7 @@ const SubmissionsTable = ({
             !scores?.length &&
             (isGroup || !nonSubmitters.length) &&
             !unsubmittedGroupRepos.length &&
+            !teamsWithoutRepos.length &&
             !nonSubmittersLoading && (
               <tr>
                 <td colSpan={isTeam ? 6 : 5}>
@@ -1020,6 +1057,32 @@ const SubmissionsTable = ({
                 />
               )
             }
+            if (item.kind === "teamNoRepo") {
+              const team = item.team
+              const teamOwner = `${GROUP_REPO_SEGMENT}${team.n}`
+              const label =
+                groupDisplayNames?.get(teamOwner) ??
+                (team.name ||
+                  t("submissions.table.teamDefaultName", { n: team.n }))
+              return (
+                <TeamWithoutRepoRow
+                  key={`team-${team.slug}`}
+                  org={org}
+                  team={team}
+                  label={label}
+                  membersCell={
+                    <TeamMembersCountCell
+                      count={teamMembers(teamOwner)?.length}
+                      label={t("submissions.table.manageMembersLabel", {
+                        name: label,
+                      })}
+                      onClick={() => setManageOwner(teamOwner)}
+                    />
+                  }
+                  onManage={() => setManageOwner(teamOwner)}
+                />
+              )
+            }
             const { owner, repoName } = item.repo
             const groupRepoHref = studentRepoUrl(
               org,
@@ -1058,6 +1121,7 @@ const SubmissionsTable = ({
                         name: groupLabel(owner, repoName),
                       })}
                       onClick={() => setManageOwner(owner)}
+                      missing={teamMissing(owner)}
                     />
                   ) : undefined
                 }

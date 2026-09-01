@@ -8,6 +8,7 @@ import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Student } from "@/types/classroom"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { BadgeTone } from "@/components/ui"
 import type { TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
@@ -791,6 +792,40 @@ export function existingTeamRepos(
   return out
 }
 
+// Live group teams (team mode) with NO trace on the submissions view: their
+// expected repo doesn't exist in the org repo list AND no score row credits
+// their counter. Without a repo the team never surfaces as a group-repo or
+// submitter row, so these render as their own "no repository yet" rows.
+// `existingRepoOwners`/`scoreOwners` are lowercased `group-<n>` owner
+// segments. Sorted by counter for a stable row order. Callers must gate on a
+// SETTLED teams query and a loaded repo list, else every team (or none)
+// flashes as repo-less while either source resolves.
+export function teamsWithoutRepos(
+  teams: readonly GroupTeamRef[],
+  existingRepoOwners: ReadonlySet<string>,
+  scoreOwners: ReadonlySet<string>,
+): GroupTeamRef[] {
+  return teams
+    .filter((team) => {
+      const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+      return !existingRepoOwners.has(owner) && !scoreOwners.has(owner)
+    })
+    .toSorted((a, b) => a.n - b.n)
+}
+
+// Whether a team-mode row's owner segment has NO live group team behind it —
+// the team was (likely) deleted on GitHub, so grading can't credit members.
+// False until the teams query has SETTLED (`teamsSettled`), so the error state
+// can't flash on every row while the listing loads.
+export function teamMissingForOwner(
+  owner: string,
+  teamsByOwner: ReadonlyMap<string, unknown> | undefined,
+  teamsSettled: boolean,
+): boolean {
+  if (!teamsSettled || !teamsByOwner) return false
+  return !teamsByOwner.has(owner.trim().toLowerCase())
+}
+
 // Roster students with no submission, with group-repo members excluded (#245).
 // "Credited" = login appears in any score row's `usernames` (member_usernames
 // for groups, else [owner]). A login in `groupRepoMembers` (an existing group
@@ -1260,6 +1295,7 @@ export type DisplayItem =
   | { kind: "row"; row: SubmissionRow }
   | { kind: "nonSubmitter"; student: Student }
   | { kind: "groupRepo"; repo: GroupRepo }
+  | { kind: "teamNoRepo"; team: GroupTeamRef }
 
 // The default and offered "Show N entries" page sizes (mirrors the reference
 // gradebook UI). Default is the first entry.
@@ -1313,22 +1349,29 @@ export function buildRosterDisplayItems(
 // to the founder's submitted row when one exists (owner match) else an
 // unsubmitted group-repo row. The group analog of buildRosterDisplayItems.
 // `rows` are the (filtered) submitted group rows; `groupRepos` the unsubmitted
-// group repos.
+// group repos. Team mode may add `teamsWithoutRepos` (live teams whose repo
+// doesn't exist yet); they key on the same `group-<n>` owner segment, so the
+// shared sort interleaves them with the other team rows by counter.
 export function buildGroupRosterDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
   students: Student[],
   mode: StudentSortMode = "first",
+  teamsWithoutRepos: GroupTeamRef[] = [],
 ): DisplayItem[] {
   const submitted = rows.map<DisplayItem>((row) => ({ kind: "row", row }))
   const unsubmitted = groupRepos.map<DisplayItem>((repo) => ({
     kind: "groupRepo",
     repo,
   }))
+  const repoless = teamsWithoutRepos.map<DisplayItem>((team) => ({
+    kind: "teamNoRepo",
+    team,
+  }))
   // Precompute the name map once so the comparator is O(1) per compare (getName
   // would re-scan the roster each call).
   const names = buildNameKeyLookup(students, mode)
-  return [...submitted, ...unsubmitted].sort((a, b) =>
+  return [...submitted, ...unsubmitted, ...repoless].sort((a, b) =>
     ownerSortKey(displayItemOwner(a), names).localeCompare(
       ownerSortKey(displayItemOwner(b), names),
       undefined,
@@ -1339,14 +1382,20 @@ export function buildGroupRosterDisplayItems(
 
 // Build the ordered display list for a GROUP assignment under a non-name sort:
 // submitted group rows first (in the caller's sort order), then unsubmitted
-// group repos.
+// group repos, then (team mode) teams whose repo doesn't exist yet — the
+// timeless rows trail the timed ones, mirroring buildSortedDisplayItems.
 export function buildGroupDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
+  teamsWithoutRepos: GroupTeamRef[] = [],
 ): DisplayItem[] {
   return [
     ...rows.map<DisplayItem>((row) => ({ kind: "row", row })),
     ...groupRepos.map<DisplayItem>((repo) => ({ kind: "groupRepo", repo })),
+    ...teamsWithoutRepos.map<DisplayItem>((team) => ({
+      kind: "teamNoRepo",
+      team,
+    })),
   ]
 }
 
@@ -1408,8 +1457,9 @@ export function paginateDisplayItems(
 }
 
 // The repo-owner login for a display item. Submitted rows and group repos are
-// keyed by `owner`; a non-submitter by its roster username. Empty string is
-// filtered by the caller.
+// keyed by `owner`; a non-submitter by its roster username; a repo-less team
+// by the `group-<n>` segment its repo WOULD have. Empty string is filtered by
+// the caller.
 export function displayItemOwner(item: DisplayItem): string {
   switch (item.kind) {
     case "row":
@@ -1418,6 +1468,8 @@ export function displayItemOwner(item: DisplayItem): string {
       return item.student.username
     case "groupRepo":
       return item.repo.owner
+    case "teamNoRepo":
+      return `${GROUP_REPO_SEGMENT}${item.team.n}`
   }
 }
 
@@ -1463,6 +1515,7 @@ export function displayPageOwners({
   rows,
   nonSubmitters,
   groupRepos,
+  teamsWithoutRepos = [],
   page,
   pageSize,
 }: {
@@ -1472,6 +1525,10 @@ export function displayPageOwners({
   rows: SubmissionRow[]
   nonSubmitters: Student[]
   groupRepos: GroupRepo[]
+  // Team mode: live teams whose repo doesn't exist yet. They occupy display
+  // slots (so the page slice matches the rendered table) but contribute no
+  // owner — there is no repo for the fan-out to read.
+  teamsWithoutRepos?: GroupTeamRef[]
   page: number
   pageSize: number
 }): string[] {
@@ -1482,14 +1539,16 @@ export function displayPageOwners({
           groupRepos,
           students,
           sortNameMode(sort),
+          teamsWithoutRepos,
         )
-      : buildGroupDisplayItems(rows, groupRepos)
+      : buildGroupDisplayItems(rows, groupRepos, teamsWithoutRepos)
     : isNameSort(sort)
       ? buildRosterDisplayItems(students, rows, nonSubmitters)
       : buildSortedDisplayItems(rows, nonSubmitters)
   const seen = new Set<string>()
   const owners: string[] = []
   for (const item of paginateDisplayItems(items, pageSize, page)) {
+    if (item.kind === "teamNoRepo") continue
     const owner = displayItemOwner(item).trim()
     if (!owner) continue
     const key = owner.toLowerCase()

@@ -92,6 +92,7 @@ import {
   sortNameMode,
   studentInSection,
   submissionRosterStudents,
+  teamsWithoutRepos,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
@@ -294,6 +295,11 @@ const SubmissionsPageContent = () => {
     enabled: isTeamAssignment,
   })
   const groupTeams = groupTeamsQuery.data
+  // Whether the teams listing has SETTLED (fetched successfully at least
+  // once). Gates both mismatch indicators — the repo-less team rows and the
+  // per-row "team missing" error — so neither flashes while the listing
+  // loads (or asserts anything after a failed listing).
+  const teamsSettled = isTeamAssignment && groupTeamsQuery.isSuccess
   const groupTeamSlugs = useMemo(
     () => (groupTeams ?? []).map((team) => team.slug),
     [groupTeams],
@@ -583,6 +589,21 @@ const SubmissionsPageContent = () => {
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
     [rosterReady, snapshotRows, students],
   )
+  // Team mode's inverse gap (state 1): live teams whose expected repo doesn't
+  // exist and that no score row credits — otherwise invisible on this view.
+  // Derived from the SNAPSHOT owners (like the fan-out spine): a live-only row
+  // requires an existing repo, which already excludes its team here, so the
+  // snapshot set is complete and can't loop the fan-out's output back into its
+  // input. Computed only once the teams query has settled AND the org repo
+  // list is loaded, so the rows can't flash while either source resolves.
+  const missingRepoTeams = useMemo(() => {
+    if (!teamsSettled || !orgRepos) return []
+    return teamsWithoutRepos(
+      groupTeams ?? [],
+      new Set(groupRepoList.map((repo) => repo.owner)),
+      new Set(snapshotScoped.map((row) => row.owner.toLowerCase())),
+    )
+  }, [teamsSettled, orgRepos, groupTeams, groupRepoList, snapshotScoped])
   // Non-submitter pool for the fan-out's display list, filtered by the SAME
   // query + section + submission axes the rendered table applies — so the
   // fanned page lines up with the visible page. The ACCEPTED axis is neutralized
@@ -616,6 +637,7 @@ const SubmissionsPageContent = () => {
       }),
       nonSubmitters: liveNonSubmitterPool,
       groupRepos: groupRepoList,
+      teamsWithoutRepos: missingRepoTeams,
     }),
     [
       isGroupFlavor,
@@ -627,6 +649,7 @@ const SubmissionsPageContent = () => {
       sectionByUsername,
       groupRepoList,
       liveNonSubmitterPool,
+      missingRepoTeams,
     ],
   )
   const livePageOwners = useMemo(
@@ -1003,6 +1026,21 @@ const SubmissionsPageContent = () => {
       return name.length > 0 && name.includes(q)
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
+
+  // Repo-less teams, gated like the unsubmitted group repos (hidden while a
+  // narrowing filter other than "not submitted" is active) and matched against
+  // the search by display name or `group-<n>` owner segment.
+  const visibleMissingRepoTeams = useMemo(() => {
+    if (!showsNonSubmitters(effectiveFilters)) return []
+    const q = query.trim().toLowerCase()
+    if (!q) return missingRepoTeams
+    return missingRepoTeams.filter((team) => {
+      const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+      if (owner.includes(q)) return true
+      const name = groupDisplayNames?.get(owner)?.toLowerCase() ?? ""
+      return name.includes(q)
+    })
+  }, [effectiveFilters, query, missingRepoTeams, groupDisplayNames])
 
   // Scope the manual collect to this assignment: the workflow serializes runs
   // per scope and the Python side collects only the matching slug, so "Collect
@@ -1653,6 +1691,10 @@ const SubmissionsPageContent = () => {
           groupDisplayNames={groupDisplayNames}
           groupMemberLogins={groupMemberLogins}
           teamsByOwner={isTeamAssignment ? teamByOwner : undefined}
+          teamsWithoutRepos={
+            isTeamAssignment ? visibleMissingRepoTeams : undefined
+          }
+          teamsSettled={teamsSettled}
           teamFormation={
             isTeamAssignment ? assignmentInfo?.team_formation : undefined
           }
