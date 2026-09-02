@@ -17,6 +17,30 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.42.0](https://github.com/foundation50/classroom50/compare/web-v1.41.0...web-v1.42.0) (2026-09-02)
+
+
+### Features
+
+* expose the assignment bundle to declarative test commands ([#833](https://github.com/foundation50/classroom50/issues/833)) ([aeb154d](https://github.com/foundation50/classroom50/commit/aeb154dbed806b1a8311a2de66db72417ecaa47c))
+* label each collect by scope and make its button show progress ([#832](https://github.com/foundation50/classroom50/issues/832)) ([3765cf3](https://github.com/foundation50/classroom50/commit/3765cf3a363158d2c75dd37698c57cb0eedb2f91))
+* lock an assignment from the assignment form ([#839](https://github.com/foundation50/classroom50/issues/839)) ([7787456](https://github.com/foundation50/classroom50/commit/7787456251acb20ffd08687121e9fab0fa99264d))
+* **web:** add a Test token button to the service token settings ([#836](https://github.com/foundation50/classroom50/issues/836)) ([89bc87d](https://github.com/foundation50/classroom50/commit/89bc87d37ed9268cd627a1adc794ffcacb1a0aa3))
+
+
+### Bug Fixes
+
+* **cli:** name every required permission when the config repo read is refused ([#855](https://github.com/foundation50/classroom50/issues/855)) ([7acdcef](https://github.com/foundation50/classroom50/commit/7acdcefe5b7ad4513b99ce74d7b1cea4f967b18a))
+* count pushes without a graded release in the assignments list ([#838](https://github.com/foundation50/classroom50/issues/838)) ([b5853e7](https://github.com/foundation50/classroom50/commit/b5853e7931e2df3de4704ff3a8615e6e36000de0))
+* fetch the org repo listing in parallel and probe known repo names ([#829](https://github.com/foundation50/classroom50/issues/829)) ([45f95e4](https://github.com/foundation50/classroom50/commit/45f95e40e0754393e6b8889c9eb3e258def11f03))
+* make staff access grants visible and catch repo-scoped service tokens ([#835](https://github.com/foundation50/classroom50/issues/835)) ([f27b4dc](https://github.com/foundation50/classroom50/commit/f27b4dc20f509b568f82014e4c024768be196eb0))
+* **web:** free read slots during probe retries and stop retrying definitive pages ([5f6a902](https://github.com/foundation50/classroom50/commit/5f6a9024fa0dc60fdae8e01c5c2c7ba0ca59a1b9))
+* **web:** keep a concurrent lock when saving unrelated assignment edits ([a68f7f8](https://github.com/foundation50/classroom50/commit/a68f7f8bf1f0fc8f695ca6a0856dc1793352b16c))
+* **web:** list a student's repos newest first again ([a5dc835](https://github.com/foundation50/classroom50/commit/a5dc835ea6975f66ba196976b0473d55e173ba23))
+* **web:** read the full org listing on a roster error and re-read repos on Refresh ([4293f35](https://github.com/foundation50/classroom50/commit/4293f35e36cf703826c6fb9d45820707e666e6f5))
+* **web:** show collected submissions and live status to TAs and HTAs ([#831](https://github.com/foundation50/classroom50/issues/831)) ([6751b36](https://github.com/foundation50/classroom50/commit/6751b36cd5bf5a15fa223b5cd74a1ca68cf5a9b9))
+* **web:** small follow-ups on the submissions and settings pages ([6763aa6](https://github.com/foundation50/classroom50/commit/6763aa6525e20ccfc0461eccddabd3c5db7e57ea))
+
 ## [1.41.0](https://github.com/foundation50/classroom50/compare/web-v1.40.0...web-v1.41.0) (2026-09-02)
 
 

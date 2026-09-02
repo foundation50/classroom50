@@ -17,6 +17,27 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.42.0](https://github.com/foundation50/classroom50/compare/cli-v1.41.0...cli-v1.42.0) (2026-09-02)
+
+
+### Features
+
+* expose the assignment bundle to declarative test commands ([#833](https://github.com/foundation50/classroom50/issues/833)) ([aeb154d](https://github.com/foundation50/classroom50/commit/aeb154dbed806b1a8311a2de66db72417ecaa47c))
+* label each collect by scope and make its button show progress ([#832](https://github.com/foundation50/classroom50/issues/832)) ([3765cf3](https://github.com/foundation50/classroom50/commit/3765cf3a363158d2c75dd37698c57cb0eedb2f91))
+* lock an assignment from the assignment form ([#839](https://github.com/foundation50/classroom50/issues/839)) ([7787456](https://github.com/foundation50/classroom50/commit/7787456251acb20ffd08687121e9fab0fa99264d))
+
+
+### Bug Fixes
+
+* **cli:** explain hand-written tests.json errors and where tests belong ([#834](https://github.com/foundation50/classroom50/issues/834)) ([6b0b83c](https://github.com/foundation50/classroom50/commit/6b0b83cfad6048af79a9705dc114d2b73fa786d9))
+* **cli:** hand the classroom default autograder the extracted bundle ([515d4b6](https://github.com/foundation50/classroom50/commit/515d4b6367b2418bd99b9666532b4df44ed9454b))
+* **cli:** make collect warnings reflect what the run found ([f89fc10](https://github.com/foundation50/classroom50/commit/f89fc1050cd2a480d052464f066e7c9fac7e78f9))
+* **cli:** name every required permission when the config repo read is refused ([#855](https://github.com/foundation50/classroom50/issues/855)) ([7acdcef](https://github.com/foundation50/classroom50/commit/7acdcefe5b7ad4513b99ce74d7b1cea4f967b18a))
+* **cli:** reuse the org listing when detecting pushes without a release ([63f36d4](https://github.com/foundation50/classroom50/commit/63f36d43d64d0c2be2fe3d57970d251d58b68c0f))
+* count pushes without a graded release in the assignments list ([#838](https://github.com/foundation50/classroom50/issues/838)) ([b5853e7](https://github.com/foundation50/classroom50/commit/b5853e7931e2df3de4704ff3a8615e6e36000de0))
+* fetch the org repo listing in parallel and probe known repo names ([#829](https://github.com/foundation50/classroom50/issues/829)) ([45f95e4](https://github.com/foundation50/classroom50/commit/45f95e40e0754393e6b8889c9eb3e258def11f03))
+* make staff access grants visible and catch repo-scoped service tokens ([#835](https://github.com/foundation50/classroom50/issues/835)) ([f27b4dc](https://github.com/foundation50/classroom50/commit/f27b4dc20f509b568f82014e4c024768be196eb0))
+
 ## [1.41.0](https://github.com/foundation50/classroom50/compare/cli-v1.40.0...cli-v1.41.0) (2026-09-02)
 
 
