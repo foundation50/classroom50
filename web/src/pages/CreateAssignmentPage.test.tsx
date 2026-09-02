@@ -40,6 +40,7 @@ vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
       slug: string
       setup_timeout: number
       release_assets: string
+      locked: boolean
     }) => void
   }) => (
     <button
@@ -49,6 +50,7 @@ vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
           slug: "hw1",
           setup_timeout: 300,
           release_assets: "report.pdf",
+          locked: true,
         })
       }
     >
@@ -167,6 +169,15 @@ it("passes grading form fields through the create boundary", () => {
       setup_timeout: 300,
       release_assets: "report.pdf",
     }),
+    expect.any(Object),
+  )
+})
+
+it("passes the lock toggle through the create boundary", () => {
+  render(<CreateAssignmentPage />)
+  submit()
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({ locked: true }),
     expect.any(Object),
   )
 })

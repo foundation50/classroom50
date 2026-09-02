@@ -352,11 +352,14 @@ const AssignmentSettingsPage = () => {
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
             onSuccess={(result) => {
-              // Surface a non-fatal template-grant warning inline; else show
-              // the success banner. It persists until the next save clears it
-              // via onMutate (Primer: don't auto-dismiss status messages).
-              if (result?.templateGrantWarning) {
-                setEditWarning(result.templateGrantWarning)
+              // Surface a non-fatal template-grant or lock-revoke warning
+              // inline; else show the success banner. It persists until the
+              // next save clears it via onMutate (Primer: don't auto-dismiss
+              // status messages).
+              const warning =
+                result?.templateGrantWarning ?? result?.templateAccessWarning
+              if (warning) {
+                setEditWarning(warning)
               } else {
                 setEditSuccess(true)
               }

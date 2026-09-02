@@ -545,6 +545,7 @@ slug is too long.
 | `--template <owner>/<repo>[@branch]` | Starter-code repository (must be flagged as a template). A `@branch` suffix is ignored with a warning: the assignment always copies the template's default branch. |
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
+| `--locked` | Register the assignment locked: students can't see or accept it, and a private in-org template stays unreadable to the classroom team until you unlock with `gh teacher assignment lock --unlock` or `--locked=false` on a re-add. Omitting the flag on a re-add keeps the stored lock. See [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments). |
 | `--mode individual\|group\|team` | `individual` (default), `team` (a group assignment: one shared repository per group, owned by a GitHub Team), or `group` (the legacy collaborator-based shared repository). Both group modes require `--max-group-size`; `team` also requires `--team-formation`. |
 | `--team-formation teacher\|student` | Who forms a team assignment's groups: `teacher` (you create the group teams; see [Manage group teams](#manage-group-teams)) or `student` (the first student founds a group with `gh student accept --new-team`). Required with `--mode team`. |
 | `--max-group-size <N>` | Maximum group size (2–100). Enforced by Classroom 50 clients when groups form; advisory beyond that. |

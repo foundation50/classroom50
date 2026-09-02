@@ -14,11 +14,31 @@ Two controls build on that:
   It controls listing only, not access: a student with the invite link can
   still accept early, and students who already accepted always see the
   assignment.
-- **Lock assignment** (in the submissions page's **Actions** menu) blocks
-  access entirely: students can't accept it, and for a private template the
-  student team's read access is removed. **Unlock assignment** reopens it and
-  restores template access. Use it to prepare an assignment with no chance
-  of early accepts.
+- **Lock assignment** blocks access entirely: students can't see or accept
+  it, and for a private template in your organization the classroom team
+  loses read access to the template. Unlocking reverses both. The toggle is
+  in the **Schedule and access** section of the assignment form and in the
+  submissions page's **Actions** menu; the CLI equivalents are
+  `gh teacher assignment add --locked` and `gh teacher assignment lock`.
+
+### Timed assessments
+
+For an in-class test or exam, create the assignment locked so students can't
+read the template before the session starts.
+
+Prerequisite: the template repository is **private** and inside the
+classroom's organization. Locking a public template only hides the assignment
+in Classroom 50; anyone can still read the repository.
+
+1. Create the assignment with **Lock assignment** turned on, or run
+   `gh teacher assignment add` with `--locked`.
+2. When the session starts, turn **Lock assignment** off in the assignment's
+   settings, or run `gh teacher assignment lock` with `--unlock`.
+3. Send students the invite link.
+4. When the session ends, lock the assignment again to stop late accepts.
+   Existing student repositories are kept.
+
+Saving other settings on a locked assignment keeps it locked.
 
 To try the assignment before students do, accept it yourself from a separate
 student account, or add yourself to the roster; see

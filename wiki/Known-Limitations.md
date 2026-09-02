@@ -62,7 +62,10 @@ If a view looks stale, reload it. See
 by giving the classroom's team read access to the template, so a curious
 student can browse it, including its history. Never commit solutions (or
 their history) to a template: develop privately and copy or squash the clean
-state into the template repository you register.
+state into the template repository you register. A **locked** assignment is
+the exception: the team has no read access to its private template until you
+unlock. Create a timed assessment locked and unlock it when the session
+starts. See [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments).
 
 **Grading files are tamper-proof, not secret.** Test scripts and fixtures
 kept in `CLASSROOM/autograders/ASSIGNMENT/` never enter a student's

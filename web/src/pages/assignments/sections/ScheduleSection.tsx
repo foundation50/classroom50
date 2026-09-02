@@ -4,9 +4,9 @@ import { ToggleField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import { SectionCard } from "./SectionCard"
 
-// Schedule (IA overhaul U8): the opt-in release-date and due-date pickers. The
-// toggle state lives in the orchestrator so the pickers stay controlled across
-// the section split.
+// Schedule and access (IA overhaul U8): the opt-in release-date and due-date
+// pickers plus the lock toggle. The picker toggle state lives in the
+// orchestrator so the pickers stay controlled across the section split.
 export function ScheduleSection({
   form,
   onReset,
@@ -112,6 +112,18 @@ export function ScheduleSection({
                 </div>
               ) : null}
             </div>
+          )}
+        </form.Field>
+
+        <form.Field name="locked">
+          {(field) => (
+            <ToggleField
+              id={field.name}
+              checked={field.state.value}
+              onChange={(checked) => field.handleChange(checked)}
+              label={t("assignments.form.lockAssignment")}
+              help={t("assignments.form.lockAssignmentTip")}
+            />
           )}
         </form.Field>
       </div>

@@ -8,8 +8,9 @@ import CreateAssignmentForm, {
 } from "./CreateAssignmentForm"
 import { deriveFormShape } from "./formShape"
 import {
-  provisioningSettingsChanged,
+  editImpactSummary,
   type CreateAssignmentResult,
+  type EditImpact,
 } from "@/domain/assignments"
 import type { Assignment } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -18,7 +19,7 @@ import { useEditAssignment } from "@/hooks/mutations/useEditAssignment"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useGetStudents from "@/hooks/useGetStudents"
 import { assignmentRepoNames } from "@/pages/submissions/dashboard"
-import { ProvisioningChangeConfirmModal } from "@/components/modals/ProvisioningChangeConfirmModal"
+import { EditImpactConfirmModal } from "@/components/modals/EditImpactConfirmModal"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { parseSubmissionTags } from "@/util/submissionTags"
 
@@ -60,8 +61,8 @@ const EditAssignmentForm = ({
 
   // Deterministic acceptance count for this assignment, derived from the org
   // repo list + roster the same way the submissions page does (no per-student
-  // fetch). Gates the provisioning-change confirmation: zero accepted → the
-  // edit saves silently; one or more → confirm with a warning first. Both reads
+  // fetch). Gates the provisioning half of the edit confirm: zero accepted → a
+  // provisioning change saves silently; one or more → confirm first. Both reads
   // are cached and shared with other views, so this adds no dedicated request
   // beyond what a staff member already loads.
   const { data: orgRepos } = useGetOrgRepos(org)
@@ -79,11 +80,13 @@ const EditAssignmentForm = ({
     [isGroup, orgRepos, classroom, assignment, students],
   )
 
-  // A change to a provisioning-class setting is confirmed before it writes when
-  // students have already accepted. The submit is deferred through a promise the
-  // modal resolves (confirm) or rejects-as-cancel (so the form stays dirty and
-  // re-submittable, matching a failed write).
+  // An edit that changes what students can do or see (lock/unlock, or a
+  // provisioning-class setting once students accepted) is confirmed before it
+  // writes. The submit is deferred through a promise the modal resolves
+  // (confirm) or rejects-as-cancel (so the form stays dirty and re-submittable,
+  // matching a failed write).
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [pendingImpact, setPendingImpact] = useState<EditImpact[]>([])
   const pendingSubmit = useRef<{
     run: () => Promise<void>
     resolve: () => void
@@ -96,7 +99,7 @@ const EditAssignmentForm = ({
     // onSubmit rejects and the form is left dirty (no reset), never written.
     const pending = pendingSubmit.current
     pendingSubmit.current = null
-    pending?.reject(new Error("provisioning-change-cancelled"))
+    pending?.reject(new Error("edit-confirm-cancelled"))
   }
 
   const confirmSubmit = async () => {
@@ -142,6 +145,7 @@ const EditAssignmentForm = ({
                 description: values.description,
                 due_date: values.due_date,
                 available_from_date: values.available_from_date,
+                locked: values.locked,
                 max_group_size: values.max_group_size,
                 team_formation: values.team_formation,
                 feedback_pr: values.feedback_pr,
@@ -192,15 +196,23 @@ const EditAssignmentForm = ({
                   onError,
                 })
 
-              // Confirm only when a provisioning-class setting changed AND
+              // Confirm when the save changes what students can do or see: a
+              // lock transition always, a provisioning-class change only once
               // students already accepted (their repos keep the old setup).
-              const changed = provisioningSettingsChanged(defaultData, {
-                empty_repo: values.empty_repo,
-                no_autograder: shape.noAutograder,
-                init_shim: shape.initShim,
-                gradingMode: values.grading_choice,
-              })
-              if (changed && acceptedCount > 0) {
+              const impact = editImpactSummary(
+                defaultData,
+                {
+                  empty_repo: values.empty_repo,
+                  no_autograder: shape.noAutograder,
+                  init_shim: shape.initShim,
+                  gradingMode: values.grading_choice,
+                  student_permission: values.student_permission || undefined,
+                  repo_visibility: values.repo_visibility,
+                  locked: values.locked,
+                },
+                acceptedCount,
+              )
+              if (impact.length > 0) {
                 await new Promise<void>((resolve, reject) => {
                   pendingSubmit.current = {
                     run: async () => {
@@ -209,6 +221,7 @@ const EditAssignmentForm = ({
                     resolve,
                     reject,
                   }
+                  setPendingImpact(impact)
                   setConfirmOpen(true)
                 })
                 return
@@ -217,10 +230,11 @@ const EditAssignmentForm = ({
               await run()
             }}
           />
-          <ProvisioningChangeConfirmModal
+          <EditImpactConfirmModal
             open={confirmOpen}
             onClose={closeConfirm}
             onConfirm={() => void confirmSubmit()}
+            impact={pendingImpact}
             acceptedCount={acceptedCount}
             saving={editAssignmentMutation.isPending}
           />

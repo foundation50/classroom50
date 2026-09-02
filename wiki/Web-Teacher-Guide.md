@@ -876,7 +876,9 @@ assignment:
 - **Lock assignment** / **Unlock assignment** — lock the assignment so
   students can't access or accept it (and, for a private template, remove the
   student team's read on it); unlock reopens it and restores template access.
-  Useful for staging an assignment before release.
+  The same toggle is in the **Schedule and access** section of the
+  assignment form, so you can create an assignment already locked. See
+  [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments).
 - **Download scores (CSV)** — export all submissions as a CSV.
 - **Download all submissions** — download each repository's latest submission
   bundled into a single zip (built in the browser, one repository at a time;

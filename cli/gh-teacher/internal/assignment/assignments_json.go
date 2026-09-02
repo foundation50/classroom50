@@ -152,7 +152,9 @@ type AssignmentsJSON struct {
 // already accepted. Client gates are advisory (assignments.json is public); the
 // enforceable boundary is that locking a PRIVATE in-org template also removes
 // the STUDENT team's read on it (staff teams untouched), and unlocking
-// re-grants it. Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+// re-grants it. Set at creation (`assignment add --locked` or the web form) the
+// grant is withheld until the first unlock. Mirrors FeedbackPR's wire shape:
+// omitempty, absent reads as false.
 //
 // Closed narrowly ends the submission WINDOW: unlike Locked it only refuses a
 // NEW accept (web + `gh student accept`); it does NOT hide the assignment or

@@ -267,7 +267,9 @@ export type Assignment = {
   // The enforceable boundary applies only to a PRIVATE in-org template:
   // locking also removes the classroom STUDENT team's read on it (teacher/
   // head-TA/TA untouched); unlocking re-grants it. Existing student repos are
-  // not deleted. Omitted when false (CLI omitempty); absent reads as false.
+  // not deleted. Set at creation (form toggle / `--locked`) it withholds the
+  // grant until the first unlock; a create/edit flip has the same access
+  // effect as the lock action. Omitted when false (CLI omitempty).
   locked?: boolean
   // End the assignment's submission window. UNLIKE `locked`, `closed` is narrow:
   // its only effect is that the accept flow (web + `gh student accept`) refuses a

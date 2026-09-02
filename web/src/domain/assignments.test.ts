@@ -8,6 +8,7 @@ import {
   assertAssignmentModeCoherent,
   buildReusedEntry,
   copyAssignmentToClassroom,
+  createAssignment,
   createAssignmentRepo,
   editAssignment,
   formatTemplateRef,
@@ -380,9 +381,11 @@ describe("preserveUnmanagedAssignmentKeys", () => {
     expect(merged.due).toBeUndefined()
   })
 
-  it("preserves closed (and locked) across an edit that never carries them", () => {
-    // Both flags are owned by their own actions, not the edit form; a rebuilt
-    // entry omits them, so the merge must carry them forward verbatim.
+  it("preserves closed across an edit that never carries it, but not locked", () => {
+    // closed is owned by its own action, not the edit form; a rebuilt entry
+    // omits it, so the merge must carry it forward verbatim. locked is now a
+    // form-owned key: the merge leaves it to the rebuilt entry (editAssignment
+    // carries the stored value forward itself when the input has no decision).
     const existing: Assignment = { ...fullSource, closed: true, locked: true }
     const edited: Assignment = {
       slug: "hw1",
@@ -392,7 +395,7 @@ describe("preserveUnmanagedAssignmentKeys", () => {
     }
     const merged = preserveUnmanagedAssignmentKeys(existing, edited)
     expect(merged.closed).toBe(true)
-    expect(merged.locked).toBe(true)
+    expect(merged.locked).toBeUndefined()
   })
 })
 
@@ -1648,8 +1651,9 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
   const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
   // Drives editAssignment down the in-org-private-template grant path and
-  // records every team-repo PUT so a test can assert which teams got read on
-  // the template. classroomJson controls the recorded team/teams block.
+  // records every team-repo PUT (and DELETE) so a test can assert which teams
+  // got or lost read on the template. classroomJson controls the recorded
+  // team/teams block; storedLocked seeds the stored entry's lock flag.
   function makeGrantClient(opts: {
     classroomJson: Record<string, unknown>
     taGrantThrows?: boolean
@@ -1658,8 +1662,16 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     // a public template (no grant), or isTemplate:false to model a non-template.
     templatePrivate?: boolean
     templateIsTemplate?: boolean
-  }): { client: GitHubClient; grants: () => string[] } {
+    storedLocked?: boolean
+  }): {
+    client: GitHubClient
+    grants: () => string[]
+    revokes: () => string[]
+    committed: () => string | undefined
+  } {
     const grants: string[] = []
+    const revokes: string[] = []
+    let committed: string | undefined
     const templatePrivate = opts.templatePrivate ?? true
     const templateIsTemplate = opts.templateIsTemplate ?? true
     // Serve a repo read for BOTH the changed ref (tmpl-v2) and the stored ref
@@ -1682,53 +1694,65 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
           autograder: "default",
           feedback_pr: true,
           template: { owner: ORG, repo: "tmpl", branch: "main" },
+          ...(opts.storedLocked ? { locked: true } : {}),
         },
       ],
     }
 
-    const request = vi.fn(async (url: string, init?: { method?: string }) => {
-      const method = init?.method ?? "GET"
-      // Team-repo grant PUT: /orgs/{org}/teams/{slug}/repos/{owner}/{repo}
-      const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
-      if (method === "PUT" && grantMatch) {
-        if (grantMatch[1].endsWith("-ta") && opts.taGrantThrows) {
-          throw new GitHubAPIError({
-            status: 500,
-            url,
-            message: "boom",
-            body: null,
-            rateLimit: {
-              limit: null,
-              remaining: null,
-              used: null,
-              reset: null,
-              resource: null,
-              retryAfter: null,
-            },
-          })
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        const method = init?.method ?? "GET"
+        // Team-repo grant PUT / revoke DELETE:
+        // /orgs/{org}/teams/{slug}/repos/{owner}/{repo}
+        const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
+        if (method === "PUT" && grantMatch) {
+          if (grantMatch[1].endsWith("-ta") && opts.taGrantThrows) {
+            throw new GitHubAPIError({
+              status: 500,
+              url,
+              message: "boom",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            })
+          }
+          grants.push(grantMatch[1])
+          return {}
         }
-        grants.push(grantMatch[1])
-        return {}
-      }
-      if (/\/repos\/[^/]+\/classroom50$/.test(url))
-        return { default_branch: "main" }
-      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
-      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
-      if (url.includes("/contents/cs50/assignments.json")) {
-        return {
-          type: "file",
-          encoding: "base64",
-          content: b64(JSON.stringify(assignmentsFile)),
+        if (method === "DELETE" && grantMatch) {
+          revokes.push(grantMatch[1])
+          return {}
         }
-      }
-      if (url.includes(`/repos/${ORG}/tmpl-v2`)) return makeRepo("tmpl-v2")
-      if (/\/repos\/[^/]+\/tmpl(\?|$)/.test(url)) return makeRepo("tmpl")
-      if (url.endsWith("/git/trees")) return { sha: "newtree" }
-      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
-      if (method === "PATCH" && url.includes("/git/refs/heads/main"))
-        return { object: { sha: "newcommit" } }
-      throw new Error(`unexpected request: ${method} ${url}`)
-    })
+        if (/\/repos\/[^/]+\/classroom50$/.test(url))
+          return { default_branch: "main" }
+        if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+        if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+        if (url.includes("/contents/cs50/assignments.json")) {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: b64(JSON.stringify(assignmentsFile)),
+          }
+        }
+        if (url.includes(`/repos/${ORG}/tmpl-v2`)) return makeRepo("tmpl-v2")
+        if (/\/repos\/[^/]+\/tmpl(\?|$)/.test(url)) return makeRepo("tmpl")
+        if (url.endsWith("/git/trees")) {
+          const body = init?.body as { tree?: { content?: string }[] }
+          committed = body?.tree?.[0]?.content
+          return { sha: "newtree" }
+        }
+        if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+        if (method === "PATCH" && url.includes("/git/refs/heads/main"))
+          return { object: { sha: "newcommit" } }
+        throw new Error(`unexpected request: ${method} ${url}`)
+      },
+    )
 
     // getClassroomJson (requestRaw) returns the recorded team block; the
     // archive guard reads the same body (active by default).
@@ -1737,6 +1761,8 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     return {
       client: { request, requestRaw } as unknown as GitHubClient,
       grants: () => grants,
+      revokes: () => revokes,
+      committed: () => committed,
     }
   }
 
@@ -1958,6 +1984,152 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     expect(grants()).toEqual([])
     expect(result.templateGrantWarning).toBeDefined()
     expect(result.templateGrantWarning).toContain("organization owner")
+  })
+
+  // The form's "Lock assignment" toggle rides the create/edit write paths and
+  // must have the same access effect as setAssignmentLock: a locked create or
+  // a false-to-true edit hands students no template read; a true-to-false edit
+  // restores it; a locked entry that stays locked is left alone.
+  describe("lock from the form (create/edit share the lock action's effect)", () => {
+    const studentOnly = {
+      schema: "classroom50/classroom/v1",
+      short_name: CLASSROOM,
+      team: { id: 7, slug: "classroom50-cs50" },
+      teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+    }
+
+    function createInput(locked: boolean) {
+      return {
+        org: ORG,
+        classroom: CLASSROOM,
+        slug: "hw2",
+        name: "Homework 2",
+        description: "",
+        template_repo: "tmpl",
+        due_date: "",
+        available_from_date: "",
+        mode: "individual",
+        max_group_size: 0,
+        release_assets: "",
+        tests: [],
+        canGrantTemplateAccess: true,
+        locked,
+      } as unknown as Parameters<typeof createAssignment>[1]
+    }
+
+    it("create locked: writes locked and grants NO team read", async () => {
+      const { client, grants, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      const result = await createAssignment(client, createInput(true))
+
+      expect(result.templateGrantWarning).toBeUndefined()
+      const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+      expect(written.assignments.find((a) => a.slug === "hw2")?.locked).toBe(
+        true,
+      )
+      expect(grants()).toEqual([])
+    })
+
+    it("create unlocked (control): omits the key and grants as before", async () => {
+      const { client, grants, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      await createAssignment(client, createInput(false))
+
+      const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+      expect(
+        written.assignments.find((a) => a.slug === "hw2"),
+      ).not.toHaveProperty("locked")
+      expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+    })
+
+    it("edit false-to-true: writes locked, revokes ONLY the student team, grants nothing", async () => {
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateGrantWarning).toBeUndefined()
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(committed()).toContain(`"locked": true`)
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual(["classroom50-cs50"])
+    })
+
+    it("edit true-to-false: drops the key and re-grants (student + staff)", async () => {
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: false,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(committed()).not.toContain(`"locked"`)
+      expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+      expect(revokes()).toEqual([])
+    })
+
+    it("edit that stays locked: no grant, no revoke", async () => {
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      await editAssignment(client, input)
+
+      expect(committed()).toContain(`"locked": true`)
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual([])
+    })
+
+    it("edit with no lock decision carries the stored lock forward", async () => {
+      // A caller that renders no lock control (input.locked undefined) must not
+      // unlock as a side effect of saving other fields.
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+      })
+
+      await editAssignment(client, editInput("tmpl"))
+
+      expect(committed()).toContain(`"locked": true`)
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual([])
+    })
+
+    it("edit false-to-true on a PUBLIC template is UX-gate only (no revoke)", async () => {
+      const { client, grants, revokes } = makeGrantClient({
+        classroomJson: studentOnly,
+        templatePrivate: false,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual([])
+    })
   })
 
   // resolveTemplateGrant is the single grant-decision recipe shared verbatim by

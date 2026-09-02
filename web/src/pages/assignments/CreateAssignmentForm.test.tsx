@@ -180,6 +180,66 @@ describe("Set a due date toggle (issue #195)", () => {
   })
 })
 
+// The "Lock assignment" toggle rides the same form -> onSubmit boundary as the
+// pickers: create defaults it off, edit seeds it from the stored entry, and a
+// flip reaches the submitted values (the write path turns it into the lock
+// action's effect).
+describe("Lock assignment toggle", () => {
+  const renderForm = (ui: ReactElement) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        {ui}
+      </QueryClientProvider>,
+    )
+
+  it("create opens unlocked and submits locked after a click", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        defaultValues={{ name: "Homework 1", slug: "hw1" }}
+        onSubmit={onSubmit}
+      />,
+    )
+    const toggle = container.querySelector<HTMLInputElement>("#locked")
+    expect(toggle?.checked).toBe(false)
+    await user.click(toggle!)
+    expect(toggle?.checked).toBe(true)
+
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.createButton" }),
+    )
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].locked).toBe(true)
+  })
+
+  it("edit seeds the toggle from the stored lock and submits the flip", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        edit
+        defaultValues={assignmentToFormValues({
+          ...(baseAssignment as Assignment),
+          locked: true,
+        })}
+        onSubmit={onSubmit}
+      />,
+    )
+    const toggle = container.querySelector<HTMLInputElement>("#locked")
+    expect(toggle?.checked).toBe(true)
+    await user.click(toggle!)
+
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.saveChanges" }),
+    )
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].locked).toBe(false)
+  })
+})
+
 // The slug field: auto-fills from the name in create mode until the teacher
 // edits it, re-arms when they clear it, and is shown read-only in edit mode.
 describe("assignment slug field", () => {

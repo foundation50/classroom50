@@ -84,6 +84,10 @@ export type CreateAssignmentResult = CreateClassroomResult & {
   // private in-org template failed — a non-fatal warning the UI surfaces
   // (students can't accept until fixed). Mirrors teamDeleteWarning.
   templateGrantWarning?: string
+  // Set when an edit locked the assignment but revoking the student team's
+  // read on its private in-org template failed (non-fatal, the commit landed).
+  // Same shape and surfacing as SetAssignmentLockResult.templateAccessWarning.
+  templateAccessWarning?: string
 }
 
 // Ownership of every Assignment entry-level key on the edit path. Typed as a
@@ -149,10 +153,11 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // Written only by the one-shot slug rename; carries the reservation and
   // collection-grandfather contracts, so an edit must never drop it.
   renamed_from: "preserved",
-  // Owned by the separate lock/unlock action (useSetAssignmentLock), never the
-  // create/edit form, so an edit must preserve it verbatim — otherwise saving
-  // an edit would silently unlock a locked assignment.
-  locked: "preserved",
+  // Rebuilt from input: the form's "Lock assignment" toggle shares this key
+  // with the lock/unlock action (useSetAssignmentLock). editAssignment carries
+  // the stored value forward when the input carries no decision, and mirrors
+  // the action's template-read revoke on a false-to-true save.
+  locked: "classroom50-owned",
   // Owned by the separate close/reopen action (useSetAssignmentClosed), never
   // the create/edit form, so an edit must preserve it verbatim — otherwise
   // saving an edit would silently reopen a closed submission window.
@@ -244,6 +249,14 @@ export async function editAssignment(
   // can never rename an assignment, regardless of what the caller passed.
   editedAssignment.slug = targetAssignment.slug
 
+  // A caller that renders no lock control (input.locked undefined) must not
+  // silently unlock; only an explicit decision changes the stored state.
+  const wasLocked = Boolean(targetAssignment.locked)
+  if (input.locked === undefined && wasLocked) {
+    editedAssignment.locked = true
+  }
+  const nowLocked = Boolean(editedAssignment.locked)
+
   // The form rebuilds only the fields it manages; carry forward the rest
   // (e.g., `migrated_from`, unknown future keys) so an edit doesn't drop them.
   const preservedEntry = preserveUnmanagedAssignmentKeys(
@@ -293,8 +306,9 @@ export async function editAssignment(
   // any other field must not re-grant it (needsTeamGrant re-affirms the grant on
   // every save of a private in-org template). Skip the grant while locked so an
   // ordinary edit can't silently re-open it — mirrors the CLI add/reuse guard.
+  // The same re-affirm is what restores the read on a true-to-false save.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && preservedEntry.template && !preservedEntry.locked) {
+  if (needsTeamGrant && preservedEntry.template && !nowLocked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
       input.org,
@@ -305,6 +319,22 @@ export async function editAssignment(
     )
   }
 
+  // A false-to-true save is the lock action in form clothing: revoke the
+  // student team's read on a private in-org template, exactly like
+  // setAssignmentLock. Only the transition revokes; a save that stays locked
+  // has nothing to remove.
+  let templateAccessWarning: string | undefined
+  if (nowLocked && !wasLocked) {
+    templateAccessWarning = await reconcileLockTemplateAccess(
+      client,
+      input.org,
+      input.classroom,
+      input.slug,
+      preservedEntry.template,
+      true,
+    )
+  }
+
   return {
     previousCommitSha: ref.object.sha,
     baseTreeSha: commit.tree.sha,
@@ -312,6 +342,7 @@ export async function editAssignment(
     newCommitSha: newCommit.sha,
     updatedRef,
     templateGrantWarning,
+    templateAccessWarning,
   }
 }
 
@@ -629,6 +660,12 @@ async function buildAssignmentEntry(
     if (due_meta) {
       entry.available_from_meta = due_meta
     }
+  }
+  // Written only when true (omitempty), matching setAssignmentLock which drops
+  // the key on unlock. The create/edit write paths gate the template team grant
+  // on this flag so a locked assignment never hands students the template.
+  if (input.locked) {
+    entry.locked = true
   }
   if (input.mode === "group" || input.mode === "team") {
     // A group size outside [GROUP_SIZE_MIN, GROUP_SIZE_MAX] (or non-integer)
@@ -1179,8 +1216,11 @@ export async function createAssignment(
     configBranch,
   )
 
+  // A locked create deliberately hands students no template read: the grant
+  // happens on unlock (setAssignmentLock or a later edit), so a timed
+  // assessment's template stays invisible until the teacher opens it.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && assignmentBody.template) {
+  if (needsTeamGrant && assignmentBody.template && !assignmentBody.locked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
       input.org,
