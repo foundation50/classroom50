@@ -1049,6 +1049,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	if resolved != nil {
 		templateDesc = fmt.Sprintf("template %s/%s@%s", resolved.Owner, resolved.Repo, resolved.Branch)
 	}
+	// Said on the summary line for every template kind: the stderr note below
+	// only fires for a private in-org template, and a public or absent one is
+	// still UX-locked for every student.
+	if committedLocked {
+		templateDesc += ", locked"
+	}
 	_, _ = fmt.Fprintf(out, "%s/%s/%s: %s %s (%s, autograder %s)\n",
 		org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), action, slug,
 		templateDesc, entry.Autograder)

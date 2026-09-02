@@ -390,6 +390,48 @@ func TestRunAssignmentAdd_LockedFlagOnFreshAddSkipsGrant(t *testing.T) {
 	if !strings.Contains(errOut.String(), "locked") {
 		t.Errorf("expected the locked note on stderr, got %q", errOut.String())
 	}
+	if !strings.Contains(out.String(), ", locked, ") {
+		t.Errorf("expected the summary line to say the entry is locked, got %q", out.String())
+	}
+}
+
+// TestRunAssignmentAdd_LockedFlagOnPublicTemplateIsConfirmed: with a PUBLIC
+// template there is no read to withhold, so the stderr note never fires; the
+// summary line is then the only confirmation that --locked took effect.
+func TestRunAssignmentAdd_LockedFlagOnPublicTemplateIsConfirmed(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: false,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "exam",
+		Name:          "Exam",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+		Locked:        true,
+		LockedChanged: true,
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(--locked, public template): %v", err)
+	}
+	file := decodeLock(t, fix)
+	idx, ok := assignment.FindAssignment(file.Assignments, "exam")
+	if !ok || !file.Assignments[idx].Locked {
+		t.Fatalf("expected the new entry to be written locked, got %+v", file.Assignments)
+	}
+	if !strings.Contains(out.String(), ", locked, ") {
+		t.Errorf("expected the summary line to say the entry is locked, got %q", out.String())
+	}
+	if strings.Contains(errOut.String(), "was not granted read") {
+		t.Errorf("a public template has no read to withhold; got the private-template note %q", errOut.String())
+	}
 }
 
 // TestRunAssignmentAdd_LockedFlagOnReAddRevokes: `--locked` on a same-slug
