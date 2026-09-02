@@ -823,7 +823,25 @@ token problem, so don't rotate the token for it:
 Also check the assignment itself: with autograding paused or a tag-mode
 assignment no one has submitted to, there are no results to collect.
 
+The warning is skipped when the run detected pushes that the autograder has not
+graded yet: reading those repositories proves the token works, and the gap is
+the autograder's (see ["The collection run did not complete successfully."](#the-collection-run-did-not-complete-successfully)).
+
 See the [service-token setup](GitHub-Integration#4-fine-grained-pat-for-score-collection).
+
+### `collect-scores` says "no staff access was granted"
+
+Collection grants the head TA and TA teams read access to student repositories
+as it runs, and reports when it had nobody to grant it to. The level tells you
+whether anything needs fixing:
+
+- A **notice** means the classroom has no staff team at all: nothing in
+  `classroom.json` names one and none exists on GitHub. A solo teacher can
+  ignore it. It stops once you add a TA on the roster page or with
+  `gh teacher staff add <org> <classroom> <username> --role ta`.
+- A **warning** means a staff team exists but has no members, or a team
+  recorded in `classroom.json` is missing or couldn't be read. Check each TA's
+  role on the roster page, then run collection again.
 
 ### "The collection run did not complete successfully."
 

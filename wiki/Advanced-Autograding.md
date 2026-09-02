@@ -47,8 +47,9 @@ The runner provides:
 
 - **Environment variables:** `CLASSROOM`, `ASSIGNMENT`, `SUBMISSION_TAG`,
   `PAGES_BASE_URL`, `USERNAME`/`OWNER`, `ASSIGNMENT_TYPE`, `COMMIT_URL`,
-  `RELEASE_URL`, `REVIEW_URL`, `CLASSROOM50_BUNDLE_DIR` (the directory the
-  entrypoint was extracted to), and all standard `GITHUB_*`.
+  `RELEASE_URL`, `REVIEW_URL`, `CLASSROOM50_BUNDLE_DIR` (the assignment's
+  extracted bundle folder, also when the entrypoint is the classroom default),
+  and all standard `GITHUB_*`.
 - **Working directory:** the student's checkout (relative paths resolve to
   student code).
 - **Sibling files:** anything else under `CLASSROOM/autograders/ASSIGNMENT/` is
@@ -176,6 +177,11 @@ default that grades every assignment without its own autograder or tests. With n
 `--from`, it installs a diagnostic stub (echoes the environment, emits a vacuous
 pass) — useful for verifying the pipeline. Inspect it with `autograder show`, and
 delete it outright with `autograder remove`.
+
+The default runs from the runtime directory, not from the assignment's bundle, so
+read per-assignment fixtures through `$CLASSROOM50_BUNDLE_DIR` rather than
+`Path(__file__).parent`. It points at `CLASSROOM/autograders/ASSIGNMENT/` when
+that folder was published, and at the runtime directory otherwise.
 
 ## The `result.json` contract
 

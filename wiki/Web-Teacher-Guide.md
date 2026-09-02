@@ -841,7 +841,9 @@ organization owners.
 The **Actions** menu at the top of the submissions page operates on the whole
 assignment:
 
-- **Metrics** — summary statistics for the assignment.
+- **Metrics** — summary statistics of the collected scores. Shown only for
+  empty-repository assignments; every other assignment shows live status in
+  the table instead.
 - **Open all Feedback PRs** — review each student's feedback pull request in
   turn.
 - **Collect now** — trigger a score collection scoped to this assignment.
