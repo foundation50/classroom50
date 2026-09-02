@@ -628,8 +628,30 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 # Per-classroom collection ----------------------------------------------------
 
 
+class RepoFacts(NamedTuple):
+    """What a listing (or a direct read) said about one repo, kept so a later
+    pass does not re-read the repo to learn it. `size` is GitHub's kilobyte
+    figure; 0 means the repo has no commits, so there is nothing to detect."""
+
+    private: bool
+    default_branch: str | None = None
+    size: int | None = None
+
+
+def repo_facts(repo: dict[str, Any]) -> RepoFacts:
+    """The RepoFacts of one repo object. `private` is strict (anything but the
+    boolean true reads as public, as before); the rest is optional."""
+    branch = repo.get("default_branch")
+    size = repo.get("size")
+    return RepoFacts(
+        repo.get("private") is True,
+        branch if isinstance(branch, str) and branch else None,
+        size if isinstance(size, int) and not isinstance(size, bool) else None,
+    )
+
+
 class RepoIndex:
-    """The org's repos (lowercased name -> `private`), read once per run and only
+    """The org's repos (lowercased name -> RepoFacts), read once per run and only
     when something asks.
 
     Both passes walk the (team member × assignment) product — thousands of names
@@ -659,16 +681,16 @@ class RepoIndex:
         self._api_url = api_url
         self._org = org
         self._token = token
-        self._repos: dict[str, bool] | None = None
+        self._repos: dict[str, RepoFacts] | None = None
         self._loaded = False
         self._started = 0.0
         # Probe mode: page 1 plus per-name answers. `_found` maps a name to its
-        # private flag, or None when its read failed (unknown, fails open);
-        # `_missing` holds the names that 404ed so they are not probed twice.
+        # facts, or None when its read failed (unknown, fails open); `_missing`
+        # holds the names that 404ed so they are not probed twice.
         self._probing = False
         self._last_page = 1
         self._probes_spent = 0
-        self._found: dict[str, bool | None] = {}
+        self._found: dict[str, RepoFacts | None] = {}
         self._missing: set[str] = set()
 
     def prefetch(self, repo_names: Iterable[str]) -> None:
@@ -681,7 +703,7 @@ class RepoIndex:
             return
         self._probe([name for name in names if not self._resolved(name)])
 
-    def _load(self, hint: list[str] | None = None) -> dict[str, bool] | None:
+    def _load(self, hint: list[str] | None = None) -> dict[str, RepoFacts] | None:
         """The repos, or None when the listing is unknown (unreadable, or being
         answered by probes). Reads once; a soft failure warns once and stays None.
 
@@ -717,7 +739,7 @@ class RepoIndex:
             )
             return None
 
-    def _read(self, hint: list[str] | None) -> dict[str, bool] | None:
+    def _read(self, hint: list[str] | None) -> dict[str, RepoFacts] | None:
         """One attempt at the org listing (or, given a small enough hint, its
         first page plus probes)."""
         if hint is None:
@@ -754,7 +776,7 @@ class RepoIndex:
             repos.update(rest)
         return self._listing(repos)
 
-    def _listing(self, repos: dict[str, bool] | None) -> dict[str, bool] | None:
+    def _listing(self, repos: dict[str, RepoFacts] | None) -> dict[str, RepoFacts] | None:
         """Accept a complete listing, treating empty as unknown."""
         if not repos:
             return None
@@ -764,7 +786,7 @@ class RepoIndex:
         )
         return repos
 
-    def _complete_listing(self) -> dict[str, bool] | None:
+    def _complete_listing(self) -> dict[str, RepoFacts] | None:
         """Leave probe mode by reading the rest of the listing. Probed answers
         are kept: a name found by probe is in the org whether or not it lands on
         a page (a repo created mid-walk shifts the pages). A soft failure leaves
@@ -778,7 +800,7 @@ class RepoIndex:
         if rest is None:
             self._repos = None
             return None
-        repos = {name: private for name, private in self._found.items() if private is not None}
+        repos = {name: facts for name, facts in self._found.items() if facts is not None}
         repos.update(rest)
         self._repos = self._listing(repos)
         return self._repos
@@ -799,7 +821,7 @@ class RepoIndex:
         self._found.update(found)
         self._missing.update(name for name in names if name not in found)
 
-    def _answers(self, name: str) -> dict[str, bool | None] | None:
+    def _answers(self, name: str) -> dict[str, RepoFacts | None] | None:
         """The map that holds `name`'s answer: the listing, or in probe mode the
         probe results once `name` is resolved (which may complete the listing).
         None when the listing is unknown. In probe mode an unknown name maps to
@@ -818,13 +840,18 @@ class RepoIndex:
         answers = self._answers(name)
         return answers is None or name in answers
 
-    def is_private(self, repo_name: str) -> bool | None:
-        """Whether `repo_name` is private, or None when the index can't say (the
-        listing was unreadable, or the name isn't in it). Answers from the
-        listing already read, saving the caller a per-repo request."""
+    def facts(self, repo_name: str) -> RepoFacts | None:
+        """What the listing said about `repo_name`, or None when the index can't
+        say (the listing was unreadable, or the name isn't in it). Answers from
+        the read already made, saving the caller a per-repo request."""
         name = repo_name.lower()
         answers = self._answers(name)
         return None if answers is None else answers.get(name)
+
+    def is_private(self, repo_name: str) -> bool | None:
+        """Whether `repo_name` is private, or None when the index can't say."""
+        facts = self.facts(repo_name)
+        return None if facts is None else facts.private
 
     def names(self) -> list[str] | None:
         """Every visible repo name (lowercased), or None when the listing is
@@ -1058,6 +1085,10 @@ class SubmissionDetector:
         # Already parsed by the caller (parse_due), which owns the one warning
         # for a malformed value.
         due: datetime.datetime | None,
+        # The run's RepoIndex, when the caller has one: what its listing said
+        # about a repo spares detection a request per repo (see
+        # detect_repo_submissions). None probes cold.
+        repo_index: RepoIndex | None = None,
     ) -> None:
         self._api_url = api_url
         self._org = org
@@ -1065,6 +1096,7 @@ class SubmissionDetector:
         self._slug = slug
         self._token = service_token
         self._roster_logins = roster_logins
+        self._repo_index = repo_index
         self._is_team = normalize_assignment_type(entry.get("mode")) == "team"
 
         self._mode = "tag" if entry.get("submission_mode") == "tag" else "every-push"
@@ -1073,9 +1105,18 @@ class SubmissionDetector:
         self._due = due
 
     def detect(self, username: str, repo_name: str) -> tuple[dict[str, Any] | None, bool]:
+        facts = (
+            self._repo_index.facts(repo_name) if self._repo_index is not None else None
+        )
         try:
             detections = detect_repo_submissions(
-                self._api_url, self._org, repo_name, self._token, self._mode, self._tags
+                self._api_url,
+                self._org,
+                repo_name,
+                self._token,
+                self._mode,
+                self._tags,
+                facts=facts,
             )
         except urllib.error.HTTPError as exc:
             if classify(exc) is not SKIPPABLE:
@@ -1161,6 +1202,7 @@ def collect_detected(
         service_token=service_token,
         roster_logins=roster_logins,
         due=parse_due(classroom_short, slug, entry),
+        repo_index=repo_index,
     )
     # team_usernames arrives already case-insensitively deduped (the
     # list_enrolled_logins union), so each repo is polled exactly once.
@@ -1380,6 +1422,7 @@ def collect_classroom(
             service_token=service_token,
             roster_logins=roster_logins,
             due=due,
+            repo_index=repo_index,
         )
         detected_records: list[dict[str, Any]] = []
         detected_visited: set[str] = set()
@@ -2981,17 +3024,26 @@ def detect_repo_submissions(
     token: str,
     mode: str,
     submission_tags: list[str],
+    facts: RepoFacts | None = None,
 ) -> list[dict[str, Any]]:
     """One repo's detected submissions. Branch mode reads the default branch, its
     accept-marker baseline and its commit log; tag mode reads its tags. Returns
-    [] for a repo that isn't accepted or is commitless."""
+    [] for a repo that isn't accepted or is commitless.
+
+    `facts` is what the org listing already said about the repo (RepoIndex).
+    A commitless repo is answered from it without a request, and a known
+    default branch spares the GET /repos read that only existed to learn it."""
+    if facts is not None and facts.size == 0:
+        return []
     if mode == "tag":
         tags = list_repo_tags(api_url, org, repo_name, token)
         patterns = [*submission_tags, f"{SUBMIT_TAG_PREFIX}*"]
         return detect_tag_submissions(tags, patterns)
 
-    info = get_repo(api_url, org, repo_name, token)
-    branch = (info or {}).get("default_branch")
+    branch: Any = facts.default_branch if facts is not None else None
+    if branch is None:
+        info = get_repo(api_url, org, repo_name, token)
+        branch = (info or {}).get("default_branch")
     if not isinstance(branch, str) or not branch:
         return []  # not accepted, or no commits yet
     baseline = oldest_commit_sha_for_path(
@@ -3382,7 +3434,7 @@ def _org_repos_page_url(api_url: str, org: str) -> Callable[[int], str]:
 
 
 def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
-    """Lowercased name -> `private` flag for every repo in `org` the token can
+    """Lowercased name -> RepoFacts for every repo in `org` the token can
     see, walking pagination in parallel. Hits GET /orgs/{org}/repos.
 
     Read once per run — see RepoIndex, which documents why a name absent here
@@ -3397,13 +3449,13 @@ def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
         token=token,
         resource_label=f"orgs/{org}/repos",
     )
-    return _repo_privacy_map(repos)
+    return _repo_facts_map(repos)
 
 
 def list_org_repos_first_page(
     api_url: str, org: str, token: str
-) -> tuple[dict[str, bool], int]:
-    """Page 1 of the org listing as (lowercased name -> private, page count).
+) -> tuple[dict[str, RepoFacts], int]:
+    """Page 1 of the org listing as (lowercased name -> RepoFacts, page count).
     A count of 1 means the map already is the whole listing. Lets RepoIndex
     learn the org's size from one request before deciding whether listing the
     rest or probing the candidate names is cheaper.
@@ -3412,31 +3464,31 @@ def list_org_repos_first_page(
     items, last = _first_page(
         _org_repos_page_url(api_url, org), api_url, token, f"orgs/{org}/repos"
     )
-    return _repo_privacy_map(items), last or 1
+    return _repo_facts_map(items), last or 1
 
 
 def list_org_repos_rest(
     api_url: str, org: str, token: str, last: int
-) -> dict[str, bool]:
+) -> dict[str, RepoFacts]:
     """Pages 2..last of the org listing, fetched in parallel. The second half
     of list_org_repos_first_page."""
     batches = _fetch_pages_parallel(
         _org_repos_page_url(api_url, org), token, range(2, last + 1)
     )
-    return _repo_privacy_map(item for batch in batches for item in batch)
+    return _repo_facts_map(item for batch in batches for item in batch)
 
 
 def probe_org_repos(
     api_url: str, org: str, names: list[str], token: str
-) -> dict[str, bool | None]:
-    """Lowercased name -> private flag for each of `names` that exists, None for
+) -> dict[str, RepoFacts | None]:
+    """Lowercased name -> RepoFacts for each of `names` that exists, None for
     a name whose read failed with a skippable error (unknown, so callers fail
     open); a 404 name is absent. Reads GET /repos/{org}/{name} in parallel.
 
     A throttle or a fatal error propagates, abandoning the probes not yet
     started, so the caller's retry sees an unresolved name rather than a wrong
     answer."""
-    def probe(name: str) -> tuple[str, bool | None, bool]:
+    def probe(name: str) -> tuple[str, RepoFacts | None, bool]:
         try:
             repo = get_repo(api_url, org, name, token)
         except urllib.error.HTTPError as exc:
@@ -3445,33 +3497,33 @@ def probe_org_repos(
             return name.lower(), None, True
         if repo is None:
             return name.lower(), None, False
-        return name.lower(), repo.get("private") is True, True
+        return name.lower(), repo_facts(repo), True
 
     if not names:
         return {}
-    found: dict[str, bool | None] = {}
+    found: dict[str, RepoFacts | None] = {}
     with concurrent.futures.ThreadPoolExecutor(
         max_workers=min(PARALLEL_PAGE_WORKERS, len(names))
     ) as pool:
         futures = [pool.submit(probe, name) for name in names]
         try:
             for future in futures:
-                name, private, present = future.result()
+                name, facts, present = future.result()
                 if present:
-                    found[name] = private
+                    found[name] = facts
         except BaseException:
             pool.shutdown(wait=False, cancel_futures=True)
             raise
     return found
 
 
-def _repo_privacy_map(repos: Iterable[dict[str, Any]]) -> dict[str, bool]:
-    """Lowercased name -> strict-boolean `private` from repo objects."""
-    visible: dict[str, bool] = {}
+def _repo_facts_map(repos: Iterable[dict[str, Any]]) -> dict[str, RepoFacts]:
+    """Lowercased name -> RepoFacts from repo objects."""
+    visible: dict[str, RepoFacts] = {}
     for repo in repos:
         name = repo.get("name")
         if isinstance(name, str) and name:
-            visible[name.lower()] = repo.get("private") is True
+            visible[name.lower()] = repo_facts(repo)
     return visible
 
 
