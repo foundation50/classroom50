@@ -1398,6 +1398,7 @@
       "setupCommandPlaceholder": "optional, for example, gcc -o hello hello.c",
       "runCommand": "Run command",
       "runCommandPlaceholder": "./hello or python3 main.py",
+      "runCommandHint": "Runs in the student's repository checkout. Uploaded test files are under $CLASSROOM50_BUNDLE_DIR.",
       "input": "Input (stdin)",
       "inputPlaceholder": "optional: text fed to the command on stdin",
       "expectedOutput": "Expected output",
@@ -1431,6 +1432,19 @@
         "failureDetailsFull": "Full: diff or expected and actual output",
         "showOutput": "Include passing test output",
         "showOutputHelp": "Adds each passing test's captured setup/run output to the submission report and workflow log, collapsed by default. Useful when authoring or debugging an autograder."
+      },
+      "teacherFiles": {
+        "button": "Upload test files",
+        "title": "Upload teacher-only test files",
+        "subtitle": "Students get every file in the template. Keep test scripts and fixtures they must not see in the classroom50 repository instead.",
+        "howTo": "Click <strong>Open upload page</strong>, drop your files in, and commit. They go to <code>{{path}}</code>; GitHub creates the folder if needed. Publishing takes a few minutes after the commit.",
+        "usage": "Test commands find the folder at <code>$CLASSROOM50_BUNDLE_DIR</code>. For example, a Run command test that calls an uploaded <code>check.sh</code>:",
+        "example": "Full walkthrough in the wiki",
+        "note": "Don't upload a file named <code>autograder.py</code>: it replaces the tests on this page.",
+        "readableTitle": "Students can't change these files, but they can read them",
+        "readableBody": "They're published on your organization's public GitHub Pages site. Keep full solutions and private data out, and use <strong>Failure details shown to students</strong> to hide expected output.",
+        "openUpload": "Open upload page",
+        "unsaved": "Create the assignment first. Test files go in a folder named after the assignment, so this guide opens once it exists."
       },
       "type": {
         "io": {

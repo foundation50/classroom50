@@ -88,6 +88,12 @@ TESTS_SCHEMA_V1 = "classroom50/tests/v1"
 # commands are each bounded by it independently.
 DEFAULT_TEST_TIMEOUT = 10
 
+# Env var handed to every setup/run command and autograder.py: the absolute
+# path of the extracted per-assignment bundle. Commands run with cwd at the
+# student checkout, so this is the only way a declarative test can reach a
+# teacher-only script or fixture that must stay out of the template.
+BUNDLE_DIR_ENV = "CLASSROOM50_BUNDLE_DIR"
+
 # Cap captured stdout/stderr in the release body so a runaway program can't
 # bloat the published release.
 MAX_CAPTURED_CHARS = 2000
@@ -1633,14 +1639,23 @@ def _resolve_expected(spec: dict[str, Any], fixtures_dir: pathlib.Path) -> str:
     return spec.get("expected") or ""
 
 
+def _command_env(bundle_dir: pathlib.Path | None) -> dict[str, str]:
+    env = dict(os.environ)
+    if bundle_dir is not None:
+        env[BUNDLE_DIR_ENV] = str(bundle_dir.resolve())
+    return env
+
+
 def _run_command(command: str, cwd: pathlib.Path, timeout: int,
-                 stdin: str = "") -> subprocess.CompletedProcess[str]:
+                 stdin: str = "",
+                 bundle_dir: pathlib.Path | None = None) -> subprocess.CompletedProcess[str]:
     """Run a shell command in the student checkout with captured text output
     and an empty-by-default stdin."""
     return subprocess.run(
         command,
         shell=True,
         cwd=str(cwd),
+        env=_command_env(bundle_dir),
         input=stdin,
         capture_output=True,
         text=True,
@@ -1650,14 +1665,15 @@ def _run_command(command: str, cwd: pathlib.Path, timeout: int,
     )
 
 
-def _run_setup(setup: str, cwd: pathlib.Path,
-               timeout: int) -> tuple[str | None, subprocess.CompletedProcess[str] | None]:
+def _run_setup(setup: str, cwd: pathlib.Path, timeout: int,
+               bundle_dir: pathlib.Path | None = None,
+               ) -> tuple[str | None, subprocess.CompletedProcess[str] | None]:
     """Run a test's setup command. Returns (error-summary, process): the
     summary is None on success; the process is None when the command never
     produced one (timeout / failed start). Captured streams travel back raw so
     the renderers can clip and policy-filter them per surface."""
     try:
-        sp = _run_command(setup, cwd, timeout)
+        sp = _run_command(setup, cwd, timeout, bundle_dir=bundle_dir)
     except subprocess.TimeoutExpired:
         return f"setup timed out after {timeout}s", None
     except OSError as exc:
@@ -1693,7 +1709,8 @@ def _ensure_pytest(cwd: pathlib.Path, timeout: int) -> None:
 
 
 def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
-                  points: int, name: str) -> dict[str, Any]:
+                  points: int, name: str,
+                  bundle_dir: pathlib.Path | None = None) -> dict[str, Any]:
     """Split `points` across cases via pytest-json-report (deps auto-installed
     by _ensure_pytest), falling back to exit-code scoring when no report."""
     _ensure_pytest(cwd, timeout)
@@ -1706,7 +1723,7 @@ def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
     else:
         cmd = f"{spec['run']} --json-report --json-report-file={shlex.quote(str(report))}"
     try:
-        rp = _run_command(cmd, cwd, timeout)
+        rp = _run_command(cmd, cwd, timeout, bundle_dir=bundle_dir)
     except subprocess.TimeoutExpired:
         shutil.rmtree(report_dir, ignore_errors=True)
         return _make_outcome(name, points, False, f"timed out after {timeout}s")
@@ -1761,7 +1778,7 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
     setup_capture: dict[str, str] = {}
     setup = spec.get("setup") or ""
     if setup:
-        err, sp = _run_setup(setup, cwd, timeout)
+        err, sp = _run_setup(setup, cwd, timeout, bundle_dir=fixtures_dir)
         if sp is not None:
             setup_capture = {k: v for k, v in
                              (("setup-stdout", sp.stdout), ("setup-stderr", sp.stderr)) if v}
@@ -1789,7 +1806,7 @@ def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
     """Run the spec's `run` phase (setup already done) and grade it."""
     ttype = spec["type"]
     if ttype == TEST_TYPE_PYTHON:
-        outcome = _grade_python(spec, cwd, timeout, points, name)
+        outcome = _grade_python(spec, cwd, timeout, points, name, bundle_dir=fixtures_dir)
         if not outcome["passed"]:
             outcome.setdefault("failure-kind", "cases")
         return outcome
@@ -1800,7 +1817,7 @@ def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
         return _make_outcome(name, points, False, str(exc))
 
     try:
-        rp = _run_command(spec["run"], cwd, timeout, stdin=stdin)
+        rp = _run_command(spec["run"], cwd, timeout, stdin=stdin, bundle_dir=fixtures_dir)
     except subprocess.TimeoutExpired:
         return _make_outcome(name, points, False, f"timed out after {timeout}s")
     except OSError as exc:
@@ -2351,6 +2368,7 @@ def run_entrypoint(
     carrier), matching run_declarative, rather than re-threading them through
     the signature."""
     env = dict(os.environ)
+    env[BUNDLE_DIR_ENV] = str(entrypoint.parent.resolve())
     env["USERNAME"] = finalize.username
     env["OWNER"] = finalize.username
     env["ASSIGNMENT_TYPE"] = finalize.assignment_type

@@ -81,7 +81,9 @@ func assignmentTestAddCmd() *cobra.Command {
 			"--input-file / --expected-file name a fixture file the teacher\n" +
 			"has committed alongside the assignment at\n" +
 			"<classroom>/autograders/<slug>/ in the classroom50 repository; it\n" +
-			"is bundled and read at grade time.\n\n" +
+			"is bundled and read at grade time. Commands run in the student\n" +
+			"checkout; $CLASSROOM50_BUNDLE_DIR points at that directory, so a\n" +
+			"grading script can stay out of the template students receive.\n\n" +
 			"Fails if the assignment slug isn't registered yet, or if the\n" +
 			"assignment already has a hand-written per-assignment autograder\n" +
 			"(the two are mutually exclusive).",
@@ -89,7 +91,10 @@ func assignmentTestAddCmd() *cobra.Command {
 			"      --name compiles --type run --run \"gcc -o hello hello.c\" --points 1\n" +
 			"  gh teacher assignment test add cs50-fall-2026 cs-principles hello \\\n" +
 			"      --name \"prints hello\" --type io --setup \"gcc -o hello hello.c\" \\\n" +
-			"      --run ./hello --expected \"Hello, world!\" --comparison included --points 2",
+			"      --run ./hello --expected \"Hello, world!\" --comparison included --points 2\n" +
+			"  gh teacher assignment test add cs50-fall-2026 cs-principles hello \\\n" +
+			"      --name \"hidden checks\" --type run \\\n" +
+			"      --run 'bash \"$CLASSROOM50_BUNDLE_DIR/check.sh\"' --points 5",
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true

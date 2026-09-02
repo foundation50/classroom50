@@ -127,7 +127,7 @@ def test_grade_python_per_case_scoring_unaffected(monkeypatch, tmp_path):
     monkeypatch.setattr(runner, "_ensure_pytest",
                         lambda cwd, timeout: None)
 
-    def fake_run(command, cwd, timeout, stdin=""):
+    def fake_run(command, cwd, timeout, stdin="", bundle_dir=None):
         # Write the report the runner asked for via --json-report-file=...
         for token in command.split():
             if token.startswith("--json-report-file="):

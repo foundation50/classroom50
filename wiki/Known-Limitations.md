@@ -64,6 +64,16 @@ student can browse it, including its history. Never commit solutions (or
 their history) to a template: develop privately and copy or squash the clean
 state into the template repository you register.
 
+**Grading files are tamper-proof, not secret.** Test scripts and fixtures
+kept in `CLASSROOM/autograders/ASSIGNMENT/` never enter a student's
+repository, and the runner fetches them fresh on every grading run, so a
+student can't alter them. But your organization's GitHub Pages site serves the
+bundle publicly (an unlisted classroom only makes the URL hard to guess), so a
+student who finds the URL can read it. Keep full solutions and private data
+out of the bundle, and use `failure-details` to limit what a failing run
+reveals. See
+[Teacher-only test files](Autograding-Basics#teacher-only-test-files).
+
 **Student repositories are not forks.** Accept generates a copy of the
 template; there is no upstream link, so template updates can't be pushed or
 pulled into accepted repositories. `.gitignore` and `.github/` are the

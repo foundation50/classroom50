@@ -19,6 +19,19 @@ export const githubOrgActionsSettingsUrl = (org: string): string =>
 export const classroomConfigTreeUrl = (org: string, slug: string): string =>
   `https://github.com/${org}/${CONFIG_REPO}/tree/${DEFAULT_BRANCH}/${slug}`
 
+// GitHub's drag-and-drop upload page for an assignment's bundle folder
+// (`<classroom>/autograders/<slug>/`), where teacher-only test scripts and
+// fixtures go. The upload page accepts a path that doesn't exist yet and
+// creates it on commit, so this works before the folder has any files.
+export const assignmentBundleUploadUrl = (
+  org: string,
+  classroom: string,
+  slug: string,
+): string =>
+  `https://github.com/${encodeURIComponent(org)}/${CONFIG_REPO}/upload/${DEFAULT_BRANCH}/${encodeURIComponent(
+    classroom,
+  )}/autograders/${encodeURIComponent(slug)}`
+
 // An assignment's starter-code (template) repo. Built from `template.owner`, not
 // the classroom org — a template can live under a different owner. Deep-links to
 // the stored branch when one is set.
