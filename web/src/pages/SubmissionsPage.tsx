@@ -1207,12 +1207,20 @@ const SubmissionsPageContent = () => {
   // The overlays read the repos directly and are outside that invalidation set.
   // Re-run them too: for a non-owner, a repo the collect just granted read on
   // 404'd into "not submitted" a moment ago, exactly like the manual button.
+  // Fires once per completed RUN (keyed on its id), not on every render while
+  // the phase reads "completed": a refetch re-renders the page, and re-firing
+  // on each render looped the fan-out against the API until a reload.
+  const overlayRefreshedForRun = useRef<number | null>(null)
   useEffect(() => {
     if (collectScores.phase !== "completed") return
+    const runId = collectScores.run?.id ?? -1
+    if (overlayRefreshedForRun.current === runId) return
+    overlayRefreshedForRun.current = runId
     if (liveCapable) refetchLive()
     if (detectionCapable) refetchDetected()
   }, [
     collectScores.phase,
+    collectScores.run?.id,
     liveCapable,
     detectionCapable,
     refetchLive,

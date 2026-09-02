@@ -353,3 +353,32 @@ describe("useDetectedSubmissions — fan-out contract", () => {
     expect(request).not.toHaveBeenCalled()
   })
 })
+
+// `refetch` is listed as an effect dependency by the submissions page (it
+// re-runs the fan-out when a collect completes). A fresh closure per render
+// made that effect re-fire on every render, each refetch re-rendering the page:
+// an unbounded GitHub read loop until reload.
+describe("useDetectedSubmissions — refetch identity", () => {
+  it("returns the same refetch function across renders", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [{ sha: "baseline" }],
+        branchCommits: [{ sha: "c1" }, { sha: "baseline" }],
+      }),
+    )
+    const { result, rerender } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    const first = result.current.refetch
+    rerender()
+    expect(result.current.refetch).toBe(first)
+  })
+})
