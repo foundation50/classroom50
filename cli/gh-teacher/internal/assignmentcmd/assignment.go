@@ -77,6 +77,7 @@ func assignmentAddCmd() *cobra.Command {
 		availableFrom  string
 		mode           string
 		maxGroupSize   int
+		teamFormation  string
 		autograder     string
 		runtimeFile    string
 		testsFile      string
@@ -201,7 +202,13 @@ func assignmentAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			modeVal, err := validateModeAndSizeFlags(mode, maxGroupSize, cmd.Flags().Changed("max-group-size"))
+			modeVal, formationVal, err := validateModeAndSizeFlags(modeSizeFlagState{
+				Mode:              mode,
+				MaxGroupSize:      maxGroupSize,
+				SizeProvided:      cmd.Flags().Changed("max-group-size"),
+				TeamFormation:     teamFormation,
+				FormationProvided: cmd.Flags().Changed("team-formation"),
+			})
 			if err != nil {
 				return err
 			}
@@ -306,6 +313,7 @@ func assignmentAddCmd() *cobra.Command {
 					AvailableFromMeta:     availableFromMetaVal,
 					Mode:                  modeVal,
 					MaxGroupSize:          maxGroupSize,
+					TeamFormation:         formationVal,
 					Autograder:            autograderVal,
 					Runtime:               runtime,
 					Tests:                 tests,
@@ -329,8 +337,9 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
 	cmd.Flags().StringVar(&due, "due", "", "Optional due date, for example 2026-09-15T23:59:00-04:00; stored as UTC. Omit the offset to use the machine's local timezone")
 	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date, for example 2026-09-15T00:00:00-04:00; stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone")
-	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default) or `group`. Group mode requires --max-group-size")
-	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum collaborators on a group repo (>= 2; required with --mode group). Enforced within the CLI when students join; direct GitHub-UI invites can bypass it")
+	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default), `group` (legacy shared repo through collaborators), or `team` (shared repo owned by a GitHub Team). Group and team modes require --max-group-size; team mode also requires --team-formation")
+	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum group size (>= 2; required with --mode group or --mode team). Enforced within Classroom 50 clients when groups form; direct GitHub-UI changes can bypass it")
+	cmd.Flags().StringVar(&teamFormation, "team-formation", "", "Who forms the groups of a team assignment: `teacher` (you create the teams) or `student` (the first student founds a team and adds teammates). Required with --mode team")
 	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the classroom50 repository")
 	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest and Python 3.14")
 	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file with a bare array of declarative test specs (io/run/python), or `-` to read from stdin. Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder. See `gh teacher assignment test --help`")
@@ -506,32 +515,57 @@ func assignmentsFilePath(classroom string) string {
 	return assignment.AssignmentsFilePath(classroom)
 }
 
-// validateModeAndSizeFlags normalizes/validates the --mode and --max-group-size
-// pair for `assignment add`. Group mode requires --max-group-size (2..cap);
-// individual mode must not set it. Extracted as a pure function so the flag
+// modeSizeFlagState carries the --mode / --max-group-size / --team-formation
+// values plus "was this flag passed" booleans, mirroring emptyRepoFlagState.
+type modeSizeFlagState struct {
+	Mode              string
+	MaxGroupSize      int
+	SizeProvided      bool
+	TeamFormation     string
+	FormationProvided bool
+}
+
+// validateModeAndSizeFlags normalizes/validates the --mode, --max-group-size,
+// and --team-formation flags for `assignment add`. Group and team modes
+// require --max-group-size (2..cap); team mode also requires --team-formation;
+// individual mode must set neither. Extracted as a pure function so the flag
 // contract is unit-testable.
-func validateModeAndSizeFlags(mode string, maxGroupSize int, sizeProvided bool) (string, error) {
-	modeVal := strings.TrimSpace(mode)
+func validateModeAndSizeFlags(s modeSizeFlagState) (mode, formation string, err error) {
+	modeVal := strings.TrimSpace(s.Mode)
 	if modeVal == "" {
 		modeVal = assignment.ModeIndividual
 	}
 	if !assignment.IsValidAssignmentMode(modeVal) {
-		return "", fmt.Errorf("invalid --mode %q: expected one of %s", modeVal, strings.Join(assignment.AssignmentModes, ", "))
+		return "", "", fmt.Errorf("invalid --mode %q: expected one of %s", modeVal, strings.Join(assignment.AssignmentModes, ", "))
 	}
+	formationVal := strings.TrimSpace(s.TeamFormation)
 	switch modeVal {
-	case assignment.ModeGroup:
-		if maxGroupSize < 2 {
-			return "", fmt.Errorf("--max-group-size must be >= 2 for a group assignment (got %d)", maxGroupSize)
+	case assignment.ModeGroup, assignment.ModeTeam:
+		if s.MaxGroupSize < 2 {
+			return "", "", fmt.Errorf("--max-group-size must be >= 2 for a %s assignment (got %d)", modeVal, s.MaxGroupSize)
 		}
-		if err := assignment.ValidateMaxGroupSize(maxGroupSize); err != nil {
-			return "", err
+		if err := assignment.ValidateMaxGroupSize(s.MaxGroupSize); err != nil {
+			return "", "", err
 		}
 	default:
-		if sizeProvided {
-			return "", errors.New("--max-group-size is only valid with --mode group")
+		if s.SizeProvided {
+			return "", "", errors.New("--max-group-size is only valid with --mode group or --mode team")
 		}
 	}
-	return modeVal, nil
+	if modeVal == assignment.ModeTeam {
+		if formationVal == "" {
+			return "", "", fmt.Errorf("--team-formation is required for a team assignment: pass one of %s", strings.Join(contract.TeamFormations, ", "))
+		}
+		if err := assignment.ValidateTeamFormation(formationVal); err != nil {
+			return "", "", err
+		}
+	} else if s.FormationProvided {
+		return "", "", errors.New("--team-formation is only valid with --mode team")
+	}
+	if modeVal != assignment.ModeTeam {
+		formationVal = ""
+	}
+	return modeVal, formationVal, nil
 }
 
 // emptyRepoFlagState is the flag-layer view validateEmptyRepoFlags checks:
@@ -606,6 +640,7 @@ type addAssignmentParams struct {
 	AvailableFromMeta *assignment.DueMeta
 	Mode              string
 	MaxGroupSize      int
+	TeamFormation     string
 	Autograder        string
 	Runtime           *assignment.RuntimeRef
 	Tests             []assignment.TestSpec
@@ -706,6 +741,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		AvailableFromMeta: availableFromMetaVal,
 		Mode:              mode,
 		MaxGroupSize:      maxGroupSize,
+		TeamFormation:     p.TeamFormation,
 		Autograder:        autograder,
 		Runtime:           runtime,
 		Tests:             tests,

@@ -16,7 +16,7 @@ const log = logger.scope(LOG_SCOPE_QUERIES)
 type SubmissionRecord = {
   schema: string
   classroom: string
-  assignment_type: "individual" | "group"
+  assignment_type: "individual" | "group" | "team"
   owner: string
   submission: string
   commit: string
@@ -41,12 +41,15 @@ type SubmissionRecord = {
 type ScoreEntry = {
   owner: string
   member_usernames?: string[]
+  // Team-mode crediting: the group's GitHub Team slug (scores-v1 `team_slug`).
+  // Type only — ingestion tolerates its absence (a pre-team collector).
+  team_slug?: string
   submissions: SubmissionRecord[]
   override?: boolean
 }
 
 type AssignmentBucket = {
-  type: "individual" | "group"
+  type: "individual" | "group" | "team"
   entries: ScoreEntry[]
   // Per-bucket freshness stamp written by collect_scores.py: the UTC instant
   // collection last walked THIS assignment (absent on files written before the
@@ -80,6 +83,9 @@ type ScoresSchema = {
 export type SubmissionRow = {
   usernames: string[]
   owner: string
+  // Team-mode crediting: the group's GitHub Team slug when the collector
+  // recorded one (scores-v1 `team_slug`); absent otherwise.
+  teamSlug?: string
   datetime: string
   commit: string
   release: string
@@ -213,6 +219,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
       return {
         usernames,
         owner: entry.owner,
+        ...(entry.team_slug ? { teamSlug: entry.team_slug } : {}),
         datetime: latest.datetime,
         commit: latest.commit,
         release: latest.release,

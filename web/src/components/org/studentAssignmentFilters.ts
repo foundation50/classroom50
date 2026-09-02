@@ -14,7 +14,7 @@ import type { StudentAssignmentSort } from "@/lib/studentAssignmentListPrefs"
 export type { StudentAssignmentSort }
 
 export type StatusFilter = "all" | "todo" | "accepted"
-export type TypeFilter = "all" | "individual" | "group"
+export type TypeFilter = "all" | "individual" | "group" | "team"
 export type DueFilter = "all" | "overdue"
 
 export type StudentAssignmentFilters = {

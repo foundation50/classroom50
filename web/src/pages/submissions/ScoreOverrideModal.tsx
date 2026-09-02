@@ -11,15 +11,18 @@ export type ScoreOverrideContext = {
   org: string
   classroom: string
   assignment: string
-  assignmentType: "individual" | "group"
+  assignmentType: "individual" | "group" | "team"
   // The max points for the score input. Manual assignments pass the configured
   // grading.max_points; a graded autograded row passes its own max-score. Absent
   // when the max isn't known yet (a pending autograded row with no collected
   // score) — the teacher then enters both the score and the max in the modal.
   maxPoints?: number
-  // Group crediting for a NEW entry (the credited members of the group repo).
-  // Individual entries omit it and are credited to `owner`.
+  // Group/team crediting for a NEW entry (the credited members of the shared
+  // repo; live team members for a team row). Individual entries omit it and
+  // are credited to `owner`.
   memberUsernames?: string[]
+  // Team mode: the group team's slug, recorded on a new entry.
+  teamSlug?: string
   // Distinguishes the copy/behavior: a manual-mode assignment vs. overriding an
   // autograded result (which preserves and can revert to the autograded score).
   mode: "manual" | "auto"
@@ -34,7 +37,7 @@ export type ScoreOverrideCapability = {
   org: string
   classroom: string
   assignment: string
-  assignmentType: "individual" | "group"
+  assignmentType: "individual" | "group" | "team"
   mode: "manual" | "auto"
   // Manual mode only: the configured total points. Absent for autograded
   // assignments (per-row max-score is used instead).
@@ -139,6 +142,7 @@ export function ScoreOverrideModal({
         owner,
         assignmentType: ctx.assignmentType,
         memberUsernames: ctx.memberUsernames,
+        teamSlug: ctx.teamSlug,
         score: parsed,
         maxPoints: effectiveMax,
       },

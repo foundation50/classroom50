@@ -90,6 +90,17 @@ Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your
 Classroom 50 sends you to GitHub to create the token, then you paste it back
 into the form to finish setup.
 
+### Member team creation
+
+Group assignments where students form their own groups work by letting the
+founding student create the group's GitHub team when accepting, so setup turns
+on the organization's "Allow members to create teams" member privilege. The
+organization settings page has a **Member team creation** section with an
+**Allow members to create teams** toggle that matches that GitHub setting.
+While it's off, students can't create teams, so student-formed group
+assignments can't work, and the new-assignment form disables the **Group**
+type.
+
 ## Create a classroom
 
 ![Classrooms in an organization](images/web_classes.png)
@@ -160,8 +171,22 @@ On the classroom page, click **+ Assignment**. Fill in:
   marks later submissions **late** in the collected scores; it does not block pushes
   or revoke access. To actually close an assignment, use the **Close
   submission** action (see below).
-- **Assignment type** — **Individual** (one repository per student) or **Group
-  project** (students share a repository and submit together).
+- **Assignment type** — **Individual** (one repository per student), **Group**
+  (teammates share one repository, owned by a GitHub team Classroom 50
+  manages), or **Group (legacy)** (the older shared repository managed through
+  repository collaborators). Group types set a **Max group size**, and
+  **Group** adds a **Group formation** choice:
+  - **Teacher assigns groups.** You create the groups and add students on the
+    assignment's **Manage groups** page. Students who aren't in a group can't
+    accept.
+  - **Students form groups.** The first student creates the group when
+    accepting, then adds teammates up to the max group size.
+
+  Student-formed groups need organization members to be able to create teams,
+  so the form disables the **Group** type, with an explanation, while the
+  organization disallows it. Setup enables the setting by default; turn it
+  back on under [Member team creation](#member-team-creation) in the
+  organization settings.
 
 ### Repository setup
 
@@ -228,7 +253,8 @@ section — most assignments never need them:
 > retrofitted, so they keep their original starter code and setup. When at least
 > one student has already accepted, the edit form asks you to confirm and warns
 > that you'll need to update the existing repositories yourself. (**Assignment
-> type** — Individual or Group — is the exception: it stays locked on edit,
+> type** — Individual, Group, or Group (legacy) — is the exception: it stays
+> locked on edit,
 > because switching it would invalidate every existing submission.)
 
 ### Submission and grading
@@ -552,6 +578,64 @@ It runs in the background — the roster stays fully usable — with the button
 reading **Refreshing roster…** while it works. The caption beside the button
 shows when the roster last changed and what the last refresh found.
 
+## Manage groups
+
+For a group assignment, open the assignment and click **Manage groups** in the
+left menu. The page lists every group with its display name, its members (with
+full names from the roster), its member count against the max group size, its
+repository status, and its visibility. Two badges need explaining:
+
+- **No repository yet.** The group's shared repository is created when a
+  group member accepts the assignment (**Repository created** replaces it
+  then).
+- **Members changed since the last refresh.** The group's live membership on
+  GitHub no longer matches the recorded group info; refresh to update the
+  record.
+
+Above the list:
+
+- **Create group.** Create a group, optionally with a **Group name** (leave
+  it blank to use a numbered name). On a teacher-formed assignment, create
+  each group and add its students here; students who aren't in a group can't
+  accept.
+- **Copy groups.** Recreate another assignment's groups for this one, useful
+  for a project sequence with stable groups. Pick the **Source assignment**;
+  each group's name and members are copied into a plan you can edit, and
+  nothing is created until you save. Groups stay per-assignment: the copy
+  creates new group teams under this assignment's own numbering.
+- **Refresh group info.** Re-read every group's live membership from GitHub
+  and update the recorded group info (the `teams.json` snapshot in the
+  `classroom50` repository). The page also refreshes automatically on load
+  when membership has drifted.
+
+An **Unassigned students** panel lists roster students who aren't in a group
+yet: choose a group with room, then add them.
+
+### Manage one group
+
+Click **Manage** on a group to open its dialog:
+
+- **Group name.** Rename the display name, then **Save name**. The name is
+  shown to you and the group's members; the repository name doesn't change.
+- **Visibility.** **Visible** groups can be browsed by classmates and receive
+  join requests on GitHub; **Hidden** groups are visible only to their members
+  and organization owners.
+- **Members.** Stage additions and removals (marked **Will be added** and
+  **Will be removed**), then **Save changes** applies them together.
+- **Danger zone.** **Delete group** removes the group's GitHub team and the
+  access it granted, after a confirmation. The group's repository is not
+  deleted.
+
+### Recover a deleted group team
+
+If a group's GitHub team was deleted but its repository still exists, grading
+can't credit the group's members until the team is recreated. The group's
+submissions row shows a **Group team missing** error; click it to recreate the
+team at the same group number. Members found in the repository's commit
+history are pre-checked, you can add more from the roster, and you can
+optionally pick a **Team maintainer** who can manage the group's members on
+GitHub (like the student who founded the group).
+
 ## Manage organization members
 
 The **Members** page lists everyone in your GitHub organization and the
@@ -664,6 +748,13 @@ and links to the repository, the commit, the feedback pull request
 result lives — per-test breakdowns, past attempts, grading a specific commit,
 and who submitted — see
 [Reading results](Autograding-Basics#reading-results) in Autograding Basics.
+
+On a group assignment, rows are titled by group name, and a **Members** column
+shows each group's live member count; click it to open the group's manage
+dialog. A group that hasn't accepted yet shows a **No repository yet** warning
+(the repository is created when a member accepts), and **Group team missing**
+flags a group whose GitHub team was deleted; click it to recreate the team
+(see [Recover a deleted group team](#recover-a-deleted-group-team)).
 
 ### Collect the whole classroom
 
@@ -784,8 +875,8 @@ spreadsheet or external tool. The column-by-column reference is in
   Same form as creating one, pre-filled. Provisioning settings (repository
   source, built-in autograder, grading mode) are editable; a change only affects
   repositories accepted from then on, so the form asks you to confirm when
-  students have already accepted. **Assignment type** (Individual or Group)
-  stays locked, since switching it would invalidate existing submissions.
+  students have already accepted. **Assignment type** stays locked, since
+  switching it would invalidate existing submissions.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
   creating one, pre-filled. Its **Advanced settings** section holds the
   **Custom Pages domain** field (see

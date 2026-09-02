@@ -55,6 +55,12 @@ import {
 import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { createAssignmentRepo } from "./repoCreation"
 import type { LocalizedMessage } from "@/types/localizedMessage"
+import {
+  findMyGroupTeam,
+  attachRepoToGroupTeam,
+} from "@/domain/teams/groupTeams"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { groupRepoName } from "@/util/studentRepo"
 
 // Land .classroom50.yaml + the autograde workflow as one Tree commit, riding out
 // GitHub's git-data lag after POST .../generate (reads 404, the first write 409s
@@ -190,6 +196,9 @@ function grantFounderAccessStep(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
+  // Team mode: the group team to attach to the repo with push — the
+  // authoritative repo<->team link, asserted before the founder grant.
+  groupTeamSlug?: string
   // Resolved repo-feature PATCH to apply before the founder grant. `full` is
   // every resolved key; `explicit` is the teacher-forced subset used as the
   // fail-open retry body. Empty `full` ({}) skips the request (templated +
@@ -207,6 +216,7 @@ function grantFounderAccessStep(params: {
     username,
     mode,
     studentPermission,
+    groupTeamSlug,
     repoFeatures,
     repoAboutTopics,
     onStepUpdate,
@@ -231,6 +241,12 @@ function grantFounderAccessStep(params: {
         repoFeatures.explicit,
       )
       await applyRepoAboutTopics(client, org, repo, repoAboutTopics)
+      // The team attachment is the load-bearing access grant for team mode
+      // (each member's push flows through it), so it lands before the
+      // (narrower) per-student founder grant. Idempotent PUT.
+      if (groupTeamSlug) {
+        await attachRepoToGroupTeam(client, org, groupTeamSlug, repo)
+      }
       await addFounderCollaborator({
         client,
         owner: org,
@@ -252,6 +268,9 @@ async function provisionAcceptedRepo(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
+  // Team mode: attach this group team to the repo with push (see
+  // grantFounderAccessStep).
+  groupTeamSlug?: string
   // Resolved repo-feature PATCH, forwarded to the founder-access step.
   repoFeatures: RepoFeatureApply
   // Template About/Topics to copy, forwarded to the founder-access step.
@@ -276,6 +295,7 @@ async function provisionAcceptedRepo(params: {
     username,
     mode,
     studentPermission,
+    groupTeamSlug,
     repoFeatures,
     repoAboutTopics,
     branch,
@@ -348,6 +368,7 @@ async function provisionAcceptedRepo(params: {
     username,
     mode,
     studentPermission,
+    groupTeamSlug,
     repoFeatures,
     repoAboutTopics,
     onStepUpdate,
@@ -799,11 +820,63 @@ export async function acceptAssignment(params: {
     })
   }
 
-  const studentRepoNameValue = studentRepoName(
-    classroom,
-    assignment.slug,
-    username,
-  )
+  // Team mode: resolve MY group team BEFORE any repo creation — the repo is
+  // named after the team's counter, and a student on no team must never mint a
+  // username-named repo. The page pre-resolves this too (blocked / create-a-
+  // group states); this guard is the authoritative one.
+  let groupTeam: GroupTeamRef | null = null
+  if (assignment.mode === "team") {
+    groupTeam = await withAcceptStep(
+      {
+        id: "team",
+        label: { key: "accept.steps.team" },
+        actions: { key: "accept.stepActions.team" },
+        doneMessage: { key: "accept.stepDone.team" },
+        onStepUpdate,
+      },
+      async () => {
+        const team = await findMyGroupTeam(
+          client,
+          org,
+          classroom,
+          assignment.slug,
+        )
+        if (!team) {
+          throw new AcceptStepError(
+            (assignment.team_formation ?? "teacher") === "teacher"
+              ? { key: "accept.errors.teamTeacherAssigns" }
+              : { key: "accept.errors.teamRequired" },
+          )
+        }
+        // Teacher formation never makes a student a maintainer (the teacher
+        // creates the team and drops out; students are added as members), so
+        // a maintainer membership marks a self-created team: the group-team
+        // name is derivable from public data, and accepting through it would
+        // bypass "your teacher assigns the groups" entirely. Fail closed on
+        // the role read too — an unverifiable membership must not become the
+        // bypass.
+        if ((assignment.team_formation ?? "teacher") === "teacher") {
+          const membership = await client.request<{ role?: string }>(
+            `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+              team.slug,
+            )}/memberships/${encodeURIComponent(username)}`,
+          )
+          if (membership.role === "maintainer") {
+            throw new AcceptStepError({
+              key: "accept.errors.teamSelfCreated",
+              params: { n: team.n },
+            })
+          }
+        }
+        return team
+      },
+    )
+  }
+
+  const studentRepoNameValue =
+    assignment.mode === "team" && groupTeam
+      ? groupRepoName(classroom, assignment.slug, groupTeam.n)
+      : studentRepoName(classroom, assignment.slug, username)
 
   const metadataYaml = createClassroom50Yaml({
     classroom,
@@ -897,6 +970,14 @@ export async function acceptAssignment(params: {
       // create), so we deliberately do NOT re-PATCH them here — re-asserting
       // would silently revert a student's own later toggle.
       try {
+        if (groupTeam) {
+          await attachRepoToGroupTeam(
+            client,
+            org,
+            groupTeam.slug,
+            created.repo.name,
+          )
+        }
         await addFounderCollaborator({
           client,
           owner: org,
@@ -935,6 +1016,7 @@ export async function acceptAssignment(params: {
         username,
         mode: assignment.mode,
         studentPermission: assignment.student_permission,
+        groupTeamSlug: groupTeam?.slug,
         repoFeatures,
         repoAboutTopics,
         onStepUpdate,
@@ -1047,8 +1129,18 @@ export async function acceptAssignment(params: {
       })
       // Reconcile the founder role LAST (best-effort): a transient failure must
       // not fail a re-run that previously succeeded, and running it after setup
-      // + feedback keeps the access step last on every path.
+      // + feedback keeps the access step last on every path. Team mode also
+      // re-asserts the team attachment (idempotent PUT), healing a prior accept
+      // that died between create and attach.
       try {
+        if (groupTeam) {
+          await attachRepoToGroupTeam(
+            client,
+            org,
+            groupTeam.slug,
+            created.repo.name,
+          )
+        }
         await addFounderCollaborator({
           client,
           owner: org,
@@ -1098,6 +1190,7 @@ export async function acceptAssignment(params: {
       username,
       mode: assignment.mode,
       studentPermission: assignment.student_permission,
+      groupTeamSlug: groupTeam?.slug,
       // Accept-time only: features are applied on the FRESH create below, never
       // re-asserted when repairing an already-existing repo (this branch runs on
       // a re-accept). Re-PATCHing here would silently revert a student's own
@@ -1148,6 +1241,7 @@ export async function acceptAssignment(params: {
     username,
     mode: assignment.mode,
     studentPermission: assignment.student_permission,
+    groupTeamSlug: groupTeam?.slug,
     repoFeatures,
     repoAboutTopics,
     branch: targetBranch,

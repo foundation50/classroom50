@@ -184,12 +184,26 @@ table, see [Repository shapes](Assignment-Templates#repository-shapes).
 
 ### How do group assignments work?
 
-Choose **Group** when creating the assignment and set a maximum group size. The
-first teammate to accept creates the shared repository and becomes its owner
-(the "founder"); they then invite the other teammates as collaborators. Everyone
-on the roster who is a collaborator gets the same score. Group repositories are
-named after the founder's username; custom group names aren't supported, and
-renaming a group repository isn't recommended.
+Choose **Group** when creating the assignment, set a maximum group size, and
+pick who forms the groups:
+
+- **Teacher assigns groups.** You create the groups and add students on the
+  assignment's **Manage groups** page (or with `gh teacher team`). Students
+  who aren't in a group can't accept.
+- **Students form groups.** The first student creates the group when
+  accepting, naming it if they like, then adds teammates. Classmates can also
+  browse the existing groups on the accept page and ask to join on GitHub.
+
+Each group is a GitHub team that owns one shared repository, named
+`<classroom>-<assignment>-group-<n>`. Groups have display names, and renaming
+one never changes the repository name. At grading time, the group team's
+members who are on the roster all get the same score.
+
+The older **Group (legacy)** mode still works: the first teammate to accept
+creates the shared repository (named after their username) and invites the
+others as collaborators, and everyone on the roster who is a collaborator gets
+the same score. Legacy groups have no names, and renaming a legacy group
+repository isn't recommended.
 
 ### Does the assignment description show to students?
 

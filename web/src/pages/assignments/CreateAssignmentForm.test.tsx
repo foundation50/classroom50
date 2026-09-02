@@ -21,6 +21,13 @@ vi.mock("./TemplateField", () => ({
   TemplateField: () => null,
 }))
 
+// DetailsSection's team-creation gate reads the org through the GitHub auth
+// context; irrelevant here, so stub it fail-open to keep the render
+// provider-free. The gate itself is covered in DetailsSection.test.tsx.
+vi.mock("@/hooks/useOrgTeamCreationAllowed", () => ({
+  default: () => true,
+}))
+
 import CreateAssignmentForm, {
   assignmentToFormValues,
 } from "./CreateAssignmentForm"
@@ -310,7 +317,7 @@ describe("assignment slug field", () => {
     )
     const modeRadios =
       container.querySelectorAll<HTMLInputElement>('input[name="mode"]')
-    expect(modeRadios.length).toBe(2)
+    expect(modeRadios.length).toBe(3)
     modeRadios.forEach((radio) => expect(radio.disabled).toBe(true))
     expect(screen.getByText("assignments.form.typeLockedHelp")).not.toBeNull()
   })
@@ -321,7 +328,7 @@ describe("assignment slug field", () => {
     )
     const modeRadios =
       container.querySelectorAll<HTMLInputElement>('input[name="mode"]')
-    expect(modeRadios.length).toBe(2)
+    expect(modeRadios.length).toBe(3)
     modeRadios.forEach((radio) => expect(radio.disabled).toBe(false))
     expect(screen.queryByText("assignments.form.typeLockedHelp")).toBeNull()
   })

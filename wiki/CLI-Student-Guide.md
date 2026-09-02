@@ -62,7 +62,8 @@ visible to anyone on the internet.
 5. Commits the setup files (`.classroom50.yaml` and the autograde workflow).
 6. Opens the Feedback PR, when the assignment enables it.
 7. Sets your repo role: `push` for an individual assignment, or `admin` for a
-   group assignment (so a group founder can invite teammates).
+   legacy group assignment (so its founder can invite teammates). On a team
+   assignment your access comes through the group's GitHub team instead.
 8. Prints the `git clone` command.
 
 </details>
@@ -85,12 +86,51 @@ To collaborate with a classmate or invite a TA:
 gh student invite <org>/<repo> <username>
 ```
 
-That adds them with `push` permission.
+That adds them with `push` permission. On a team assignment (see below) invite
+refuses: teammates join through the group's GitHub team, with
+`gh student team add`.
 
 ### Group assignments
 
-If your teacher registered the assignment with `--mode group`, teammates share
-**one** repository:
+If your teacher registered the assignment with `--mode team`, your group
+shares **one** repository, owned by a GitHub team. How you get a group depends
+on the assignment:
+
+- **Your teacher assigns the groups.** If accept reports you're not in a group
+  yet, ask your teacher to add you to one, then run accept again.
+- **Students form groups.** The first member (the "founder") creates the group
+  while accepting, optionally naming it:
+
+  ```sh
+  gh student accept <org> <classroom> <assignment> --new-team --team-name "The Sharks"
+  ```
+
+  The founder then adds each teammate:
+
+  ```sh
+  gh student team add <org> <classroom> <assignment> <teammate-username>
+  ```
+
+  Teammates must be enrolled in the classroom and not already in another
+  group, and the group is capped at the
+  size your teacher set. Once added, each teammate runs a plain
+  `gh student accept` for the same assignment.
+
+The shared repository is named `<classroom>-<assignment>-group-<n>` and is
+created by the first accept; every group member gets push access through the
+team. Check your group and its members anytime:
+
+```sh
+gh student team list <org> <classroom> <assignment>
+```
+
+At grading time, the group team's members who are on the roster all get the
+same score.
+
+### Legacy group assignments
+
+If your teacher registered the assignment with `--mode group` (the legacy
+shared-repository mode), there is no group team:
 
 1. **One teammate accepts first.** They create the shared repository (named after
    them) and become its **admin** (the "founder").

@@ -40,6 +40,11 @@ output, or `--verbose` / `-v` for per-step detail.
 | `assignment lock <org> <classroom> <slug>` | Lock (or `--unlock`) an assignment against student access. |
 | `assignment feedback-pr <org> <classroom> <assignment>` | Open or repair the Feedback PR on every student repo. Flags: `--user`, `-q`. |
 | `assignment test add/list/remove` | Manage an assignment's declarative tests. |
+| `team create <org> <classroom> <assignment>` | Create a group team for a team assignment. Flags: `--name`, `--member` (repeatable). |
+| `team list <org> <classroom> <assignment>` | List a team assignment's group teams, members, and drift. |
+| `team add` / `remove <org> <classroom> <assignment> <team> <username>` | Add or remove a rostered student on a group team. |
+| `team delete <org> <classroom> <assignment> <team>` | Delete a group team (not its repository). |
+| `team copy <org> <classroom> <assignment> --from <src>` | Recreate another assignment's group teams for this one. |
 | `autograder set-default <org> <classroom>` | Install/replace the classroom default `autograder.py`. |
 | `autograder show/list/remove <org> <classroom>` | Inspect or delete autograders. |
 | `invite <org>[/<repo>] <username>` | Invite to an org or repo. |
@@ -568,8 +573,9 @@ the CLI warns that students with long usernames can't accept it.
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
 | `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control: students who already accepted always see it. |
-| `--mode individual\|group` | `individual` (default) or `group` (requires `--max-group-size`). |
-| `--max-group-size <N>` | Max group collaborators (2–100). Advisory. |
+| `--mode individual\|group\|team` | `individual` (default), `team` (a group assignment: one shared repository per group, owned by a GitHub Team; see [`team`](#team)), or `group` (the legacy collaborator-based shared repository). Both group modes require `--max-group-size`; `team` also requires `--team-formation`. |
+| `--team-formation teacher\|student` | Who forms a team assignment's groups: `teacher` (you create the group teams with [`team create`](#team-create); students not in a group can't accept) or `student` (the first student founds a group with `gh student accept --new-team` and adds teammates). Required with `--mode team`. |
+| `--max-group-size <N>` | Maximum group size (2–100). Enforced by Classroom 50 clients when groups form; advisory beyond that (direct GitHub-UI changes can bypass it). |
 | `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
@@ -811,6 +817,99 @@ even when it passes (`--show-output=false` opts one test out of a
 and [Report options](Autograding-Basics#report-options) for what each level
 shows. For bulk edits, use `assignment add --tests <file.json>`.
 
+## `team`
+
+Manage the GitHub Teams behind a `--mode team` assignment. Each group is a
+GitHub Team named `classroom50-group-<hash>-<n>` that owns the shared
+repository `<classroom>-<assignment>-group-<n>`. Membership writes also update
+`<classroom>/teams.json` in the `classroom50` repository: the snapshot of
+intended membership that survives drift (GitHub Teams stay authoritative for
+who can push). Every subcommand takes `<org> <classroom> <assignment>` and
+requires a team assignment; a `<team>` argument accepts the group's counter
+(`2`) or the full team slug.
+
+### `team create`
+
+```sh
+gh teacher team create <org> <classroom> <assignment> [--name "<display name>"] [--member <username>]...
+gh teacher team create cs50-fall-2026 cs-principles project --name "The Sharks" --member alice --member bob
+```
+
+Creates the next free group team for the assignment and adds the given
+members.
+
+- Members must be on the classroom roster; usernames not on `roster.csv` are
+  skipped with a warning.
+- A student can be on only one of the assignment's groups, so a member who is
+  already on another group is refused before the team is created.
+- The member count is capped by the assignment's `max_group_size`.
+- The new team is recorded in `<classroom>/teams.json`.
+- The team is attached to its shared repository when a student accepts;
+  creating the team first is the teacher-formation flow.
+
+`--name` records a display name (shown in the teacher views and to the
+group's members; never part of the slug or the repository name). If a member
+add fails partway, the team itself is already created: re-run
+`gh teacher team add` for the missing members rather than `create` again.
+
+### `team list`
+
+```sh
+gh teacher team list <org> <classroom> <assignment>
+```
+
+Shows every live group team: counter, display name, members, member count
+against `max_group_size`, and drift against the `teams.json` snapshot
+(members present live but not in the snapshot, or recorded but missing live).
+A snapshot row with no live team is noted separately. Read-only; no commit
+lands on the repository.
+
+### `team add` / `team remove`
+
+```sh
+gh teacher team add <org> <classroom> <assignment> <team> <username>
+gh teacher team remove <org> <classroom> <assignment> <team> <username>
+gh teacher team add cs50-fall-2026 cs-principles project 2 alice
+```
+
+`add` puts a rostered student on the group team and records them in
+`teams.json`. The student must be on the classroom roster, a student already
+on another of the assignment's groups is refused (one student, one group),
+the team's live member count is capped by the assignment's `max_group_size`,
+and adding a student who is already on the team changes nothing. `remove`
+takes the student off the team and drops them from the snapshot; removing a
+student who is not on the team changes nothing.
+
+### `team delete`
+
+```sh
+gh teacher team delete <org> <classroom> <assignment> <team>
+gh teacher team delete cs50-fall-2026 cs-principles project 2
+```
+
+Deletes the group team and drops it from `teams.json`. The shared repository
+is not touched. The delete is guarded: the live team must match the full
+group-team shape, its recorded id, and a verified group record, so a
+same-named team created by something else is never deleted blind. A team that
+is already gone counts as deleted (the stale snapshot row is still dropped).
+
+### `team copy`
+
+```sh
+gh teacher team copy <org> <classroom> <assignment> --from <assignment>
+gh teacher team copy cs50-fall-2026 cs-principles project2 --from project
+```
+
+Recreates the source assignment's group teams for the target assignment: same
+members and display names, fresh counters under the target's own team
+namespace. Both assignments must be team assignments in the same classroom.
+Members no longer on the roster, and members already on one of the target
+assignment's groups, are skipped with a warning; a source team whose members
+are all skipped is not recreated. A source team over the target's
+`max_group_size` fails the copy. The new teams are recorded in
+`<classroom>/teams.json`. The web app's **Copy groups** dialog is the same
+operation with an editable preview.
+
 ## `autograder`
 
 Manage the **classroom default autograder** at `<classroom>/autograder.py` and
@@ -916,7 +1015,9 @@ Deletes **every** repository in `<org>` — a development reset. It confirms the
 `classroom50` marker repo exists (refusing otherwise), lists all repos, prompts
 for the typed org name, then deletes each (the `classroom50` repository last, so an
 interrupted run stays safe to re-run). It then removes the classroom and invite
-teams it finds, so no invited address is left behind.
+teams it finds, so no invited address is left behind, and sweeps each
+classroom's group teams (`classroom50-group-…`), verifying each team's group
+record before deleting it.
 
 > [!WARNING]
 > Requires the `delete_repo` scope, which is **not** in the default set. Opt in

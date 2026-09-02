@@ -130,6 +130,32 @@ func TestClassifyDefaults_EnforcedAndCriticalMiss(t *testing.T) {
 	}
 }
 
+// Member team creation must be enabled on every plan: student-formed group
+// assignments (team_formation: student) have the founding student create the
+// GitHub team at accept. Non-critical — an org that keeps it off only loses
+// that mode (the web form gates it), so it must not fail the whole lockdown.
+// Parity with the web mirror's test.
+func TestMemberDefaultSettings_TeamCreationEnabled(t *testing.T) {
+	for _, plan := range []string{"enterprise", "team", "free", ""} {
+		var found bool
+		for _, s := range MemberDefaultSettings(plan) {
+			if s.Field != "members_can_create_teams" {
+				continue
+			}
+			found = true
+			if s.Value != true {
+				t.Errorf("members_can_create_teams on plan %q = %v, want true", plan, s.Value)
+			}
+			if s.Critical {
+				t.Errorf("members_can_create_teams on plan %q should be non-critical", plan)
+			}
+		}
+		if !found {
+			t.Errorf("plan %q must include members_can_create_teams", plan)
+		}
+	}
+}
+
 func TestClassifyDefaults_PlanScopesEnterpriseFields(t *testing.T) {
 	// An enterprise-only field set to a non-locked value must be ignored
 	// on Team (out of scope), so the lockdown stays complete.

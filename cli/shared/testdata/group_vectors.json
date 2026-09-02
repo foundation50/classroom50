@@ -1,0 +1,37 @@
+{
+  "comment": "Cross-language golden vectors for the per-assignment group-team name derivation. Every writer and reader of this contract must produce these bytes for these inputs: the Go contract (GroupTeamHash / GroupTeamName in cli/shared/contract/contract.go, asserted by contract_test.go), the web (groupTeamHash / groupTeamName in web/src/util/teamSlug.ts, asserted by teamSlug.test.ts), and the Python collector (group_team_hash in collect_scores.py, asserted by skeleton_tests). `hash` is the first 16 hex chars of SHA-256 over `<lowercased classroom>\\u0000<lowercased assignment>`; the separator byte prevents (\"ab\",\"c\") and (\"a\",\"bc\") colliding, and lowercasing mirrors the repo-name formula so a mixed-case input can't split one assignment's teams into two namespaces. `team_1` is the full team NAME for counter 1 — the name is slug-safe by construction (lowercase hex + hyphens), so GitHub's name-to-slug generation is the identity function and name == slug.",
+  "hash_hex_len": 16,
+  "prefix": "classroom50-group-",
+  "cases": [
+    {
+      "classroom": "cs50",
+      "assignment": "project",
+      "hash": "cee5352cb880dff5",
+      "team_1": "classroom50-group-cee5352cb880dff5-1"
+    },
+    {
+      "classroom": "sept-2026",
+      "assignment": "groupproject",
+      "hash": "d2537674d06f6f92",
+      "team_1": "classroom50-group-d2537674d06f6f92-1"
+    },
+    {
+      "classroom": "intro-cs-fall",
+      "assignment": "lab-05",
+      "hash": "5411372e7b63533f",
+      "team_1": "classroom50-group-5411372e7b63533f-1"
+    },
+    {
+      "classroom": "a",
+      "assignment": "b",
+      "hash": "59b271ae1bbcb1d3",
+      "team_1": "classroom50-group-59b271ae1bbcb1d3-1"
+    },
+    {
+      "classroom": "CS50",
+      "assignment": "Project",
+      "hash": "cee5352cb880dff5",
+      "team_1": "classroom50-group-cee5352cb880dff5-1"
+    }
+  ]
+}

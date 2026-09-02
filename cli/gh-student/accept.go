@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,7 @@ import (
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
+	"github.com/foundation50/gh-student/internal/groupteam"
 	"github.com/foundation50/gh-student/internal/localgit"
 	"github.com/foundation50/gh-student/internal/reponame"
 	"github.com/foundation50/gh-student/internal/ui"
@@ -113,7 +115,11 @@ func renderEmbeddedShim(org, branch, configBranch, submissionMode string, submis
 }
 
 func acceptCmd() *cobra.Command {
-	var key string
+	var (
+		key      string
+		newTeam  bool
+		teamName string
+	)
 	cmd := &cobra.Command{
 		Use:   "accept <org> <classroom> <assignment>",
 		Short: "Accept an assignment from an organization's classroom",
@@ -153,7 +159,16 @@ func acceptCmd() *cobra.Command {
 			"Running accept again is safe:\n\n" +
 			"  - A repository that is fully set up is left in place (your access\n" +
 			"    level is refreshed when possible).\n" +
-			"  - A repository whose setup was interrupted partway is repaired.",
+			"  - A repository whose setup was interrupted partway is repaired.\n\n" +
+			"Team assignments:\n\n" +
+			"  - A team assignment uses one shared repository per group, owned by\n" +
+			"    a GitHub Team. If you are already in a group, accept creates (or\n" +
+			"    finds) your group's repository and gives your team push access.\n" +
+			"  - If your teacher assigns the groups, ask them to add you to one,\n" +
+			"    then run accept again.\n" +
+			"  - If students form their own groups, the first member runs accept\n" +
+			"    with --new-team (optionally --team-name) to create the group,\n" +
+			"    then adds teammates with `gh student team add`.",
 		Example: "  gh student accept cs50 cs50-fall-2026 hello\n" +
 			"  gh student accept cs50 cs50-fall-2026 hello --key dhkrm4ih\n",
 		Args: cobra.ExactArgs(3),
@@ -205,7 +220,7 @@ func acceptCmd() *cobra.Command {
 					}
 					switch acceptStatus.StatusCode {
 					case http.StatusOK:
-						return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner)
+						return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner, newTeam, strings.TrimSpace(teamName))
 					case http.StatusNotFound:
 						return fmt.Errorf("%s: couldn't find your invitation to this organization; ask your teacher to invite you again", org)
 					case http.StatusForbidden:
@@ -224,11 +239,13 @@ func acceptCmd() *cobra.Command {
 				return fmt.Errorf("%s: unexpected response (status %d) while checking your organization membership", org, status.StatusCode)
 			}
 
-			return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner)
+			return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner, newTeam, strings.TrimSpace(teamName))
 		},
 	}
 
 	cmd.Flags().StringVar(&key, "key", "", "Access key from your teacher for a classroom that uses an unlisted URL; omit for normal classrooms")
+	cmd.Flags().BoolVar(&newTeam, "new-team", false, "Team assignments with student-formed groups only: create a new group for this assignment and become its founder; add teammates afterward with `gh student team add`")
+	cmd.Flags().StringVar(&teamName, "team-name", "", `Display name for the group created by --new-team, for example "The Sharks"`)
 	return cmd
 }
 
@@ -328,9 +345,9 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 }
 
 // checkAcceptableMode rejects an unrecognized mode (which can't map to a repo
-// role). Group-shape coherence is a separate check (assertModeCoherentForCreate).
+// role). Shape coherence is a separate check (assertModeCoherentForCreate).
 func checkAcceptableMode(assignment, mode string) error {
-	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup {
+	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup && mode != contract.ModeTeam {
 		return fmt.Errorf("assignment %q has unsupported mode %q", assignment, mode)
 	}
 	return nil
@@ -352,19 +369,96 @@ func assertAssignmentAcceptable(entry assignments.Entry, assignment string) erro
 	return nil
 }
 
-// assertModeCoherentForCreate rejects a group-shaped entry (max_group_size >= 2)
-// whose mode isn't `group`: fresh-founding it would under-privilege the founder
-// and break `gh student invite`. Only on fresh create — a healthy repo must
+// assertModeCoherentForCreate rejects a fresh create against incoherent
+// published metadata. A group-shaped entry (max_group_size >= 2) whose mode
+// isn't `group` or `team` would under-privilege the founder and break the
+// join flow; a team entry needs a usable size AND a valid team_formation
+// (the field that decides who may found a team); a team_formation outside
+// team mode is a drifted entry. Only on fresh create — a healthy repo must
 // still reconcile even if a later-published entry drifted incoherent.
-func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int) error {
+func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int, teamFormation string) error {
+	if mode == contract.ModeTeam {
+		if maxGroupSize < 2 || !contract.IsValidTeamFormation(teamFormation) {
+			return fmt.Errorf("assignment %q is a team assignment but its published details are incomplete (max_group_size %d, team_formation %q); ask your teacher to re-run `gh teacher assignment add`",
+				assignment, maxGroupSize, teamFormation)
+		}
+		return nil
+	}
 	if maxGroupSize > 0 && mode != contract.ModeGroup {
-		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q): its published details are inconsistent; ask your teacher to re-run `gh teacher assignment add`",
-			assignment, maxGroupSize, mode, contract.ModeGroup)
+		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q or %q): its published details are inconsistent; ask your teacher to re-run `gh teacher assignment add`",
+			assignment, maxGroupSize, mode, contract.ModeGroup, contract.ModeTeam)
+	}
+	if teamFormation != "" {
+		return fmt.Errorf("assignment %q sets team_formation %q but mode %q (team_formation is team-mode only): its published details are inconsistent; ask your teacher to re-run `gh teacher assignment add`",
+			assignment, teamFormation, mode)
 	}
 	return nil
 }
 
-func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out io.Writer, org, classroom, assignment, secret string, isOwner bool) error {
+// resolveTeamMembership resolves the student's group team for a team
+// assignment, founding one when appropriate:
+//
+//   - already on a team → that team (an unnecessary --new-team is ignored
+//     with a warning, so a re-run after a partial accept never forks a
+//     second team);
+//   - not on a team, teacher formation → the teacher assigns groups;
+//   - not on a team, student formation → --new-team founds a team (the
+//     student becomes its GitHub team maintainer), else an error explains
+//     the two ways to get one.
+func resolveTeamMembership(client githubapi.Client, u *ui.UI, org, classroom, assignment, username string, entry assignments.Entry, newTeam bool, teamName string) (groupteam.Membership, error) {
+	membership, found, err := groupteam.MyTeam(client, org, classroom, assignment)
+	if err != nil {
+		return groupteam.Membership{}, err
+	}
+	if found {
+		if newTeam {
+			u.Warn("you are already in group %d for this assignment; ignoring --new-team", membership.Counter)
+		}
+		// Teacher formation never makes a student a maintainer (the teacher
+		// creates the team and drops out; students are added as members), so
+		// a maintainer membership marks a self-created team: the group-team
+		// name is derivable from public data, and accepting through it would
+		// bypass "your teacher assigns the groups" entirely. Fail closed on
+		// the role read too — an unverifiable membership must not become the
+		// bypass. Advisory like every client-side gate, but it keeps honest
+		// students off a path the teacher tooling would flag as drift.
+		if entry.TeamFormation == contract.TeamFormationTeacher {
+			role, err := groupteam.MembershipRole(context.Background(), client, org, membership.Slug, username)
+			if err != nil {
+				return groupteam.Membership{}, fmt.Errorf("could not verify your group membership: %w; run accept again in a moment", err)
+			}
+			if role == "maintainer" {
+				return groupteam.Membership{}, fmt.Errorf("your teacher assigns the groups for this assignment, and group %d was not created by your teacher (you maintain it). Ask your teacher to add you to one of their groups, then run accept again", membership.Counter)
+			}
+		}
+		return membership, nil
+	}
+	if entry.TeamFormation == contract.TeamFormationTeacher {
+		return groupteam.Membership{}, fmt.Errorf("your teacher assigns the groups for this assignment. Ask your teacher to add you to a group, then run accept again")
+	}
+	if !newTeam {
+		return groupteam.Membership{}, fmt.Errorf("you are not in a group for this assignment yet. Run accept again with --new-team to create one (you become its founder and can add teammates with `gh student team add`), or ask a teammate who already has a group to add you, then run accept again")
+	}
+	// The coherence gate runs on the FOUNDING path only: founding against an
+	// incoherent entry would mint a team (and later a repo) the contract
+	// forbids, but a student already on a team must still reconcile a healthy
+	// repo even if a later-published entry drifted incoherent.
+	if err := assertModeCoherentForCreate(assignment, entry.Mode, entry.MaxGroupSize, entry.TeamFormation); err != nil {
+		return groupteam.Membership{}, err
+	}
+	created, err := groupteam.Create(client, org, classroom, assignment, teamName)
+	if err != nil {
+		return groupteam.Membership{}, err
+	}
+	label := fmt.Sprintf("group %d", created.Counter)
+	if teamName != "" {
+		label = fmt.Sprintf("%q (group %d)", teamName, created.Counter)
+	}
+	u.Warn("created %s for this assignment; add teammates with `gh student team add %s %s %s <username>`", label, org, classroom, assignment)
+	return created, nil
+}
+
+func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out io.Writer, org, classroom, assignment, secret string, isOwner, newTeam bool, teamName string) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	// The acceptor owns the repo, so capture their immutable id and the
@@ -408,6 +502,25 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// `gh student invite <org>/<repo> <teammate>`. Only an unknown mode errors.
 	if err := checkAcceptableMode(assignment, entry.Mode); err != nil {
 		return err
+	}
+	// Team mode resolves "my group team" BEFORE any repo work: the team's
+	// counter decides the repo name (`<classroom>-<assignment>-group-<n>`),
+	// and a student without a team either founds one (student formation with
+	// --new-team) or is told to ask the teacher (teacher formation).
+	// ownerSegment is what occupies the username position of the repo-name
+	// formula: the accepting student's login normally, `group-<n>` for team
+	// mode.
+	ownerSegment := username
+	teamSlug := ""
+	if entry.Mode == contract.ModeTeam {
+		membership, err := resolveTeamMembership(client, u, org, classroom, assignment, username, entry, newTeam, teamName)
+		if err != nil {
+			return err
+		}
+		teamSlug = membership.Slug
+		ownerSegment = groupteam.OwnerSegment(membership.Counter)
+	} else if newTeam || teamName != "" {
+		return fmt.Errorf("assignment %q is not a team assignment (mode %q), so --new-team and --team-name do not apply; run accept without them", assignment, entry.Mode)
 	}
 	// A template, when present, must be complete. A template-less assignment
 	// (no template block) is accepted as an empty repo carrying only the
@@ -504,9 +617,9 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 			// The generated repo's own default branch — not the template's
 			// branch — is where control files land and what the shim must
 			// trigger on.
-			return createTemplatedAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template, entry.RepoFeatures, entry.IncludeAllBranches, public)
+			return createTemplatedAssignmentRepoInOrg(client, u, verbose, ownerSegment, classroom, assignment, org, *entry.Template, entry.RepoFeatures, entry.IncludeAllBranches, public)
 		}
-		return createEmptyAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, !entry.EmptyRepo, entry.RepoFeatures, public)
+		return createEmptyAssignmentRepoInOrg(client, u, verbose, ownerSegment, classroom, assignment, org, !entry.EmptyRepo, entry.RepoFeatures, public)
 	}
 	htmlURL, fullName, commitBranch, alreadyExisted, err = createRepo(wantPublic)
 	if err != nil && wantPublic && isPublicRepoCreationDenied(err) {
@@ -552,13 +665,15 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		shim = renderEmbeddedShim(org, commitBranch, configBranch, entry.SubmissionMode, entry.SubmissionTags)
 	}
 
-	repoName := reponame.Name(classroom, assignment, username)
+	repoName := reponame.Name(classroom, assignment, ownerSegment)
 	return acceptIntoRepo(client, u, verbose, out, acceptRepoParams{
 		org:                org,
 		classroom:          classroom,
 		assignment:         assignment,
 		mode:               entry.Mode,
 		maxGroupSize:       entry.MaxGroupSize,
+		teamFormation:      entry.TeamFormation,
+		teamSlug:           teamSlug,
 		studentPermission:  entry.StudentPermission,
 		secret:             secret,
 		username:           username,
@@ -589,6 +704,13 @@ type acceptRepoParams struct {
 	org, classroom, assignment string
 	mode                       string
 	maxGroupSize               int
+	// teamFormation is the entry's team_formation (team mode only), threaded
+	// through for the fresh-create coherence gate.
+	teamFormation string
+	// teamSlug is the group team owning a team-mode repo; provisioning
+	// attaches it to the repo with push (the authoritative repo<->team
+	// link). Empty for individual/group assignments.
+	teamSlug                   string
 	secret                     string
 	username, repoName, branch string
 	ownerID                    *int64
@@ -646,6 +768,12 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			return perr
 		}
 		if provisioned {
+			// Heal the team attach BEFORE any role reconcile: the attach PUT
+			// needs repo admin — the founder's transient creator-admin — and
+			// the team-mode founder role is push, so reconciling the role
+			// first would self-downgrade the founder and strand the attach
+			// forever (the exact half-accept this branch exists to repair).
+			attachTeamBestEffort(client, u, verbose, p)
 			// Already accepted: reconcile the role best-effort. The repo is
 			// already healthy, so a transient/SSO-403/left-org failure must not
 			// fail a re-run that previously always succeeded — warn and report.
@@ -675,9 +803,9 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 	}
 
 	// Fresh create (or heal of a never-finished accept): a group-shaped entry
-	// whose mode isn't group would found the repo under-privileged, so reject
-	// incoherent metadata here — not on the already-accepted path above.
-	if err := assertModeCoherentForCreate(p.assignment, p.mode, p.maxGroupSize); err != nil {
+	// whose mode isn't group/team would found the repo under-privileged, so
+	// reject incoherent metadata here — not on the already-accepted path above.
+	if err := assertModeCoherentForCreate(p.assignment, p.mode, p.maxGroupSize, p.teamFormation); err != nil {
 		return err
 	}
 
@@ -721,6 +849,7 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 		// templated already-accepted path. The bare repo is already healthy
 		// (its only provisioning is this grant), so a transient/SSO-403/
 		// left-org failure must not fail a re-run that previously succeeded.
+		attachTeamBestEffort(client, u, verbose, p)
 		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode, p.studentPermission)); err != nil && verbose {
 			u.Detail("could not update %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 		}
@@ -728,10 +857,16 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 	}
 	p.createSp.Stop(fmt.Sprintf("Created %s", p.fullName))
 
-	// Fresh create: a group-shaped entry whose mode isn't group would found
-	// the repo under-privileged, so reject incoherent metadata before the
-	// grant — same guard the templated fresh-create path runs.
-	if err := assertModeCoherentForCreate(p.assignment, p.mode, p.maxGroupSize); err != nil {
+	// Fresh create: a group-shaped entry whose mode isn't group/team would
+	// found the repo under-privileged, so reject incoherent metadata before
+	// the grant — same guard the templated fresh-create path runs.
+	if err := assertModeCoherentForCreate(p.assignment, p.mode, p.maxGroupSize, p.teamFormation); err != nil {
+		return err
+	}
+
+	// A fresh team-mode bare repo still needs its team attached — that is the
+	// only thing giving teammates access to a repo with no collaborators.
+	if err := attachTeamStep(client, p); err != nil {
 		return err
 	}
 
@@ -740,6 +875,38 @@ func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.
 	}
 
 	return reportBareAccepted(u, out, p.fullName, p.htmlURL)
+}
+
+// attachTeamStep grants the group team push on the just-created repo — the
+// authoritative repo<->team link for a team-mode assignment. A no-op when the
+// accept isn't team mode. The accepting student holds creator-admin on the
+// repo at this point (the founder self-downgrade runs later), so the PUT
+// succeeds for teacher-formed teams too.
+func attachTeamStep(client githubapi.Client, p acceptRepoParams) error {
+	if p.teamSlug == "" {
+		return nil
+	}
+	return groupteam.AttachRepo(context.Background(), client, p.org, p.teamSlug, p.repoName)
+}
+
+// attachTeamBestEffort re-issues the idempotent team attach on an
+// already-accepted repo, healing a prior accept that died between the repo
+// landing and the grant. Probe-first: any team member can read the
+// attachment, so a healthy re-run — including a teammate's, who could never
+// issue the PUT (it needs repo admin) — skips silently instead of warning on
+// every run. Best-effort throughout: the repo is healthy, so a failure must
+// not fail a re-run — warn instead.
+func attachTeamBestEffort(client githubapi.Client, u *ui.UI, _ bool, p acceptRepoParams) {
+	if p.teamSlug == "" {
+		return
+	}
+	attached, err := groupteam.TeamHasRepo(context.Background(), client, p.org, p.teamSlug, p.repoName)
+	if err == nil && attached {
+		return
+	}
+	if err := groupteam.AttachRepo(context.Background(), client, p.org, p.teamSlug, p.repoName); err != nil {
+		u.Warn("could not confirm your team %s has access to %s/%s (%v); run accept again if teammates cannot push", p.teamSlug, p.org, p.repoName, err)
+	}
 }
 
 // provisionAcceptedRepo brings a just-created (or partially-provisioned)
@@ -780,6 +947,14 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	// Read-back: a successful commit PATCH isn't proof the repo is readable
 	// yet, so confirm the marker before reporting accepted.
 	if err := verifyProvisioned(client, p.org, p.repoName); err != nil {
+		return err
+	}
+
+	// Team mode: attach the group team to the repo with push — the
+	// authoritative repo<->team link, and the only thing giving teammates
+	// access. Before the founder grant so a founder self-downgrade to a
+	// non-admin role can never lock the attach out.
+	if err := attachTeamStep(client, p); err != nil {
 		return err
 	}
 

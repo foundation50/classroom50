@@ -12,6 +12,7 @@ import {
   GRADING_MAX_POINTS_MIN,
   TEST_FAILURE_DETAILS_LEVELS,
   assertAssignmentMode,
+  assertTeamFormation,
   defaultStudentPermission,
 } from "@/types/classroom"
 import {
@@ -109,6 +110,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   mode: "classroom50-owned",
   autograder: "classroom50-owned",
   max_group_size: "classroom50-owned",
+  team_formation: "classroom50-owned",
   feedback_pr: "classroom50-owned",
   // Rebuilt from input and MUTABLE: an edit may flip empty_repo now (the UI
   // warns when students already accepted, since existing repos aren't
@@ -628,10 +630,11 @@ async function buildAssignmentEntry(
       entry.available_from_meta = due_meta
     }
   }
-  if (input.mode === "group") {
+  if (input.mode === "group" || input.mode === "team") {
     // A group size outside [GROUP_SIZE_MIN, GROUP_SIZE_MAX] (or non-integer)
     // produces an assignments.json the CLI refuses to parse; enforce the
-    // schema bounds here, not just in the form.
+    // schema bounds here, not just in the form. Applies to both group flavors
+    // (legacy group and team).
     if (
       !Number.isInteger(input.max_group_size) ||
       input.max_group_size < GROUP_SIZE_MIN ||
@@ -642,6 +645,18 @@ async function buildAssignmentEntry(
       )
     }
     entry.max_group_size = input.max_group_size
+  }
+
+  // team_formation is required for mode: team and forbidden otherwise (the
+  // CLI schema enforces the same conditional). assertTeamFormation guards a
+  // hand-tampered value before it can reach the file.
+  if (input.mode === "team") {
+    if (!input.team_formation) {
+      throw new Error(
+        "team_formation: a team assignment requires a formation (teacher or student).",
+      )
+    }
+    entry.team_formation = assertTeamFormation(input.team_formation)
   }
 
   // Runtime overrides (Advanced Settings); omit the block when unset.
@@ -809,9 +824,11 @@ async function buildAssignmentEntry(
 
   // student_permission: opt-in accept-time role for the enrolled student on
   // their own repo. Omit when it equals the mode default (absent = default
-  // everywhere downstream), and clamp a group assignment up to admin (a founder
-  // must manage members). Validate against the ladder so a bad value can't
-  // produce a file the CLI refuses to parse.
+  // everywhere downstream). Group is clamped up to admin (a founder must
+  // manage members); team is clamped AWAY from admin down to the push default
+  // (access flows through the team attachment — a per-member admin would let
+  // one student delete the shared repo). Validate against the ladder so a bad
+  // value can't produce a file the CLI refuses to parse.
   if (input.student_permission) {
     if (!REPO_PERMISSIONS.includes(input.student_permission)) {
       throw new Error(
@@ -822,7 +839,9 @@ async function buildAssignmentEntry(
     const effective =
       mode === "group" && input.student_permission !== "admin"
         ? "admin"
-        : input.student_permission
+        : mode === "team" && input.student_permission === "admin"
+          ? defaultStudentPermission(mode)
+          : input.student_permission
     if (effective !== defaultStudentPermission(mode)) {
       entry.student_permission = effective
     }

@@ -140,6 +140,13 @@ func enforceGroupSize(cmd *cobra.Command, client githubapi.Client, org, repo, in
 		}
 		return nil
 	}
+	if entry.Mode == contract.ModeTeam {
+		// Team assignments manage access through their GitHub Team, not
+		// direct collaborators — a collaborator invite would bypass the team
+		// and never be credited.
+		return fmt.Errorf("this is a team assignment: teammates join through your GitHub team, not repository invitations. Use `gh student team add %s %s %s %s` instead",
+			org, cfg.Classroom, cfg.Assignment, invitee)
+	}
 	if entry.Mode != contract.ModeGroup {
 		return nil // individual assignment → no cap
 	}

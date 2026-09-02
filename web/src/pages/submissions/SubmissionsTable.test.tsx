@@ -64,6 +64,7 @@ vi.mock("@/components/modals/StudentProfileModal", () => ({
 import SubmissionsTable from "./SubmissionsTable"
 import type { Student } from "@/types/classroom"
 import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 
 const student = (over: Partial<Student> = {}): Student => ({
   username: "alice",
@@ -725,10 +726,13 @@ describe("SubmissionsTable hub action list", () => {
     expect(
       screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
     ).toBeTruthy()
-    // The group Members hand-off is present; the per-student Manage-access
-    // action is not (group access is managed via the Members modal).
+    // The group Manage-group hand-off is present; the per-student
+    // Manage-access action is not (group access is managed via the group
+    // members editor).
     expect(
-      screen.getByRole("button", { name: /submissions\.table\.members/ }),
+      screen.getByRole("button", {
+        name: /submissions\.manageModal\.manageGroup/,
+      }),
     ).toBeTruthy()
     expect(
       screen.queryByRole("button", {
@@ -990,5 +994,86 @@ describe("SubmissionsTable submission details modal", () => {
     expect(emptyLink.getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-alice/tags",
     )
+  })
+})
+
+describe("SubmissionsTable team/repo mismatch indicators", () => {
+  const team: GroupTeamRef = {
+    slug: "classroom50-group-abc123-2",
+    id: 102,
+    n: 2,
+    name: "Rocket",
+  }
+
+  it("renders a repo-less team as a row with the no-repository badge and a team link", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={new Map([["group-2", team]])}
+        teamsWithoutRepos={[team]}
+      />,
+    )
+    expect(screen.getByText("submissions.table.teamNoRepo")).toBeTruthy()
+    // The name cell links to the team's GitHub page, not a (404) repo URL.
+    const link = screen.getByRole("link", { name: "Rocket" })
+    expect(link.getAttribute("href")).toBe(
+      "https://github.com/orgs/acme/teams/classroom50-group-abc123-2",
+    )
+    // The empty-state row must not render alongside the team row.
+    expect(
+      screen.queryByText("submissions.table.emptyNoGroupsTitle"),
+    ).toBeNull()
+  })
+
+  it("flags an unsubmitted repo whose team no longer exists once teams settle", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={new Map<string, GroupTeamRef>()}
+        unsubmittedGroupRepos={[
+          { owner: "group-1", repoName: "cs101-hw1-group-1" },
+        ]}
+      />,
+    )
+    expect(screen.getByText("submissions.table.teamMissing")).toBeTruthy()
+  })
+
+  it("flags a submitter row whose team no longer exists", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={new Map<string, GroupTeamRef>()}
+        scores={[scoreRow({ owner: "group-1", usernames: ["alice"] })]}
+      />,
+    )
+    expect(screen.getByText("submissions.table.teamMissing")).toBeTruthy()
+  })
+
+  it("shows no missing-team badge while the teams query hasn't settled", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        isTeam
+        teamsSettled={false}
+        teamsByOwner={new Map<string, GroupTeamRef>()}
+        unsubmittedGroupRepos={[
+          { owner: "group-1", repoName: "cs101-hw1-group-1" },
+        ]}
+      />,
+    )
+    expect(screen.queryByText("submissions.table.teamMissing")).toBeNull()
   })
 })

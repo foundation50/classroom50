@@ -26,7 +26,7 @@ import type { CreateAssignmentFormValues } from "./assignmentFormModel"
 // repo; "empty" source without the built-in autograder is the truly bare
 // empty_repo.
 export type RepositorySource = "template" | "readme" | "empty"
-export type AssignmentType = "individual" | "group"
+export type AssignmentType = "individual" | "group" | "team"
 
 export type FormShape = {
   // The repository source, folded from the UI's repo_source + add_readme.
@@ -48,8 +48,10 @@ export type FormShape = {
   // "built-in" (including the init_shim case), everything else -> "none".
   autogradingState: AutogradingState
   assignmentType: AssignmentType
-  // Max group size only applies to a group assignment.
+  // Max group size applies to both group flavors (legacy group and team).
   showGroupSize: boolean
+  // The formation radio (teacher-assigned vs student-formed) is team-only.
+  showTeamFormation: boolean
   // Template ref + creation method only when a template is the source.
   showTemplateFields: boolean
   // The "Add a README" toggle only shows for the no-template source (a template
@@ -137,8 +139,12 @@ export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
     initShim,
     noAutograder,
     autogradingState,
-    assignmentType: value.mode === "group" ? "group" : "individual",
-    showGroupSize: value.mode === "group",
+    assignmentType:
+      value.mode === "group" || value.mode === "team"
+        ? value.mode
+        : "individual",
+    showGroupSize: value.mode === "group" || value.mode === "team",
+    showTeamFormation: value.mode === "team",
     showTemplateFields: repositorySource === "template",
     showAddReadme: value.repo_source === "none",
     feedbackPrEnabled: !emptyRepo,

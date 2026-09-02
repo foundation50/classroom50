@@ -17,7 +17,9 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { groupDisplayName } from "@/util/groupTeam"
+import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import {
   formatDueDateTime,
   formatRelativeToNow,
@@ -30,7 +32,11 @@ import {
   submissionModeCountKey,
   latestDetectedAt,
 } from "@/domain/assignments/submissionDetection"
-import type { Assignment, SubmissionMode } from "@/types/classroom"
+import type {
+  Assignment,
+  AssignmentMode,
+  SubmissionMode,
+} from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Markdown, TableShell } from "@/components/ui"
@@ -53,6 +59,7 @@ import {
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
 import SubmitGuidance from "@/components/SubmitGuidance"
+import { GroupTeamMembersReadOnly } from "@/components/assignments/GroupTeamMembersReadOnly"
 import { errorText } from "@/types/localizedMessage"
 
 // A submit/<UTC-ts>-<short-sha> release tag → its trailing short sha, so a
@@ -108,10 +115,14 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
     <div>
       <MetaStrip
         items={[
-          assignment.mode === "group" ? (
+          assignment.mode === "group" || assignment.mode === "team" ? (
             <MetaItem>
               <PeopleIcon aria-hidden="true" className="size-4" />
-              {t("submissions.student.modeGroup")}
+              {t(
+                assignment.mode === "team"
+                  ? "submissions.student.modeTeam"
+                  : "submissions.student.modeGroup",
+              )}
             </MetaItem>
           ) : assignment.mode === "individual" ? (
             <MetaItem>
@@ -147,6 +158,7 @@ const SubmissionBody = ({
   classroom,
   assignment,
   secret,
+  mode,
   submissionMode,
   submissionTags,
 }: {
@@ -156,12 +168,33 @@ const SubmissionBody = ({
   // Capability-URL secret for a protected classroom; threads into the accept
   // link. Undefined for unprotected.
   secret?: string
+  // Assignment mode: team mode resolves the shared group repo through the
+  // viewer's team membership instead of the username formula.
+  mode?: AssignmentMode
   submissionMode?: SubmissionMode
   submissionTags?: string[]
 }) => {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
   const isTagMode = submissionMode === "tag"
+
+  // Team mode: the repo is `<classroom>-<assignment>-group-<n>`, so the
+  // owner segment comes from MY group team's counter, not my username. Not on
+  // a team (settled null) leaves the owner unset, which reads as "not
+  // accepted" below — the accept page owns the join/create flow.
+  const isTeamMode = mode === "team"
+  const { data: myTeam, isLoading: myTeamLoading } = useMyGroupTeam(
+    org,
+    classroom,
+    assignment,
+    { enabled: isTeamMode && Boolean(user?.login) },
+  )
+  const repoOwnerSegment = isTeamMode
+    ? myTeam
+      ? `${GROUP_REPO_SEGMENT}${myTeam.n}`
+      : undefined
+    : user?.login
+
   const {
     releases,
     tags: taggedSubmissions,
@@ -171,7 +204,7 @@ const SubmissionBody = ({
     releasesErrorObj,
     submissionListError,
     submissionListLoading,
-  } = useMySubmissions(org, classroom, assignment, user?.login, {
+  } = useMySubmissions(org, classroom, assignment, repoOwnerSegment, {
     mode: submissionMode,
     submissionTags,
   })
@@ -181,12 +214,17 @@ const SubmissionBody = ({
   // the "haven't accepted yet" CTA and misdirects the student.
   const {
     assignment: studentRepo,
-    isLoading: repoLoading,
+    isLoading: repoQueryLoading,
     isError: repoIsError,
     error: repoError,
-  } = useGetAssignmentRepo(org, classroom, assignment, user?.login)
+  } = useGetAssignmentRepo(org, classroom, assignment, repoOwnerSegment)
+  const repoLoading = repoQueryLoading || (isTeamMode && myTeamLoading)
 
-  const repoName = studentRepoName(classroom, assignment, user?.login ?? "")
+  const repoName = studentRepoName(
+    classroom,
+    assignment,
+    repoOwnerSegment ?? "",
+  )
 
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -251,7 +289,11 @@ const SubmissionBody = ({
     const message = firstError ? errorText(t, firstError) : ""
     return (
       <Alert tone="error">
-        {t("submissions.student.loadError")}
+        {t(
+          isTeamMode
+            ? "submissions.student.loadErrorTeam"
+            : "submissions.student.loadError",
+        )}
         {message ? ` ${message}` : ""}
       </Alert>
     )
@@ -264,7 +306,11 @@ const SubmissionBody = ({
         <Alert tone="info">
           <div>
             <Trans
-              i18nKey="submissions.student.notAccepted"
+              i18nKey={
+                isTeamMode
+                  ? "submissions.student.notAcceptedTeam"
+                  : "submissions.student.notAccepted"
+              }
               components={{
                 acceptLink: (
                   <Link
@@ -320,6 +366,18 @@ const SubmissionBody = ({
           </Button>
         </Alert>
       )}
+      {/* Team mode: a compact, read-only "who's in my group" strip above the
+          repo table, so teammates are one glance (and one click) away. It
+          resolves from the same my-team query the body already settled, so it
+          never re-gates the view; a failed member read quietly omits it. */}
+      {isTeamMode && myTeam ? (
+        <GroupTeamMembersReadOnly
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          variant="strip"
+        />
+      ) : null}
       {/* One-row, teacher-style submissions table for the student's own repo.
           The count chip opens the shared details modal (tags or pushes); the
           student column set omits the teacher-only score and management
@@ -327,11 +385,21 @@ const SubmissionBody = ({
           already animates this block. */}
       <TableShell animate={false}>
         <caption className="sr-only">
-          {t("submissions.student.tableCaption")}
+          {t(
+            isTeamMode
+              ? "submissions.student.tableCaptionTeam"
+              : "submissions.student.tableCaption",
+          )}
         </caption>
         <thead>
           <tr>
-            <th scope="col">{t("submissions.student.colYourRepo")}</th>
+            <th scope="col">
+              {t(
+                isTeamMode
+                  ? "submissions.student.colYourRepoTeam"
+                  : "submissions.student.colYourRepo",
+              )}
+            </th>
             <th scope="col">{t("submissions.table.colSubmissions")}</th>
             <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
             <th scope="col">
@@ -344,22 +412,50 @@ const SubmissionBody = ({
         <tbody>
           <tr>
             <td>
-              <Avatar
-                name={user?.name || user?.login || ""}
-                initials=""
-                github={user?.login || ""}
-                subtitle={
-                  <a
-                    className="link link-hover block max-w-72 truncate font-mono text-xs"
-                    href={repoHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={repoName}
-                  >
-                    {repoName}
-                  </a>
-                }
-              />
+              {isTeamMode ? (
+                // The repo belongs to the GROUP, so the row identity is the
+                // group — not the signed-in account (any teammate sees the
+                // same row).
+                <div className="flex items-center gap-3">
+                  <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-base-200 text-base-content/70">
+                    <PeopleIcon aria-hidden="true" className="size-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-medium">
+                      {groupDisplayName(
+                        { name: myTeam?.name, n: myTeam?.n ?? 0 },
+                        t,
+                      )}
+                    </div>
+                    <a
+                      className="link link-hover block max-w-72 truncate font-mono text-xs"
+                      href={repoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={repoName}
+                    >
+                      {repoName}
+                    </a>
+                  </div>
+                </div>
+              ) : (
+                <Avatar
+                  name={user?.name || user?.login || ""}
+                  initials=""
+                  github={user?.login || ""}
+                  subtitle={
+                    <a
+                      className="link link-hover block max-w-72 truncate font-mono text-xs"
+                      href={repoHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={repoName}
+                    >
+                      {repoName}
+                    </a>
+                  }
+                />
+              )}
             </td>
             <td>
               <SubmissionCountCell
@@ -425,7 +521,11 @@ const SubmissionBody = ({
       {detailsOpen ? (
         <SubmissionDetailsModal
           onClose={() => setDetailsOpen(false)}
-          title={t("submissions.student.detailsTitle")}
+          title={t(
+            isTeamMode
+              ? "submissions.student.detailsTitleTeam"
+              : "submissions.student.detailsTitle",
+          )}
           repo={repoName}
           repoHref={repoHref}
           countLabel={t(submissionModeCountKey(submissionMode), {
@@ -447,7 +547,6 @@ const SubmissionBody = ({
 
 const StudentSubmissionPage = () => {
   const { t } = useTranslation()
-  useDocumentTitle(t("documentTitle.mySubmission"))
   const { org, classroom, assignment } = useParams({ strict: false })
   const { user } = useGithubAuth()
   // Resolve the capability-URL secret (protected classrooms) from two sources
@@ -491,13 +590,26 @@ const StudentSubmissionPage = () => {
   // not just while the pages read itself is in flight.
   const assignmentLoading = loadingAssignment || loadingBootstrap
   const description = assignmentDescription(assignmentData)
+  // "Group submission" for a team assignment: the shared repo isn't only the
+  // viewer's. Defaults to the individual title until the mode resolves.
+  const isTeamAssignment = assignmentData?.mode === "team"
+  const submissionLabel = t(
+    isTeamAssignment ? "nav.mySubmissionTeam" : "nav.mySubmission",
+  )
+  useDocumentTitle(
+    t(
+      isTeamAssignment
+        ? "documentTitle.mySubmissionTeam"
+        : "documentTitle.mySubmission",
+    ),
+  )
   const submissionMode = assignmentData?.submission_mode
   const submissionTags = assignmentData?.submission_tags
 
   return (
     <PageShell>
       <Breadcrumb
-        endpoint={t("nav.mySubmission")}
+        endpoint={submissionLabel}
         assignmentName={assignmentData?.name}
       />
       <PageHeader
@@ -551,6 +663,7 @@ const StudentSubmissionPage = () => {
             classroom={classroom}
             assignment={assignment}
             secret={secret}
+            mode={assignmentData?.mode}
             submissionMode={submissionMode}
             submissionTags={submissionTags}
           />

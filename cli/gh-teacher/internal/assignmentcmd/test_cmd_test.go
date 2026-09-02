@@ -1090,31 +1090,50 @@ func TestRunAssignmentTestList_EmptyEmitsJSONArray(t *testing.T) {
 
 func TestValidateModeAndSizeFlags(t *testing.T) {
 	cases := []struct {
-		name         string
-		mode         string
-		maxGroupSize int
-		sizeProvided bool
-		wantMode     string
-		wantErrPart  string // "" = expect success
+		name              string
+		mode              string
+		maxGroupSize      int
+		sizeProvided      bool
+		formation         string
+		formationProvided bool
+		wantMode          string
+		wantFormation     string
+		wantErrPart       string // "" = expect success
 	}{
-		{"individual default, no size", "", 0, false, "individual", ""},
-		{"explicit individual, no size", "individual", 0, false, "individual", ""},
-		{"individual with size rejected", "individual", 3, true, "", "only valid with --mode group"},
-		{"group with valid size", "group", 3, true, "group", ""},
-		{"group without size rejected", "group", 0, false, "", "must be >= 2"},
-		{"group with size 1 rejected", "group", 1, true, "", "must be >= 2"},
-		{"group above cap rejected", "group", 101, true, "", "max_group_size"},
-		{"unknown mode rejected", "team", 0, false, "", "invalid --mode"},
+		{name: "individual default, no size", wantMode: "individual"},
+		{name: "explicit individual, no size", mode: "individual", wantMode: "individual"},
+		{name: "individual with size rejected", mode: "individual", maxGroupSize: 3, sizeProvided: true, wantErrPart: "only valid with --mode group or --mode team"},
+		{name: "group with valid size", mode: "group", maxGroupSize: 3, sizeProvided: true, wantMode: "group"},
+		{name: "group without size rejected", mode: "group", wantErrPart: "must be >= 2"},
+		{name: "group with size 1 rejected", mode: "group", maxGroupSize: 1, sizeProvided: true, wantErrPart: "must be >= 2"},
+		{name: "group above cap rejected", mode: "group", maxGroupSize: 101, sizeProvided: true, wantErrPart: "max_group_size"},
+		{name: "group with formation rejected", mode: "group", maxGroupSize: 3, sizeProvided: true, formation: "teacher", formationProvided: true, wantErrPart: "only valid with --mode team"},
+		{name: "individual with formation rejected", formation: "teacher", formationProvided: true, wantErrPart: "only valid with --mode team"},
+		{name: "team with size and teacher formation", mode: "team", maxGroupSize: 4, sizeProvided: true, formation: "teacher", formationProvided: true, wantMode: "team", wantFormation: "teacher"},
+		{name: "team with size and student formation", mode: "team", maxGroupSize: 4, sizeProvided: true, formation: "student", formationProvided: true, wantMode: "team", wantFormation: "student"},
+		{name: "team without size rejected", mode: "team", formation: "teacher", formationProvided: true, wantErrPart: "must be >= 2"},
+		{name: "team without formation rejected", mode: "team", maxGroupSize: 4, sizeProvided: true, wantErrPart: "--team-formation is required"},
+		{name: "team with invalid formation rejected", mode: "team", maxGroupSize: 4, sizeProvided: true, formation: "anyone", formationProvided: true, wantErrPart: "team_formation"},
+		{name: "unknown mode rejected", mode: "pair", wantErrPart: "invalid --mode"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotMode, err := validateModeAndSizeFlags(tc.mode, tc.maxGroupSize, tc.sizeProvided)
+			gotMode, gotFormation, err := validateModeAndSizeFlags(modeSizeFlagState{
+				Mode:              tc.mode,
+				MaxGroupSize:      tc.maxGroupSize,
+				SizeProvided:      tc.sizeProvided,
+				TeamFormation:     tc.formation,
+				FormationProvided: tc.formationProvided,
+			})
 			if tc.wantErrPart == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				if gotMode != tc.wantMode {
 					t.Errorf("mode = %q, want %q", gotMode, tc.wantMode)
+				}
+				if gotFormation != tc.wantFormation {
+					t.Errorf("formation = %q, want %q", gotFormation, tc.wantFormation)
 				}
 				return
 			}

@@ -528,11 +528,12 @@ jobs:
           # Only honor the flag when we actually have a template to read from.
           feedback_pr_template = feedback_pr_template and feedback_pr and bool(template_repo)
 
-          # Assignment mode (individual | group), normalized; drives the
-          # Feedback PR label so a teacher can tell them apart at a glance.
+          # Assignment mode (individual | group | team), normalized; drives
+          # the result.json assignment_type (runner.py) and the Feedback PR
+          # label so a teacher can tell them apart at a glance.
           mode = (entry.get("mode") or "individual").strip().lower()
-          if mode not in ("individual", "group"):
-              fail(f"entry {assignment!r}: mode {mode!r} must be 'individual' or 'group'")
+          if mode not in ("individual", "group", "team"):
+              fail(f"entry {assignment!r}: mode {mode!r} must be 'individual', 'group', or 'team'")
 
           # === Allowed-files allowlist ===
           # Re-validate the hand-editable manifest field and emit it as a
@@ -923,9 +924,9 @@ jobs:
       # Optional capability-URL secret from .classroom50.yaml (via setup).
       # runner.py inserts it into the fetch URLs; empty = plain path.
       SECRET:         ${{ needs.setup.outputs.secret }}
-      # Assignment mode (individual | group) from assignments.json, so
-      # runner.py validates a group autograder's multi-username result.json
-      # instead of rejecting it. Defaults to the stricter individual rule
+      # Assignment mode (individual | group | team) from assignments.json, so
+      # runner.py stamps and validates the matching assignment_type instead
+      # of rejecting it. Defaults to the stricter individual rule
       # when absent.
       MODE:           ${{ needs.setup.outputs.mode }}
       # allowed_files patterns (JSON array) from assignments.json;

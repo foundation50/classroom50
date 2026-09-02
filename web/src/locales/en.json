@@ -212,7 +212,9 @@
     "settings": "Settings",
     "submissions": "Submissions",
     "mySubmission": "My submission",
+    "mySubmissionTeam": "Group submission",
     "manageGroup": "Manage group",
+    "manageGroups": "Manage groups",
     "acceptAssignment": "Accept assignment",
     "myClasses": "My classrooms",
     "published": "Published",
@@ -355,8 +357,10 @@
     "newClassroom": "New classroom",
     "classes": "Classrooms",
     "mySubmission": "My submission",
+    "mySubmissionTeam": "Group submission",
     "submissions": "Submissions",
-    "activity": "Activity"
+    "activity": "Activity",
+    "manageGroups": "Manage groups"
   },
   "students": {
     "addTitle": "Add member",
@@ -1064,6 +1068,9 @@
       "notAccepted": "Not accepted",
       "accepted": "Accepted",
       "viewSubmission": "View my submission",
+      "viewSubmissionTeam": "View group submission",
+      "viewGroup": "View group",
+      "viewGroupTitle": "Your group",
       "colStatus": "Status",
       "colAction": "Action",
       "tableCaption": "Published assignments and your status for each",
@@ -1082,7 +1089,8 @@
         "typeAria": "Filter by type",
         "typeAll": "All types",
         "typeIndividual": "Individual",
-        "typeGroup": "Group",
+        "typeTeam": "Group",
+        "typeGroup": "Group (legacy)",
         "dueAria": "Filter by due date",
         "dueAll": "Any due date",
         "dueOverdue": "Overdue",
@@ -1136,8 +1144,9 @@
       "availableFromTz": "Times are in your local timezone ({{tz}}).",
       "type": "Assignment type",
       "typeIndividual": "Individual",
-      "typeGroup": "Group project",
+      "typeGroup": "Group (legacy)",
       "typeLockedHelp": "Can't be changed after creation. Switching it would invalidate existing submissions.",
+      "typeTeamDisabledHelp": "Group assignments need organization members to be able to create teams: the first student creates the group's team when accepting. Turn on \"Allow members to create teams\" in the Member team creation section of the organization settings page, or in the organization's member privileges on GitHub.",
       "maxGroupSize": "Max group size",
       "maxGroupSizeTitle": "Must be a whole number between {{min}} and {{max}}",
       "repoSource": {
@@ -1357,8 +1366,16 @@
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
         "releaseAssetsInvalidBasename": "{{basename}} is not a safe Release filename or is reserved.",
         "releaseAssetsDuplicatePath": "{{path}} is listed more than once; each release file path must be unique.",
-        "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique."
-      }
+        "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique.",
+        "teamFormationInvalid": "Choose who forms the groups."
+      },
+      "typeTeam": "Group",
+      "typeTeamRecommended": "Recommended",
+      "teamFormation": "Group formation",
+      "teamFormationTeacher": "Teacher assigns groups",
+      "teamFormationTeacherHelp": "You create the groups and add students on the assignment settings page. Students who aren't in a group can't accept.",
+      "teamFormationStudent": "Students form groups",
+      "teamFormationStudentHelp": "The first student creates the group when accepting, then adds teammates up to the max group size."
     },
     "autograder": {
       "heading": "Autograding tests",
@@ -1445,6 +1462,7 @@
       "retry": "Retry",
       "individual": "Individual",
       "group": "Group",
+      "groupLegacy": "Group (legacy)",
       "noDueDate": "No due date",
       "scheduled": "Releases {{date}}",
       "releaseNotSet": "Not set · link-only",
@@ -1517,7 +1535,8 @@
       "typeAria": "Filter by type",
       "typeAll": "All types",
       "typeIndividual": "Individual",
-      "typeGroup": "Group",
+      "typeTeam": "Group",
+      "typeGroup": "Group (legacy)",
       "dueAria": "Filter by due date",
       "dueAll": "All due dates",
       "dueHas": "Has due date",
@@ -1811,6 +1830,128 @@
       "cancel": "Cancel"
     }
   },
+  "manageGroups": {
+    "title": "Manage groups",
+    "missingParams": "This link is missing its organization, classroom, or assignment. Check the address and try again.",
+    "heading": "Groups",
+    "teacherFormationHint": "You assign the groups for this assignment. Students who aren't in a group can't accept.",
+    "studentFormationHint": "Students form their own groups when they accept. You can fix membership if needed.",
+    "refreshSnapshot": "Refresh group info",
+    "createButton": "Create group",
+    "createTitle": "Create a group",
+    "createNameLabel": "Group name",
+    "createNameHint": "Optional. Shown on this page and to the group's members. Leave it blank to use a numbered name.",
+    "loading": "Loading groups…",
+    "emptyTitle": "No groups yet",
+    "emptyTeacher": "Create the first group, then add students from the roster.",
+    "emptyStudent": "Groups appear here as students create them.",
+    "memberCountOfMax_one": "{{count}} of {{max}} members",
+    "memberCountOfMax_other": "{{count}} of {{max}} members",
+    "memberCount_one": "{{count}} member",
+    "memberCount_other": "{{count}} members",
+    "driftBadge": "Members changed since the last refresh",
+    "manageButton": "Manage",
+    "manageAriaLabel": "Manage {{name}}",
+    "removeAriaLabel": "Remove {{username}} from the group",
+    "addMemberAriaLabel": "Add a student to {{name}}",
+    "addMemberPlaceholder": "Choose a student",
+    "addMemberButton": "Add",
+    "groupFull": "Group is full ({{max}} members max).",
+    "noMembers": "No members yet",
+    "manage": {
+      "title": "Manage {{name}}",
+      "membersHeading": "Members",
+      "saveMembers": "Save changes",
+      "willBeAdded": "Will be added",
+      "willBeRemoved": "Will be removed",
+      "undo": "Undo",
+      "pendingNote": "Counts include unsaved changes.",
+      "membersError": "Some membership changes couldn't be saved: {{error}} The unsaved changes are still listed. Save again to retry them.",
+      "dangerHeading": "Danger zone",
+      "dangerBody": "Deleting this group removes its GitHub team and the access it granted. The group's repository is not deleted."
+    },
+    "copy": {
+      "button": "Copy groups",
+      "title": "Copy groups from another assignment",
+      "sourceLabel": "Source assignment",
+      "sourcePlaceholder": "Choose an assignment",
+      "sourceHint": "Each group's name and members are copied into a plan you can edit below. Nothing is created until you save.",
+      "noSources": "No other group assignments",
+      "noSourcesBody": "Groups can be copied from another group assignment in this classroom. This classroom doesn't have one yet.",
+      "loadingGroups": "Loading groups…",
+      "sourceEmpty": "The selected assignment has no groups to copy.",
+      "planHeading": "Planned groups",
+      "numberingNote": "Group numbers shown here are placeholders. Real numbers are assigned when the groups are created.",
+      "existingNote_one": "This assignment already has {{count}} group. Copied groups are added alongside it and numbering continues.",
+      "existingNote_other": "This assignment already has {{count}} groups. Copied groups are added alongside them and numbering continues.",
+      "emptyPlan": "No groups left to create. Choose another assignment or close this dialog.",
+      "dropGroupButton": "Remove group",
+      "dropGroupAriaLabel": "Remove {{name}} from the plan",
+      "removeMemberAriaLabel": "Remove {{username}} from this planned group",
+      "addMemberAriaLabel": "Add a student to {{name}}",
+      "overCapacity": "This group has {{members}} members, but this assignment allows {{max}}. Remove members before saving.",
+      "takenMembers": "Already in a group for this assignment: {{logins}}. Remove them before saving.",
+      "saveButton_one": "Create {{count}} group",
+      "saveButton_other": "Create {{count}} groups",
+      "saveButtonEmpty": "Create groups",
+      "progress": "Creating group {{current}} of {{total}}…",
+      "createFailed": "Created {{created}} of {{total}} groups, then creating {{name}} failed: {{error}} The groups that weren't created stay in the plan. Fix the issue and save again.",
+      "memberWarningsIntro": "Some members couldn't be added to the groups that were created. Add them from each group's Manage dialog:",
+      "memberWarningItem": "{{name}}: {{username}} ({{error}})"
+    },
+    "deleteTitle": "Delete group",
+    "deleteConfirm": "Delete group",
+    "deleteBody": "This deletes the GitHub team for {{name}}. Members lose the access the team granted. The group's repository is not deleted.",
+    "recover": {
+      "title": "Recreate {{name}}",
+      "intro": "This group's GitHub team no longer exists, but its repository is still there. Grading can't credit the group's members until the team is recreated. Choose the members, then recreate the group.",
+      "suggestedHint": "Members found in the repository's commit history are pre-checked. Uncheck anyone who shouldn't be in the group, or add more from the roster.",
+      "suggestionsLoading": "Looking for members in the commit history…",
+      "noSuggestions": "No roster students were found in the repository's commit history. Add members from the roster below.",
+      "overCapacity": "This group has {{members}} members chosen, but this assignment allows {{max}}. Remove members before recreating.",
+      "maintainerLabel": "Team maintainer",
+      "maintainerNone": "No maintainer",
+      "maintainerHint": "Optional. A maintainer can manage the group's members on GitHub, like the student who founded the group.",
+      "submitButton": "Recreate group",
+      "applying": "Recreating the group…",
+      "warningsIntro": "The group was recreated, but some steps didn't finish:",
+      "warnAddMember": "{{username}} couldn't be added: {{error}} Add them from the group's Manage dialog.",
+      "warnAttachRepo": "The repository couldn't be attached to the new team: {{error}} Grant the team push access from the repository's settings on GitHub.",
+      "warnTeacherDrop": "You were added to the new team and couldn't be removed: {{error}} Leave the team from its page on GitHub.",
+      "warnNotifications": "Notifications couldn't be re-enabled for the team: {{error}} Turn them on from the team's page on GitHub."
+    },
+    "notTeamMode": "This assignment doesn't use groups, so there is nothing to manage here. Review its setup in <settingsLink>assignment settings</settingsLink>.",
+    "archivedNotice": "This classroom is archived, so its groups are read-only. Unarchive it in <settingsLink>Classroom settings</settingsLink> to manage groups.",
+    "rename": {
+      "saveButton": "Save name",
+      "help": "Shown on this page and to the group's members. The repository name doesn't change."
+    },
+    "repo": {
+      "createdBadge": "Repository created",
+      "noRepoBadge": "No repository yet",
+      "noRepoHelp": "The repository is created when a group member accepts the assignment."
+    },
+    "visibility": {
+      "label": "Visibility",
+      "visible": "Visible",
+      "hidden": "Hidden",
+      "help": "Visible groups can be browsed by classmates and receive join requests on GitHub. Hidden groups are visible only to their members and organization owners."
+    },
+    "unassigned": {
+      "heading": "Unassigned students",
+      "hint": "Students on the roster who aren't in a group yet. Choose a group with room, then add them.",
+      "loading": "Loading students…",
+      "empty": "Everyone on the roster is in a group.",
+      "groupPlaceholder": "Choose a group",
+      "selectAriaLabel": "Group for {{name}}",
+      "addAriaLabel": "Add {{name}} to the selected group",
+      "addButton": "Add"
+    },
+    "errors": {
+      "createForbidden": "GitHub blocked creating the team. This organization restricts team creation to owners. Ask an owner to allow members to create teams, or have an owner create the groups.",
+      "membershipForbidden": "GitHub blocked the membership change. This team's membership may be managed by your identity provider. Update membership there, or ask an organization owner."
+    }
+  },
   "serviceTokenHealth": {
     "summary_one": "{{count}} organization needs a service-token check.",
     "summary_other": "{{count}} organizations need a service-token check.",
@@ -1944,6 +2085,22 @@
       "confirmBody": "This stops all workflows in student repositories, not just autograding, so any CI your students run stops too. Submissions aren't graded and get no autograde or feedback-pr checks until you resume. Feedback pull requests still open when students accept and continue to show new pushes.",
       "confirmButton": "Pause autograding",
       "toggleFailed": "Couldn't update Actions permissions: {{message}}"
+    },
+    "teamCreation": {
+      "title": "Member team creation",
+      "description": "Let organization members create teams. Group assignments where students form their own groups need this: the first student creates the group's team when accepting.",
+      "openSettings": "Open member privileges",
+      "statusOn": "On",
+      "statusOff": "Off",
+      "loading": "Checking status…",
+      "applying": "Updating…",
+      "toggleLabel": "Allow members to create teams",
+      "toggleHint": "Matches the \"Allow members to create teams\" setting in the organization's member privileges on GitHub.",
+      "offNotice": "Students can't create teams, so group assignments where students form their own groups can't work. The new-assignment form disables the Group type while this is off.",
+      "enabledToast": "Member team creation turned on.",
+      "disabledToast": "Member team creation turned off.",
+      "unknownNotice": "Couldn't read this setting from GitHub. Check it on the member privileges page instead.",
+      "toggleFailed": "Couldn't update member team creation: {{message}}"
     },
     "rerun": {
       "title": "Re-run setup",
@@ -2242,6 +2399,7 @@
       "classroomLabel": "Classroom:",
       "individual": "Individual",
       "group": "Group",
+      "groupLegacy": "Group (legacy)",
       "openRepo": "Open repository",
       "details": "Details",
       "descriptionModalTitle": "Assignment description",
@@ -2358,7 +2516,9 @@
     "pastDue": "Past due {{date}}",
     "noDueDate": "No due date",
     "alreadyAcceptedHeading": "You've already accepted this assignment.",
+    "alreadyAcceptedHeadingTeam": "Your group has already accepted this assignment.",
     "acceptHeading": "Accept this assignment to get your own copy of the starter code repository.",
+    "acceptHeadingTeam": "Accept this assignment to get your group's copy of the starter code repository.",
     "descriptionLabel": "Assignment details",
     "repoAlreadyExists": "Repository already exists as:",
     "repoWillBeCreated": "Repository will be created as:",
@@ -2368,6 +2528,7 @@
     "openRepository": "Open repository",
     "goToClassroom": "Go to my classroom",
     "editCollaborators": "Edit collaborators",
+    "manageGroupButton": "Manage my group",
     "acceptButton": "Accept assignment",
     "templateErrors": {
       "githubSaid": " GitHub said: \"{{message}}\".",
@@ -2425,7 +2586,8 @@
       "repo": "Creating your repository",
       "access": "Setting your repository access",
       "setup": "Setting up autograding",
-      "feedback": "Opening feedback pull request"
+      "feedback": "Opening feedback pull request",
+      "team": "Finding your group"
     },
     "stepDone": {
       "account": "Checked your GitHub account",
@@ -2442,7 +2604,8 @@
       "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
       "feedback": "Feedback pull request ready",
       "feedbackSkipped": "No feedback pull request for this assignment",
-      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry (or it opens on your first submission if autograding is enabled)"
+      "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry (or it opens on your first submission if autograding is enabled)",
+      "team": "Group found"
     },
     "stepActions": {
       "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
@@ -2451,7 +2614,8 @@
       "autograder": "Couldn't resolve the autograder for \"{{assignmentSlug}}\". Ask your teacher to confirm it's published, then accept again.",
       "repo": "Couldn't create {{org}}/{{repo}}. Confirm you're a member of {{org}} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.",
       "access": "Your repository {{org}}/{{repo}} was created, but setting your ({{username}}) access on it failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
-      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\"."
+      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. It may still be initializing. Wait a minute, then use \"Re-run setup\".",
+      "team": "Check that you're in a group for this assignment, then try again."
     },
     "stepErrors": {
       "rateLimited": "{{label}} hit GitHub's rate limit. Wait a minute, then try accepting again.",
@@ -2463,7 +2627,10 @@
       "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template, which isn't valid. Ask your teacher to re-run assignment setup.",
       "noAutograderWithEmptyRepo": "Assignment \"{{assignmentSlug}}\" sets both no built-in autograder and an empty repository, which isn't valid. Ask your teacher to re-run assignment setup.",
       "initShimInvalidCombo": "Assignment \"{{assignmentSlug}}\" combines the built-in-autograder-on-an-empty-repo setting with a template, an empty repository, or no built-in autograder, which isn't valid. Ask your teacher to re-run assignment setup.",
-      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup."
+      "incoherentMode": "Assignment \"{{slug}}\" has a group size of {{maxGroupSize}} but is set up as \"{{mode}}\", so its published settings are inconsistent. Ask your teacher to re-run assignment setup.",
+      "teamTeacherAssigns": "You're not in a group for this assignment yet. Your teacher assigns the groups. Ask your teacher to add you to a group, then open this link again.",
+      "teamRequired": "You're not in a group for this assignment yet. Create a group, or ask a teammate to add you, then try again.",
+      "teamSelfCreated": "Your teacher assigns the groups for this assignment, and group {{n}} wasn't created by your teacher. Ask your teacher to add you to one of their groups, then open this link again."
     },
     "progress": {
       "error": "Setup failed. Review the steps.",
@@ -2476,6 +2643,33 @@
       "havingTrouble": "Having trouble?",
       "hint": "Autograding not running, or setup files missing? Re-run setup to repair your repository.",
       "rerun": "Re-run setup"
+    },
+    "modeTeam": "Group assignment",
+    "teamBlocked": {
+      "badge": "Waiting for your group",
+      "title": "You're not in a group yet",
+      "body": "Your teacher assigns the groups for this assignment. Ask your teacher to add you to a group, then open this link again."
+    },
+    "createGroup": {
+      "body": "This is a group assignment for up to {{max}} people. Create a group to get started: you become its first member and can add teammates after you accept.",
+      "bodyNoMax": "This is a group assignment. Create a group to get started: you become its first member and can add teammates after you accept.",
+      "nameLabel": "Group name (optional)",
+      "namePlaceholder": "The Segfaults",
+      "nameHelp": "Shown to your teacher and teammates. Leave blank to use the group number.",
+      "createButton": "Create group",
+      "createForbidden": "Your organization doesn't allow members to create teams, so Classroom 50 can't create your group. Ask your teacher to create the group for you."
+    },
+    "joinGroup": {
+      "title": "Join a group",
+      "memberCountOfMax_one": "{{count}}/{{max}}",
+      "memberCountOfMax_other": "{{count}}/{{max}}",
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "full": "Full",
+      "request": "Ask to join",
+      "help": "Asking to join opens the group's page on GitHub. Select \"Request to join\" there; the group reviews requests on that page, where you can also cancel yours. Once you're in, come back here.",
+      "recheck": "Check again",
+      "or": "or"
     }
   },
   "submissions": {
@@ -2688,7 +2882,6 @@
       "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Collect now\" to grade and score it.",
       "notCollectedYet": "Not yet collected",
       "notCollectedYetTitle": "This student has pushed work that hasn't been collected yet, so there's no recorded submission time. Run \"Collect now\" to collect it.",
-      "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
       "viewRepo": "View repository",
       "openFeedbackPrLabel": "Open feedback pull request for {{repo}}",
@@ -2714,7 +2907,17 @@
       "noGroup": "Not in a credited group",
       "noGroupTitle": "This student isn't credited on any group's repository. Membership is read from each repository's collaborators at collection time, so a student who never joined a group, or whose group's membership couldn't be read on the last collection, appears here. Open the group repositories to confirm before grading.",
       "review": "Review",
-      "reviewAria": "Open feedback pull request"
+      "reviewAria": "Open feedback pull request",
+      "noTeam": "Not in a group",
+      "noTeamTitle": "This student isn't a member of any group team for this assignment. Add them to a group on the assignment settings page.",
+      "teamNoRepo": "No repository yet",
+      "teamNoRepoTitle": "The group's repository is created when a group member accepts the assignment. Share the assignment link so a member can accept.",
+      "teamMissing": "Group team missing",
+      "teamMissingTitle": "The GitHub team behind this group no longer exists. It was likely deleted, so grading can't credit its members until it's recreated.",
+      "recoverTeamLabel": "Recreate the group team for {{name}}",
+      "openGroupTeam": "Open the group's team on GitHub",
+      "colMembers": "Members",
+      "manageMembersLabel": "View and manage members of {{name}}"
     },
     "scoreOverride": {
       "notGraded": "Not graded",
@@ -3078,6 +3281,7 @@
       "detailsDescription": "Open the autograder result on GitHub",
       "regradeDescription": "Re-run the autograder on the latest commit",
       "downloadDescription": "Save the submission as a zip archive",
+      "manageGroup": "Manage group",
       "membersDescription": "View and manage the group's members"
     },
     "publicRepo": {
@@ -3089,15 +3293,20 @@
       "modeGroup": "Group",
       "modeIndividual": "Individual",
       "detailsTitle": "Your submissions",
+      "detailsTitleTeam": "Your group's submissions",
       "tableCaption": "Your submission for this assignment",
+      "tableCaptionTeam": "Your group's submission for this assignment",
       "notSubmittedYet": "Not submitted yet",
       "submittedAwaitingGrading": "Submitted, awaiting grading",
       "statusSubmitted": "Submitted. Last submission {{relative}}.",
       "statusNotSubmitted": "Nothing submitted yet.",
       "statusNotSubmittedCta": "Show me how to submit",
       "colYourRepo": "Your repository",
+      "colYourRepoTeam": "Group repository",
       "loadError": "Couldn't load your submissions. Refresh to try again.",
+      "loadErrorTeam": "Couldn't load your group's submissions. Refresh to try again.",
       "notAccepted": "You haven't accepted this assignment yet. <acceptLink>Accept it</acceptLink> to get your repository, then push your work to be graded.",
+      "notAcceptedTeam": "You're not in a group that has accepted this assignment yet. <acceptLink>Accept the assignment</acceptLink> to get your group's repository, then push your work to be graded.",
       "locked": "This assignment is locked by your teacher and isn't available right now. Check back later or ask your teacher to unlock it.",
       "submitGuide": {
         "title": "Submit from the command line",
@@ -3137,7 +3346,8 @@
         "reservedPath": "Skipped \"{{path}}\": that path is managed by Classroom 50 and can't be uploaded."
       },
       "fallbackTitle": "Submission",
-      "missingParams": "This link is missing its classroom or assignment. Ask your teacher for a fresh link."
+      "missingParams": "This link is missing its classroom or assignment. Ask your teacher for a fresh link.",
+      "modeTeam": "Group"
     }
   },
   "orgActivity": {
@@ -3519,9 +3729,46 @@
         "slugLabel": "Slug in {{classroom}} (the short name used in repository names)",
         "uniqueHint": "Must be unique within this classroom."
       }
+    },
+    "groupTeamMembers": {
+      "title": "Group members",
+      "loadFailed": "Couldn't load the group's members. Refresh to try again.",
+      "memberCountOfMax_one": "{{count}} of {{max}} members",
+      "memberCountOfMax_other": "{{count}} of {{max}} members",
+      "memberCount_one": "{{count}} member",
+      "memberCount_other": "{{count}} members",
+      "loading": "Loading group members…",
+      "youBadge": "You",
+      "removeUser": "Remove {{username}} from the group",
+      "noMembers": "No members yet",
+      "groupFull": "Group is full ({{max}} members max). Remove someone to add another.",
+      "addPlaceholder": "GitHub username",
+      "addAriaLabel": "Add a teammate by GitHub username",
+      "add": "Add",
+      "reviewJoinRequests": "Review join requests on GitHub",
+      "maintainerBadge": "Maintainer",
+      "maintainerCannotLeave": "You maintain this group, so you can't leave it. Ask your teacher to move you.",
+      "leave": "Leave group",
+      "leaveTitle": "Leave {{name}}?",
+      "leaveBody": "You lose access to the group's repository and your work stays with the group. Rejoining takes extra steps: you must request to join again on GitHub and wait for the group or your teacher to approve it.",
+      "leaveConfirm": "Leave group"
     }
   },
   "formatDate": {
     "invalidDate": "Invalid date"
+  },
+  "groupTeams": {
+    "defaultName": "Group {{n}}",
+    "errors": {
+      "counterExhausted": "Couldn't find a free group number after {{attempts}} tries. Try again in a moment.",
+      "groupFull": "This group is full ({{max}} members max). Remove a member to add another.",
+      "notOnRoster": "{{username}} isn't on the classroom roster. Add them to the roster first, then add them to the group.",
+      "notAGroupTeam": "{{slug}} isn't a group team Classroom 50 created, so it wasn't changed.",
+      "recreateNameTaken": "The team {{slug}} already exists again, so nothing was recreated. Refresh the page to load the current groups.",
+      "idMismatch": "The team {{slug}} isn't the one this assignment created, so it wasn't deleted. Remove it on GitHub if you're sure.",
+      "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure.",
+      "leaveForbidden": "GitHub blocked leaving the group. The team's membership may be managed by your school. Ask your teacher to remove you, or leave from the team's page on GitHub.",
+      "maintainerCannotLeave": "You maintain this group, so you can't leave it. Ask your teacher to move you."
+    }
   }
 }

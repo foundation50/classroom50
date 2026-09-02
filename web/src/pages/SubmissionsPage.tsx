@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertIcon, CalendarIcon, DownloadIcon } from "@/components/ui/icons"
+import {
+  AlertIcon,
+  CalendarIcon,
+  DownloadIcon,
+  PeopleIcon,
+} from "@/components/ui/icons"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
@@ -23,6 +28,7 @@ import {
   HelpTooltip,
   MetricBar,
   InlineSpinner,
+  RouterButton,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
@@ -68,6 +74,7 @@ import {
   displayPageOwners,
   distinctSections,
   existingGroupRepos,
+  existingTeamRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
@@ -85,6 +92,7 @@ import {
   sortNameMode,
   studentInSection,
   submissionRosterStudents,
+  teamsWithoutRepos,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
@@ -96,7 +104,11 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { getName, sortStudentsByName } from "@/util/students"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { groupDisplayName } from "@/util/groupTeam"
+import useGroupTeams from "@/hooks/useGroupTeams"
+import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
@@ -140,6 +152,9 @@ import { GitHubLink } from "@/components/GitHubLink"
 // when live, so no accepted-set membership is consulted). Module-level so its
 // identity is stable across renders and doesn't churn the memo.
 const EMPTY_SET: Set<string> = new Set()
+
+// Stable empty list for the disabled legacy collaborators fan-out (team mode).
+const EMPTY_GROUP_REPOS: { owner: string; repoName: string }[] = []
 
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
@@ -198,6 +213,13 @@ const SubmissionsPageContent = () => {
   // hidden. Students are always shown (a not-yet-accepted student still lists as
   // "not accepted"), unchanged.
   const isGroupAssignment = assignmentInfo?.mode === "group"
+  // Team mode: a shared repo backed by a per-assignment GitHub Team. Rows are
+  // keyed by the `group-<n>` owner segment, members resolve from LIVE team
+  // membership, and the legacy collaborator machinery stays untouched.
+  const isTeamAssignment = assignmentInfo?.mode === "team"
+  // Either shared-repo flavor (legacy group or team): everywhere rows are
+  // keyed by a shared repo rather than a student login.
+  const isGroupFlavor = isGroupAssignment || isTeamAssignment
   // Whether the assignment entry has been read. Every value derived from it
   // falls back to a default while the query loads and after it fails, so any
   // gate that depends on the real mode or autograder must require this too.
@@ -242,28 +264,99 @@ const SubmissionsPageContent = () => {
   )
   const groupRepoList = useMemo(
     () =>
-      isGroupAssignment
-        ? existingGroupRepos(
-            orgRepos,
-            classroom ?? "",
-            assignment ?? "",
-            siblingSlugs,
-          )
-        : [],
-    [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
+      isTeamAssignment
+        ? existingTeamRepos(orgRepos, classroom ?? "", assignment ?? "")
+        : isGroupAssignment
+          ? existingGroupRepos(
+              orgRepos,
+              classroom ?? "",
+              assignment ?? "",
+              siblingSlugs,
+            )
+          : [],
+    [
+      isGroupAssignment,
+      isTeamAssignment,
+      orgRepos,
+      classroom,
+      assignment,
+      siblingSlugs,
+    ],
   )
-  // Members of every existing group repo (founders known from the repo name,
-  // plus each repo's collaborators). Feeds both the staff-acceptance gate and
-  // the "no group" reconciliation below (one shared derivation).
-  const { logins: groupRepoMembers, isPending: groupMembersPending } =
-    useGroupRepoMemberLogins(org ?? "", groupRepoList)
+  // Members of every existing group repo. Legacy group: founders (from the
+  // repo name) plus each repo's collaborators. Team mode: LIVE team
+  // membership (the authoritative link) — the collaborators fan-out is
+  // disabled (empty repo list) so legacy behavior stays byte-identical.
+  const { logins: groupCollabLogins, isPending: groupCollabPending } =
+    useGroupRepoMemberLogins(
+      org ?? "",
+      isTeamAssignment ? EMPTY_GROUP_REPOS : groupRepoList,
+    )
+  const groupTeamsQuery = useGroupTeams(org, classroom, assignment, {
+    enabled: isTeamAssignment,
+  })
+  const groupTeams = groupTeamsQuery.data
+  // Whether the teams listing has SETTLED (fetched successfully at least
+  // once). Gates both mismatch indicators — the repo-less team rows and the
+  // per-row "team missing" error — so neither flashes while the listing
+  // loads (or asserts anything after a failed listing).
+  const teamsSettled = isTeamAssignment && groupTeamsQuery.isSuccess
+  const groupTeamSlugs = useMemo(
+    () => (groupTeams ?? []).map((team) => team.slug),
+    [groupTeams],
+  )
+  const {
+    membersBySlug: teamMembersBySlug,
+    logins: teamMemberLogins,
+    isPending: teamMembersPending,
+  } = useGroupTeamMembers(org ?? "", groupTeamSlugs)
+  const groupRepoMembers = isTeamAssignment
+    ? teamMemberLogins
+    : groupCollabLogins
+  const groupMembersPending = isTeamAssignment
+    ? groupTeamsQuery.isLoading || teamMembersPending
+    : groupCollabPending
+  // Team lookups keyed by the `group-<n>` owner segment (lowercased): live
+  // member logins, display names ("Group <n>" when the record has none), and
+  // the team slug (recorded on a manual override entry).
+  const teamByOwner = useMemo(() => {
+    const map = new Map<string, GroupTeamRef>()
+    for (const team of groupTeams ?? []) {
+      map.set(`${GROUP_REPO_SEGMENT}${team.n}`, team)
+    }
+    return map
+  }, [groupTeams])
+  const groupMemberLogins = useMemo(() => {
+    if (!isTeamAssignment) return undefined
+    const map = new Map<string, string[]>()
+    for (const [owner, team] of teamByOwner) {
+      const members = teamMembersBySlug.get(team.slug)
+      if (members) {
+        map.set(
+          owner,
+          members.map((m) => m.login),
+        )
+      }
+    }
+    return map
+  }, [isTeamAssignment, teamByOwner, teamMembersBySlug])
+  const groupDisplayNames = useMemo(() => {
+    if (!isTeamAssignment) return undefined
+    const map = new Map<string, string>()
+    for (const [owner, team] of teamByOwner) {
+      map.set(owner, groupDisplayName(team, t))
+    }
+    return map
+  }, [isTeamAssignment, teamByOwner, t])
   const groupRepoFounders = useMemo(
     () =>
       new Set([
-        ...groupRepoList.map((repo) => repo.owner),
+        // Team owners are `group-<n>` counters, not logins — members alone
+        // carry the identity there.
+        ...(isTeamAssignment ? [] : groupRepoList.map((repo) => repo.owner)),
         ...groupRepoMembers,
       ]),
-    [groupRepoList, groupRepoMembers],
+    [isTeamAssignment, groupRepoList, groupRepoMembers],
   )
   // Staff logins who accepted an INDIVIDUAL assignment (their repo exists). Only
   // pure-staff rows need gating; a student row is always included, so scope this
@@ -271,7 +364,7 @@ const SubmissionsPageContent = () => {
   // groupRepoFounders (a founder/member set), so this stays individual-only.
   const acceptedStaffLogins = useMemo(() => {
     const set = new Set<string>()
-    if (isGroupAssignment || !orgRepos) return set
+    if (isGroupFlavor || !orgRepos) return set
     const repoNames = new Set(orgRepos.map((r) => r.name.toLowerCase()))
     for (const row of teamRows) {
       if (row.state !== "enrolled" || hasStudentEnrollment(row)) continue
@@ -284,7 +377,7 @@ const SubmissionsPageContent = () => {
       }
     }
     return set
-  }, [teamRows, orgRepos, isGroupAssignment, classroom, assignment])
+  }, [teamRows, orgRepos, isGroupFlavor, classroom, assignment])
   const [sort, setSort] = useState<SubmissionSort>("name-first")
   // The roster spine's name order follows the user's first/last choice in every
   // mode. `sortNameMode` maps a time sort to first-name order, so a non-name
@@ -494,6 +587,21 @@ const SubmissionsPageContent = () => {
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
     [rosterReady, snapshotRows, students],
   )
+  // Team mode's inverse gap (state 1): live teams whose expected repo doesn't
+  // exist and that no score row credits — otherwise invisible on this view.
+  // Derived from the SNAPSHOT owners (like the fan-out spine): a live-only row
+  // requires an existing repo, which already excludes its team here, so the
+  // snapshot set is complete and can't loop the fan-out's output back into its
+  // input. Computed only once the teams query has settled AND the org repo
+  // list is loaded, so the rows can't flash while either source resolves.
+  const missingRepoTeams = useMemo(() => {
+    if (!teamsSettled || !orgRepos) return []
+    return teamsWithoutRepos(
+      groupTeams ?? [],
+      new Set(groupRepoList.map((repo) => repo.owner)),
+      new Set(snapshotScoped.map((row) => row.owner.toLowerCase())),
+    )
+  }, [teamsSettled, orgRepos, groupTeams, groupRepoList, snapshotScoped])
   // Non-submitter pool for the fan-out's display list, filtered by the SAME
   // query + section + submission axes the rendered table applies — so the
   // fanned page lines up with the visible page. The ACCEPTED axis is neutralized
@@ -514,7 +622,7 @@ const SubmissionsPageContent = () => {
   )
   const liveOwnerArgs = useMemo(
     () => ({
-      isGroup: isGroupAssignment,
+      isGroup: isGroupFlavor,
       sort,
       students,
       rows: filterAndSortRows(snapshotScoped, {
@@ -527,9 +635,10 @@ const SubmissionsPageContent = () => {
       }),
       nonSubmitters: liveNonSubmitterPool,
       groupRepos: groupRepoList,
+      teamsWithoutRepos: missingRepoTeams,
     }),
     [
-      isGroupAssignment,
+      isGroupFlavor,
       sort,
       students,
       snapshotScoped,
@@ -538,6 +647,7 @@ const SubmissionsPageContent = () => {
       sectionByUsername,
       groupRepoList,
       liveNonSubmitterPool,
+      missingRepoTeams,
     ],
   )
   const livePageOwners = useMemo(
@@ -657,8 +767,14 @@ const SubmissionsPageContent = () => {
   // Group mode additionally waits for the org repo list: its rows (and the
   // "No groups yet" empty state) are derived from repo existence, so painting
   // before the list resolves would flash a wrong affirmative claim.
+  // Team mode also waits for the group-teams listing: row titles come from the
+  // teams' display names and would first paint as raw repo names, then flip.
+  // isLoading (not isFetching) so a background refetch never blanks the table.
   const initialLoading =
-    !scoresLoaded || rosterLoading || (isGroupAssignment && orgReposLoading)
+    !scoresLoaded ||
+    rosterLoading ||
+    (isGroupFlavor && orgReposLoading) ||
+    (isTeamAssignment && groupTeamsQuery.isLoading)
   const nonSubmittersReady =
     scoresLoaded && !livePending && !detectedPending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
@@ -701,7 +817,7 @@ const SubmissionsPageContent = () => {
       acceptedUsernames(orgRepos, classroom ?? "", assignment ?? "", students),
     [orgRepos, classroom, assignment, students],
   )
-  const acceptedAvailable = !isGroupAssignment && orgRepos != null
+  const acceptedAvailable = !isGroupFlavor && orgRepos != null
 
   // Every existing assignment repo name (individual + group), for the bulk
   // "Open all Feedback PRs" action. Derived from the already-loaded org repo
@@ -711,6 +827,7 @@ const SubmissionsPageContent = () => {
     () =>
       assignmentRepoNames({
         isGroup: isGroupAssignment,
+        isTeam: isTeamAssignment,
         repos: orgRepos,
         classroom: classroom ?? "",
         assignment: assignment ?? "",
@@ -719,6 +836,7 @@ const SubmissionsPageContent = () => {
       }),
     [
       isGroupAssignment,
+      isTeamAssignment,
       orgRepos,
       classroom,
       assignment,
@@ -834,7 +952,7 @@ const SubmissionsPageContent = () => {
   const submittedGroups = groupRepoList.length - unsubmittedGroupRepos.length
   // Show the bar once its denominator is real: repo list resolved, and (for
   // groups) at least one group repo exists.
-  const showSubmissionProgress = isGroupAssignment
+  const showSubmissionProgress = isGroupFlavor
     ? orgRepos != null && groupRepoList.length > 0
     : acceptedAvailable
 
@@ -912,6 +1030,21 @@ const SubmissionsPageContent = () => {
       return name.length > 0 && name.includes(q)
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
+
+  // Repo-less teams, gated like the unsubmitted group repos (hidden while a
+  // narrowing filter other than "not submitted" is active) and matched against
+  // the search by display name or `group-<n>` owner segment.
+  const visibleMissingRepoTeams = useMemo(() => {
+    if (!showsNonSubmitters(effectiveFilters)) return []
+    const q = query.trim().toLowerCase()
+    if (!q) return missingRepoTeams
+    return missingRepoTeams.filter((team) => {
+      const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+      if (owner.includes(q)) return true
+      const name = groupDisplayNames?.get(owner)?.toLowerCase() ?? ""
+      return name.includes(q)
+    })
+  }, [effectiveFilters, query, missingRepoTeams, groupDisplayNames])
 
   // Scope the manual collect to this assignment: the workflow serializes runs
   // per scope and the Python side collects only the matching slug, so "Collect
@@ -1048,7 +1181,7 @@ const SubmissionsPageContent = () => {
     // via their group's row, not as individual score-0 rows (restoring the
     // pre-#174 export). Individual non-submitters (accepted-no-push or
     // never-accepted) are still legitimately 0 and stay in the export.
-    const csvNonSubmitters = isGroupAssignment ? [] : nonSubmitters
+    const csvNonSubmitters = isGroupFlavor ? [] : nonSubmitters
     // Export the authoritative snapshot, not the live-merged view: `scoresInfo`
     // carries live count bumps only for the current page's owners, which would
     // make the file's counts depend on the last-viewed page. `snapshotScoped`
@@ -1136,12 +1269,12 @@ const SubmissionsPageContent = () => {
                   className="-m-1 cursor-pointer rounded-btn p-1 hover:bg-base-200"
                 >
                   <MetricBar
-                    value={isGroupAssignment ? submittedGroups : submittedShare}
-                    max={isGroupAssignment ? groupRepoList.length : funnelTotal}
+                    value={isGroupFlavor ? submittedGroups : submittedShare}
+                    max={isGroupFlavor ? groupRepoList.length : funnelTotal}
                     tone="success"
                     showNumbers={false}
                     title={
-                      isGroupAssignment
+                      isGroupFlavor
                         ? t("submissions.funnel.submittedTitleGroup", {
                             submitted: submittedGroups,
                             accepted: groupRepoList.length,
@@ -1326,7 +1459,7 @@ const SubmissionsPageContent = () => {
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          isGroup={isGroupAssignment}
+          isGroup={isGroupFlavor}
           acceptedAvailable={acceptedAvailable}
           passingAvailable={passingEnabled}
           sections={sections}
@@ -1374,6 +1507,20 @@ const SubmissionsPageContent = () => {
           }
           trailing={
             <>
+              {/* Team-mode groups are managed on their own page (create,
+                  members, visibility, snapshot); the per-row manage-group
+                  dialog stays for quick fixes. */}
+              {isTeamAssignment && (
+                <RouterButton
+                  variant="outline"
+                  size="sm"
+                  to="/$org/$classroom/assignments/$assignment/groups"
+                  params={{ org, classroom, assignment }}
+                >
+                  <PeopleIcon aria-hidden="true" className="size-4" />
+                  {t("manageGroups.title")}
+                </RouterButton>
+              )}
               {/* Clone submissions (CLI) — icon-only so the toolbar stays
                   compact; opens a modal with the `gh teacher download`
                   command. See https://github.com/foundation50/classroom50/issues/724. */}
@@ -1427,7 +1574,7 @@ const SubmissionsPageContent = () => {
                 // founder-managed), never empty_repo, and only when repos exist.
                 onBulkAccess={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment &&
                   acceptedSet.size > 0
                     ? () => setBulkAccessOpen(true)
@@ -1438,7 +1585,7 @@ const SubmissionsPageContent = () => {
                 // accept-time only).
                 onBulkFeatures={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment &&
                   acceptedSet.size > 0
                     ? () => setBulkFeaturesOpen(true)
@@ -1449,7 +1596,7 @@ const SubmissionsPageContent = () => {
                 // assignment's repo_visibility applies at accept-time only.
                 onBulkVisibility={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment &&
                   acceptedSet.size > 0
                     ? () => setBulkVisibilityOpen(true)
@@ -1463,7 +1610,7 @@ const SubmissionsPageContent = () => {
                 // Requires a resolved entry — see assignmentResolved.
                 onBulkTrigger={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !skipsGrading &&
                   assignmentResolved &&
                   isDefaultAutograder(assignmentInfo.autograder) &&
@@ -1477,7 +1624,7 @@ const SubmissionsPageContent = () => {
                 // autograder + accepted repos exist).
                 onBulkPause={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !skipsGrading &&
                   assignmentResolved &&
                   isDefaultAutograder(assignmentInfo.autograder) &&
@@ -1487,7 +1634,7 @@ const SubmissionsPageContent = () => {
                 }
                 onBulkResume={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !skipsGrading &&
                   assignmentResolved &&
                   isDefaultAutograder(assignmentInfo.autograder) &&
@@ -1510,7 +1657,7 @@ const SubmissionsPageContent = () => {
                 onCloseToggle={
                   canRegradeAll &&
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment
                     ? () => setCloseSubmissionOpen(true)
                     : undefined
@@ -1543,7 +1690,18 @@ const SubmissionsPageContent = () => {
           students={students}
           nonSubmitters={visibleNonSubmitters}
           unsubmittedGroupRepos={visibleGroupRepos}
-          isGroup={isGroupAssignment}
+          isGroup={isGroupFlavor}
+          isTeam={isTeamAssignment}
+          groupDisplayNames={groupDisplayNames}
+          groupMemberLogins={groupMemberLogins}
+          teamsByOwner={isTeamAssignment ? teamByOwner : undefined}
+          teamsWithoutRepos={
+            isTeamAssignment ? visibleMissingRepoTeams : undefined
+          }
+          teamsSettled={teamsSettled}
+          teamFormation={
+            isTeamAssignment ? assignmentInfo?.team_formation : undefined
+          }
           org={org}
           classroom={classroom}
           assignment={assignment}
@@ -1590,7 +1748,11 @@ const SubmissionsPageContent = () => {
                     org,
                     classroom,
                     assignment,
-                    assignmentType: isGroupAssignment ? "group" : "individual",
+                    assignmentType: isTeamAssignment
+                      ? "team"
+                      : isGroupAssignment
+                        ? "group"
+                        : "individual",
                     mode: "manual" as const,
                     maxPoints: assignmentInfo.grading.max_points,
                   }
@@ -1603,7 +1765,11 @@ const SubmissionsPageContent = () => {
                     org,
                     classroom,
                     assignment,
-                    assignmentType: isGroupAssignment ? "group" : "individual",
+                    assignmentType: isTeamAssignment
+                      ? "team"
+                      : isGroupAssignment
+                        ? "group"
+                        : "individual",
                     mode: "auto" as const,
                   }
                 : undefined
@@ -1614,7 +1780,7 @@ const SubmissionsPageContent = () => {
           // group-assignment reach.
           canPauseAutograding={
             isOwner &&
-            !isGroupAssignment &&
+            !isGroupFlavor &&
             !skipsGrading &&
             assignmentResolved &&
             isDefaultAutograder(assignmentInfo.autograder)
@@ -1762,7 +1928,7 @@ const SubmissionsPageContent = () => {
       <MetricsModal
         open={metricsOpen && !overlayCapable}
         onClose={() => setMetricsOpen(false)}
-        isGroup={isGroupAssignment}
+        isGroup={isGroupFlavor}
         submitted={stats.submitted}
         rosterCount={scopedStudents.length}
         avgScore={avgScore}
@@ -1795,7 +1961,7 @@ const SubmissionsPageContent = () => {
         onClose={() => setOpenAllPrsOpen(false)}
         org={org}
         assignmentName={assignmentInfo?.name ?? assignment}
-        mode={isGroupAssignment ? "group" : "individual"}
+        mode={isGroupFlavor ? "group" : "individual"}
         repos={allAssignmentRepos}
       />
       <DownloadAllSubmissionsModal

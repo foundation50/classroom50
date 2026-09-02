@@ -34,8 +34,9 @@ exception by plan: it's locked off only on Enterprise Cloud, because Team/Free
 couples public and private creation and the student flow needs private creation.
 So it's safe for `gh student accept` to grant broad access to a student's own
 repository — individual students are downgraded to **write** after creation, a
-group founder keeps **admin** to add teammates, and the org locks defang the
-rest.
+legacy group founder keeps **admin** to add teammates (the current group mode
+grants push through the group's GitHub Team instead), and the org locks defang
+the rest.
 
 </details>
 
@@ -127,10 +128,12 @@ own account (scope it tightly to the org):
 > passes a Contents check but fails the first call collection makes.
 
 > [!NOTE]
-> **Group assignments need no extra scope.** Collection reads a group repo's
-> collaborators via `Metadata: read` (auto-included) and credits members on the
-> classroom team. If the read fails, the owner is still scored and a warning is
-> logged.
+> **Group assignments need no extra scope.** Collection reads a group team's
+> members with the same **Members: Read** the classroom team uses, and reads a
+> legacy group repo's collaborators via `Metadata: read` (auto-included),
+> crediting members on the classroom team either way. A failed legacy read
+> still scores the owner with a warning; a failed group-team read skips the
+> repository and preserves its previous credit.
 
 Supply the token via the environment variable (never a flag — command-line PATs
 leak via shell history):
@@ -360,7 +363,7 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 | POST | `/repos/{template_owner}/{template_repo}/generate` | Generate the repo from a template. |
 | POST | `/orgs/{org}/repos` | Create the repo directly (template-less accept). |
 | GET / PATCH | `/repos/{owner}/{repo}` | Recover from "already exists"; read the template's features and apply the assignment's repository-feature settings (inherit/on/off). |
-| PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Set the founder role: `push` (individual) or `admin` (group); also backs `gh student invite`. |
+| PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Set the founder role: `push` (individual) or `admin` (legacy group); also backs `gh student invite`. |
 | GET / POST / PATCH | `/repos/{owner}/{repo}/git/{refs,commits,blobs,trees}` + `/branches/{branch}` | Commit the setup files. |
 | GET | `/repos/{owner}/{repo}/contents/{path}` | Fetch `.gitignore`/`.github/` from the template (`submit`). |
 
@@ -368,9 +371,9 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 
 | Method | Endpoint | Purpose | FG-PAT permission |
 |--------|----------|---------|-------------------|
-| GET | `/orgs/{org}/teams/{slug}/members` | List the classroom team (team-driven enrollment). | **Members: Read** |
+| GET | `/orgs/{org}/teams/{slug}/members` | List the classroom team (team-driven enrollment) and a group assignment's group teams. | **Members: Read** |
 | GET | `/repos/{owner}/{repo}/releases` + `/releases/assets/{id}` | Collect submissions and `result.json`. | **Contents: Read** |
-| GET | `/repos/{owner}/{repo}/collaborators` | Fan a group score to teammates. | **Metadata: Read** |
+| GET | `/repos/{owner}/{repo}/collaborators` | Fan a legacy group score to teammates. | **Metadata: Read** |
 | GET / PUT | `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Grant staff teams read on student repos/templates. | **Administration: R/W** |
 
 ### `probe_token.py` (Actions, read-only)

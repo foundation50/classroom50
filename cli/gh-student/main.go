@@ -12,6 +12,7 @@ import (
 	"github.com/foundation50/gh-student/internal/auth"
 	"github.com/foundation50/gh-student/internal/invitecmd"
 	"github.com/foundation50/gh-student/internal/submitcmd"
+	"github.com/foundation50/gh-student/internal/teamcmd"
 )
 
 // Build metadata, injected by the release workflow via -ldflags. Defaults
@@ -39,6 +40,7 @@ func main() {
 	root.AddCommand(auth.NewLogoutCmd())
 	root.AddCommand(acceptCmd())
 	root.AddCommand(invitecmd.NewCmd())
+	root.AddCommand(teamcmd.NewCmd())
 	root.AddCommand(submitcmd.NewCmd())
 
 	// Signal-aware root context: subcommands see cmd.Context() cancel on

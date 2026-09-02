@@ -112,12 +112,109 @@ export function parseStudentClassroomSlug(
 // student team of a role-suffixed classroom (`ml-ta`) — proven by a
 // classroom50/team/v1 record on the team (staff teams carry none). The caller
 // gates on that record; on its own this does not distinguish student from staff.
+//
+// A per-assignment group team (`classroom50-group-<hash>-<n>`) shares the
+// namespace but is never a classroom: without this exclusion, a student's
+// group membership would render a phantom classroom named `group-<hash>-<n>`
+// on their classrooms list. Full-shape gated, so a real classroom short-name
+// that merely starts with `group-` still parses.
 export function parseBareClassroomSlug(
   slug: string,
 ): { classroom: string } | null {
   const prefix = `${CONFIG_REPO}-`
   if (!slug.startsWith(prefix)) return null
+  if (isGroupTeamSlug(slug)) return null
   const classroom = slug.slice(prefix.length)
   if (classroom.length === 0) return null
   return { classroom }
+}
+
+// ---------------------------------------------------------------------------
+// Per-assignment group teams (mode: team assignments)
+// ---------------------------------------------------------------------------
+
+// Team-name prefix for a per-assignment group team:
+// `classroom50-group-<hash>-<n>`. Living inside the `classroom50-` namespace
+// keeps group teams behind the same fail-closed delete guard as the classroom
+// teams (isDeletableClassroomTeamRef). A byte-mirror of
+// contract.GroupTeamPrefix (cli/shared/contract) with no compile-time link —
+// keep in lockstep; both sides pin the shared vectors in
+// cli/shared/testdata/group_vectors.json.
+export const GROUP_TEAM_PREFIX = `${CONFIG_REPO}-group-`
+
+// SHA-256 prefix length (hex chars) in the group team name. 16 hex = 64 bits —
+// ample collision resistance for per-assignment scoping. Mirror of
+// contract.GroupHashHexLen.
+export const GROUP_HASH_HEX_LEN = 16
+
+// The FULL group-team shape destructive ops must gate on (plus a parsed
+// classroom50/group/v1 description record plus a recorded-vs-live id check):
+// the prefix alone is a namespace a pathological classroom short-name could
+// land in. Mirror of contract.GroupTeamPattern.
+export const GROUP_TEAM_PATTERN = /^classroom50-group-[0-9a-f]{16}-[1-9][0-9]*$/
+
+// The deterministic hex prefix scoping one assignment's group teams: the first
+// GROUP_HASH_HEX_LEN hex chars of SHA-256 over
+// `<lowercased classroom>\0<lowercased assignment>`. The separator byte
+// prevents ("ab","c") and ("a","bc") colliding; lowercasing mirrors
+// studentRepoName so a mixed-case input can't split one assignment's teams
+// into two namespaces. Async because it uses the Web Crypto digest (mirrors
+// inviteTeamName). Byte-mirror of contract.GroupTeamHash.
+export async function groupTeamHash(
+  classroom: string,
+  assignment: string,
+): Promise<string> {
+  const encoded = new TextEncoder().encode(
+    `${classroom.toLowerCase()}\u0000${assignment.toLowerCase()}`,
+  )
+  const digest = await crypto.subtle.digest("SHA-256", encoded)
+  const hex = [...new Uint8Array(digest)]
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+  return hex.slice(0, GROUP_HASH_HEX_LEN)
+}
+
+// The enumeration prefix for one assignment's group teams:
+// `classroom50-group-<hash>-`. Filtering GET /orgs/{org}/teams (or GET
+// /user/teams) on it yields exactly this assignment's teams — no config read
+// needed, which is what lets a student client resolve "my team" from
+// membership alone. Byte-mirror of contract.GroupTeamAssignmentPrefix.
+export async function groupTeamAssignmentPrefix(
+  classroom: string,
+  assignment: string,
+): Promise<string> {
+  return `${GROUP_TEAM_PREFIX}${await groupTeamHash(classroom, assignment)}-`
+}
+
+// The canonical group-team NAME (== slug: the name is slug-safe by
+// construction, so GitHub's name-to-slug generation is the identity function)
+// for counter n. Counters start at 1 and are allocated by create-time 422
+// retries, never by visibility-dependent probes (a secret team is invisible to
+// non-members, so a listing can't prove a counter free). Byte-mirror of
+// contract.GroupTeamName.
+export async function groupTeamName(
+  classroom: string,
+  assignment: string,
+  n: number,
+): Promise<string> {
+  return `${await groupTeamAssignmentPrefix(classroom, assignment)}${n}`
+}
+
+// True when a slug matches the FULL group-team shape. See GROUP_TEAM_PATTERN
+// for what a destructive caller must additionally verify.
+export function isGroupTeamSlug(slug: string): boolean {
+  return GROUP_TEAM_PATTERN.test(slug)
+}
+
+// Recover the counter from a group-team slug given that assignment's
+// enumeration prefix (from groupTeamAssignmentPrefix), or null when the slug
+// isn't one of that assignment's teams. The hash is one-way, so a slug alone
+// (unknown assignment) is attributed via its description record instead.
+export function parseGroupTeamCounter(
+  slug: string,
+  assignmentPrefix: string,
+): number | null {
+  if (!slug.startsWith(assignmentPrefix) || !isGroupTeamSlug(slug)) return null
+  const n = Number(slug.slice(assignmentPrefix.length))
+  return Number.isInteger(n) && n >= 1 ? n : null
 }

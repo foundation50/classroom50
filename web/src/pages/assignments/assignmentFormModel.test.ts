@@ -47,6 +47,7 @@ const base: CreateAssignmentFormValues = {
   due_date: "",
   available_from_date: "",
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,
@@ -204,6 +205,62 @@ describe("validateAssignmentForm — group size", () => {
       validateAssignmentForm({ ...base, mode: "group", max_group_size: 0 }, t)
         .max_group_size,
     ).toBe("assignments.form.validation.maxGroupSizeInvalid")
+  })
+
+  it("applies the same bounds to team mode", () => {
+    expect(
+      validateAssignmentForm({ ...base, mode: "team", max_group_size: 999 }, t)
+        .max_group_size,
+    ).toBe("validation.groupSizeRange")
+    expect(
+      validateAssignmentForm({ ...base, mode: "team", max_group_size: 4 }, t),
+    ).toEqual({})
+  })
+})
+
+describe("validateAssignmentForm — team formation", () => {
+  it("rejects a tampered formation value in team mode", () => {
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          mode: "team",
+          max_group_size: 3,
+          team_formation: "anarchy" as never,
+        },
+        t,
+      ).team_formation,
+    ).toBe("assignments.form.validation.teamFormationInvalid")
+  })
+
+  it("ignores the formation outside team mode", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, mode: "individual", team_formation: "anarchy" as never },
+        t,
+      ).team_formation,
+    ).toBeUndefined()
+  })
+})
+
+describe("toSubmitValues — team formation clearing", () => {
+  it("passes the formation through for team mode", () => {
+    const out = toSubmitValues({
+      ...base,
+      mode: "team",
+      max_group_size: 4,
+      team_formation: "student",
+    })
+    expect(out.team_formation).toBe("student")
+  })
+
+  it("resets a stale formation to the default outside team mode", () => {
+    const out = toSubmitValues({
+      ...base,
+      mode: "individual",
+      team_formation: "student",
+    })
+    expect(out.team_formation).toBe("teacher")
   })
 })
 

@@ -224,6 +224,7 @@ const CreateAssignmentForm = ({
                   takenSlugs={takenSlugs}
                   reservedSlugs={reservedSlugs}
                   classroom={classroom}
+                  org={org}
                 />
                 <RepositorySetupSection
                   form={form}

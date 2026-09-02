@@ -368,13 +368,18 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 		"members_can_delete_repositories",
 		"members_can_change_repo_visibility",
 		"members_can_delete_issues",
-		"members_can_create_teams",
 		"readers_can_create_discussions",
 		"members_can_create_private_pages",
 	} {
 		if v, ok := gotBody[f]; !ok || v != false {
 			t.Errorf("combined PATCH field %s = %v (present=%v), want false", f, v, ok)
 		}
+	}
+	// Member team creation is ENFORCED true: student-formed group assignments
+	// (team_formation: student) have the founding student create the GitHub
+	// team at accept.
+	if v, ok := gotBody["members_can_create_teams"]; !ok || v != true {
+		t.Errorf("combined PATCH field members_can_create_teams = %v (present=%v), want true", v, ok)
 	}
 	// Enterprise-only fields must be OMITTED on a Team plan (Team doesn't
 	// expose them).

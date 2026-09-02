@@ -4,9 +4,11 @@ import {
   CheckCircleIcon,
   ChevronDownIcon,
   GlobeIcon,
+  LinkExternalIcon,
   LockIcon,
   MarkGithubIcon,
   MortarBoardIcon,
+  PeopleIcon,
   PersonIcon,
 } from "@/components/ui/icons"
 
@@ -24,6 +26,7 @@ import {
 import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
+import { GitHubAPIError } from "@/github-core/errors"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { useAcceptAssignment } from "@/hooks/mutations/useAcceptAssignment"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -49,10 +52,22 @@ import { isOwnerGitHubOrgRole } from "@/authz"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
-import { studentRepoName } from "@/util/studentRepo"
+import {
+  studentRepoName,
+  groupRepoName,
+  GROUP_REPO_SEGMENT,
+} from "@/util/studentRepo"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
+import useMyGroupTeam from "@/hooks/useMyGroupTeam"
+import useGroupTeams from "@/hooks/useGroupTeams"
+import { useGroupTeamMembers } from "@/hooks/useGroupTeamMembers"
+import { groupTeamUrl } from "@/domain/teams/groupTeams"
+import { groupDisplayName } from "@/util/groupTeam"
+import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
+import { Input } from "@/components/ui"
+import { errorText as resolveErrorText } from "@/types/localizedMessage"
 import { LanguageDialog } from "@/components/LanguageDialog"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useOutageHint } from "@/lib/githubHealth"
@@ -430,23 +445,260 @@ const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
   )
 }
 
+// Team mode, teacher formation: the viewer isn't on any of this assignment's
+// groups yet. The teacher forms the groups, so accepting is blocked until the
+// teacher adds them — a waiting state, not an error.
+const TeamNotAssigned = ({ user }: { user: GitHubUser | null }) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptErrorCard
+      tone="warning"
+      icon={<PersonIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.teamBlocked.badge")}
+      title={t("accept.teamBlocked.title")}
+      body={t("accept.teamBlocked.body")}
+      user={user}
+    />
+  )
+}
+
+// Team mode, student formation: the viewer is on no group yet, so the first
+// step is founding one (they become the team maintainer and can add roster
+// teammates). On success the my-team cache refreshes and the page falls
+// through to the normal accept flow.
+const CreateGroupCard = ({
+  org,
+  classroom,
+  assignment,
+  assignmentName,
+  maxGroupSize,
+  username,
+  user,
+  onRecheck,
+  recheckPending = false,
+}: {
+  org: string
+  classroom: string
+  assignment: string
+  assignmentName?: string
+  maxGroupSize?: number
+  username?: string
+  user: GitHubUser | null
+  // Re-runs the viewer's own-team resolution — the "I was approved on GitHub,
+  // check again" affordance under the join list.
+  onRecheck?: () => void
+  recheckPending?: boolean
+}) => {
+  const { t } = useTranslation()
+  const [displayName, setDisplayName] = useState("")
+  const createTeam = useCreateGroupTeam({ org, classroom, assignment })
+  // Student-formed teams are closed (visible), so classmates can browse them
+  // here and request to join through GitHub's native flow — the REST API
+  // exposes no join requests, so requesting, cancelling, and reviewing all
+  // happen on the team's GitHub page.
+  const teamsQuery = useGroupTeams(org, classroom, assignment)
+  const teams = teamsQuery.data ?? []
+  const { membersBySlug } = useGroupTeamMembers(
+    org,
+    teams.map((team) => team.slug),
+  )
+  // An org that restricts team creation to owners 403s the create; name that
+  // case for the student instead of surfacing GitHub's raw message.
+  const createError = createTeam.error
+    ? createTeam.error instanceof GitHubAPIError && createTeam.error.isForbidden
+      ? t("accept.createGroup.createForbidden")
+      : resolveErrorText(t, createTeam.error)
+    : null
+
+  return (
+    <AcceptLayout>
+      <AcceptCard>
+        <Card.Body className="gap-6">
+          <div>
+            <Badge tone="primary" size="md" className="gap-2">
+              <PersonIcon aria-hidden="true" className="size-4" />
+              {t("accept.modeTeam")}
+            </Badge>
+            <Heading as="h1" variant="title-medium" className="mt-6">
+              {assignmentName}
+            </Heading>
+            <p className="mt-2 text-base text-base-content/70">
+              {maxGroupSize
+                ? t("accept.createGroup.body", { max: maxGroupSize })
+                : t("accept.createGroup.bodyNoMax")}
+            </p>
+          </div>
+
+          {createError ? (
+            <Alert tone="error" className="text-sm">
+              {createError}
+            </Alert>
+          ) : null}
+
+          {teams.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="label p-0 text-sm font-medium">
+                {t("accept.joinGroup.title")}
+              </span>
+              <ul className="divide-y divide-base-200 rounded-box border border-base-200">
+                {teams.map((team) => {
+                  const members = membersBySlug.get(team.slug)
+                  const count = members?.length
+                  const isFull =
+                    maxGroupSize !== undefined &&
+                    count !== undefined &&
+                    count >= maxGroupSize
+                  return (
+                    <li
+                      key={team.slug}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                    >
+                      <PeopleIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-base-content/70"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {groupDisplayName(team, t)}
+                      </span>
+                      <span className="text-xs text-base-content/70">
+                        {count === undefined
+                          ? "—"
+                          : maxGroupSize !== undefined
+                            ? t("accept.joinGroup.memberCountOfMax", {
+                                count,
+                                max: maxGroupSize,
+                              })
+                            : t("accept.joinGroup.memberCount", { count })}
+                      </span>
+                      {isFull ? (
+                        <Badge ghost>{t("accept.joinGroup.full")}</Badge>
+                      ) : (
+                        <Button
+                          as="a"
+                          href={groupTeamUrl(org, team.slug)}
+                          target="_blank"
+                          rel="noreferrer"
+                          variant="outline"
+                          size="sm"
+                        >
+                          {t("accept.joinGroup.request")}
+                          <LinkExternalIcon
+                            aria-hidden="true"
+                            className="size-3.5"
+                          />
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="text-xs text-base-content/70">
+                {t("accept.joinGroup.help")}
+              </p>
+              {onRecheck && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit"
+                  disabled={recheckPending}
+                  loading={recheckPending}
+                  onClick={onRecheck}
+                >
+                  {t("accept.joinGroup.recheck")}
+                </Button>
+              )}
+              <div className="divider my-0">{t("accept.joinGroup.or")}</div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <label
+              className="label p-0 text-sm font-medium"
+              htmlFor="group-display-name"
+            >
+              {t("accept.createGroup.nameLabel")}
+            </label>
+            <Input
+              id="group-display-name"
+              value={displayName}
+              maxLength={80}
+              placeholder={t("accept.createGroup.namePlaceholder")}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+            <p className="text-xs text-base-content/70">
+              {t("accept.createGroup.nameHelp")}
+            </p>
+          </div>
+
+          <Button
+            variant="primary"
+            className="w-full text-lg p-5"
+            disabled={!username || createTeam.isPending}
+            loading={createTeam.isPending}
+            loadingLabel={t("accept.createGroup.createButton")}
+            onClick={() =>
+              createTeam.mutate({
+                displayName: displayName.trim() || undefined,
+                creatorLogin: username ?? "",
+                founderLogin: username ?? "",
+                formation: "student",
+              })
+            }
+          >
+            {t("accept.createGroup.createButton")}
+          </Button>
+
+          <div className="divider my-0" />
+
+          <div className="space-y-3">
+            <label className="label p-0 text-base font-semibold">
+              {t("accept.signedInAs")}
+            </label>
+            <UserInfo user={user} />
+          </div>
+        </Card.Body>
+      </AcceptCard>
+    </AcceptLayout>
+  )
+}
+
 const modeLabelKey: Record<string, string> = {
   individual: "accept.modeIndividual",
   group: "accept.modeGroup",
+  team: "accept.modeTeam",
 }
 
 // Pending-state placeholders. Once a step emits, the domain sends the same
 // `accept.steps.*` key back as a { key, params } descriptor — one source of
 // truth for every step label (see AGENTS.md's `{ key, params }` rule).
-const ACCEPT_STEP_ORDER: { id: AcceptStepId; labelKey: string }[] = [
+// Team-mode accepts insert the group-resolution step after the assignment
+// lookup; other modes never emit it, so it's omitted from their checklist.
+const acceptStepOrder = (
+  isTeam: boolean,
+): { id: AcceptStepId; labelKey: string }[] => [
   { id: "account", labelKey: "accept.steps.account" },
   { id: "membership", labelKey: "accept.steps.membership" },
   { id: "assignment", labelKey: "accept.steps.assignment" },
+  ...(isTeam
+    ? [{ id: "team" as AcceptStepId, labelKey: "accept.steps.team" }]
+    : []),
   { id: "autograder", labelKey: "accept.steps.autograder" },
   { id: "repo", labelKey: "accept.steps.repo" },
   { id: "setup", labelKey: "accept.steps.setup" },
   { id: "feedback", labelKey: "accept.steps.feedback" },
   { id: "access", labelKey: "accept.steps.access" },
+]
+
+const ALL_ACCEPT_STEP_IDS: AcceptStepId[] = [
+  "account",
+  "membership",
+  "assignment",
+  "team",
+  "autograder",
+  "repo",
+  "setup",
+  "feedback",
+  "access",
 ]
 
 type StepState = Record<
@@ -459,7 +711,7 @@ type StepState = Record<
 >
 
 const initialStepState: StepState = Object.fromEntries(
-  ACCEPT_STEP_ORDER.map((step) => [step.id, { status: "pending" as const }]),
+  ALL_ACCEPT_STEP_IDS.map((id) => [id, { status: "pending" as const }]),
 ) as StepState
 
 const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
@@ -591,12 +843,18 @@ const CircularProgress = ({
   )
 }
 
-const AcceptProgress = ({ steps }: { steps: StepState }) => {
+const AcceptProgress = ({
+  steps,
+  order,
+}: {
+  steps: StepState
+  order: { id: AcceptStepId; labelKey: string }[]
+}) => {
   const { t } = useTranslation()
-  const stepStates = ACCEPT_STEP_ORDER.map((step) => steps[step.id])
+  const stepStates = order.map((step) => steps[step.id])
   const completed = stepStates.filter((s) => s.status === "complete").length
   const hasError = stepStates.some((s) => s.status === "error")
-  const allDone = completed === ACCEPT_STEP_ORDER.length
+  const allDone = completed === order.length
   // Between steps, the finishing step is already "complete" while the next
   // hasn't emitted "running" yet — a momentary gap where no step is running.
   // Treat that gap as running so the header doesn't flicker back to pending on
@@ -638,11 +896,11 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
         <span className="flex items-center gap-3">
           <CircularProgress
             completed={completed}
-            total={ACCEPT_STEP_ORDER.length}
+            total={order.length}
             status={headerStatus}
             label={t("accept.progress.count", {
               completed,
-              total: ACCEPT_STEP_ORDER.length,
+              total: order.length,
             })}
           />
           <span className="font-medium">{summary}</span>
@@ -658,7 +916,7 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
 
       {expanded && (
         <div className="flex flex-col gap-3 border-t border-base-300 p-5">
-          {ACCEPT_STEP_ORDER.map((step) => (
+          {order.map((step) => (
             <StepRow
               key={step.id}
               label={t(step.labelKey)}
@@ -791,19 +1049,45 @@ const AcceptAssignmentPage = () => {
 
   const pastDue = Boolean(assignmentData?.due && isPastDue(assignmentData.due))
 
-  const expectedRepoName = username
-    ? studentRepoName(classroom ?? "", assignment ?? "", username)
-    : studentRepoName(
-        classroom ?? "",
-        assignment ?? "",
-        "{your-github-username}",
-      )
+  // Team mode: resolve MY group team before anything repo-shaped — the repo is
+  // named after the team's counter, and a student on no team is blocked
+  // (teacher formation) or offered the create-a-group flow (student formation).
+  const isTeamMode = assignmentData?.mode === "team"
+  const teamFormation = assignmentData?.team_formation ?? "teacher"
+  const {
+    data: myTeam,
+    isLoading: loadingMyTeam,
+    isError: myTeamError,
+    refetch: refetchMyTeam,
+    isFetching: fetchingMyTeam,
+  } = useMyGroupTeam(org, classroom, assignment, {
+    enabled: isTeamMode && Boolean(username),
+  })
+
+  const expectedRepoName = isTeamMode
+    ? myTeam
+      ? groupRepoName(classroom ?? "", assignment ?? "", myTeam.n)
+      : // Placeholder counter until the team resolves; only rendered, never
+        // queried (see repoLookupName).
+        `${studentRepoName(classroom ?? "", assignment ?? "", GROUP_REPO_SEGMENT)}{n}`
+    : username
+      ? studentRepoName(classroom ?? "", assignment ?? "", username)
+      : studentRepoName(
+          classroom ?? "",
+          assignment ?? "",
+          "{your-github-username}",
+        )
+
+  // Only probe a repo name that's fully resolved: a team-mode student on no
+  // team has no repo to check.
+  const repoLookupName = isTeamMode && !myTeam ? "" : expectedRepoName
 
   const { data: checkedRepo, isLoading: isLoadingRepo } = useGetRepo(
     org,
-    expectedRepoName,
+    repoLookupName,
   )
-  const repoExistsAlready = checkedRepo?.name === expectedRepoName
+  const repoExistsAlready =
+    Boolean(repoLookupName) && checkedRepo?.name === repoLookupName
 
   const [steps, setSteps] = useState<StepState>(initialStepState)
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
@@ -861,7 +1145,8 @@ const AcceptAssignmentPage = () => {
     loadingAssignments ||
     isLoadingRepo ||
     loadingOrgMembership ||
-    loadingEnrollment
+    loadingEnrollment ||
+    (isTeamMode && loadingMyTeam)
   ) {
     return (
       <AcceptLayout>
@@ -986,6 +1271,29 @@ const AcceptAssignmentPage = () => {
     return <AssignmentClosed user={user} assignment={assignment} />
   }
 
+  // Team mode with no group yet (a SETTLED null — a transient my-teams failure
+  // falls through, and the accept flow's own team step surfaces a retryable
+  // error instead of a wrongful block). Teacher formation waits for the
+  // teacher; student formation founds a group first.
+  if (isTeamMode && !myTeam && !myTeamError && username) {
+    if (teamFormation === "student") {
+      return (
+        <CreateGroupCard
+          org={org ?? ""}
+          classroom={classroom ?? ""}
+          assignment={assignment ?? ""}
+          assignmentName={assignmentData.name}
+          maxGroupSize={assignmentData.max_group_size}
+          username={username}
+          user={user}
+          onRecheck={() => void refetchMyTeam()}
+          recheckPending={fetchingMyTeam}
+        />
+      )
+    }
+    return <TeamNotAssigned user={user} />
+  }
+
   const description = assignmentDescription(assignmentData)
 
   return (
@@ -1012,8 +1320,16 @@ const AcceptAssignmentPage = () => {
           </Heading>
           <h2 className="text-lg">
             {repoExistsAlready
-              ? t("accept.alreadyAcceptedHeading")
-              : t("accept.acceptHeading")}
+              ? t(
+                  isTeamMode
+                    ? "accept.alreadyAcceptedHeadingTeam"
+                    : "accept.alreadyAcceptedHeading",
+                )
+              : t(
+                  isTeamMode
+                    ? "accept.acceptHeadingTeam"
+                    : "accept.acceptHeading",
+                )}
           </h2>
 
           {description ? (
@@ -1069,7 +1385,12 @@ const AcceptAssignmentPage = () => {
 
             {(acceptMutation.isPending ||
               acceptMutation.isError ||
-              acceptMutation.isSuccess) && <AcceptProgress steps={steps} />}
+              acceptMutation.isSuccess) && (
+              <AcceptProgress
+                steps={steps}
+                order={acceptStepOrder(isTeamMode)}
+              />
+            )}
 
             {acceptMutation.isError && (
               <Alert tone="error" className="items-start">
@@ -1151,6 +1472,28 @@ const AcceptAssignmentPage = () => {
                   </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Team mode: group management lives on the dedicated Manage
+                group view (the assignment settings student branch), so the
+                accept card stays a lightweight confirmation — one button in
+                the post-accept action stack instead of an inline panel. */}
+            {isTeamMode &&
+              myTeam &&
+              (acceptMutation.data || repoExistsAlready) &&
+              !acceptMutation.isPending &&
+              org &&
+              classroom &&
+              assignment && (
+                <RouterButton
+                  to="/$org/$classroom/assignments/$assignment/settings"
+                  params={{ org, classroom, assignment }}
+                  variant="outline"
+                  className="w-full text-lg p-5"
+                >
+                  <PeopleIcon aria-hidden="true" className="size-5" />
+                  {t("accept.manageGroupButton")}
+                </RouterButton>
+              )}
 
             {!acceptMutation.data &&
               !repoExistsAlready &&

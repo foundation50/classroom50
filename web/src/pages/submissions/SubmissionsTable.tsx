@@ -11,7 +11,11 @@ import {
   getSection,
   resolveStudent,
 } from "@/util/students"
-import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
+import {
+  studentRepoName,
+  studentRepoUrl,
+  GROUP_REPO_SEGMENT,
+} from "@/util/studentRepo"
 import { repoCommitUrl } from "@/util/orgUrl"
 import Avatar from "@/components/avatar"
 import {
@@ -36,6 +40,7 @@ import {
   paginateDisplayItems,
   paginationRange,
   sortNameMode,
+  teamMissingForOwner,
   PAGE_SIZE_OPTIONS,
 } from "@/pages/submissions/dashboard"
 import {
@@ -44,6 +49,8 @@ import {
   GroupRepoRow,
   NonSubmitterRow,
   PublicRepoBadge,
+  TeamMembersCountCell,
+  TeamWithoutRepoRow,
   identitySubtitle,
 } from "@/pages/submissions/SubmissionsRows"
 import {
@@ -59,6 +66,8 @@ import {
   type ScoreOverrideCapability,
 } from "@/pages/submissions/ScoreOverrideModal"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
+import { ManageGroupDialog } from "@/pages/manageGroups/ManageGroupDialog"
+import { RecoverGroupDialog } from "@/pages/manageGroups/RecoverGroupDialog"
 import { RepoAccessModal } from "@/components/modals/RepoAccessModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import {
@@ -78,7 +87,9 @@ import {
 } from "@/components/submissions/SubmissionRowCells"
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
-import type { Student, SubmissionMode } from "@/types/classroom"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { groupDisplayName } from "@/util/groupTeam"
+import type { Student, SubmissionMode, TeamFormation } from "@/types/classroom"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { blockEnter } from "@/lib/motion"
@@ -130,6 +141,8 @@ type OverrideModalRow = {
   // asks the teacher to enter the max.
   maxPoints?: number
   memberUsernames?: string[]
+  // Team mode: recorded on a new override entry (scores-v1 `team_slug`).
+  teamSlug?: string
 }
 
 // Build the type-aware detail items for a row via the shared builder: tag
@@ -241,12 +254,29 @@ const SKELETON_BARS = [
   "h-8 w-24",
 ]
 
+// Team mode adds the Members column between the name and Submissions.
+const TEAM_SKELETON_BARS = [
+  "h-4 w-40",
+  "h-6 w-10",
+  "h-6 w-20",
+  "h-6 w-16",
+  "h-4 w-32",
+  "h-8 w-24",
+]
+
 const SubmissionsTable = ({
   scores,
   students,
   nonSubmitters = [],
   unsubmittedGroupRepos = [],
   isGroup = false,
+  isTeam = false,
+  groupDisplayNames,
+  groupMemberLogins,
+  teamsByOwner,
+  teamsWithoutRepos = [],
+  teamsSettled = false,
+  teamFormation,
   org,
   classroom,
   assignment,
@@ -283,6 +313,28 @@ const SubmissionsTable = ({
   // Rendered as extra rows so teachers see teams that formed before any push.
   unsubmittedGroupRepos?: GroupRepo[]
   isGroup?: boolean
+  // TEAM mode (a group flavor): members come from live team membership, the
+  // display name from the team record, and the legacy collaborators modal is
+  // never offered. isGroup is also true for team rows.
+  isTeam?: boolean
+  // Team mode: owner segment ("group-<n>", lowercased) -> the team's display
+  // name / live member logins.
+  groupDisplayNames?: ReadonlyMap<string, string>
+  groupMemberLogins?: ReadonlyMap<string, string[]>
+  // Team mode: owner segment -> the full team ref (slug recorded on override
+  // entries; the whole ref feeds the shared manage-group dialog).
+  teamsByOwner?: ReadonlyMap<string, GroupTeamRef>
+  // Team mode: live teams whose expected repo doesn't exist yet (and that have
+  // no score row). Rendered as their own "no repository yet" rows in the
+  // display sequence. Already filtered/gated by the page.
+  teamsWithoutRepos?: GroupTeamRef[]
+  // Team mode: whether the group-teams query has SETTLED (fetched at least
+  // once). Gates the "team missing" error state so it can't flash on every
+  // row while the listing loads.
+  teamsSettled?: boolean
+  // Team mode: the assignment's team_formation, recorded on the teams.json
+  // snapshot writes the manage dialog triggers.
+  teamFormation?: TeamFormation
   org: string
   classroom: string
   assignment: string
@@ -437,14 +489,27 @@ const SubmissionsTable = ({
             unsubmittedGroupRepos,
             students,
             sortNameMode(sort),
+            teamsWithoutRepos,
           )
-        : buildGroupDisplayItems(scores, unsubmittedGroupRepos)
+        : buildGroupDisplayItems(
+            scores,
+            unsubmittedGroupRepos,
+            teamsWithoutRepos,
+          )
     }
     if (isNameSort(sort)) {
       return buildRosterDisplayItems(students, scores, nonSubmitters)
     }
     return buildSortedDisplayItems(scores, nonSubmitters)
-  }, [isGroup, sort, students, scores, nonSubmitters, unsubmittedGroupRepos])
+  }, [
+    isGroup,
+    sort,
+    students,
+    scores,
+    nonSubmitters,
+    unsubmittedGroupRepos,
+    teamsWithoutRepos,
+  ])
   const bounds = pageBounds(displayItems.length, pageSize, page)
   const pageItems = useMemo(
     () => paginateDisplayItems(displayItems, pageSize, page),
@@ -473,6 +538,22 @@ const SubmissionsTable = ({
   const isPublicRepo = (repoName: string) =>
     Boolean(publicRepoNames?.has(repoName.toLowerCase()))
 
+  // A group row's display label: the team's record name for team mode
+  // ("Group <n>" default supplied by the page), else the repo name.
+  const groupLabel = (owner: string, repo: string) =>
+    groupDisplayNames?.get(owner.toLowerCase()) ?? repo
+
+  // Team mode: a row's live member logins, or undefined while membership is
+  // still unresolved (which blocks the override editor — see below).
+  const teamMembers = (owner: string) =>
+    groupMemberLogins?.get(owner.toLowerCase())
+
+  // Team mode: whether a row's owner segment has no live team behind it (the
+  // GitHub team was likely deleted). Settled-gated so it can't flash while
+  // the teams listing loads.
+  const teamMissing = (owner: string) =>
+    isTeam && teamMissingForOwner(owner, teamsByOwner, teamsSettled)
+
   // One submitted/pending row. Extracted so the paginated sequence can render
   // it inline alongside non-submitter and group-repo rows without duplicating
   // this markup. Keyed by owner by the caller.
@@ -492,7 +573,9 @@ const SubmissionsTable = ({
     const openDetails = () =>
       setDetailsContext({
         owner: rest.owner,
-        title: isGroup ? repo : getName(rest.owner, students) || rest.owner,
+        title: isGroup
+          ? groupLabel(rest.owner, repo)
+          : getName(rest.owner, students) || rest.owner,
         subtitle: isGroup
           ? undefined
           : identitySubtitle(
@@ -518,12 +601,13 @@ const SubmissionsTable = ({
           ? {
               owner: rest.owner,
               isGroup: true,
-              title: repo,
+              title: groupLabel(rest.owner, repo),
               repo,
               repoHref,
               hasRepo: true,
               commit: rest.commit,
               release: rest.release,
+              displayName: groupDisplayNames?.get(rest.owner.toLowerCase()),
             }
           : {
               owner: rest.owner,
@@ -562,7 +646,15 @@ const SubmissionsTable = ({
                 usernames={usernames}
                 students={students}
                 repoHref={repoHref}
-                repoLabel={repo}
+                // Team rows title the group by its display name; the long
+                // repo name stays on the link's hover title. Legacy group
+                // rows keep the repo name as the label.
+                repoLabel={isTeam ? groupLabel(rest.owner, repo) : repo}
+                memberLoginsOverride={
+                  isTeam ? teamMembers(rest.owner) : undefined
+                }
+                // Team mode: members render in their own count column.
+                showAvatars={!isTeam}
               />
               {isPublicRepo(repo) ? <PublicRepoBadge /> : null}
             </div>
@@ -583,6 +675,23 @@ const SubmissionsTable = ({
             </div>
           )}
         </td>
+        {isTeam && (
+          // Quarantined from the row's manage click like the actions cell, so
+          // the count button is the only click target inside it.
+          <td onClick={(event) => event.stopPropagation()}>
+            <TeamMembersCountCell
+              count={teamMembers(rest.owner)?.length}
+              label={t("submissions.table.manageMembersLabel", {
+                name: groupLabel(rest.owner, repo),
+              })}
+              onClick={() => setManageOwner(rest.owner)}
+              missing={teamMissing(rest.owner)}
+              missingLabel={t("submissions.table.recoverTeamLabel", {
+                name: groupLabel(rest.owner, repo),
+              })}
+            />
+          </td>
+        )}
         <td>
           <SubmissionCountCell
             mode={assignmentMode}
@@ -600,7 +709,12 @@ const SubmissionsTable = ({
               isGroup,
               skipsGrading,
             )
-            if (cell) {
+            // Team rows credit LIVE team members on an override write, so the
+            // editor is blocked until membership resolves — the team analog of
+            // the pending-group guard inside resolveOverrideCell.
+            const liveTeamMembers = isTeam ? teamMembers(rest.owner) : undefined
+            const teamMembersUnresolved = isTeam && !liveTeamMembers
+            if (cell && !teamMembersUnresolved) {
               return (
                 <ScoreCell
                   owner={rest.owner}
@@ -614,7 +728,7 @@ const SubmissionsTable = ({
                     setOverrideRow({
                       owner: rest.owner,
                       displayName: isGroup
-                        ? repo
+                        ? groupLabel(rest.owner, repo)
                         : getName(rest.owner, students) || undefined,
                       hasGrade: cell.hasGrade,
                       score,
@@ -622,7 +736,11 @@ const SubmissionsTable = ({
                       autogradedScore: rest.autogradedScore,
                       autogradedMax: rest.autogradedMax,
                       maxPoints: cell.maxPoints,
-                      memberUsernames: usernames,
+                      memberUsernames: liveTeamMembers ?? usernames,
+                      teamSlug: isTeam
+                        ? (rest.teamSlug ??
+                          teamsByOwner?.get(rest.owner.toLowerCase())?.slug)
+                        : undefined,
                     })
                   }
                 />
@@ -741,7 +859,7 @@ const SubmissionsTable = ({
                 clump at the far edge. */}
           <tr>
             <SortableTh
-              className="w-[26%]"
+              className={isTeam ? "w-[22%]" : "w-[26%]"}
               label={
                 isGroup
                   ? t("submissions.table.colGroup")
@@ -753,7 +871,12 @@ const SubmissionsTable = ({
               onSortChange={onSortChange}
               title={t("submissions.table.sortByName")}
             />
-            <th scope="col" className="w-[24%]">
+            {isTeam && (
+              <th scope="col" className="w-[10%]">
+                {t("submissions.table.colMembers")}
+              </th>
+            )}
+            <th scope="col" className={isTeam ? "w-[18%]" : "w-[24%]"}>
               {t("submissions.table.colSubmissions")}
             </th>
             <th scope="col" className="w-[13%]">
@@ -783,7 +906,9 @@ const SubmissionsTable = ({
           initial="initial"
           animate="animate"
         >
-          {initialLoading && <SkeletonRows bars={SKELETON_BARS} />}
+          {initialLoading && (
+            <SkeletonRows bars={isTeam ? TEAM_SKELETON_BARS : SKELETON_BARS} />
+          )}
           {/* Group mode renders group rows only — the reconciled "no group"
               non-submitters never appear as rows here — so they must not
               suppress the empty state (a groupless class would otherwise get
@@ -792,9 +917,10 @@ const SubmissionsTable = ({
             !scores?.length &&
             (isGroup || !nonSubmitters.length) &&
             !unsubmittedGroupRepos.length &&
+            !teamsWithoutRepos.length &&
             !nonSubmittersLoading && (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={isTeam ? 6 : 5}>
                   {filtered ? (
                     <EmptyState
                       variant="bare"
@@ -834,155 +960,209 @@ const SubmissionsTable = ({
                 </td>
               </tr>
             )}
-          {pageItems.map((item) => {
-            if (item.kind === "row") return renderSubmitterRow(item.row)
-            if (item.kind === "nonSubmitter") {
-              const student = item.student
-              // Individual non-submitter: show the same per-repo action
-              // cluster as a submitter, disabled where inapplicable. A repo
-              // exists only if they accepted; a never-accepted student's
-              // repo-scoped actions render disabled. A group non-submitter has
-              // no per-student repo, so no actions (the row shows an em-dash).
-              //
-              // Acceptance is a tri-state: `acceptedUsernames` is undefined
-              // until the org repo list loads. Treat undefined as "unknown"
-              // and fall back to the em-dash (like the neutral "Not submitted"
-              // badge does), so the row never asserts "hasn't accepted" with a
-              // disabled cluster while acceptance is still resolving.
-              const showActions =
-                !isGroup && Boolean(student.username) && acceptedUsernames
+          {/* The whole row sequence waits for initialLoading: parts of it
+              (e.g. team-mode group-repo rows from the org repo list) can be
+              derivable before the queries the ROW CONTENT needs (team display
+              names) resolve — painting them early shows repo names that then
+              flip, beneath the skeletons. */}
+          {!initialLoading &&
+            pageItems.map((item) => {
+              if (item.kind === "row") return renderSubmitterRow(item.row)
+              if (item.kind === "nonSubmitter") {
+                const student = item.student
+                // Individual non-submitter: show the same per-repo action
+                // cluster as a submitter, disabled where inapplicable. A repo
+                // exists only if they accepted; a never-accepted student's
+                // repo-scoped actions render disabled. A group non-submitter has
+                // no per-student repo, so no actions (the row shows an em-dash).
+                //
+                // Acceptance is a tri-state: `acceptedUsernames` is undefined
+                // until the org repo list loads. Treat undefined as "unknown"
+                // and fall back to the em-dash (like the neutral "Not submitted"
+                // badge does), so the row never asserts "hasn't accepted" with a
+                // disabled cluster while acceptance is still resolving.
+                const showActions =
+                  !isGroup && Boolean(student.username) && acceptedUsernames
 
-              let actions: React.ReactNode
-              let openManage: (() => void) | undefined
-              if (showActions) {
-                const repoName = studentRepoName(
-                  classroom,
-                  assignment,
-                  student.username,
-                )
-                const repoHref = studentRepoUrl(
-                  org,
-                  classroom,
-                  assignment,
-                  student.username,
-                )
-                const accepted = hasAccepted(student.username, showActions)
-                openManage = () =>
-                  setManageSubmission({
-                    owner: student.username,
-                    isGroup: false,
-                    title:
-                      getName(student.username, students) || student.username,
-                    subtitle: identitySubtitle(
-                      getName(student.username, students),
-                      student.username,
-                      student.section,
-                    ),
-                    repo: repoName,
-                    repoHref,
-                    hasRepo: accepted,
-                    displayName:
-                      getName(student.username, students) || undefined,
-                  })
-                actions = (
-                  <RepoRowActions
-                    owner={student.username}
-                    skipsGrading={skipsGrading}
-                    header={
-                      <IndividualRowHeader
-                        repo={repoName}
-                        repoHref={repoHref}
-                        hasRepo={accepted}
-                      />
-                    }
-                    feedbackPr={feedbackPrShortcut(repoName, accepted)}
+                let actions: React.ReactNode
+                let openManage: (() => void) | undefined
+                if (showActions) {
+                  const repoName = studentRepoName(
+                    classroom,
+                    assignment,
+                    student.username,
+                  )
+                  const repoHref = studentRepoUrl(
+                    org,
+                    classroom,
+                    assignment,
+                    student.username,
+                  )
+                  const accepted = hasAccepted(student.username, showActions)
+                  openManage = () =>
+                    setManageSubmission({
+                      owner: student.username,
+                      isGroup: false,
+                      title:
+                        getName(student.username, students) || student.username,
+                      subtitle: identitySubtitle(
+                        getName(student.username, students),
+                        student.username,
+                        student.section,
+                      ),
+                      repo: repoName,
+                      repoHref,
+                      hasRepo: accepted,
+                      displayName:
+                        getName(student.username, students) || undefined,
+                    })
+                  actions = (
+                    <RepoRowActions
+                      owner={student.username}
+                      skipsGrading={skipsGrading}
+                      header={
+                        <IndividualRowHeader
+                          repo={repoName}
+                          repoHref={repoHref}
+                          hasRepo={accepted}
+                        />
+                      }
+                      feedbackPr={feedbackPrShortcut(repoName, accepted)}
+                      onManage={openManage}
+                    />
+                  )
+                }
+                return (
+                  <NonSubmitterRow
+                    key={`missing-${student.username || student.email || student.github_id}`}
+                    student={student}
+                    students={students}
+                    isGroup={isGroup}
+                    isTeam={isTeam}
+                    acceptedUsernames={acceptedUsernames}
+                    onProfile={setProfileUsername}
+                    actions={actions}
                     onManage={openManage}
+                    overrideGrade={overrideGrade}
+                    onEditGrade={(username) =>
+                      overrideGrade?.mode === "manual" &&
+                      typeof overrideGrade.maxPoints === "number"
+                        ? setOverrideRow({
+                            owner: username,
+                            displayName:
+                              getName(username, students) || undefined,
+                            hasGrade: false,
+                            score: 0,
+                            overridden: false,
+                            maxPoints: overrideGrade.maxPoints,
+                          })
+                        : undefined
+                    }
+                    thresholdFraction={passBar}
+                    nameMode={nameDisplayMode}
+                    publicRepo={
+                      Boolean(student.username) &&
+                      isPublicRepo(
+                        studentRepoName(
+                          classroom,
+                          assignment,
+                          student.username,
+                        ),
+                      )
+                    }
                   />
                 )
               }
+              if (item.kind === "teamNoRepo") {
+                const team = item.team
+                const teamOwner = `${GROUP_REPO_SEGMENT}${team.n}`
+                const label =
+                  groupDisplayNames?.get(teamOwner) ?? groupDisplayName(team, t)
+                return (
+                  <TeamWithoutRepoRow
+                    key={`team-${team.slug}`}
+                    org={org}
+                    team={team}
+                    label={label}
+                    membersCell={
+                      <TeamMembersCountCell
+                        count={teamMembers(teamOwner)?.length}
+                        label={t("submissions.table.manageMembersLabel", {
+                          name: label,
+                        })}
+                        onClick={() => setManageOwner(teamOwner)}
+                      />
+                    }
+                    onManage={() => setManageOwner(teamOwner)}
+                  />
+                )
+              }
+              const { owner, repoName } = item.repo
+              const groupRepoHref = studentRepoUrl(
+                org,
+                classroom,
+                assignment,
+                owner,
+              )
+              const openManage = () =>
+                setManageSubmission({
+                  owner,
+                  isGroup: true,
+                  title: groupLabel(owner, repoName),
+                  repo: repoName,
+                  repoHref: groupRepoHref,
+                  hasRepo: true,
+                  displayName: groupDisplayNames?.get(owner.toLowerCase()),
+                })
               return (
-                <NonSubmitterRow
-                  key={`missing-${student.username || student.email || student.github_id}`}
-                  student={student}
+                <GroupRepoRow
+                  key={`group-${repoName}`}
+                  org={org}
+                  classroom={classroom}
+                  assignment={assignment}
+                  owner={owner}
+                  repoName={repoName}
                   students={students}
-                  isGroup={isGroup}
-                  acceptedUsernames={acceptedUsernames}
-                  onProfile={setProfileUsername}
-                  actions={actions}
                   onManage={openManage}
-                  overrideGrade={overrideGrade}
-                  onEditGrade={(username) =>
-                    overrideGrade?.mode === "manual" &&
-                    typeof overrideGrade.maxPoints === "number"
-                      ? setOverrideRow({
-                          owner: username,
-                          displayName: getName(username, students) || undefined,
-                          hasGrade: false,
-                          score: 0,
-                          overridden: false,
-                          maxPoints: overrideGrade.maxPoints,
-                        })
-                      : undefined
+                  publicRepo={isPublicRepo(repoName)}
+                  memberLogins={isTeam ? teamMembers(owner) : undefined}
+                  label={isTeam ? groupLabel(owner, repoName) : undefined}
+                  membersCell={
+                    isTeam ? (
+                      <TeamMembersCountCell
+                        count={teamMembers(owner)?.length}
+                        label={t("submissions.table.manageMembersLabel", {
+                          name: groupLabel(owner, repoName),
+                        })}
+                        onClick={() => setManageOwner(owner)}
+                        missing={teamMissing(owner)}
+                        missingLabel={t("submissions.table.recoverTeamLabel", {
+                          name: groupLabel(owner, repoName),
+                        })}
+                      />
+                    ) : undefined
                   }
-                  thresholdFraction={passBar}
-                  nameMode={nameDisplayMode}
-                  publicRepo={
-                    Boolean(student.username) &&
-                    isPublicRepo(
-                      studentRepoName(classroom, assignment, student.username),
-                    )
+                  actions={
+                    <RepoRowActions
+                      owner={owner}
+                      skipsGrading={skipsGrading}
+                      header={
+                        <GroupActionControls
+                          repo={repoName}
+                          repoHref={groupRepoHref}
+                        />
+                      }
+                      feedbackPr={feedbackPrShortcut(repoName, true)}
+                      onManage={openManage}
+                    />
                   }
                 />
               )
-            }
-            const { owner, repoName } = item.repo
-            const groupRepoHref = studentRepoUrl(
-              org,
-              classroom,
-              assignment,
-              owner,
-            )
-            const openManage = () =>
-              setManageSubmission({
-                owner,
-                isGroup: true,
-                title: repoName,
-                repo: repoName,
-                repoHref: groupRepoHref,
-                hasRepo: true,
-              })
-            return (
-              <GroupRepoRow
-                key={`group-${repoName}`}
-                org={org}
-                classroom={classroom}
-                assignment={assignment}
-                owner={owner}
-                repoName={repoName}
-                students={students}
-                onManage={openManage}
-                publicRepo={isPublicRepo(repoName)}
-                actions={
-                  <RepoRowActions
-                    owner={owner}
-                    skipsGrading={skipsGrading}
-                    header={
-                      <GroupActionControls
-                        repo={repoName}
-                        repoHref={groupRepoHref}
-                      />
-                    }
-                    feedbackPr={feedbackPrShortcut(repoName, true)}
-                    onManage={openManage}
-                  />
-                }
-              />
-            )
-          })}
+            })}
           {nonSubmittersLoading && (
             <tr>
               <td
-                colSpan={5}
+                colSpan={isTeam ? 6 : 5}
                 className="py-4 text-center text-sm text-base-content/60"
               >
                 <span role="status" className="inline-flex items-center gap-2">
@@ -1039,6 +1219,9 @@ const SubmissionsTable = ({
             manageOwner === manageSubmission.owner
           }
           onManageMembers={
+            // Group flavors both get a members editor: legacy group edits
+            // direct collaborators, team mode opens the shared manage-group
+            // dialog (ManageGroupDialog).
             manageSubmission.isGroup
               ? () => setManageOwner(manageSubmission.owner)
               : undefined
@@ -1067,7 +1250,7 @@ const SubmissionsTable = ({
         />
       )}
 
-      {isGroup && manageOwner && (
+      {isGroup && !isTeam && manageOwner && (
         <GroupCollaboratorsModal
           key={manageOwner}
           open
@@ -1081,6 +1264,42 @@ const SubmissionsTable = ({
           students={students}
         />
       )}
+
+      {isTeam &&
+        manageOwner &&
+        (() => {
+          // Team present -> the shared manage dialog; team MISSING (settled,
+          // deleted on GitHub) -> the recovery dialog. Both entry points (the
+          // members-column badge and the hub's Manage group action) land here.
+          const team = teamsByOwner?.get(manageOwner.toLowerCase())
+          if (team) {
+            return (
+              <ManageGroupDialog
+                key={manageOwner}
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                team={team}
+                formation={teamFormation ?? "teacher"}
+                maxGroupSize={maxGroupSize}
+                onClose={() => setManageOwner(null)}
+              />
+            )
+          }
+          if (!teamMissing(manageOwner)) return null
+          return (
+            <RecoverGroupDialog
+              key={`recover-${manageOwner}`}
+              org={org}
+              classroom={classroom}
+              assignment={assignment}
+              owner={manageOwner}
+              formation={teamFormation ?? "teacher"}
+              maxGroupSize={maxGroupSize}
+              onClose={() => setManageOwner(null)}
+            />
+          )
+        })()}
 
       {accessOwner && (
         <RepoAccessModal
@@ -1117,6 +1336,7 @@ const SubmissionsTable = ({
             mode: overrideGrade.mode,
             maxPoints: overrideRow.maxPoints,
             memberUsernames: overrideRow.memberUsernames,
+            teamSlug: overrideRow.teamSlug,
           }}
         />
       )}

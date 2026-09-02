@@ -94,26 +94,31 @@ export function permissionSatisfies(
 
 // Maps an assignment to the founder's accept-time repo role: the configured
 // student_permission when set, else the mode default (least-privilege push for
-// individual, admin for group). A group founder must hold at least admin to add
-// teammates via `gh student invite`, so a group value below admin is clamped up.
-// Mirrors gh-student's founderPermission.
+// individual and team, admin for the legacy group). A group founder must hold
+// at least admin to add teammates via `gh student invite`, so a group value
+// below admin is clamped up. A TEAM member must never hold admin (access flows
+// through the team attachment; per-member admin would let one student delete
+// the shared repo), so a team value of admin is clamped down to the push
+// default. Mirrors gh-student's founderPermission.
 export function founderPermission(
   mode: AssignmentMode,
   studentPermission?: RepoPermission,
 ): RepoPermission {
   const want = studentPermission ?? defaultStudentPermission(mode)
   if (mode === "group" && want !== "admin") return "admin"
+  if (mode === "team" && want === "admin") return defaultStudentPermission(mode)
   return want
 }
 
-// Rejects a group-shaped entry (max_group_size >= 2) whose mode isn't `group`:
-// the founder would be under-privileged. Mirrors gh-student's assertModeCoherentForCreate.
+// Rejects a group-shaped entry (max_group_size >= 2) whose mode isn't a group
+// flavor (group or team): the founder would be under-privileged. Mirrors
+// gh-student's assertModeCoherentForCreate.
 export function assertAssignmentModeCoherent(
   slug: string,
   mode: AssignmentMode,
   maxGroupSize: number | undefined,
 ): void {
-  if ((maxGroupSize ?? 0) > 0 && mode !== "group") {
+  if ((maxGroupSize ?? 0) > 0 && mode !== "group" && mode !== "team") {
     throw localizedError({
       key: "accept.errors.incoherentMode",
       params: { slug, maxGroupSize: maxGroupSize ?? 0, mode },

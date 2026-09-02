@@ -25,6 +25,7 @@ state is represented by ordinary GitHub data:
 | Your classrooms, assignments, scores | Config files in a private `classroom50` repo in your org |
 | Who's enrolled | GitHub organization and team membership |
 | Who's staff (teacher/TA) | Membership in `secret` GitHub teams |
+| Who's in which group | Membership in per-group GitHub Teams, with a teacher-committed snapshot in `teams.json` |
 | An address you invited, before that person joins | A `secret` per-invite team, removed once they're on the roster |
 | A student's submissions | Commit history and Releases in their repo |
 | Who can do what | GitHub permissions |
@@ -276,10 +277,13 @@ repository is deliberately broad:
 
 - **Individual assignments:** the student is created as an admin of their repo,
   then downgraded to **write**, enough to push work but not enough to do damage.
-- **Group assignments:** the first student to accept (the **founder**) keeps
-  **admin** on the shared repo, because they need it to invite teammates as
-  collaborators. Classroom 50 has no separate "create a team" step — students
-  form their own groups.
+- **Group assignments:** members get push access through their group's GitHub
+  Team, so no student needs repo admin. The founding accepter's transient
+  creator-admin is dropped once the team is attached. See
+  [Group assignments are GitHub Teams](#group-assignments-are-github-teams).
+- **Legacy group assignments:** the first student to accept (the **founder**)
+  keeps **admin** on the shared repo, because they need it to invite teammates
+  as collaborators.
 
 This is safe **because of** the org lockdown: even an admin on their own repo
 can't delete it, change its visibility, transfer it, or reach another student's
@@ -358,6 +362,39 @@ cascade into deleting a student's work:
   doesn't delete the repositories.
 - **Deleting** a repository is always a separate, manual action.
 
+## Group assignments are GitHub Teams
+
+A group assignment's groups follow the same derived-state model as everything
+else: each group **is** a GitHub Team, named `classroom50-group-<hash>-<n>`
+(the hash is derived from the classroom and assignment slugs, `<n>` is the
+group's number). The team owns the group's shared repository,
+`<classroom>-<assignment>-group-<n>`, and the team's push access to that
+repository is the authoritative link between the two. Three consequences:
+
+- **Membership lives on the team.** Members get push access through the team,
+  so no student needs repo admin. Grading credits the team's live members who
+  are on the classroom roster, never repository collaborators.
+- **Who forms the groups is an assignment setting.** With teacher formation,
+  the teacher creates the group teams (created `secret`) and a student who
+  isn't in one can't accept. With student formation, the first student founds
+  the team when accepting and becomes its GitHub team maintainer; those teams
+  are created `closed` (visible to organization members) so classmates can
+  browse groups and use GitHub's native request-to-join flow. Student-formed
+  groups require the organization to allow members to create teams, which
+  setup enables by default.
+- **A snapshot records intent.** Teacher tooling commits each group's
+  intended membership to `<classroom>/teams.json` in the `classroom50`
+  repository. GitHub Teams stay authoritative for who can push; the snapshot
+  is the baseline the teacher views diff live membership against to surface
+  drift, and what makes a deleted group team attributable and recoverable
+  afterward.
+
+A group's display name (for example, "The Sharks") is display metadata only,
+stored on the team's record: renaming a group never changes its team slug or
+its repository name. The legacy group mode predates group teams and still
+works the old way: one shared repository owned by the founding student, with
+teammates as repository collaborators.
+
 ## Assignment repositories
 
 Each accepted assignment produces a repository named in all-lowercase:
@@ -366,7 +403,9 @@ Each accepted assignment produces a repository named in all-lowercase:
 <classroom>-<assignment>-<username>
 ```
 
-For a group assignment, `<username>` is the founder who created the shared repo.
+A group assignment's shared repository is named
+`<classroom>-<assignment>-group-<n>` after its group's number; for a legacy
+group assignment, `<username>` is the founder who created the shared repo.
 These are normal GitHub repositories — scripts that automate git operations
 against them generally work the same as they did with GitHub Classroom.
 
@@ -405,7 +444,7 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 | Classroom ↔ org | Classrooms managed in the hosted dashboard | A folder in your organization's `classroom50` repository, plus GitHub teams |
 | Grading | Hosted autograder | GitHub Actions in each repo |
 | Joining | Students self-select their roster entry from an invite link | The owner invites students; accept links work once they've joined the org |
-| Group naming | Team names | Founder's username |
+| Group naming | Team names | Group display names, backed by GitHub Teams (legacy group mode: founder's username) |
 | Data | In the service | In your `classroom50` repository (yours to keep) |
 
 For a term-by-term mapping of GitHub Classroom vocabulary (cutoff date,

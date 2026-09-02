@@ -318,7 +318,8 @@ def make_result(
     review_link is None.
 
     `username` is the repo OWNER, emitted as `owner` (the identity anchor
-    the collector validates). `assignment_type` ("individual"|"group")
+    the collector validates; for a team assignment the repo-name tail
+    `group-<n>`). `assignment_type` ("individual"|"group"|"team")
     records the mode. No `usernames` field: who pushed is `submitted_by`,
     who owns the repo is `owner`, the credited member list is resolved by
     collection.
@@ -436,6 +437,7 @@ def render_release_body(result: dict[str, Any], summary: str) -> str:
 
 def validate_result(
     data: Any, *, classroom: str, assignment: str, is_group: bool = False,
+    expected_type: str | None = None,
     owner: str | None = None,
 ) -> str | None:
     """None if `data` is v1-shaped for the given identity, else a
@@ -448,9 +450,11 @@ def validate_result(
     — the student appears not-yet-submitted with no signal in the log.
 
     `owner` (repo owner login) is the identity anchor: when provided it must
-    equal `data["owner"]`. `assignment_type` must be "individual"/"group" and
-    match the run's mode. No `usernames` field: who pushed is `submitted_by`,
-    who owns is `owner`, the credited member list is resolved by collection.
+    equal `data["owner"]`. `assignment_type` must equal the run's
+    `expected_type` ("individual"/"group"/"team"); the legacy `is_group`
+    boolean is honored when `expected_type` is not supplied. No `usernames`
+    field: who pushed is `submitted_by`, who owns is `owner`, the credited
+    member list is resolved by collection.
     """
     if not isinstance(data, dict):
         return f"{RESULT_FILENAME} is not a JSON object"
@@ -476,7 +480,8 @@ def validate_result(
             f"(derived from the repo name)"
         )
 
-    expected_type = "group" if is_group else "individual"
+    if expected_type is None:
+        expected_type = "group" if is_group else "individual"
     assignment_type = data.get("assignment_type")
     if assignment_type != expected_type:
         return (
@@ -1404,6 +1409,19 @@ def mode_is_group(mode: str | None) -> bool:
     return (mode or "").strip().lower() == "group"
 
 
+def assignment_type_for_mode(mode: str | None) -> str:
+    """Map the MODE env (the manifest mode, via the setup job) to the
+    result.json assignment_type: 'group' and 'team' pass through verbatim;
+    anything else — None, '', or unrecognized — is individual, the strictest
+    type, so a missing/typo'd MODE can never loosen validation. Keep the
+    accepted set in lockstep with the setup job's mode allow-list and
+    collect_scores.py's normalize_assignment_type."""
+    normalized = (mode or "").strip().lower()
+    if normalized in ("group", "team"):
+        return normalized
+    return "individual"
+
+
 # ---------------------------------------------------------------------------
 # Error finalizer
 # ---------------------------------------------------------------------------
@@ -2222,7 +2240,7 @@ def run_declarative(tests_path: pathlib.Path, finalize: Finalizer,
     # keeps parity with collect_scores ingest and catches drift early.
     err = validate_result(
         result, classroom=finalize.classroom, assignment=finalize.assignment,
-        is_group=(finalize.assignment_type == "group"), owner=finalize.username,
+        expected_type=finalize.assignment_type, owner=finalize.username,
     )
     if err is not None:
         return finalize.error(f"declarative grader produced invalid result: {err}")
@@ -2353,12 +2371,12 @@ def run_entrypoint(
     return None
 
 
-def finalize_result(finalize: Finalizer, *, is_group: bool) -> int:
+def finalize_result(finalize: Finalizer) -> int:
     """Read + validate the autograder's result.json, then synthesize the release
     body and status/summary outputs it didn't write. Returns the runner's exit
     code (0 on success; an error rc when the result is missing/malformed/invalid).
-    Identity/paths are read off `finalize`; `is_group` is the one stage-local
-    input (it drives the `assignment_type` check in validate_result)."""
+    Identity/paths — including the expected `assignment_type` — are read off
+    `finalize`."""
     workspace = finalize.workspace
     github_output = finalize.github_output
     result_path = workspace / RESULT_FILENAME
@@ -2394,7 +2412,7 @@ def finalize_result(finalize: Finalizer, *, is_group: bool) -> int:
 
     err = validate_result(
         result, classroom=finalize.classroom, assignment=finalize.assignment,
-        is_group=is_group, owner=finalize.username,
+        expected_type=finalize.assignment_type, owner=finalize.username,
     )
     if err is not None:
         return finalize.error(err)
@@ -2485,9 +2503,9 @@ def main() -> int:
     server_url = os.environ.get("GITHUB_SERVER_URL", "https://github.com")
     actor = os.environ.get("GITHUB_ACTOR", "")
     # Assignment mode flows from assignments.json via the setup job's `mode`
-    # output. Unknown/missing defaults to individual (the stricter
+    # output. Unknown/missing defaults to individual (the strictest
     # `assignment_type`) so a missing env can't loosen validation.
-    is_group = mode_is_group(os.environ.get("MODE"))
+    assignment_type = assignment_type_for_mode(os.environ.get("MODE"))
     github_output = os.environ.get("GITHUB_OUTPUT")
     workspace = pathlib.Path.cwd()
 
@@ -2540,7 +2558,7 @@ def main() -> int:
         release_link=release_link,
         review_link=review_link,
         submitted_by=actor_identity(),
-        assignment_type="group" if is_group else "individual",
+        assignment_type=assignment_type,
         submitted_at=submitted_at,
     )
 
@@ -2580,7 +2598,7 @@ def main() -> int:
         if rc is not None:
             return rc
 
-        return finalize_result(finalize, is_group=is_group)
+        return finalize_result(finalize)
 
     # Append the removed-files note on every exit path (incl. an exception
     # in grading): the files were already deleted before _grade() ran.

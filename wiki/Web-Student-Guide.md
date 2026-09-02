@@ -85,9 +85,36 @@ you accepted. Using the CLI instead? See
 ## Group assignments
 
 Some assignments are done in a group. When accepting, you'll see the assignment
-tagged **Individual** or **Group**.
+tagged **Individual**, **Group**, or **Group (legacy)**.
 
-For a group assignment:
+For a **Group** assignment, your group shares one repository, and the accept
+page walks you through getting a group. How you get one depends on the
+assignment:
+
+- **Your teacher assigns the groups.** The accept page says so. If you aren't
+  in a group yet, ask your teacher to add you to one, then open the link
+  again.
+- **Students form groups.** The accept page lists the existing groups with
+  their member counts. **Ask to join** opens a group's page on GitHub: select
+  **Request to join** there (the group reviews requests on that page, where
+  you can also cancel yours), then come back and click **Check again**. Or
+  click **Create group** to start your own: you become its
+  first member and can add teammates after you accept.
+
+The group's shared repository is created when the first member accepts, and
+every member gets push access through the group's GitHub team.
+
+After accepting, **Manage my group** on the accept page (or **Manage group**
+in the assignment's left menu) shows your group and its members. In a
+student-formed group you can also add teammates there, or leave the group:
+leaving asks you to type the group's name to confirm, because you lose access
+to the group's repository (your work stays with the group). The student who
+created the group maintains it and can't leave; the teacher can move them
+instead.
+
+### Legacy group assignments
+
+For an assignment tagged **Group (legacy)**, there is no group team:
 
 1. **One teammate accepts** and creates the shared repository.
 2. **That teammate adds the others** as collaborators.
@@ -109,7 +136,10 @@ Then click **Manage collaborators**:
 
 Open the assignment and click **My submission** in the left menu. A callout at
 the top shows whether you've submitted and when; if you haven't, **Show me how
-to submit** walks you through your first submission.
+to submit** walks you through your first submission. On a group assignment the
+menu item is **Group submission** instead, and the page shows your group and
+teammates alongside the shared **Group repository**; the assignments list
+offers the same views as **View group submission** and **View group**.
 
 ![Assignment submission](images/web_assignment_submission_student.png)
 

@@ -36,9 +36,49 @@ Each student gets their own repository.
 
 #### Group assignment
 
-Teammates share one repository. The first student to
-accept creates it and invites the others. Groups replace GitHub Classroom's
-teams: there is no separate team-creation step and no group names.
+Teammates share one repository, owned by a **group team** that Classroom 50
+creates and manages. Groups have display names and a capacity, and the
+assignment's **group formation** setting decides who forms them. The web app
+calls this assignment type **Group**; the CLI mode is `team`. The older
+collaborator-based flow remains available as **Group (legacy)**.
+
+#### Group (legacy) assignment
+
+The original shared-repository mode (CLI mode `group`): the first student to
+accept creates the repository and invites teammates as repository
+collaborators. No GitHub team backs the group, and groups have no names.
+Existing legacy assignments keep working; prefer **Group** for new ones.
+
+#### Group team
+
+The GitHub Team behind one group of a group assignment, named
+`classroom50-group-<hash>-<n>`. The team owns the group's shared repository
+(the team's push access to it is the authoritative link), and grading credits
+the team's live members who are on the classroom roster, never repository
+collaborators. Teacher-formed teams are `secret`; student-formed teams are
+`closed` (visible to organization members) so classmates can browse groups.
+
+#### Group formation
+
+Who forms a group assignment's groups. With **Teacher assigns groups**, only
+the teacher creates groups and members, and a student who isn't in a group
+can't accept. With **Students form groups**, the first student founds the
+group when accepting (becoming the group team's maintainer) and adds
+teammates, up to the maximum group size.
+
+#### Group display name
+
+The human-readable name of a group (for example, "The Sharks"), chosen by the
+teacher or the founding student. Display metadata only: renaming a group never
+changes its team slug or its repository name.
+
+#### Group info snapshot
+
+The `<classroom>/teams.json` file in the `classroom50` repository: the
+recorded intent of each group's membership. GitHub Teams stay authoritative
+for who can push; the snapshot exists so intended membership survives
+**drift** (members changed on GitHub since the last refresh, which the teacher
+views surface) and so cleanup can attribute a group team after it is deleted.
 
 #### Roster
 
@@ -112,8 +152,10 @@ A member of the classroom who accepts and submits assignments.
 
 #### Founder
 
-For a group assignment, the student who accepts first: they create
-the shared repository and invite the other teammates as collaborators.
+For a group assignment with student-formed groups, the student who creates the
+group: they become the group team's maintainer and add teammates. For a legacy
+group assignment, the student who accepts first: they create the shared
+repository and invite the other teammates as collaborators.
 
 ## Assignments and grading
 
@@ -215,7 +257,10 @@ Assignment repositories are named:
 <classroom>-<assignment>-<username>
 ```
 
-For a group assignment, `<username>` is the founder who created the shared
+For a group assignment, the shared repository is named
+`<classroom>-<assignment>-group-<n>`, where `<n>` is the group's number; the
+repository name never changes, even when the group's display name does. For a
+legacy group assignment, `<username>` is the founder who created the shared
 repository.
 
 GitHub caps a repository name at 100 characters, so the classroom and

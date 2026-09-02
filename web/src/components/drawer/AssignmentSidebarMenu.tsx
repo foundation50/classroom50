@@ -4,6 +4,7 @@ import {
   FileCheckIcon,
   GearIcon,
   PeopleIcon,
+  RepoIcon,
 } from "@/components/ui/icons"
 import { Link, useMatchRoute } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
@@ -15,7 +16,8 @@ import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import { SidebarItemBody, SidebarNavItem } from "./primitives"
 import { sidebarIconButton } from "./sidebarClasses"
 import { rtlFlip } from "@/components/ui"
@@ -76,8 +78,10 @@ export const AssignmentSidebarMenu = ({
   )
   // Group assignments give students collaborators to manage; individual
   // assignments have nothing student-editable, so we omit the settings entry
-  // rather than route to a dead-end.
-  const isGroupAssignment = publicAssignment?.mode === "group"
+  // rather than route to a dead-end. Team mode manages members too (via the
+  // group team), so it gets the entry as well.
+  const isGroupAssignment =
+    publicAssignment?.mode === "group" || publicAssignment?.mode === "team"
 
   const onRoute = (to: Parameters<typeof matchRoute>[0]["to"]) =>
     Boolean(matchRoute({ to, fuzzy: false }))
@@ -91,18 +95,33 @@ export const AssignmentSidebarMenu = ({
   const onSettings = onRoute(
     "/$org/$classroom/assignments/$assignment/settings",
   )
+  const onGroups = onRoute("/$org/$classroom/assignments/$assignment/groups")
   const onAccept = onRoute("/$org/$classroom/assignments/$assignment/accept")
 
   // Students only: surface "Accept" until they have their repo. Hidden while
   // loading (avoid a flash) and for a real staffer previewing as a student —
-  // they have no student repo, so "Accept" would dead-end.
+  // they have no student repo, so "Accept" would dead-end. Team mode resolves
+  // the shared group repo through the viewer's team membership.
+  const isTeamAssignment = publicAssignment?.mode === "team"
+  const { data: myGroupTeam, isLoading: myTeamLoading } = useMyGroupTeam(
+    org,
+    classroom,
+    assignment,
+    { enabled: isTeamAssignment && Boolean(user?.login) },
+  )
+  const repoOwnerSegment = isTeamAssignment
+    ? myGroupTeam
+      ? `${GROUP_REPO_SEGMENT}${myGroupTeam.n}`
+      : undefined
+    : user?.login
   const { assignment: studentRepo, isLoading: repoLoading } =
-    useGetAssignmentRepo(org, classroom, assignment, user?.login)
+    useGetAssignmentRepo(org, classroom, assignment, repoOwnerSegment)
   const showAccept =
     !showTeacherUi &&
     !isActuallyStaff &&
     roleResolved &&
     !repoLoading &&
+    !(isTeamAssignment && myTeamLoading) &&
     !studentRepo
 
   return (
@@ -150,6 +169,21 @@ export const AssignmentSidebarMenu = ({
             </>
           ) : showTeacherUi ? (
             <>
+              {isTeamAssignment && (
+                <SidebarNavItem label={t("nav.manageGroups")}>
+                  <Link
+                    to="/$org/$classroom/assignments/$assignment/groups"
+                    params={{ org, classroom, assignment }}
+                  >
+                    <SidebarItemBody
+                      label={t("nav.manageGroups")}
+                      icon={<PeopleIcon aria-hidden="true" />}
+                      active={onGroups}
+                      groupId="assignment"
+                    />
+                  </Link>
+                </SidebarNavItem>
+              )}
               <SidebarNavItem label={t("nav.submissions")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submissions"
@@ -157,7 +191,7 @@ export const AssignmentSidebarMenu = ({
                 >
                   <SidebarItemBody
                     label={t("nav.submissions")}
-                    icon={<PeopleIcon aria-hidden="true" />}
+                    icon={<RepoIcon aria-hidden="true" />}
                     active={onSubmissions}
                     groupId="assignment"
                   />
@@ -195,13 +229,23 @@ export const AssignmentSidebarMenu = ({
                   </Link>
                 </SidebarNavItem>
               )}
-              <SidebarNavItem label={t("nav.mySubmission")}>
+              <SidebarNavItem
+                label={t(
+                  isTeamAssignment
+                    ? "nav.mySubmissionTeam"
+                    : "nav.mySubmission",
+                )}
+              >
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submission"
                   params={{ org, classroom, assignment }}
                 >
                   <SidebarItemBody
-                    label={t("nav.mySubmission")}
+                    label={t(
+                      isTeamAssignment
+                        ? "nav.mySubmissionTeam"
+                        : "nav.mySubmission",
+                    )}
                     icon={<FileCheckIcon aria-hidden="true" />}
                     active={onSubmission}
                     groupId="assignment"

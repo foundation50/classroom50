@@ -59,10 +59,11 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   // (`<classroom>-<assignment>-<user>`) when assignment data hasn't resolved.
   const title = assignmentData?.name || assignment || repo.name
 
-  // Only group assignments have something a student can manage (collaborators);
-  // for individual assignments the edit page is a dead-end, so no pencil.
+  // Only shared-repo assignments have something a student can manage (their
+  // group); for individual assignments the edit page is a dead-end, so no pencil.
   const canManageGroup =
-    Boolean(classroom && assignment) && assignmentData?.mode === "group"
+    Boolean(classroom && assignment) &&
+    (assignmentData?.mode === "group" || assignmentData?.mode === "team")
 
   return (
     <Card
@@ -157,10 +158,16 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 {t("classes.repo.individual")}
               </Badge>
             )}
-            {assignmentData?.mode === "group" && (
+            {assignmentData?.mode === "team" && (
               <Badge ghost className="py-3">
                 <PeopleIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.group")}
+              </Badge>
+            )}
+            {assignmentData?.mode === "group" && (
+              <Badge ghost className="py-3">
+                <PeopleIcon aria-hidden="true" className="size-4" />{" "}
+                {t("classes.repo.groupLegacy")}
               </Badge>
             )}
           </div>

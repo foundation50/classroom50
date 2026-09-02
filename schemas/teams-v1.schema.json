@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/foundation50/classroom50/main/schemas/teams-v1.schema.json",
+  "title": "classroom50/teams/v1",
+  "description": "Machine-readable schema for <classroom>/teams.json in the org's private classroom50 config repo: the teacher-committed snapshot of INTENDED group-team membership for `team` assignments, keyed by assignment slug. For a teacher-formed assignment (team_formation: teacher) this file is the source of truth the teacher tooling reconciles GitHub Teams against; for a student-formed one it is the drift baseline clients diff live membership against (an absent assignment key means no baseline yet). It is a SNAPSHOT, not live state: GitHub Teams are authoritative for who can push, and grading credits live team membership — this file exists so intent survives membership drift and so cleanup can attribute teams after they are deleted. Rules JSON Schema cannot express, enforced in code: (1) within an assignment, team slugs are unique and their hash segment must equal GroupTeamHash(classroom, assignment) — a slug from another assignment is a hard error; (2) `members` lists are disjoint within an assignment (one student, one team); (3) member usernames are stored lowercased. Evolve additively: readers must tolerate and preserve unknown fields on a read-modify-write, since the file may be written by newer releases.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema", "assignments"],
+  "properties": {
+    "schema": { "const": "classroom50/teams/v1" },
+    "assignments": {
+      "type": "object",
+      "description": "Assignment slug -> that assignment's group-team snapshot. `{}` (never null) at scaffold time.",
+      "propertyNames": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]{1,99}$"
+      },
+      "additionalProperties": { "$ref": "#/$defs/assignmentTeams" }
+    }
+  },
+  "$defs": {
+    "assignmentTeams": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["teams"],
+      "properties": {
+        "teams": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/team" },
+          "description": "One record per group team. `[]` when the teacher has defined no teams yet."
+        }
+      }
+    },
+    "team": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["slug", "members"],
+      "properties": {
+        "slug": {
+          "type": "string",
+          "pattern": "^classroom50-group-[0-9a-f]{16}-[1-9][0-9]*$",
+          "description": "The GitHub Team slug (== name) `classroom50-group-<hash>-<n>`. The hash segment must equal GroupTeamHash of this classroom and the bucket's assignment slug (enforced in code)."
+        },
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "The live team's numeric id, recorded at creation. Destructive deletes confirm the live team still carries this id before acting (the TeamIdMismatchError pattern), so a reused slug is never clobbered blind. Absent on a record written before the team existed (e.g., a planned import)."
+        },
+        "name": {
+          "type": "string",
+          "description": "Human-readable display name (e.g., \"The Sharks\"). Display metadata only — never part of the slug. Mirrored into the team's classroom50/group/v1 description record. Omitted when the team has no display name."
+        },
+        "members": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "description": "Intended member usernames, lowercased. May be [] for a teacher-created placeholder team awaiting assignment. INTENT, not live state: clients diff this against live GitHub Team membership to surface drift."
+        },
+        "formation": {
+          "enum": ["teacher", "student"],
+          "description": "Who founded this team, recorded so a mixed history stays auditable after the assignment's team_formation is edited. Omitted when unknown (a backfilled snapshot)."
+        }
+      }
+    }
+  }
+}

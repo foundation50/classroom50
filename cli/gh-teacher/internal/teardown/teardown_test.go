@@ -3,6 +3,7 @@ package teardown
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -27,7 +29,8 @@ type teardownTestServer struct {
 	classroomJSON     map[string]string // "<dir>/classroom.json" → contents-API JSON body
 	teamGET           map[string]string // "/orgs/{org}/teams/{slug}" → GET body (id verify)
 	deletedTeams      []string          // team slugs that received DELETE
-	orgTeams          []string          // GET /orgs/{org}/teams slugs (invite-team sweep)
+	orgTeams          []string          // GET /orgs/{org}/teams slugs (invite/group sweeps)
+	orgTeamBodies     map[string]string // slug → extra JSON fields (e.g. description) for the listing
 	failOrgTeamsList  bool              // when true, GET /orgs/{org}/teams 500s
 }
 
@@ -102,7 +105,11 @@ func (s *teardownTestServer) handler(t *testing.T, org string) http.Handler {
 				if i > 0 {
 					sb.WriteByte(',')
 				}
-				fmt.Fprintf(&sb, `{"id":%d,"slug":%q}`, 1000+i, slug)
+				extra := s.orgTeamBodies[slug]
+				if extra != "" {
+					extra = "," + extra
+				}
+				fmt.Fprintf(&sb, `{"id":%d,"slug":%q%s}`, 1000+i, slug, extra)
 			}
 			sb.WriteByte(']')
 			_, _ = w.Write([]byte(sb.String()))
@@ -252,6 +259,67 @@ func TestRunTeardown_InviteSweepListFailureIsNonFatal(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "could not list invite teams") {
 		t.Errorf("stderr should warn about the skipped sweep, got %q", errOut.String())
+	}
+}
+
+// The group teams behind team-mode assignments are swept per snapshotted
+// classroom, attributed by their description records — never by prefix alone.
+func TestRunTeardown_SweepsGroupTeams(t *testing.T) {
+	mine := contract.GroupTeamName("cs-principles", "project", 1)
+	mineRecord, err := configrepo.MarshalGroupDescription("cs-principles", "project", "The Sharks")
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := contract.GroupTeamName("other-class", "project", 1)
+	otherRecord, err := configrepo.MarshalGroupDescription("other-class", "project", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	descField := func(record string) string {
+		body, _ := json.Marshal(record)
+		return `"description":` + string(body)
+	}
+	state := &teardownTestServer{
+		classroom50Exists: true,
+		repos:             []string{"classroom50"},
+		failOnDelete:      map[string]int{},
+		classroomDirs:     []string{"cs-principles"},
+		classroomJSON: map[string]string{
+			"cs-principles/classroom.json": jsonBase64Body(`{
+  "schema": "classroom50/classroom/v1",
+  "short_name": "cs-principles",
+  "org": "classroom50-test"
+}`),
+		},
+		orgTeams: []string{
+			mine,
+			other,                      // another classroom's group team — untouched
+			"classroom50-group-theory", // human team in the namespace — untouched
+		},
+		orgTeamBodies: map[string]string{
+			mine:  descField(mineRecord),
+			other: descField(otherRecord),
+		},
+		teamGET: map[string]string{
+			"/orgs/classroom50-test/teams/" + mine: `{"id":1000,"slug":"` + mine + `",` + descField(mineRecord) + `}`,
+		},
+	}
+	server := httptest.NewServer(state.handler(t, "classroom50-test"))
+	defer server.Close()
+
+	var out, errOut bytes.Buffer
+	if err := runTeardown(githubtest.NewTestClient(t, server), strings.NewReader(""), &out, &errOut, "classroom50-test", true); err != nil {
+		t.Fatalf("runTeardown: %v\nstderr:\n%s", err, errOut.String())
+	}
+
+	state.mu.Lock()
+	deleted := append([]string(nil), state.deletedTeams...)
+	state.mu.Unlock()
+	if len(deleted) != 1 || deleted[0] != mine {
+		t.Fatalf("deleted teams = %v, want only %q", deleted, mine)
+	}
+	if !strings.Contains(out.String(), "deleted group team "+mine) {
+		t.Errorf("stdout should report the swept group team:\n%s", out.String())
 	}
 }
 

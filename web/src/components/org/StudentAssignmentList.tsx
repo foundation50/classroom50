@@ -7,11 +7,14 @@ import {
   ArrowSwitchIcon,
   FileAddedIcon,
   FilterIcon,
+  PeopleIcon,
 } from "@/components/ui/icons"
 
 import {
   Alert,
   Badge,
+  Button,
+  Modal,
   RouterButton,
   SkeletonRows,
   SortableTh,
@@ -22,6 +25,7 @@ import {
   DueDateCell,
   ModeBadge,
 } from "@/components/assignments/AssignmentCells"
+import { GroupTeamMembersReadOnly } from "@/components/assignments/GroupTeamMembersReadOnly"
 import { EmptyState, NoSearchResults } from "@/components/list"
 import { ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
@@ -39,7 +43,7 @@ import {
   type StudentAssignmentFilters,
   type StudentAssignmentSort,
 } from "@/components/org/studentAssignmentFilters"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, parseGroupRepoCounter } from "@/util/studentRepo"
 import type { Assignment } from "@/types/classroom"
 
 // The accept/view-submission CTA, the row's primary action.
@@ -65,7 +69,11 @@ function AssignmentCta({
         variant="outline"
         size="sm"
       >
-        {t("assignments.discover.viewSubmission")}
+        {t(
+          assignment.mode === "team"
+            ? "assignments.discover.viewSubmissionTeam"
+            : "assignments.discover.viewSubmission",
+        )}
       </RouterButton>
     )
   }
@@ -104,6 +112,10 @@ function AssignmentRow({
 }: AssignmentItemProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
+  const [groupOpen, setGroupOpen] = useState(false)
+  // Accepted team-mode rows get a secondary "View group" action: a read-only
+  // look at who shares the repo, without leaving the list.
+  const showViewGroup = accepted && assignment.mode === "team"
   // The row's ONE destination (view-submission once accepted, else accept
   // with the capability secret), shared by the row click, the name link, and
   // the CTA so the three can't drift.
@@ -158,7 +170,17 @@ function AssignmentRow({
       {/* Quarantined from the row click so a near-miss around the CTA never
           double-navigates. */}
       <td onClick={(event) => event.stopPropagation()}>
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end gap-2">
+          {showViewGroup && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setGroupOpen(true)}
+            >
+              <PeopleIcon aria-hidden="true" className="size-4" />
+              {t("assignments.discover.viewGroup")}
+            </Button>
+          )}
           <AssignmentCta
             org={org}
             classroom={classroom}
@@ -167,6 +189,22 @@ function AssignmentRow({
             secret={secret}
           />
         </div>
+        {showViewGroup && groupOpen ? (
+          <Modal
+            open
+            onClose={() => setGroupOpen(false)}
+            size="md"
+            title={t("assignments.discover.viewGroupTitle")}
+          >
+            <div className="pt-4">
+              <GroupTeamMembersReadOnly
+                org={org}
+                classroom={classroom}
+                assignment={assignment.slug}
+              />
+            </div>
+          </Modal>
+        ) : null}
       </td>
     </ClickableTr>
   )
@@ -299,6 +337,9 @@ function StudentAssignmentsToolbar({
         <option value="individual">
           {t("assignments.discover.toolbar.typeIndividual")}
         </option>
+        <option value="team">
+          {t("assignments.discover.toolbar.typeTeam")}
+        </option>
         <option value="group">
           {t("assignments.discover.toolbar.typeGroup")}
         </option>
@@ -402,7 +443,18 @@ export function StudentAssignmentList({
         .map((repo) => repo.name.toLowerCase()),
     )
     for (const a of assignments ?? []) {
-      if (writableNames.has(studentRepoName(classroom, a.slug, login))) {
+      if (a.mode === "team") {
+        // A team-mode repo is named after the group counter, not the login;
+        // the viewer's push on any `<classroom>-<slug>-group-<n>` repo (via
+        // the team attachment) means their group accepted. Mode-gated parse —
+        // `group-3` is also a valid username shape.
+        for (const name of writableNames) {
+          if (parseGroupRepoCounter(name, classroom, a.slug) !== null) {
+            set.add(a.slug)
+            break
+          }
+        }
+      } else if (writableNames.has(studentRepoName(classroom, a.slug, login))) {
         set.add(a.slug)
       }
     }

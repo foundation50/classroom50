@@ -7,6 +7,7 @@ import type {
   RepoVisibility,
   SubmissionMode,
   Grading,
+  TeamFormation,
 } from "@/types/classroom"
 import {
   GitHubAPIError,
@@ -408,6 +409,9 @@ export type CreateAssignmentInput = {
   classroom: string
   org: string
   max_group_size: number
+  // Who forms the groups of a team assignment. Written only for mode: team
+  // (buildAssignmentEntry omits it otherwise, matching the CLI's omitempty).
+  team_formation?: TeamFormation
   feedback_pr?: boolean
   // Use the template repo's pull_request_template.md as the Feedback PR body.
   // Requires a template and feedback_pr; mirrors the wire feedback_pr_template.

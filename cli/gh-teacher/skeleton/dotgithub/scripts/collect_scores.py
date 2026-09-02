@@ -54,6 +54,7 @@ from __future__ import annotations
 
 import csv
 import datetime
+import hashlib
 import json
 import os
 import pathlib
@@ -154,6 +155,44 @@ ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "sect
 # cli/shared/contract/contract.go with NO compile-time link — keep
 # byte-identical.
 ROSTER_FILENAME = "roster.csv"
+
+# Group-team naming for `team` assignments: each group is a GitHub Team
+# `classroom50-group-<hash>-<n>` whose shared repo is
+# `<classroom>-<assignment>-group-<n>`. Mirrors contract.GroupTeamPrefix /
+# GroupHashHexLen / GroupRepoSegment (cli/shared/contract/contract.go) and the
+# web teamSlug.ts with NO compile-time link — keep byte-identical; the shared
+# vectors in cli/shared/testdata/group_vectors.json pin every mirror.
+GROUP_TEAM_PREFIX = "classroom50-group-"
+GROUP_HASH_HEX_LEN = 16
+GROUP_REPO_SEGMENT = "group-"
+
+
+def group_team_hash(classroom: str, assignment: str) -> str:
+    """First GROUP_HASH_HEX_LEN hex chars of SHA-256 over
+    `<lowercased classroom>\\x00<lowercased assignment>`. Byte-identical with
+    Go's contract.GroupTeamHash and the web's groupTeamHash — the NUL
+    separator prevents ("ab","c")/("a","bc") colliding, and lowercasing
+    mirrors the repo-name formula."""
+    digest = hashlib.sha256(
+        (classroom.lower() + "\x00" + assignment.lower()).encode()
+    ).hexdigest()
+    return digest[:GROUP_HASH_HEX_LEN]
+
+
+def group_team_slug(classroom: str, assignment: str, counter: int) -> str:
+    """The group team slug (== name) for one counter:
+    `classroom50-group-<hash>-<n>`. Mirrors contract.GroupTeamName."""
+    return f"{GROUP_TEAM_PREFIX}{group_team_hash(classroom, assignment)}-{counter}"
+
+
+def normalize_assignment_type(raw_mode: Any) -> str:
+    """Map a manifest `mode` to the scores/result assignment_type: 'group' and
+    'team' verbatim, anything else (absent/typo'd) individual — the stricter
+    default, so a malformed mode can never loosen validation."""
+    mode = raw_mode.lower() if isinstance(raw_mode, str) else ""
+    if mode in ("group", "team"):
+        return mode
+    return "individual"
 
 # The exact on-disk roster.csv header. Must equal FullRosterHeader in the Go
 # students_csv.go (asserted by TestFullRosterHeader) and the web app's
@@ -614,6 +653,16 @@ class RepoIndex:
             return None
         return repos.get(repo_name.lower())
 
+    def names(self) -> list[str] | None:
+        """Every visible repo name (lowercased), or None when the listing is
+        unknown. Team-mode collection derives its poll targets from these
+        (the `<classroom>-<assignment>-group-<n>` repos carry no username to
+        derive them from)."""
+        repos = self._load()
+        if repos is None:
+            return None
+        return list(repos)
+
 
 def is_empty_repo(entry: dict[str, Any]) -> bool:
     """True only when empty_repo is the boolean `true`. The wire contract is a
@@ -782,8 +831,8 @@ def collect_detected(
     prior record.
     """
     raw_mode = entry.get("mode")
-    is_group = (raw_mode or "").lower() == "group"
-    assignment_type = "group" if is_group else "individual"
+    assignment_type = normalize_assignment_type(raw_mode)
+    is_team = assignment_type == "team"
 
     submission_mode = entry.get("submission_mode")
     mode = "tag" if submission_mode == "tag" else "every-push"
@@ -807,9 +856,24 @@ def collect_detected(
     # recorded submitter over a transient 500 — the same warn-and-keep policy the
     # graded path applies to entries.
     visited: set[str] = set()
+    # Team repos carry no username: poll the counter-derived `group-<n>`
+    # owners instead (same target resolution as the graded path). An
+    # unreadable target source returns nothing visited, preserving prior
+    # records. Member credit resolves from the GROUP TEAM, mirroring the
+    # graded team path — a failed team read skips the repo (not visited).
+    if is_team:
+        poll_owners, ok = team_poll_owners(
+            api_url, org, classroom_short, slug, service_token, repo_index
+        )
+        if not ok:
+            return assignment_type, records, visited
+        roster_logins = {u.strip().lower() for u in team_usernames}
+    else:
+        poll_owners = team_usernames
+        roster_logins = set()
     # team_usernames arrives already case-insensitively deduped (the
     # list_enrolled_logins union), so each repo is polled exactly once.
-    for username in team_usernames:
+    for username in poll_owners:
         repo_name = assignment_repo_name(classroom_short, slug, username)
         if repo_index is not None and not repo_index.contains(repo_name):
             # The index says the repo doesn't exist — a definite "not accepted",
@@ -843,6 +907,23 @@ def collect_detected(
             continue
         record = detected_record(username, detections, due, trust_times=mode != "tag")
         record["kind"] = "tag" if mode == "tag" else "commit"
+        if is_team:
+            # Same member resolution as the graded team path: credit the group
+            # team's enrolled members and record the team slug. A failed team
+            # read skips the repo UN-visited so the prior record survives.
+            counter = team_repo_counter(username)
+            if counter is None:
+                continue
+            detected_team_slug = group_team_slug(classroom_short, slug, counter)
+            members, failure_warning = attribute_team_members(
+                api_url, org, repo_name, detected_team_slug, service_token, roster_logins
+            )
+            if members is None:
+                visited.discard(username.lower())
+                emit_warning(failure_warning)
+                continue
+            record["member_usernames"] = list(members)
+            record["team_slug"] = detected_team_slug
         records.append(record)
 
     return assignment_type, records, visited
@@ -892,6 +973,9 @@ def collect_classroom(
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
     group_attribution_degraded = 0
+    # Team submissions skipped because the group team's member list could not
+    # be read (prior credit preserved) — aggregated into one warning below.
+    team_attribution_failed = 0
     # Assignments this run actually walked (slug -> mode), for `collected_at`
     # stamping. Populated only past the team-read gate below.
     collected: dict[str, str] = {}
@@ -997,19 +1081,35 @@ def collect_classroom(
             )
 
         raw_mode = entry.get("mode")
-        is_group = (raw_mode or "").lower() == "group"
+        assignment_type = normalize_assignment_type(raw_mode)
+        is_group = assignment_type == "group"
+        is_team = assignment_type == "team"
         if isinstance(raw_mode, str) and raw_mode and raw_mode.lower() not in (
             "individual",
             "group",
+            "team",
         ):
             # A typo'd mode would silently collect as individual and reject
-            # every group submission via the owner-identity check (reading as
-            # a mode flip) — name the real cause up front.
+            # every group/team submission via the owner-identity check (reading
+            # as a mode flip) — name the real cause up front.
             emit_warning(
                 f"{classroom_short}/{slug}: unknown mode {raw_mode!r} — "
-                f"expected 'individual' or 'group'; collecting as individual"
+                f"expected 'individual', 'group', or 'team'; collecting as individual"
             )
-        assignment_type = "group" if is_group else "individual"
+
+        # Team repos carry no username (`<classroom>-<slug>-group-<n>`), so a
+        # team assignment polls the counter-derived owner segments instead of
+        # the enrolled logins. An unreadable target source skips the
+        # assignment (state preserved) BEFORE the collected stamp, so a
+        # skipped team assignment never reads as freshly collected.
+        if is_team:
+            poll_owners, ok = team_poll_owners(
+                api_url, org, classroom_short, slug, service_token, repo_index
+            )
+            if not ok:
+                continue
+        else:
+            poll_owners = team_usernames
         collected[slug] = assignment_type
 
         # One-shot pre-rename slug (see validate_result): a non-string or empty
@@ -1030,7 +1130,7 @@ def collect_classroom(
         # Repos under THIS assignment whose only submissions were rejected by
         # validation (mode-flip symptom); reported once per assignment below.
         mode_flip_repos: list[str] = []
-        for username in team_usernames:
+        for username in poll_owners:
             repo_name = assignment_repo_name(classroom_short, slug, username)
             # A name the index doesn't know has no repo, so its release poll
             # would 404 and read as "not submitted" anyway — same outcome, one
@@ -1091,8 +1191,8 @@ def collect_classroom(
                     continue
 
                 # validate_result enforces identity (owner == repo owner) AND
-                # that `assignment_type` matches the manifest mode (is_group), so
-                # a mode-flipped or mis-typed result is rejected here — no
+                # that `assignment_type` matches the manifest mode, so a
+                # mode-flipped or mis-typed result is rejected here — no
                 # separate assignment_type cross-check needed afterward.
                 try:
                     validate_result(
@@ -1100,7 +1200,7 @@ def collect_classroom(
                         classroom_short,
                         slug,
                         username,
-                        is_group=is_group,
+                        expected_type=assignment_type,
                         renamed_from=renamed_from,
                     )
                 except ValueError as exc:
@@ -1145,10 +1245,43 @@ def collect_classroom(
             # `member_usernames`. On a read failure, force owner-only (never
             # trust student-supplied data) and warn, so a scope/transient issue
             # degrades gracefully. Individual entries carry no member list.
-            # Resolved BEFORE building the entry so `member_usernames` sits
-            # right after `owner` in the written JSON key order.
+            # Team attribution instead credits the GROUP TEAM's live members
+            # (never repo collaborators), and a failed team read SKIPS the repo
+            # — the owner `group-<n>` is not a person, so an owner-only degrade
+            # would credit nobody and revoke every member. Resolved BEFORE
+            # building the entry so `member_usernames` sits right after
+            # `owner` in the written JSON key order.
             members: list[str] | None = None
-            if is_group:
+            entry_team_slug: str | None = None
+            if is_team:
+                counter = team_repo_counter(username)
+                if counter is None:
+                    # Unreachable via team_poll_owners (which derives owners
+                    # from the counter shape); defensive for a future caller.
+                    emit_warning(
+                        f"{org}/{repo_name}: owner segment {username!r} is not "
+                        f"group-<n>; skipping"
+                    )
+                    continue
+                entry_team_slug = group_team_slug(classroom_short, slug, counter)
+                members, failure_warning = attribute_team_members(
+                    api_url, org, repo_name, entry_team_slug, service_token, roster_logins
+                )
+                if members is None:
+                    team_attribution_failed += 1
+                    emit_warning(failure_warning)
+                    continue
+                if not members:
+                    # A team whose live members are all unenrolled (or the
+                    # team is empty) still writes its entry — the drift is
+                    # loud, not silent.
+                    emit_warning(
+                        f"{org}/{repo_name}: team {entry_team_slug!r} has no enrolled "
+                        f"members to credit; the submission is recorded but nobody "
+                        f"is credited. Ensure the team's members are on the "
+                        f"{classroom_short} classroom team."
+                    )
+            elif is_group:
                 try:
                     members, degraded_warning = attribute_group_members(
                         api_url, org, repo_name, username, service_token, roster_logins
@@ -1195,6 +1328,8 @@ def collect_classroom(
             }
             if members is not None:
                 entry_row["member_usernames"] = list(members)
+            if entry_team_slug is not None:
+                entry_row["team_slug"] = entry_team_slug
             # Best-effort roster join: attach non-blank display metadata for the
             # owner when the roster carries a row. Missing/blank is fine (the
             # team, not the roster, drives enrollment).
@@ -1208,14 +1343,19 @@ def collect_classroom(
 
             results.append(entry_row)
             submitted += 1
-            if username.strip().lower() not in student_logins:
+            if not is_team and username.strip().lower() not in student_logins:
                 staff_submitted += 1
 
         # Denominator: students (expected to submit) + staff who actually
         # submitted. Non-accepting staff (polled but no repo) are excluded so
         # the coverage line reads as student coverage, not inflated by testers.
-        expected = len(student_logins) + staff_submitted
-        print(f"{classroom_short}/{slug}: {submitted}/{expected} submitted")
+        # A team assignment counts GROUPS, not people — its poll targets are
+        # the group repos.
+        if is_team:
+            print(f"{classroom_short}/{slug}: {submitted}/{len(poll_owners)} group(s) submitted")
+        else:
+            expected = len(student_logins) + staff_submitted
+            print(f"{classroom_short}/{slug}: {submitted}/{expected} submitted")
 
         if mode_flip_repos:
             mode_flip_assignments += 1
@@ -1223,7 +1363,7 @@ def collect_classroom(
                 f"{classroom_short}/{slug}: {len(mode_flip_repos)} repo(s) had submit-tag "
                 f"release(s) but NONE were creditable — every present submission was rejected "
                 f"by validation. This is the symptom of switching this assignment's mode "
-                f"(individual<->group): prior submissions' assignment_type no longer matches "
+                f"(individual/group/team): prior submissions' assignment_type no longer matches "
                 f"{assignment_type!r}, so affected students show as not-submitted until they "
                 f"re-submit under the new mode. Affected repos: "
                 f"{', '.join(sorted(mode_flip_repos))}."
@@ -1236,6 +1376,14 @@ def collect_classroom(
             f"(teammates not credited). This usually means CLASSROOM50_SERVICE_TOKEN "
             f"lacks the collaborator-read permission — rotate it with `gh teacher rotate-service-token`."
         )
+    if team_attribution_failed:
+        emit_warning(
+            f"{classroom_short}: {team_attribution_failed} team submission(s) were "
+            f"skipped because the group team's member list could not be read; their "
+            f"existing gradebook entries are preserved. This usually means "
+            f"CLASSROOM50_SERVICE_TOKEN lacks Organization -> Members: Read (a "
+            f"fine-grained PAT permission). Rotate it with `gh teacher rotate-service-token`."
+        )
 
     return results, mode_flip_assignments, collected, detected
 
@@ -1245,6 +1393,138 @@ def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
     cli/shared/contract (AssignmentRepoName); keep byte-identical or the
     collect loop misidentifies submissions."""
     return f"{classroom.lower()}-{assignment.lower()}-{username.lower()}"
+
+
+def team_repo_counter(owner_segment: str) -> int | None:
+    """Recover n from a team repo's owner segment (`group-<n>`), or None when
+    the segment isn't that shape. MODE-GATED by the caller ("group-3" is a
+    syntactically valid GitHub login) — mirrors contract.ParseGroupRepoCounter:
+    counters start at 1, no leading zeros."""
+    if not owner_segment.startswith(GROUP_REPO_SEGMENT):
+        return None
+    rest = owner_segment[len(GROUP_REPO_SEGMENT):]
+    if not rest.isdigit() or rest.startswith("0"):
+        return None
+    return int(rest)
+
+
+def list_assignment_team_counters(
+    api_url: str, org: str, classroom: str, assignment: str, token: str
+) -> list[int]:
+    """Counters of the assignment's live group teams, from the org team
+    listing filtered on the assignment's `classroom50-group-<hash>-` prefix.
+    The fallback poll-target source when the org repo listing is unreadable
+    (the repos are named from the counters by pure function). Raises
+    urllib.error.HTTPError on any non-2xx so the caller can warn-and-skip."""
+    prefix = f"{GROUP_TEAM_PREFIX}{group_team_hash(classroom, assignment)}-"
+    per_page = 100
+    base = f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams"
+    slugs = _paginate_field_list(
+        page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
+        api_url=api_url,
+        token=token,
+        resource_label=f"orgs/{org}/teams",
+        field="slug",
+    )
+    counters: list[int] = []
+    for slug in slugs:
+        if not slug.startswith(prefix):
+            continue
+        counter = team_repo_counter(GROUP_REPO_SEGMENT + slug[len(prefix):])
+        if counter is not None:
+            counters.append(counter)
+    return counters
+
+
+def team_poll_owners(
+    api_url: str,
+    org: str,
+    classroom_short: str,
+    slug: str,
+    service_token: str,
+    repo_index: "RepoIndex | None",
+) -> tuple[list[str], bool]:
+    """The `group-<n>` owner segments a team assignment polls, sorted by
+    counter. Team repos carry no username, so the targets come from the org
+    repo listing (already read once per run) or — when that listing is
+    unreadable — from enumerating the assignment's group teams. Returns
+    (owners, ok): ok=False (with a warning) when neither source is readable,
+    so the caller skips the assignment and prior state is preserved rather
+    than collected-as-empty."""
+    prefix = f"{classroom_short.lower()}-{slug.lower()}-{GROUP_REPO_SEGMENT}"
+    names = repo_index.names() if repo_index is not None else None
+    counters: set[int] = set()
+    if names is not None:
+        for name in names:
+            if not name.startswith(prefix):
+                continue
+            counter = team_repo_counter(name[len(prefix) - len(GROUP_REPO_SEGMENT):])
+            if counter is not None:
+                counters.add(counter)
+    else:
+        try:
+            counters = set(
+                list_assignment_team_counters(api_url, org, classroom_short, slug, service_token)
+            )
+        except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
+            emit_warning(
+                f"{classroom_short}/{slug}: could not enumerate the assignment's "
+                f"group teams (HTTP {exc.code}, {exc.reason or 'no reason'}) and the "
+                f"org repo listing was unavailable; skipping this team assignment so "
+                f"its existing entries are preserved. Ensure CLASSROOM50_SERVICE_TOKEN "
+                f"has Organization -> Members: Read. Rotate it with "
+                f"`gh teacher rotate-service-token {org}`."
+            )
+            return [], False
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{classroom_short}/{slug}: group team listing malformed ({exc}); "
+                f"skipping this team assignment so its existing entries are preserved."
+            )
+            return [], False
+    return [f"{GROUP_REPO_SEGMENT}{n}" for n in sorted(counters)], True
+
+
+def attribute_team_members(
+    api_url: str, org: str, repo: str, team_slug: str, token: str, roster_logins: set[str]
+) -> tuple[list[str] | None, str | None]:
+    """Resolve the member list to credit for a TEAM submission: the group
+    team's live members intersected with the classroom enrollment set,
+    lowercased and sorted.
+
+    Returns (members, None) on success, (None, warning) on ANY read failure.
+    Unlike the legacy-group fallback there is NO owner-only degrade: the repo
+    "owner" is the counter segment `group-<n>`, not a person, so a degraded
+    write would credit nobody and silently revoke every member. The caller
+    skips the repo instead (preserving prior credit) and counts the failure.
+    A THROTTLE still propagates (mirroring attribute_group_members)."""
+    try:
+        logins = list_team_member_logins(api_url, org, team_slug, token)
+    except urllib.error.HTTPError as exc:
+        if classify(exc) is THROTTLED:
+            raise
+        return None, (
+            f"{org}/{repo}: could not read team {team_slug!r} members "
+            f"(HTTP {exc.code} {exc.reason or 'no reason'}); skipping this repo so "
+            f"its existing member credit is preserved. Ensure "
+            f"CLASSROOM50_SERVICE_TOKEN has Organization -> Members: Read. Rotate "
+            f"it with `gh teacher rotate-service-token`."
+        )
+    except IncompleteListing as exc:
+        return None, (
+            f"{org}/{repo}: team {team_slug!r} member listing is incomplete "
+            f"({exc}); skipping this repo so its existing member credit is "
+            f"preserved. Re-run to collect it."
+        )
+    except (json.JSONDecodeError, ValueError) as exc:
+        return None, (
+            f"{org}/{repo}: team {team_slug!r} member listing malformed ({exc}); "
+            f"skipping this repo so its existing member credit is preserved."
+        )
+    members = sorted({login.strip().lower() for login in logins if login.strip()} & roster_logins)
+    return members, None
 
 
 def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> str:
@@ -1691,7 +1971,7 @@ def load_scores(path: pathlib.Path) -> dict[str, Any]:
 def normalize_assignments(assignments: Any) -> dict[str, dict[str, Any]]:
     """Validate the `assignments` field as the canonical slug-keyed map.
     Accepted: None/missing -> {}; object -> each value an object
-    `{ "type": <"individual"|"group">, "entries": [...] }`.
+    `{ "type": <"individual"|"group"|"team">, "entries": [...] }`.
 
     Anything else hard-fails. Legacy shapes (flat array, "{}" string wrapper,
     the old `submissions`-keyed map) are NOT migrated — backward compat is
@@ -1712,9 +1992,9 @@ def normalize_assignments(assignments: Any) -> dict[str, dict[str, Any]]:
                 f"got {type(bucket).__name__}"
             )
         atype = bucket.get("type")
-        if atype not in ("individual", "group"):
+        if atype not in ("individual", "group", "team"):
             raise ValueError(
-                f"assignments[{slug!r}].type must be 'individual' or 'group', got {atype!r}"
+                f"assignments[{slug!r}].type must be 'individual', 'group', or 'team', got {atype!r}"
             )
         entries = bucket.get("entries")
         if entries is None:
@@ -1797,7 +2077,7 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
         # setdefault. Collection always supplies a valid type; defensive.
         if (
             not isinstance(slug, str) or not slug
-            or atype not in ("individual", "group")
+            or atype not in ("individual", "group", "team")
             or key is None
         ):
             continue
@@ -1920,6 +2200,7 @@ def validate_result(
     expected_username: str,
     *,
     is_group: bool = False,
+    expected_type: str | None = None,
     renamed_from: str | None = None,
 ) -> None:
     """Raise ValueError if the payload fails the v1 contract. The
@@ -1928,10 +2209,12 @@ def validate_result(
     source repo's expected identity.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
-    (the roster/repo-name-derived owner). `assignment_type` must be
-    "individual"/"group" and match the mode implied by `is_group`. No
-    `usernames` field: who pushed is `submitted_by`; the credited member list
-    is resolved by collection after this check.
+    (the roster/repo-name-derived owner; for a team assignment the repo-name
+    tail `group-<n>`). `assignment_type` must equal the manifest-derived
+    `expected_type` ("individual"/"group"/"team"); the legacy `is_group`
+    boolean is honored when `expected_type` is not supplied. No `usernames`
+    field: who pushed is `submitted_by`; the credited member list is resolved
+    by collection after this check.
 
     `renamed_from` is the manifest entry's pre-rename slug (one-shot, so a
     single value): a historical release published before the rename carries it
@@ -1964,7 +2247,8 @@ def validate_result(
             f"owner = {owner!r}, want {expected_username!r} (derived from the repo name)"
         )
 
-    expected_type = "group" if is_group else "individual"
+    if expected_type is None:
+        expected_type = "group" if is_group else "individual"
     assignment_type = payload.get("assignment_type")
     if assignment_type != expected_type:
         raise ValueError(

@@ -140,12 +140,21 @@ template inside the organization. The web app offers the same action as
 dialog. See
 [`gh teacher assignment reuse`](gh-teacher#assignment-reuse).
 
+Groups aren't copied either: they are per-assignment, and a new term's
+classroom has a new roster, so a reused group assignment starts with no
+groups. Within one classroom you can carry groups forward from one assignment
+to the next with **Copy groups** on the **Manage groups** page, or
+[`gh teacher team copy`](gh-teacher#team-copy): same members and display
+names, fresh numbering.
+
 ## Resetting an organization (destructive)
 
 **Tear down organization** (web app: organization settings, Danger zone; CLI:
 `gh teacher teardown`) deletes every repository Classroom 50 manages in the
 organization, along with each classroom's GitHub team, after you type an
-explicit confirmation. The CLI also removes any invite teams it finds. Teardown
+explicit confirmation. The CLI also removes any invite teams it finds and
+sweeps each classroom's group teams, so no assignment's groups are left
+behind. Teardown
 exists for development resets and complete decommissioning.
 
 > [!WARNING]

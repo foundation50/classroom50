@@ -15,8 +15,12 @@
 package contract
 
 import (
+	"crypto/sha256"
 	_ "embed"
+	"encoding/hex"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -78,14 +82,81 @@ const (
 	// with NO compile-time link, pinned on each side.
 	InviteTeamGCMinAge = 24 * time.Hour
 
+	// GroupTeamPrefix and GroupHashHexLen describe the per-assignment group
+	// teams backing mode: team assignments:
+	// `classroom50-group-<16 lowercase hex>-<counter>`, where the hex is a
+	// SHA-256 prefix over the classroom and assignment slugs (GroupTeamHash)
+	// and the counter is allocated by 422-losing retries (a create that 422s
+	// means another founder won that counter — even one whose secret team the
+	// caller can't see). The name is slug-safe by construction, so name ==
+	// slug and an assignment's teams are enumerable by GroupTeamAssignmentPrefix
+	// without reading any config. Living inside the `classroom50-` namespace
+	// keeps these teams behind the same fail-closed delete guard as the
+	// classroom teams. Matching the FULL GroupTeamPattern shape matters for
+	// destructive ops — the prefix alone is a namespace a pathological
+	// classroom short-name could land in. Mirrored in web/src/util/teamSlug.ts
+	// (GROUP_TEAM_PREFIX / GROUP_HASH_HEX_LEN) and collect_scores.py with NO
+	// compile-time link — keep byte-identical; contract_test.go pins the Go
+	// half and the shared vectors in cli/shared/testdata/group_vectors.json pin
+	// every writer's output.
+	GroupTeamPrefix  = ConfigRepoName + "-group-"
+	GroupHashHexLen  = 16
+	GroupTeamPattern = `^classroom50-group-[0-9a-f]{16}-[1-9][0-9]*$`
+
+	// GroupSchemaV1 is the schema sentinel for the classroom50/group/v1 record
+	// stored in a group team's DESCRIPTION: `{schema, classroom, assignment,
+	// name?}`. The hash in the team name is one-way, so this record is what
+	// makes a group team attributable (and safely deletable) after the
+	// assignment entry — or the whole config repo — is gone, mirroring the
+	// invite-team record's role. `name` carries the students' display name for
+	// a student-formed team. Mirrored in schemas/group-team-v1.schema.json and
+	// the web reader with NO compile-time link — keep byte-identical;
+	// contract_test.go pins the Go half.
+	GroupSchemaV1 = "classroom50/group/v1"
+
+	// TeamsSchemaV1 and TeamsFilename describe <classroom>/teams.json, the
+	// teacher-committed snapshot of intended group-team membership: the source
+	// of truth for teacher-assigned teams and the drift baseline for
+	// student-formed ones. Mirrored in schemas/teams-v1.schema.json and the web
+	// GUI with NO compile-time link — keep byte-identical; contract_test.go
+	// pins the Go half.
+	TeamsSchemaV1 = "classroom50/teams/v1"
+	TeamsFilename = "teams.json"
+
+	// GroupRepoSegment is the fixed segment in a team-mode assignment repo name
+	// `<classroom>-<assignment>-group-<n>` (see GroupRepoName). It occupies the
+	// username position of the individual formula, so mode-aware parsers can
+	// recover the counter; it is NOT a reserved username namespace — parsing is
+	// always mode-gated, never shape-guessed.
+	GroupRepoSegment = "group-"
+
 	// DefaultAutograderName is the universal-shim autograder name; resolves to
 	// the shim embedded in gh-student, not a per-classroom override.
 	DefaultAutograderName = "default"
 
-	// ModeIndividual and ModeGroup are the assignment modes: individual = one
-	// repo per student; group = a shared repo teammates join.
+	// ModeIndividual, ModeGroup, and ModeTeam are the assignment modes:
+	// individual = one repo per student; group = LEGACY shared repo — the first
+	// accepter founds it, becomes its admin, and adds teammates as direct repo
+	// collaborators; team = a shared repo owned by a per-assignment GitHub Team
+	// (`classroom50-group-<hash>-<n>`), formed by the teacher or by students
+	// (see TeamFormation*). Old binaries reject unknown modes, which is the
+	// desired fail-safe for files written by newer releases.
 	ModeIndividual = "individual"
 	ModeGroup      = "group"
+	ModeTeam       = "team"
+
+	// TeamFormationTeacher and TeamFormationStudent are the assignment
+	// team_formation values for mode: team. teacher = only the teacher (an org
+	// owner) creates the group teams and their memberships — fully enforceable,
+	// students never hold team-maintainer or repo-admin rights. student =
+	// self-service: the first student founds the team through a Classroom 50
+	// client (becoming its GitHub team maintainer) and adds roster teammates;
+	// membership drift is detectable, not preventable. REQUIRED for mode: team
+	// and forbidden otherwise. Mirrored in the assignments-v1 schema enum and
+	// the web TEAM_FORMATIONS; pinned by contract_test.go and the schema-parity
+	// tests.
+	TeamFormationTeacher = "teacher"
+	TeamFormationStudent = "student"
 
 	// SubmissionModeEveryPush and SubmissionModeTag are the assignment
 	// submission_mode values: every-push = the shim grades every push to the
@@ -430,12 +501,14 @@ func FeedbackOpenCommitMessage() string {
 
 // FeedbackLabelForMode is the Feedback PR's mode label and color, mirroring
 // GitHub Classroom's Individual/Group feedback labels so a teacher can tell
-// the modes apart at a glance. Unknown modes fall back to individual.
+// the modes apart at a glance. Both shared-repo modes (group and team) carry
+// the Group label. Unknown modes fall back to individual.
 // Byte-identical with ensure_feedback_pr.py `_LABELS` / `label_for_mode` and
 // the web GUI — the runner adopts the accept-time PR, so both sides must
 // produce the same label or teachers see two.
 func FeedbackLabelForMode(mode string) (name, color string) {
-	if strings.TrimSpace(strings.ToLower(mode)) == ModeGroup {
+	switch strings.TrimSpace(strings.ToLower(mode)) {
+	case ModeGroup, ModeTeam:
 		return "Group Assignment", "5319E7"
 	}
 	return "Individual Assignment", "0E8A16"
@@ -529,7 +602,9 @@ func IsValidRepoPermission(p string) bool {
 
 // DefaultStudentPermission is the accept-time role a student gets on their own
 // repo when an assignment sets no student_permission: least-privilege push for
-// individual, admin for group (a group founder must manage collaborators).
+// individual, admin for legacy group (a group founder must manage direct
+// collaborators), and push again for team mode (access flows through the
+// GitHub Team attachment, so no student needs repo admin).
 // Mirrors the web founderPermission default and gh-student's.
 func DefaultStudentPermission(mode string) string {
 	if strings.TrimSpace(strings.ToLower(mode)) == ModeGroup {
@@ -612,4 +687,126 @@ func ClassroomTeamSlugs(shortName string) []string {
 		slugs = append(slugs, StaffTeamSlug(shortName, role))
 	}
 	return slugs
+}
+
+// TeamFormations is every valid assignments.json team_formation value.
+// Single-sources the allow-list; the schema enum in assignments-v1.schema.json
+// and the web TEAM_FORMATIONS mirror it (parity-tested on both sides).
+var TeamFormations = []string{TeamFormationTeacher, TeamFormationStudent}
+
+// IsValidTeamFormation reports whether f is one of the TeamFormations.
+func IsValidTeamFormation(f string) bool {
+	for _, allowed := range TeamFormations {
+		if f == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// AssignmentModes is every valid assignments.json mode value. Single-sources
+// the allow-list; the schema enum in assignments-v1.schema.json and the web
+// ASSIGNMENT_MODES mirror it (parity-tested on both sides).
+var AssignmentModes = []string{ModeIndividual, ModeGroup, ModeTeam}
+
+// IsValidAssignmentMode reports whether m is one of the AssignmentModes.
+func IsValidAssignmentMode(m string) bool {
+	for _, allowed := range AssignmentModes {
+		if m == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// GroupTeamHash is the deterministic hex prefix scoping one assignment's group
+// teams: the first GroupHashHexLen hex chars of SHA-256 over
+// `<lowercased classroom>\x00<lowercased assignment>`. The separator byte
+// prevents ("ab","c") and ("a","bc") colliding; lowercasing mirrors
+// AssignmentRepoName so a mixed-case input can't split one assignment's teams
+// into two namespaces. Cross-language with NO compile-time link — mirrored in
+// web/src/util/teamSlug.ts (groupTeamHash) and collect_scores.py
+// (group_team_hash), pinned by cli/shared/testdata/group_vectors.json.
+func GroupTeamHash(classroom, assignment string) string {
+	sum := sha256.Sum256([]byte(
+		strings.ToLower(classroom) + "\x00" + strings.ToLower(assignment)))
+	return hex.EncodeToString(sum[:])[:GroupHashHexLen]
+}
+
+// GroupTeamAssignmentPrefix is the enumeration prefix for one assignment's
+// group teams: `classroom50-group-<hash>-`. Filtering GET /orgs/{org}/teams
+// (or GET /user/teams) on it yields exactly this assignment's teams — no
+// config read needed, which is what lets a student client resolve "my team"
+// from membership alone.
+func GroupTeamAssignmentPrefix(classroom, assignment string) string {
+	return GroupTeamPrefix + GroupTeamHash(classroom, assignment) + "-"
+}
+
+// GroupTeamName is the canonical group-team NAME (== slug, the name is
+// slug-safe by construction) for counter n:
+// `classroom50-group-<hash>-<n>`. Counters start at 1 and are allocated by
+// create-time 422 retries, never by visibility-dependent probes (a secret
+// team is invisible to non-members, so a listing can't prove a counter free).
+func GroupTeamName(classroom, assignment string, n int) string {
+	return GroupTeamAssignmentPrefix(classroom, assignment) + strconv.Itoa(n)
+}
+
+// groupTeamRegexp compiles GroupTeamPattern once; the pattern is exported for
+// mirrors, the compiled form for Go callers.
+var groupTeamRegexp = regexp.MustCompile(GroupTeamPattern)
+
+// IsGroupTeamSlug reports whether slug matches the FULL group-team shape
+// (`classroom50-group-<16 hex>-<counter>`). Destructive ops must gate on this
+// full match plus a parsed classroom50/group/v1 description record plus a
+// recorded-vs-live id check — the prefix alone is a namespace a pathological
+// classroom short-name could land in.
+func IsGroupTeamSlug(slug string) bool {
+	return groupTeamRegexp.MatchString(slug)
+}
+
+// ParseGroupTeamCounter recovers n from a group-team slug for a KNOWN
+// classroom+assignment (ok=false when the slug isn't one of that assignment's
+// teams). The inverse of GroupTeamName; the hash is one-way, so a slug alone
+// (unknown assignment) is attributed via its description record instead.
+func ParseGroupTeamCounter(slug, classroom, assignment string) (n int, ok bool) {
+	prefix := GroupTeamAssignmentPrefix(classroom, assignment)
+	if !strings.HasPrefix(slug, prefix) || !IsGroupTeamSlug(slug) {
+		return 0, false
+	}
+	n, err := strconv.Atoi(strings.TrimPrefix(slug, prefix))
+	if err != nil || n < 1 {
+		return 0, false
+	}
+	return n, true
+}
+
+// GroupRepoName is the canonical team-mode assignment repo name
+// `<classroom>-<assignment>-group-<n>` — the individual formula with the
+// team counter in the username position. Readable and searchable where the
+// team slug is not; the counter maps it back to GroupTeamName(classroom,
+// assignment, n) by pure function. The authoritative repo<->team link is the
+// team->repo attachment, so this name is display/search convention, not the
+// binding. Always shorter than the worst-case individual name (the segment
+// stays under GitHubLoginMaxLen for any plausible counter), so the existing
+// repo-name budget covers it.
+func GroupRepoName(classroom, assignment string, n int) string {
+	return AssignmentRepoPrefix(classroom, assignment) + GroupRepoSegment + strconv.Itoa(n)
+}
+
+// ParseGroupRepoCounter recovers n from a team-mode repo name for a KNOWN
+// classroom+assignment (ok=false when the name isn't that assignment's
+// team-repo shape). MODE-GATED by the caller: `group-3` is a syntactically
+// valid GitHub login, so this must only run on assignments whose mode is
+// team — never as a shape guess on legacy repos.
+func ParseGroupRepoCounter(repo, classroom, assignment string) (n int, ok bool) {
+	prefix := AssignmentRepoPrefix(classroom, assignment) + GroupRepoSegment
+	if !strings.HasPrefix(strings.ToLower(repo), prefix) {
+		return 0, false
+	}
+	rest := strings.ToLower(repo)[len(prefix):]
+	n, err := strconv.Atoi(rest)
+	if err != nil || n < 1 || strings.HasPrefix(rest, "0") {
+		return 0, false
+	}
+	return n, true
 }
