@@ -1,10 +1,7 @@
 import type { GitHubClient } from "./client"
 import { GitHubAPIError } from "./errors"
-import { logger } from "@/lib/logger"
-import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
+import { log, MAX_RATE_LIMIT_WAIT_MS, withRetry } from "./queries/shared"
 import { mapWithConcurrency } from "@/util/concurrency"
-
-const log = logger.scope(LOG_SCOPE_QUERIES)
 
 // Hard cap (100 pages x 100/page = 10k items) so a server that ignores the
 // page param and keeps returning full pages can't loop unbounded.
@@ -16,13 +13,11 @@ const MAX_PAGES = 100
 export const PAGE_FETCH_CONCURRENCY = 8
 
 // Per-page retry: a single 15s timeout or 5xx on page 40 of 90 used to fail the
-// whole query and React Query re-walked every page from 1.
+// whole query and React Query re-walked every page from 1. A rate limit whose
+// Retry-After exceeds MAX_RATE_LIMIT_WAIT_MS is not waited out: the page fails
+// at once rather than being re-requested while GitHub is still refusing.
 const PAGE_RETRY_ATTEMPTS = 3
 const PAGE_RETRY_BASE_MS = 500
-// A rate limit whose Retry-After is longer than this is not waited out: the
-// page is failed at once rather than re-requested while GitHub is still
-// refusing (the UI reports it and the user retries later).
-const MAX_RATE_LIMIT_WAIT_MS = 8000
 
 export type PaginateOptions = {
   signal?: AbortSignal
@@ -172,25 +167,18 @@ export function lastPageNumber(linkHeader: string | null): number | null {
 // network). Every other GitHub status (401/403/404, and a 409/422/451 a
 // re-request cannot change), caller aborts, and a rate limit longer than
 // MAX_RATE_LIMIT_WAIT_MS propagate at once.
-export async function withTransientRetry<T>(
+export function withTransientRetry<T>(
   fn: () => Promise<T>,
   signal: AbortSignal | undefined,
 ): Promise<T> {
-  let lastError: unknown
-  for (let attempt = 0; attempt < PAGE_RETRY_ATTEMPTS; attempt++) {
-    try {
-      return await fn()
-    } catch (err) {
-      lastError = err
-      if (signal?.aborted || !isTransientPageError(err)) throw err
-      if (attempt === PAGE_RETRY_ATTEMPTS - 1) break
-      const waitMs = retryWaitMs(err, attempt)
-      if (waitMs === null) throw err
-      log.debug("retrying page", { attempt, waitMs })
-      await sleep(waitMs, signal)
-    }
-  }
-  throw lastError
+  return withRetry(fn, {
+    attempts: PAGE_RETRY_ATTEMPTS,
+    shouldRetry: isTransientPageError,
+    waitMs: retryWaitMs,
+    signal,
+    onRetry: (attempt, waitMs) =>
+      log.debug("retrying page", { attempt, waitMs }),
+  })
 }
 
 // How long to wait before retrying `err`, or null when the wait would exceed
@@ -211,18 +199,4 @@ function isTransientPageError(err: unknown): boolean {
   }
   // A timeout (`TimeoutError` DOMException) or network failure.
   return !(err instanceof DOMException && err.name === "AbortError")
-}
-
-function sleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      signal?.removeEventListener("abort", onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"))
-    }
-    signal?.addEventListener("abort", onAbort, { once: true })
-  })
 }

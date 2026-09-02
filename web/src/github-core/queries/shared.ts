@@ -74,31 +74,76 @@ export function withGithubReadSlot<T>(fn: () => Promise<T>): Promise<T> {
 // client fan-out shouldn't hang a page that long. Cap the wait so one throttled
 // repo can't stall the batch; beyond this the read surfaces as an error the UI
 // reports rather than an indefinite spinner.
-const MAX_RATE_LIMIT_WAIT_MS = 8000
+export const MAX_RATE_LIMIT_WAIT_MS = 8000
+
+export type RetryOptions = {
+  // Total attempts, including the first.
+  attempts: number
+  // Whether `err` is worth another attempt at all.
+  shouldRetry: (err: unknown) => boolean
+  // How long to wait before attempt `attempt + 1` (0-based `attempt` just
+  // failed), or null to give up on this error even though it is retryable
+  // (a rate limit longer than a page load can absorb).
+  waitMs: (err: unknown, attempt: number) => number | null
+  // Aborts the wait and stops retrying once aborted.
+  signal?: AbortSignal
+  onRetry?: (attempt: number, waitMs: number) => void
+}
+
+// The one retry loop under every GitHub read retry: fresh-repo lag, a rate
+// limit, a transient page failure. Each caller supplies only its policy.
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  options: RetryOptions,
+): Promise<T> {
+  const { attempts, shouldRetry, waitMs, signal, onRetry } = options
+  let lastError: unknown
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn()
+    } catch (err) {
+      lastError = err
+      if (signal?.aborted || !shouldRetry(err)) throw err
+      if (attempt === attempts - 1) break
+      const wait = waitMs(err, attempt)
+      if (wait === null) throw err
+      onRetry?.(attempt, wait)
+      await sleep(wait, signal)
+    }
+  }
+  throw lastError
+}
 
 // Run a GitHub read, retrying ONCE if it fails with a rate-limit (429, or a 403
 // carrying Retry-After / remaining:0). Waits the server's Retry-After (bounded),
 // falling back to a short delay when the header is absent. Non-rate-limit errors
 // propagate immediately. One retry only — a persistent throttle should surface,
 // not loop.
-export async function retryOnRateLimit<T>(fn: () => Promise<T>): Promise<T> {
-  try {
-    return await fn()
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isRateLimited) {
-      const retryAfterMs =
-        err.rateLimit.retryAfter !== null
-          ? err.rateLimit.retryAfter * 1000
-          : 1000
-      await sleep(Math.min(retryAfterMs, MAX_RATE_LIMIT_WAIT_MS))
-      return await fn()
-    }
-    throw err
-  }
+export function retryOnRateLimit<T>(fn: () => Promise<T>): Promise<T> {
+  return withRetry(fn, {
+    attempts: 2,
+    shouldRetry: (err) => err instanceof GitHubAPIError && err.isRateLimited,
+    waitMs: (err) => {
+      const retryAfter = (err as GitHubAPIError).rateLimit.retryAfter
+      const retryAfterMs = retryAfter !== null ? retryAfter * 1000 : 1000
+      return Math.min(retryAfterMs, MAX_RATE_LIMIT_WAIT_MS)
+    },
+  })
 }
 
-export function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms))
+// Resolve after `ms`, or reject with the signal's reason if it aborts first.
+export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(signal?.reason ?? new DOMException("Aborted", "AbortError"))
+    }
+    signal?.addEventListener("abort", onAbort, { once: true })
+  })
 }
 
 function isGitRepositoryEmptyError(error: unknown) {
@@ -142,28 +187,17 @@ export type FreshRepoRetryOptions = {
 // Retry `fn` while it hits fresh-repo lag. `fn` must re-read its own state each
 // attempt and may throw a synthetic error to signal non-HTTP lag (e.g., a 200
 // with a blank SHA).
-export async function withFreshRepoRetry<T>(
+export function withFreshRepoRetry<T>(
   fn: () => Promise<T>,
   options: FreshRepoRetryOptions = {},
 ): Promise<T> {
-  const attempts = options.attempts ?? 6
   const baseDelayMs = options.baseDelayMs ?? 500
   const backoffFactor = options.backoffFactor ?? 2
-  const shouldRetry = options.shouldRetry ?? isFreshRepoLagError
-
-  let lastError: unknown
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      return await fn()
-    } catch (err) {
-      lastError = err
-      if (!shouldRetry(err) || attempt === attempts) {
-        throw err
-      }
-      log.debug("fresh-repo lag, retrying read", { attempt })
-      await sleep(baseDelayMs * backoffFactor ** (attempt - 1))
-    }
-  }
-
-  throw lastError
+  return withRetry(fn, {
+    attempts: options.attempts ?? 6,
+    shouldRetry: options.shouldRetry ?? isFreshRepoLagError,
+    waitMs: (_err, attempt) => baseDelayMs * backoffFactor ** attempt,
+    onRetry: (attempt) =>
+      log.debug("fresh-repo lag, retrying read", { attempt: attempt + 1 }),
+  })
 }

@@ -1,7 +1,13 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import type { GitHubClient } from "../client"
-import type { GitHubRelease, GitHubWorkflowRun } from "../types"
+import type {
+  GitHubCheckAnnotation,
+  GitHubRelease,
+  GitHubWorkflowJob,
+  GitHubWorkflowRun,
+  GitHubWorkflowRunList,
+} from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 import {
@@ -278,7 +284,7 @@ async function listLatestWorkflowRun(
   if (filters.status) params.set("status", filters.status)
   if (filters.page) params.set("page", String(filters.page))
 
-  const res = await client.request<{ workflow_runs: GitHubWorkflowRun[] }>(
+  const res = await client.request<GitHubWorkflowRunList>(
     `/repos/${org}/${CONFIG_REPO}/actions/workflows/${workflow}/runs?${params.toString()}`,
     { method: "GET", signal },
   )
@@ -411,18 +417,15 @@ export async function getRunAnnotations(
   signal?: AbortSignal,
 ): Promise<RunAnnotation[]> {
   const repo = `/repos/${encodeURIComponent(org)}/${CONFIG_REPO}`
-  const { jobs } = await client.request<{ jobs: { id: number }[] }>(
+  const { jobs } = await client.request<{ jobs: GitHubWorkflowJob[] }>(
     `${repo}/actions/runs/${runId}/jobs?per_page=100`,
     { method: "GET", signal },
   )
   const perJob = await Promise.all(
     jobs.map((job) =>
-      client.request<{ annotation_level: string; message: string | null }[]>(
+      client.request<GitHubCheckAnnotation[]>(
         `${repo}/check-runs/${job.id}/annotations?per_page=100`,
-        {
-          method: "GET",
-          signal,
-        },
+        { method: "GET", signal },
       ),
     ),
   )

@@ -6,6 +6,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 import type { GitHubClient } from "../client"
+import type { GitHubRepo } from "../types"
 
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
@@ -181,9 +182,9 @@ async function assertTokenReachesOtherRepos(
   teacherClient: GitHubClient,
   org: string,
 ) {
-  let repos: { name: string }[]
+  let repos: Pick<GitHubRepo, "name">[]
   try {
-    repos = await teacherClient.request<{ name: string }[]>(
+    repos = await teacherClient.request<Pick<GitHubRepo, "name">[]>(
       `/orgs/${encodeURIComponent(org)}/repos?type=private&sort=created&direction=asc&per_page=10`,
     )
   } catch {
