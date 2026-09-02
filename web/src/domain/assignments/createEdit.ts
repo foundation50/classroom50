@@ -248,7 +248,8 @@ export async function editAssignment(
   // can never rename an assignment, regardless of what the caller passed.
   editedAssignment.slug = targetAssignment.slug
 
-  // A caller that renders no lock control (input.locked undefined) must not
+  // An input with no lock decision (input.locked undefined: no lock control, or
+  // a toggle left as it was seeded) must not
   // silently unlock; only an explicit decision changes the stored state.
   const wasLocked = Boolean(targetAssignment.locked)
   if (input.locked === undefined && wasLocked) {

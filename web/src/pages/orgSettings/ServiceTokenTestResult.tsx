@@ -109,9 +109,9 @@ export default function ServiceTokenTestResult({
     </Button>
   ) : null
 
-  // Every outcome but a failed RUN is one sentence in one tone; the table keeps
-  // a new outcome to a row. A failed run is the one shape with structure (the
-  // probe's own verdict list), rendered below.
+  // Every outcome but a failed RUN is one sentence in one tone, so simpleOutcome
+  // keeps a new outcome to one branch. A failed run is the one shape with
+  // structure (the probe's own verdict list), rendered below.
   const simple = simpleOutcome({ phase, failure, error })
   if (simple) {
     return (

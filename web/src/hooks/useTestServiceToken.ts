@@ -21,9 +21,10 @@ const PROBE_BACKOFF_INTERVAL_MS = 12000
 
 /**
  * Dispatches probe-token.yaml (the read-only service-token health check) and
- * tracks the run via useGitHubOperation, then reads the finished run's
+ * tracks the run via useGitHubOperation, then reads a FAILED run's
  * annotations, which is where the probe reports which scope checks failed and
- * how to fix them. Registers with the Actions banner like every dispatch.
+ * how to fix them (a passing run emits only a notice the result never shows,
+ * so it is not read). Registers with the Actions banner like every dispatch.
  */
 const useTestServiceToken = (org: string | undefined) => {
   const client = useGitHubClient()

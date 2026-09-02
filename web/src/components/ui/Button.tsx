@@ -11,10 +11,11 @@ import { cx } from "./cx"
 
 // The canonical button. Wraps daisyUI `btn` so the ~160 inline sites share one
 // prop->class mapping instead of hand-ordered modifier strings. Color/size are
-// props; icon-only buttons pick a `shape`; `loading` renders the accessible
-// Spinner inside and makes the button inert WITHOUT semantically disabling it
-// (aria-disabled + click guard — a native `disabled` would drop keyboard focus
-// mid-action, per Primer's loading guidance). A trailing `className` escape
+// props; icon-only buttons pick a `shape`; `loading` renders a spinner inside
+// (the accessible Spinner beside the children, or a decorative one when
+// `busyLabel` replaces them) and makes the button inert WITHOUT semantically
+// disabling it (aria-disabled + click guard — a native `disabled` would drop
+// keyboard focus mid-action, per Primer's loading guidance). A trailing `className` escape
 // hatch stays for the per-site layout utilities (`w-full`, `join-item`,
 // `self-start`, ...). `ref` is a plain prop (React 19) so sites that manage
 // focus can still reach the underlying element.

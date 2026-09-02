@@ -15,8 +15,8 @@ import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 // stale data look authoritative, and give the user a direct way to refresh it.
 //
 // For a viewer who can dispatch the collect (teacher, head TA) the button reads
-// "Collect now" in every state — the same string the Manage hub's collect action
-// uses, because it is the same dispatch. A TA has read-only config-repo access
+// "Collect now" (and "Collecting…" while the run is in flight) — the same
+// strings the Manage hub's collect action uses, because it is the same dispatch. A TA has read-only config-repo access
 // and can't dispatch, so their button is "Refresh" (re-read what a teacher
 // collected) with a note on who to ask.
 //

@@ -314,8 +314,9 @@ func TestProvisionServiceSecret_PutStatus(t *testing.T) {
 }
 
 // The rotate command's help spells the token requirements as a bullet list and
-// every rejection quotes RequiredTokenPermissions; both must name the same
-// settings, or a permission added to one is invisible in the other.
+// the permission-shaped rejections quote RequiredTokenPermissions; both must
+// name the same settings, or a permission added to one is invisible in the
+// other.
 func TestRotateHelpNamesEveryRequiredTokenPermission(t *testing.T) {
 	// The help wraps at ~70 columns, so a phrase may straddle a line break.
 	long := strings.Join(strings.Fields(NewRotateCmd().Long), " ")

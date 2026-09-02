@@ -108,9 +108,11 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 }
 
 // RequiredTokenPermissions is the fine-grained token configuration collection
-// and regrade need, as the one sentence every rejection shares (the rotate
-// help's bullet list and collect_scores.py's grant hint are pinned to it by
-// test), so a permission added in one place cannot go missing from another.
+// and regrade need, as the one sentence every permission-shaped rejection
+// quotes (the 401 and the Members-only 403 name their own single cause). The
+// rotate help's bullet list is pinned to it by test, and collect_scores.py's
+// grant hint to the two settings a grant failure can mean, so a permission
+// added in one place cannot go missing from another.
 const RequiredTokenPermissions = "Repository access = All repositories, " +
 	"Repository permissions Contents: Read and write, Actions: Read and write, " +
 	"and Administration: Read and write, and Organization permissions Members: Read"
@@ -178,7 +180,7 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 		case cliutil.IsHTTPStatus(err, http.StatusUnauthorized):
 			return fmt.Errorf("the supplied token is invalid, expired, or revoked (401). Create a fresh fine-grained PAT and try again")
 		case cliutil.IsHTTPStatus(err, http.StatusNotFound), cliutil.IsHTTPStatus(err, http.StatusForbidden):
-			return fmt.Errorf("the supplied token can't read %s/%s. Create a fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write (regrade re-runs autograde workflow runs; collect grants staff teams repo access). If your org requires PAT approval and you are not an org owner, an owner must approve it first (owners' tokens are auto-approved). Underlying error: %v", org, configrepo.ConfigRepoName, org, err)
+			return fmt.Errorf("the supplied token can't read %s/%s. Create a fine-grained PAT with Resource owner = %q and %s (regrade re-runs autograde workflow runs; collect grants staff teams repo access). If your org requires PAT approval and you are not an org owner, an owner must approve it first (owners' tokens are auto-approved). Underlying error: %v", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions, err)
 		default:
 			return fmt.Errorf("couldn't verify the token against %s/%s: %w", org, configrepo.ConfigRepoName, err)
 		}

@@ -13,7 +13,8 @@ type Args = {
   assignment: string
   // Logins whose `<classroom>-<assignment>-<login>` repos the caller looks up.
   // `undefined` means the names are not derivable (a shared-repo assignment, or
-  // the roster hasn't loaded), so the whole org listing is read instead.
+  // a roster the caller could not derive them from; see
+  // assignmentRepoCandidateLogins), so the whole org listing is read instead.
   logins: readonly string[] | undefined
   enabled?: boolean
 }
@@ -26,9 +27,10 @@ type Args = {
 // latestAssignmentPush, ...) read unchanged.
 //
 // The scoped read shares its cache with the full listing in both directions: a
-// fresh full listing answers it without a request, and a scoped read that ended
-// up walking the whole org (a large roster) is stored under the full-listing
-// key too, so the assignments page does not walk the org again.
+// fresh full listing answers it without a request (except on a manual
+// `refetch`, which marks that listing stale first), and a scoped read that
+// ended up walking the whole org (a large roster) is stored under the
+// full-listing key too, so the assignments page does not walk the org again.
 export function useAssignmentRepos({
   org,
   classroom,

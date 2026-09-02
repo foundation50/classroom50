@@ -2,10 +2,11 @@ import { GitHubAPIError } from "../errors"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
 
-// Shared leaf primitives for the read sub-modules: the scoped logger, the
-// fresh-repo retry loop, and the per-repo read concurrency cap. Kept in a leaf
-// (imports only ../errors + lib) so every read module can depend on it without
-// forming a cycle.
+// Shared leaf primitives for github-core reads (the query sub-modules and
+// paginate): the scoped logger, the retry loop with its fresh-repo and
+// rate-limit policies, and the per-repo read slot. Kept in a leaf (imports only
+// ../errors + lib) so every read module can depend on it without forming a
+// cycle.
 export const log = logger.scope(LOG_SCOPE_QUERIES)
 
 // Max simultaneous per-repo reads. Bounded so a large class doesn't fan out
@@ -71,9 +72,10 @@ export function withGithubReadSlot<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 // Retry-After ceiling: a real secondary-limit backoff is usually ~60s, but a
-// client fan-out shouldn't hang a page that long. Cap the wait so one throttled
-// repo can't stall the batch; beyond this the read surfaces as an error the UI
-// reports rather than an indefinite spinner.
+// client fan-out shouldn't hang a page that long. retryOnRateLimit clamps its
+// one wait to this and retries anyway; withTransientRetry (paginate.ts) gives
+// the page up instead, so the UI reports an error rather than an indefinite
+// spinner.
 export const MAX_RATE_LIMIT_WAIT_MS = 8000
 
 export type RetryOptions = {
@@ -90,8 +92,8 @@ export type RetryOptions = {
   onRetry?: (attempt: number, waitMs: number) => void
 }
 
-// The one retry loop under every GitHub read retry: fresh-repo lag, a rate
-// limit, a transient page failure. Each caller supplies only its policy.
+// The one retry loop under every github-core read retry: fresh-repo lag, a
+// rate limit, a transient page failure. Each caller supplies only its policy.
 export async function withRetry<T>(
   fn: () => Promise<T>,
   options: RetryOptions,
