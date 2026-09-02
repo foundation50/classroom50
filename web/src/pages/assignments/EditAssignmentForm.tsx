@@ -137,6 +137,15 @@ const EditAssignmentForm = ({
             defaultValues={assignmentToFormValues(defaultData)}
             onSubmit={async (values) => {
               const shape = deriveFormShape(values)
+              // Only an explicit flip of the toggle is written. An unchanged
+              // toggle sends undefined so editAssignment carries the STORED
+              // state forward: the form was seeded when it opened, and a lock
+              // applied since (row action, CLI, co-teacher) must not be
+              // undone by a save that never touched it.
+              const locked =
+                values.locked === Boolean(defaultData.locked)
+                  ? undefined
+                  : values.locked
               const input = {
                 name: values.name,
                 mode: values.mode,
@@ -145,7 +154,7 @@ const EditAssignmentForm = ({
                 description: values.description,
                 due_date: values.due_date,
                 available_from_date: values.available_from_date,
-                locked: values.locked,
+                locked,
                 max_group_size: values.max_group_size,
                 team_formation: values.team_formation,
                 feedback_pr: values.feedback_pr,
@@ -208,7 +217,7 @@ const EditAssignmentForm = ({
                   gradingMode: values.grading_choice,
                   student_permission: values.student_permission || undefined,
                   repo_visibility: values.repo_visibility,
-                  locked: values.locked,
+                  locked,
                 },
                 acceptedCount,
               )
