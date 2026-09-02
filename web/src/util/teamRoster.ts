@@ -173,6 +173,39 @@ export type BuildTeamRosterInput = {
   // invite, so the whole needs-attention pass is suppressed to avoid mislabeling
   // a pending person as needs_attention_not_in_org.
   pendingHidden?: boolean
+  // roster.csv rows standing in for a team the viewer could not read, keyed by
+  // the role that team backs. Every classroom team is `secret`, so GitHub 404s
+  // it to a non-owner who isn't on it; the CSV (readable with config-repo
+  // `pull`) is the only student list such a viewer has. Emitted as `enrolled`
+  // rows with that role. A person already emitted from a visible team gets the
+  // role unioned, never a second row. See csvRowsForHiddenTeams.
+  fallbackRows?: Partial<Record<ClassroomRole, Student[]>>
+}
+
+// Which roster.csv rows stand in for each team the viewer could not read. A
+// row's recorded `role` picks its team; a blank role is a legacy student row.
+// Rows for a role whose team WAS readable are dropped: the team is the truth
+// there, and a stale CSV role must not resurrect someone the team dropped.
+export function csvRowsForHiddenTeams(
+  students: Student[],
+  hiddenRoles: ReadonlySet<ClassroomRole>,
+): Partial<Record<ClassroomRole, Student[]>> {
+  const out: Partial<Record<ClassroomRole, Student[]>> = {}
+  for (const student of students) {
+    if (!student.github_id?.trim() && !student.username?.trim()) continue
+    const role = csvRole(student)
+    if (!role || !hiddenRoles.has(role)) continue
+    ;(out[role] ??= []).push(student)
+  }
+  return out
+}
+
+const csvRole = (student: Student): ClassroomRole | null => {
+  const raw = student.role?.trim().toLowerCase() ?? ""
+  if (raw === "" || raw === "student") return "student"
+  return (STAFF_ROLES as readonly string[]).includes(raw)
+    ? (raw as StaffRole)
+    : null
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
@@ -191,6 +224,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     orgMemberLogins,
     orgMembersKnown = false,
     pendingHidden = false,
+    fallbackRows = {},
   } = input
   const csv = indexCsv(students)
 
@@ -264,6 +298,45 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     rows.push(row)
   }
 
+  // Fallback rows for teams the viewer could not read (see fallbackRows). Run
+  // after the member loop so a visible team wins the identity and the CSV only
+  // unions a role onto it; run before the pending pass so a stale invite for a
+  // CSV-listed member is skipped the same way it is for a team member.
+  const enrolledByLogin = new Map<string, TeamRosterRow>()
+  for (const row of rows) {
+    if (row.username) enrolledByLogin.set(row.username.toLowerCase(), row)
+  }
+  for (const role of ["student", ...STAFF_ROLES] as const) {
+    for (const student of fallbackRows[role] ?? []) {
+      const id = student.github_id?.trim() ?? ""
+      const login = student.username?.trim() ?? ""
+      const loginKey = login.toLowerCase()
+      if (!id && !loginKey) continue
+      const existing =
+        (id ? enrolledById.get(id) : undefined) ??
+        (loginKey ? enrolledByLogin.get(loginKey) : undefined)
+      if (existing) {
+        addRole(existing, role)
+        continue
+      }
+      const email = student.email?.trim().toLowerCase()
+      const row: TeamRosterRow = {
+        key: id || login,
+        state: "enrolled",
+        roles: [role],
+        username: login,
+        github_id: id,
+        avatar_url: id ? `https://avatars.githubusercontent.com/u/${id}` : "",
+        ...metadataFrom(student, donorFor(email)),
+      }
+      if (id) enrolledById.set(id, row)
+      if (loginKey) {
+        enrolledByLogin.set(loginKey, row)
+        memberLogins.add(loginKey)
+      }
+      rows.push(row)
+    }
+  }
   // Pending, tagged by role. Staff-team invitations are AUTHORITATIVE for a
   // staff role and are processed FIRST: adding a not-yet-org-member to a staff
   // team lists them under BOTH that team's invitations (tagged ta/teacher) AND

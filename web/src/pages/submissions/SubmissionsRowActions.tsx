@@ -383,6 +383,9 @@ export type SubmissionActionListProps = {
   // The repo's live private flag (from the hub's repo read), driving the
   // Change-visibility action's label/direction. undefined = still loading.
   repoPrivate?: boolean
+  // Whether the per-row Regrade action applies: config-repo write (teacher and
+  // head TA). A pull-only TA can't dispatch regrade.yaml, so it is omitted.
+  canRegrade?: boolean
 }
 
 export const SubmissionActionList = ({
@@ -405,6 +408,7 @@ export const SubmissionActionList = ({
   canPauseAutograding = false,
   canChangeVisibility = false,
   repoPrivate,
+  canRegrade = true,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -458,14 +462,16 @@ export const SubmissionActionList = ({
             disabled={!releaseHref}
             external
           />
-          <RegradeButton
-            org={org}
-            classroom={classroom}
-            assignment={assignment}
-            owner={owner}
-            displayName={displayName}
-            noRepo={!hasRepo}
-          />
+          {canRegrade && (
+            <RegradeButton
+              org={org}
+              classroom={classroom}
+              assignment={assignment}
+              owner={owner}
+              displayName={displayName}
+              noRepo={!hasRepo}
+            />
+          )}
           {submissionMode && (
             <UpdateTriggerButton
               org={org}

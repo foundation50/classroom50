@@ -60,10 +60,10 @@ export function SubmissionsActionsMenu({
   collecting: boolean
   regrading: boolean
   regradeAllActive: boolean
-  // Whether the viewer may trigger "Regrade all" (teacher|hta). A plain TA can
-  // Collect and regrade individual rows but not batch-regrade; GitHub 403s a
-  // pull-only TA regardless, so this is the UX gate. Defaults true for callers
-  // that don't gate (the item stays visible).
+  // Whether the viewer may trigger "Regrade all" (teacher|hta). Workflow
+  // dispatch needs config-repo write, which a pull-only TA lacks; GitHub 403s
+  // them regardless, so this is the UX gate. Defaults true for callers that
+  // don't gate (the item stays visible).
   canRegradeAll?: boolean
   emptyRoster: boolean
   // The assignment never autogrades (empty_repo OR no_autograder), so the
@@ -73,7 +73,9 @@ export function SubmissionsActionsMenu({
   // Opens the Metrics modal. Omitted (hidden) in live view, where the graded
   // snapshot stats don't apply.
   onMetrics?: () => void
-  onCollect: () => void
+  // Dispatches a collect. Omitted (hidden) for a viewer who can't dispatch
+  // workflows in the config repo (a TA); they refresh from the toolbar instead.
+  onCollect?: () => void
   onRegradeAll: () => void
   // Opens the "Open all Feedback PRs" modal. Omitted (hidden) when the viewer
   // can't write every repo (non-owner) or the assignment has no Feedback PRs
@@ -219,24 +221,27 @@ export function SubmissionsActionsMenu({
         )}
         {/* Collect stays for non-autograding assignments: it's org-wide and
             collect_scores.py skips this assignment server-side (see the
-            SubmissionsPage comment). Only grading actions hide. */}
-        <li>
-          <button
-            type="button"
-            disabled={disabledActions}
-            title={collectTitle}
-            onClick={() => {
-              closeMenu()
-              if (disabledActions) return
-              onCollect()
-            }}
-          >
-            <DownloadIcon aria-hidden="true" className="size-4" />
-            {collecting
-              ? t("submissions.collect.active")
-              : t("submissions.collect.label")}
-          </button>
-        </li>
+            SubmissionsPage comment). Only grading actions hide. Omitted for a
+            viewer who can't dispatch the workflow (a pull-only TA). */}
+        {onCollect && (
+          <li>
+            <button
+              type="button"
+              disabled={disabledActions}
+              title={collectTitle}
+              onClick={() => {
+                closeMenu()
+                if (disabledActions) return
+                onCollect()
+              }}
+            >
+              <DownloadIcon aria-hidden="true" className="size-4" />
+              {collecting
+                ? t("submissions.collect.active")
+                : t("submissions.collect.label")}
+            </button>
+          </li>
+        )}
         {!skipsGrading && (
           <>
             {canRegradeAll && (

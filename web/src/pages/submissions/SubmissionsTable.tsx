@@ -294,6 +294,7 @@ const SubmissionsTable = ({
   overrideGrade,
   canPauseAutograding = false,
   canChangeVisibility = false,
+  canRegrade = true,
   publicRepoNames,
   initialLoading = false,
   nonSubmittersLoading = false,
@@ -386,6 +387,10 @@ const SubmissionsTable = ({
   // Gated by the page on org OWNER only — org policy blocks members from
   // flipping visibility, and GitHub 403s them regardless.
   canChangeVisibility?: boolean
+  // Whether the manage hub's per-row Regrade action applies. Regrade dispatches
+  // regrade.yaml in the config repo, which needs config-repo write (teacher and
+  // head TA); a pull-only TA would 403, so the page passes false for them.
+  canRegrade?: boolean
   // Lowercased names of this assignment's repos that are currently PUBLIC
   // (derived from the org repo list). Rows whose repo is in the set show the
   // warning badge; undefined/absent renders no badges (list still loading).
@@ -1246,6 +1251,7 @@ const SubmissionsTable = ({
             submissionTags,
             canPauseAutograding,
             canChangeVisibility,
+            canRegrade,
           }}
         />
       )}

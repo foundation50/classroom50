@@ -138,6 +138,7 @@ export const TeacherAssignmentsView = ({
     studentCount,
     isLoading: studentsLoading,
     isError: studentCountError,
+    isUnknown: studentCountUnknown,
   } = useStudentCount(org, classroom)
   const {
     data: classroomData,
@@ -188,12 +189,13 @@ export const TeacherAssignmentsView = ({
 
   // Classroom-wide collect, left-aligned in the toolbar (the `leading` slot),
   // mirroring the submissions toolbar where the DataFreshness/Sync widget
-  // leads and search + filters sit on the right. Open to any staff viewer (a
-  // TA may collect, as on the submissions page — only authoring is
-  // author-gated). Hidden on an archived classroom and while the list is
-  // empty: there is no assignment to collect for.
+  // leads and search + filters sit on the right. Dispatching the collect
+  // workflow needs config-repo write, the same tier as authoring (teacher and
+  // head TA), so a pull-only TA sees no button rather than a 403. Hidden on an
+  // archived classroom and while the list is empty: there is no assignment to
+  // collect for.
   const collectAction =
-    !archived && hasAssignments ? (
+    canAuthor && !archived && hasAssignments ? (
       <ClassroomCollectButton
         org={org}
         classroom={classroom}
@@ -220,9 +222,9 @@ export const TeacherAssignmentsView = ({
             {classroomData?.term ? `${classroomData?.term} • ` : ""}
             {studentsLoading
               ? "…"
-              : // A failed count is hidden entirely (never a wrong number);
-                // the perpetual "…" read as still-loading.
-                studentCountError
+              : // A failed or unknowable count is hidden entirely (never a
+                // wrong number); the perpetual "…" read as still-loading.
+                studentCountError || studentCountUnknown
                 ? null
                 : t("assignments.studentCount", { count: studentCount ?? 0 })}
           </>

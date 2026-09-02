@@ -443,6 +443,7 @@
     "inviteToOrg": "Invite to organization",
     "pendingBanner_one": "{{count}} pending invitation hasn't been accepted yet.",
     "pendingBanner_other": "{{count}} pending invitations haven't been accepted yet.",
+    "rosterFromCsvNotice": "This list comes from the roster file as of its last sync, because your role can't view the classroom's GitHub teams. A member added since then appears after a teacher opens the roster. Organization owners see live membership.",
     "unlinkedBanner_one": "{{count}} roster row isn't linked to a GitHub account yet.",
     "unlinkedBanner_other": "{{count}} roster rows aren't linked to a GitHub account yet.",
     "failedInvitesTitle_one": "{{count}} invitation failed or expired.",
@@ -2721,6 +2722,7 @@
     "skipPastTable": "Skip past the submissions table",
     "lockedNotice": "This assignment is locked. Students can't accept or open it, and if it uses a private template the student team's access to that template has been removed. Existing repositories and their submissions are unaffected. Unlock it from the Actions menu (or the assignments list) to reopen it.",
     "closedNotice": "Submissions are closed. New students can't accept this assignment. When you close from here, accepted students' repositories are set to read-only; existing work is preserved. Reopen it from the Actions menu to allow submissions again.",
+    "rosterFromCsvNotice": "The student list comes from the roster file as of its last sync, because your role can't view the classroom's GitHub team. A student enrolled since then appears after a teacher opens the roster. Organization owners see live membership.",
     "lock": {
       "lockLabel": "Lock assignment",
       "unlockLabel": "Unlock assignment",
@@ -2738,7 +2740,10 @@
       "neverCollected": "Submission data not collected yet",
       "stale": "Out of date",
       "staleHelp": "New pushes since the last collection. Collect now to grade the newest work.",
-      "collectHelp": "Collect now to grade the latest pushes."
+      "collectHelp": "Collect now to grade the latest pushes.",
+      "refreshLabel": "Refresh",
+      "refreshHelp": "Re-read the latest collected submission data and live repository status.",
+      "collectRestricted": "Only teachers and head TAs can collect scores. Ask one to run a collection to grade the latest pushes."
     },
     "live": {
       "incomplete_one": "{{count}} repository couldn't be read, so live submission status may be incomplete. Retry, or run \"Collect now\".",

@@ -52,6 +52,7 @@ function useCardCounts(org: string, classroom: string) {
     studentCount,
     isLoading: studentsLoading,
     isError: studentsError,
+    isUnknown: studentsUnknown,
   } = useStudentCount(org, classroom)
   const assignmentsQuery = useGetClassroomAssignments(org, classroom)
   // A missing assignments.json 404s (a brand-new classroom has none), which is
@@ -64,6 +65,9 @@ function useCardCounts(org: string, classroom: string) {
     // shows "counts unavailable" rather than a misleading 0 (R6).
     studentCount: studentsLoading ? undefined : studentCount,
     studentsError,
+    // Settled but unknowable to this viewer (see useStudentCount.isUnknown):
+    // the stat is omitted, neither a spinner nor "0 students".
+    studentsUnknown,
     // Optional-chain `assignments` too: jsonFileQuery does no shape validation,
     // so a file that parses without an `assignments` array must not throw.
     assignmentCount: assignmentsQuery.isPending
@@ -444,22 +448,29 @@ function ClassroomBadges({ summary }: { summary: ClassroomSummary }) {
 
 export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
   const { t } = useTranslation()
-  const { studentCount, studentsError, assignmentCount, assignmentsError } =
-    useCardCounts(org, slug)
+  const {
+    studentCount,
+    studentsError,
+    studentsUnknown,
+    assignmentCount,
+    assignmentsError,
+  } = useCardCounts(org, slug)
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <CountStat
-        icon={<PeopleIcon aria-hidden="true" className="size-4" />}
-        loading={studentCount === undefined && !studentsError}
-        loadingLabel={t("classes.card.loadingStudents")}
-        label={
-          studentsError
-            ? t("classes.card.countsUnavailable")
-            : studentCount === 0
-              ? t("classes.noStudents")
-              : t("classes.studentCount", { count: studentCount ?? 0 })
-        }
-      />
+      {!studentsUnknown && (
+        <CountStat
+          icon={<PeopleIcon aria-hidden="true" className="size-4" />}
+          loading={studentCount === undefined && !studentsError}
+          loadingLabel={t("classes.card.loadingStudents")}
+          label={
+            studentsError
+              ? t("classes.card.countsUnavailable")
+              : studentCount === 0
+                ? t("classes.noStudents")
+                : t("classes.studentCount", { count: studentCount ?? 0 })
+          }
+        />
+      )}
       <CountStat
         icon={<BookIcon aria-hidden="true" className="size-4" />}
         loading={assignmentCount === undefined && !assignmentsError}

@@ -78,10 +78,24 @@ assignments, submissions, and scores. The differences:
   owners read pending invitations, so a TA's roster view can't show who has
   been invited but hasn't joined yet; the app notes this instead of showing
   an incomplete list.
+- **The student list comes from the roster file.** The classroom's GitHub
+  teams are secret, so a TA or head TA who isn't on the student team can't
+  read its membership. Their roster, submissions, and student counts use
+  `roster.csv` as of its last sync instead, and the page says so. A student
+  enrolled since then appears after a teacher opens the roster (which syncs
+  the file). Organization owners always see live membership.
+- **Collecting and regrading are for teachers and head TAs.** Both run
+  workflows in the classroom's config repository, which needs write access.
+  Head TAs have it and can use **Collect now** to refresh submission data
+  themselves. TAs have read-only access, so they see a **Refresh** button
+  that re-reads the latest collected data and live repository status, plus a
+  note on who to ask for a new collection.
 - **Access to student repositories arrives with collection.** The
   score-collection workflow grants the staff teams read access to student
   repositories as it runs. A freshly accepted repository has no staff access
-  yet, which is expected; it appears after the next collection run.
+  yet, which is expected; it appears after the next collection run. Until
+  then that student reads as "not accepted" to staff, while the teacher sees
+  the repository.
 
 With read access, TAs can open each student's work and leave reviews on the
 [feedback pull request](Autograding-Basics#feedback-pull-requests). There is no

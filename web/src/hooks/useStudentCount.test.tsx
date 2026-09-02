@@ -32,6 +32,7 @@ const rosterResult = (
     roleCounts: roleCounts(0),
     isLoading: false,
     isError: false,
+    studentRosterKnown: true,
     ...overrides,
   }) as UseTeamRosterResult
 
@@ -90,6 +91,32 @@ describe("useStudentCount", () => {
 
     const { result } = renderHook(() => useStudentCount("org", "cs101"))
     expect(result.current.studentCount).toBe(0)
+    expect(result.current.isUnknown).toBe(false)
+  })
+
+  it("reports an unknown roster as settled and countless, not as loading or 0", () => {
+    // A non-owner off the secret student team with no CSV students: the hook
+    // has nothing to count, and a card keyed on `undefined && !error` for its
+    // spinner must be told this is settled.
+    teamRoster.mockReturnValue(
+      rosterResult({ roleCounts: roleCounts(0), studentRosterKnown: false }),
+    )
+
+    const { result } = renderHook(() => useStudentCount("org", "cs101"))
+    expect(result.current.isUnknown).toBe(true)
+    expect(result.current.studentCount).toBeUndefined()
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.isError).toBe(false)
+  })
+
+  it("does not flag unknown while still loading (loading wins)", () => {
+    teamRoster.mockReturnValue(
+      rosterResult({ isLoading: true, studentRosterKnown: false }),
+    )
+
+    const { result } = renderHook(() => useStudentCount("org", "cs101"))
+    expect(result.current.isUnknown).toBe(false)
+    expect(result.current.isLoading).toBe(true)
   })
 
   it("passes roster students through to useTeamRoster as the metadata arg", () => {

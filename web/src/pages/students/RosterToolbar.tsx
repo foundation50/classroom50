@@ -62,7 +62,10 @@ export function RosterToolbar({
   // manual run): the Sync button becomes the progress indicator. Nothing else
   // freezes — roster writes rebase onto a concurrent sync commit.
   syncing: boolean
-  onSync: () => void
+  // Omitted when this viewer must not write roster.csv: a non-owner whose
+  // roster is partly read from the CSV itself (useTeamRoster.rosterSource ===
+  // "csv") has no full team picture to sync from, so the button is hidden.
+  onSync?: () => void
   // When roster.csv last changed (its latest commit) — null while unknown.
   // Rendered as an "Updated x ago" caption beside the Refresh button.
   lastUpdatedAt?: Date | null
@@ -127,26 +130,30 @@ export function RosterToolbar({
               {captionParts.join(" · ")}
             </span>
           ) : null}
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={syncing}
-            aria-live="polite"
-            className="text-base-content/70"
-            onClick={onSync}
-            title={
-              syncing
-                ? t("students.syncActiveHelp")
-                : t("students.syncRosterTitle")
-            }
-          >
-            <SyncIcon
-              aria-hidden="true"
-              className={cx("size-4", syncing && "animate-spin")}
-            />
-            {syncing ? t("students.syncActive") : t("students.syncNow")}
-          </Button>
-          <HelpTooltip help={t("students.syncHelp")} />
+          {onSync ? (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={syncing}
+                aria-live="polite"
+                className="text-base-content/70"
+                onClick={onSync}
+                title={
+                  syncing
+                    ? t("students.syncActiveHelp")
+                    : t("students.syncRosterTitle")
+                }
+              >
+                <SyncIcon
+                  aria-hidden="true"
+                  className={cx("size-4", syncing && "animate-spin")}
+                />
+                {syncing ? t("students.syncActive") : t("students.syncNow")}
+              </Button>
+              <HelpTooltip help={t("students.syncHelp")} />
+            </>
+          ) : null}
         </div>
       ) : null}
       {/* Selection cluster (count + Actions menu + Clear) — appears on the

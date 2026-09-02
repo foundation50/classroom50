@@ -6,6 +6,7 @@ import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
 import { GitHubAPIError } from "@/github-core/errors"
+import type { Student } from "@/types/classroom"
 
 const apiError = (status: number, url: string) =>
   new GitHubAPIError({
@@ -214,5 +215,107 @@ describe("useTeamRoster — pending scoped to the classroom team (#236)", () => 
       scoped.mock.calls.some(([url]) => String(url).includes(u))
     expect(requested("/teams/classroom50-cs101/invitations")).toBe(true)
     expect(requested("/teams/classroom50-cs201/invitations")).toBe(true)
+  })
+})
+
+// Discussion #677: every classroom team is `secret`, so a non-owner who isn't
+// on the student team reads its members as 404 -> []. That must not render as
+// an authoritative empty roster (which blanked the submissions view): the
+// viewer's roster.csv stands in, and when even that lists no students the
+// roster is UNKNOWN rather than empty.
+describe("useTeamRoster — hidden teams fall back to roster.csv for a non-owner", () => {
+  const csv = (over: Partial<Student>): Student =>
+    ({
+      username: "",
+      first_name: "",
+      last_name: "",
+      email: "",
+      section: "",
+      github_id: "",
+      role: "",
+      ...over,
+    }) as Student
+  const students = [
+    csv({ github_id: "1", username: "ada", role: "student" }),
+    csv({ github_id: "2", username: "bob", role: "" }),
+    csv({ github_id: "3", username: "tia", role: "ta" }),
+  ]
+  // The viewer (a TA) sees only their own secret team; the student and teacher
+  // teams 404, the hta team legitimately doesn't exist (also 404).
+  const hiddenTeams = vi.fn((url: string): Promise<unknown[]> => {
+    if (url.includes("/teams/") && url.includes("/members")) {
+      if (url.includes("-ta/members")) {
+        return Promise.resolve([{ id: 3, login: "tia", avatar_url: "" }])
+      }
+      return Promise.reject(apiError(404, url))
+    }
+    return Promise.resolve([])
+  })
+
+  beforeEach(() => {
+    githubOrgRole = "member"
+    taMembersShouldFail = false
+    studentInvitesShouldFail = false
+    studentFailedInvitesShouldFail = false
+    request.mockClear()
+    request.mockImplementation(hiddenTeams)
+  })
+
+  it("enrolls the CSV students and reports the CSV as the source", async () => {
+    const { result } = renderHook(
+      () => useTeamRoster("acme", "cs101", students),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.isError).toBe(false)
+    expect(result.current.rosterSource).toBe("csv")
+    expect(result.current.studentRosterKnown).toBe(true)
+    expect(result.current.roleCounts.student).toBe(2)
+    // The visible TA team still wins its own identity: one row, from the team.
+    const tia = result.current.rows.find((r) => r.username === "tia")
+    expect(tia?.roles).toEqual(["ta"])
+    expect(result.current.counts.enrolled).toBe(3)
+    // Drift terms read the raw team lists, so the fallback manufactures none.
+    expect(result.current.csvMissingCount).toBe(0)
+    expect(result.current.backfillNeededCount).toBe(0)
+  })
+
+  it("marks the roster unknown when the CSV has no students either", async () => {
+    const { result } = renderHook(() => useTeamRoster("acme", "cs101", []), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.rosterSource).toBe("csv")
+    expect(result.current.studentRosterKnown).toBe(false)
+    expect(result.current.roleCounts.student).toBe(0)
+  })
+
+  it("keeps an owner's empty team read as the truth (no fallback)", async () => {
+    githubOrgRole = "owner"
+    const { result } = renderHook(
+      () => useTeamRoster("acme", "cs101", students),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.rosterSource).toBe("team")
+    expect(result.current.studentRosterKnown).toBe(true)
+    expect(result.current.roleCounts.student).toBe(0)
+  })
+
+  it("stays loading while the org role is unresolved, so an owner never flashes the CSV", async () => {
+    githubOrgRole = "unresolved"
+    const { result } = renderHook(
+      () => useTeamRoster("acme", "cs101", students),
+      { wrapper },
+    )
+    // Let the team reads settle; the role gate alone must hold loading.
+    await waitFor(() =>
+      expect(
+        request.mock.calls.some(([u]) => String(u).includes("/members")),
+      ).toBe(true),
+    )
+    await new Promise((r) => setTimeout(r, 20))
+    expect(result.current.isLoading).toBe(true)
+    expect(result.current.rosterSource).toBe("team")
   })
 })

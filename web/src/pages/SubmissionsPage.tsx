@@ -164,18 +164,21 @@ const SubmissionsPageContent = () => {
   const { org, classroom, assignment } = useParams({ strict: false })
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  // Regrade-all is a config-repo-write tier action (teacher|hta); Collect and
-  // per-row regrade stay all-staff (the page already gates entry on
-  // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
+  // Workflow dispatches (Collect now, Regrade all, per-row regrade) POST to the
+  // config repo's Actions API, which needs `push` there: the teacher and head-TA
+  // teams have it, a TA has `pull` and would 403. `authorAssignments` is exactly
+  // that write tier, so it gates every dispatch affordance; a TA gets a
+  // read-only Refresh instead. Page entry is gated on
+  // viewClassroomStaffContent. GitHub is the real enforcer; this is the UX gate.
   const { role: classroomRole } = useClassroomRoleContext()
-  const canRegradeAll = can("authorAssignments", { classroomRole })
-  // Live reads (submit/* releases) hit student repos with the VIEWER's personal
-  // token. Only an org owner is admin on every repo and can read them; a TA/HTA
-  // is granted per-repo read at collect time but can't enumerate the org, so
-  // their live fan-out would 404. So the live overlay is owner-only — non-owners
-  // render purely from the collected snapshot. `isOwner` is fail-closed: false
-  // until the org role is CONFIRMED owner, so the page shows the snapshot without
-  // a live flash while the role resolves.
+  const canDispatchWorkflows = can("authorAssignments", { classroomRole })
+  const canRegradeAll = canDispatchWorkflows
+  // Org ownership gates only what needs repo ADMIN (bulk access/features/
+  // visibility, Open all PRs, the template grant). Reading student repos does
+  // not: the live and detection overlays run for every staff viewer with the
+  // VIEWER's token, and a repo they lack access to reads as 404, which both
+  // fan-outs already treat as "not accepted" (collect grants the staff teams
+  // per-repo read as it runs, so those repos appear after the next collect).
   const { isOwner } = useIsOrgOwner()
   const {
     data: scoresData,
@@ -203,11 +206,16 @@ const SubmissionsPageContent = () => {
   const { students: csvStudents } = useGetStudents(org, classroom)
   // Surface the team fetch's error/loading: a transient or permission failure
   // of the enrolled source of truth must render as error+retry, not an
-  // authoritative empty roster.
+  // authoritative empty roster. A non-owner off the secret student team reads
+  // it as 404, so their rows come from roster.csv (rosterSource "csv"); when
+  // even that has no students the roster is UNKNOWN, never empty (see
+  // rosterReady).
   const {
     rows: teamRows,
     isLoading: rosterLoading,
     isError: rosterError,
+    rosterSource,
+    studentRosterKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
 
@@ -258,10 +266,15 @@ const SubmissionsPageContent = () => {
   // `latestPush` isn't frozen at page load (else a push after load never flips
   // the freshness line to "Out of date").
   // For an individual assignment the repo names are derivable from the enrolled
-  // roster, so the read is scoped to them and can skip walking a large org.
+  // roster, so the read is scoped to them and can skip walking a large org. An
+  // UNKNOWN roster has no names to derive, so it reads the full listing rather
+  // than probing an empty candidate set (which would stop at page one).
   const candidateLogins = useMemo(
-    () => assignmentRepoCandidateLogins(isGroupFlavor, teamRows),
-    [isGroupFlavor, teamRows],
+    () =>
+      studentRosterKnown
+        ? assignmentRepoCandidateLogins(isGroupFlavor, teamRows)
+        : undefined,
+    [studentRosterKnown, isGroupFlavor, teamRows],
   )
   const {
     data: orgRepos,
@@ -467,9 +480,11 @@ const SubmissionsPageContent = () => {
   const [closeSubmissionOpen, setCloseSubmissionOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
-  // Gate on a resolved roster so a transient load/permission failure falls back
-  // to unscoped rows rather than blanking a populated gradebook.
-  const rosterReady = !rosterLoading && !rosterError
+  // Gate on a resolved, KNOWN roster so a transient load/permission failure, or
+  // a viewer who can't see the student list at all, falls back to unscoped rows
+  // rather than blanking a populated gradebook (discussion #677: every row
+  // filtered out against a roster the viewer couldn't read).
+  const rosterReady = !rosterLoading && !rosterError && studentRosterKnown
   const snapshotRows = useMemo(() => {
     return scoresData?.submissions?.[assignment ?? ""] || []
   }, [scoresData, assignment])
@@ -579,11 +594,11 @@ const SubmissionsPageContent = () => {
     ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
     : null
 
-  // Whether the live presence overlay applies here: owner-only (personal token
-  // can read the repos) and an assignment that autogrades (empty_repo and
-  // no_autograder never produce submit/* releases). A non-owner renders purely
-  // from the collected snapshot.
-  const liveCapable = isOwner && !skipsGrading
+  // Whether the live presence overlay applies here: an assignment that
+  // autogrades (empty_repo and no_autograder never produce submit/* releases).
+  // Runs for every staff viewer: reading a release needs only repo read, and a
+  // repo this viewer can't see 404s into "not submitted" inside the fan-out.
+  const liveCapable = !skipsGrading
 
   // Detection is a SEPARATE capability from live presence, and deliberately
   // wider: it reads raw repo state (commits/tags), so it works for a
@@ -591,7 +606,7 @@ const SubmissionsPageContent = () => {
   // collect_scores.py skips outright — leaving scores.json permanently empty
   // (issue #659). Only a bare empty_repo is excluded: it carries no submission
   // definition to detect against.
-  const detectionCapable = isOwner && !isEmptyRepoAssignment
+  const detectionCapable = !isEmptyRepoAssignment
 
   // Either overlay makes the view more than a replay of the collected snapshot,
   // so the affordances that describe "we're still resolving rows beyond the
@@ -604,7 +619,7 @@ const SubmissionsPageContent = () => {
   // from the SNAPSHOT display list (never the live-merged rows), so honoring the
   // real sort/filters can't loop the fan-out's output back into its input.
   // PAGE-SCOPED: it reads only the repos on the CURRENT table page (#359's burst
-  // mitigation). Owner-only, off for empty_repo.
+  // mitigation). Off for empty_repo.
   const snapshotScoped = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
@@ -687,7 +702,7 @@ const SubmissionsPageContent = () => {
     classroom,
     assignment,
     repoOwners: livePageOwners,
-    // Owner-only, not empty_repo — see liveCapable.
+    // Not empty_repo — see liveCapable.
     enabled: liveCapable,
   })
 
@@ -706,22 +721,23 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    // Owner-only and detection-capable (no_autograder included) — see
-    // detectionCapable. Resolved-only: otherwise the fan-out starts with an
+    // Detection-capable (no_autograder included) — see detectionCapable.
+    // Resolved-only: otherwise the fan-out starts with an
     // undefined mode and counts a tag-mode assignment in branch mode.
     enabled: detectionCapable && assignmentResolved,
   })
 
-  // Overlay live presence over the snapshot for a live-capable viewer (snapshot
-  // wins per owner for GRADES; live adds a pending row for an as-yet-uncollected
-  // submitter and bumps stale counts), then overlay detection the same way (a
-  // second count/presence-only overlay on the same snapshot — KTD6). A viewer
-  // with NEITHER overlay (TA/HTA) uses the collected snapshot ALONE. The two
-  // overlays are independent: a no_autograder assignment is detection-capable
-  // but not live-capable, and detection alone is what makes its submissions
-  // visible at all (issue #659). Then roster-scope, gated on a resolved roster
-  // so a transient failure falls back to unscoped rows rather than blanking a
-  // populated gradebook.
+  // Overlay live presence over the snapshot for a live-capable assignment
+  // (snapshot wins per owner for GRADES; live adds a pending row for an
+  // as-yet-uncollected submitter and bumps stale counts), then overlay
+  // detection the same way (a second count/presence-only overlay on the same
+  // snapshot — KTD6). An assignment with NEITHER overlay (a bare empty_repo)
+  // uses the collected snapshot ALONE. The two overlays are independent: a
+  // no_autograder assignment is detection-capable but not live-capable, and
+  // detection alone is what makes its submissions visible at all (issue #659).
+  // Then roster-scope, gated on a resolved, known roster so a transient
+  // failure or an unreadable student list falls back to unscoped rows rather
+  // than blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
     if (!overlayCapable) {
       return rosterReady
@@ -1397,6 +1413,15 @@ const SubmissionsPageContent = () => {
         </Alert>
       )}
 
+      {/* Non-owner staff can't read the secret classroom teams, so their
+          student list is the last synced roster.csv. Say so: a student enrolled
+          since then is missing here, not missing from the class. */}
+      {rosterSource === "csv" && !rosterLoading && (
+        <Alert tone="info" role="status">
+          {t("submissions.rosterFromCsvNotice")}
+        </Alert>
+      )}
+
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
           neutral line (transient); running/completed/failed/timeout become an
           Alert; idle renders nothing. */}
@@ -1515,17 +1540,24 @@ const SubmissionsPageContent = () => {
                 stale={snapshotStale}
                 collecting={collecting}
                 errorCount={liveErrorCount}
+                canCollect={canDispatchWorkflows}
                 onRefresh={
-                  collecting || emptyRoster.show
+                  collecting || (canDispatchWorkflows && emptyRoster.show)
                     ? undefined
                     : () => {
-                        // Collect now = re-collect (rebuild scores.json). Re-read the org
-                        // repo list too so the staleness line re-derives against the
-                        // newest pushes (latestPush would otherwise stay frozen at
-                        // page load), and re-run the live fan-out for a live-capable
-                        // viewer so presence refreshes alongside the dispatched
-                        // collect.
-                        collectScores.collect()
+                        // Collect now = re-collect (rebuild scores.json), for a
+                        // viewer who can dispatch it. A TA gets Refresh: the
+                        // same re-reads without the dispatch, so a collect a
+                        // teacher ran elsewhere lands without a reload. Re-read
+                        // the org repo list too so the staleness line
+                        // re-derives against the newest pushes (latestPush
+                        // would otherwise stay frozen at page load), and re-run
+                        // the overlays so presence refreshes alongside.
+                        if (canDispatchWorkflows) {
+                          collectScores.collect()
+                        } else {
+                          void refetchScores()
+                        }
                         refetchOrgRepos()
                         if (liveCapable) {
                           refetchLive()
@@ -1583,7 +1615,11 @@ const SubmissionsPageContent = () => {
                 onMetrics={
                   overlayCapable ? undefined : () => setMetricsOpen(true)
                 }
-                onCollect={() => collectScores.collect()}
+                onCollect={
+                  canDispatchWorkflows
+                    ? () => collectScores.collect()
+                    : undefined
+                }
                 onRegradeAll={() => setRegradeConfirmOpen(true)}
                 // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
                 // like the live reads), never for empty_repo (no PRs). A
@@ -1823,6 +1859,7 @@ const SubmissionsPageContent = () => {
           // GitHub 403s them regardless. Every repo shape qualifies (a bare or
           // group repo is still showcaseable).
           canChangeVisibility={isOwner}
+          canRegrade={canDispatchWorkflows}
           publicRepoNames={publicRepoNames}
           initialLoading={initialLoading}
           nonSubmittersLoading={
