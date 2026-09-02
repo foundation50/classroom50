@@ -82,7 +82,7 @@ describe("AutogradingTestsPane teacher-only files modal", () => {
     )
     expect(anchor?.getAttribute("target")).toBe("_blank")
     expect(
-      screen.getByText("assignments.autograder.teacherFiles.step2Body"),
+      screen.getByText("assignments.autograder.teacherFiles.howTo"),
     ).toBeTruthy()
   })
 
@@ -97,7 +97,7 @@ describe("AutogradingTestsPane teacher-only files modal", () => {
       screen.queryByText("assignments.autograder.teacherFiles.openUpload"),
     ).toBeNull()
     expect(
-      screen.queryByText("assignments.autograder.teacherFiles.step1Title"),
+      screen.queryByText("assignments.autograder.teacherFiles.howTo"),
     ).toBeNull()
     expect(
       screen.queryByText("assignments.autograder.teacherFiles.readableTitle"),

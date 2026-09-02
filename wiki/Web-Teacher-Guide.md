@@ -371,13 +371,12 @@ Below the tests table, a **Report defaults** panel sets the same two report
 options for every test: **Default failure details** and **Include passing
 test output**. A test's own report options override them.
 
-Next to **Add test**, **Upload test files** opens a short guide to keeping test
-scripts and fixtures out of the template: write a script that exits 0 when the
-work passes, upload it to the assignment's folder in the `classroom50`
-repository, and call it from a Run command test through
-`$CLASSROOM50_BUNDLE_DIR`. On a saved assignment, the guide's **Open upload
-page** button opens the GitHub upload page for that folder, so you can drop
-files in without cloning the repository. See
+Next to **Add test**, **Upload test files** explains where test scripts and
+fixtures that students must not see belong: the assignment's folder in the
+`classroom50` repository, reachable from test commands as
+`$CLASSROOM50_BUNDLE_DIR`. On a saved assignment, its **Open upload page**
+button opens the GitHub upload page for that folder, so you can drop files in
+without cloning the repository. For the full walkthrough, see
 [Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
 When you're done, click **Create assignment**.
