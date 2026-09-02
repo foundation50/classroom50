@@ -1444,6 +1444,7 @@
         "howTo": "Click <strong>Open upload page</strong>, drop your files in, and commit. They go to <code>{{path}}</code>; GitHub creates the folder if needed. Publishing takes a few minutes after the commit.",
         "usage": "Test commands find the folder at <code>$CLASSROOM50_BUNDLE_DIR</code>. For example, a Run command test that calls an uploaded <code>check.sh</code>:",
         "example": "Full walkthrough in the wiki",
+        "copyCommand": "Copy the Run command",
         "note": "Don't upload a file named <code>autograder.py</code>: it replaces the tests on this page.",
         "readableTitle": "Students can't change these files, but they can read them",
         "readableBody": "They're published on your organization's public GitHub Pages site. Keep full solutions and private data out, and use <strong>Failure details shown to students</strong> to hide expected output.",
@@ -2048,6 +2049,19 @@
         "startFailed": "Couldn't start the token check: {{reason}}",
         "workflowMissing": "This organization's workflow files don't include the token check yet. <updateLink>Update the workflow files</updateLink>, then test again.",
         "timeout": "The check is taking longer than expected. Open the run to see the result when it finishes."
+      },
+      "validate": {
+        "empty": "Enter a token before saving.",
+        "scopeHint": "Create a fine-grained personal access token with Resource owner set to {{org}} and Repository access set to All repositories. Under Repository permissions, set Contents, Actions, and Administration to Read and write: collecting scores reads student repositories and grants staff teams access to them, and regrading re-runs autograde workflows and may push submit tags. Under Organization permissions, set Members to Read: collection lists the classroom team, which no repository permission covers. If your organization requires token approval and you are not an owner, an owner must approve the token first.",
+        "invalid": "This token is invalid, expired, or revoked. Create a new fine-grained token and try again.",
+        "noAccess": "This token can't access {{org}}/{{repo}}. {{hint}}",
+        "configRepoMissing": "Couldn't find a {{repo}} repository in {{org}}. Check that the organization is correct and that setup has been run for it. This isn't necessarily a problem with the token.",
+        "unreachable": "Couldn't reach GitHub to verify the token. Check your connection and try again. ({{reason}})",
+        "unverified": "Couldn't verify the token against {{org}}/{{repo}}: {{reason}}",
+        "readOnly": "This token can read {{org}}/{{repo}} but can't write to it. Collecting scores needs read access, and regrading needs write access. {{hint}}",
+        "noAdmin": "This token can read and write {{org}}/{{repo}} but can't administer it. Collecting scores grants staff teams, such as TAs, read access to student repositories, which needs Administration set to Read and write. {{hint}}",
+        "noMembersRead": "This token can read {{org}}/{{repo}} but can't read the organization's members. Collecting scores lists the classroom team, which needs Members set to Read under Organization permissions. {{hint}}",
+        "selectedRepos": "This token can read {{org}}/{{repo}} but not {{org}}/{{probe}}, so its Repository access is limited to selected repositories, or its Resource owner isn't {{org}}. Collecting scores reads every student repository and grants staff teams access to them. Create the token again with Resource owner set to {{org}} and Repository access set to All repositories, keeping the same permissions."
       }
     },
     "audit": {

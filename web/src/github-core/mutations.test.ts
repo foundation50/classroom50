@@ -17,6 +17,7 @@ import {
 } from "./mutations"
 import { REGRADE_WORKFLOW } from "./workflows"
 import { GitHubAPIError } from "./errors"
+import { localizedMessageOf } from "@/types/localizedMessage"
 import { createGitHubClient } from "./client"
 import { buildSkeletonFiles } from "@/skeleton/skeleton"
 
@@ -646,6 +647,21 @@ describe("validateServiceToken", () => {
       rateLimit,
     })
 
+  // Every rejection names an en.json key (rendered by errorText at the view),
+  // so assert the key rather than assembled English.
+  const rejectsWithKey = async (promise: Promise<unknown>, key: string) => {
+    const err: unknown = await promise.then(
+      () => {
+        throw new Error("expected rejection")
+      },
+      (e: unknown) => e,
+    )
+    expect(localizedMessageOf(err)?.key).toBe(
+      `orgSettings.serviceToken.validate.${key}`,
+    )
+    return localizedMessageOf(err)
+  }
+
   it("accepts a token with write access and org-members read", async () => {
     const request = mockTokenClient((path) => {
       if (path === "/repos/acme/classroom50") {
@@ -666,17 +682,25 @@ describe("validateServiceToken", () => {
 
   it("rejects a read-only token (permissions.push false) with a write hint", async () => {
     mockTokenClient(() => Promise.resolve({ permissions: { push: false } }))
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /lacks write access|Read and write/,
+    const message = await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "readOnly",
     )
+    // The scope hint rides along as a nested message, so the view renders the
+    // fix beside the finding.
+    expect(message?.params?.hint).toMatchObject({
+      key: "orgSettings.serviceToken.validate.scopeHint",
+      params: { org: "acme" },
+    })
   })
 
   it("rejects an admin-less token (permissions.admin false) with an admin hint", async () => {
     mockTokenClient(() =>
       Promise.resolve({ permissions: { push: true, admin: false } }),
     )
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /lacks admin access|Administration: Read and write/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noAdmin",
     )
   })
 
@@ -687,8 +711,9 @@ describe("validateServiceToken", () => {
       }
       return Promise.reject(apiError(403))
     })
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /Members: Read|can't read the org's members/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noMembersRead",
     )
   })
 
@@ -699,8 +724,9 @@ describe("validateServiceToken", () => {
       }
       return Promise.reject(apiError(404))
     })
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /Members: Read|can't read the org's members/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noMembersRead",
     )
   })
 
@@ -742,23 +768,23 @@ describe("validateServiceToken", () => {
 
   it("maps a 403 to the actionable scope hint", async () => {
     mockTokenClient(() => Promise.reject(apiError(403)))
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /Read and write/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noAccess",
     )
   })
 
   it("maps a 401 to invalid/expired/revoked", async () => {
     mockTokenClient(() => Promise.reject(apiError(401)))
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /invalid, expired, or revoked/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "invalid",
     )
   })
 
   it("requires an org and a non-empty token", async () => {
     await expect(validateServiceToken("tok", undefined)).rejects.toThrow(/org/)
-    await expect(validateServiceToken("   ", "acme")).rejects.toThrow(
-      /Enter a token/,
-    )
+    await rejectsWithKey(validateServiceToken("   ", "acme"), "empty")
   })
 
   // The "All repositories" probe (discussion #768): a token scoped to selected
@@ -801,13 +827,18 @@ describe("validateServiceToken", () => {
 
     it("rejects a token scoped to selected repositories (404 on another repo)", async () => {
       okToken(() => Promise.reject(apiError(404)))
-      await expect(
+      const message = await rejectsWithKey(
         validateServiceToken(
           "github_pat_x",
           "acme",
           teacherWith([{ name: "classroom50" }, { name: "cs-hw1-alice" }]),
         ),
-      ).rejects.toThrow(/All repositories.*|acme\/cs-hw1-alice/)
+        "selectedRepos",
+      )
+      expect(message?.params).toMatchObject({
+        org: "acme",
+        probe: "cs-hw1-alice",
+      })
     })
 
     it("never probes with classroom50 itself, whatever its casing", async () => {

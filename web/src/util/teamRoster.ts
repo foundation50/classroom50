@@ -2,6 +2,7 @@ import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { parseGitHubId, rosterClaimSet } from "@/util/identity"
+import { githubAvatarUrl } from "@/util/orgUrl"
 import {
   DEFAULT_STUDENT_SORT,
   NAME_COLLATION,
@@ -326,7 +327,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
         roles: [role],
         username: login,
         github_id: id,
-        avatar_url: id ? `https://avatars.githubusercontent.com/u/${id}` : "",
+        avatar_url: id ? githubAvatarUrl(id) : "",
         ...metadataFrom(student, donorFor(email)),
       }
       if (id) enrolledById.set(id, row)
@@ -708,6 +709,8 @@ export function rowsNeedingBackfill(
     // Not on any team -> nothing for sync to backfill (a needs-attention row).
     if (!teamRole) return false
     // On a team but the id is blank or unusable, or the recorded role is stale.
-    return parseGitHubId(id ?? "") === null || s.role !== teamRole
+    // Compared through csvRole so " TA " and a blank (= student) read the same
+    // way the hidden-team pass reads them.
+    return parseGitHubId(id ?? "") === null || csvRole(s) !== teamRole
   })
 }

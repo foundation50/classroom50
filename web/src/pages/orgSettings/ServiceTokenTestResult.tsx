@@ -1,7 +1,9 @@
 import { Link } from "@tanstack/react-router"
+import type { TFunction } from "i18next"
+import type { ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { Alert, Button, cx } from "@/components/ui"
+import { Alert, Button, cx, type AlertTone } from "@/components/ui"
 import { LinkExternalIcon } from "@/components/ui/icons"
 import { ProbeWorkflowMissingError } from "@/github-core/mutations"
 import type { RunAnnotation } from "@/github-core/queries"
@@ -18,6 +20,63 @@ const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 // (which checks did not pass, and the fix). Notices only restate "passed".
 const failureMessages = (annotations: RunAnnotation[] | undefined) =>
   (annotations ?? []).filter((a) => a.level === "failure").map((a) => a.message)
+
+type SimpleOutcome = {
+  tone: AlertTone
+  body: (t: TFunction) => ReactNode
+  // Whether the "View run" link belongs beside it (a rejected dispatch has no
+  // run to view).
+  showRun: boolean
+}
+
+// The single-sentence outcomes, keyed by what the tracker reports.
+function simpleOutcome({
+  phase,
+  failure,
+  error,
+}: Pick<TestState, "phase" | "failure" | "error">): SimpleOutcome | null {
+  if (phase === "completed") {
+    return {
+      tone: "success",
+      showRun: true,
+      body: (t) => t("orgSettings.serviceToken.test.passed"),
+    }
+  }
+  if (phase === "timeout") {
+    return {
+      tone: "warning",
+      showRun: true,
+      body: (t) => t("orgSettings.serviceToken.test.timeout"),
+    }
+  }
+  if (phase === "failed" && failure === "dispatch") {
+    if (error instanceof ProbeWorkflowMissingError) {
+      return {
+        tone: "warning",
+        showRun: false,
+        body: () => (
+          <Trans
+            i18nKey="orgSettings.serviceToken.test.workflowMissing"
+            components={{
+              updateLink: (
+                <Link className="link" to="." hash={RERUN_ORG_SETUP_ANCHOR} />
+              ),
+            }}
+          />
+        ),
+      }
+    }
+    return {
+      tone: "error",
+      showRun: false,
+      body: (t) =>
+        t("orgSettings.serviceToken.test.startFailed", {
+          reason: errorText(t, error),
+        }),
+    }
+  }
+  return null
+}
 
 // The outcome of the last "Test token" run, below the token row. In-flight
 // progress is not shown here: the button spins and the Actions banner carries
@@ -50,47 +109,15 @@ export default function ServiceTokenTestResult({
     </Button>
   ) : null
 
-  if (phase === "completed") {
+  // Every outcome but a failed RUN is one sentence in one tone; the table keeps
+  // a new outcome to a row. A failed run is the one shape with structure (the
+  // probe's own verdict list), rendered below.
+  const simple = simpleOutcome({ phase, failure, error })
+  if (simple) {
     return (
-      <Alert tone="success" className={cx("text-sm", className)}>
-        <span>{t("orgSettings.serviceToken.test.passed")}</span>
-        {viewRun}
-      </Alert>
-    )
-  }
-
-  if (phase === "timeout") {
-    return (
-      <Alert tone="warning" className={cx("text-sm", className)}>
-        <span>{t("orgSettings.serviceToken.test.timeout")}</span>
-        {viewRun}
-      </Alert>
-    )
-  }
-
-  // phase === "failed"
-  if (failure === "dispatch") {
-    if (error instanceof ProbeWorkflowMissingError) {
-      return (
-        <Alert tone="warning" className={cx("text-sm", className)}>
-          <span>
-            <Trans
-              i18nKey="orgSettings.serviceToken.test.workflowMissing"
-              components={{
-                updateLink: (
-                  <Link className="link" to="." hash={RERUN_ORG_SETUP_ANCHOR} />
-                ),
-              }}
-            />
-          </span>
-        </Alert>
-      )
-    }
-    return (
-      <Alert tone="error" className={cx("text-sm", className)}>
-        {t("orgSettings.serviceToken.test.startFailed", {
-          reason: errorText(t, error),
-        })}
+      <Alert tone={simple.tone} className={cx("text-sm", className)}>
+        <span>{simple.body(t)}</span>
+        {simple.showRun && viewRun}
       </Alert>
     )
   }
