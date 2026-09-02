@@ -108,6 +108,12 @@ export function TeacherFilesModal({
               components={markup}
             />
           </p>
+          <p className="mt-1 text-base-content/70">
+            <Trans
+              i18nKey="assignments.autograder.teacherFiles.step2Note"
+              components={markup}
+            />
+          </p>
         </li>
         <li>
           <p className="font-bold">

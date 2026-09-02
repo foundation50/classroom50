@@ -1441,6 +1441,7 @@
         "step1Body": "This example is a shell script that checks a student's add.py. Use any tool the grading runner has installed.",
         "step2Title": "Upload it to the assignment folder",
         "step2Body": "Click <strong>Open upload page</strong>, drop the file on the page, and commit. GitHub creates <code>{{path}}</code> in the classroom50 repository if it doesn't exist yet.",
+        "step2Note": "Don't upload a file named <code>autograder.py</code>: it replaces the tests on this page.",
         "step3Title": "Add a Run command test that calls it",
         "step3Body": "Click <strong>Add test</strong>, choose <strong>Run command</strong>, and enter this command. <code>$CLASSROOM50_BUNDLE_DIR</code> points at the uploaded files.",
         "step4Title": "Wait for publishing, then submit a test",
