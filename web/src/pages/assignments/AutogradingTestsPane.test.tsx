@@ -86,16 +86,21 @@ describe("AutogradingTestsPane teacher-only files modal", () => {
     ).toBeTruthy()
   })
 
-  it("asks the teacher to save first when the slug isn't known", async () => {
+  it("only asks the teacher to create the assignment first when it isn't saved", async () => {
     renderPane({ org: "acme", classroom: "cs50", slug: "" })
     await openModal()
     expect(
-      await screen.findByText(
-        "assignments.autograder.teacherFiles.step2BodyUnsaved",
-      ),
+      await screen.findByText("assignments.autograder.teacherFiles.unsaved"),
     ).toBeTruthy()
+    // None of the guide is actionable yet, so none of it renders.
     expect(
       screen.queryByText("assignments.autograder.teacherFiles.openUpload"),
+    ).toBeNull()
+    expect(
+      screen.queryByText("assignments.autograder.teacherFiles.step1Title"),
+    ).toBeNull()
+    expect(
+      screen.queryByText("assignments.autograder.teacherFiles.readableTitle"),
     ).toBeNull()
   })
 })

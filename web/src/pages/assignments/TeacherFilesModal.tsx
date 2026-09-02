@@ -5,9 +5,10 @@ import { WIKI_URL } from "@/version"
 
 // Walks a teacher through keeping test scripts out of the template: write a
 // script, drop it on GitHub's upload page for the assignment's bundle folder,
-// call it from a run test via $CLASSROOM50_BUNDLE_DIR. `uploadUrl` is null
+// call it from a run test via $CLASSROOM50_BUNDLE_DIR. Both props are null
 // until the assignment exists (create mode), since the folder is keyed by the
-// saved slug.
+// saved slug; the modal then only says to create the assignment first, since
+// none of the steps are actionable yet.
 export function TeacherFilesModal({
   open,
   onClose,
@@ -21,6 +22,27 @@ export function TeacherFilesModal({
 }) {
   const { t } = useTranslation()
   const markup = { code: <code dir="ltr" />, strong: <strong /> }
+
+  if (!bundlePath || !uploadUrl) {
+    return (
+      <Modal
+        open={open}
+        onClose={onClose}
+        size="md"
+        title={t("assignments.autograder.teacherFiles.title")}
+        footer={
+          <Button variant="ghost" onClick={onClose}>
+            {t("common.close")}
+          </Button>
+        }
+      >
+        <p className="mt-6 text-sm text-base-content/70">
+          {t("assignments.autograder.teacherFiles.unsaved")}
+        </p>
+      </Modal>
+    )
+  }
+
   return (
     <Modal
       open={open}
@@ -42,18 +64,16 @@ export function TeacherFilesModal({
           <Button variant="ghost" onClick={onClose}>
             {t("common.close")}
           </Button>
-          {uploadUrl && (
-            <Button
-              as="a"
-              variant="primary"
-              href={uploadUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("assignments.autograder.teacherFiles.openUpload")}
-              <LinkExternalIcon aria-hidden="true" className="size-4" />
-            </Button>
-          )}
+          <Button
+            as="a"
+            variant="primary"
+            href={uploadUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("assignments.autograder.teacherFiles.openUpload")}
+            <LinkExternalIcon aria-hidden="true" className="size-4" />
+          </Button>
         </>
       }
     >
@@ -82,18 +102,11 @@ export function TeacherFilesModal({
             {t("assignments.autograder.teacherFiles.step2Title")}
           </p>
           <p className="text-base-content/70">
-            {bundlePath ? (
-              <Trans
-                i18nKey="assignments.autograder.teacherFiles.step2Body"
-                values={{ path: bundlePath }}
-                components={markup}
-              />
-            ) : (
-              <Trans
-                i18nKey="assignments.autograder.teacherFiles.step2BodyUnsaved"
-                components={markup}
-              />
-            )}
+            <Trans
+              i18nKey="assignments.autograder.teacherFiles.step2Body"
+              values={{ path: bundlePath }}
+              components={markup}
+            />
           </p>
         </li>
         <li>
