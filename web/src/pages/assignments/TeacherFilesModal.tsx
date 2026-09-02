@@ -86,7 +86,15 @@ export function TeacherFilesModal({
           <Trans
             i18nKey="assignments.autograder.teacherFiles.usage"
             components={markup}
-          />{" "}
+          />
+        </p>
+        <pre
+          dir="ltr"
+          className="overflow-x-auto rounded bg-base-200 p-3 text-xs"
+        >
+          {'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"'}
+        </pre>
+        <p>
           <a
             className="link inline-flex items-center gap-1"
             href={WIKI_HREF}
