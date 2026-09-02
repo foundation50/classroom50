@@ -30,8 +30,10 @@ export const githubKeys = {
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
 
   // One assignment's slice of the org repo list, resolved for a known set of
-  // candidate logins (see getOrgRepos candidateNames). Prefixed by `orgRepos`
-  // so every invalidation of the full listing reaches it too.
+  // candidate logins (see getAssignmentRepos). The logins are part of the key
+  // because the result depends on them: a roster change must re-resolve.
+  // Prefixed by `orgRepos` so every invalidation of the full listing reaches
+  // it too.
   assignmentRepos: (
     org: string,
     classroom: string,

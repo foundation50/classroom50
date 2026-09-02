@@ -6,11 +6,13 @@ export async function getRepo(
   client: GitHubClient,
   owner: string,
   repo: string,
+  signal?: AbortSignal,
 ) {
   return tolerateGitHubError(
     () =>
       client.request<GitHubRepo>(
         `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+        { method: "GET", signal },
       ),
     null,
   )

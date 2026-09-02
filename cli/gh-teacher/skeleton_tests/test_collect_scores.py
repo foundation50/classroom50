@@ -4868,6 +4868,8 @@ class TestParallelPagination:
         got = self._walk()
         assert len(got) == 101
         assert got[-1]["name"] == "p2-0"
+        # Page 1 is handed to the sequential walk, not read again.
+        assert [int(re.search(r"[?&]page=(\d+)", u).group(1)) for u in calls] == [1, 2]
 
     def test_page_count_past_the_cap_is_incomplete(self, monkeypatch):
         self._serve(
@@ -4932,16 +4934,20 @@ class TestRepoIndexProbeMode:
 
     API = "https://api.github.com"
 
-    def _index(self, monkeypatch, *, pages_left, page1=None, existing=(), fail=()):
+    def _index(
+        self, monkeypatch, *, last, page1=None, existing=(), fail=(), rest_error=None
+    ):
         page1 = {"starter": False} if page1 is None else dict(page1)
         probed: list[str] = []
         rest_reads: list[int] = []
 
         def first_page(api_url, org, token):
-            return dict(page1), pages_left
+            return dict(page1), last
 
         def rest(api_url, org, token, n):
             rest_reads.append(n)
+            if rest_error is not None:
+                raise rest_error
             return {name: False for name in existing}
 
         def get_repo(api_url, owner, repo, token):
@@ -4960,7 +4966,7 @@ class TestRepoIndexProbeMode:
 
     def test_small_hint_probes_instead_of_listing(self, monkeypatch, capsys):
         index, probed, rest_reads = self._index(
-            monkeypatch, pages_left=89, existing={"cs-hw1-alice", "priv-cs-hw1-bob"}
+            monkeypatch, last=90, existing={"cs-hw1-alice", "priv-cs-hw1-bob"}
         )
         index.prefetch(["cs-hw1-ALICE", "priv-cs-hw1-bob", "cs-hw1-carol", "starter"])
         # Page 1 answered `starter`; the other three were probed, in parallel.
@@ -4977,45 +4983,56 @@ class TestRepoIndexProbeMode:
 
     def test_large_hint_reads_the_rest_of_the_listing(self, monkeypatch, capsys):
         index, probed, rest_reads = self._index(
-            monkeypatch, pages_left=2, existing={"cs-hw1-alice"}
+            monkeypatch, last=3, existing={"cs-hw1-alice"}
         )
         index.prefetch([f"cs-hw1-user{i}" for i in range(5)])
         assert probed == []
-        assert rest_reads == [2]
+        assert rest_reads == [3]
         assert index.contains("cs-hw1-alice") is True
         assert index.contains("cs-hw1-user0") is False
         assert "2 repo(s) visible" in capsys.readouterr().out
+
+    def test_hint_equal_to_pages_left_probes(self, monkeypatch):
+        # The boundary: as many candidates as pages left costs the same either
+        # way, and the probes are the lighter requests.
+        index, probed, rest_reads = self._index(monkeypatch, last=3)
+        index.prefetch(["cs-hw1-alice", "cs-hw1-bob"])
+        assert len(probed) == 2 and rest_reads == []
 
     def test_probe_budget_is_the_listing_cost(self, monkeypatch):
         # Two classrooms' hints together exceed the pages left, so the second
         # prefetch completes the listing rather than probing past the budget.
         index, probed, rest_reads = self._index(
-            monkeypatch, pages_left=3, existing={"cs-hw1-alice", "cs-hw2-dan"}
+            monkeypatch, last=4, existing={"cs-hw1-alice", "cs-hw2-dan"}
         )
         index.prefetch(["cs-hw1-alice", "cs-hw1-bob"])
         assert len(probed) == 2 and rest_reads == []
         index.prefetch(["cs-hw2-carol", "cs-hw2-dan"])
         assert len(probed) == 2  # no further probes
-        assert rest_reads == [3]
+        assert rest_reads == [4]
         assert index.contains("cs-hw1-alice") is True  # probed answer kept
         assert index.contains("cs-hw2-dan") is True
         assert index.contains("cs-hw2-carol") is False
+        assert index.is_private("cs-hw2-dan") is False
 
     def test_unhinted_name_is_probed_on_demand_once(self, monkeypatch):
-        index, probed, _ = self._index(monkeypatch, pages_left=10, existing={"late"})
+        index, probed, _ = self._index(monkeypatch, last=11, existing={"late"})
         index.prefetch(["cs-hw1-alice"])
         assert index.contains("late") is True
         assert index.contains("LATE") is True
         assert probed.count("late") == 1
 
     def test_failed_probe_fails_open(self, monkeypatch):
-        index, _, _ = self._index(monkeypatch, pages_left=10, fail={"cs-hw1-alice"})
+        index, _, _ = self._index(monkeypatch, last=11, fail={"cs-hw1-alice"})
         index.prefetch(["cs-hw1-alice"])
         assert index.contains("cs-hw1-alice") is True
         assert index.is_private("cs-hw1-alice") is None
 
-    def test_throttled_probe_propagates(self, monkeypatch):
-        index, _, _ = self._index(monkeypatch, pages_left=10)
+    def test_throttled_probe_propagates_and_stays_unlatched(self, monkeypatch):
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=11, existing={"cs-hw1-alice"}
+        )
+        working = cs.get_repo
 
         def throttled(*a, **k):
             raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
@@ -5023,15 +5040,60 @@ class TestRepoIndexProbeMode:
         monkeypatch.setattr(cs, "get_repo", throttled)
         with pytest.raises(cs.urllib.error.HTTPError):
             index.prefetch(["cs-hw1-alice"])
+        # The failed batch charged no budget and the name is still unresolved,
+        # so the retry probes it for real instead of answering from a guess.
+        monkeypatch.setattr(cs, "get_repo", working)
+        index.prefetch(["cs-hw1-alice"])
+        assert probed == ["cs-hw1-alice"]
+        assert index.contains("cs-hw1-alice") is True
+        assert index.is_private("cs-hw1-alice") is False
+        assert rest_reads == []
 
     def test_names_completes_the_listing(self, monkeypatch):
         index, _, rest_reads = self._index(
-            monkeypatch, pages_left=10, existing={"cs-hw1-group-1"}
+            monkeypatch, last=11, existing={"cs-hw1-group-1"}
         )
         index.prefetch(["cs-hw1-alice"])
         assert rest_reads == []
         assert sorted(index.names()) == ["cs-hw1-group-1", "starter"]
-        assert rest_reads == [10]
+        assert rest_reads == [11]
+
+    def test_soft_failure_completing_the_listing_fails_open(self, monkeypatch, capsys):
+        # A 5xx on a later page must not abort the run: the listing becomes
+        # unknown, every name polls, and team mode falls back to its own source.
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=11, rest_error=http_error(502, {}, b"bad gateway")
+        )
+        index.prefetch(["cs-hw1-alice"])
+        assert index.names() is None
+        assert rest_reads == [11]
+        assert index.contains("cs-hw1-alice") is True
+        assert index.contains("never-probed") is True
+        assert index.is_private("cs-hw1-alice") is None
+        assert len(probed) == 1  # no further probes once the listing is unknown
+        assert "could not list" in capsys.readouterr().err
+
+    def test_malformed_rest_of_listing_fails_open(self, monkeypatch, capsys):
+        index, _, _ = self._index(
+            monkeypatch, last=3, rest_error=cs.IncompleteListing("orgs/cs50/repos: loop")
+        )
+        # A hint larger than the pages left reads the rest inside _read.
+        index.prefetch(["cs-hw1-alice", "cs-hw1-bob", "cs-hw1-carol"])
+        assert index.contains("cs-hw1-carol") is True
+        assert "malformed" in capsys.readouterr().err
+
+    def test_throttled_rest_of_listing_propagates(self, monkeypatch):
+        index, _, _ = self._index(
+            monkeypatch,
+            last=11,
+            rest_error=http_error(403, {"Retry-After": "60"}, b"secondary rate limit"),
+        )
+        index.prefetch(["cs-hw1-alice"])
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.names()
+        # Still in probe mode: the next attempt retries the completion.
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.names()
 
     def test_no_hint_reads_the_whole_listing(self, monkeypatch):
         monkeypatch.setattr(cs, "list_org_repos", lambda *a, **k: {"cs-hw1-alice": False})
@@ -5041,38 +5103,118 @@ class TestRepoIndexProbeMode:
         index = cs.RepoIndex(self.API, "cs50", "tok")
         assert index.contains("cs-hw1-alice") is True
 
+    def test_single_page_org_with_a_hint_is_the_listing(self, monkeypatch):
+        index, probed, rest_reads = self._index(monkeypatch, last=1)
+        index.prefetch(["cs-hw1-alice"])
+        assert probed == [] and rest_reads == []
+        assert index.contains("starter") is True
+        assert index.contains("cs-hw1-alice") is False
+
     def test_empty_first_page_is_unknown(self, monkeypatch):
-        index, probed, _ = self._index(monkeypatch, pages_left=0, page1={})
+        index, probed, _ = self._index(monkeypatch, last=1, page1={})
         index.prefetch(["cs-hw1-alice"])
         assert index.contains("anything") is True
         assert probed == []
 
 
+class TestCollectPassHintsEveryPoll:
+    """collect_classroom must hand the index every name it will ask about, or
+    each miss costs a request; the hint list is derived separately from the
+    poll loop, so the two are pinned to agree here."""
+
+    class RecordingIndex:
+        def __init__(self):
+            self.hinted: set[str] = set()
+            self.unhinted: list[str] = []
+
+        def prefetch(self, names):
+            self.hinted.update(n.lower() for n in names)
+
+        def contains(self, name):
+            if name.lower() not in self.hinted:
+                self.unhinted.append(name)
+            return False
+
+        def is_private(self, name):
+            return None
+
+        def names(self):
+            return []
+
+    ASSIGNMENTS = {
+        "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+        "assignments": [
+            {"slug": "hw1"},
+            {"slug": "hw2", "mode": "group"},
+            {"slug": "proj", "mode": "team"},
+            {"slug": "warmup", "empty_repo": True},
+            {"slug": "essay", "no_autograder": True},
+        ],
+    }
+
+    @pytest.mark.parametrize("assignment_filter", ["", "essay"])
+    def test_every_polled_name_was_hinted(self, monkeypatch, assignment_filter):
+        monkeypatch.setattr(
+            cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"]
+        )
+        index = self.RecordingIndex()
+        cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short="cs",
+            classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short": "cs", "name": "CS"},
+            assignments=self.ASSIGNMENTS,
+            service_token="tok",
+            assignment_filter=assignment_filter,
+            repo_index=index,
+        )
+        assert index.unhinted == []
+        assert index.hinted  # the pass did ask about something
+
+
 class TestListOrgReposFirstPage:
     BASE = "https://api.github.com/orgs/cs50/repos?per_page=100"
 
-    def test_reports_pages_left_from_rel_last(self, monkeypatch):
+    def test_reports_the_page_count_from_rel_last(self, monkeypatch):
         def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            self.url = url
             return (
                 json.dumps([{"name": "A", "private": True}]).encode(),
                 _link(self.BASE, next_page=2, last=90),
             )
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
-        repos, left = cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok")
-        assert repos == {"a": True} and left == 89
+        repos, last = cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok")
+        assert repos == {"a": True} and last == 90
+        # Oldest first: a repo created mid-walk lands after the pages in flight.
+        assert "sort=created" in self.url and "direction=asc" in self.url
 
-    def test_single_page_has_nothing_left(self, monkeypatch):
+    def test_single_page_counts_as_one(self, monkeypatch):
         def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
             return json.dumps([{"name": "a"}]).encode(), {}
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
         assert cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok") == (
             {"a": False},
-            0,
+            1,
         )
 
-    def test_rest_fetches_pages_two_onward(self, monkeypatch):
+    def test_next_without_last_walks_everything_reading_page_one_once(self, monkeypatch):
+        seen: list[int] = []
+        pages = {1: [{"name": f"p1-{i}"} for i in range(100)], 2: [{"name": "p2-0"}]}
+
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            page = int(re.search(r"[?&]page=(\d+)", url).group(1))
+            seen.append(page)
+            headers = _link(self.BASE, next_page=2) if page == 1 else {}
+            return json.dumps(pages[page]).encode(), headers
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        repos, last = cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok")
+        assert len(repos) == 101 and last == 1
+        assert seen == [1, 2]
+
+    def test_rest_fetches_pages_two_through_last(self, monkeypatch):
         seen: list[int] = []
 
         def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
@@ -5081,9 +5223,50 @@ class TestListOrgReposFirstPage:
             return json.dumps([{"name": f"r{page}", "private": page == 3}]).encode(), {}
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
-        got = cs.list_org_repos_rest("https://api.github.com", "cs50", "tok", 3)
+        got = cs.list_org_repos_rest("https://api.github.com", "cs50", "tok", 4)
         assert sorted(seen) == [2, 3, 4]
         assert got == {"r2": False, "r3": True, "r4": False}
+
+
+class TestThrottleBudgetUnderConcurrency:
+    """The sleep budget is wall-clock: eight workers waiting out the same
+    throttle at once spend it once, while one thread's back-to-back waits each
+    count in full."""
+
+    @pytest.fixture(autouse=True)
+    def _fresh_budget(self):
+        cs._throttle_sleep_spent = 0.0
+        cs._throttle_sleep_until = 0.0
+        cs._throttle_local.__dict__.clear()
+        yield
+        cs._throttle_sleep_spent = 0.0
+        cs._throttle_sleep_until = 0.0
+        cs._throttle_local.__dict__.clear()
+
+    def test_overlapping_waits_on_other_threads_count_once(self):
+        import threading
+
+        refused: list[bool] = []
+        barrier = threading.Barrier(cs.PARALLEL_PAGE_WORKERS)
+
+        def worker():
+            barrier.wait(timeout=5)
+            refused.append(cs.throttle_sleep_budget_spent(60))
+
+        threads = [threading.Thread(target=worker) for _ in range(cs.PARALLEL_PAGE_WORKERS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        assert refused == [False] * cs.PARALLEL_PAGE_WORKERS
+        # Threads arrive microseconds apart, so the union is a hair over 60s.
+        assert 60 <= cs._throttle_sleep_spent < 61
+
+    def test_sequential_waits_on_one_thread_each_count(self):
+        for _ in range(5):
+            assert cs.throttle_sleep_budget_spent(60) is False
+        assert cs._throttle_sleep_spent == 300
+        assert cs.throttle_sleep_budget_spent(1) is True
 
 
 class TestProbeOrgRepos:

@@ -334,6 +334,11 @@ function latestCommitDetectedAt(
 // match, sibling-slug guard) is shared with existingAssignmentRepos so the two
 // repo-list-derived signals can never disagree on which repos belong to an
 // assignment. Returns the winning repo's ISO `pushed_at`.
+//
+// For an individual assignment the page reads a roster-scoped slice of the
+// listing (useAssignmentRepos), so a push to a repo whose owner has since left
+// the classroom no longer counts: the gradebook does not list that person
+// either, so the heuristic and the table agree on whose work is "out of date".
 export function latestAssignmentPush(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
@@ -1581,4 +1586,48 @@ export function paginationRange(
     prev = p
   }
   return out
+}
+
+// Logins whose `<classroom>-<assignment>-<login>` repo the submissions page
+// looks up, for the roster-scoped org repo read (useAssignmentRepos). Every
+// enrolled row counts, students and staff alike (a staff member who accepted is
+// a gradee too). `undefined` for a shared-repo assignment: a team repo's
+// `group-<n>` segment is not derivable from any login, so the page reads the
+// whole listing instead.
+export function assignmentRepoCandidateLogins(
+  isGroupFlavor: boolean,
+  teamRows: readonly TeamRosterRow[],
+): string[] | undefined {
+  if (isGroupFlavor) return undefined
+  return teamRows
+    .filter((row) => row.state === "enrolled")
+    .map((row) => row.username)
+}
+
+// Whether the org repo read may start. The assignment shape decides which read
+// runs (scoped or full), so it must be known first; the scoped read also needs
+// the roster, since its candidate names come from it. A shared-repo assignment
+// does not wait for the roster.
+export function orgReposReadEnabled(args: {
+  assignmentLoading: boolean
+  isGroupFlavor: boolean
+  rosterLoading: boolean
+}): boolean {
+  return !args.assignmentLoading && (args.isGroupFlavor || !args.rosterLoading)
+}
+
+// Whether to show "Checking who accepted..." in place of the submission
+// progress bar: the bar's denominator comes from the org repo read, so until
+// that resolves the wait is explained where the bar will appear. Never for an
+// empty_repo assignment, which has no repos to check.
+export function showCheckingAccepted(args: {
+  showSubmissionProgress: boolean
+  orgReposPending: boolean
+  isEmptyRepoAssignment: boolean
+}): boolean {
+  return (
+    !args.showSubmissionProgress &&
+    args.orgReposPending &&
+    !args.isEmptyRepoAssignment
+  )
 }

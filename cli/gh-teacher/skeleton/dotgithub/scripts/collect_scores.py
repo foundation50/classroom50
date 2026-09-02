@@ -119,7 +119,15 @@ TRANSIENT_RETRY_CAP_SECONDS = 30
 MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
 
 _throttle_sleep_spent = 0.0
-# Guards _throttle_sleep_spent and _request_count: the bulk listings fetch
+# Wall-clock accounting for the budget above. Bulk listings sleep out a
+# throttle on up to PARALLEL_PAGE_WORKERS threads at once; charging each thread
+# would spend the whole budget on one episode. Overlapping waits count once:
+# `_throttle_sleep_until` is the latest deadline any thread is waiting for, and
+# a thread's own waits are sequential, so its next wait starts at its own last
+# deadline (kept in `_throttle_local`), never earlier.
+_throttle_sleep_until = 0.0
+_throttle_local = threading.local()
+# Guards the throttle accounting and _request_count: the bulk listings fetch
 # pages on a thread pool, so the transport runs concurrently.
 _transport_lock = threading.Lock()
 _request_count = 0
@@ -633,11 +641,12 @@ class RepoIndex:
         self._token = token
         self._repos: dict[str, bool] | None = None
         self._loaded = False
+        self._started = 0.0
         # Probe mode: page 1 plus per-name answers. `_found` maps a name to its
         # private flag, or None when its read failed (unknown, fails open);
-        # `_missing` holds the names that 404ed.
+        # `_missing` holds the names that 404ed so they are not probed twice.
         self._probing = False
-        self._pages_left = 0
+        self._last_page = 1
         self._probes_spent = 0
         self._found: dict[str, bool | None] = {}
         self._missing: set[str] = set()
@@ -661,22 +670,16 @@ class RepoIndex:
         rather than spending the run on the degraded answer."""
         if self._loaded:
             return self._repos
+        self._started = time.monotonic()
         self._repos = self._read(hint)
         self._loaded = True
         return self._repos
 
-    def _read(self, hint: list[str] | None) -> dict[str, bool] | None:
-        """One attempt at the org listing (or, given a small enough hint, its
-        first page plus probes)."""
-        started = time.monotonic()
+    def _soft_read(self, read: Callable[[], Any]) -> Any:
+        """Run one listing read. A SKIPPABLE HTTP error or a malformed body warns
+        and returns None (unknown, so callers fail open); anything else raises."""
         try:
-            if hint is None:
-                repos = list_org_repos(self._api_url, self._org, self._token)
-                pages_left = 0
-            else:
-                repos, pages_left = list_org_repos_first_page(
-                    self._api_url, self._org, self._token
-                )
+            return read()
         except urllib.error.HTTPError as exc:
             if classify(exc) is not SKIPPABLE:
                 raise
@@ -693,46 +696,72 @@ class RepoIndex:
                 f"falling back to probing every (member, assignment) repo name."
             )
             return None
+
+    def _read(self, hint: list[str] | None) -> dict[str, bool] | None:
+        """One attempt at the org listing (or, given a small enough hint, its
+        first page plus probes)."""
+        if hint is None:
+            repos = self._soft_read(
+                lambda: list_org_repos(self._api_url, self._org, self._token)
+            )
+            return self._listing(repos)
+        first = self._soft_read(
+            lambda: list_org_repos_first_page(self._api_url, self._org, self._token)
+        )
+        if first is None:
+            return None
+        repos, last = first
         # Unknown, not "nothing exists": a token scoped to zero repos must not
         # silently skip every poll.
         if not repos:
             return None
-        if pages_left:
-            unresolved = [name for name in (hint or []) if name not in repos]
-            if len(unresolved) <= pages_left:
+        if last > 1:
+            unresolved = [name for name in hint if name not in repos]
+            if len(unresolved) <= last - 1:
                 self._probing = True
-                self._pages_left = pages_left
+                self._last_page = last
                 self._found = dict(repos)
                 print(
-                    f"{self._org}: {pages_left + 1} page(s) of repos; checking "
+                    f"{self._org}: {last} page(s) of repos; checking "
                     f"{len(unresolved)} candidate repo name(s) directly instead"
                 )
                 return None
-            repos.update(
-                list_org_repos_rest(self._api_url, self._org, self._token, pages_left)
+            rest = self._soft_read(
+                lambda: list_org_repos_rest(self._api_url, self._org, self._token, last)
             )
+            if rest is None:
+                return None
+            repos.update(rest)
+        return self._listing(repos)
+
+    def _listing(self, repos: dict[str, bool] | None) -> dict[str, bool] | None:
+        """Accept a complete listing, treating empty as unknown."""
+        if not repos:
+            return None
         print(
             f"{self._org}: {len(repos)} repo(s) visible to the service token "
-            f"({time.monotonic() - started:.1f}s)"
+            f"({time.monotonic() - self._started:.1f}s)"
         )
         return repos
 
-    def _complete_listing(self) -> dict[str, bool]:
+    def _complete_listing(self) -> dict[str, bool] | None:
         """Leave probe mode by reading the rest of the listing. Probed answers
         are kept: a name found by probe is in the org whether or not it lands on
-        a page (a repo created mid-walk shifts the pages)."""
-        rest = list_org_repos_rest(
-            self._api_url, self._org, self._token, self._pages_left
+        a page (a repo created mid-walk shifts the pages). A soft failure leaves
+        the listing unknown, like a failed first read."""
+        rest = self._soft_read(
+            lambda: list_org_repos_rest(
+                self._api_url, self._org, self._token, self._last_page
+            )
         )
-        repos: dict[str, bool] = {}
-        for name, private in self._found.items():
-            if private is not None:
-                repos[name] = private
-        repos.update(rest)
-        self._repos = repos
         self._probing = False
-        print(f"{self._org}: {len(repos)} repo(s) visible to the service token")
-        return repos
+        if rest is None:
+            self._repos = None
+            return None
+        repos = {name: private for name, private in self._found.items() if private is not None}
+        repos.update(rest)
+        self._repos = self._listing(repos)
+        return self._repos
 
     def _resolved(self, name: str) -> bool:
         return name in self._found or name in self._missing
@@ -742,46 +771,40 @@ class RepoIndex:
         probes would cost more than the pages they stand in for."""
         if not names:
             return
-        if self._probes_spent + len(names) > self._pages_left:
+        if self._probes_spent + len(names) > self._last_page - 1:
             self._complete_listing()
             return
-        self._probes_spent += len(names)
         found = probe_org_repos(self._api_url, self._org, names, self._token)
+        self._probes_spent += len(names)
         self._found.update(found)
         self._missing.update(name for name in names if name not in found)
 
-    def _lookup(self, name: str) -> None:
-        """Probe-mode resolution of one lowercased name, if not yet known. May
-        leave probe mode (see _probe), after which `_repos` holds the answer."""
-        if not self._resolved(name):
-            self._probe([name])
+    def _answers(self, name: str) -> dict[str, bool | None] | None:
+        """The map that holds `name`'s answer: the listing, or in probe mode the
+        probe results once `name` is resolved (which may complete the listing).
+        None when the listing is unknown. In probe mode an unknown name maps to
+        None and a 404 name is absent, so both maps read the same way."""
+        repos = self._load()
+        if repos is None and self._probing:
+            if not self._resolved(name):
+                self._probe([name])
+            return self._found if self._probing else self._repos
+        return repos
 
     def contains(self, repo_name: str) -> bool:
         """Whether `repo_name` exists — True whenever the listing is unknown, so
         an unreadable index never hides a repo from either pass."""
         name = repo_name.lower()
-        repos = self._load()
-        if repos is None and self._probing:
-            self._lookup(name)
-            if self._probing:
-                return name not in self._missing
-            repos = self._repos
-        return repos is None or name in repos
+        answers = self._answers(name)
+        return answers is None or name in answers
 
     def is_private(self, repo_name: str) -> bool | None:
         """Whether `repo_name` is private, or None when the index can't say (the
         listing was unreadable, or the name isn't in it). Answers from the
         listing already read, saving the caller a per-repo request."""
         name = repo_name.lower()
-        repos = self._load()
-        if repos is None and self._probing:
-            self._lookup(name)
-            if self._probing:
-                return self._found.get(name)
-            repos = self._repos
-        if repos is None:
-            return None
-        return repos.get(name)
+        answers = self._answers(name)
+        return None if answers is None else answers.get(name)
 
     def names(self) -> list[str] | None:
         """Every visible repo name (lowercased), or None when the listing is
@@ -2948,6 +2971,40 @@ def _fetch_pages_parallel(
             raise
 
 
+def _first_page(
+    page_url: Callable[[int], str],
+    api_url: str,
+    token: str,
+    resource_label: str,
+) -> tuple[list[dict[str, Any]], int | None]:
+    """Page 1 of a list endpoint and its page count from `Link: rel="last"`.
+
+    A None count means the returned items are already the whole listing: the
+    header named no other page, or it named only a `rel="next"` (a
+    cursor-paginated endpoint), in which case the walk is finished here by
+    _paginate_objects without re-reading page 1. Raises IncompleteListing when
+    the count exceeds MAX_LISTING_PAGES; otherwise the _paginate_objects error
+    contract applies."""
+    batch, headers = _fetch_page(page_url(1), token)
+    link_header = headers.get("Link") if headers else None
+    last = _last_page_number(link_header, api_url)
+    if last is None:
+        if _next_page_link(link_header):
+            return (
+                _paginate_objects(
+                    page_url, api_url, token, resource_label, first=(batch, headers)
+                ),
+                None,
+            )
+        return _dict_items(batch), None
+    if last > MAX_LISTING_PAGES:
+        raise IncompleteListing(
+            f"{resource_label}: too many entries to enumerate "
+            f"({last} pages, cap {MAX_LISTING_PAGES})"
+        )
+    return _dict_items(batch), last
+
+
 def _paginate_objects_parallel(
     page_url: Callable[[int], str],
     api_url: str,
@@ -2955,32 +3012,13 @@ def _paginate_objects_parallel(
     resource_label: str,
 ) -> list[dict[str, Any]]:
     """Every object of a paginated list endpoint, with pages 2..last fetched
-    concurrently.
+    concurrently. The remaining pages are built from `page_url` (same host by
+    construction, so no Link is followed) and fetched on a thread pool.
 
-    Page 1 is read alone; its `Link: rel="last"` names the page count, and the
-    remaining pages are built from `page_url` (same host by construction, so no
-    Link is followed) and fetched on a thread pool. An org with 9,000 repos is
-    90 pages: sequentially that is minutes, in parallel it is seconds. When the
-    header names no last page but does name a next one (a cursor-paginated
-    endpoint), the walk falls back to _paginate_objects.
-
-    Same error contract as _paginate_objects: urllib.error.HTTPError on any
-    non-2xx, ValueError on a non-array body, IncompleteListing when the page
-    count exceeds MAX_LISTING_PAGES.
-    """
-    first, headers = _fetch_page(page_url(1), token)
-    link_header = headers.get("Link") if headers else None
-    last = _last_page_number(link_header, api_url)
+    Same error contract as _first_page."""
+    items, last = _first_page(page_url, api_url, token, resource_label)
     if last is None:
-        if _next_page_link(link_header):
-            return _paginate_objects(page_url, api_url, token, resource_label)
-        return _dict_items(first)
-    if last > MAX_LISTING_PAGES:
-        raise IncompleteListing(
-            f"{resource_label}: too many entries to enumerate "
-            f"({last} pages, cap {MAX_LISTING_PAGES})"
-        )
-    items = _dict_items(first)
+        return items
     for batch in _fetch_pages_parallel(page_url, token, range(2, last + 1)):
         items.extend(batch)
     return items
@@ -3011,6 +3049,7 @@ def _paginate_objects(
     token: str,
     resource_label: str,
     stop_after: Callable[[dict[str, Any]], bool] | None = None,
+    first: tuple[list[Any], Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Walk a paginated GitHub list endpoint, returning every object it yields.
 
@@ -3025,6 +3064,9 @@ def _paginate_objects(
     accept-baseline commit), sparing the rest of a long history. The whole page
     is still returned, so the caller cuts precisely.
 
+    `first` (optional) is page 1 as (raw array, headers) already read by the
+    caller, so a walk that starts elsewhere does not fetch it twice.
+
     Raises urllib.error.HTTPError on any non-2xx (including 404) so the caller
     can choose soft fallback vs. hard failure; raises ValueError on a non-array
     body, and IncompleteListing (a ValueError) when the walk can't be completed
@@ -3036,7 +3078,10 @@ def _paginate_objects(
     url = page_url(1)
     seen_next: set[str] = set()
     for page in range(1, max_pages + 1):
-        batch, headers = _fetch_page(url, token)
+        if page == 1 and first is not None:
+            batch, headers = first
+        else:
+            batch, headers = _fetch_page(url, token)
         page_items = _dict_items(batch)
         items.extend(page_items)
         if stop_after is not None and any(stop_after(item) for item in page_items):
@@ -3144,8 +3189,12 @@ def list_team_member_logins(
 
 
 def _org_repos_page_url(api_url: str, org: str) -> Callable[[int], str]:
+    # Oldest first, so a repo created while pages 2..last are in flight lands
+    # after them instead of shifting every page (the default is newest first).
     base = f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/repos"
-    return lambda page: f"{base}?per_page=100&page={page}&type=all"
+    return lambda page: (
+        f"{base}?per_page=100&page={page}&type=all&sort=created&direction=asc"
+    )
 
 
 def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
@@ -3170,36 +3219,25 @@ def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
 def list_org_repos_first_page(
     api_url: str, org: str, token: str
 ) -> tuple[dict[str, bool], int]:
-    """Page 1 of the org listing as (lowercased name -> private, pages left).
-    0 pages left means the map already is the whole listing. Lets RepoIndex
+    """Page 1 of the org listing as (lowercased name -> private, page count).
+    A count of 1 means the map already is the whole listing. Lets RepoIndex
     learn the org's size from one request before deciding whether listing the
     rest or probing the candidate names is cheaper.
 
     Same error contract as list_org_repos."""
-    page_url = _org_repos_page_url(api_url, org)
-    batch, headers = _fetch_page(page_url(1), token)
-    link_header = headers.get("Link") if headers else None
-    last = _last_page_number(link_header, api_url)
-    if last is None:
-        if _next_page_link(link_header):
-            # No page count to plan with: take the whole listing now.
-            return list_org_repos(api_url, org, token), 0
-        return _repo_privacy_map(_dict_items(batch)), 0
-    if last > MAX_LISTING_PAGES:
-        raise IncompleteListing(
-            f"orgs/{org}/repos: too many entries to enumerate "
-            f"({last} pages, cap {MAX_LISTING_PAGES})"
-        )
-    return _repo_privacy_map(_dict_items(batch)), last - 1
+    items, last = _first_page(
+        _org_repos_page_url(api_url, org), api_url, token, f"orgs/{org}/repos"
+    )
+    return _repo_privacy_map(items), last or 1
 
 
 def list_org_repos_rest(
-    api_url: str, org: str, token: str, pages_left: int
+    api_url: str, org: str, token: str, last: int
 ) -> dict[str, bool]:
-    """Pages 2..(pages_left + 1) of the org listing, fetched in parallel. The
-    second half of list_org_repos_first_page."""
+    """Pages 2..last of the org listing, fetched in parallel. The second half
+    of list_org_repos_first_page."""
     batches = _fetch_pages_parallel(
-        _org_repos_page_url(api_url, org), token, range(2, pages_left + 2)
+        _org_repos_page_url(api_url, org), token, range(2, last + 1)
     )
     return _repo_privacy_map(item for batch in batches for item in batch)
 
@@ -3708,12 +3746,21 @@ def throttle_sleep_budget_spent(delay: float) -> bool:
 
     A recovering throttle raises nothing, so the sleeps stay invisible until the
     job timeout kills the run. This ceiling converts that into the named
-    THROTTLED error instead."""
-    global _throttle_sleep_spent
+    THROTTLED error instead.
+
+    Charged in wall-clock seconds: the part of this wait that extends past every
+    wait already in progress on another thread (see _throttle_sleep_until)."""
+    global _throttle_sleep_spent, _throttle_sleep_until
+    now = time.monotonic()
     with _transport_lock:
-        if _throttle_sleep_spent + delay > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
+        start = max(now, getattr(_throttle_local, "sleep_until", 0.0))
+        end = start + delay
+        charge = max(0.0, end - max(start, _throttle_sleep_until))
+        if _throttle_sleep_spent + charge > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
             return True
-        _throttle_sleep_spent += delay
+        _throttle_sleep_spent += charge
+        _throttle_sleep_until = max(_throttle_sleep_until, end)
+        _throttle_local.sleep_until = end
         return False
 
 

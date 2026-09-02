@@ -43,12 +43,15 @@ import {
   rowPassState,
   scoreTone,
   selectActiveWorkflowAction,
+  showCheckingAccepted,
   showsNonSubmitters,
   snapshotIsStale,
   statusSelectValue,
   submissionRosterStudents,
   teamMissingForOwner,
   teamsWithoutRepos,
+  assignmentRepoCandidateLogins,
+  orgReposReadEnabled,
   type SubmissionFilters,
 } from "./dashboard"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
@@ -2565,5 +2568,118 @@ describe("pagination helpers", () => {
       // Near the start, no gap between first and the neighbor cluster.
       expect(paginationRange(1, 20)).toEqual([0, 1, 2, null, 19])
     })
+  })
+})
+
+describe("assignmentRepoCandidateLogins", () => {
+  it("names every enrolled row, students and staff alike", () => {
+    const rows = [
+      teamRow({ username: "alice" }),
+      teamRow({ username: "Prof", roles: ["teacher"] }),
+      teamRow({ username: "invited", state: "pending" }),
+      teamRow({ username: "csvonly", state: "unlinked" }),
+    ]
+    expect(assignmentRepoCandidateLogins(false, rows)).toEqual([
+      "alice",
+      "Prof",
+    ])
+  })
+
+  it("agrees with the gradee roster on who can be looked up", () => {
+    // Every student the table lists as a gradee must be a candidate, or the
+    // scoped read would report them as not accepted.
+    const rows = [
+      teamRow({ username: "alice" }),
+      teamRow({ username: "bob" }),
+      teamRow({ username: "Prof", roles: ["teacher"] }),
+      teamRow({ username: "invited", state: "pending" }),
+    ]
+    const candidates = new Set(
+      assignmentRepoCandidateLogins(false, rows)?.map((l) => l.toLowerCase()),
+    )
+    const students = submissionRosterStudents(rows, {
+      acceptedStaffLogins: new Set(["prof"]),
+      groupRepoMembers: new Set(),
+    })
+    expect(students).toHaveLength(3)
+    for (const student of students) {
+      expect(candidates.has(student.username.toLowerCase())).toBe(true)
+    }
+  })
+
+  it("is undefined for a shared-repo assignment", () => {
+    expect(assignmentRepoCandidateLogins(true, [teamRow()])).toBeUndefined()
+  })
+})
+
+describe("orgReposReadEnabled", () => {
+  it("waits for the assignment shape", () => {
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: true,
+        isGroupFlavor: false,
+        rosterLoading: false,
+      }),
+    ).toBe(false)
+  })
+
+  it("waits for the roster only when the read is roster-scoped", () => {
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: false,
+        isGroupFlavor: false,
+        rosterLoading: true,
+      }),
+    ).toBe(false)
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: false,
+        isGroupFlavor: true,
+        rosterLoading: true,
+      }),
+    ).toBe(true)
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: false,
+        isGroupFlavor: false,
+        rosterLoading: false,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe("showCheckingAccepted", () => {
+  it("shows only while the read is pending and the bar is not up", () => {
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: false,
+        orgReposPending: true,
+        isEmptyRepoAssignment: false,
+      }),
+    ).toBe(true)
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: true,
+        orgReposPending: true,
+        isEmptyRepoAssignment: false,
+      }),
+    ).toBe(false)
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: false,
+        orgReposPending: false,
+        isEmptyRepoAssignment: false,
+      }),
+    ).toBe(false)
+  })
+
+  it("never shows for an empty_repo assignment", () => {
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: false,
+        orgReposPending: true,
+        isEmptyRepoAssignment: true,
+      }),
+    ).toBe(false)
   })
 })

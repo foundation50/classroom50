@@ -139,4 +139,51 @@ describe("useAssignmentRepos", () => {
     await client.invalidateQueries({ queryKey: githubKeys.orgRepos("acme") })
     await waitFor(() => expect(listed).toEqual([1, 1]))
   })
+
+  it("stores a walk that covered the whole org under the full-listing key", async () => {
+    // A roster larger than the pages left walks the org; the assignments page
+    // (useGetOrgRepos) must not walk it again.
+    const { listed } = serveOrg({ lastPage: 3, existing: ["cs101-hw1-alice"] })
+    const client = makeClient()
+    const { result } = renderHook(
+      () =>
+        useAssignmentRepos({
+          ...base,
+          logins: ["alice", "bob", "carol", "dan"],
+        }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(listed.sort()).toEqual([1, 2, 3])
+    const full = client.getQueryData<{ name: string }[]>(
+      githubKeys.orgRepos("acme"),
+    )
+    expect(full?.map((r) => r.name)).toContain("cs101-hw1-alice")
+  })
+
+  it("does not store a probe result as the full listing", async () => {
+    serveOrg({ lastPage: 20, existing: [] })
+    const client = makeClient()
+    const { result } = renderHook(
+      () => useAssignmentRepos({ ...base, logins: ["alice"] }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(client.getQueryData(githubKeys.orgRepos("acme"))).toBeUndefined()
+  })
+
+  it("answers from a fresh full listing without a request", async () => {
+    serveOrg({ lastPage: 20, existing: [] })
+    const client = makeClient()
+    client.setQueryData(githubKeys.orgRepos("acme"), [
+      { name: "cs101-hw1-alice", private: true },
+    ])
+    const { result } = renderHook(
+      () => useAssignmentRepos({ ...base, logins: ["alice"] }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(request).not.toHaveBeenCalled()
+    expect(result.current.data?.map((r) => r.name)).toEqual(["cs101-hw1-alice"])
+  })
 })

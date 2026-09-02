@@ -9,7 +9,7 @@ import {
   tolerateGitHubError,
 } from "../errors"
 import { createTeam } from "../teamWrites"
-import { paginateAll } from "../paginate"
+import { PAGE_FETCH_CONCURRENCY, paginateAll } from "../paginate"
 import { githubKeys } from "./keys"
 
 export async function getTeam(
@@ -80,6 +80,7 @@ export async function listTeamMembers(
           `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
             teamSlug,
           )}/members?per_page=100&page=${page}`,
+        { concurrency: PAGE_FETCH_CONCURRENCY },
       ),
     [],
   )
@@ -134,6 +135,7 @@ export async function listOrgTeams(
         client,
         (page) =>
           `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
+        { concurrency: PAGE_FETCH_CONCURRENCY },
       ),
     [],
   )

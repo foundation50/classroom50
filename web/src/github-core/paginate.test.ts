@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 
-import { lastPageNumber, paginateAll } from "./paginate"
+import { lastPageNumber, PAGE_FETCH_CONCURRENCY, paginateAll } from "./paginate"
 import type { GitHubClient, GitHubRequestOptions } from "./client"
 import { GitHubAPIError } from "./errors"
 
@@ -67,7 +67,7 @@ const apiError = (status: number, retryAfter: number | null = null) =>
 describe("paginateAll", () => {
   const makePath = (page: number) => `${BASE}&page=${page}`
 
-  it("fetches pages 2..last concurrently after page 1 names the count", async () => {
+  it("fetches pages 2..last concurrently when a bulk listing opts in", async () => {
     const pages = {
       1: pageOf(1),
       2: pageOf(2),
@@ -75,7 +75,9 @@ describe("paginateAll", () => {
       4: pageOf(4, 7),
     }
     const { client, requested, peak } = fakeClient({ pages, last: 4 })
-    const all = await paginateAll<{ id: number }>(client, makePath)
+    const all = await paginateAll<{ id: number }>(client, makePath, {
+      concurrency: PAGE_FETCH_CONCURRENCY,
+    })
     expect(all).toHaveLength(307)
     // Page order survives the parallel fetch.
     expect(all.map((r) => r.id).filter((id) => id % 1000 === 0)).toEqual([
@@ -84,6 +86,14 @@ describe("paginateAll", () => {
     expect(requested[0]).toBe(1)
     expect([...requested].sort()).toEqual([1, 2, 3, 4])
     expect(peak()).toBeGreaterThan(1)
+  })
+
+  it("reads one page at a time by default (callers may sit inside a read slot)", async () => {
+    const pages = { 1: pageOf(1), 2: pageOf(2), 3: pageOf(3, 1) }
+    const { client, requested, peak } = fakeClient({ pages, last: 3 })
+    await paginateAll(client, makePath)
+    expect(requested).toEqual([1, 2, 3])
+    expect(peak()).toBe(1)
   })
 
   it("honours the concurrency option", async () => {
@@ -157,7 +167,7 @@ describe("paginateAll", () => {
     }
   })
 
-  it("waits out a rate limit on one page", async () => {
+  it("waits out a short rate limit on one page", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     try {
       const pages = { 1: pageOf(1), 2: pageOf(2, 1) }
@@ -172,6 +182,77 @@ describe("paginateAll", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("fails at once on a rate limit longer than a page load can absorb", async () => {
+    // A real secondary limit asks for ~60s; re-requesting after 8s would only
+    // burn requests while GitHub is still refusing.
+    const { client, requested } = fakeClient({
+      pages: { 1: pageOf(1) },
+      last: 2,
+      failures: { 2: [apiError(403, 60)] },
+    })
+    await expect(
+      paginateAll(client, makePath, { retryPages: true }),
+    ).rejects.toMatchObject({ status: 403 })
+    expect(requested.filter((p) => p === 2)).toHaveLength(1)
+  })
+
+  it("fails at once on a rate limit with no Retry-After", async () => {
+    const primaryLimit = new GitHubAPIError({
+      status: 403,
+      url: BASE,
+      message: "API rate limit exceeded",
+      body: null,
+      rateLimit: {
+        limit: 5000,
+        remaining: 0,
+        used: 5000,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+    const { client, requested } = fakeClient({
+      pages: { 1: pageOf(1) },
+      last: 2,
+      failures: { 2: [primaryLimit] },
+    })
+    await expect(
+      paginateAll(client, makePath, { retryPages: true }),
+    ).rejects.toMatchObject({ status: 403 })
+    expect(requested.filter((p) => p === 2)).toHaveLength(1)
+  })
+
+  it("aborts the sibling pages once one page fails for good", async () => {
+    const seenSignals: AbortSignal[] = []
+    let inFlight = 0
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        const page = Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1)
+        if (page === 1) {
+          options?.onHeaders?.(new Headers({ link: linkHeader(4) }))
+          return pageOf(1)
+        }
+        if (options?.signal) seenSignals.push(options.signal)
+        if (page === 2) throw apiError(404)
+        // Pages 3 and 4 are slow; they should be aborted, not completed.
+        inFlight++
+        await new Promise((_, reject) => {
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        })
+        return []
+      },
+    )
+    await expect(
+      paginateAll({ request } as unknown as GitHubClient, makePath, {
+        concurrency: PAGE_FETCH_CONCURRENCY,
+      }),
+    ).rejects.toMatchObject({ status: 404 })
+    expect(inFlight).toBe(2)
+    expect(seenSignals.every((s) => s.aborted)).toBe(true)
   })
 
   it("does not retry a definitive status", async () => {
@@ -203,24 +284,29 @@ describe("paginateAll", () => {
     }
   })
 
-  it("forwards the caller's signal to every page", async () => {
-    const seen: Array<AbortSignal | undefined> = []
+  it("forwards the caller's abort to every page", async () => {
+    const seen: AbortSignal[] = []
+    const controller = new AbortController()
     const request = vi.fn(
       async (path: string, options?: GitHubRequestOptions) => {
-        seen.push(options?.signal)
+        if (options?.signal) seen.push(options.signal)
         if (/page=1\b/.test(path)) {
           options?.onHeaders?.(new Headers({ link: linkHeader(2) }))
           return pageOf(1)
         }
+        // The caller gives up while page 2 is in flight.
+        controller.abort()
         return pageOf(2, 1)
       },
     )
-    const controller = new AbortController()
     await paginateAll({ request } as unknown as GitHubClient, makePath, {
       signal: controller.signal,
     })
     expect(seen).toHaveLength(2)
-    expect(seen.every((s) => s === controller.signal)).toBe(true)
+    expect(seen[0]).toBe(controller.signal)
+    // Later pages get the walk's own signal, linked to the caller's.
+    expect(seen[1]).not.toBe(controller.signal)
+    expect(seen[1].aborted).toBe(true)
   })
 
   it("does not retry once aborted", async () => {

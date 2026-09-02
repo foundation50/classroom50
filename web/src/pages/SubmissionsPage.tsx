@@ -66,6 +66,7 @@ import {
   acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
+  assignmentRepoCandidateLogins,
   assignmentRepoNames,
   buildScoresCsvRows,
   buildSectionLookup,
@@ -82,11 +83,13 @@ import {
   effectiveCollectedAt,
   mergeDetectedSubmissions,
   mergeLiveRows,
+  orgReposReadEnabled,
   reconcileNonSubmitters,
   pendingMayHide,
   rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
+  showCheckingAccepted,
   showsNonSubmitters,
   snapshotIsStale,
   sortNameMode,
@@ -254,18 +257,10 @@ const SubmissionsPageContent = () => {
   // staleness heuristic). `refetch` is wired to Collect now + collect-completion so
   // `latestPush` isn't frozen at page load (else a push after load never flips
   // the freshness line to "Out of date").
-  //
   // For an individual assignment the repo names are derivable from the enrolled
-  // roster (students and staff alike), so the read is scoped to them and can
-  // skip walking a large org. Shared-repo flavors read the whole listing: a
-  // team repo's `group-<n>` segment is not derivable from any login.
+  // roster, so the read is scoped to them and can skip walking a large org.
   const candidateLogins = useMemo(
-    () =>
-      isGroupFlavor
-        ? undefined
-        : teamRows
-            .filter((row) => row.state === "enrolled")
-            .map((row) => row.username),
+    () => assignmentRepoCandidateLogins(isGroupFlavor, teamRows),
     [isGroupFlavor, teamRows],
   )
   const {
@@ -278,7 +273,11 @@ const SubmissionsPageContent = () => {
     classroom: classroom ?? "",
     assignment: assignment ?? "",
     logins: candidateLogins,
-    enabled: !assignmentLoading && (isGroupFlavor || !rosterLoading),
+    enabled: orgReposReadEnabled({
+      assignmentLoading,
+      isGroupFlavor,
+      rosterLoading,
+    }),
   })
   // Sibling slugs guard group-repo attribution against a slug-extending sibling
   // ("hw1-bonus" under "hw1"); see existingGroupRepos.
@@ -1285,18 +1284,16 @@ const SubmissionsPageContent = () => {
           // number — and doubles as a one-click jump to who hasn't submitted.
           <MetaStrip
             items={[
-              // The bar's denominator comes from the org repo list. Until that
-              // resolves (a large org is many requests), say so in place,
-              // rather than leaving only the global progress bar to explain the
-              // wait.
-              !showSubmissionProgress &&
-                orgReposPending &&
-                !isEmptyRepoAssignment && (
-                  <MetaItem>
-                    <InlineSpinner />
-                    {t("submissions.funnel.checkingAccepted")}
-                  </MetaItem>
-                ),
+              showCheckingAccepted({
+                showSubmissionProgress,
+                orgReposPending,
+                isEmptyRepoAssignment,
+              }) && (
+                <MetaItem>
+                  <InlineSpinner />
+                  {t("submissions.funnel.checkingAccepted")}
+                </MetaItem>
+              ),
               showSubmissionProgress && (
                 <button
                   type="button"

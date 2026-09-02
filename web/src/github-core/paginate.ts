@@ -10,19 +10,26 @@ const log = logger.scope(LOG_SCOPE_QUERIES)
 // page param and keeps returning full pages can't loop unbounded.
 const MAX_PAGES = 100
 
-// Pages fetched at once after page 1 reveals the count. Separate from
-// REPO_READ_CONCURRENCY on purpose: a listing walk shouldn't starve the per-repo
-// fan-outs that share that semaphore, and vice versa.
+// Pages fetched at once by a bulk listing that opts in via `concurrency`.
+// Separate from REPO_READ_CONCURRENCY on purpose: a listing walk shouldn't
+// starve the per-repo fan-outs that share that semaphore, and vice versa.
 export const PAGE_FETCH_CONCURRENCY = 8
 
 // Per-page retry: a single 15s timeout or 5xx on page 40 of 90 used to fail the
 // whole query and React Query re-walked every page from 1.
 const PAGE_RETRY_ATTEMPTS = 3
 const PAGE_RETRY_BASE_MS = 500
+// A rate limit whose Retry-After is longer than this is not waited out: the
+// page is failed at once rather than re-requested while GitHub is still
+// refusing (the UI reports it and the user retries later).
 const MAX_RATE_LIMIT_WAIT_MS = 8000
 
 export type PaginateOptions = {
   signal?: AbortSignal
+  // Pages fetched at once after page 1 reveals the count. Defaults to 1
+  // because many callers already run inside a per-repo read slot
+  // (withGithubReadSlot); only top-level bulk listings pass
+  // PAGE_FETCH_CONCURRENCY.
   concurrency?: number
   // Retry a page that fails transiently (5xx, rate limit, timeout) instead of
   // failing the walk. Off by default: most callers surface a failure at once
@@ -73,7 +80,7 @@ export async function paginateRemaining<T>(
   first: FirstPage<T>,
   options: PaginateOptions = {},
 ): Promise<T[]> {
-  const { concurrency = PAGE_FETCH_CONCURRENCY } = options
+  const { concurrency = 1 } = options
 
   if (first.lastPage === null) {
     return paginateSequentially(client, makePath, first.items, options)
@@ -87,11 +94,24 @@ export async function paginateRemaining<T>(
     })
   }
 
+  // One page failing definitively ends the walk; the sibling pages in flight
+  // are aborted rather than left to finish (and retry) for nothing.
+  const walk = new AbortController()
+  const onCallerAbort = () => walk.abort(options.signal?.reason)
+  options.signal?.addEventListener("abort", onCallerAbort, { once: true })
+  const pageOptions = { ...options, signal: walk.signal }
   const pages = Array.from({ length: lastPage - 1 }, (_, i) => i + 2)
-  const rest = await mapWithConcurrency(pages, concurrency, (page) =>
-    fetchPage<T>(client, makePath(page), options),
-  )
-  return first.items.concat(...rest)
+  try {
+    const rest = await mapWithConcurrency(pages, concurrency, (page) =>
+      fetchPage<T>(client, makePath(page), pageOptions),
+    )
+    return first.items.concat(...rest)
+  } catch (err) {
+    walk.abort(err)
+    throw err
+  } finally {
+    options.signal?.removeEventListener("abort", onCallerAbort)
+  }
 }
 
 async function paginateSequentially<T>(
@@ -128,7 +148,7 @@ function fetchPage<T>(
   const { signal, retryPages = false } = options
   const read = () =>
     client.request<T[]>(path, { method: "GET", signal, onHeaders })
-  return retryPages ? withPageRetry(read, signal) : read()
+  return retryPages ? withTransientRetry(read, signal) : read()
 }
 
 // The page number of the `rel="last"` URL in a `Link` header, or null when the
@@ -147,9 +167,10 @@ export function lastPageNumber(linkHeader: string | null): number | null {
   return Number(page)
 }
 
-// Retry one page on transient failures (5xx, rate limit, timeout, network).
-// Definitive statuses (401/403/404) and caller aborts propagate at once.
-async function withPageRetry<T>(
+// Retry one read on transient failures (5xx, short rate limit, timeout,
+// network). Definitive statuses (401/403/404), caller aborts, and a rate limit
+// longer than MAX_RATE_LIMIT_WAIT_MS propagate at once.
+export async function withTransientRetry<T>(
   fn: () => Promise<T>,
   signal: AbortSignal | undefined,
 ): Promise<T> {
@@ -161,18 +182,25 @@ async function withPageRetry<T>(
       lastError = err
       if (signal?.aborted || !isTransientPageError(err)) throw err
       if (attempt === PAGE_RETRY_ATTEMPTS - 1) break
-      const waitMs =
-        err instanceof GitHubAPIError && err.isRateLimited
-          ? Math.min(
-              (err.rateLimit.retryAfter ?? 1) * 1000,
-              MAX_RATE_LIMIT_WAIT_MS,
-            )
-          : PAGE_RETRY_BASE_MS * 2 ** attempt
+      const waitMs = retryWaitMs(err, attempt)
+      if (waitMs === null) throw err
       log.debug("retrying page", { attempt, waitMs })
       await sleep(waitMs, signal)
     }
   }
   throw lastError
+}
+
+// How long to wait before retrying `err`, or null when the wait would exceed
+// what a page load can absorb (a real secondary limit asks for ~60s).
+function retryWaitMs(err: unknown, attempt: number): number | null {
+  if (err instanceof GitHubAPIError && err.isRateLimited) {
+    const retryAfter = err.rateLimit.retryAfter
+    if (retryAfter === null) return null
+    const waitMs = retryAfter * 1000
+    return waitMs > MAX_RATE_LIMIT_WAIT_MS ? null : waitMs
+  }
+  return PAGE_RETRY_BASE_MS * 2 ** attempt
 }
 
 function isTransientPageError(err: unknown): boolean {

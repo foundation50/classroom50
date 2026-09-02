@@ -1,8 +1,9 @@
 import { useMemo } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { getOrgRepos, githubKeys } from "@/github-core/queries"
+import { getAssignmentRepos, githubKeys } from "@/github-core/queries"
+import type { GitHubRepo } from "@/github-core/types"
 import { studentRepoName } from "@/util/studentRepo"
 import useGetOrgRepos, { ORG_REPOS_STALE_MS } from "./useGetMyOrgRepos"
 
@@ -19,10 +20,15 @@ type Args = {
 
 // The org repo list as the submissions dashboard consumes it. For an
 // individual assignment the candidate repo names are known from the roster, so
-// getOrgRepos can read them directly when that beats walking the org (see
-// candidateNames); shared-repo assignments fall back to the full listing.
-// Either way the result is a `GitHubRepo[]` the existing name-filtering
-// consumers (acceptedUsernames, latestAssignmentPush, ...) read unchanged.
+// getAssignmentRepos can read them directly when that beats walking the org;
+// shared-repo assignments fall back to the full listing. Either way the result
+// is a `GitHubRepo[]` the existing name-filtering consumers (acceptedUsernames,
+// latestAssignmentPush, ...) read unchanged.
+//
+// The scoped read shares its cache with the full listing in both directions: a
+// fresh full listing answers it without a request, and a scoped read that ended
+// up walking the whole org (a large roster) is stored under the full-listing
+// key too, so the assignments page does not walk the org again.
 export function useAssignmentRepos({
   org,
   classroom,
@@ -31,6 +37,7 @@ export function useAssignmentRepos({
   enabled = true,
 }: Args) {
   const client = useGitHubClient()
+  const queryClient = useQueryClient()
   const sortedLogins = useMemo(
     () =>
       logins === undefined
@@ -49,13 +56,26 @@ export function useAssignmentRepos({
       assignment,
       sortedLogins ?? [],
     ),
-    queryFn: ({ signal }) =>
-      getOrgRepos(client, org, {
-        signal,
-        candidateNames: (sortedLogins ?? []).map((login) =>
+    queryFn: async ({ signal }) => {
+      const fullKey = githubKeys.orgRepos(org)
+      const cached = queryClient.getQueryState<GitHubRepo[] | null>(fullKey)
+      if (
+        cached?.data &&
+        Date.now() - cached.dataUpdatedAt < ORG_REPOS_STALE_MS
+      ) {
+        return cached.data
+      }
+      const { repos, complete } = await getAssignmentRepos(
+        client,
+        org,
+        (sortedLogins ?? []).map((login) =>
           studentRepoName(classroom, assignment, login),
         ),
-      }),
+        { signal },
+      )
+      if (complete) queryClient.setQueryData(fullKey, repos)
+      return repos
+    },
     staleTime: ORG_REPOS_STALE_MS,
     retry: false,
     enabled: enabled && scoped && Boolean(org && classroom && assignment),
