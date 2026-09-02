@@ -52,6 +52,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import concurrent.futures
 import csv
 import datetime
 import hashlib
@@ -60,6 +61,7 @@ import os
 import pathlib
 import re
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -117,6 +119,20 @@ TRANSIENT_RETRY_CAP_SECONDS = 30
 MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
 
 _throttle_sleep_spent = 0.0
+# Guards _throttle_sleep_spent and _request_count: the bulk listings fetch
+# pages on a thread pool, so the transport runs concurrently.
+_transport_lock = threading.Lock()
+_request_count = 0
+
+# Pages fetched at once by the bulk listings. GitHub's secondary limit allows
+# 100 concurrent requests; a handful keeps a 90-page org listing to seconds
+# without crowding the per-repo reads that follow.
+PARALLEL_PAGE_WORKERS = 8
+
+# Upper bound on the pages a bulk listing will fan out to (50k items). The
+# sequential walk's 100-page cap read a 10k-repo org as "unlistable" and fell
+# back to probing every candidate name, so the largest orgs paid the most.
+MAX_LISTING_PAGES = 500
 
 # Bounded read for the error-body snippet: only 300 characters are kept, and a
 # body can come from a proxy or the asset redirect rather than GitHub.
@@ -217,6 +233,7 @@ def warn_grant_deferred(classroom_short: str, detail: str) -> None:
 
 
 def main() -> int:
+    run_started = time.monotonic()
     base_dir = pathlib.Path(os.environ.get("GITHUB_WORKSPACE") or ".").resolve()
     classroom_filter = (os.environ.get("CLASSROOM_FILTER") or "").strip()
     assignment_filter = (os.environ.get("ASSIGNMENT_FILTER") or "").strip()
@@ -261,6 +278,7 @@ def main() -> int:
     # no-match classroom filter.
     assignment_filter_matched = not assignment_filter
     for classroom_short, classroom_meta, assignments in classroom_dirs:
+        classroom_started = time.monotonic()
         if assignment_filter and any(
             entry.get("slug") == assignment_filter
             for entry in assignments.get("assignments") or []
@@ -463,12 +481,21 @@ def main() -> int:
             failed_classrooms.append(classroom_short)
             continue
 
-        print(f"{classroom_short}: {n_changes} updated submission(s)")
+        print(
+            f"{classroom_short}: {n_changes} updated submission(s) "
+            f"({time.monotonic() - classroom_started:.1f}s)"
+        )
         total_changes += n_changes
 
     print(
         f"collect: {total_changes} total submission(s) updated across "
         f"{len(classroom_dirs)} classroom(s)"
+    )
+    # The per-phase lines above say where a slow run spent its time; this says
+    # what it cost, so a report can name the number instead of "a long time".
+    print(
+        f"collect: {request_count()} GitHub API request(s) in "
+        f"{time.monotonic() - run_started:.1f}s"
     )
     if not assignment_filter_matched:
         # Same contract as the classroom-filter no-match above: a scoped run
@@ -589,6 +616,15 @@ class RepoIndex:
     repo would read a real submission as "not submitted". Both detectable shapes
     fail open instead — empty reads as unknown, truncated raises
     IncompleteListing.
+
+    Two ways to answer. A caller that knows its candidate names up front
+    (`prefetch`) lets the index read page 1 of the org listing, learn the page
+    count, and pick the cheaper source: the rest of the listing (an org of
+    thousands of repos is ~90 pages) or one GET /repos/{org}/{name} per
+    candidate (a single-assignment run over a small section is a few dozen).
+    Probing is bounded by what the listing would have cost; past that the index
+    completes the listing instead. A caller that asks without a hint gets the
+    listing.
     """
 
     def __init__(self, api_url: str, org: str, token: str) -> None:
@@ -597,24 +633,50 @@ class RepoIndex:
         self._token = token
         self._repos: dict[str, bool] | None = None
         self._loaded = False
+        # Probe mode: page 1 plus per-name answers. `_found` maps a name to its
+        # private flag, or None when its read failed (unknown, fails open);
+        # `_missing` holds the names that 404ed.
+        self._probing = False
+        self._pages_left = 0
+        self._probes_spent = 0
+        self._found: dict[str, bool | None] = {}
+        self._missing: set[str] = set()
 
-    def _load(self) -> dict[str, bool] | None:
-        """The repos, or None when the listing could not be read. Reads once; a
-        soft failure warns once and stays None.
+    def prefetch(self, repo_names: Iterable[str]) -> None:
+        """Tell the index which names the caller is about to ask about, so it can
+        resolve them in one parallel batch (and choose probing over the listing
+        when that is cheaper). Optional: `contains` and `is_private` answer
+        without it, one request per unseen name in probe mode."""
+        names = list(dict.fromkeys(name.lower() for name in repo_names))
+        if self._load(names) is not None or not self._probing:
+            return
+        self._probe([name for name in names if not self._resolved(name)])
+
+    def _load(self, hint: list[str] | None = None) -> dict[str, bool] | None:
+        """The repos, or None when the listing is unknown (unreadable, or being
+        answered by probes). Reads once; a soft failure warns once and stays None.
 
         A THROTTLED or FATAL failure propagates and leaves the read UNLATCHED, so
         a caller that survives it (the grant pass defers a throttle) retries
         rather than spending the run on the degraded answer."""
         if self._loaded:
             return self._repos
-        self._repos = self._read()
+        self._repos = self._read(hint)
         self._loaded = True
         return self._repos
 
-    def _read(self) -> dict[str, bool] | None:
-        """One attempt at the org listing."""
+    def _read(self, hint: list[str] | None) -> dict[str, bool] | None:
+        """One attempt at the org listing (or, given a small enough hint, its
+        first page plus probes)."""
+        started = time.monotonic()
         try:
-            repos = list_org_repos(self._api_url, self._org, self._token)
+            if hint is None:
+                repos = list_org_repos(self._api_url, self._org, self._token)
+                pages_left = 0
+            else:
+                repos, pages_left = list_org_repos_first_page(
+                    self._api_url, self._org, self._token
+                )
         except urllib.error.HTTPError as exc:
             if classify(exc) is not SKIPPABLE:
                 raise
@@ -635,30 +697,100 @@ class RepoIndex:
         # silently skip every poll.
         if not repos:
             return None
+        if pages_left:
+            unresolved = [name for name in (hint or []) if name not in repos]
+            if len(unresolved) <= pages_left:
+                self._probing = True
+                self._pages_left = pages_left
+                self._found = dict(repos)
+                print(
+                    f"{self._org}: {pages_left + 1} page(s) of repos; checking "
+                    f"{len(unresolved)} candidate repo name(s) directly instead"
+                )
+                return None
+            repos.update(
+                list_org_repos_rest(self._api_url, self._org, self._token, pages_left)
+            )
+        print(
+            f"{self._org}: {len(repos)} repo(s) visible to the service token "
+            f"({time.monotonic() - started:.1f}s)"
+        )
+        return repos
+
+    def _complete_listing(self) -> dict[str, bool]:
+        """Leave probe mode by reading the rest of the listing. Probed answers
+        are kept: a name found by probe is in the org whether or not it lands on
+        a page (a repo created mid-walk shifts the pages)."""
+        rest = list_org_repos_rest(
+            self._api_url, self._org, self._token, self._pages_left
+        )
+        repos: dict[str, bool] = {}
+        for name, private in self._found.items():
+            if private is not None:
+                repos[name] = private
+        repos.update(rest)
+        self._repos = repos
+        self._probing = False
         print(f"{self._org}: {len(repos)} repo(s) visible to the service token")
         return repos
+
+    def _resolved(self, name: str) -> bool:
+        return name in self._found or name in self._missing
+
+    def _probe(self, names: list[str]) -> None:
+        """Resolve `names` by direct reads, or by completing the listing once the
+        probes would cost more than the pages they stand in for."""
+        if not names:
+            return
+        if self._probes_spent + len(names) > self._pages_left:
+            self._complete_listing()
+            return
+        self._probes_spent += len(names)
+        found = probe_org_repos(self._api_url, self._org, names, self._token)
+        self._found.update(found)
+        self._missing.update(name for name in names if name not in found)
+
+    def _lookup(self, name: str) -> None:
+        """Probe-mode resolution of one lowercased name, if not yet known. May
+        leave probe mode (see _probe), after which `_repos` holds the answer."""
+        if not self._resolved(name):
+            self._probe([name])
 
     def contains(self, repo_name: str) -> bool:
         """Whether `repo_name` exists — True whenever the listing is unknown, so
         an unreadable index never hides a repo from either pass."""
+        name = repo_name.lower()
         repos = self._load()
-        return repos is None or repo_name.lower() in repos
+        if repos is None and self._probing:
+            self._lookup(name)
+            if self._probing:
+                return name not in self._missing
+            repos = self._repos
+        return repos is None or name in repos
 
     def is_private(self, repo_name: str) -> bool | None:
         """Whether `repo_name` is private, or None when the index can't say (the
         listing was unreadable, or the name isn't in it). Answers from the
         listing already read, saving the caller a per-repo request."""
+        name = repo_name.lower()
         repos = self._load()
+        if repos is None and self._probing:
+            self._lookup(name)
+            if self._probing:
+                return self._found.get(name)
+            repos = self._repos
         if repos is None:
             return None
-        return repos.get(repo_name.lower())
+        return repos.get(name)
 
     def names(self) -> list[str] | None:
         """Every visible repo name (lowercased), or None when the listing is
         unknown. Team-mode collection derives its poll targets from these
         (the `<classroom>-<assignment>-group-<n>` repos carry no username to
-        derive them from)."""
+        derive them from), so probe mode completes the listing here."""
         repos = self._load()
+        if repos is None and self._probing:
+            repos = self._complete_listing()
         if repos is None:
             return None
         return list(repos)
@@ -727,6 +859,35 @@ def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
         if isinstance(slug, str) and slug:
             slugs.append(slug)
     return slugs
+
+
+def poll_candidate_names(
+    classroom_short: str,
+    assignments: dict[str, Any],
+    assignment_filter: str,
+    usernames: Iterable[str],
+) -> list[str]:
+    """Every repo name collection may poll for `usernames`: one per (collectable
+    or detected assignment, member). empty_repo assignments are skipped outright
+    and team assignments derive their targets from the listing, so neither is
+    a candidate. Feeds RepoIndex.prefetch so the poll loop's lookups are one
+    batch instead of one request each."""
+    slugs: list[str] = []
+    for entry in assignments.get("assignments") or []:
+        slug = entry.get("slug")
+        if not isinstance(slug, str) or not slug:
+            continue
+        if assignment_filter and slug != assignment_filter:
+            continue
+        if is_empty_repo(entry) or normalize_assignment_type(entry.get("mode")) == "team":
+            continue
+        slugs.append(slug)
+    users = list(usernames)
+    return [
+        assignment_repo_name(classroom_short, slug, username)
+        for slug in slugs
+        for username in users
+    ]
 
 
 class TeamMembers:
@@ -1034,6 +1195,13 @@ def collect_classroom(
     # (owner always credited) — same trust model, team-sourced set. Staff are in
     # the union, so a staff collaborator on a group repo can be credited too.
     roster_logins = {u.lower() for u in team_usernames}
+    if repo_index is not None:
+        # Every name the poll below can ask about, resolved in one batch.
+        repo_index.prefetch(
+            poll_candidate_names(
+                classroom_short, assignments, assignment_filter, team_usernames
+            )
+        )
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
         if not isinstance(slug, str) or not slug:
@@ -1689,13 +1857,18 @@ def grant_classroom_team_access(
 
     # Resolved once rather than per staff role. Knowing the full list up front is
     # also what lets a throttled pass say how much is left for the next run.
-    targets: list[tuple[str, str]] = []
-    for slug in slugs:
-        for username in usernames:
-            repo_name = assignment_repo_name(classroom_short, slug, username)
-            if repo_index is not None and not repo_index.contains(repo_name):
-                continue
-            targets.append((org, repo_name))
+    candidates = [
+        assignment_repo_name(classroom_short, slug, username)
+        for slug in slugs
+        for username in usernames
+    ]
+    if repo_index is not None:
+        repo_index.prefetch(candidates)
+    targets: list[tuple[str, str]] = [
+        (org, repo_name)
+        for repo_name in candidates
+        if repo_index is None or repo_index.contains(repo_name)
+    ]
     targets.extend(
         private_template_targets(
             api_url, org, assignments, service_token, repo_index=repo_index,
@@ -2719,6 +2892,100 @@ def _next_page_link(link_header: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+def _last_page_number(link_header: str | None, api_url: str) -> int | None:
+    """The page number of the `rel="last"` URL in a GitHub `Link` header, or None
+    when the header names no last page (no header, a single page, or a
+    cursor-paginated endpoint). The URL is host-pinned like a followed
+    `rel="next"`, though only its `page` query parameter is used."""
+    if not link_header:
+        return None
+    m = re.search(r'<([^>]+)>\s*;\s*[^,]*rel="last"', link_header)
+    if not m:
+        return None
+    last_url = _assert_same_host(m.group(1), api_url)
+    page_values = urllib.parse.parse_qs(urllib.parse.urlsplit(last_url).query).get("page")
+    if not page_values or not page_values[0].isdigit():
+        return None
+    return int(page_values[0])
+
+
+def _fetch_page(url: str, token: str) -> tuple[list[Any], Any]:
+    """One page of a list endpoint: (raw array, response headers). Raises
+    ValueError on a non-array body."""
+    body, headers = _http_get_with_headers(
+        url, token, accept="application/vnd.github+json"
+    )
+    batch = json.loads(body.decode("utf-8"))
+    if not isinstance(batch, list):
+        raise ValueError(
+            f"GET {url}: expected JSON array, got {type(batch).__name__}"
+        )
+    return batch, headers
+
+
+def _dict_items(batch: list[Any]) -> list[dict[str, Any]]:
+    return [item for item in batch if isinstance(item, dict)]
+
+
+def _fetch_pages_parallel(
+    page_url: Callable[[int], str],
+    token: str,
+    pages: range,
+) -> list[list[dict[str, Any]]]:
+    """Pages `pages` of a list endpoint, fetched PARALLEL_PAGE_WORKERS at a time
+    and returned in page order. The first failure propagates and abandons the
+    pages not yet started."""
+    if not pages:
+        return []
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(PARALLEL_PAGE_WORKERS, len(pages))
+    ) as pool:
+        futures = [pool.submit(_fetch_page, page_url(page), token) for page in pages]
+        try:
+            return [_dict_items(future.result()[0]) for future in futures]
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+
+
+def _paginate_objects_parallel(
+    page_url: Callable[[int], str],
+    api_url: str,
+    token: str,
+    resource_label: str,
+) -> list[dict[str, Any]]:
+    """Every object of a paginated list endpoint, with pages 2..last fetched
+    concurrently.
+
+    Page 1 is read alone; its `Link: rel="last"` names the page count, and the
+    remaining pages are built from `page_url` (same host by construction, so no
+    Link is followed) and fetched on a thread pool. An org with 9,000 repos is
+    90 pages: sequentially that is minutes, in parallel it is seconds. When the
+    header names no last page but does name a next one (a cursor-paginated
+    endpoint), the walk falls back to _paginate_objects.
+
+    Same error contract as _paginate_objects: urllib.error.HTTPError on any
+    non-2xx, ValueError on a non-array body, IncompleteListing when the page
+    count exceeds MAX_LISTING_PAGES.
+    """
+    first, headers = _fetch_page(page_url(1), token)
+    link_header = headers.get("Link") if headers else None
+    last = _last_page_number(link_header, api_url)
+    if last is None:
+        if _next_page_link(link_header):
+            return _paginate_objects(page_url, api_url, token, resource_label)
+        return _dict_items(first)
+    if last > MAX_LISTING_PAGES:
+        raise IncompleteListing(
+            f"{resource_label}: too many entries to enumerate "
+            f"({last} pages, cap {MAX_LISTING_PAGES})"
+        )
+    items = _dict_items(first)
+    for batch in _fetch_pages_parallel(page_url, token, range(2, last + 1)):
+        items.extend(batch)
+    return items
+
+
 def _assert_same_host(next_url: str, api_url: str) -> str:
     """Return next_url only if its scheme+host match api_url's; else raise
     ValueError. The pagination loop attaches `Authorization: Bearer <token>` to
@@ -2769,15 +3036,8 @@ def _paginate_objects(
     url = page_url(1)
     seen_next: set[str] = set()
     for page in range(1, max_pages + 1):
-        body, headers = _http_get_with_headers(
-            url, token, accept="application/vnd.github+json"
-        )
-        batch = json.loads(body.decode("utf-8"))
-        if not isinstance(batch, list):
-            raise ValueError(
-                f"GET {url}: expected JSON array, got {type(batch).__name__}"
-            )
-        page_items = [item for item in batch if isinstance(item, dict)]
+        batch, headers = _fetch_page(url, token)
+        page_items = _dict_items(batch)
         items.extend(page_items)
         if stop_after is not None and any(stop_after(item) for item in page_items):
             return items
@@ -2810,12 +3070,15 @@ def _paginate_field_list(
     token: str,
     resource_label: str,
     field: str = "login",
+    parallel: bool = False,
 ) -> list[str]:
     """Every object's `field` from a paginated endpoint (accounts by `login`,
-    repos by `name`/`full_name`). The one-field view of _paginate_objects, which
-    owns the walk and its error contract."""
+    repos by `name`/`full_name`). The one-field view of _paginate_objects (or,
+    for `parallel`, _paginate_objects_parallel), which owns the walk and its
+    error contract."""
+    walk = _paginate_objects_parallel if parallel else _paginate_objects
     values: list[str] = []
-    for item in _paginate_objects(page_url, api_url, token, resource_label):
+    for item in walk(page_url, api_url, token, resource_label):
         value = item.get(field)
         if isinstance(value, str) and value:
             values.append(value)
@@ -2876,12 +3139,18 @@ def list_team_member_logins(
         api_url=api_url,
         token=token,
         resource_label=f"orgs/{org}/teams/{team_slug}/members",
+        parallel=True,
     )
+
+
+def _org_repos_page_url(api_url: str, org: str) -> Callable[[int], str]:
+    base = f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/repos"
+    return lambda page: f"{base}?per_page=100&page={page}&type=all"
 
 
 def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
     """Lowercased name -> `private` flag for every repo in `org` the token can
-    see, walking pagination. Hits GET /orgs/{org}/repos.
+    see, walking pagination in parallel. Hits GET /orgs/{org}/repos.
 
     Read once per run — see RepoIndex, which documents why a name absent here
     can be skipped. The `private` flag rides along from the same response
@@ -2889,14 +3158,93 @@ def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
 
     Raises urllib.error.HTTPError on any non-2xx so the caller can fall back to
     per-repo probing."""
-    per_page = 100
-    base = f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/repos"
-    repos = _paginate_objects(
-        page_url=lambda page: f"{base}?per_page={per_page}&page={page}&type=all",
+    repos = _paginate_objects_parallel(
+        page_url=_org_repos_page_url(api_url, org),
         api_url=api_url,
         token=token,
         resource_label=f"orgs/{org}/repos",
     )
+    return _repo_privacy_map(repos)
+
+
+def list_org_repos_first_page(
+    api_url: str, org: str, token: str
+) -> tuple[dict[str, bool], int]:
+    """Page 1 of the org listing as (lowercased name -> private, pages left).
+    0 pages left means the map already is the whole listing. Lets RepoIndex
+    learn the org's size from one request before deciding whether listing the
+    rest or probing the candidate names is cheaper.
+
+    Same error contract as list_org_repos."""
+    page_url = _org_repos_page_url(api_url, org)
+    batch, headers = _fetch_page(page_url(1), token)
+    link_header = headers.get("Link") if headers else None
+    last = _last_page_number(link_header, api_url)
+    if last is None:
+        if _next_page_link(link_header):
+            # No page count to plan with: take the whole listing now.
+            return list_org_repos(api_url, org, token), 0
+        return _repo_privacy_map(_dict_items(batch)), 0
+    if last > MAX_LISTING_PAGES:
+        raise IncompleteListing(
+            f"orgs/{org}/repos: too many entries to enumerate "
+            f"({last} pages, cap {MAX_LISTING_PAGES})"
+        )
+    return _repo_privacy_map(_dict_items(batch)), last - 1
+
+
+def list_org_repos_rest(
+    api_url: str, org: str, token: str, pages_left: int
+) -> dict[str, bool]:
+    """Pages 2..(pages_left + 1) of the org listing, fetched in parallel. The
+    second half of list_org_repos_first_page."""
+    batches = _fetch_pages_parallel(
+        _org_repos_page_url(api_url, org), token, range(2, pages_left + 2)
+    )
+    return _repo_privacy_map(item for batch in batches for item in batch)
+
+
+def probe_org_repos(
+    api_url: str, org: str, names: list[str], token: str
+) -> dict[str, bool | None]:
+    """Lowercased name -> private flag for each of `names` that exists, None for
+    a name whose read failed with a skippable error (unknown, so callers fail
+    open); a 404 name is absent. Reads GET /repos/{org}/{name} in parallel.
+
+    A throttle or a fatal error propagates, abandoning the probes not yet
+    started, so the caller's retry sees an unresolved name rather than a wrong
+    answer."""
+    def probe(name: str) -> tuple[str, bool | None, bool]:
+        try:
+            repo = get_repo(api_url, org, name, token)
+        except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
+            return name.lower(), None, True
+        if repo is None:
+            return name.lower(), None, False
+        return name.lower(), repo.get("private") is True, True
+
+    if not names:
+        return {}
+    found: dict[str, bool | None] = {}
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(PARALLEL_PAGE_WORKERS, len(names))
+    ) as pool:
+        futures = [pool.submit(probe, name) for name in names]
+        try:
+            for future in futures:
+                name, private, present = future.result()
+                if present:
+                    found[name] = private
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+    return found
+
+
+def _repo_privacy_map(repos: Iterable[dict[str, Any]]) -> dict[str, bool]:
+    """Lowercased name -> strict-boolean `private` from repo objects."""
     visible: dict[str, bool] = {}
     for repo in repos:
         name = repo.get("name")
@@ -2925,6 +3273,7 @@ def list_team_repo_full_names(
         token=token,
         resource_label=f"orgs/{org}/teams/{team_slug}/repos",
         field="full_name",
+        parallel=True,
     )
     return {name.lower() for name in full_names}
 
@@ -3156,6 +3505,7 @@ def _http_request(
         headers["Content-Type"] = "application/json"
     for attempt in range(_retries):
         req = urllib.request.Request(url, method=method, data=body, headers=headers)
+        _count_request()
         try:
             with _OPENER.open(req, timeout=30) as resp:
                 resp_body = (
@@ -3186,6 +3536,19 @@ def _http_request(
                 fp=None,
             ) from exc
     raise RuntimeError(f"_http_request called with _retries={_retries}")
+
+
+def _count_request() -> None:
+    global _request_count
+    with _transport_lock:
+        _request_count += 1
+
+
+def request_count() -> int:
+    """HTTP requests issued so far this run (retries included), for the
+    end-of-run summary."""
+    with _transport_lock:
+        return _request_count
 
 
 def team_has_repo_access(
@@ -3347,10 +3710,11 @@ def throttle_sleep_budget_spent(delay: float) -> bool:
     job timeout kills the run. This ceiling converts that into the named
     THROTTLED error instead."""
     global _throttle_sleep_spent
-    if _throttle_sleep_spent + delay > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
-        return True
-    _throttle_sleep_spent += delay
-    return False
+    with _transport_lock:
+        if _throttle_sleep_spent + delay > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
+            return True
+        _throttle_sleep_spent += delay
+        return False
 
 
 def _retry_after_seconds(headers: Any) -> str | None:

@@ -8,8 +8,14 @@ import type {
   GitHubRepo,
 } from "../types"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { mapWithConcurrency } from "@/util/concurrency"
 import { tolerateGitHubError } from "../errors"
-import { paginateAll } from "../paginate"
+import {
+  PAGE_FETCH_CONCURRENCY,
+  paginateAll,
+  paginateFirstPage,
+  paginateRemaining,
+} from "../paginate"
 import { githubKeys } from "./keys"
 
 export function getBranchRefRepo(
@@ -102,19 +108,62 @@ export function repoQuery(client: GitHubClient, owner: string, repo: string) {
   })
 }
 
-export async function getOrgRepos(client: GitHubClient, owner: string) {
+export type OrgReposOptions = {
+  signal?: AbortSignal
+  // Repo names the caller will look up in the result. When there are fewer
+  // of them than pages left after page 1, each is read directly instead of
+  // walking the org: a 30-student section in a 9,000-repo org is 30 small
+  // requests instead of 89 heavy pages. The result is then page 1 plus the
+  // candidates that exist, which is a superset of what the caller asked for.
+  candidateNames?: readonly string[]
+}
+
+export async function getOrgRepos(
+  client: GitHubClient,
+  owner: string,
+  options: OrgReposOptions = {},
+) {
+  const { signal, candidateNames } = options
+  const makePath = (page: number) =>
+    `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`
+  // The longest walk in the app, so one late page retries on its own rather
+  // than sending the query back to page 1.
+  const walk = { signal, retryPages: true }
   // Paginate to exhaustion: a single per_page=100 page silently under-counts
   // orgs with >100 repos, making repo-list-derived signals (e.g., assignment
   // acceptance on the submissions dashboard) miss students in large orgs. A
   // first-page 404 surfaces as null.
-  return tolerateGitHubError(
-    () =>
-      paginateAll<GitHubRepo>(
-        client,
-        (page) => `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`,
-      ),
-    null,
-  )
+  return tolerateGitHubError(async () => {
+    const first = await paginateFirstPage<GitHubRepo>(client, makePath, walk)
+    const pagesLeft = first.lastPage === null ? null : first.lastPage - 1
+    if (candidateNames && pagesLeft !== null) {
+      const onFirstPage = new Set(
+        first.items.map((repo) => repo.name.toLowerCase()),
+      )
+      const unresolved = [
+        ...new Set(candidateNames.map((name) => name.toLowerCase())),
+      ].filter((name) => !onFirstPage.has(name))
+      if (unresolved.length < pagesLeft) {
+        const probed = await mapWithConcurrency(
+          unresolved,
+          PAGE_FETCH_CONCURRENCY,
+          (name) =>
+            tolerateGitHubError(
+              () =>
+                client.request<GitHubRepo>(
+                  `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`,
+                  { method: "GET", signal },
+                ),
+              null,
+            ),
+        )
+        return first.items.concat(
+          probed.filter((repo): repo is GitHubRepo => repo !== null),
+        )
+      }
+    }
+    return paginateRemaining(client, makePath, first, walk)
+  }, null)
 }
 
 // Open PRs on a student/group repo. The autograde workflow opens one Feedback

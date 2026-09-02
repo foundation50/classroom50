@@ -1,7 +1,8 @@
 import { describe, it, expect, vi } from "vitest"
 
-import { getOldestCommitShaForPath } from "./repoRefReads"
-import type { GitHubClient } from "../client"
+import { getOldestCommitShaForPath, getOrgRepos } from "./repoRefReads"
+import type { GitHubClient, GitHubRequestOptions } from "../client"
+import { GitHubAPIError } from "../errors"
 
 // The Feedback-PR base must be frozen at the commit the autograde runner's
 // baseline_sha() resolves — the OLDEST commit touching the accept marker. A
@@ -39,6 +40,121 @@ describe("getOldestCommitShaForPath", () => {
     const { client } = fakeClient([[]])
     await expect(
       getOldestCommitShaForPath(client, "o", "r", ".classroom50.yaml"),
+    ).resolves.toBeNull()
+  })
+})
+
+// The org listing is the submissions dashboard's "accepted" signal. In a large
+// org it is dozens of pages, so when the caller names the repos it will look up
+// and there are fewer of them than pages, each is read directly instead.
+describe("getOrgRepos", () => {
+  const LIST = "https://api.github.com/orgs/acme/repos?per_page=100"
+  const notFound = () =>
+    new GitHubAPIError({
+      status: 404,
+      url: "x",
+      message: "Not Found",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  // `lastPage` pages of listing, each holding the repos in `pages[n]`;
+  // `existing` names answer a direct GET /repos read, anything else 404s.
+  function fakeOrg(opts: {
+    pages: Record<number, string[]>
+    lastPage?: number
+    existing?: string[]
+  }) {
+    const listed: number[] = []
+    const probed: string[] = []
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        const page = /[?&]page=(\d+)/.exec(path)
+        if (page) {
+          const n = Number(page[1])
+          listed.push(n)
+          if (n === 1 && opts.lastPage && opts.lastPage > 1) {
+            options?.onHeaders?.(
+              new Headers({
+                link: `<${LIST}&page=2>; rel="next", <${LIST}&page=${opts.lastPage}>; rel="last"`,
+              }),
+            )
+          }
+          return (opts.pages[n] ?? []).map((name) => ({ name, private: true }))
+        }
+        const name = decodeURIComponent(path.split("/").pop() ?? "")
+        probed.push(name)
+        if (opts.existing?.includes(name)) return { name, private: false }
+        throw notFound()
+      },
+    )
+    return { client: { request } as unknown as GitHubClient, listed, probed }
+  }
+
+  it("walks the whole listing without candidates", async () => {
+    const { client, listed, probed } = fakeOrg({
+      pages: { 1: ["a"], 2: ["b"], 3: ["c"] },
+      lastPage: 3,
+    })
+    const repos = await getOrgRepos(client, "acme")
+    expect(repos?.map((r) => r.name)).toEqual(["a", "b", "c"])
+    expect(listed.sort()).toEqual([1, 2, 3])
+    expect(probed).toEqual([])
+  })
+
+  it("probes the candidates when they are fewer than the pages left", async () => {
+    const { client, listed, probed } = fakeOrg({
+      pages: { 1: ["cs-hw1-Alice", "other"] },
+      lastPage: 10,
+      existing: ["cs-hw1-bob"],
+    })
+    const repos = await getOrgRepos(client, "acme", {
+      candidateNames: ["cs-hw1-alice", "cs-hw1-bob", "cs-hw1-carol"],
+    })
+    // Page 1 answered alice; bob and carol were read directly; only bob exists.
+    expect(listed).toEqual([1])
+    expect(probed.sort()).toEqual(["cs-hw1-bob", "cs-hw1-carol"])
+    expect(repos?.map((r) => r.name).sort()).toEqual([
+      "cs-hw1-Alice",
+      "cs-hw1-bob",
+      "other",
+    ])
+  })
+
+  it("lists the rest when the candidates outnumber the pages left", async () => {
+    const { client, listed, probed } = fakeOrg({
+      pages: { 1: ["a"], 2: ["cs-hw1-bob"] },
+      lastPage: 2,
+    })
+    const repos = await getOrgRepos(client, "acme", {
+      candidateNames: ["cs-hw1-bob", "cs-hw1-carol"],
+    })
+    expect(listed.sort()).toEqual([1, 2])
+    expect(probed).toEqual([])
+    expect(repos?.map((r) => r.name)).toEqual(["a", "cs-hw1-bob"])
+  })
+
+  it("lists when the page count is unknown", async () => {
+    const { client, listed, probed } = fakeOrg({ pages: { 1: ["a"] } })
+    const repos = await getOrgRepos(client, "acme", {
+      candidateNames: ["cs-hw1-bob"],
+    })
+    expect(listed).toEqual([1])
+    expect(probed).toEqual([])
+    expect(repos?.map((r) => r.name)).toEqual(["a"])
+  })
+
+  it("resolves null when the org itself 404s", async () => {
+    const request = vi.fn().mockRejectedValue(notFound())
+    await expect(
+      getOrgRepos({ request } as unknown as GitHubClient, "acme"),
     ).resolves.toBeNull()
   })
 })
