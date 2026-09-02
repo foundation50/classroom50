@@ -1977,6 +1977,27 @@ class TestLateness:
         # Lateness is marked per submission, inside the row's submissions list.
         assert results[0]["submissions"][0]["late"] is True
 
+    def test_malformed_due_warns_exactly_once_per_autograded_assignment(
+        self, monkeypatch, capsys
+    ):
+        # The graded path and the push detector both need the parsed due date;
+        # the warning for a bad value must not be emitted once by each.
+        monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+        monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
+        stub_team_members(monkeypatch, ["alice"])
+
+        cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short="cs-principles",
+            classroom_meta={},
+            assignments={"assignments": [{"slug": "hello", "due": "2026-09-15"}]},
+            service_token="token",
+        )
+
+        err = capsys.readouterr().err
+        assert err.count("is not an RFC 3339 timestamp with timezone") == 1
+
 
 # roster.csv header lockstep --------------------------------------------------
 
@@ -2827,6 +2848,62 @@ class TestMain:
 
         assert cs.main() == 0
         assert "::warning::" not in capsys.readouterr().err
+
+    def test_no_token_hint_when_pushes_were_detected_but_none_graded(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # Zero graded entries with detected pushes is the autograder not having
+        # published yet, not a token that can't read the repos: detection just
+        # read them. The re-scope hint would contradict the run's own data.
+        write_minimal_classroom(tmp_path)
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        detected = {
+            "hello": ("individual", [{"owner": "alice", "count": 2}], {"alice"})
+        }
+        monkeypatch.setattr(
+            cs,
+            "collect_classroom",
+            lambda **kwargs: ([], 0, {"hello": "individual"}, detected),
+        )
+
+        assert cs.main() == 0
+        err = capsys.readouterr().err
+        assert "collected 0 submissions" not in err
+        assert "rotate-service-token" not in err
+
+    def test_first_empty_detected_list_is_not_counted_as_a_change(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # A bucket written before detection existed has no `detected` key; the
+        # first run after an upgrade writes [] into it. That is bookkeeping, not
+        # an updated submission, so the summary must not count it.
+        write_minimal_classroom(tmp_path)
+        scores_path = tmp_path / "cs-principles" / "scores.json"
+        scores_path.write_text(
+            json.dumps(
+                {
+                    "schema": cs.SCORES_SCHEMA_V1,
+                    "assignments": {"hello": {"type": "individual", "entries": []}},
+                }
+            )
+        )
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        detected = {"hello": ("individual", [], {"alice"})}
+        monkeypatch.setattr(
+            cs,
+            "collect_classroom",
+            lambda **kwargs: ([], 0, {"hello": "individual"}, detected),
+        )
+
+        assert cs.main() == 0
+        out = capsys.readouterr().out
+        assert "0 updated submission(s)" in out
+        written = json.loads(scores_path.read_text())
+        assert written["assignments"]["hello"]["detected"] == []
 
     def test_warns_when_zero_collected_but_assignments_exist(self, tmp_path, monkeypatch, capsys):
         # Team-driven collection: an empty roster no longer means
@@ -4248,6 +4325,30 @@ class TestGrantClassroomTeamAccess:
         # Per-team reasons on stdout so the log explains the verdict.
         assert "'classroom50-cs-ta' (ta) has no members" in out
         assert "no hta team recorded" in out
+
+    def test_no_staff_team_at_all_is_a_notice_not_a_warning(self, monkeypatch, capsys):
+        # A solo teacher: nothing under `teams`, and neither derived staff team
+        # exists on GitHub. Nothing is misconfigured, so this must not paint a
+        # yellow annotation on every collect; the verdict is still printed as a
+        # notice so a teacher who does expect TAs can find it.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs":
+                return ["alice", "bob"]
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short_name": "cs"},
+            assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        out, err = capsys.readouterr()
+        assert "::warning::" not in err
+        assert "::notice::cs: no staff access was granted" in err
+        assert "no ta team recorded" in out and "no hta team recorded" in out
 
     def test_no_warning_when_some_staff_team_is_populated(self, monkeypatch, capsys):
         grants = self._capture_grants(monkeypatch)
