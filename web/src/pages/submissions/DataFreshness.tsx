@@ -61,9 +61,6 @@ export function DataFreshness({
 }: DataFreshnessProps) {
   const { t } = useTranslation()
   const busy = collecting || refreshing
-  const busyLabel = collecting
-    ? t("submissions.collect.active")
-    : t("submissions.freshness.refreshing")
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -73,15 +70,18 @@ export function DataFreshness({
       >
         {onRefresh && (
           // A quiet ghost button in both states, so the freshness line doesn't
-          // outshout the search/filter controls beside it in the toolbar. The
-          // same loading recipe as ClassroomCollectButton: `loading` swallows
-          // clicks and announces the busy state, so no `disabled` (which would
-          // drop keyboard focus mid-action).
+          // outshout the search/filter controls beside it in the toolbar.
+          // `loading` swallows clicks and `busyLabel` is the in-place progress
+          // text, so no `disabled` (which would drop keyboard focus mid-action).
           <Button
             variant="ghost"
             size="sm"
             loading={busy}
-            loadingLabel={busyLabel}
+            busyLabel={
+              collecting
+                ? t("submissions.collect.active")
+                : t("submissions.freshness.refreshing")
+            }
             onClick={onRefresh}
             className="text-base-content/70"
             title={
@@ -90,16 +90,10 @@ export function DataFreshness({
                 : t("submissions.freshness.refreshHelp")
             }
           >
-            {busy ? (
-              busyLabel
-            ) : (
-              <>
-                <SyncIcon aria-hidden="true" className="size-4" />
-                {canCollect
-                  ? t("submissions.collect.label")
-                  : t("submissions.freshness.refreshLabel")}
-              </>
-            )}
+            <SyncIcon aria-hidden="true" className="size-4" />
+            {canCollect
+              ? t("submissions.collect.label")
+              : t("submissions.freshness.refreshLabel")}
           </Button>
         )}
       </SubmissionFreshnessLine>

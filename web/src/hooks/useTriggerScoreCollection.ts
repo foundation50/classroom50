@@ -75,7 +75,7 @@ const useTriggerScoreCollection = (
   const scopeSuffix = scope
     ? `:${scope.classroom}${scope.assignment ? `:${scope.assignment}` : ""}`
     : ""
-  const { trigger, phase, failure, run, error } = useGitHubOperation({
+  const { trigger, phase, failure, run, error, inFlight } = useGitHubOperation({
     timeoutMs: scope && !scope.assignment ? SWEEP_TIMEOUT_MS : undefined,
     storageKey: org ? `cl50:collect-scores:${org}${scopeSuffix}` : null,
     queryKey: (sinceRunId) =>
@@ -98,7 +98,7 @@ const useTriggerScoreCollection = (
     },
   })
 
-  return { collect: trigger, phase, failure, run, error }
+  return { collect: trigger, phase, failure, run, error, inFlight }
 }
 
 export default useTriggerScoreCollection

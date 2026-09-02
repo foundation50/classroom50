@@ -73,6 +73,28 @@ describe("Button", () => {
     expect(onClick).not.toHaveBeenCalled()
   })
 
+  it("swaps its content for busyLabel while loading, with a decorative spinner", () => {
+    const { rerender } = render(
+      <Button busyLabel="Collecting…">Collect</Button>,
+    )
+    expect(screen.getByRole("button", { name: "Collect" })).toBeTruthy()
+
+    rerender(
+      <Button loading busyLabel="Collecting…">
+        Collect
+      </Button>,
+    )
+    const btn = screen.getByRole("button", { name: "Collecting…" })
+    // The visible text is the announcement: no children, no second sr-only
+    // label for a screen reader to read the same word twice.
+    expect(btn.textContent).toBe("Collecting…")
+    expect(btn.querySelector(".loading")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    )
+    expect(btn.querySelector("[role=status]")).toBeNull()
+    expect(btn.getAttribute("aria-busy")).toBe("true")
+  })
+
   it("does not fire onClick when disabled", async () => {
     const onClick = vi.fn()
     render(

@@ -5,7 +5,7 @@ import type {
   Ref,
 } from "react"
 
-import { Spinner } from "@/components/Spinner"
+import { InlineSpinner, Spinner } from "@/components/Spinner"
 
 import { cx } from "./cx"
 
@@ -75,7 +75,13 @@ type CommonProps = {
   shape?: ButtonShape
   active?: boolean
   loading?: boolean
+  // Screen-reader label for the spinner while `loading`; the children stay
+  // visible beside it. Use when the visible text does not change.
   loadingLabel?: string
+  // The button's whole visible content while `loading` ("Collecting…"),
+  // REPLACING the children. The text is the announcement, so the spinner is
+  // decorative: no second sr-only label to read the same word twice.
+  busyLabel?: string
   children?: ReactNode
 }
 
@@ -105,6 +111,7 @@ export function Button({
   active = false,
   loading = false,
   loadingLabel,
+  busyLabel,
   className,
   children,
   as,
@@ -127,12 +134,18 @@ export function Button({
     className,
   )
 
-  const inner = (
-    <>
-      {loading && <Spinner size={SPINNER_SIZE[size]} label={loadingLabel} />}
-      {children}
-    </>
-  )
+  const inner =
+    loading && busyLabel !== undefined ? (
+      <>
+        <InlineSpinner size={SPINNER_SIZE[size]} />
+        {busyLabel}
+      </>
+    ) : (
+      <>
+        {loading && <Spinner size={SPINNER_SIZE[size]} label={loadingLabel} />}
+        {children}
+      </>
+    )
 
   // Render an <a> when the caller asked for one (via `as="a"` or an `href`).
   // Anchors can't be natively `disabled`, so a loading/disabled anchor drops

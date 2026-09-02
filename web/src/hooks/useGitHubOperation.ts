@@ -242,5 +242,12 @@ export function useGitHubOperation(config: GitHubOperationConfig) {
     failure,
     run,
     error: mutation.error ?? runQuery.error,
+    inFlight: isOperationInFlight(phase),
   }
+}
+
+// Whether a dispatch is underway: the POST is pending or the run has not
+// settled. The one predicate behind every "busy" button and re-entrancy latch.
+export function isOperationInFlight(phase: OperationPhase): boolean {
+  return phase === "dispatching" || phase === "running"
 }

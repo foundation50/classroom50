@@ -42,13 +42,23 @@ let capturedConfig: {
   onDispatched?: (s: { sinceRunId: number | null }) => void
 }
 const trigger = vi.fn()
-vi.mock("@/hooks/useGitHubOperation", () => ({
-  useGitHubOperation: (config: typeof capturedConfig) => {
-    capturedConfig = config
-    return { trigger, ...operation }
-  },
-}))
+vi.mock("@/hooks/useGitHubOperation", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useGitHubOperation")>()
+  return {
+    ...actual,
+    useGitHubOperation: (config: typeof capturedConfig) => {
+      capturedConfig = config
+      return {
+        trigger,
+        ...operation,
+        inFlight: actual.isOperationInFlight(operation.phase as OperationPhase),
+      }
+    },
+  }
+})
 
+import type { OperationPhase } from "@/hooks/useGitHubOperation"
 import useTestServiceToken from "./useTestServiceToken"
 
 const wrapper = ({ children }: PropsWithChildren) =>

@@ -31,8 +31,8 @@ export default function ServiceTokenTestResult({
   className?: string
 }) {
   const { t } = useTranslation()
-  const { phase, failure, run, error, annotations } = state
-  if (phase === "idle" || phase === "dispatching" || phase === "running") {
+  const { phase, failure, run, error, annotations, inFlight } = state
+  if (phase === "idle" || inFlight) {
     return null
   }
 
