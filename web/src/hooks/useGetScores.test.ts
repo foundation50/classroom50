@@ -172,6 +172,28 @@ describe("normalizeScores — detected (ungraded) submissions", () => {
     expect(normalized?.submissions.manual).toEqual([])
   })
 
+  it("keeps graded rows and detected submitters side by side in one bucket", () => {
+    // An autograded bucket now carries both: alice's release was graded, bob
+    // pushed but the autograder never published (#677).
+    const normalized = normalizeScores({
+      schema: "classroom50/scores/v1",
+      assignments: {
+        hw1: {
+          type: "individual",
+          entries: [
+            {
+              owner: "alice",
+              submissions: [{ ...overrideRecord, owner: "alice" }],
+            },
+          ],
+          detected: [{ owner: "bob", count: 2, kind: "commit" }],
+        },
+      },
+    } as never)
+    expect(normalized?.submissions.hw1.map((r) => r.owner)).toEqual(["alice"])
+    expect(normalized?.detected.hw1.map((d) => d.owner)).toEqual(["bob"])
+  })
+
   it("distinguishes never-collected from collected-with-nobody", () => {
     // The absent key must not read as an empty list: 0/N for a bucket that was
     // never walked is exactly the bug this fixes (#659).
