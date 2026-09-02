@@ -1,5 +1,5 @@
 import type { GitHubClient } from "./client"
-import type { GitHubWorkflowRun } from "./types"
+import type { GitHubWorkflowRun, GitHubWorkflowRunList } from "./types"
 import { GitHubAPIError } from "./errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 
@@ -29,7 +29,7 @@ async function fetchRunsPage(
   signal?: AbortSignal,
 ): Promise<GitHubWorkflowRun[]> {
   try {
-    const res = await client.request<{ workflow_runs: GitHubWorkflowRun[] }>(
+    const res = await client.request<GitHubWorkflowRunList>(
       `/repos/${encodeURIComponent(org)}/${CONFIG_REPO}/actions/runs?${query}`,
       { method: "GET", signal },
     )

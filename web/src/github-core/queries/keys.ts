@@ -2,6 +2,25 @@ import type { QueryClient } from "@tanstack/react-query"
 
 import { CONFIG_REPO } from "@/util/configRepo"
 
+// The tracker key for one workflow dispatch. `scope` narrows it to the surface
+// that dispatched (a regrade is per classroom/assignment/owner so one
+// assignment's run never shows as in progress on another's page); `sinceRunId`
+// binds the poll to our own dispatch. Every dispatch tracker key is built here
+// so a new workflow needs no hand-written key.
+const dispatchRun = (
+  workflow: string,
+  owner: string,
+  scope: readonly string[],
+  sinceRunId: number | null,
+) =>
+  [
+    ...githubKeys.all,
+    `${workflow}-run`,
+    owner,
+    ...scope,
+    sinceRunId ?? "none",
+  ] as const
+
 // The cache-key factory for every github-core read. This is the leaf of the
 // queries module: every *Query sub-module imports these keys, and this file
 // imports nothing from them, so the split stays cycle-free (import-x/no-cycle).
@@ -151,19 +170,11 @@ export const githubKeys = {
     [...githubKeys.all, "csv-file", owner, repo, path, ref ?? null] as const,
 
   collectScoresRun: (owner: string, sinceRunId: number | null) =>
-    [
-      ...githubKeys.all,
-      "collect-scores-run",
-      owner,
-      sinceRunId ?? "none",
-    ] as const,
+    dispatchRun("collect-scores", owner, [], sinceRunId),
 
   lastCollectScoresRun: (owner: string) =>
     [...githubKeys.all, "last-collect-scores-run", owner] as const,
 
-  // Scoped by classroom + assignment (+ optional repo owner) so a regrade of
-  // one assignment doesn't surface as in-progress on another assignment's
-  // page; sinceRunId binds the poll to our specific dispatch.
   regradeRun: (
     owner: string,
     classroom: string,
@@ -171,27 +182,18 @@ export const githubKeys = {
     repoOwner: string | null,
     sinceRunId: number | null,
   ) =>
-    [
-      ...githubKeys.all,
-      "regrade-run",
+    dispatchRun(
+      "regrade",
       owner,
-      classroom,
-      assignment,
-      repoOwner ?? "all",
-      sinceRunId ?? "none",
-    ] as const,
+      [classroom, assignment, repoOwner ?? "all"],
+      sinceRunId,
+    ),
 
   serviceToken: (owner: string) =>
     [...githubKeys.all, "serviceToken", owner] as const,
 
-  // The probe-token dispatch tracker; sinceRunId binds the poll to one dispatch.
   probeTokenRun: (owner: string, sinceRunId: number | null) =>
-    [
-      ...githubKeys.all,
-      "probe-token-run",
-      owner,
-      sinceRunId ?? "none",
-    ] as const,
+    dispatchRun("probe-token", owner, [], sinceRunId),
 
   runAnnotations: (owner: string, runId: number) =>
     [...githubKeys.all, "run-annotations", owner, runId] as const,

@@ -8,7 +8,6 @@ import type {
   GitHubRepo,
 } from "../types"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
-import { mapWithConcurrency } from "@/util/concurrency"
 import { tolerateGitHubError } from "../errors"
 import {
   PAGE_FETCH_CONCURRENCY,
@@ -19,7 +18,7 @@ import {
 } from "../paginate"
 import { getRepo } from "../repoReads"
 import { githubKeys } from "./keys"
-import { REPO_READ_CONCURRENCY, withGithubReadSlot } from "./shared"
+import { withGithubReadSlot } from "./shared"
 
 export function getBranchRefRepo(
   client: GitHubClient,
@@ -193,7 +192,9 @@ export async function getAssignmentRepos(
 // The candidate repos that exist, read by exact name. Mirrors paginateRemaining:
 // one probe failing definitively ends the fan-out and aborts its siblings, and
 // the retry waits outside the read slot so a throttled probe does not hold one
-// of the few slots while it sleeps.
+// of the few slots while it sleeps. The slot is the only bound: it already caps
+// the aggregate wire concurrency, so the fan-out starts every probe and lets
+// them queue on it.
 async function probeRepos(
   client: GitHubClient,
   owner: string,
@@ -205,10 +206,8 @@ async function probeRepos(
   if (signal?.aborted) onCallerAbort()
   signal?.addEventListener("abort", onCallerAbort, { once: true })
   try {
-    const probed = await mapWithConcurrency(
-      names,
-      REPO_READ_CONCURRENCY,
-      (name) =>
+    const probed = await Promise.all(
+      names.map((name) =>
         withTransientRetry(
           () =>
             withGithubReadSlot(() =>
@@ -216,6 +215,7 @@ async function probeRepos(
             ),
           fanOut.signal,
         ),
+      ),
     )
     return probed.filter((repo): repo is GitHubRepo => repo !== null)
   } catch (err) {

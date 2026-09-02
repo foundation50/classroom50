@@ -289,6 +289,28 @@ export type GitHubWorkflowRun = {
   }
 }
 
+// The list-runs envelope (GET .../actions/workflows/{id}/runs and
+// .../actions/runs). Only `id` is read where the list is used as a baseline.
+export type GitHubWorkflowRunList<Run = GitHubWorkflowRun> = {
+  workflow_runs: Run[]
+}
+
+// One job of a workflow run (GET .../actions/runs/{id}/jobs). Each job is also
+// a check run, which is where its annotations live.
+export type GitHubWorkflowJob = {
+  id: number
+  name?: string
+}
+
+// One workflow-command annotation (`::error::`, `::warning::`, `::notice::`)
+// as attached to a job's check run (GET .../check-runs/{id}/annotations).
+export type GitHubCheckAnnotation = {
+  annotation_level: "notice" | "warning" | "failure" | string
+  message: string | null
+  path?: string
+  start_line?: number
+}
+
 // A commit from the REST list-commits endpoint
 // (GET /repos/{owner}/{repo}/commits). Distinct from GitHubCommitRef (the
 // git-data single-commit tree ref). Used by the org activity timeline to render
