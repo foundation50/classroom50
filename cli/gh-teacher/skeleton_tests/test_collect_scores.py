@@ -4497,6 +4497,9 @@ class TestGrantThrottled:
         # Collection can't defer — an incomplete gradebook must not report
         # success — but the message still must not blame the token.
         write_minimal_classroom(tmp_path)
+        # The grant pass runs first and reads the student team; keep it off the
+        # network so the only error under test is collection's throttle.
+        stub_team_members(monkeypatch, [])
 
         def fail_collect(**kwargs):
             raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
