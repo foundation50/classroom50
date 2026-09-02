@@ -1276,3 +1276,79 @@ func TestRateLimitMarkersParity_GoVsInlinePython(t *testing.T) {
 		}
 	}
 }
+
+// TestStaffRolesParity_GoVsPythonVsWeb pins the STAFF_ROLES tuple the two
+// embedded scripts hand-mirror, and the web's STAFF_ROLES literal, to
+// contract.StaffRoles in value AND order. A role added to one side but not the
+// others would leave that side's staff team unread by the grant pass or unshown
+// on the roster, silently.
+func TestStaffRolesParity_GoVsPythonVsWeb(t *testing.T) {
+	var goRoles []string
+	for _, role := range contract.StaffRoles {
+		goRoles = append(goRoles, string(role))
+	}
+
+	quoteRE := regexp.MustCompile(`"([^"]+)"`)
+	readRoles := func(src, name string, declRE *regexp.Regexp) []string {
+		m := declRE.FindStringSubmatch(src)
+		if m == nil {
+			t.Fatalf("%s no longer declares STAFF_ROLES where this parity check reads it", name)
+		}
+		var got []string
+		for _, q := range quoteRE.FindAllStringSubmatch(m[1], -1) {
+			got = append(got, q[1])
+		}
+		return got
+	}
+
+	files, err := skeletonFiles("main")
+	if err != nil {
+		t.Fatalf("skeletonFiles: %v", err)
+	}
+	pyRE := regexp.MustCompile(`(?m)^STAFF_ROLES = \(([^)]*)\)`)
+	for _, name := range []string{"collect_scores.py", "probe_token.py"} {
+		script, ok := files[".github/scripts/"+name]
+		if !ok {
+			t.Fatalf("%s missing from skeleton", name)
+		}
+		if got := readRoles(script, name, pyRE); !reflect.DeepEqual(got, goRoles) {
+			t.Errorf("%s STAFF_ROLES = %q, want contract.StaffRoles %q (value and order)", name, got, goRoles)
+		}
+	}
+
+	webSrc, err := os.ReadFile(filepath.Join("..", "..", "web", "src", "types", "classroom.ts"))
+	if err != nil {
+		t.Fatalf("read web classroom.ts: %v", err)
+	}
+	webRE := regexp.MustCompile(`export const STAFF_ROLES: readonly StaffRole\[\] = \[([^\]]*)\]`)
+	if got := readRoles(string(webSrc), "web/src/types/classroom.ts", webRE); !reflect.DeepEqual(got, goRoles) {
+		t.Errorf("web STAFF_ROLES = %q, want contract.StaffRoles %q (value and order)", got, goRoles)
+	}
+}
+
+// TestStaffTeamSlugParity_GoVsPython pins the derived staff team slug shape
+// `classroom50-<short>-<role>` in both scripts to contract.StaffTeamSlug. The
+// scripts are standalone, so each spells the f-string itself; a drift here
+// means the grant pass and the probe look up a team that does not exist and
+// read "no TAs".
+func TestStaffTeamSlugParity_GoVsPython(t *testing.T) {
+	want := contract.StaffTeamSlug("cs", contract.RoleTA)
+	if want != "classroom50-cs-ta" {
+		t.Fatalf("contract.StaffTeamSlug shape changed to %q; update the Python scripts and this test together", want)
+	}
+	files, err := skeletonFiles("main")
+	if err != nil {
+		t.Fatalf("skeletonFiles: %v", err)
+	}
+	// Either spelling of the prefix, then `-{classroom_short}-{role}`.
+	slugRE := regexp.MustCompile(`f"(?:classroom50|\{CONFIG_REPO\})-\{classroom_short\}-\{role\}"`)
+	for _, name := range []string{"collect_scores.py", "probe_token.py"} {
+		script, ok := files[".github/scripts/"+name]
+		if !ok {
+			t.Fatalf("%s missing from skeleton", name)
+		}
+		if !slugRE.MatchString(script) {
+			t.Errorf("%s no longer derives the staff team slug as classroom50-<short>-<role>; keep it byte-equal to contract.StaffTeamSlug", name)
+		}
+	}
+}
