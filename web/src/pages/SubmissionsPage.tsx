@@ -124,6 +124,7 @@ import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useAssignmentRepos } from "@/hooks/useAssignmentRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
+import useInvalidateAfterCollect from "@/hooks/useInvalidateAfterCollect"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
@@ -1195,22 +1196,28 @@ const SubmissionsPageContent = () => {
     snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
   // Refresh scores + last-run timestamp + org repo list once a manual collection
-  // finishes, so the freshness line re-derives (the collect just consumed the
-  // pushes latestPush was flagging). Invalidate the last-run query rather than
-  // refetching it: its 60s staleTime would otherwise let a cached entry from
-  // before the run short-circuit the update, leaving the "Last collected" line
-  // lagging even though the button color is already correct from the tracked run.
+  // finishes (or this client times out on the poll), so the table and the
+  // freshness line re-derive: the collect just consumed the pushes latestPush
+  // was flagging, and for a non-owner it also granted read on repos that were
+  // invisible before, which flips their rows from "not accepted" to accepted
+  // without a reload. Invalidation reaches the roster-scoped repo probe through
+  // its orgRepos-prefixed key; the probe honors it rather than serving a
+  // pre-collect listing from cache.
+  useInvalidateAfterCollect(org ?? "", classroom ?? "", collectScores.phase)
+  // The overlays read the repos directly and are outside that invalidation set.
+  // Re-run them too: for a non-owner, a repo the collect just granted read on
+  // 404'd into "not submitted" a moment ago, exactly like the manual button.
   useEffect(() => {
-    if (collectScores.phase === "completed") {
-      refetchScores()
-      if (org) {
-        queryClient.invalidateQueries({
-          queryKey: githubKeys.lastCollectScoresRun(org),
-        })
-      }
-      refetchOrgRepos()
-    }
-  }, [collectScores.phase, org, queryClient, refetchScores, refetchOrgRepos])
+    if (collectScores.phase !== "completed") return
+    if (liveCapable) refetchLive()
+    if (detectionCapable) refetchDetected()
+  }, [
+    collectScores.phase,
+    liveCapable,
+    detectionCapable,
+    refetchLive,
+    refetchDetected,
+  ])
 
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
