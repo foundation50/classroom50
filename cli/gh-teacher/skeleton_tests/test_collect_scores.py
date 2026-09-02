@@ -6064,3 +6064,34 @@ class TestMainThrottleBranches:
         line = next(ln for ln in err.splitlines() if "throttled" in ln)
         assert "do NOT rotate" in line
         assert "rotate-service-token" not in line
+
+
+class TestScope:
+    def test_describes_the_three_shapes_like_the_workflow_run_name(self):
+        assert cs.Scope().describe() == "all classrooms"
+        assert cs.Scope("cs").describe() == "every assignment in cs"
+        assert cs.Scope("cs", "hw1").describe() == "hw1 in cs"
+
+    def test_reads_and_trims_the_dispatch_env(self, monkeypatch):
+        monkeypatch.setenv("CLASSROOM_FILTER", " cs ")
+        monkeypatch.setenv("ASSIGNMENT_FILTER", "hw1 ")
+        assert cs.Scope.from_env() == cs.Scope("cs", "hw1")
+
+
+class TestProbeState:
+    def test_budget_is_the_pages_not_read(self):
+        state = cs._ProbeState({"starter": cs.RepoFacts(False)}, last_page=4)
+        assert state.budget_allows(3) is True
+        state.record(["a", "b"], {"a": cs.RepoFacts(True)})
+        assert state.budget_allows(1) is True
+        assert state.budget_allows(2) is False
+        assert state.resolved("a") and state.resolved("b")
+        assert state.unresolved(["a", "b", "c"]) == ["c"]
+
+    def test_known_keeps_probed_hits_and_drops_unknowns(self):
+        state = cs._ProbeState({"starter": cs.RepoFacts(False)}, last_page=3)
+        state.record(["a", "b"], {"a": cs.RepoFacts(True), "b": None})
+        assert state.known() == {
+            "starter": cs.RepoFacts(False),
+            "a": cs.RepoFacts(True),
+        }

@@ -66,7 +66,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Iterable, NamedTuple
+from typing import Any, Callable, Iterable, NamedTuple, Sequence
 
 # Schema sentinels — keep in lockstep with the Go-side constants in
 # `cli/gh-teacher/classroom.go` and `cli/gh-teacher/assignments_json.go`.
@@ -244,11 +244,35 @@ def warn_grant_deferred(classroom_short: str, detail: str) -> None:
     )
 
 
+class Scope(NamedTuple):
+    """What one run collects, as the workflow_dispatch inputs name it: every
+    classroom (both blank), one classroom, or one assignment within it. The
+    same three shapes the workflow's run-name spells out."""
+
+    classroom: str = ""
+    assignment: str = ""
+
+    @classmethod
+    def from_env(cls) -> "Scope":
+        return cls(
+            (os.environ.get("CLASSROOM_FILTER") or "").strip(),
+            (os.environ.get("ASSIGNMENT_FILTER") or "").strip(),
+        )
+
+    def describe(self) -> str:
+        if self.assignment:
+            return f"{self.assignment} in {self.classroom}"
+        if self.classroom:
+            return f"every assignment in {self.classroom}"
+        return "all classrooms"
+
+
 def main() -> int:
     run_started = time.monotonic()
     base_dir = pathlib.Path(os.environ.get("GITHUB_WORKSPACE") or ".").resolve()
-    classroom_filter = (os.environ.get("CLASSROOM_FILTER") or "").strip()
-    assignment_filter = (os.environ.get("ASSIGNMENT_FILTER") or "").strip()
+    scope = Scope.from_env()
+    classroom_filter, assignment_filter = scope
+    print(f"collecting {scope.describe()}")
 
     org = (os.environ.get("GITHUB_REPOSITORY_OWNER") or "").strip()
     if not org:
@@ -650,6 +674,42 @@ def repo_facts(repo: dict[str, Any]) -> RepoFacts:
     )
 
 
+class _ProbeState:
+    """RepoIndex's probe mode: page 1 of the listing plus per-name answers,
+    within a request budget of the pages that were not read.
+
+    `found` maps a name to its facts, or None when its read failed (unknown,
+    fails open); `missing` holds the names that 404ed so they are not probed
+    twice. `budget_allows` is the latch rule: probes may never cost more than
+    the pages they stand in for, past that the caller completes the listing."""
+
+    def __init__(self, first_page: dict[str, RepoFacts], last_page: int) -> None:
+        self.last_page = last_page
+        self.found: dict[str, RepoFacts | None] = dict(first_page)
+        self.missing: set[str] = set()
+        self._spent = 0
+
+    def resolved(self, name: str) -> bool:
+        return name in self.found or name in self.missing
+
+    def unresolved(self, names: Iterable[str]) -> list[str]:
+        return [name for name in names if not self.resolved(name)]
+
+    def budget_allows(self, count: int) -> bool:
+        return self._spent + count <= self.last_page - 1
+
+    def record(self, names: list[str], probed: dict[str, RepoFacts | None]) -> None:
+        self._spent += len(names)
+        self.found.update(probed)
+        self.missing.update(name for name in names if name not in probed)
+
+    def known(self) -> dict[str, RepoFacts]:
+        """The names that exist with facts in hand, as the seed of a completed
+        listing: a name found by probe is in the org whether or not it lands on
+        a page (a repo created mid-walk shifts the pages)."""
+        return {name: facts for name, facts in self.found.items() if facts is not None}
+
+
 class RepoIndex:
     """The org's repos (lowercased name -> RepoFacts), read once per run and only
     when something asks.
@@ -684,14 +744,8 @@ class RepoIndex:
         self._repos: dict[str, RepoFacts] | None = None
         self._loaded = False
         self._started = 0.0
-        # Probe mode: page 1 plus per-name answers. `_found` maps a name to its
-        # facts, or None when its read failed (unknown, fails open); `_missing`
-        # holds the names that 404ed so they are not probed twice.
-        self._probing = False
-        self._last_page = 1
-        self._probes_spent = 0
-        self._found: dict[str, RepoFacts | None] = {}
-        self._missing: set[str] = set()
+        # Set while page 1 plus probes answer instead of the listing.
+        self._probe_state: _ProbeState | None = None
 
     def prefetch(self, repo_names: Iterable[str]) -> None:
         """Tell the index which names the caller is about to ask about, so it can
@@ -699,9 +753,9 @@ class RepoIndex:
         when that is cheaper). Optional: `contains` and `is_private` answer
         without it, one request per unseen name in probe mode."""
         names = list(dict.fromkeys(name.lower() for name in repo_names))
-        if self._load(names) is not None or not self._probing:
+        if self._load(names) is not None or self._probe_state is None:
             return
-        self._probe([name for name in names if not self._resolved(name)])
+        self._probe(self._probe_state.unresolved(names))
 
     def _load(self, hint: list[str] | None = None) -> dict[str, RepoFacts] | None:
         """The repos, or None when the listing is unknown (unreadable, or being
@@ -760,9 +814,7 @@ class RepoIndex:
         if last > 1:
             unresolved = [name for name in hint if name not in repos]
             if len(unresolved) <= last - 1:
-                self._probing = True
-                self._last_page = last
-                self._found = dict(repos)
+                self._probe_state = _ProbeState(repos, last)
                 print(
                     f"{self._org}: {last} page(s) of repos; checking "
                     f"{len(unresolved)} candidate repo name(s) directly instead"
@@ -791,35 +843,34 @@ class RepoIndex:
         are kept: a name found by probe is in the org whether or not it lands on
         a page (a repo created mid-walk shifts the pages). A soft failure leaves
         the listing unknown, like a failed first read."""
+        probe = self._probe_state
+        assert probe is not None
         rest = self._soft_read(
             lambda: list_org_repos_rest(
-                self._api_url, self._org, self._token, self._last_page
+                self._api_url, self._org, self._token, probe.last_page
             )
         )
-        self._probing = False
+        self._probe_state = None
         if rest is None:
             self._repos = None
             return None
-        repos = {name: facts for name, facts in self._found.items() if facts is not None}
+        repos = probe.known()
         repos.update(rest)
         self._repos = self._listing(repos)
         return self._repos
 
-    def _resolved(self, name: str) -> bool:
-        return name in self._found or name in self._missing
-
     def _probe(self, names: list[str]) -> None:
         """Resolve `names` by direct reads, or by completing the listing once the
         probes would cost more than the pages they stand in for."""
-        if not names:
+        probe = self._probe_state
+        if not names or probe is None:
             return
-        if self._probes_spent + len(names) > self._last_page - 1:
+        if not probe.budget_allows(len(names)):
             self._complete_listing()
             return
-        found = probe_org_repos(self._api_url, self._org, names, self._token)
-        self._probes_spent += len(names)
-        self._found.update(found)
-        self._missing.update(name for name in names if name not in found)
+        probe.record(
+            names, probe_org_repos(self._api_url, self._org, names, self._token)
+        )
 
     def _answers(self, name: str) -> dict[str, RepoFacts | None] | None:
         """The map that holds `name`'s answer: the listing, or in probe mode the
@@ -827,10 +878,11 @@ class RepoIndex:
         None when the listing is unknown. In probe mode an unknown name maps to
         None and a 404 name is absent, so both maps read the same way."""
         repos = self._load()
-        if repos is None and self._probing:
-            if not self._resolved(name):
+        probe = self._probe_state
+        if repos is None and probe is not None:
+            if not probe.resolved(name):
                 self._probe([name])
-            return self._found if self._probing else self._repos
+            return self._probe_state.found if self._probe_state else self._repos
         return repos
 
     def contains(self, repo_name: str) -> bool:
@@ -859,7 +911,7 @@ class RepoIndex:
         (the `<classroom>-<assignment>-group-<n>` repos carry no username to
         derive them from), so probe mode completes the listing here."""
         repos = self._load()
-        if repos is None and self._probing:
+        if repos is None and self._probe_state is not None:
             repos = self._complete_listing()
         if repos is None:
             return None
@@ -1222,6 +1274,228 @@ def collect_detected(
     return assignment_type, records, visited
 
 
+def collect_release_history(
+    api_url: str,
+    org: str,
+    repo_name: str,
+    releases: list[dict[str, Any]],
+    service_token: str,
+    *,
+    classroom_short: str,
+    slug: str,
+    username: str,
+    assignment_type: str,
+    renamed_from: str | None,
+    due: datetime.datetime | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """One repo's creditable submissions, newest first, as
+    (history, validation_rejected).
+
+    Each release's result.json is downloaded and validated independently; a
+    single bad/missing one warns and is skipped without dropping the others.
+    `validation_rejected` counts releases present and downloaded but FAILED
+    validate_result (the mode-flip / identity-mismatch symptom), kept distinct
+    from a benign download error or missing asset so the caller's "mode flipped"
+    warning fires only on the real symptom."""
+    history: list[dict[str, Any]] = []
+    validation_rejected = 0
+    for release in releases:
+        try:
+            candidate = download_result_asset(api_url, release, service_token)
+        except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
+            emit_warning(
+                f"{org}/{repo_name}: result.json download failed for "
+                f"{release.get('tag_name')!r}: HTTP {exc.code} "
+                f"({exc.reason or 'no reason'}); skipping that submission"
+            )
+            continue
+        except AssetMissingError as exc:
+            emit_warning(
+                f"{org}/{repo_name}: {release.get('tag_name')!r}: {exc}; "
+                f"skipping that submission"
+            )
+            continue
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{org}/{repo_name}: result.json malformed for "
+                f"{release.get('tag_name')!r} ({exc}); skipping that submission"
+            )
+            continue
+
+        # validate_result enforces identity (owner == repo owner) AND that
+        # `assignment_type` matches the manifest mode, so a mode-flipped or
+        # mis-typed result is rejected here — no separate assignment_type
+        # cross-check needed afterward.
+        try:
+            validate_result(
+                candidate,
+                classroom_short,
+                slug,
+                username,
+                expected_type=assignment_type,
+                renamed_from=renamed_from,
+            )
+        except ValueError as exc:
+            emit_warning(
+                f"{org}/{repo_name}: invalid result.json for "
+                f"{release.get('tag_name')!r} ({exc}); skipping that submission"
+            )
+            validation_rejected += 1
+            continue
+
+        # Lateness is advisory, marked per submission on the record itself
+        # (each carries its own datetime).
+        if due is not None and not mark_late(candidate, due):
+            emit_warning(
+                f"{org}/{repo_name}: result.json datetime = "
+                f"{candidate.get('datetime')!r} is not an RFC 3339 timestamp; "
+                f"cannot mark lateness"
+            )
+        # The stored record is the validated payload minus the bucket-key
+        # `assignment`. Keeps result/v1 shape: owner + assignment_type +
+        # submitted_by, no usernames.
+        history.append({k: v for k, v in candidate.items() if k != "assignment"})
+    return history, validation_rejected
+
+
+class MemberAttribution(NamedTuple):
+    """Who a submission credits. `members` is None for an individual entry
+    (no member list is written). `skipped` names why the repo is left alone
+    this run (prior credit preserved), or None when the entry is written;
+    `degraded` flags a group read that fell back to owner-only."""
+
+    members: list[str] | None
+    team_slug: str | None
+    skipped: str | None = None
+    degraded: bool = False
+
+
+def attribute_submission_members(
+    api_url: str,
+    org: str,
+    classroom_short: str,
+    slug: str,
+    repo_name: str,
+    username: str,
+    *,
+    is_team: bool,
+    is_group: bool,
+    service_token: str,
+    roster_logins: set[str],
+) -> MemberAttribution:
+    """Resolve the credited members for one submitted repo.
+
+    Group attribution: the runner emits owner-only (it can't read
+    collaborators). Collection is authoritative — list the repo's collaborators
+    intersected with the roster and credit them all via `member_usernames`. On a
+    read failure, force owner-only (never trust student-supplied data) and warn,
+    so a scope/transient issue degrades gracefully. Individual entries carry no
+    member list. Team attribution instead credits the GROUP TEAM's live members
+    (never repo collaborators), and a failed team read SKIPS the repo — the
+    owner `group-<n>` is not a person, so an owner-only degrade would credit
+    nobody and revoke every member."""
+    if is_team:
+        counter = team_repo_counter(username)
+        if counter is None:
+            # Unreachable via team_poll_owners (which derives owners from the
+            # counter shape); defensive for a future caller.
+            emit_warning(
+                f"{org}/{repo_name}: owner segment {username!r} is not "
+                f"group-<n>; skipping"
+            )
+            return MemberAttribution(None, None, skipped="bad-owner")
+        entry_team_slug = group_team_slug(classroom_short, slug, counter)
+        members, failure_warning = attribute_team_members(
+            api_url, org, repo_name, entry_team_slug, service_token, roster_logins
+        )
+        if members is None:
+            emit_warning(failure_warning)
+            return MemberAttribution(None, entry_team_slug, skipped="team-read-failed")
+        if not members:
+            # A team whose live members are all unenrolled (or the team is
+            # empty) still writes its entry — the drift is loud, not silent.
+            emit_warning(
+                f"{org}/{repo_name}: team {entry_team_slug!r} has no enrolled "
+                f"members to credit; the submission is recorded but nobody "
+                f"is credited. Ensure the team's members are on the "
+                f"{classroom_short} classroom team."
+            )
+        return MemberAttribution(members, entry_team_slug)
+    if is_group:
+        try:
+            members, degraded_warning = attribute_group_members(
+                api_url, org, repo_name, username, service_token, roster_logins
+            )
+        except IncompleteListing as exc:
+            # A partial list must not be written as if it were whole: skipping
+            # the repo leaves its previous gradebook entry (and its credited
+            # teammates) intact.
+            emit_warning(
+                f"{org}/{repo_name}: group collaborator listing is "
+                f"incomplete ({exc}); skipping this repo so its existing "
+                f"member credit is preserved. Re-run to collect it."
+            )
+            return MemberAttribution(None, None, skipped="incomplete-listing")
+        if degraded_warning is not None:
+            emit_warning(degraded_warning)
+            return MemberAttribution(members, None, degraded=True)
+        if len(members) == 1:
+            # Read succeeded but credited only the owner — no other rostered
+            # collaborator found. Often expected (a solo group submission), but
+            # also the symptom of a real misconfig (teammates not on the roster,
+            # or not added as collaborators), which would otherwise be silent.
+            emit_warning(
+                f"{org}/{repo_name}: group submission credited to the owner "
+                f"{username!r} only — no other team member is a collaborator "
+                f"on the repo. If this is a team submission, ensure each teammate "
+                f"is on the {classroom_short} classroom team AND a collaborator on "
+                f"the repo (added via `gh student invite`)."
+            )
+        return MemberAttribution(members, None)
+    return MemberAttribution(None, None)
+
+
+def build_entry_row(
+    slug: str,
+    assignment_type: str,
+    username: str,
+    attribution: MemberAttribution,
+    roster_meta: dict[str, dict[str, str]],
+    history: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """The gradebook entry: identity/keying at the top, the full per-submission
+    detail ONLY inside `submissions` (newest first). `owner` is the stable
+    per-bucket key (repo owner from the <classroom>-<assignment>-<username>
+    formula), invariant across re-collects even when a group's member set
+    changes, so apply_updates replaces the entry in place. For a group entry
+    `member_usernames` sits right after `owner`. `_assignment` / `_type` are
+    transport-only hints for apply_updates (bucket slug + type), stripped on
+    store."""
+    entry_row: dict[str, Any] = {
+        "_assignment": slug,
+        "_type": assignment_type,
+        "owner": username,
+    }
+    if attribution.members is not None:
+        entry_row["member_usernames"] = list(attribution.members)
+    if attribution.team_slug is not None:
+        entry_row["team_slug"] = attribution.team_slug
+    # Best-effort roster join: attach non-blank display metadata for the owner
+    # when the roster carries a row. Missing/blank is fine (the team, not the
+    # roster, drives enrollment).
+    meta = roster_meta.get(username.lower())
+    if meta:
+        for field in ("first_name", "last_name", "email", "section"):
+            value = meta.get(field)
+            if value:
+                entry_row[field] = value
+    entry_row["submissions"] = history
+    return entry_row
+
+
+
 def collect_classroom(
     *,
     api_url: str,
@@ -1481,73 +1755,11 @@ def collect_classroom(
                     detected_records.append(record)
                 continue
 
-            # Collect EVERY submission, newest first. Each release's result.json
-            # is downloaded and validated independently; a single bad/missing one
-            # warns and is skipped without dropping the others. `validation_rejected`
-            # counts releases present and downloaded but FAILED validate_result
-            # (the mode-flip / identity-mismatch symptom) — kept distinct from a
-            # benign download error or missing asset, so the "mode flipped"
-            # warning below only fires on the real symptom.
-            history: list[dict[str, Any]] = []
-            validation_rejected = 0
-            for release in releases:
-                try:
-                    candidate = download_result_asset(api_url, release, service_token)
-                except urllib.error.HTTPError as exc:
-                    if classify(exc) is not SKIPPABLE:
-                        raise
-                    emit_warning(
-                        f"{org}/{repo_name}: result.json download failed for "
-                        f"{release.get('tag_name')!r}: HTTP {exc.code} "
-                        f"({exc.reason or 'no reason'}); skipping that submission"
-                    )
-                    continue
-                except AssetMissingError as exc:
-                    emit_warning(
-                        f"{org}/{repo_name}: {release.get('tag_name')!r}: {exc}; "
-                        f"skipping that submission"
-                    )
-                    continue
-                except (json.JSONDecodeError, ValueError) as exc:
-                    emit_warning(
-                        f"{org}/{repo_name}: result.json malformed for "
-                        f"{release.get('tag_name')!r} ({exc}); skipping that submission"
-                    )
-                    continue
-
-                # validate_result enforces identity (owner == repo owner) AND
-                # that `assignment_type` matches the manifest mode, so a
-                # mode-flipped or mis-typed result is rejected here — no
-                # separate assignment_type cross-check needed afterward.
-                try:
-                    validate_result(
-                        candidate,
-                        classroom_short,
-                        slug,
-                        username,
-                        expected_type=assignment_type,
-                        renamed_from=renamed_from,
-                    )
-                except ValueError as exc:
-                    emit_warning(
-                        f"{org}/{repo_name}: invalid result.json for "
-                        f"{release.get('tag_name')!r} ({exc}); skipping that submission"
-                    )
-                    validation_rejected += 1
-                    continue
-
-                # Lateness is advisory, marked per submission on the record
-                # itself (each carries its own datetime).
-                if due is not None and not mark_late(candidate, due):
-                    emit_warning(
-                        f"{org}/{repo_name}: result.json datetime = "
-                        f"{candidate.get('datetime')!r} is not an RFC 3339 timestamp; "
-                        f"cannot mark lateness"
-                    )
-                # The stored record is the validated payload minus the bucket-key
-                # `assignment`. Keeps result/v1 shape: owner + assignment_type +
-                # submitted_by, no usernames.
-                history.append({k: v for k, v in candidate.items() if k != "assignment"})
+            history, validation_rejected = collect_release_history(
+                api_url, org, repo_name, releases, service_token,
+                classroom_short=classroom_short, slug=slug, username=username,
+                assignment_type=assignment_type, renamed_from=renamed_from, due=due,
+            )
 
             if not history:
                 # The repo had submit-tag releases but no creditable history.
@@ -1564,108 +1776,24 @@ def collect_classroom(
                     mode_flip_repos.append(repo_name)
                 continue
 
-            # Group attribution: the runner emits owner-only (it can't read
-            # collaborators). Collection is authoritative — list the repo's
-            # collaborators intersected with the roster and credit them all via
-            # `member_usernames`. On a read failure, force owner-only (never
-            # trust student-supplied data) and warn, so a scope/transient issue
-            # degrades gracefully. Individual entries carry no member list.
-            # Team attribution instead credits the GROUP TEAM's live members
-            # (never repo collaborators), and a failed team read SKIPS the repo
-            # — the owner `group-<n>` is not a person, so an owner-only degrade
-            # would credit nobody and revoke every member. Resolved BEFORE
-            # building the entry so `member_usernames` sits right after
+            # Who the entry credits (see attribute_submission_members). Resolved
+            # BEFORE building the entry so `member_usernames` sits right after
             # `owner` in the written JSON key order.
-            members: list[str] | None = None
-            entry_team_slug: str | None = None
-            if is_team:
-                counter = team_repo_counter(username)
-                if counter is None:
-                    # Unreachable via team_poll_owners (which derives owners
-                    # from the counter shape); defensive for a future caller.
-                    emit_warning(
-                        f"{org}/{repo_name}: owner segment {username!r} is not "
-                        f"group-<n>; skipping"
-                    )
-                    continue
-                entry_team_slug = group_team_slug(classroom_short, slug, counter)
-                members, failure_warning = attribute_team_members(
-                    api_url, org, repo_name, entry_team_slug, service_token, roster_logins
-                )
-                if members is None:
+            attribution = attribute_submission_members(
+                api_url, org, classroom_short, slug, repo_name, username,
+                is_team=is_team, is_group=is_group,
+                service_token=service_token, roster_logins=roster_logins,
+            )
+            if attribution.degraded:
+                group_attribution_degraded += 1
+            if attribution.skipped is not None:
+                if attribution.skipped == "team-read-failed":
                     team_attribution_failed += 1
-                    emit_warning(failure_warning)
-                    continue
-                if not members:
-                    # A team whose live members are all unenrolled (or the
-                    # team is empty) still writes its entry — the drift is
-                    # loud, not silent.
-                    emit_warning(
-                        f"{org}/{repo_name}: team {entry_team_slug!r} has no enrolled "
-                        f"members to credit; the submission is recorded but nobody "
-                        f"is credited. Ensure the team's members are on the "
-                        f"{classroom_short} classroom team."
-                    )
-            elif is_group:
-                try:
-                    members, degraded_warning = attribute_group_members(
-                        api_url, org, repo_name, username, service_token, roster_logins
-                    )
-                except IncompleteListing as exc:
-                    # A partial list must not be written as if it were whole:
-                    # skipping the repo leaves its previous gradebook entry (and
-                    # its credited teammates) intact.
-                    emit_warning(
-                        f"{org}/{repo_name}: group collaborator listing is "
-                        f"incomplete ({exc}); skipping this repo so its existing "
-                        f"member credit is preserved. Re-run to collect it."
-                    )
-                    continue
-                if degraded_warning is not None:
-                    group_attribution_degraded += 1
-                    emit_warning(degraded_warning)
-                elif len(members) == 1:
-                    # Read succeeded but credited only the owner — no other
-                    # rostered collaborator found. Often expected (a solo group
-                    # submission), but also the symptom of a real misconfig
-                    # (teammates not on the roster, or not added as
-                    # collaborators), which would otherwise be silent.
-                    emit_warning(
-                        f"{org}/{repo_name}: group submission credited to the owner "
-                        f"{username!r} only — no other team member is a collaborator "
-                        f"on the repo. If this is a team submission, ensure each teammate "
-                        f"is on the {classroom_short} classroom team AND a collaborator on "
-                        f"the repo (added via `gh student invite`)."
-                    )
+                continue
 
-            # Build the gradebook entry: identity/keying at the top, the full
-            # per-submission detail ONLY inside `submissions` (newest first).
-            # `owner` is the stable per-bucket key (repo owner from the
-            # <classroom>-<assignment>-<username> formula), invariant across
-            # re-collects even when a group's member set changes, so apply_updates
-            # replaces the entry in place. For a group entry `member_usernames`
-            # sits right after `owner`. `_assignment` / `_type` are transport-only
-            # hints for apply_updates (bucket slug + type), stripped on store.
-            entry_row: dict[str, Any] = {
-                "_assignment": slug,
-                "_type": assignment_type,
-                "owner": username,
-            }
-            if members is not None:
-                entry_row["member_usernames"] = list(members)
-            if entry_team_slug is not None:
-                entry_row["team_slug"] = entry_team_slug
-            # Best-effort roster join: attach non-blank display metadata for the
-            # owner when the roster carries a row. Missing/blank is fine (the
-            # team, not the roster, drives enrollment).
-            meta = roster_meta.get(username.lower())
-            if meta:
-                for field in ("first_name", "last_name", "email", "section"):
-                    value = meta.get(field)
-                    if value:
-                        entry_row[field] = value
-            entry_row["submissions"] = history
-
+            entry_row = build_entry_row(
+                slug, assignment_type, username, attribution, roster_meta, history
+            )
             results.append(entry_row)
             # Graded now, so a detected record from an earlier run is stale.
             detected_visited.add(username.lower())
@@ -3186,25 +3314,33 @@ def _dict_items(batch: list[Any]) -> list[dict[str, Any]]:
     return [item for item in batch if isinstance(item, dict)]
 
 
+def _parallel_map(fn: Callable[[Any], Any], items: Sequence[Any]) -> list[Any]:
+    """`fn` over `items`, PARALLEL_PAGE_WORKERS at a time, results in input
+    order. The first failure propagates and abandons the items not yet started
+    (in-flight requests still finish, bounded by their own timeout)."""
+    if not items:
+        return []
+    with concurrent.futures.ThreadPoolExecutor(
+        max_workers=min(PARALLEL_PAGE_WORKERS, len(items))
+    ) as pool:
+        futures = [pool.submit(fn, item) for item in items]
+        try:
+            return [future.result() for future in futures]
+        except BaseException:
+            pool.shutdown(wait=False, cancel_futures=True)
+            raise
+
+
 def _fetch_pages_parallel(
     page_url: Callable[[int], str],
     token: str,
     pages: range,
 ) -> list[list[dict[str, Any]]]:
-    """Pages `pages` of a list endpoint, fetched PARALLEL_PAGE_WORKERS at a time
-    and returned in page order. The first failure propagates and abandons the
-    pages not yet started."""
-    if not pages:
-        return []
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=min(PARALLEL_PAGE_WORKERS, len(pages))
-    ) as pool:
-        futures = [pool.submit(_fetch_page, page_url(page), token) for page in pages]
-        try:
-            return [_dict_items(future.result()[0]) for future in futures]
-        except BaseException:
-            pool.shutdown(wait=False, cancel_futures=True)
-            raise
+    """Pages `pages` of a list endpoint, fetched in parallel and returned in
+    page order (see _parallel_map for the failure contract)."""
+    return _parallel_map(
+        lambda page: _dict_items(_fetch_page(page_url(page), token)[0]), pages
+    )
 
 
 def _first_page(
@@ -3499,21 +3635,10 @@ def probe_org_repos(
             return name.lower(), None, False
         return name.lower(), repo_facts(repo), True
 
-    if not names:
-        return {}
     found: dict[str, RepoFacts | None] = {}
-    with concurrent.futures.ThreadPoolExecutor(
-        max_workers=min(PARALLEL_PAGE_WORKERS, len(names))
-    ) as pool:
-        futures = [pool.submit(probe, name) for name in names]
-        try:
-            for future in futures:
-                name, facts, present = future.result()
-                if present:
-                    found[name] = facts
-        except BaseException:
-            pool.shutdown(wait=False, cancel_futures=True)
-            raise
+    for name, facts, present in _parallel_map(probe, names):
+        if present:
+            found[name] = facts
     return found
 
 
