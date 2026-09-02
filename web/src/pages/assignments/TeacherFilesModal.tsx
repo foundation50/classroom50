@@ -37,7 +37,10 @@ export function TeacherFilesModal({
         }
       >
         <p className="mt-6 text-sm text-base-content/70">
-          {t("assignments.autograder.teacherFiles.unsaved")}
+          <Trans
+            i18nKey="assignments.autograder.teacherFiles.unsaved"
+            components={markup}
+          />
         </p>
       </Modal>
     )
@@ -83,7 +86,10 @@ export function TeacherFilesModal({
             {t("assignments.autograder.teacherFiles.step1Title")}
           </p>
           <p className="text-base-content/70">
-            {t("assignments.autograder.teacherFiles.step1Body")}
+            <Trans
+              i18nKey="assignments.autograder.teacherFiles.step1Body"
+              components={markup}
+            />
           </p>
           <pre
             dir="ltr"
@@ -137,7 +143,10 @@ export function TeacherFilesModal({
             {t("assignments.autograder.teacherFiles.step4Title")}
           </p>
           <p className="text-base-content/70">
-            {t("assignments.autograder.teacherFiles.step4Body")}
+            <Trans
+              i18nKey="assignments.autograder.teacherFiles.step4Body"
+              components={markup}
+            />
           </p>
         </li>
       </ol>
