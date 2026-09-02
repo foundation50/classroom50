@@ -312,3 +312,25 @@ func TestProvisionServiceSecret_PutStatus(t *testing.T) {
 		})
 	}
 }
+
+// The rotate command's help spells the token requirements as a bullet list and
+// every rejection quotes RequiredTokenPermissions; both must name the same
+// settings, or a permission added to one is invisible in the other.
+func TestRotateHelpNamesEveryRequiredTokenPermission(t *testing.T) {
+	// The help wraps at ~70 columns, so a phrase may straddle a line break.
+	long := strings.Join(strings.Fields(NewRotateCmd().Long), " ")
+	for _, phrase := range []string{
+		"All repositories",
+		"Contents: Read and write",
+		"Actions: Read and write",
+		"Administration: Read and write",
+		"Members: Read",
+	} {
+		if !strings.Contains(RequiredTokenPermissions, phrase) {
+			t.Errorf("RequiredTokenPermissions no longer names %q", phrase)
+		}
+		if !strings.Contains(long, phrase) {
+			t.Errorf("rotate-service-token help no longer names %q; keep it in step with RequiredTokenPermissions", phrase)
+		}
+	}
+}

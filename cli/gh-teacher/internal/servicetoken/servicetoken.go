@@ -107,6 +107,14 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 	return true, nil
 }
 
+// RequiredTokenPermissions is the fine-grained token configuration collection
+// and regrade need, as the one sentence every rejection shares (the rotate
+// help's bullet list and collect_scores.py's grant hint are pinned to it by
+// test), so a permission added in one place cannot go missing from another.
+const RequiredTokenPermissions = "Repository access = All repositories, " +
+	"Repository permissions Contents: Read and write, Actions: Read and write, " +
+	"and Administration: Read and write, and Organization permissions Members: Read"
+
 // ValidateTokenVerbose confirms a service token can do what the pipeline needs:
 // Contents Read+Write in the org (collect reads, regrade pushes submit/* tags),
 // Administration: write (collect grants staff teams repo access via PUT
@@ -178,14 +186,14 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 	// Token can read the repo, but regrade needs Contents: write to push
 	// submit/* tags. A read-only PAT reports push == false; reject it.
 	if !repo.Permissions.Push {
-		return fmt.Errorf("the supplied token can read %s/%s but lacks write access (Contents: write): collecting scores needs read, but regrading needs to push submit/* tags to student repos. Re-create the fine-grained personal access token with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write, Actions: Read and write, and Administration: Read and write (regrade re-runs student autograde workflow runs; collect grants staff teams repo access)", org, configrepo.ConfigRepoName, org)
+		return fmt.Errorf("the supplied token can read %s/%s but lacks write access (Contents: write): collecting scores needs read, but regrading needs to push submit/* tags to student repos. Re-create the fine-grained personal access token with Resource owner = %q and %s (regrade re-runs student autograde workflow runs; collect grants staff teams repo access)", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions)
 	}
 
 	// Contents is proven, but collect grants staff teams repo access, needing
 	// Administration (not implied by Contents); reject an admin-less PAT here
 	// rather than as a collect-time 403 on the first grant.
 	if !repo.Permissions.Admin {
-		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write): collecting scores grants staff teams (TAs, for example) read access to student repos, which needs the Administration permission. Re-create the fine-grained personal access token with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write, Actions: Read and write, and Administration: Read and write", org, configrepo.ConfigRepoName, org)
+		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write): collecting scores grants staff teams (TAs, for example) read access to student repos, which needs the Administration permission. Re-create the fine-grained personal access token with Resource owner = %q and %s", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions)
 	}
 
 	// Contents is proven, but collection is team-driven: it lists the
@@ -240,7 +248,7 @@ func validateRepoScopeWithClients(tokenClient, teacher githubapi.Client, org str
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(probe))
 	if err := tokenClient.Get(path, nil); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return fmt.Errorf("the supplied token can read %s/%s but not %s/%s, so it is scoped to selected repositories (or its Resource owner isn't %q). Collecting scores reads every student repo and grants staff teams access to them. Re-create the fine-grained personal access token with Resource owner = %q and Repository access = All repositories, keeping Contents: Read and write, Actions: Read and write, Administration: Read and write, and Organization permissions -> Members: Read", org, configrepo.ConfigRepoName, org, probe, org, org)
+			return fmt.Errorf("the supplied token can read %s/%s but not %s/%s, so it is scoped to selected repositories (or its Resource owner isn't %q). Collecting scores reads every student repo and grants staff teams access to them. Re-create the fine-grained personal access token with Resource owner = %q and %s", org, configrepo.ConfigRepoName, org, probe, org, org, RequiredTokenPermissions)
 		}
 		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Repository access setting by reading %s/%s (%v). Proceeding; if the token is scoped to selected repositories, collection can't reach student repos. Run the `probe-token` workflow to verify.\n", org, probe, err)
 	}
