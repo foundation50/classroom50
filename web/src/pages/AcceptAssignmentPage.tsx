@@ -3,11 +3,9 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   ChevronDownIcon,
-  GlobeIcon,
   LinkExternalIcon,
   LockIcon,
   MarkGithubIcon,
-  MortarBoardIcon,
   PeopleIcon,
   PersonIcon,
 } from "@/components/ui/icons"
@@ -27,10 +25,10 @@ import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
 import { GitHubAPIError } from "@/github-core/errors"
-import { Link, useParams, useSearch } from "@tanstack/react-router"
+import { useParams, useSearch } from "@tanstack/react-router"
 import { useAcceptAssignment } from "@/hooks/mutations/useAcceptAssignment"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
@@ -68,7 +66,6 @@ import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { Input } from "@/components/ui"
 import { errorText as resolveErrorText } from "@/types/localizedMessage"
-import { LanguageDialog } from "@/components/LanguageDialog"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useOutageHint } from "@/lib/githubHealth"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -86,35 +83,6 @@ const initialsFor = (user: GitHubUser | null) => {
     .join("")
 }
 
-const AcceptNavbar = () => {
-  const { t } = useTranslation()
-  const langDialogRef = useRef<HTMLDialogElement>(null)
-  return (
-    <div className="navbar bg-base-100 shadow-sm">
-      <div className="flex-1">
-        <Link to="/">
-          <div className="flex p-6 text-lg font-bold">
-            <MortarBoardIcon aria-hidden="true" className="size-8 me-2" />{" "}
-            {t("nav.appName")}
-          </div>
-        </Link>
-      </div>
-      <div className="flex-none pe-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          onClick={() => langDialogRef.current?.showModal()}
-        >
-          <GlobeIcon aria-hidden="true" className="size-4" />
-          <span className="hidden sm:inline">{t("nav.language")}</span>
-        </Button>
-      </div>
-      <LanguageDialog ref={langDialogRef} />
-    </div>
-  )
-}
-
 const AcceptCard = ({ children }: { children: React.ReactNode }) => {
   return (
     <Card shadow={false} className="w-200 max-w-full p-8">
@@ -128,7 +96,6 @@ const AcceptCard = ({ children }: { children: React.ReactNode }) => {
 const AcceptLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex min-h-screen flex-col bg-base-100">
-      <AcceptNavbar />
       <div className="flex flex-1 items-center justify-center p-4">
         {children}
       </div>
