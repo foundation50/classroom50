@@ -112,9 +112,15 @@ organization is rejected (students can't be granted access, so accept would
 404). Enterprise Cloud's "internal" visibility also works.
 
 > [!NOTE]
-> The team read grant happens when you **create** the assignment. If you
-> create the assignment first and add a private template later by editing it,
-> the grant isn't re-applied and students may get a 404 on accept.
+> The team read grant runs every time you save the assignment, so adding or
+> changing a private template later grants it too. Two exceptions:
+>
+> - A **locked** assignment gets no grant until you unlock it, so students
+>   can't read the template while you prepare it. See
+>   [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments).
+> - Only an **organization owner** can grant. When a head TA or TA saves,
+>   the save succeeds with a warning, and an owner must save the assignment
+>   again before students can accept.
 
 ## Template requirements and gotchas
 

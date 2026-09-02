@@ -46,6 +46,7 @@ const base: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
   team_formation: "teacher",
   feedback_pr: true,
@@ -1131,6 +1132,29 @@ describe("available_from (release date)", () => {
       toSubmitValues({ ...base, available_from_date: " 2026-09-01T12:00 " })
         .available_from_date,
     ).toBe("2026-09-01T12:00")
+  })
+})
+
+describe("locked (Lock assignment toggle)", () => {
+  it("reads an absent flag as unlocked and a stored true as locked", () => {
+    const stored = {
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual" as const,
+      autograder: "default" as const,
+    }
+    expect(assignmentToFormValues(stored).locked).toBe(false)
+    expect(assignmentToFormValues({ ...stored, locked: true }).locked).toBe(
+      true,
+    )
+  })
+
+  it("passes through on submit regardless of repo shape", () => {
+    expect(toSubmitValues({ ...base, locked: true }).locked).toBe(true)
+    expect(
+      toSubmitValues({ ...base, locked: true, empty_repo: true }).locked,
+    ).toBe(true)
+    expect(toSubmitValues(base).locked).toBe(false)
   })
 })
 

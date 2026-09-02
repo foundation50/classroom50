@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 import type { Assignment } from "@/types/classroom"
 import {
+  editImpactSummary,
+  provisioningChanges,
   provisioningFieldsFromAssignment,
   provisioningSettingsChanged,
 } from "./provisioningChange"
@@ -19,6 +21,8 @@ describe("provisioningFieldsFromAssignment", () => {
       no_autograder: false,
       init_shim: false,
       gradingMode: "auto",
+      student_permission: "push",
+      repo_visibility: "private",
     })
   })
 
@@ -28,13 +32,24 @@ describe("provisioningFieldsFromAssignment", () => {
         ...base,
         empty_repo: true,
         grading: { mode: "manual", max_points: 20 },
+        student_permission: "admin",
+        repo_visibility: "public",
       }),
     ).toEqual({
       empty_repo: true,
       no_autograder: false,
       init_shim: false,
       gradingMode: "manual",
+      student_permission: "admin",
+      repo_visibility: "public",
     })
+  })
+
+  it("resolves an absent permission to the mode default (group is admin)", () => {
+    expect(
+      provisioningFieldsFromAssignment({ ...base, mode: "group" })
+        .student_permission,
+    ).toBe("admin")
   })
 })
 
@@ -87,5 +102,100 @@ describe("provisioningSettingsChanged", () => {
     expect(provisioningSettingsChanged(manual, { gradingMode: "manual" })).toBe(
       false,
     )
+  })
+
+  it("detects a student_permission change but not an explicit default", () => {
+    expect(
+      provisioningSettingsChanged(base, { student_permission: "admin" }),
+    ).toBe(true)
+    // Pinning the mode default is byte-identical on the wire (the write path
+    // omits it), so it must not gate.
+    expect(
+      provisioningSettingsChanged(base, { student_permission: "push" }),
+    ).toBe(false)
+    // On a group assignment the write path clamps up to admin, so "push"
+    // resolves to the stored default too.
+    expect(
+      provisioningSettingsChanged(
+        { ...base, mode: "group" },
+        { student_permission: "push" },
+      ),
+    ).toBe(false)
+  })
+
+  it("detects a repo_visibility change but not absent-vs-private", () => {
+    expect(
+      provisioningSettingsChanged(base, { repo_visibility: "public" }),
+    ).toBe(true)
+    expect(
+      provisioningSettingsChanged(base, { repo_visibility: "private" }),
+    ).toBe(false)
+    expect(
+      provisioningSettingsChanged(
+        { ...base, repo_visibility: "public" },
+        { repo_visibility: "private" },
+      ),
+    ).toBe(true)
+  })
+})
+
+describe("provisioningChanges", () => {
+  it("lists each changed setting once, in display order", () => {
+    expect(
+      provisioningChanges(base, {
+        empty_repo: true,
+        init_shim: false,
+        no_autograder: true,
+        gradingMode: "manual",
+        student_permission: "admin",
+        repo_visibility: "public",
+      }),
+    ).toEqual([
+      "repo_source",
+      "autograder",
+      "grading_mode",
+      "student_permission",
+      "repo_visibility",
+    ])
+  })
+
+  it("collapses empty_repo and init_shim into one repository-source item", () => {
+    expect(
+      provisioningChanges({ ...base, init_shim: true }, { empty_repo: true }),
+    ).toEqual(["repo_source"])
+  })
+})
+
+describe("editImpactSummary", () => {
+  it("is empty when nothing students see or can do changes", () => {
+    expect(editImpactSummary(base, { locked: false }, 5)).toEqual([])
+    expect(
+      editImpactSummary({ ...base, locked: true }, { locked: true }, 5),
+    ).toEqual([])
+  })
+
+  it("reports a lock even with zero accepted students", () => {
+    expect(editImpactSummary(base, { locked: true }, 0)).toEqual([
+      { kind: "lock" },
+    ])
+  })
+
+  it("reports an unlock", () => {
+    expect(
+      editImpactSummary({ ...base, locked: true }, { locked: false }, 0),
+    ).toEqual([{ kind: "unlock" }])
+  })
+
+  it("ignores the lock when the caller renders no lock control", () => {
+    expect(editImpactSummary({ ...base, locked: true }, {}, 0)).toEqual([])
+  })
+
+  it("adds provisioning items only once students accepted, after the lock", () => {
+    const next = { locked: true, repo_visibility: "public" as const }
+    expect(editImpactSummary(base, next, 0)).toEqual([{ kind: "lock" }])
+    expect(editImpactSummary(base, next, 2)).toEqual([
+      { kind: "lock" },
+      { kind: "provisioning", field: "repo_visibility" },
+    ])
   })
 })

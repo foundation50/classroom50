@@ -89,6 +89,7 @@ func assignmentAddCmd() *cobra.Command {
 		submissionMd   string
 		submissionTags []string
 		repoVisibility string
+		locked         bool
 	)
 
 	cmd := &cobra.Command{
@@ -104,6 +105,13 @@ func assignmentAddCmd() *cobra.Command {
 			"  - If the slug already exists in assignments.json, the entry is\n" +
 			"    replaced in place (idempotent for repeated edits to the same\n" +
 			"    assignment).\n\n" +
+			"--locked registers the assignment locked, the same as\n" +
+			"`gh teacher assignment lock`:\n" +
+			"  - Students can't see or accept it.\n" +
+			"  - A private template in the org stays unreadable to the\n" +
+			"    classroom team until you unlock.\n" +
+			"  - Use it to stage a timed assessment, then unlock when the\n" +
+			"    session starts.\n\n" +
 			"--empty-repo creates truly bare student repos:\n" +
 			"  - No README, no .classroom50.yaml marker, no autograde workflow:\n" +
 			"    for assignments where students build everything (including\n" +
@@ -164,7 +172,10 @@ func assignmentAddCmd() *cobra.Command {
 			"      --name \"Intro\" --template cs50/intro-template\n" +
 			"  gh teacher assignment add cs50-fall-2026 cs-principles greet \\\n" +
 			"      --name \"Greet\" --template cs50/greet-template \\\n" +
-			"      --runtime ./runtime-c.json",
+			"      --runtime ./runtime-c.json\n" +
+			"  gh teacher assignment add cs50-fall-2026 cs-principles midterm \\\n" +
+			"      --name \"Midterm\" --template cs50-fall-2026/midterm-template \\\n" +
+			"      --locked",
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
@@ -328,6 +339,8 @@ func assignmentAddCmd() *cobra.Command {
 					SubmissionTagsChanged: cmd.Flags().Changed("submission-tag"),
 					RepoVisibility:        repoVisibilityVal,
 					RepoVisibilityChanged: cmd.Flags().Changed("repo-visibility"),
+					Locked:                locked,
+					LockedChanged:         cmd.Flags().Changed("locked"),
 				})
 		},
 	}
@@ -351,6 +364,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade: `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo")
 	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that also triggers grading, for example --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo")
 	cmd.Flags().StringVar(&repoVisibility, "repo-visibility", contract.RepoVisibilityPrivate, "Visibility each student repo is created with at accept time: `private` (default) or `public` (for peer-review, portfolio, or showcase assignments; students are told upfront their work will be publicly visible). Applies to students who accept from now on; existing repos are unchanged (flip those from the gradebook's visibility actions). Caution with public: student work (names, emails, commit history) is visible to anyone on the internet from the moment the repo is created. If org policy blocks members from creating public repos, accept falls back to a private repo and tells the student")
+	cmd.Flags().BoolVar(&locked, "locked", false, "Lock the assignment so students can't see or accept it, including students who already accepted. For a private template in the org, the classroom team gets no read access until you unlock. Same effect as `gh teacher assignment lock`. On a same-slug re-add, --locked=false unlocks and omitting the flag keeps the stored lock")
 	return cmd
 }
 
@@ -667,6 +681,12 @@ type addAssignmentParams struct {
 	// flag carries a prior entry's visibility forward (often GUI-authored);
 	// an explicit --repo-visibility private is a deliberate reset.
 	RepoVisibilityChanged bool
+	Locked                bool
+	// Same omitted-vs-explicit distinction for --locked: an omitted flag
+	// carries a prior entry's lock forward (it may have been set by
+	// `assignment lock` or the web app); an explicit --locked / --locked=false
+	// is the lock action itself, including the template read revoke/re-grant.
+	LockedChanged bool
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -753,6 +773,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		SubmissionMode:    p.SubmissionMode,
 		SubmissionTags:    p.SubmissionTags,
 		RepoVisibility:    p.RepoVisibility,
+		Locked:            p.Locked,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -773,10 +794,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// and are carried forward from the prior entry below, so `add` can never
 		// change them — only empty_repo is detectable here.)
 		changedEmptyRepo bool
-		// The locked state that actually landed (carried forward from a prior
-		// same-slug entry). Read after the commit to decide the template grant,
-		// since `entry` (rebuilt from flags) never carries Locked.
+		// The locked state that actually landed, and the one it replaced. Read
+		// after the commit to decide the template grant (or, on a false-to-true
+		// transition, the revoke): with --locked omitted the prior entry's lock
+		// is carried forward, so `entry` (rebuilt from flags) isn't authoritative.
 		committedLocked bool
+		previousLocked  bool
 	)
 	build := func(parentSHA string) (map[string]string, error) {
 		droppedTests = 0
@@ -785,6 +808,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedPassThreshold = nil
 		droppedStudentPerm = ""
 		changedEmptyRepo = false
+		previousLocked = false
 		attemptEntry := entry
 		// Refuse on an archived classroom (active:false), mirroring the web.
 		// Checked at parentSHA so a concurrent unarchive is observed on retry.
@@ -921,16 +945,21 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// unknown Extra keys when a same-slug add rebuilds the rest from flags. This
 		// stays inside the retry callback so a rebase observes the latest parent.
 		//
-		// Locked is likewise preserved: it's owned by `assignment lock`, not `add`,
-		// and `locked` is a known key (so it decodes onto the struct, not Extra).
-		// Without this carry-forward a same-slug re-add would clear the lock AND
-		// re-grant the student-team template read (the !entry.Locked guard below
-		// would see false), silently re-opening a locked assignment.
+		// Locked is carried forward when --locked was omitted: it may have been
+		// set by `assignment lock` or the web app, and `locked` is a known key
+		// (so it decodes onto the struct, not Extra). Without this carry-forward
+		// a same-slug re-add would clear the lock AND re-grant the student-team
+		// template read (the !committedLocked guard below would see false),
+		// silently re-opening a locked assignment. An explicit --locked or
+		// --locked=false is the lock action itself and wins.
 		if hasPrev {
 			previous := file.Assignments[prevIdx]
 			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
 			attemptEntry.Extra = previous.Extra
-			attemptEntry.Locked = previous.Locked
+			previousLocked = previous.Locked
+			if !p.LockedChanged {
+				attemptEntry.Locked = previous.Locked
+			}
 			// renamed_from and migrated_from are provenance owned by the slug
 			// rename and the retired `classroom migrate` respectively — `add`
 			// has no flags for them, and both are known keys (they decode onto
@@ -1031,9 +1060,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// skip the grant here — otherwise re-running add would silently re-open it
 	// (the lock command removed it on purpose). Staff grants aren't reached
 	// because grantStaffTeamTemplateRead runs inside the student grant path.
-	// committedLocked (not entry.Locked) is authoritative: `entry` is rebuilt
-	// from flags and never carries a prior lock, so the closure captures the
-	// value that actually landed.
+	// committedLocked (not entry.Locked) is authoritative: with --locked omitted
+	// the prior lock is carried forward inside the closure, so only the value
+	// that actually landed decides. A same-slug re-add that flips unlocked to
+	// locked (--locked) is the lock action itself: revoke the student team's
+	// read exactly like `assignment lock`. A locked-to-unlocked flip
+	// (--locked=false) re-grants through the ordinary grant below.
 	if resolved != nil && templatePrivate && inOrg && !committedLocked {
 		if err := grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
@@ -1041,6 +1073,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		}
 	}
 	if resolved != nil && templatePrivate && inOrg && committedLocked {
+		if action == "updated" && !previousLocked && p.LockedChanged {
+			if err := revokeClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo); err != nil {
+				return err
+			}
+		}
 		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was not granted read on the private template %s/%s. Unlock it with `gh teacher assignment lock %s %s %s --unlock` when you want students to accept again.\n",
 			slug, resolved.Owner, resolved.Repo, org, classroom, slug)
 	}

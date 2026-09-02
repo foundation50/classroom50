@@ -100,6 +100,10 @@ export type CreateAssignmentFormValues = {
   due_date: string
   // Release date (datetime-local wall-clock, "" when unset).
   available_from_date: string
+  // Lock the assignment against every student surface. Saving a change here has
+  // the same effect as the Lock/Unlock action (the team's read on a private
+  // in-org template is revoked or re-granted). Maps to the wire `locked`.
+  locked: boolean
   max_group_size: number
   // Who forms the groups of a team assignment (teacher-assigned vs
   // student-formed). Only meaningful when mode === "team"; reset to the
@@ -648,6 +652,7 @@ export function toSubmitValues(
     template_repo: isTemplate ? value.template_repo.trim() : "",
     due_date: value.due_date.trim(),
     available_from_date: value.available_from_date.trim(),
+    locked: value.locked,
     max_group_size: value.max_group_size,
     // Formation only belongs to a team assignment; reset to the default
     // otherwise so a stale pick can't reach the wire.
@@ -742,6 +747,7 @@ export const useAssignmentForm = (
       available_from_date: utcIsoToDatetimeLocalValue(
         defaultValues?.available_from_date,
       ),
+      locked: defaultValues?.locked ?? false,
       max_group_size: defaultValues?.max_group_size || 2,
       team_formation: defaultValues?.team_formation ?? "teacher",
       feedback_pr: defaultValues?.feedback_pr ?? true,
@@ -857,6 +863,8 @@ export const assignmentToFormValues = (
       : "",
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
     available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
+    // Absent means unlocked (the wire's omitempty shape).
+    locked: assignment.locked ?? false,
     max_group_size: assignment.max_group_size ?? 2,
     team_formation: assignment.team_formation ?? "teacher",
     feedback_pr: assignment.feedback_pr ?? true,

@@ -74,7 +74,11 @@ export {
 } from "./assignments/rename"
 export {
   provisioningSettingsChanged,
+  provisioningChanges,
   provisioningFieldsFromAssignment,
+  editImpactSummary,
+  type EditImpact,
+  type ProvisioningField,
   type ProvisioningFields,
 } from "./assignments/provisioningChange"
 export {

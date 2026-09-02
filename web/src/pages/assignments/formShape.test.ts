@@ -11,6 +11,7 @@ const base: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
   team_formation: "teacher",
   feedback_pr: true,

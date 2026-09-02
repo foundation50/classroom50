@@ -404,6 +404,12 @@ export type CreateAssignmentInput = {
   due_date: string
   // Release date (datetime-local wall-clock or ""); normalized like due_date.
   available_from_date: string
+  // Lock the assignment against every student surface (mirrors the wire
+  // `locked` and the CLI's --locked). Create: written as-is and the private
+  // in-org template read grant is skipped. Edit: a false-to-true transition
+  // revokes the student team's template read, exactly like the lock action;
+  // undefined leaves the stored value untouched.
+  locked?: boolean
   mode: string
   slug: string
   classroom: string

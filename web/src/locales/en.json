@@ -860,6 +860,7 @@
     "classroomSettingsSaved": "Classroom settings saved. Publishing to the student site now; the banner above tracks progress.",
     "classroomSaveConflict": "Couldn't save: another change landed first. Try again.",
     "assignmentCreated": "Assignment created. It's publishing to the student site and will appear shortly; the banner above tracks progress.",
+    "assignmentCreatedLocked": "Assignment created and locked. Students can't see or accept it until you unlock it in its settings or actions menu.",
     "publishingAssignment": "Publishing \"{{name}}\" to the student site",
     "classroomCreated": "Classroom created. It's publishing to the student site and will appear shortly; the banner above tracks progress.",
     "invited": "Invited {{who}} to the {{org}} organization.",
@@ -1124,7 +1125,7 @@
       "repositorySetupSection": "Repository setup",
       "submissionSection": "Submission and grading",
       "submissionSectionHelp": "Define what counts as a submission for this assignment: when the autograder runs and which tags a student can push to submit.",
-      "scheduleSection": "Schedule",
+      "scheduleSection": "Schedule and access",
       "reset": "Reset",
       "resetSection": "Reset this section to its default settings",
       "discardChanges": "Discard changes",
@@ -1146,6 +1147,8 @@
       "setAvailableFrom": "Set a release date",
       "setAvailableFromTip": "Assignments are hidden from the student assignments page by default, so students can only accept via the invite link. Set a release date to list it for everyone once the date passes. Students who already accepted always see it. This controls listing only, not access.",
       "availableFromTz": "Times are in your local timezone ({{tz}}).",
+      "lockAssignment": "Lock assignment",
+      "lockAssignmentTip": "Students can't see or accept a locked assignment, including students who already accepted. For a private template in your organization, the classroom team loses read access to the template until you unlock. Staff access and existing student repositories are unchanged. Use it to stage a timed assessment, then unlock when the session starts.",
       "type": "Assignment type",
       "typeIndividual": "Individual",
       "typeGroup": "Group (legacy)",
@@ -1842,11 +1845,22 @@
     "collaboratorsHint_one": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> student in addition to the group owner.",
     "collaboratorsHint_other": "Add or remove collaborators for this assignment repository. This assignment allows up to <count>{{count}}</count> students in addition to the group owner.",
     "manageCollaborators": "Manage collaborators",
-    "provisioningConfirm": {
-      "title": "Change provisioning settings after students accepted?",
-      "body_one": "{{count}} student has already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repository keeps its original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the collected scores; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to resolve any inconsistency yourself.",
-      "body_other": "{{count}} students have already accepted this assignment. This change only affects repositories accepted from now on; the {{count}} existing repositories keep their original starter code and setup. If you turn off autograding, those repositories' autograde runs start failing and drop out of the collected scores; if you change the grading mode, scores recorded under the old mode may read differently. You'll need to resolve any inconsistency yourself.",
-      "confirm": "Save changes anyway",
+    "editConfirm": {
+      "title": "Review changes before saving",
+      "access": {
+        "lock": "Lock assignment: students can no longer see or accept it, including students who already accepted. For a private template in your organization, the classroom team loses read access to the template. Existing student repositories are kept.",
+        "unlock": "Unlock assignment: students can see and accept it again. For a private template in your organization, the classroom team gets read access back."
+      },
+      "provisioningIntro_one": "{{count}} student has already accepted. These changes apply only to repositories accepted from now on; the existing repository keeps its current setup:",
+      "provisioningIntro_other": "{{count}} students have already accepted. These changes apply only to repositories accepted from now on; the {{count}} existing repositories keep their current setup:",
+      "provisioning": {
+        "repo_source": "Repository source: existing repositories keep their original starter content.",
+        "autograder": "Built-in autograder: turning it off makes existing repositories' autograde runs fail and drop out of the collected scores.",
+        "grading_mode": "Grading mode: scores recorded under the old mode may read differently.",
+        "student_permission": "Student repository access: change existing repositories from the submissions page.",
+        "repo_visibility": "Repository visibility: change existing repositories from the submissions page."
+      },
+      "confirm": "Save changes",
       "cancel": "Cancel"
     }
   },
