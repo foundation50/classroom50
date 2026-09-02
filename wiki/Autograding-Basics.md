@@ -75,12 +75,15 @@ Two related, optional settings:
 ### Declarative tests
 
 The lowest-friction way to grade: describe io/run/pytest checks directly on the
-assignment, and the runner grades them with a built-in interpreter — no grading
+assignment, and the runner grades them with a built-in interpreter, no grading
 code to write. The three types map onto GitHub Classroom's legacy autograder
 presets.
 
-In the web app, add tests in the assignment form's **Autograding tests**
-section. From the CLI, author them one at a time:
+Tests are stored on the assignment itself (its entry in `assignments.json`).
+Add them in one of two ways:
+
+- In the web app, use the assignment form's **Autograding tests** section.
+- From the CLI, add them one at a time with `gh teacher assignment test add`:
 
 ```sh
 gh teacher assignment test add cs50-fall-2026 cs-principles hello \
@@ -92,9 +95,11 @@ gh teacher assignment test list cs50-fall-2026 cs-principles hello
 gh teacher assignment test remove cs50-fall-2026 cs-principles hello compiles
 ```
 
-Or set the whole array at once with `gh teacher assignment add ... --tests
-<file.json>` (`--tests -` reads stdin). The file is a bare JSON array — the same
-shape `assignment test list --json` emits:
+To set the whole list at once, pass a file to `gh teacher assignment add ...
+--tests hello-tests.json` (`--tests -` reads stdin). The file is a bare JSON
+array, the same shape `assignment test list --json` emits. Keep it anywhere
+outside the `classroom50` repository; the CLI copies its contents into the
+assignment.
 
 ```json
 [
@@ -107,6 +112,29 @@ shape `assignment test list --json` emits:
   { "name": "pytest suite", "type": "python", "run": "python -m pytest -q", "timeout": 120, "points": 10 }
 ]
 ```
+
+#### Where tests live
+
+You never write a `tests.json` yourself. When you push to the `classroom50`
+repository, the **Publish Pages** workflow reads each assignment's tests and
+generates `CLASSROOM/autograders/ASSIGNMENT/tests.json` inside the published
+bundle, wrapped in an envelope (`schema`, `tests`, and optional `defaults`)
+that the runner checks at grade time.
+
+Don't commit a `tests.json` to `CLASSROOM/autograders/ASSIGNMENT/` in the
+`classroom50` repository:
+
+- If the assignment has tests, publishing replaces your file and logs a warning.
+- If it doesn't, the runner rejects your file (`tests.json is a bare test
+  array` or `tests.json is not a JSON object`), and every submission ends as an
+  error until you remove it. See
+  [Troubleshooting](Troubleshooting#testsjson-is-a-bare-test-array-or-testsjson-is-not-a-json-object-in-the-grading-log).
+
+That directory is for the files tests read: fixtures for `input-file` and
+`expected-file`, and grading scripts students must not see. See
+[Teacher-only test files](#teacher-only-test-files). In paths and commands on
+this page, replace `CLASSROOM` with the classroom's short name and `ASSIGNMENT`
+with the assignment slug.
 
 #### Test types
 
@@ -139,10 +167,8 @@ shape `assignment test list --json` emits:
 
 At most 100 tests per assignment. Put large fixtures in files
 (`input-file` / `expected-file`) under `CLASSROOM/autograders/ASSIGNMENT/`, not
-inline; that directory is also where grading scripts students must not see
-belong (see [Teacher-only test files](#teacher-only-test-files)). In paths and
-commands on this page, replace `CLASSROOM` with the classroom's short name and
-`ASSIGNMENT` with the assignment slug.
+inline. See [Where tests live](#where-tests-live) for what else belongs in that
+directory, and what doesn't.
 
 #### Report options
 
@@ -228,20 +254,18 @@ and GitHub Actions reads `$GITHUB_ENV` only after that step finishes. A write
 cannot change the runner process or the environment of later tests.
 
 <details>
-<summary>How tests flow, and where failures surface</summary>
+<summary>Where failures surface</summary>
 
-Tests live inline in `assignments.json`. On the next push to the `classroom50`
-repository, publish-pages **materializes** them into the assignment's Pages
-bundle as `tests.json`. At grade time, `runner.py` runs each spec in the student checkout:
-one row per test in `result.json`, plus a failure breakdown in three places — the
-**Release body**, the **grade job log** ("Grade details"), and the **run Summary
-page**. What the breakdown contains follows the test's
+At grade time, the runner runs each test in the student checkout: one row per
+test in `result.json`, plus a failure breakdown in three places: the **Release
+body**, the **grade job log** ("Grade details"), and the **run Summary page**.
+What the breakdown contains follows the test's
 [report options](#report-options). Captured output is clipped per block:
 2,000 characters in the Release body and Summary, 100,000 in the grade job
 log, so long compiler or build output stays readable in the log.
 
-Specs are validated three times: by the CLI at write time, by the runner
-workflow at submission setup, and by `runner.py` before executing.
+Tests are validated three times: by the CLI or web form when you save them, by
+the runner workflow at submission setup, and by the runner before executing.
 
 </details>
 
