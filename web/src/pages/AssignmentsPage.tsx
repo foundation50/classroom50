@@ -203,6 +203,7 @@ export const TeacherAssignmentsView = ({
       <ClassroomCollectButton
         org={org}
         classroom={classroom}
+        classroomName={classroomData?.name || classroomData?.short_name}
         emptyRoster={emptyRoster.show}
       />
     ) : null

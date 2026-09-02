@@ -1092,6 +1092,10 @@ const SubmissionsPageContent = () => {
   const collectScores = useTriggerScoreCollection(
     org,
     classroom && assignment ? { classroom, assignment } : undefined,
+    {
+      classroom: classroomMeta?.name || classroomMeta?.short_name,
+      assignment: assignmentInfo?.name,
+    },
   )
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   const { notify, announce } = useToast()
@@ -1437,27 +1441,16 @@ const SubmissionsPageContent = () => {
         </Alert>
       )}
 
-      {/* Live status strip. Full phase mapping: dispatching stays a quiet
-          neutral line (transient); running/completed/failed/timeout become an
-          Alert; idle renders nothing. */}
+      {/* Workflow outcome strip. In-flight progress is NOT shown here: the
+          initiating button spins (DataFreshness for collect, the Actions
+          trigger for regrade) and the app-wide Actions banner carries the run
+          with elapsed time, "View run", and the done state. Only outcomes the
+          banner can't cover stay on the page: a failure with its reason (a
+          rejected dispatch never registers a banner row) and this client's
+          poll timeout. Regrade's "completed" stays too, since it tells the
+          teacher what to do next. */}
       {activeAction === "collect" && collectScores.phase !== "idle" && (
         <>
-          {collectScores.phase === "dispatching" && (
-            <p className="text-sm text-base-content/70" role="status">
-              {t("submissions.collect.statusDispatching")}
-            </p>
-          )}
-          {collectScores.phase === "running" && (
-            <Alert tone="info" role="status">
-              <InlineSpinner />
-              {t("submissions.collect.statusRunning")}
-            </Alert>
-          )}
-          {collectScores.phase === "completed" && (
-            <Alert tone="success" role="status">
-              {t("submissions.collect.statusCompleted")}
-            </Alert>
-          )}
           {collectScores.phase === "failed" && (
             <Alert tone="error" role="status">
               {collectScores.error instanceof CollectInputsUnsupportedError ? (
@@ -1483,17 +1476,6 @@ const SubmissionsPageContent = () => {
       )}
       {activeAction === "regrade" && regradeAll.phase !== "idle" && (
         <>
-          {regradeAll.phase === "dispatching" && (
-            <p className="text-sm text-base-content/70" role="status">
-              {t("submissions.regradeAll.statusDispatching")}
-            </p>
-          )}
-          {regradeAll.phase === "running" && (
-            <Alert tone="info" role="status">
-              <InlineSpinner />
-              {t("submissions.regradeAll.statusRunning")}
-            </Alert>
-          )}
           {regradeAll.phase === "completed" && (
             <Alert tone="success" role="status">
               <Trans
@@ -1557,8 +1539,11 @@ const SubmissionsPageContent = () => {
                 collecting={collecting}
                 errorCount={liveErrorCount}
                 canCollect={canDispatchWorkflows}
+                // Stays mounted while collecting: the button IS the in-page
+                // progress indicator (it spins and goes inert), so it must
+                // not vanish the moment it's clicked.
                 onRefresh={
-                  collecting || (canDispatchWorkflows && emptyRoster.show)
+                  canDispatchWorkflows && emptyRoster.show
                     ? undefined
                     : () => {
                         // Collect now = re-collect (rebuild scores.json), for a
@@ -1569,6 +1554,9 @@ const SubmissionsPageContent = () => {
                         // re-derives against the newest pushes (latestPush
                         // would otherwise stay frozen at page load), and re-run
                         // the overlays so presence refreshes alongside.
+                        // Button's `loading` already swallows the click; this
+                        // is the re-entrancy latch behind it.
+                        if (collecting) return
                         if (canDispatchWorkflows) {
                           collectScores.collect()
                         } else {

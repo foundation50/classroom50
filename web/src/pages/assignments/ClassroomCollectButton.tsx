@@ -46,17 +46,24 @@ import { errorText } from "@/types/localizedMessage"
 export function ClassroomCollectButton({
   org,
   classroom,
+  classroomName,
   emptyRoster = false,
 }: {
   org: string
   classroom: string
+  // Display name for the banner tracker's label; falls back to the slug.
+  classroomName?: string
   // Nothing to collect until someone is enrolled. The dispatch would still
   // succeed, so this is a UX gate, not a correctness one.
   emptyRoster?: boolean
 }) {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const collect = useTriggerScoreCollection(org, { classroom })
+  const collect = useTriggerScoreCollection(
+    org,
+    { classroom },
+    { classroom: classroomName },
+  )
   const busy = collect.phase === "dispatching" || collect.phase === "running"
   // A sweep is a heavier dispatch than the per-assignment collect (it walks
   // every assignment, and Actions minutes scale with the classroom), so the

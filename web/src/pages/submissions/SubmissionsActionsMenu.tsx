@@ -153,18 +153,22 @@ export function SubmissionsActionsMenu({
 
   return (
     <div className="dropdown dropdown-end">
+      {/* The trigger spins only for the action it owns (Regrade all). A
+          collect is indicated by the toolbar's Collect now button, so the
+          menu stays open for business (exports, View run) meanwhile; its
+          workflow items are still gated via disabledActions. */}
       <Button
         variant="primary"
         size="sm"
-        loading={busy}
-        loadingLabel={t("submissions.menu.actions")}
+        loading={regrading}
+        loadingLabel={t("submissions.regradeAll.active")}
       >
-        {busy
-          ? collecting
-            ? t("submissions.collect.active")
-            : t("submissions.regradeAll.active")
+        {regrading
+          ? t("submissions.regradeAll.active")
           : t("submissions.menu.actions")}
-        {!busy && <TriangleDownIcon aria-hidden="true" className="size-4" />}
+        {!regrading && (
+          <TriangleDownIcon aria-hidden="true" className="size-4" />
+        )}
       </Button>
       <DropdownMenu className="w-64">
         {/* Metrics — graded-snapshot stats; hidden in live view (onMetrics

@@ -133,7 +133,28 @@ describe("ClassroomCollectButton", () => {
     )
 
     expect(collect).toHaveBeenCalledTimes(1)
-    expect(hookArgs[0]).toEqual(["acme", { classroom: "cs50" }])
+    expect(hookArgs[0]).toEqual([
+      "acme",
+      { classroom: "cs50" },
+      { classroom: undefined },
+    ])
+  })
+
+  it("hands the classroom's display name to the hook so the banner names it", () => {
+    const { wrapper } = setup()
+    render(
+      <ClassroomCollectButton
+        org="acme"
+        classroom="cs50"
+        classroomName="CS50: Intro to CS"
+      />,
+      { wrapper },
+    )
+    expect(hookArgs[0]).toEqual([
+      "acme",
+      { classroom: "cs50" },
+      { classroom: "CS50: Intro to CS" },
+    ])
   })
 
   it("does not dispatch when the confirmation is cancelled", () => {

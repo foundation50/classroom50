@@ -1,5 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
+import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
 import { triggerScoreCollection } from "@/github-core/mutations"
 import { COLLECT_SCORES_WORKFLOW } from "@/github-core/workflows"
@@ -25,14 +26,43 @@ const SWEEP_TIMEOUT_MS = 30 * 60 * 1000
 // (the submissions page); omitted collects org-wide.
 export type CollectScoresScope = { classroom: string; assignment?: string }
 
+// Display names for the banner label and the run title on GitHub, so a teacher
+// can tell which classroom / assignment each collect covers in either place.
+// Slugs from the scope are the fallback when a page hasn't loaded the names
+// yet.
+export type CollectScoresNames = { classroom?: string; assignment?: string }
+
+// The banner label says what the run covers, because the run itself can't:
+// the Actions API lists a dispatch run without its inputs, so once the run is
+// bound nothing else distinguishes a one-assignment collect from a classroom
+// sweep or an org-wide run. Built once at dispatch (the label is persisted
+// with the op).
+export function collectScoresLabel(
+  t: TFunction,
+  scope?: CollectScoresScope,
+  names?: CollectScoresNames,
+): string {
+  if (!scope) return t("actionsBanner.workflow.collectScores")
+  const classroom = names?.classroom || scope.classroom
+  if (scope.assignment) {
+    return t("actionsBanner.workflow.collectScoresAssignment", {
+      classroom,
+      assignment: names?.assignment || scope.assignment,
+    })
+  }
+  return t("actionsBanner.workflow.collectScoresClassroom", { classroom })
+}
+
 /**
  * Triggers collect-scores and tracks the run via useGitHubOperation; also
  * registers the dispatch with the activity banner. Pass `scope` to collect a
- * single classroom, or one assignment within it, instead of the whole org.
+ * single classroom, or one assignment within it, instead of the whole org, and
+ * `names` so the banner names them rather than showing slugs.
  */
 const useTriggerScoreCollection = (
   org: string | undefined,
   scope?: CollectScoresScope,
+  names?: CollectScoresNames,
 ) => {
   const client = useGitHubClient()
   const { register } = useActionActivityRegistry()
@@ -51,14 +81,14 @@ const useTriggerScoreCollection = (
     queryKey: (sinceRunId) =>
       githubKeys.collectScoresRun(org ?? "", sinceRunId),
     resetKey: `${org ?? ""}${scopeSuffix}`,
-    dispatch: () => triggerScoreCollection(client, org ?? "", scope),
+    dispatch: () => triggerScoreCollection(client, org ?? "", scope, names),
     findRun: (sinceRunId, signal) =>
       getCollectScoresRunAfterId(client, org ?? "", sinceRunId, signal),
     onDispatched: (result) => {
       if (!org) return
       register({
         org,
-        label: t("actionsBanner.workflow.collectScores"),
+        label: collectScoresLabel(t, scope, names),
         anchor: {
           kind: "sinceRunId",
           workflow: COLLECT_SCORES_WORKFLOW,

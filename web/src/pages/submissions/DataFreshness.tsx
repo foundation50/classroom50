@@ -1,7 +1,7 @@
 import { SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, cx } from "@/components/ui"
+import { Alert, Button } from "@/components/ui"
 import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 
 // The submissions dashboard's freshness surface: the shared freshness strip
@@ -31,7 +31,9 @@ export type DataFreshnessProps = {
   // An assignment repo was pushed after the last collect, so the snapshot is
   // (probably) out of date — surfaces the "Out of date" badge.
   stale: boolean
-  // A collect is in flight (dispatching/running) — disables the button and spins.
+  // A collect is in flight (dispatching/running). The button becomes the
+  // in-page progress indicator: it spins, reads "Collecting…", and goes inert
+  // (but stays focusable) until the run settles.
   collecting: boolean
   // Collect (canCollect) or re-read (otherwise) the submission data. Omitted
   // when neither applies (e.g., empty roster) — then no button renders.
@@ -62,13 +64,16 @@ export function DataFreshness({
       >
         {onRefresh && (
           // A quiet ghost button in both states, so the freshness line doesn't
-          // outshout the search/filter controls beside it in the toolbar.
+          // outshout the search/filter controls beside it in the toolbar. The
+          // same loading recipe as ClassroomCollectButton: `loading` swallows
+          // clicks and announces the busy state, so no `disabled` (which would
+          // drop keyboard focus mid-action).
           <Button
             variant="ghost"
             size="sm"
-            disabled={collecting}
+            loading={collecting}
+            loadingLabel={t("submissions.collect.active")}
             onClick={onRefresh}
-            aria-live="polite"
             className="text-base-content/70"
             title={
               canCollect
@@ -76,15 +81,16 @@ export function DataFreshness({
                 : t("submissions.freshness.refreshHelp")
             }
           >
-            <SyncIcon
-              aria-hidden="true"
-              className={cx("size-4", collecting && "animate-spin")}
-            />
-            {collecting
-              ? t("submissions.collect.active")
-              : canCollect
-                ? t("submissions.collect.label")
-                : t("submissions.freshness.refreshLabel")}
+            {collecting ? (
+              t("submissions.collect.active")
+            ) : (
+              <>
+                <SyncIcon aria-hidden="true" className="size-4" />
+                {canCollect
+                  ? t("submissions.collect.label")
+                  : t("submissions.freshness.refreshLabel")}
+              </>
+            )}
           </Button>
         )}
       </SubmissionFreshnessLine>

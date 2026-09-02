@@ -35,11 +35,16 @@ export class CollectInputsUnsupportedError extends Error {
  *   classroom, or one assignment within it; omitted collects org-wide.
  *   Sending `assignment` against a config repo whose workflow predates the
  *   input throws CollectInputsUnsupportedError.
+ * @param names optional display names for the scope, sent as the label-only
+ *   `classroom_name` / `assignment_name` inputs so the run's title on GitHub
+ *   reads the classroom and assignment by name rather than slug. Dropped and
+ *   retried without if the org's workflow predates those inputs.
  */
 export async function triggerScoreCollection(
   client: GitHubClient,
   org: string | undefined,
   scope?: { classroom: string; assignment?: string },
+  names?: { classroom?: string; assignment?: string },
 ): Promise<{ sinceRunId: number | null }> {
   if (!org) throw new Error("org must be specified to collect scores")
 
@@ -63,15 +68,42 @@ export async function triggerScoreCollection(
     inputs.classroom = scope.classroom
     if (scope.assignment) inputs.assignment = scope.assignment
   }
+  // Label-only inputs. A name equal to its slug adds nothing, so skip it and
+  // keep the payload minimal for the common unnamed case.
+  const labelInputs: Record<string, string> = {}
+  if (scope && names?.classroom && names.classroom !== scope.classroom) {
+    labelInputs.classroom_name = names.classroom
+  }
+  if (
+    scope?.assignment &&
+    names?.assignment &&
+    names.assignment !== scope.assignment
+  ) {
+    labelInputs.assignment_name = names.assignment
+  }
+
+  const dispatch = (body: Record<string, string>) =>
+    client.request(
+      `/repos/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}/dispatches`,
+      { method: "POST", body: { ref, inputs: body } },
+    )
 
   try {
-    await client.request(
-      `/repos/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}/dispatches`,
-      {
-        method: "POST",
-        body: { ref, inputs },
-      },
-    )
+    try {
+      await dispatch({ ...inputs, ...labelInputs })
+    } catch (err) {
+      // GitHub 422s on ANY undeclared input key, so an org whose workflow
+      // predates the *_name inputs would otherwise lose collect entirely over
+      // a cosmetic label. Retry once with the slugs only: the run still
+      // happens, just titled by slug until the org updates its workflows.
+      if (Object.keys(labelInputs).length === 0 || !is422UnexpectedInputs(err))
+        throw err
+      logWorkflows.info(
+        "collect-scores.yaml predates the *_name inputs; retrying without",
+        { org },
+      )
+      await dispatch(inputs)
+    }
   } catch (err) {
     // Only the `assignment` input is newer than the long-standing `classroom`
     // one, so a 422 "unexpected inputs" on a scoped dispatch means the config
