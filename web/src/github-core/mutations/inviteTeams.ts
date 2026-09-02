@@ -3,7 +3,7 @@ import type { GitHubTeam, GitHubUser } from "../types"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 import { createTeam } from "../teamWrites"
 import { removeUserFromTeam } from "./teams"
-import { paginateAll } from "../paginate"
+import { PAGE_FETCH_CONCURRENCY, paginateAll } from "../paginate"
 import {
   INVITE_TEAM_PREFIX,
   inviteTeamName,
@@ -241,6 +241,7 @@ export async function listInviteTeams(
     client,
     (page) =>
       `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
+    { concurrency: PAGE_FETCH_CONCURRENCY },
   )
   return teams.filter((t) => t.slug && isInviteTeamSlug(t.slug))
 }

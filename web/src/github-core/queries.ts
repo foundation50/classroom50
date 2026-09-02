@@ -48,6 +48,7 @@ export {
   commitQuery,
   repoQuery,
   getOrgRepos,
+  getAssignmentRepos,
   getOpenPullRequests,
   listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"

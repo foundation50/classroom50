@@ -66,6 +66,7 @@ import {
   acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
+  assignmentRepoCandidateLogins,
   assignmentRepoNames,
   buildScoresCsvRows,
   buildSectionLookup,
@@ -82,11 +83,13 @@ import {
   effectiveCollectedAt,
   mergeDetectedSubmissions,
   mergeLiveRows,
+  orgReposReadEnabled,
   reconcileNonSubmitters,
   pendingMayHide,
   rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
+  showCheckingAccepted,
   showsNonSubmitters,
   snapshotIsStale,
   sortNameMode,
@@ -118,7 +121,7 @@ import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
-import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import { useAssignmentRepos } from "@/hooks/useAssignmentRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
@@ -184,8 +187,11 @@ const SubmissionsPageContent = () => {
   // comes from the PRIVATE config repo (source:"config"); students never reach
   // this page. `assignments` carries the sibling list for repo-prefix
   // disambiguation below.
-  const { assignment: assignmentInfo, assignments: allAssignments } =
-    useSubmissionAssignment(org, classroom, assignment, { source: "config" })
+  const {
+    assignment: assignmentInfo,
+    assignments: allAssignments,
+    isLoading: assignmentLoading,
+  } = useSubmissionAssignment(org, classroom, assignment, { source: "config" })
   // Team-driven usernames: the classroom GitHub teams are authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
   // Student[], so map enrolled team rows into that shape (see
@@ -251,11 +257,28 @@ const SubmissionsPageContent = () => {
   // staleness heuristic). `refetch` is wired to Collect now + collect-completion so
   // `latestPush` isn't frozen at page load (else a push after load never flips
   // the freshness line to "Out of date").
+  // For an individual assignment the repo names are derivable from the enrolled
+  // roster, so the read is scoped to them and can skip walking a large org.
+  const candidateLogins = useMemo(
+    () => assignmentRepoCandidateLogins(isGroupFlavor, teamRows),
+    [isGroupFlavor, teamRows],
+  )
   const {
     data: orgRepos,
     isLoading: orgReposLoading,
+    isPending: orgReposPending,
     refetch: refetchOrgRepos,
-  } = useGetOrgRepos(org ?? "")
+  } = useAssignmentRepos({
+    org: org ?? "",
+    classroom: classroom ?? "",
+    assignment: assignment ?? "",
+    logins: candidateLogins,
+    enabled: orgReposReadEnabled({
+      assignmentLoading,
+      isGroupFlavor,
+      rosterLoading,
+    }),
+  })
   // Sibling slugs guard group-repo attribution against a slug-extending sibling
   // ("hw1-bonus" under "hw1"); see existingGroupRepos.
   const siblingSlugs = useMemo(
@@ -1261,6 +1284,16 @@ const SubmissionsPageContent = () => {
           // number — and doubles as a one-click jump to who hasn't submitted.
           <MetaStrip
             items={[
+              showCheckingAccepted({
+                showSubmissionProgress,
+                orgReposPending,
+                isEmptyRepoAssignment,
+              }) && (
+                <MetaItem>
+                  <InlineSpinner />
+                  {t("submissions.funnel.checkingAccepted")}
+                </MetaItem>
+              ),
               showSubmissionProgress && (
                 <button
                   type="button"

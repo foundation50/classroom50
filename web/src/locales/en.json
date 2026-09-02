@@ -2713,7 +2713,8 @@
     "funnel": {
       "submittedTitle": "{{submitted}} of {{total}} students submitted",
       "submittedTitleGroup": "{{submitted}} of {{accepted}} groups submitted",
-      "showNotSubmitted": "Show who hasn't submitted"
+      "showNotSubmitted": "Show who hasn't submitted",
+      "checkingAccepted": "Checking who accepted…"
     },
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View template",

@@ -29,6 +29,25 @@ export const githubKeys = {
 
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
 
+  // One assignment's slice of the org repo list, resolved for a known set of
+  // candidate logins (see getAssignmentRepos). The logins are part of the key
+  // because the result depends on them: a roster change must re-resolve.
+  // Prefixed by `orgRepos` so every invalidation of the full listing reaches
+  // it too.
+  assignmentRepos: (
+    org: string,
+    classroom: string,
+    assignment: string,
+    logins: readonly string[],
+  ) =>
+    [
+      ...githubKeys.orgRepos(org),
+      "assignment",
+      classroom,
+      assignment,
+      logins,
+    ] as const,
+
   // The org's template repos (GET /orgs/{org}/repos, filtered locally). Distinct
   // from `orgRepos`: this is a bounded, recency-sorted walk cached for the
   // picker, not the exhaustive listing the submissions signals use.

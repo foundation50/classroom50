@@ -39,9 +39,10 @@ export function useAcceptAssignment(params: {
         onStepUpdate,
       }),
     onSuccess: () => {
+      // Prefix match on purpose: the submissions page keeps an
+      // assignment-scoped slice under this key too (githubKeys.assignmentRepos).
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgRepos(org),
-        exact: true,
         refetchType: "all",
       })
     },
