@@ -431,7 +431,16 @@ def main() -> int:
             if not assignment_filter or s == assignment_filter
         ]
         assignment_count = len(collectable_slugs)
-        if assignment_count and not updates and not mode_flip_assignments:
+        # A detected record proves the token reads the student repos (and that
+        # someone pushed), so the token hint below would contradict the run's
+        # own data; "0 graded" with pushes pending is the autograder's business.
+        anything_detected = any(records for _, records, _ in detected.values())
+        if (
+            assignment_count
+            and not updates
+            and not mode_flip_assignments
+            and not anything_detected
+        ):
             emit_warning(
                 f"{classroom_short}: collected 0 submissions across "
                 f"{assignment_count} assignment(s). If you expected submissions, "
@@ -486,7 +495,11 @@ def main() -> int:
             # "never collected" (absent key) — popping it here would make a real
             # collect that found no submitters look like no collect at all.
             bucket["detected"] = merged
-            if bucket.get("detected") != before:
+            # Compared against the prior LIST, not the raw key: writing [] into a
+            # bucket that never had the key is bookkeeping, not a change, and
+            # would otherwise count once per bucket on the first run after an
+            # upgrade.
+            if merged != prior:
                 n_changes += 1
         try:
             save_scores(scores_path, scores)
@@ -1004,6 +1017,23 @@ def list_enrolled_logins(
     return _dedupe_logins(logins), {u.strip().lower() for u in student_logins}
 
 
+def parse_due(
+    classroom_short: str, slug: str, entry: dict[str, Any]
+) -> datetime.datetime | None:
+    """The assignment's `due` as a datetime, or None when absent or malformed.
+    A malformed value warns ONCE here: lateness silently absent would otherwise
+    be indistinguishable from "no due date set". Parse once per assignment and
+    hand the result to whatever needs it (see SubmissionDetector)."""
+    due_raw = entry.get("due")
+    due = parse_rfc3339(due_raw) if due_raw else None
+    if due_raw and due is None:
+        emit_warning(
+            f"{classroom_short}/{slug}: due = {due_raw!r} is not an RFC 3339 "
+            f"timestamp with timezone; skipping late-marking for this assignment"
+        )
+    return due
+
+
 class SubmissionDetector:
     """Per-repo submission detection for one assignment, shared by the
     no_autograder path (every repo) and the autograded path (repos with no
@@ -1025,6 +1055,9 @@ class SubmissionDetector:
         entry: dict[str, Any],
         service_token: str,
         roster_logins: set[str],
+        # Already parsed by the caller (parse_due), which owns the one warning
+        # for a malformed value.
+        due: datetime.datetime | None,
     ) -> None:
         self._api_url = api_url
         self._org = org
@@ -1037,16 +1070,7 @@ class SubmissionDetector:
         self._mode = "tag" if entry.get("submission_mode") == "tag" else "every-push"
         raw_tags = entry.get("submission_tags")
         self._tags = [t for t in (raw_tags or []) if isinstance(t, str) and t]
-
-        due_raw = entry.get("due")
-        self._due = parse_rfc3339(due_raw) if due_raw else None
-        if due_raw and self._due is None:
-            # Same advisory warning as the graded path — lateness silently absent
-            # would otherwise be indistinguishable from "no due date set".
-            emit_warning(
-                f"{classroom_short}/{slug}: due = {due_raw!r} is not an RFC 3339 "
-                f"timestamp with timezone; skipping late-marking for this assignment"
-            )
+        self._due = due
 
     def detect(self, username: str, repo_name: str) -> tuple[dict[str, Any] | None, bool]:
         try:
@@ -1136,6 +1160,7 @@ def collect_detected(
         entry=entry,
         service_token=service_token,
         roster_logins=roster_logins,
+        due=parse_due(classroom_short, slug, entry),
     )
     # team_usernames arrives already case-insensitively deduped (the
     # list_enrolled_logins union), so each repo is polled exactly once.
@@ -1307,13 +1332,7 @@ def collect_classroom(
             )
             continue
 
-        due_raw = entry.get("due")
-        due = parse_rfc3339(due_raw) if due_raw else None
-        if due_raw and due is None:
-            emit_warning(
-                f"{classroom_short}/{slug}: due = {due_raw!r} is not an RFC 3339 "
-                f"timestamp with timezone; skipping late-marking for this assignment"
-            )
+        due = parse_due(classroom_short, slug, entry)
 
         raw_mode = entry.get("mode")
         assignment_type = normalize_assignment_type(raw_mode)
@@ -1360,6 +1379,7 @@ def collect_classroom(
             entry=entry,
             service_token=service_token,
             roster_logins=roster_logins,
+            due=due,
         )
         detected_records: list[dict[str, Any]] = []
         detected_visited: set[str] = set()
@@ -2011,8 +2031,11 @@ def grant_classroom_team_access(
         return
 
     # Which teams the pass could work with, so the tail can tell "nothing to
-    # grant" (no populated staff team) from "already granted" (all idempotent).
+    # grant" (no populated staff team) from "already granted" (all idempotent),
+    # and "no staff team was ever set up" (all absent and unrecorded) from "a
+    # staff team exists but is empty".
     populated_teams: list[str] = []
+    absent_teams: list[str] = []
     for role, staff_team, permission in grant_teams:
         team_slug = staff_team.slug
         # Read this staff team's members to skip it when empty (see docstring).
@@ -2029,6 +2052,7 @@ def grant_classroom_team_access(
             if classify(exc) is not SKIPPABLE:
                 raise
             if exc.code == 404 and not staff_team.recorded:
+                absent_teams.append(team_slug)
                 print(
                     f"{classroom_short}: no {role} team recorded in classroom.json and "
                     f"{team_slug!r} does not exist on GitHub; nothing to grant for that role."
@@ -2099,7 +2123,15 @@ def grant_classroom_team_access(
             )
 
     if not populated_teams:
-        emit_warning(warn_no_staff_to_grant(classroom_short, org, grant_teams))
+        # Every staff team absent AND unrecorded means nothing was ever set up
+        # (a solo teacher, or a classroom before its first TA): a notice, since
+        # there is nothing to fix. A team that exists but is empty is the
+        # misconfiguration the warning is for.
+        message = warn_no_staff_to_grant(classroom_short, org, grant_teams)
+        if len(absent_teams) == len(grant_teams):
+            emit_notice(message)
+        else:
+            emit_warning(message)
 
 
 def warn_no_staff_to_grant(
@@ -2110,7 +2142,8 @@ def warn_no_staff_to_grant(
     """The verdict for a grant pass that found student repos but no populated
     staff team to grant them to. Without it, "every TA was moved to a team the
     pass can't see" exits 0 exactly like a healthy run, and the teacher learns
-    the TAs have no access only when they ask."""
+    the TAs have no access only when they ask. The caller picks the level: a
+    warning when some team exists but is empty, a notice when none was set up."""
     slugs = ", ".join(team.slug for _, team, _ in grant_teams)
     return (
         f"{classroom_short}: no staff access was granted because no head-TA or TA "
@@ -3974,6 +4007,10 @@ def emit_error(message: str) -> None:
 
 def emit_warning(message: str) -> None:
     print(f"::warning::{message}", file=sys.stderr)
+
+
+def emit_notice(message: str) -> None:
+    print(f"::notice::{message}", file=sys.stderr)
 
 
 # Entry point ----------------------------------------------------------------
