@@ -1092,6 +1092,10 @@ const SubmissionsPageContent = () => {
   const collectScores = useTriggerScoreCollection(
     org,
     classroom && assignment ? { classroom, assignment } : undefined,
+    {
+      classroom: classroomMeta?.name || classroomMeta?.short_name,
+      assignment: assignmentInfo?.name,
+    },
   )
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   const { notify, announce } = useToast()

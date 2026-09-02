@@ -143,6 +143,8 @@
       "publishPages": "Publishing to student site",
       "publishClassroom": "Publishing \"{{name}}\" settings",
       "collectScores": "Collecting scores",
+      "collectScoresClassroom": "Collecting scores for every assignment in \"{{classroom}}\"",
+      "collectScoresAssignment": "Collecting scores for \"{{assignment}}\" in \"{{classroom}}\"",
       "regrade": "Regrading",
       "generic": "GitHub Actions workflow"
     }

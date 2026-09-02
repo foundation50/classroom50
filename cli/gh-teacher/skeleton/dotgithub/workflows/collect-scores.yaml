@@ -14,6 +14,19 @@ name: Collect Scores
 # by design — no concurrent ingest, no per-student dispatch event, no broad
 # cross-repo write secret.
 
+# The run list shows only the workflow name by default, so a scoped collect
+# and an org-wide sweep look identical there. Spell the scope out in the run
+# title (and the job name below). Display names come from the optional
+# *_name inputs the web app sends alongside the slugs; a manual dispatch from
+# the Actions tab leaves them blank and gets the slugs. This can't be looked up
+# here: run-name is evaluated before any step, so there is no checkout to read
+# classroom.json / assignments.json from.
+run-name: >-
+  Collect scores:
+  ${{ github.event.inputs.assignment && format('{0} in {1}', github.event.inputs.assignment_name || github.event.inputs.assignment, github.event.inputs.classroom_name || github.event.inputs.classroom)
+  || github.event.inputs.classroom && format('every assignment in {0}', github.event.inputs.classroom_name || github.event.inputs.classroom)
+  || 'all classrooms' }}
+
 on:
   workflow_dispatch:
     inputs:
@@ -22,6 +35,13 @@ on:
         required: false
       assignment:
         description: "Assignment slug (leave blank to collect the whole classroom; requires classroom to be meaningful)"
+        required: false
+      # Label-only: used in run-name and the job name, never by the collector.
+      classroom_name:
+        description: "Classroom display name for the run title (optional)"
+        required: false
+      assignment_name:
+        description: "Assignment display name for the run title (optional)"
         required: false
 
 permissions:
@@ -39,6 +59,13 @@ concurrency:
 
 jobs:
   collect:
+    # Same scope as run-name, so the run's sidebar and the checks list say
+    # what this job walked, not just "collect".
+    name: >-
+      Collect
+      ${{ github.event.inputs.assignment && format('{0} in {1}', github.event.inputs.assignment_name || github.event.inputs.assignment, github.event.inputs.classroom_name || github.event.inputs.classroom)
+      || github.event.inputs.classroom && format('every assignment in {0}', github.event.inputs.classroom_name || github.event.inputs.classroom)
+      || 'all classrooms' }}
     runs-on: ubuntu-latest
     # Bound the job: the commit/push retry below can loop, and with
     # cancel-in-progress: false a wedged git operation would otherwise hold the
