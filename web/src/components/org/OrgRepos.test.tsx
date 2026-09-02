@@ -109,4 +109,23 @@ describe("OrgRepos", () => {
       screen.queryByRole("heading", { name: "cs101-a1-sibling" }),
     ).toBeNull()
   })
+
+  it("lists the newest repo first even though the listing arrives oldest first", () => {
+    getOrgRepos.mockReturnValue({
+      data: [
+        { ...repo("cs-a1-first", "write"), created_at: "2026-01-01T00:00:00Z" },
+        {
+          ...repo("cs-a2-second", "write"),
+          created_at: "2026-02-01T00:00:00Z",
+        },
+        { ...repo("cs-a3-third", "write"), created_at: "2026-03-01T00:00:00Z" },
+      ],
+    })
+
+    render(<OrgRepos org="acme" classroom="cs" />)
+
+    expect(
+      screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
+    ).toEqual(["cs-a3-third", "cs-a2-second", "cs-a1-first"])
+  })
 })

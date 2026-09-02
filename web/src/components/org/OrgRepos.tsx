@@ -30,6 +30,7 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { EnterDiv } from "@/lib/motionComponents"
+import { sortReposNewestFirst } from "@/util/repoOrder"
 
 const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   const { t } = useTranslation()
@@ -234,7 +235,11 @@ export const OrgRepos = ({
 
   if (!repos) return <></>
 
-  let writableRepos = repos.filter((repo) => repo.permissions?.push)
+  // The listing arrives oldest first (see sortReposNewestFirst); a student
+  // expects their latest assignment at the top.
+  let writableRepos = sortReposNewestFirst(repos).filter(
+    (repo) => repo.permissions?.push,
+  )
   if (classroom) {
     // Classroom repos are `<classroom>-<assignment>-<user>`, so require the
     // trailing "-" to avoid matching a sibling classroom whose name extends
