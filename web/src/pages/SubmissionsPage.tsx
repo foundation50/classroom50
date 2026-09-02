@@ -267,15 +267,17 @@ const SubmissionsPageContent = () => {
   // `latestPush` isn't frozen at page load (else a push after load never flips
   // the freshness line to "Out of date").
   // For an individual assignment the repo names are derivable from the enrolled
-  // roster, so the read is scoped to them and can skip walking a large org. An
-  // UNKNOWN roster has no names to derive, so it reads the full listing rather
-  // than probing an empty candidate set (which would stop at page one).
+  // roster, so the read is scoped to them and can skip walking a large org.
+  // When they are not (see assignmentRepoCandidateLogins) it reads the full
+  // listing rather than probing a partial candidate set, which would stop at
+  // page one.
   const candidateLogins = useMemo(
     () =>
-      studentRosterKnown
-        ? assignmentRepoCandidateLogins(isGroupFlavor, teamRows)
-        : undefined,
-    [studentRosterKnown, isGroupFlavor, teamRows],
+      assignmentRepoCandidateLogins(isGroupFlavor, teamRows, {
+        rosterKnown: studentRosterKnown,
+        rosterError,
+      }),
+    [studentRosterKnown, rosterError, isGroupFlavor, teamRows],
   )
   const {
     data: orgRepos,

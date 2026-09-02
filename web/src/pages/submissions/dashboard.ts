@@ -1601,14 +1601,20 @@ export function paginationRange(
 // Logins whose `<classroom>-<assignment>-<login>` repo the submissions page
 // looks up, for the roster-scoped org repo read (useAssignmentRepos). Every
 // enrolled row counts, students and staff alike (a staff member who accepted is
-// a gradee too). `undefined` for a shared-repo assignment: a team repo's
-// `group-<n>` segment is not derivable from any login, so the page reads the
-// whole listing instead.
+// a gradee too). `undefined` means the names are not derivable and the page
+// reads the whole listing instead:
+//   - a shared-repo assignment: a team repo's `group-<n>` segment comes from no
+//     login;
+//   - a roster this viewer cannot see (`rosterKnown` false);
+//   - a roster read that failed (`rosterError`): its rows are whatever staff
+//     loaded, and scoping to those would report page one of the org as truth.
 export function assignmentRepoCandidateLogins(
   isGroupFlavor: boolean,
   teamRows: readonly TeamRosterRow[],
+  roster: { rosterKnown?: boolean; rosterError?: boolean } = {},
 ): string[] | undefined {
-  if (isGroupFlavor) return undefined
+  const { rosterKnown = true, rosterError = false } = roster
+  if (isGroupFlavor || !rosterKnown || rosterError) return undefined
   return teamRows
     .filter((row) => row.state === "enrolled")
     .map((row) => row.username)
