@@ -5265,7 +5265,8 @@ class TestThrottleBudgetUnderConcurrency:
     def test_sequential_waits_on_one_thread_each_count(self):
         for _ in range(5):
             assert cs.throttle_sleep_budget_spent(60) is False
-        assert cs._throttle_sleep_spent == 300
+        # (start + 60) - start on a large monotonic clock loses a few ULPs.
+        assert cs._throttle_sleep_spent == pytest.approx(300)
         assert cs.throttle_sleep_budget_spent(1) is True
 
 

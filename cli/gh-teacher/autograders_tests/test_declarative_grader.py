@@ -388,7 +388,25 @@ class TestLoadTests:
 
     def test_bad_schema(self, tmp_path):
         p = self._write(tmp_path, '{"schema": "nope", "tests": []}')
-        with pytest.raises(ag.TestsConfigError):
+        with pytest.raises(ag.TestsConfigError, match="gh teacher assignment test add"):
+            ag.load_tests(p)
+
+    def test_bare_array_names_the_mistake(self, tmp_path):
+        # Discussion #805: a teacher pasted the `--tests` file (a bare array)
+        # into CLASSROOM/autograders/ASSIGNMENT/tests.json. The error must say
+        # which format they used and how to author tests instead.
+        p = self._write(tmp_path, [{"name": "a", "type": "run", "run": "true", "points": 1}])
+        with pytest.raises(ag.TestsConfigError) as excinfo:
+            ag.load_tests(p)
+        msg = str(excinfo.value)
+        assert "bare test array" in msg
+        assert "--tests" in msg
+        assert "Remove the tests.json" in msg
+        assert "gh teacher assignment test add" in msg
+
+    def test_non_object_scalar_points_to_authoring_path(self, tmp_path):
+        p = self._write(tmp_path, '"hello"')
+        with pytest.raises(ag.TestsConfigError, match="not a JSON object.*Remove the tests.json"):
             ag.load_tests(p)
 
     def test_empty_tests_list(self, tmp_path):
@@ -905,7 +923,7 @@ class TestRunDeclarative:
         assert result["score"] == 5 and result["max-score"] == 5
         assert "status=success" in gho.read_text()
 
-    def test_malformed_tests_json_routes_to_error_result(self, tmp_path):
+    def test_malformed_tests_json_routes_to_error_result(self, tmp_path, capsys):
         fin, gho = _finalizer(tmp_path)
         p = tmp_path / "tests.json"
         p.write_text('{"schema": "wrong", "tests": []}')
@@ -914,6 +932,20 @@ class TestRunDeclarative:
         result = json.loads((tmp_path / "result.json").read_text())
         assert result["tests"] == [] and result["score"] == 0
         assert "status=error" in gho.read_text()
+        # The annotation names the file once, not "tests.json: tests.json ...".
+        err = capsys.readouterr().err
+        assert "::error::tests.json schema is 'wrong'" in err
+        assert "tests.json: tests.json" not in err
+
+    def test_bare_array_tests_json_routes_to_error_result(self, tmp_path, capsys):
+        fin, gho = _finalizer(tmp_path)
+        p = tmp_path / "tests.json"
+        p.write_text('[{"name": "a", "type": "run", "run": "true", "points": 1}]')
+        rc = ag.run_declarative(p, fin, tmp_path)
+        assert rc == 0
+        assert "status=error" in gho.read_text()
+        err = capsys.readouterr().err
+        assert "bare test array" in err and "gh teacher assignment test add" in err
 
     def test_unexpected_grader_crash_routes_to_error(self, tmp_path, monkeypatch):
         # Backstop: if execute_test raises something unexpected (future

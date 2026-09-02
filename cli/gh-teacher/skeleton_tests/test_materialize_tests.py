@@ -65,7 +65,7 @@ class TestMaterialize:
         assert mt.materialize(tmp_path) == 0
         assert not (tmp_path / "cs" / "autograders" / "intro").exists()
 
-    def test_preserves_existing_fixtures_in_override_dir(self, tmp_path):
+    def test_preserves_existing_fixtures_in_override_dir(self, tmp_path, capsys):
         # A teacher who uses expected-file keeps the fixture in the override
         # dir; materialize must drop tests.json alongside, not clobber it.
         override = tmp_path / "cs" / "autograders" / "hello"
@@ -81,6 +81,24 @@ class TestMaterialize:
         mt.materialize(tmp_path)
         assert (override / "expected.txt").read_text() == "golden output"
         assert (override / "tests.json").is_file()
+        assert "::warning::" not in capsys.readouterr().out
+
+    def test_warns_when_replacing_hand_committed_tests_json(self, tmp_path, capsys):
+        # Discussion #805: a teacher committed their own tests.json under the
+        # override dir. The assignment's tests still win, but the publish log
+        # must say the file was replaced and where tests belong.
+        override = tmp_path / "cs" / "autograders" / "hello"
+        override.mkdir(parents=True)
+        (override / "tests.json").write_text('[{"name": "stale", "type": "run", "run": "true", "points": 1}]')
+        _write_classroom(tmp_path, "cs", _manifest([
+            {"slug": "hello", "tests": [_io_test()]}]))
+        assert mt.materialize(tmp_path) == 1
+        payload = json.loads((override / "tests.json").read_text())
+        assert [t["name"] for t in payload["tests"]] == ["prints"]
+        out = capsys.readouterr().out
+        assert "::warning::" in out
+        assert "replaced by the tests stored on the assignment" in out
+        assert "gh teacher assignment test add" in out
 
     def test_rejects_traversal_slug(self, tmp_path):
         # A hand-edited manifest with a path-traversal slug must not escape

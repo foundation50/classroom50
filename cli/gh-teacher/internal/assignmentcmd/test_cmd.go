@@ -32,10 +32,12 @@ func assignmentTestCmd() *cobra.Command {
 			"  - io      compare stdout\n" +
 			"  - run     check the exit code\n" +
 			"  - python  run pytest\n\n" +
-			"Describe tests here instead of writing an autograder script: the\n" +
-			"publish-pages workflow materializes them into the assignment's\n" +
-			"Pages bundle and runner.py grades them on every submission. See\n" +
-			"the Autograding-Basics wiki page for the field reference.\n\n" +
+			"Describe tests here instead of writing an autograder script. Tests\n" +
+			"are stored on the assignment; the Publish Pages workflow generates\n" +
+			"the bundled tests.json from them, so never commit a tests.json under\n" +
+			"<classroom>/autograders/<slug>/ (that directory is for fixtures and\n" +
+			"grading scripts). See the Autograding-Basics wiki page for the\n" +
+			"field reference.\n\n" +
 			"For bulk edits (or a GUI/agent export), `gh teacher assignment\n" +
 			"add <org> <classroom> <slug> --tests <file.json>` sets the whole\n" +
 			"array at once; these subcommands edit one test at a time.",

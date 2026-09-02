@@ -770,6 +770,29 @@ this used to mean a missing `pytest`; the built-in autograder now installs
   your tests import there. See the
   [Python recipe](Autograder-Recipes#python).
 
+### `tests.json is a bare test array` or `tests.json is not a JSON object` in the grading log
+
+Every submission ends as an error, and the **Grade details** step says the
+bundled `tests.json` has the wrong shape. Someone committed a `tests.json` to
+`CLASSROOM/autograders/ASSIGNMENT/` in the `classroom50` repository, usually by
+copying the `--tests` file example from the wiki. That directory holds fixtures
+and grading scripts only; the Publish Pages workflow generates `tests.json`
+from the tests stored on the assignment, so a hand-written one is never valid
+there.
+
+1. Delete `CLASSROOM/autograders/ASSIGNMENT/tests.json` from the `classroom50`
+   repository and push.
+2. Add the tests on the assignment instead: the web form's **Autograding
+   tests** section, `gh teacher assignment test add`, or `gh teacher assignment
+   add --tests FILE` with the bare-array file.
+3. Wait for the **Publish Pages** workflow to finish, then submit as a test
+   student.
+
+If the assignment already had tests, the publish log also warns
+`replaced by the tests stored on the assignment`: grading works, but delete
+the committed file so the next person doesn't edit it. See
+[Where tests live](Autograding-Basics#where-tests-live).
+
 ## Collecting scores and downloading submissions
 
 ### `collect-scores` warns "collected 0 submissions"

@@ -1914,17 +1914,36 @@ def _validate_test_defaults(d: Any) -> str | None:
     return None
 
 
+# publish-pages always materializes a well-formed envelope, so a structurally
+# wrong tests.json means a teacher committed one by hand under
+# <classroom>/autograders/<slug>/ (see discussion #805). Point them back to the
+# supported authoring path instead of describing a format they never write.
+HAND_WRITTEN_TESTS_HINT = (
+    "Declarative tests are stored on the assignment and tests.json is generated "
+    "from them when the classroom50 repository publishes. Remove the tests.json "
+    "you committed under CLASSROOM/autograders/ASSIGNMENT/ and add the tests "
+    "with the web assignment form or `gh teacher assignment test add` instead.")
+
+
 def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
     """Parse + re-validate a materialized tests.json, folding the envelope's
     `defaults` (assignment-level failure-details / show-output) into each spec
     that doesn't set its own. Raises TestsConfigError on any structural
     problem."""
     data = json.loads(path.read_text(encoding="utf-8"))
+    if isinstance(data, list):
+        # The predictable mistake: the bare array `gh teacher assignment add
+        # --tests` accepts, copied from the wiki into the bundle directory.
+        raise TestsConfigError(
+            f"{TESTS_FILENAME} is a bare test array, the `--tests` file format, "
+            f"not the generated bundle format. {HAND_WRITTEN_TESTS_HINT}")
     if not isinstance(data, dict):
-        raise TestsConfigError(f"{TESTS_FILENAME} is not a JSON object")
+        raise TestsConfigError(
+            f"{TESTS_FILENAME} is not a JSON object. {HAND_WRITTEN_TESTS_HINT}")
     if data.get("schema") != TESTS_SCHEMA_V1:
         raise TestsConfigError(
-            f"{TESTS_FILENAME} schema is {data.get('schema')!r}, want {TESTS_SCHEMA_V1!r}")
+            f"{TESTS_FILENAME} schema is {data.get('schema')!r}, want {TESTS_SCHEMA_V1!r}. "
+            f"{HAND_WRITTEN_TESTS_HINT}")
     tests = data.get("tests")
     if not isinstance(tests, list) or not tests:
         raise TestsConfigError(f"{TESTS_FILENAME} 'tests' must be a non-empty list")
@@ -2228,7 +2247,10 @@ def run_declarative(tests_path: pathlib.Path, finalize: Finalizer,
     never fails the runner."""
     try:
         tests = load_tests(tests_path)
-    except (json.JSONDecodeError, TestsConfigError, OSError) as exc:
+    except TestsConfigError as exc:
+        # Already names the file and says what to do next.
+        return finalize.error(str(exc))
+    except (json.JSONDecodeError, OSError) as exc:
         return finalize.error(f"{TESTS_FILENAME}: {exc}")
 
     grader = DeclarativeGrader(

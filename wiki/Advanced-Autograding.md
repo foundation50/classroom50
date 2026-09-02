@@ -18,21 +18,25 @@ two scopes:
 | Path | Scope | Used when |
 |---|---|---|
 | `CLASSROOM/autograders/ASSIGNMENT/autograder.py` | One assignment | Present in the bundle. |
-| `CLASSROOM/autograders/ASSIGNMENT/tests.json` | One assignment | [Declarative tests](Autograding-Basics#declarative-tests); no per-assignment `autograder.py`. |
-| `CLASSROOM/autograder.py` | One classroom | Neither of the above exists. |
+| `CLASSROOM/autograder.py` | One classroom | No per-assignment `autograder.py` and no declarative tests. |
 
-If none exist, the runner emits a vacuous pass (score 0/0) and the submission
-still lands as a tagged Release — a valid mid-setup state.
+Declarative tests sit between the two: the **Publish Pages** workflow generates
+them into the bundle as `CLASSROOM/autograders/ASSIGNMENT/tests.json`. You
+never create or commit that file. See
+[Where tests live](Autograding-Basics#where-tests-live).
+
+If none of the three exist, the runner emits a vacuous pass (score 0/0) and the
+submission still lands as a tagged Release, a valid mid-setup state.
 
 ### Precedence
 
-`runner.py` resolves the grading entrypoint in this order:
+The runner resolves the grading entrypoint in this order:
 
 1. Per-assignment `CLASSROOM/autograders/ASSIGNMENT/autograder.py` (an override
    always wins).
-2. Per-assignment `tests.json` (declarative tests).
+2. The assignment's declarative tests (the generated `tests.json`).
 3. Classroom default `CLASSROOM/autograder.py`.
-4. None of the above → vacuous pass.
+4. None of the above: vacuous pass.
 
 To keep precedence from silently swallowing tests, the CLI refuses `assignment
 test add` / `--tests` while a per-assignment `autograder.py` exists.

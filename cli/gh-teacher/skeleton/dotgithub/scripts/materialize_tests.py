@@ -70,6 +70,15 @@ def materialize(root: pathlib.Path) -> int:
 
             outdir = root / classroom / "autograders" / slug
             outdir.mkdir(parents=True, exist_ok=True)
+            target = outdir / TESTS_FILENAME
+            if target.exists():
+                # Only a hand-committed file can be here: this script runs on a
+                # fresh checkout. The assignment's own tests win, so say so in
+                # the run log instead of clobbering silently.
+                print(f"::warning::{target}: replaced by the tests stored on the "
+                      f"assignment. tests.json is generated at publish time; remove "
+                      f"the committed copy and manage tests with the web assignment "
+                      f"form or `gh teacher assignment test add`.")
             payload = {"schema": TESTS_SCHEMA_V1, "tests": tests}
             # Assignment-level defaults for the per-test reporting options
             # (failure-details / show-output) ride the envelope; runner.py's
@@ -77,9 +86,9 @@ def materialize(root: pathlib.Path) -> int:
             defaults = entry.get("test_defaults")
             if isinstance(defaults, dict) and defaults:
                 payload["defaults"] = defaults
-            (outdir / TESTS_FILENAME).write_text(
+            target.write_text(
                 json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-            print(f"materialized {outdir / TESTS_FILENAME} ({len(tests)} test(s))")
+            print(f"materialized {target} ({len(tests)} test(s))")
             written += 1
     return written
 
