@@ -155,7 +155,10 @@ export const TeacherAssignmentsView = ({
   const canAuthor = can("authorAssignments", { classroomRole: myRole })
   // Only an org owner's repo list covers every repo; a non-owner sees the
   // repos their staff team was granted, so the Accepted column is a lower bound.
-  const { isOwner } = useIsOrgOwner()
+  // Asserted while the role still resolves so an owner never flashes the
+  // non-owner wording on load.
+  const { isOwner, isPending: ownerPending } = useIsOrgOwner()
+  const acceptanceComplete = isOwner || ownerPending
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
   const [query, setQuery] = useState("")
@@ -308,7 +311,7 @@ export const TeacherAssignmentsView = ({
           }
           archived={archived}
           canAuthor={canAuthor}
-          acceptanceComplete={isOwner}
+          acceptanceComplete={acceptanceComplete}
           sort={sort}
           onSortChange={setSort}
           // Replay the row entrance on filter/sort changes; search is excluded

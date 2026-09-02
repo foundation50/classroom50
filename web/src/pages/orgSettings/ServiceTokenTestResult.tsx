@@ -106,8 +106,10 @@ export default function ServiceTokenTestResult({
           <span>{t("orgSettings.serviceToken.test.failedLoading")}</span>
         ) : details.length > 0 ? (
           <ul className="list-disc space-y-1 ps-5">
-            {details.map((message) => (
-              <li key={message}>{message}</li>
+            {details.map((message, index) => (
+              // The probe may repeat a message (one per failed check), so the
+              // text alone is not a stable key.
+              <li key={`${index}-${message}`}>{message}</li>
             ))}
           </ul>
         ) : (

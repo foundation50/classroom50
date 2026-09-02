@@ -180,10 +180,15 @@ const SubmissionsPageContent = () => {
   // VIEWER's token, and a repo they lack access to reads as 404, which both
   // fan-outs already treat as "not accepted" (collect grants the staff teams
   // per-repo read as it runs, so those repos appear after the next collect).
-  const { isOwner } = useIsOrgOwner()
+  const { isOwner, isPending: ownerPending } = useIsOrgOwner()
+  // Whether the org repo list covers every repo. Asserted while the role is
+  // still resolving too: a confirmed owner would otherwise flash the non-owner
+  // "you can see" wording for a moment on every load.
+  const acceptanceComplete = isOwner || ownerPending
   const {
     data: scoresData,
     refetch: refetchScores,
+    isRefetching: scoresRefetching,
     isError: scoresError,
     error: scoresErrorObj,
   } = useGetScores(org, classroom)
@@ -281,6 +286,7 @@ const SubmissionsPageContent = () => {
     data: orgRepos,
     isLoading: orgReposLoading,
     isPending: orgReposPending,
+    isRefetching: orgReposRefetching,
     refetch: refetchOrgRepos,
   } = useAssignmentRepos({
     org: org ?? "",
@@ -1516,7 +1522,7 @@ const SubmissionsPageContent = () => {
           onSortChange={setSort}
           isGroup={isGroupFlavor}
           acceptedAvailable={acceptedAvailable}
-          acceptanceComplete={isOwner}
+          acceptanceComplete={acceptanceComplete}
           passingAvailable={passingEnabled}
           sections={sections}
           onShare={() => setAcceptOpen(true)}
@@ -1537,6 +1543,10 @@ const SubmissionsPageContent = () => {
                 lastCollectedLabel={lastCollectedLabel}
                 stale={snapshotStale}
                 collecting={collecting}
+                refreshing={
+                  !canDispatchWorkflows &&
+                  (scoresRefetching || orgReposRefetching)
+                }
                 errorCount={liveErrorCount}
                 canCollect={canDispatchWorkflows}
                 // Stays mounted while collecting: the button IS the in-page
@@ -1557,6 +1567,11 @@ const SubmissionsPageContent = () => {
                         // Button's `loading` already swallows the click; this
                         // is the re-entrancy latch behind it.
                         if (collecting) return
+                        if (
+                          !canDispatchWorkflows &&
+                          (scoresRefetching || orgReposRefetching)
+                        )
+                          return
                         if (canDispatchWorkflows) {
                           collectScores.collect()
                         } else {
@@ -1783,7 +1798,7 @@ const SubmissionsPageContent = () => {
           acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
           // Only an owner sees every org repo; a non-owner's list is the repos
           // they were granted, so an absence is "not visible", not "not accepted".
-          acceptanceComplete={isOwner}
+          acceptanceComplete={acceptanceComplete}
           thresholdFraction={thresholdFraction}
           filtered={hasActiveFilter}
           onClearFilters={clearFilters}

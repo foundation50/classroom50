@@ -157,11 +157,32 @@ describe("useTestServiceToken", () => {
     expect(getRunAnnotations).not.toHaveBeenCalled()
   })
 
-  it("falls back to [] when the annotations read fails, so the run link still shows", async () => {
-    getRunAnnotations.mockRejectedValue(new Error("403"))
+  it("does not read annotations for a run that passed", async () => {
+    // A green run's only annotation is a "passed" notice the result never
+    // shows, so the read (jobs list plus one call per job) is skipped.
+    getRunAnnotations.mockClear()
     operation = {
       phase: "completed",
       failure: null,
+      run: {
+        id: 79,
+        html_url: "https://github.com/acme/classroom50/actions/runs/79",
+      },
+      error: null,
+    }
+    const { result } = renderHook(() => useTestServiceToken("acme"), {
+      wrapper,
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(result.current.annotations).toBeUndefined()
+    expect(getRunAnnotations).not.toHaveBeenCalled()
+  })
+
+  it("falls back to [] when the annotations read fails, so the run link still shows", async () => {
+    getRunAnnotations.mockRejectedValue(new Error("403"))
+    operation = {
+      phase: "failed",
+      failure: "run",
       run: {
         id: 78,
         html_url: "https://github.com/acme/classroom50/actions/runs/78",

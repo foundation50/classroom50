@@ -146,6 +146,26 @@ describe("DataFreshness", () => {
       expect(onRefresh).toHaveBeenCalledTimes(1)
     })
 
+    it("spins and reads 'Refreshing…' while its re-reads are in flight", async () => {
+      // No workflow phase changes for a TA, so the re-reads themselves drive
+      // the feedback; the click is swallowed meanwhile like a collect.
+      const onRefresh = vi.fn()
+      render(
+        <DataFreshness
+          {...base}
+          canCollect={false}
+          refreshing
+          onRefresh={onRefresh}
+        />,
+      )
+      const btn = screen.getByRole("button")
+      expect(btn.textContent).toContain("submissions.freshness.refreshing")
+      expect(btn.textContent).not.toContain("submissions.collect.active")
+      expect(btn.getAttribute("aria-busy")).toBe("true")
+      await userEvent.click(btn)
+      expect(onRefresh).not.toHaveBeenCalled()
+    })
+
     it("explains who can collect, and only for that viewer", () => {
       const { rerender } = render(
         <DataFreshness {...base} canCollect={false} />,

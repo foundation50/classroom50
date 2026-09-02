@@ -55,15 +55,15 @@ const useTestServiceToken = (org: string | undefined) => {
     },
   })
 
-  // Annotations exist only once the run has concluded; a run that passed emits
-  // a single notice, a failed one the error naming the checks that did not pass.
-  const finished =
-    phase === "completed" || (phase === "failed" && failure === "run")
+  // Annotations are read only for a run that FAILED: that is where the probe
+  // names the checks that did not pass and the fix. A passing run emits only a
+  // "passed" notice the result never shows, so its read is skipped.
+  const failedRun = phase === "failed" && failure === "run"
   const annotations = useQuery({
     queryKey: githubKeys.runAnnotations(org ?? "", run?.id ?? 0),
     queryFn: ({ signal }) =>
       getRunAnnotations(client, org ?? "", run?.id ?? 0, signal),
-    enabled: Boolean(org && run?.id && finished),
+    enabled: Boolean(org && run?.id && failedRun),
     staleTime: Infinity,
     // The run link is the fallback, so a failed read isn't worth retrying.
     retry: false,
@@ -81,10 +81,10 @@ const useTestServiceToken = (org: string | undefined) => {
     run,
     error,
     inFlight,
-    // undefined while loading or when the run isn't finished; [] when the run
+    // undefined while loading or unless the run failed; [] when the run
     // emitted nothing (or the annotations read failed, since the run link still
     // gives the teacher the full log).
-    annotations: finished
+    annotations: failedRun
       ? annotations.isError
         ? []
         : annotations.data

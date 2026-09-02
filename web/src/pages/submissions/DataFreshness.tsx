@@ -35,6 +35,10 @@ export type DataFreshnessProps = {
   // in-page progress indicator: it spins, reads "Collecting…", and goes inert
   // (but stays focusable) until the run settles.
   collecting: boolean
+  // The read-only Refresh variant's re-reads are in flight. Same treatment as
+  // `collecting`, reading "Refreshing…": a TA gets feedback for the click even
+  // though no workflow phase changes for them.
+  refreshing?: boolean
   // Collect (canCollect) or re-read (otherwise) the submission data. Omitted
   // when neither applies (e.g., empty roster) — then no button renders.
   onRefresh?: () => void
@@ -50,11 +54,16 @@ export function DataFreshness({
   lastCollectedLabel,
   stale,
   collecting,
+  refreshing = false,
   onRefresh,
   canCollect = true,
   errorCount = 0,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
+  const busy = collecting || refreshing
+  const busyLabel = collecting
+    ? t("submissions.collect.active")
+    : t("submissions.freshness.refreshing")
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -71,8 +80,8 @@ export function DataFreshness({
           <Button
             variant="ghost"
             size="sm"
-            loading={collecting}
-            loadingLabel={t("submissions.collect.active")}
+            loading={busy}
+            loadingLabel={busyLabel}
             onClick={onRefresh}
             className="text-base-content/70"
             title={
@@ -81,8 +90,8 @@ export function DataFreshness({
                 : t("submissions.freshness.refreshHelp")
             }
           >
-            {collecting ? (
-              t("submissions.collect.active")
+            {busy ? (
+              busyLabel
             ) : (
               <>
                 <SyncIcon aria-hidden="true" className="size-4" />
