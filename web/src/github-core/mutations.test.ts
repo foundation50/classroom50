@@ -760,6 +760,109 @@ describe("validateServiceToken", () => {
       /Enter a token/,
     )
   })
+
+  // The "All repositories" probe (discussion #768): a token scoped to selected
+  // repositories reads classroom50 fine and 404s on every student repo. With
+  // the teacher's client supplied, the token must also read one other private
+  // org repo; only a 404 there is a verdict.
+  describe("repository access probe", () => {
+    const okToken = (probeResult: () => Promise<unknown>) =>
+      mockTokenClient((path) => {
+        if (path === "/repos/acme/classroom50") {
+          return Promise.resolve({ permissions: { push: true, admin: true } })
+        }
+        if (path === "/orgs/acme/members?per_page=1") {
+          return Promise.resolve([])
+        }
+        if (path === "/repos/acme/cs-hw1-alice") return probeResult()
+        throw new Error(`unexpected path ${path}`)
+      })
+    const teacherWith = (repos: { name: string }[] | Error) => {
+      const request = vi.fn().mockImplementation((path: string) => {
+        expect(path).toMatch(/^\/orgs\/acme\/repos\?type=private/)
+        return repos instanceof Error
+          ? Promise.reject(repos)
+          : Promise.resolve(repos)
+      })
+      return { request } as unknown as ReturnType<typeof createGitHubClient>
+    }
+
+    it("passes when the token reads another private repo", async () => {
+      const request = okToken(() => Promise.resolve({ name: "cs-hw1-alice" }))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith([{ name: "classroom50" }, { name: "cs-hw1-alice" }]),
+        ),
+      ).resolves.toBeUndefined()
+      expect(request).toHaveBeenCalledWith("/repos/acme/cs-hw1-alice")
+    })
+
+    it("rejects a token scoped to selected repositories (404 on another repo)", async () => {
+      okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith([{ name: "classroom50" }, { name: "cs-hw1-alice" }]),
+        ),
+      ).rejects.toThrow(/All repositories.*|acme\/cs-hw1-alice/)
+    })
+
+    it("never probes with classroom50 itself, whatever its casing", async () => {
+      const request = okToken(() => Promise.resolve({}))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith([{ name: "Classroom50" }]),
+        ),
+      ).resolves.toBeUndefined()
+      // Only the baseline config-repo read and members probe ran; no third
+      // read against the config repo under another casing.
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(request).not.toHaveBeenCalledWith("/repos/acme/Classroom50")
+    })
+
+    it("has nothing to prove when the org has no other private repo", async () => {
+      const request = okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken("github_pat_x", "acme", teacherWith([])),
+      ).resolves.toBeUndefined()
+      expect(request).not.toHaveBeenCalledWith("/repos/acme/cs-hw1-alice")
+    })
+
+    it("is inconclusive when the teacher's listing fails or the probe 403s/500s", async () => {
+      okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith(new TypeError("Failed to fetch")),
+        ),
+      ).resolves.toBeUndefined()
+
+      for (const status of [403, 500]) {
+        okToken(() => Promise.reject(apiError(status)))
+        await expect(
+          validateServiceToken(
+            "github_pat_x",
+            "acme",
+            teacherWith([{ name: "cs-hw1-alice" }]),
+          ),
+        ).resolves.toBeUndefined()
+      }
+    })
+
+    it("skips the probe entirely without a teacher client", async () => {
+      const request = okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken("github_pat_x", "acme"),
+      ).resolves.toBeUndefined()
+      expect(request).toHaveBeenCalledTimes(2)
+    })
+  })
 })
 
 // gitBlobSha must match `git hash-object` so a skeleton file's bundled content

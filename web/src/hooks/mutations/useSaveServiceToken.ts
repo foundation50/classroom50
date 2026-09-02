@@ -52,7 +52,7 @@ export function useSaveServiceToken(org: string | undefined) {
       expiresInDays,
       tokenName,
     }: SaveServiceTokenInput) => {
-      await validateServiceToken(serviceToken, org)
+      await validateServiceToken(serviceToken, org, client)
       await putRepoSecret(
         client,
         org,

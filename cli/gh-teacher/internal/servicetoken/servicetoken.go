@@ -115,7 +115,7 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 // members — also not implied by any repository permission). Catches a
 // misconfigured PAT at provisioning time rather than as an opaque collect-time 403.
 func ValidateToken(token []byte, org string) error {
-	return ValidateTokenVerbose(token, org, io.Discard)
+	return ValidateTokenVerbose(token, org, nil, io.Discard)
 }
 
 // ValidateTokenVerbose is ValidateToken with a writer for advisory notes. When
@@ -123,7 +123,12 @@ func ValidateToken(token []byte, org string) error {
 // repo read), validation still passes (fail-open) but warns to `out` so the
 // teacher knows Members: Read wasn't positively confirmed and should run the
 // `probe-token` workflow before relying on collection.
-func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
+//
+// `teacher` is the caller's own authenticated client. When non-nil it is used
+// to find a private repo other than classroom50 to read as the token, which is
+// the only way to tell a PAT scoped to "All repositories" from one scoped to
+// selected repositories (see validateRepoScopeWithClients). nil skips that probe.
+func ValidateTokenVerbose(token []byte, org string, teacher githubapi.Client, out io.Writer) error {
 	tokenClient, err := githubapi.NewClient(githubapi.ClientOptions{
 		AuthToken: string(token),
 	})
@@ -131,7 +136,13 @@ func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("build token client: %w", err)
 	}
-	return validateTokenWithClient(tokenClient, org, out)
+	if err := validateTokenWithClient(tokenClient, org, out); err != nil {
+		return err
+	}
+	if teacher == nil {
+		return nil
+	}
+	return validateRepoScopeWithClients(tokenClient, teacher, org, out)
 }
 
 // validateTokenWithClient is ValidateToken's testable core: reads the config
@@ -195,6 +206,46 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 		// unconfirmed Members-less token 403s at collect time. Point at
 		// probe-token.
 		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Organization -> Members: Read scope (%v). Proceeding, since the repo read proved the token live, but if it in fact lacks Members: Read, collection will 403 and skip. Run the `probe-token` workflow to verify all scopes before the first collect.\n", err)
+	}
+	return nil
+}
+
+// validateRepoScopeWithClients checks that the token reaches repos beyond
+// classroom50. The config-repo read proves nothing about the student repos: a
+// PAT scoped to "Only select repositories" (with classroom50 selected) passes
+// every check above and then 404s on every student repo, which surfaces weeks
+// later as a collect-time 403 on the first staff-team grant.
+//
+// The teacher's own client picks a private org repo other than classroom50 (a
+// repo they can see, so a token they own with All repositories can see it too)
+// and the token reads it. 404 is definitive: the repo is outside the token's
+// selection, or its Resource owner isn't the org. No other private repo yet
+// means there is nothing to prove; any other failure is inconclusive and warns.
+func validateRepoScopeWithClients(tokenClient, teacher githubapi.Client, org string, out io.Writer) error {
+	listPath := fmt.Sprintf("orgs/%s/repos?type=private&sort=created&direction=asc&per_page=10", url.PathEscape(org))
+	var repos []struct {
+		Name string `json:"name"`
+	}
+	if err := teacher.Get(listPath, &repos); err != nil {
+		_, _ = fmt.Fprintf(out, "Warning: couldn't list %s's private repositories to confirm the token's Repository access setting (%v). Proceeding; if the token is scoped to selected repositories, collection can't reach student repos. Run the `probe-token` workflow to verify.\n", org, err)
+		return nil
+	}
+	probe := ""
+	for _, r := range repos {
+		if !strings.EqualFold(r.Name, configrepo.ConfigRepoName) {
+			probe = r.Name
+			break
+		}
+	}
+	if probe == "" {
+		return nil
+	}
+	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(probe))
+	if err := tokenClient.Get(path, nil); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return fmt.Errorf("the supplied token can read %s/%s but not %s/%s, so it is scoped to selected repositories (or its Resource owner isn't %q). Collecting scores reads every student repo and grants staff teams access to them. Re-create the fine-grained personal access token with Resource owner = %q and Repository access = All repositories, keeping Contents: Read and write, Actions: Read and write, Administration: Read and write, and Organization permissions -> Members: Read", org, configrepo.ConfigRepoName, org, probe, org, org)
+		}
+		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Repository access setting by reading %s/%s (%v). Proceeding; if the token is scoped to selected repositories, collection can't reach student repos. Run the `probe-token` workflow to verify.\n", org, probe, err)
 	}
 	return nil
 }
@@ -278,6 +329,8 @@ func NewRotateCmd() *cobra.Command {
 			"  - read the org's members (collection is team-driven and lists\n" +
 			"    the classroom team)\n\n" +
 			"Required fine-grained token permissions:\n" +
+			"  - Repository access -> All repositories (a token limited to\n" +
+			"    selected repositories can't reach student repos)\n" +
 			"  - Repository permissions -> Contents: Read and write, Actions:\n" +
 			"    Read and write, and Administration: Read and write\n" +
 			"    (Metadata: Read is auto-included)\n" +
@@ -315,7 +368,7 @@ func NewRotateCmd() *cobra.Command {
 			}
 			// Validate before storing: catch a bad PAT now, not weeks later.
 			// Verbose so an inconclusive Members-scope probe warns.
-			if err := ValidateTokenVerbose(token, org, out); err != nil {
+			if err := ValidateTokenVerbose(token, org, client, out); err != nil {
 				return fmt.Errorf("service token validation failed: %w", err)
 			}
 			return ProvisionSecret(client, out, org, configrepo.ConfigRepoName, token, "rotated")

@@ -179,6 +179,85 @@ func boolJSON(b bool) string {
 	return "false"
 }
 
+// TestValidateRepoScope pins the "All repositories" probe: the teacher's client
+// lists private org repos, the token reads the first one that isn't
+// classroom50, and only a 404 there rejects the token. A token scoped to
+// selected repositories passes every config-repo check (discussion #768), so
+// this probe is the one place the misconfiguration can be caught before it
+// shows up as a collect-time 403 on the first staff-team grant.
+func TestValidateRepoScope(t *testing.T) {
+	cases := []struct {
+		name string
+		// listing is the teacher's GET /orgs/cs50/repos body (or a status).
+		listStatus int
+		listing    string
+		// probeStatus is the token's GET /repos/cs50/<probe> status.
+		probeStatus int
+		wantProbe   string // "" when no probe should be made
+		wantErr     bool
+		wantWarn    bool
+	}{
+		{"all repositories", http.StatusOK, `[{"name":"classroom50"},{"name":"cs-hw1-alice"}]`, http.StatusOK, "cs-hw1-alice", false, false},
+		{"selected repositories rejected", http.StatusOK, `[{"name":"classroom50"},{"name":"cs-hw1-alice"}]`, http.StatusNotFound, "cs-hw1-alice", true, false},
+		{"config repo is never the probe", http.StatusOK, `[{"name":"Classroom50"},{"name":"other"}]`, http.StatusOK, "other", false, false},
+		{"only the config repo exists: nothing to prove", http.StatusOK, `[{"name":"classroom50"}]`, 0, "", false, false},
+		{"no private repos: nothing to prove", http.StatusOK, `[]`, 0, "", false, false},
+		{"teacher listing fails: inconclusive", http.StatusInternalServerError, ``, 0, "", false, true},
+		{"probe 403 is inconclusive, not a scope verdict", http.StatusOK, `[{"name":"cs-hw1-alice"}]`, http.StatusForbidden, "cs-hw1-alice", false, true},
+		{"probe 5xx is inconclusive", http.StatusOK, `[{"name":"cs-hw1-alice"}]`, http.StatusBadGateway, "cs-hw1-alice", false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var probed []string
+			teacherServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if !strings.HasSuffix(r.URL.Path, "/orgs/cs50/repos") {
+					t.Errorf("teacher client: unexpected request %s", r.URL.Path)
+				}
+				if got := r.URL.Query().Get("type"); got != "private" {
+					t.Errorf("listing type = %q, want private (a public repo proves nothing)", got)
+				}
+				if tc.listStatus != http.StatusOK {
+					w.WriteHeader(tc.listStatus)
+					return
+				}
+				_, _ = w.Write([]byte(tc.listing))
+			}))
+			t.Cleanup(teacherServer.Close)
+			tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				probed = append(probed, strings.TrimPrefix(r.URL.Path, "/repos/cs50/"))
+				if tc.probeStatus != http.StatusOK {
+					w.WriteHeader(tc.probeStatus)
+					return
+				}
+				_, _ = w.Write([]byte(`{"name":"x"}`))
+			}))
+			t.Cleanup(tokenServer.Close)
+
+			var warnOut strings.Builder
+			err := validateRepoScopeWithClients(
+				githubtest.NewTestClient(t, tokenServer),
+				githubtest.NewTestClient(t, teacherServer),
+				"cs50", &warnOut,
+			)
+			if tc.wantErr != (err != nil) {
+				t.Fatalf("err = %v, wantErr %v", err, tc.wantErr)
+			}
+			if tc.wantErr && (!strings.Contains(err.Error(), "All repositories") || !strings.Contains(err.Error(), "cs50/cs-hw1-alice")) {
+				t.Errorf("rejection should name the unreadable repo and the All repositories fix: %q", err.Error())
+			}
+			if tc.wantWarn != strings.Contains(warnOut.String(), "probe-token") {
+				t.Errorf("inconclusive warning = %v, want %v (out=%q)", !tc.wantWarn, tc.wantWarn, warnOut.String())
+			}
+			if tc.wantProbe == "" && len(probed) != 0 {
+				t.Errorf("token must not be used when there is nothing to prove; probed %v", probed)
+			}
+			if tc.wantProbe != "" && (len(probed) != 1 || probed[0] != tc.wantProbe) {
+				t.Errorf("probed %v, want exactly [%s]", probed, tc.wantProbe)
+			}
+		})
+	}
+}
+
 // TestProvisionServiceSecret_PutStatus pins the PUT status handling: the
 // Actions-secret upload must succeed on 201 (created) and 204 (updated),
 // and the new assertion must reject any other 2xx (e.g., a 200 that means
