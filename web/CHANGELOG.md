@@ -17,6 +17,19 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.41.0](https://github.com/foundation50/classroom50/compare/web-v1.40.0...web-v1.41.0) (2026-09-02)
+
+
+### Features
+
+* add team-based group assignments backed by GitHub Teams ([#827](https://github.com/foundation50/classroom50/issues/827)) ([63cb10f](https://github.com/foundation50/classroom50/commit/63cb10f6ab06ed76c7cbd69b366f61a65b3df5eb))
+
+
+### Bug Fixes
+
+* **web:** redesign published resources as a repo-style file browser ([#823](https://github.com/foundation50/classroom50/issues/823)) ([b681d37](https://github.com/foundation50/classroom50/commit/b681d37ba53c28a28bf5b9a9c28b4d5a0833ca1b))
+* **web:** remove duplicate navbar from the accept assignment page ([#828](https://github.com/foundation50/classroom50/issues/828)) ([6f1b779](https://github.com/foundation50/classroom50/commit/6f1b779400b22e60b85c6f555e8e52e72a2ce8c7))
+
 ## [1.40.0](https://github.com/foundation50/classroom50/compare/web-v1.39.1...web-v1.40.0) (2026-08-31)
 
 
