@@ -2788,6 +2788,7 @@
       "staleHelp": "New pushes since the last collection. Collect now to grade the newest work.",
       "collectHelp": "Collect now to grade the latest pushes.",
       "refreshLabel": "Refresh",
+      "refreshing": "Refreshing…",
       "refreshHelp": "Re-read the latest collected submission data and live repository status.",
       "collectRestricted": "Only teachers and head TAs can collect scores. Ask one to run a collection to grade the latest pushes."
     },
