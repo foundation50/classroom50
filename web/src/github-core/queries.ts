@@ -128,6 +128,8 @@ export {
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,
+  getProbeTokenRunAfterId,
+  getRunAnnotations,
   getLastCollectScoresRun,
   SERVICE_TOKEN_SECRET_NAME,
   SERVICE_TOKEN_EXPIRES_AT_VAR,
@@ -136,4 +138,5 @@ export {
   classifyServiceTokenExpiry,
   type ServiceTokenStatus,
   type ServiceTokenExpiry,
+  type RunAnnotation,
 } from "./queries/releaseRunReads"

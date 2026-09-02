@@ -1,11 +1,28 @@
 import type { GitHubClient } from "../client"
-import { is422UnexpectedInputs } from "../errors"
+import { GitHubAPIError, is422UnexpectedInputs } from "../errors"
 import { getRepo } from "../repoReads"
-import { COLLECT_SCORES_WORKFLOW, REGRADE_WORKFLOW } from "../workflows"
+import {
+  COLLECT_SCORES_WORKFLOW,
+  PROBE_TOKEN_WORKFLOW,
+  REGRADE_WORKFLOW,
+} from "../workflows"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 
 const logWorkflows = logger.scope("github:workflows")
+
+// The org's classroom50 repo has no probe-token.yaml (its skeleton predates the
+// workflow), so GitHub 404'd the workflow. The view maps this to "update the
+// workflow files first" rather than a generic dispatch failure.
+export class ProbeWorkflowMissingError extends Error {
+  constructor(cause: unknown) {
+    super(
+      "probe-token.yaml is not in the config repo; the org's workflow files are out of date",
+    )
+    this.name = "ProbeWorkflowMissingError"
+    this.cause = cause
+  }
+}
 
 // The org's collect-scores.yaml predates the `assignment` dispatch input, so
 // GitHub rejected the scoped dispatch with a 422 ("Unexpected inputs"). The
@@ -193,6 +210,52 @@ export async function triggerRegrade(
     owner: owner ?? "(all)",
     sinceRunId,
   })
+  return { sinceRunId }
+}
+
+/**
+ * Dispatches the classroom50 repo's `probe-token.yaml` workflow, the read-only
+ * check that exercises every scope the service token needs. No inputs.
+ *
+ * Returns `sinceRunId` like the other dispatchers so the caller can bind to its
+ * own run. A 404 on the workflow (baseline read or dispatch) means the org's
+ * skeleton predates probe-token.yaml and surfaces as ProbeWorkflowMissingError.
+ */
+export async function triggerProbeToken(
+  client: GitHubClient,
+  org: string | undefined,
+): Promise<{ sinceRunId: number | null }> {
+  if (!org) throw new Error("org must be specified to probe the service token")
+
+  const workflowBase = `/repos/${org}/${CONFIG_REPO}/actions/workflows/${PROBE_TOKEN_WORKFLOW}`
+  const rethrowMissingWorkflow = (err: unknown): never => {
+    if (err instanceof GitHubAPIError && err.isNotFound) {
+      throw new ProbeWorkflowMissingError(err)
+    }
+    throw err
+  }
+
+  const [repo, baseline] = await Promise.all([
+    getRepo(client, org, CONFIG_REPO),
+    client
+      .request<{ workflow_runs: { id: number }[] }>(
+        `${workflowBase}/runs?event=workflow_dispatch&per_page=1`,
+      )
+      .catch(rethrowMissingWorkflow),
+  ])
+  if (!repo) {
+    throw new Error(
+      `${org}/${CONFIG_REPO} not found; run setup for this org first`,
+    )
+  }
+  const ref = repo.default_branch || DEFAULT_BRANCH
+  const sinceRunId = baseline.workflow_runs?.[0]?.id ?? null
+
+  await client
+    .request(`${workflowBase}/dispatches`, { method: "POST", body: { ref } })
+    .catch(rethrowMissingWorkflow)
+
+  logWorkflows.info("dispatched probe-token", { org, sinceRunId })
   return { sinceRunId }
 }
 

@@ -90,6 +90,26 @@ Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your
 Classroom 50 sends you to GitHub to create the token, then you paste it back
 into the form to finish setup.
 
+#### Test the token
+
+Saving a token checks what it can prove from the `classroom50` repository
+and one other repository. The permissions that only matter once collection
+reads your classroom teams and re-runs workflows (organization **Members:
+Read**, **Actions**, and whether the token can see each staff team) are checked
+by a read-only workflow in your organization. On the organization settings
+page, the **Service token** section has a **Test token** button that runs it
+and shows the verdict in place:
+
+- a pass means the token has every permission Classroom 50 needs
+- a failure lists the permissions the check found missing, with a **View run**
+  link to the full log; create a new token with those permissions and use
+  **Set a new token** to save it
+
+Run it after setting or rotating a token, or when a collect or regrade run
+fails with a 401 or 403. The check only reads, so it's safe to run at any time.
+If the button reports that the workflow is missing, the organization's workflow
+files predate it: use **Re-run org setup** on the same page to update them.
+
 ### Member team creation
 
 Group assignments where students form their own groups work by letting the

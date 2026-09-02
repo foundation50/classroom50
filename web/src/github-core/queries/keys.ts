@@ -184,6 +184,18 @@ export const githubKeys = {
   serviceToken: (owner: string) =>
     [...githubKeys.all, "serviceToken", owner] as const,
 
+  // The probe-token dispatch tracker; sinceRunId binds the poll to one dispatch.
+  probeTokenRun: (owner: string, sinceRunId: number | null) =>
+    [
+      ...githubKeys.all,
+      "probe-token-run",
+      owner,
+      sinceRunId ?? "none",
+    ] as const,
+
+  runAnnotations: (owner: string, runId: number) =>
+    [...githubKeys.all, "run-annotations", owner, runId] as const,
+
   skeletonDrift: (owner: string) =>
     [...githubKeys.all, "skeletonDrift", owner] as const,
 
