@@ -674,15 +674,15 @@ func TestIsGroupTeamSlug(t *testing.T) {
 	}{
 		{GroupTeamName("cs50", "project", 1), true},
 		{GroupTeamName("cs50", "project", 42), true},
-		{GroupTeamPrefix + hash + "-0", false},   // counters start at 1
-		{GroupTeamPrefix + hash + "-01", false},  // no leading zeros
-		{GroupTeamPrefix + hash + "-", false},    // no counter
-		{GroupTeamPrefix + hash, false},          // no counter segment
-		{GroupTeamPrefix + "nothexnothexnot0-1", false},   // non-hex hash
-		{GroupTeamPrefix + hash[:15] + "-1", false},       // short hash
-		{"classroom50-group-theory", false},               // human team in the namespace
-		{"classroom50-cs50", false},                       // classroom student team
-		{"invite-" + hash, false},                         // invite team
+		{GroupTeamPrefix + hash + "-0", false},             // counters start at 1
+		{GroupTeamPrefix + hash + "-01", false},            // no leading zeros
+		{GroupTeamPrefix + hash + "-", false},              // no counter
+		{GroupTeamPrefix + hash, false},                    // no counter segment
+		{GroupTeamPrefix + "nothexnothexnot0-1", false},    // non-hex hash
+		{GroupTeamPrefix + hash[:15] + "-1", false},        // short hash
+		{"classroom50-group-theory", false},                // human team in the namespace
+		{"classroom50-cs50", false},                        // classroom student team
+		{"invite-" + hash, false},                          // invite team
 		{"x" + GroupTeamName("cs50", "project", 1), false}, // anchored
 	}
 	for _, tc := range cases {
