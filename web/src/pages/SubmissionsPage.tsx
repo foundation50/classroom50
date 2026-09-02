@@ -1133,13 +1133,11 @@ const SubmissionsPageContent = () => {
   const regrading = regradeAll.anyRegrading
   // Whether "Regrade all" specifically is mid-dispatch, for its own
   // spinner/label (distinct from the page-wide `regrading` gate).
-  const regradeAllActive =
-    regradeAll.phase === "dispatching" || regradeAll.phase === "running"
+  const regradeAllActive = regradeAll.inFlight
   const { data: lastRun } = useGetLastCollectScoresRun(org)
   const collectWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}`
   const regradeWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}`
-  const collecting =
-    collectScores.phase === "dispatching" || collectScores.phase === "running"
+  const collecting = collectScores.inFlight
 
   // Which action the single "View …" link points at and which status strip (if
   // any) shows. Running takes precedence; else most recently finished; else

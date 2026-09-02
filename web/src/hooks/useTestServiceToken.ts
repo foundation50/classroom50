@@ -30,7 +30,7 @@ const useTestServiceToken = (org: string | undefined) => {
   const { register } = useActionActivityRegistry()
   const { t } = useTranslation()
 
-  const { trigger, phase, failure, run, error } = useGitHubOperation({
+  const { trigger, phase, failure, run, error, inFlight } = useGitHubOperation({
     storageKey: org ? `cl50:probe-token:${org}` : null,
     queryKey: (sinceRunId) => githubKeys.probeTokenRun(org ?? "", sinceRunId),
     resetKey: org ?? "",
@@ -68,8 +68,6 @@ const useTestServiceToken = (org: string | undefined) => {
     // The run link is the fallback, so a failed read isn't worth retrying.
     retry: false,
   })
-
-  const inFlight = phase === "dispatching" || phase === "running"
 
   return {
     test: () => {

@@ -113,13 +113,12 @@ const ActiveRegradeButton = ({
   displayName?: string
 }) => {
   const { t } = useTranslation()
-  const { regrade, phase, anyRegrading } = useTriggerRegrade({
+  const { regrade, phase, anyRegrading, inFlight } = useTriggerRegrade({
     org,
     classroom,
     assignment,
     owner,
   })
-  const inFlight = phase === "dispatching" || phase === "running"
   // Disable while ANY regrade (this row, another, or "Regrade all") is in flight:
   // trackers share one regrade.yaml run list and bind by monotonic id, so a
   // single outstanding dispatch keeps the binding unambiguous.

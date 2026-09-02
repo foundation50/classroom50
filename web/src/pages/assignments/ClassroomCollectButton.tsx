@@ -64,7 +64,7 @@ export function ClassroomCollectButton({
     { classroom },
     { classroom: classroomName },
   )
-  const busy = collect.phase === "dispatching" || collect.phase === "running"
+  const busy = collect.inFlight
   // A sweep is a heavier dispatch than the per-assignment collect (it walks
   // every assignment, and Actions minutes scale with the classroom), so the
   // click confirms before dispatching instead of firing straight away.
@@ -219,7 +219,7 @@ export function ClassroomCollectButton({
           variant="ghost"
           size="sm"
           loading={busy}
-          loadingLabel={t("submissions.collect.active")}
+          busyLabel={t("submissions.collect.active")}
           disabled={emptyRoster}
           title={
             emptyRoster
@@ -228,14 +228,8 @@ export function ClassroomCollectButton({
           }
           onClick={() => setConfirmOpen(true)}
         >
-          {busy ? (
-            t("submissions.collect.active")
-          ) : (
-            <>
-              <SyncIcon aria-hidden="true" className="size-4" />
-              {t("assignments.collect.label")}
-            </>
-          )}
+          <SyncIcon aria-hidden="true" className="size-4" />
+          {t("assignments.collect.label")}
         </Button>
       </SubmissionFreshnessLine>
 

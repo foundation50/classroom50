@@ -558,13 +558,11 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
                 variant="outline"
                 size="sm"
                 loading={tokenTest.inFlight}
-                loadingLabel={t("orgSettings.serviceToken.test.running")}
+                busyLabel={t("orgSettings.serviceToken.test.running")}
                 title={t("orgSettings.serviceToken.test.help")}
                 onClick={tokenTest.test}
               >
-                {tokenTest.inFlight
-                  ? t("orgSettings.serviceToken.test.running")
-                  : t("orgSettings.serviceToken.test.button")}
+                {t("orgSettings.serviceToken.test.button")}
               </Button>
               <Button variant="outline" size="sm" onClick={openModal}>
                 {t("orgSettings.serviceToken.rotateButton")}
