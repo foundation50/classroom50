@@ -126,8 +126,8 @@ shape `assignment test list --json` emits:
 |---|---|
 | `name` | Required. Unique within the assignment; ≤ 100 UTF-8 bytes; no control characters. |
 | `type` | Required. `io`, `run`, or `python`. |
-| `run` | Required. Shell command, run in the student checkout. |
-| `setup` | Optional pre-command (for example, compile). Non-zero exit fails the test. |
+| `run` | Required. Shell command, run in the student checkout. `$CLASSROOM50_BUNDLE_DIR` points at the assignment's bundle; see [Teacher-only test files](#teacher-only-test-files). |
+| `setup` | Optional pre-command (for example, compile). Non-zero exit fails the test. Same working directory and `$CLASSROOM50_BUNDLE_DIR` as `run`. |
 | `input` / `input-file` | `io` only, mutually exclusive. Inline stdin or a bundled fixture. |
 | `expected` / `expected-file` | `io` only, mutually exclusive. Must be non-empty for `included`/`regex`. |
 | `comparison` | `io` only. `included` (substring), `exact` (trimmed equality), or `regex` (Python `re.search`, multiline). |
@@ -139,8 +139,10 @@ shape `assignment test list --json` emits:
 
 At most 100 tests per assignment. Put large fixtures in files
 (`input-file` / `expected-file`) under `CLASSROOM/autograders/ASSIGNMENT/`, not
-inline. In paths and commands on this page, replace `CLASSROOM` with the
-classroom's short name and `ASSIGNMENT` with the assignment slug.
+inline; that directory is also where grading scripts students must not see
+belong (see [Teacher-only test files](#teacher-only-test-files)). In paths and
+commands on this page, replace `CLASSROOM` with the classroom's short name and
+`ASSIGNMENT` with the assignment slug.
 
 #### Report options
 
@@ -242,6 +244,97 @@ Specs are validated three times: by the CLI at write time, by the runner
 workflow at submission setup, and by `runner.py` before executing.
 
 </details>
+
+### Teacher-only test files
+
+Students receive every file in the assignment template, so a test script kept
+there can be read and edited, for example changed to always exit 0. Put grading
+files in the `classroom50` repository under `CLASSROOM/autograders/ASSIGNMENT/`
+instead. Publishing bundles that directory, and the runner downloads a fresh
+copy on every grading run, so nothing a student changes in their repository
+affects it.
+
+Every `setup` and `run` command receives the bundle's absolute path in
+`CLASSROOM50_BUNDLE_DIR`. Commands still start in the student checkout, so
+student files stay relative and teacher files go through the variable.
+
+The following example grades a Python assignment where students implement
+`add.py` and the checks live in a script students never see. Replace `ORG` with
+your organization.
+
+1. Write the script. The test passes when the script exits 0. Use any tool the
+   grading runner has installed; the assignment's
+   [`runtime` block](Advanced-Autograding#the-runtime-block) controls what's
+   available.
+
+   ```sh
+   # check.sh
+   set -euo pipefail
+   test "$(python3 add.py 2 3)" = "5"
+   test "$(python3 add.py -1 1)" = "0"
+   ```
+
+2. Upload the script to `CLASSROOM/autograders/ASSIGNMENT/` in the
+   `classroom50` repository. In the web app, open the saved assignment, click
+   **Upload test files**, then click **Open upload page**, and drop the file on
+   the GitHub upload page. Or commit it from a clone:
+
+   ```sh
+   git clone https://github.com/ORG/classroom50 && cd classroom50
+   mkdir -p CLASSROOM/autograders/ASSIGNMENT
+   cp check.sh CLASSROOM/autograders/ASSIGNMENT/
+   git add . && git commit -m "ASSIGNMENT: grading script" && git push
+   ```
+
+3. Add a `run` test that calls the script through the variable. In the web app,
+   enter `bash "$CLASSROOM50_BUNDLE_DIR/check.sh"` as the **Run command**. From
+   the CLI:
+
+   ```sh
+   gh teacher assignment test add ORG CLASSROOM ASSIGNMENT \
+       --name "adds correctly" --type run \
+       --run 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"' --points 5
+   ```
+
+4. Wait for the **Publish Pages** workflow in the `classroom50` repository to
+   finish, then submit as a test student. To confirm the bundle contains the
+   script:
+
+   ```sh
+   curl -fsSL "https://ORG.github.io/classroom50/CLASSROOM/autograders/ASSIGNMENT.tar.gz" | tar -tz
+   # ASSIGNMENT/tests.json  ASSIGNMENT/check.sh
+   ```
+
+The variable works for every test type:
+
+- A `python` test can run pytest against hidden test files with
+  `python3 -m pytest -q "$CLASSROOM50_BUNDLE_DIR"`. Add
+  `sys.path.insert(0, os.getcwd())` or a `pythonpath` setting so the tests
+  import the student's modules.
+- An `io` test reads hidden fixtures with `input-file` and `expected-file`,
+  with no variable needed.
+
+Details to know:
+
+- Invoke scripts through their interpreter (`bash check.sh`, `python3 check.py`)
+  rather than relying on the executable bit surviving the commit.
+- On a Windows runner the shell is `cmd.exe`, so write
+  `%CLASSROOM50_BUNDLE_DIR%` instead of `$CLASSROOM50_BUNDLE_DIR`.
+- Don't add an `autograder.py` to the same directory: it takes precedence over
+  declarative tests, and the CLI refuses `test add` while one exists. An
+  `autograder.py` receives the same variable, and its sibling files are also
+  at `Path(__file__).parent`. See
+  [Advanced Autograding](Advanced-Autograding#writing-an-autograderpy).
+- If the script's failure output would give away the answer, set
+  `failure-details` to `actual-only` or `none`. See
+  [Report options](#report-options).
+
+> [!IMPORTANT]
+> Hidden means students can't change these files, not that they can't read
+> them. Your organization's GitHub Pages site serves the bundle publicly, so a
+> student who finds the URL can download it. Keep anything confidential (a full
+> solution, a private dataset) out of the bundle. See
+> [Known Limitations](Known-Limitations#templates-and-student-repositories).
 
 ### Beyond declarative tests
 

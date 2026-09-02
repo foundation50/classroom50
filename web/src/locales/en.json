@@ -1398,6 +1398,7 @@
       "setupCommandPlaceholder": "optional, for example, gcc -o hello hello.c",
       "runCommand": "Run command",
       "runCommandPlaceholder": "./hello or python3 main.py",
+      "runCommandHint": "Runs in the student's repository checkout. Uploaded test files are under $CLASSROOM50_BUNDLE_DIR.",
       "input": "Input (stdin)",
       "inputPlaceholder": "optional: text fed to the command on stdin",
       "expectedOutput": "Expected output",
@@ -1431,6 +1432,24 @@
         "failureDetailsFull": "Full: diff or expected and actual output",
         "showOutput": "Include passing test output",
         "showOutputHelp": "Adds each passing test's captured setup/run output to the submission report and workflow log, collapsed by default. Useful when authoring or debugging an autograder."
+      },
+      "teacherFiles": {
+        "button": "Upload test files",
+        "title": "Upload teacher-only test files",
+        "subtitle": "Files in the template reach students. Put test scripts and fixtures they must not see in the classroom50 repository instead. The runner fetches them on every grading run.",
+        "step1Title": "Write a script that exits 0 when the work passes",
+        "step1Body": "This example is a shell script that checks a student's add.py. Use any tool the grading runner has installed.",
+        "step2Title": "Upload it to the assignment folder",
+        "step2Body": "Click <strong>Open upload page</strong>, drop the file on the page, and commit. GitHub creates <code>{{path}}</code> in the classroom50 repository if it doesn't exist yet.",
+        "step2BodyUnsaved": "Save the assignment first. The <strong>Open upload page</strong> button appears here afterward.",
+        "step3Title": "Add a Run command test that calls it",
+        "step3Body": "Click <strong>Add test</strong>, choose <strong>Run command</strong>, and enter this command. <code>$CLASSROOM50_BUNDLE_DIR</code> points at the uploaded files.",
+        "step4Title": "Wait for publishing, then submit a test",
+        "step4Body": "The <strong>Publish Pages</strong> workflow in the classroom50 repository bundles the files within a few minutes. Then submit as a test student and check the result.",
+        "readableTitle": "Students can't change these files, but they can read them",
+        "readableBody": "Your organization's GitHub Pages site serves them publicly. Keep full solutions and private data out. If expected output would reveal the answer, hide it with <strong>Failure details shown to students</strong>.",
+        "learnMore": "Learn about teacher-only test files",
+        "openUpload": "Open upload page"
       },
       "type": {
         "io": {

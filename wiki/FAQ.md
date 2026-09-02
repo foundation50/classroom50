@@ -220,6 +220,19 @@ defined right on the assignment. No grading script needed. For more control,
 write an `autograder.py`. See [Autograding Basics](Autograding-Basics#declarative-tests)
 and [Advanced Autograding](Advanced-Autograding).
 
+### Can I keep my test script out of the student's repository?
+
+Yes. Students receive every file in the template, so put grading files in the
+`classroom50` repository under `CLASSROOM/autograders/ASSIGNMENT/` instead. In
+the web app, **Upload test files** in the assignment's autograding section
+opens the GitHub upload page for that folder. Reference the files from a test
+command with `$CLASSROOM50_BUNDLE_DIR`, for example
+`bash "$CLASSROOM50_BUNDLE_DIR/check.sh"`. The runner fetches the folder fresh
+on every grading run, so a student can't edit the script to make it exit 0.
+Your organization's public GitHub Pages site serves the folder, though, so a
+determined student can still read it. See
+[Teacher-only test files](Autograding-Basics#teacher-only-test-files).
+
 ### Can I turn autograding off, or reduce Actions usage?
 
 Yes. Grade only on explicit submits (**Submission type: A tagged commit**),

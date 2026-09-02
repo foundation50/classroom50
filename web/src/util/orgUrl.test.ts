@@ -1,10 +1,19 @@
 import { describe, expect, it } from "vitest"
 import {
+  assignmentBundleUploadUrl,
   githubTemplateRepoUrl,
   repoTreeAtRefUrl,
   repoTagsUrl,
   repoCommitUrl,
 } from "./orgUrl"
+
+describe("assignmentBundleUploadUrl", () => {
+  it("opens GitHub's upload page for the assignment's bundle folder", () => {
+    expect(assignmentBundleUploadUrl("acme", "cs50", "hello")).toBe(
+      "https://github.com/acme/classroom50/upload/main/cs50/autograders/hello",
+    )
+  })
+})
 
 describe("githubTemplateRepoUrl", () => {
   it("links to the repo root when no branch is given", () => {

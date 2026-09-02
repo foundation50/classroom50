@@ -43,11 +43,16 @@ The runner provides:
 
 - **Environment variables:** `CLASSROOM`, `ASSIGNMENT`, `SUBMISSION_TAG`,
   `PAGES_BASE_URL`, `USERNAME`/`OWNER`, `ASSIGNMENT_TYPE`, `COMMIT_URL`,
-  `RELEASE_URL`, `REVIEW_URL`, and all standard `GITHUB_*`.
+  `RELEASE_URL`, `REVIEW_URL`, `CLASSROOM50_BUNDLE_DIR` (the directory the
+  entrypoint was extracted to), and all standard `GITHUB_*`.
 - **Working directory:** the student's checkout (relative paths resolve to
   student code).
 - **Sibling files:** anything else under `CLASSROOM/autograders/ASSIGNMENT/` is
-  bundled and lives at `Path(__file__).parent`.
+  bundled and lives at `Path(__file__).parent`. Students never receive these
+  files in their repository, which makes this the place for test scripts and
+  fixtures that must not be tampered with. Anyone who finds the GitHub Pages
+  URL can read them, though. See
+  [Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
 The autograder must produce **`./result.json`** (required — see
 [the `result.json` contract](#the-resultjson-contract)). Optionally

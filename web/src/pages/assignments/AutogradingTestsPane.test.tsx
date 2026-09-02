@@ -39,8 +39,10 @@ beforeAll(() => {
 // TanStack array API, then expose the form instance for assertions.
 const Harness = ({
   onForm,
+  location,
 }: {
   onForm: (form: ReturnType<typeof useAssignmentForm>) => void
+  location?: { org: string; classroom: string; slug: string }
 }) => {
   const form = useAssignmentForm(
     undefined,
@@ -48,14 +50,55 @@ const Harness = ({
     ((k: string) => k) as never,
   )
   onForm(form)
-  return <AutogradingTestsPane form={form} />
+  return <AutogradingTestsPane form={form} {...location} />
 }
 
-const renderPane = () => {
+const renderPane = (location?: {
+  org: string
+  classroom: string
+  slug: string
+}) => {
   let form!: ReturnType<typeof useAssignmentForm>
-  render(<Harness onForm={(f) => (form = f)} />)
+  render(<Harness onForm={(f) => (form = f)} location={location} />)
   return () => form.state.values.tests
 }
+
+describe("AutogradingTestsPane teacher-only files modal", () => {
+  const openModal = async () => {
+    await userEvent
+      .setup()
+      .click(screen.getByText("assignments.autograder.teacherFiles.button"))
+  }
+
+  it("links to GitHub's upload page for the bundle folder in edit mode", async () => {
+    renderPane({ org: "acme", classroom: "cs50", slug: "hello" })
+    await openModal()
+    const link = await screen.findByText(
+      "assignments.autograder.teacherFiles.openUpload",
+    )
+    const anchor = link.closest("a")
+    expect(anchor?.getAttribute("href")).toBe(
+      "https://github.com/acme/classroom50/upload/main/cs50/autograders/hello",
+    )
+    expect(anchor?.getAttribute("target")).toBe("_blank")
+    expect(
+      screen.getByText("assignments.autograder.teacherFiles.step2Body"),
+    ).toBeTruthy()
+  })
+
+  it("asks the teacher to save first when the slug isn't known", async () => {
+    renderPane({ org: "acme", classroom: "cs50", slug: "" })
+    await openModal()
+    expect(
+      await screen.findByText(
+        "assignments.autograder.teacherFiles.step2BodyUnsaved",
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText("assignments.autograder.teacherFiles.openUpload"),
+    ).toBeNull()
+  })
+})
 
 describe("draftsEqual", () => {
   it("is true for two fresh empty drafts", () => {
@@ -93,9 +136,10 @@ describe("AutogradingTestsPane editor commit gating", () => {
   }
 
   // The commit button lives in the modal's `.modal-action` footer; the pane's
-  // own "Add test" button shares its label, so scope the lookup to the footer.
+  // own "Add test" button shares its label, so scope the lookup to the footer
+  // of the open dialog (the teacher-files modal stays mounted while closed).
   const commitButton = () => {
-    const action = document.querySelector(".modal-action")
+    const action = document.querySelector("dialog[open] .modal-action")
     if (!action) throw new Error("modal not open")
     const buttons = Array.from(action.querySelectorAll("button"))
     const commit = buttons.find(

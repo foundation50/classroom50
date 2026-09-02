@@ -812,7 +812,10 @@ submission report: `--failure-details {full,actual-only,none}` sets how much
 failure detail students see (omit for the assignment's default), and
 `--show-output` includes the test's captured setup/run output in the report
 even when it passes (`--show-output=false` opts one test out of a
-`show-output` default). See
+`show-output` default). Commands run in the student checkout;
+`$CLASSROOM50_BUNDLE_DIR` points at the teacher-only files in
+`<classroom>/autograders/<slug>/` (see
+[Teacher-only test files](Autograding-Basics#teacher-only-test-files)). See
 [Autograders](Autograding-Basics#declarative-tests) for fields and semantics
 and [Report options](Autograding-Basics#report-options) for what each level
 shows. For bulk edits, use `assignment add --tests <file.json>`.

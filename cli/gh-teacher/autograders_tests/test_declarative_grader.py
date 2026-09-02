@@ -11,6 +11,7 @@ pytest's tmp_path so the subprocess behavior is covered, not mocked.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import sys
@@ -198,6 +199,97 @@ class TestExecuteIO:
                 "expected-file": "nope.txt", "comparison": "exact", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"] and "not found" in o["detail"]
+
+
+# ---------------------------------------------------------------------------
+# execute_test -- $CLASSROOM50_BUNDLE_DIR (teacher-only scripts)
+# ---------------------------------------------------------------------------
+
+
+def _hidden_script_layout(tmp_path):
+    """The wiki's "hidden test files" example: the student checkout holds
+    only their code; the grading script lives in the bundle, never the
+    template."""
+    student = tmp_path / "student"
+    bundle = tmp_path / "bundle"
+    student.mkdir()
+    bundle.mkdir()
+    (bundle / "check.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'test "$(python3 add.py 2 3)" = "5"\n'
+        'test "$(python3 add.py -1 1)" = "0"\n'
+    )
+    return student, bundle
+
+
+class TestBundleDirEnv:
+    def test_run_command_can_invoke_a_bundled_script(self, tmp_path):
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text(
+            "import sys\nprint(int(sys.argv[1]) + int(sys.argv[2]))\n")
+        spec = {"name": "adds", "type": "run",
+                "run": 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"', "points": 2}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert o["passed"] and o["score"] == 2
+
+    def test_bundled_script_fails_wrong_student_code(self, tmp_path):
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text("print(5)\n")
+        spec = {"name": "adds", "type": "run",
+                "run": 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"', "points": 2}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert not o["passed"] and o["failure-kind"] == "exit"
+
+    def test_student_edit_of_a_same_named_file_is_ignored(self, tmp_path):
+        # The whole point: a `check.sh` the student drops into their repo
+        # (say, one that exits 0) is not the one the test runs.
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text("print(5)\n")
+        (student / "check.sh").write_text("exit 0\n")
+        spec = {"name": "adds", "type": "run",
+                "run": 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"', "points": 2}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert not o["passed"]
+
+    def test_setup_and_cwd_semantics(self, tmp_path):
+        # setup sees the variable too, and cwd stays the student checkout
+        # (relative paths resolve to student code, not the bundle).
+        student, bundle = _hidden_script_layout(tmp_path)
+        (bundle / "prep.sh").write_text("echo prepared > marker.txt\n")
+        spec = {"name": "t", "type": "run",
+                "setup": 'bash "$CLASSROOM50_BUNDLE_DIR/prep.sh"',
+                "run": "test -f marker.txt && test ! -f \"$CLASSROOM50_BUNDLE_DIR/marker.txt\"",
+                "points": 1}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert o["passed"], o["detail"]
+        assert (student / "marker.txt").is_file()
+
+    def test_python_type_can_target_bundled_tests(self, tmp_path):
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text("def add(a, b):\n    return a + b\n")
+        (bundle / "test_hidden.py").write_text(
+            "import sys, os\n"
+            "sys.path.insert(0, os.getcwd())\n"
+            "from add import add\n"
+            "def test_a():\n    assert add(2, 3) == 5\n"
+            "def test_b():\n    assert add(-1, 1) == 0\n"
+        )
+        spec = {"name": "hidden suite", "type": "python",
+                "run": f'{shlex.quote(sys.executable)} -m pytest -q "$CLASSROOM50_BUNDLE_DIR"',
+                "timeout": 60, "points": 4}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert o["passed"] and o["score"] == 4, o["detail"]
+
+    def test_env_is_absolute_and_process_env_untouched(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLASSROOM50_BUNDLE_DIR", raising=False)
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        spec = {"name": "t", "type": "io", "run": 'printf "%s" "$CLASSROOM50_BUNDLE_DIR"',
+                "expected": str(bundle.resolve()), "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=bundle)
+        assert o["passed"], o["detail"]
+        assert "CLASSROOM50_BUNDLE_DIR" not in os.environ
 
 
 # ---------------------------------------------------------------------------

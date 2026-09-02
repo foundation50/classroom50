@@ -240,6 +240,8 @@ const CreateAssignmentForm = ({
                   edit={edit}
                   onReset={onReset("submission")}
                   org={org}
+                  classroom={classroom}
+                  slug={slug}
                   hasAcceptedStudents={hasAcceptedStudents}
                 />
                 <ScheduleSection

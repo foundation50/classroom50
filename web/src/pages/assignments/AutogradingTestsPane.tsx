@@ -1,10 +1,17 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { ChevronRightIcon, PencilIcon, TrashIcon } from "@/components/ui/icons"
+import {
+  ChevronRightIcon,
+  PencilIcon,
+  TrashIcon,
+  UploadIcon,
+} from "@/components/ui/icons"
 import { EmptyState } from "@/components/list"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
+import { assignmentBundleUploadUrl } from "@/util/orgUrl"
 import type { AssignmentForm } from "./assignmentFormModel"
+import { TeacherFilesModal } from "./TeacherFilesModal"
 
 import {
   FormField,
@@ -229,6 +236,7 @@ const AutogradingTestModal = ({
         <FormField
           htmlFor={field("run")}
           label={t("assignments.autograder.runCommand")}
+          hint={t("assignments.autograder.runCommandHint")}
           error={errors.run}
         >
           {({ id, describedById, invalid }) => (
@@ -510,11 +518,31 @@ const typeBadge = (type: AssignmentTestDraft["type"], t: TFunction) => {
   return labelKey ? t(labelKey) : type
 }
 
-const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
+const AutogradingTestsPane = ({
+  form,
+  org,
+  classroom,
+  slug,
+}: {
+  form: AssignmentForm
+  // All three locate the assignment's bundle folder in the config repo. `slug`
+  // is only known once the assignment exists (edit mode); on create the draft
+  // slug can still change, so the upload link waits until after save.
+  org?: string
+  classroom?: string
+  slug?: string
+}) => {
   const { t } = useTranslation()
   const paneFieldId = useId()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const [editor, setEditor] = useState<EditorState | null>(null)
+  const [filesOpen, setFilesOpen] = useState(false)
+  const bundlePath =
+    classroom && slug ? `${classroom}/autograders/${slug}` : null
+  const bundleUploadUrl =
+    org && classroom && slug
+      ? assignmentBundleUploadUrl(org, classroom, slug)
+      : null
   // The test list collapses so a long table doesn't bury the Advanced settings
   // below it. Seeded open when tests already exist (an edited assignment shows
   // its tests up front); a fresh assignment starts collapsed.
@@ -622,7 +650,11 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                   </span>
                 </span>
               </button>
-              <div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Button variant="ghost" onClick={() => setFilesOpen(true)}>
+                  <UploadIcon aria-hidden="true" className="size-4" />
+                  {t("assignments.autograder.teacherFiles.button")}
+                </Button>
                 <Button variant="outline" onClick={openNewEditor}>
                   {t("assignments.autograder.addTest")}
                 </Button>
@@ -804,6 +836,13 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 </div>
               </div>
             </Collapse>
+
+            <TeacherFilesModal
+              open={filesOpen}
+              onClose={() => setFilesOpen(false)}
+              bundlePath={bundlePath}
+              uploadUrl={bundleUploadUrl}
+            />
 
             {editor && (
               <form.Subscribe
