@@ -210,8 +210,13 @@ const EnrolledStudents = ({
     csvMissingLogins,
     backfillNeededLogins,
     orgMembersKnown,
+    rosterSource,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
+  // roster.csv writes (drift auto-sync, manual Sync) need the full team picture.
+  // A viewer whose roster is partly the CSV itself (a non-owner off the secret
+  // student team) would sync from a partial view, so the write path stays off.
+  const canSyncRoster = rosterSource === "team"
 
   const setWarning = (key: string, message: string) =>
     setWarnings((prev) => ({ ...prev, [key]: message }))
@@ -557,7 +562,7 @@ const EnrolledStudents = ({
   // concurrent pass would only buy conflict retries.
   useRosterAutoSync({
     classroom,
-    ready: !isLoading && !isError,
+    ready: !isLoading && !isError && canSyncRoster,
     csvMissingLogins,
     backfillNeededLogins,
     suppressedLogins,
@@ -751,6 +756,15 @@ const EnrolledStudents = ({
         <RosterWarnings warnings={warnings} onDismiss={dismissWarning} />
       ) : null}
 
+      {/* A non-owner off the secret classroom team reads it as 404, so their
+          rows come from roster.csv. Say so, since the list lags live
+          enrollment and Sync is hidden for them. */}
+      {rosterSource === "csv" && !isLoading ? (
+        <Alert tone="info" role="status">
+          {t("students.rosterFromCsvNotice")}
+        </Alert>
+      ) : null}
+
       {/* Pending-invites banner: clicking "Review" filters to pending so the
           teacher can select rows and bulk-resend (cancel + re-send).
           Dismissable for the session. */}
@@ -881,13 +895,18 @@ const EnrolledStudents = ({
           syncing={syncing}
           lastUpdatedAt={lastUpdatedAt}
           lastSyncChanges={lastSyncChanges}
-          onSync={() => {
-            // Explicit backfill: clear the post-unenroll suppression so the
-            // teacher's deliberate Sync always runs (re-adding any drifted
-            // team members, even ones removed earlier this session).
-            suppressedLogins.clear()
-            runSync()
-          }}
+          onSync={
+            canSyncRoster
+              ? () => {
+                  // Explicit backfill: clear the post-unenroll suppression so
+                  // the teacher's deliberate Sync always runs (re-adding any
+                  // drifted team members, even ones removed earlier this
+                  // session).
+                  suppressedLogins.clear()
+                  runSync()
+                }
+              : undefined
+          }
           selectedRows={selectedRows}
           onClearSelection={() => setSelectedKeys(new Set())}
           onBulkDone={onBulkDone}

@@ -859,7 +859,12 @@ export function reconcileNonSubmitters(
 //     submitting group's repo (group repos are named after the founder, so a
 //     never-joined student has nothing to reconcile against).
 //   - accepted-not-submitted: individual — a repo exists (accepted) but no push.
-//   - not-accepted: individual — never accepted, so no repo.
+//   - not-accepted: individual — never accepted, so no repo. Only an org owner
+//     can assert this: they see every org repo.
+//   - repo-not-visible: individual — no repo the VIEWER can see. For a
+//     non-owner (TA/HTA) a private repo they lack access to 404s exactly like a
+//     missing one, and collect only grants their team read as it runs, so this
+//     is "not accepted OR not yet granted", never asserted as either.
 //   - not-submitted: acceptance data unavailable (repos not loaded yet) — a
 //     neutral fallback so a transient empty repo list can't mislabel everyone.
 export type NonSubmitterStatus =
@@ -867,6 +872,7 @@ export type NonSubmitterStatus =
   | "no-team"
   | "accepted-not-submitted"
   | "not-accepted"
+  | "repo-not-visible"
   | "not-submitted"
 
 export function nonSubmitterStatus(
@@ -875,18 +881,22 @@ export function nonSubmitterStatus(
     isGroup,
     isTeam,
     acceptedUsernames,
+    acceptanceComplete = true,
   }: {
     isGroup: boolean
     isTeam?: boolean
     acceptedUsernames?: Set<string>
+    // Whether `acceptedUsernames` covers every repo (an org owner's view). A
+    // non-owner's set holds only the repos they can read, so an absence is
+    // reported as repo-not-visible rather than not-accepted.
+    acceptanceComplete?: boolean
   },
 ): NonSubmitterStatus {
   if (isTeam) return "no-team"
   if (isGroup) return "no-group"
   if (!acceptedUsernames) return "not-submitted"
-  return hasAccepted(username, acceptedUsernames)
-    ? "accepted-not-submitted"
-    : "not-accepted"
+  if (hasAccepted(username, acceptedUsernames)) return "accepted-not-submitted"
+  return acceptanceComplete ? "not-accepted" : "repo-not-visible"
 }
 
 // The combined "Status" toolbar select folds the submission axis and the

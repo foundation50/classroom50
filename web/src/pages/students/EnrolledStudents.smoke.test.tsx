@@ -152,6 +152,8 @@ const emptyRoster = {
   csvMissingLogins: [],
   backfillNeededLogins: [],
   orgMembersKnown: true,
+  rosterSource: "team",
+  studentRosterKnown: true,
   orgMembers: [],
   refetch: vi.fn(),
 }
@@ -700,5 +702,17 @@ describe("EnrolledStudents — rendered phase views", () => {
     rerender(renderView())
     expect(document.querySelector("th[scope='rowgroup']")).toBeNull()
     expect(screen.queryByLabelText("students.groupBy.label")).toBeNull()
+  })
+
+  // A non-owner whose rows are partly roster.csv itself (a hidden secret team)
+  // must not write roster.csv from that partial view: no Sync button, and the
+  // notice explains where the list came from.
+  it("hides Sync and explains the source when the roster comes from roster.csv", () => {
+    useTeamRoster.mockReturnValue({ ...populatedRoster, rosterSource: "csv" })
+    render(renderView())
+    expect(
+      screen.queryByRole("button", { name: /students\.syncNow/ }),
+    ).toBeNull()
+    expect(screen.getByText("students.rosterFromCsvNotice")).not.toBeNull()
   })
 })

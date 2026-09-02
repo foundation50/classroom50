@@ -21,7 +21,7 @@ const useEmptyRosterWarning = (
   )
   // Team roster drives enrollment; roster.csv is only metadata (passed so rows
   // enrich and `hasRosterRows` reflects known students).
-  const { counts, isLoading, isError } = useTeamRoster(
+  const { counts, isLoading, isError, studentRosterKnown } = useTeamRoster(
     org ?? "",
     classroom ?? "",
     students,
@@ -35,6 +35,7 @@ const useEmptyRosterWarning = (
     isError,
     enrolledCount: counts.enrolled,
     hasRosterRows: students.length > 0 || counts.pending > 0,
+    rosterKnown: studentRosterKnown,
   })
 }
 

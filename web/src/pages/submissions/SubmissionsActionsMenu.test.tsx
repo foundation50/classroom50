@@ -45,6 +45,22 @@ describe("SubmissionsActionsMenu — canRegradeAll gate", () => {
   })
 })
 
+// Collect is a workflow dispatch too: the page omits onCollect for a viewer
+// without config-repo write (a TA), and the item must go with it.
+describe("SubmissionsActionsMenu — Collect item", () => {
+  it("hides Collect when onCollect is omitted, keeping the exports", () => {
+    render(
+      <SubmissionsActionsMenu
+        {...baseProps}
+        onCollect={undefined}
+        canRegradeAll={false}
+      />,
+    )
+    expect(screen.queryByText("submissions.collect.label")).toBeNull()
+    expect(screen.queryByText("submissions.downloadCsv")).not.toBeNull()
+  })
+})
+
 describe("SubmissionsActionsMenu — Metrics item", () => {
   it("does not include Share (moved next to the search bar)", () => {
     render(<SubmissionsActionsMenu {...baseProps} />)

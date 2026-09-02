@@ -37,16 +37,23 @@ export type EmptyRosterDecision = {
 // classroom on a transient/permission failure — the view shows error+retry and
 // the banner self-heals. Treating an error as "settled" would false-warn a
 // populated classroom during a blip.
+//
+// `rosterKnown` false (a non-owner whose student team is hidden and whose
+// roster.csv has no students) is likewise not "empty": the viewer simply can't
+// tell, so no warning — and none of the actions the warning suppresses (Collect)
+// are held back either.
 export function resolveEmptyRosterWarning(input: {
   studentsLoading: boolean
   isLoading: boolean
   isError: boolean
   enrolledCount: number
   hasRosterRows: boolean
+  rosterKnown?: boolean
 }): EmptyRosterDecision {
   const loading = input.studentsLoading || input.isLoading || input.isError
+  const known = input.rosterKnown ?? true
   return {
-    show: !loading && input.enrolledCount === 0,
+    show: !loading && known && input.enrolledCount === 0,
     hasRosterRows: input.hasRosterRows,
     isLoading: loading,
   }

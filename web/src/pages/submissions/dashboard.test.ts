@@ -1194,6 +1194,31 @@ describe("nonSubmitterStatus", () => {
       }),
     ).toBe("no-team")
   })
+
+  // A non-owner's repo list holds only the repos they were granted, so a
+  // missing repo is "not accepted OR not yet visible": never assert either.
+  it("reports repo-not-visible instead of not-accepted when acceptance is incomplete", () => {
+    const visible = new Set(["alice"])
+    expect(
+      nonSubmitterStatus("bob", {
+        isGroup: false,
+        acceptedUsernames: visible,
+        acceptanceComplete: false,
+      }),
+    ).toBe("repo-not-visible")
+    // A repo the viewer CAN see is definitively accepted, complete or not.
+    expect(
+      nonSubmitterStatus("alice", {
+        isGroup: false,
+        acceptedUsernames: visible,
+        acceptanceComplete: false,
+      }),
+    ).toBe("accepted-not-submitted")
+    // Loading still wins: no data means the neutral fallback, not "not visible".
+    expect(
+      nonSubmitterStatus("bob", { isGroup: false, acceptanceComplete: false }),
+    ).toBe("not-submitted")
+  })
 })
 
 describe("existingTeamRepos", () => {

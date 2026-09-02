@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -186,15 +186,18 @@ export function useDetectedSubmissions({
   })
 
   const empty = useMemo(() => [] as DetectedRepoSubmissions[], [])
+  // Stable identity so an effect may list it as a dependency without re-firing
+  // every render (react-query's own refetch is stable; keep the wrapper so).
+  const refetchStable = useCallback(() => {
+    void refetch()
+  }, [refetch])
 
   return {
     detected: data?.detected ?? empty,
     errorCount: data?.errorCount ?? 0,
     isFetching,
     isPending: active && isLoading,
-    refetch: () => {
-      void refetch()
-    },
+    refetch: refetchStable,
   }
 }
 

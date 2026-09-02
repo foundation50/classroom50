@@ -59,8 +59,13 @@ export function useAssignmentRepos({
     queryFn: async ({ signal }) => {
       const fullKey = githubKeys.orgRepos(org)
       const cached = queryClient.getQueryState<GitHubRepo[] | null>(fullKey)
+      // A recent full listing answers without a request, unless something has
+      // invalidated it: a finished collect grants the staff teams repo access,
+      // so a listing walked before it would still say "not accepted" for a repo
+      // this viewer can now see, and the invalidation must reach the probe.
       if (
         cached?.data &&
+        !cached.isInvalidated &&
         Date.now() - cached.dataUpdatedAt < ORG_REPOS_STALE_MS
       ) {
         return cached.data

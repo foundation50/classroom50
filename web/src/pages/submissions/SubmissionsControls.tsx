@@ -36,6 +36,7 @@ const SubmissionsControls = ({
   onSortChange,
   isGroup = false,
   acceptedAvailable = false,
+  acceptanceComplete = true,
   passingAvailable = false,
   sections = [],
   onShare,
@@ -51,6 +52,9 @@ const SubmissionsControls = ({
   onSortChange: (sort: SubmissionSort) => void
   isGroup?: boolean
   acceptedAvailable?: boolean
+  // False for a non-owner, whose repo list holds only what they can read: the
+  // "not accepted" option is relabeled to what it really selects for them.
+  acceptanceComplete?: boolean
   passingAvailable?: boolean
   sections?: string[]
   // Opens the Share (accept-link) modal. Rendered as a prominent button just
@@ -158,7 +162,9 @@ const SubmissionsControls = ({
                 {t("submissions.filters.accepted")}
               </option>
               <option value="not-accepted">
-                {t("submissions.filters.notAccepted")}
+                {acceptanceComplete
+                  ? t("submissions.filters.notAccepted")
+                  : t("submissions.filters.repoNotVisible")}
               </option>
             </>
           )}

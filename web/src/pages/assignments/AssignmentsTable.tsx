@@ -114,12 +114,17 @@ const AssignmentsTable = ({
   emptyAction,
   archived = false,
   canAuthor = false,
+  acceptanceComplete = true,
   sort,
   onSortChange,
   viewSignature = "",
 }: {
   org: string
   classroom: string
+  // Whether the org repo list covers every repo (an org owner). A non-owner
+  // sees only the repos their staff team was granted, so the Accepted cell is
+  // a lower bound and its tooltip says so instead of asserting acceptance.
+  acceptanceComplete?: boolean
   // The classroom's capability-URL secret (classroom.json `secret`), read off
   // the same classroom.json the page already loads for `archived`. Threaded in
   // so each row's copied accept link carries `?k=` for a protected classroom;
@@ -461,7 +466,11 @@ const AssignmentsTable = ({
                         <MetricCount
                           value={accepted}
                           tone="info"
-                          title={t("assignments.table.groupsAcceptedTitle")}
+                          title={
+                            acceptanceComplete
+                              ? t("assignments.table.groupsAcceptedTitle")
+                              : t("assignments.table.groupsVisibleTitle")
+                          }
                         />
                       )
                     }
@@ -478,10 +487,17 @@ const AssignmentsTable = ({
                         value={shown}
                         max={total}
                         tone="info"
-                        title={t("assignments.table.acceptedTitle", {
-                          accepted: shown,
-                          total,
-                        })}
+                        title={
+                          acceptanceComplete
+                            ? t("assignments.table.acceptedTitle", {
+                                accepted: shown,
+                                total,
+                              })
+                            : t("assignments.table.acceptedVisibleTitle", {
+                                accepted: shown,
+                                total,
+                              })
+                        }
                       />
                     )
                   })()}

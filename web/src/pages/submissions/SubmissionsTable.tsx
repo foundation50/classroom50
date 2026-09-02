@@ -283,6 +283,7 @@ const SubmissionsTable = ({
   assignmentName,
   maxGroupSize,
   acceptedUsernames,
+  acceptanceComplete = true,
   thresholdFraction,
   filtered = false,
   onClearFilters,
@@ -294,6 +295,7 @@ const SubmissionsTable = ({
   overrideGrade,
   canPauseAutograding = false,
   canChangeVisibility = false,
+  canRegrade = true,
   publicRepoNames,
   initialLoading = false,
   nonSubmittersLoading = false,
@@ -344,6 +346,10 @@ const SubmissionsTable = ({
   // to decide whether the profile modal shows "Open repo" for a non-submitter —
   // a never-accepted student has no repo, so the link would 404.
   acceptedUsernames?: Set<string>
+  // Whether `acceptedUsernames` covers every repo (an org owner). A non-owner's
+  // set holds only the repos they can read, so a non-submitter's absence renders
+  // as "not visible to you" instead of asserting "not accepted".
+  acceptanceComplete?: boolean
   // Passing bar as a fraction of max (e.g., 1.0 = full marks); drives score badge
   // color. `null`/omitted means no passing threshold (badges render neutral).
   thresholdFraction?: number | null
@@ -386,6 +392,10 @@ const SubmissionsTable = ({
   // Gated by the page on org OWNER only — org policy blocks members from
   // flipping visibility, and GitHub 403s them regardless.
   canChangeVisibility?: boolean
+  // Whether the manage hub's per-row Regrade action applies. Regrade dispatches
+  // regrade.yaml in the config repo, which needs config-repo write (teacher and
+  // head TA); a pull-only TA would 403, so the page passes false for them.
+  canRegrade?: boolean
   // Lowercased names of this assignment's repos that are currently PUBLIC
   // (derived from the org repo list). Rows whose repo is in the set show the
   // warning badge; undefined/absent renders no badges (list still loading).
@@ -1040,6 +1050,7 @@ const SubmissionsTable = ({
                     isGroup={isGroup}
                     isTeam={isTeam}
                     acceptedUsernames={acceptedUsernames}
+                    acceptanceComplete={acceptanceComplete}
                     onProfile={setProfileUsername}
                     actions={actions}
                     onManage={openManage}
@@ -1246,6 +1257,7 @@ const SubmissionsTable = ({
             submissionTags,
             canPauseAutograding,
             canChangeVisibility,
+            canRegrade,
           }}
         />
       )}

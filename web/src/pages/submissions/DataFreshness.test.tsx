@@ -103,4 +103,44 @@ describe("DataFreshness", () => {
     rerender(<DataFreshness {...base} errorCount={3} />)
     expect(screen.getByText(/submissions\.live\.incomplete/)).not.toBeNull()
   })
+
+  // A TA has read-only config-repo access and can't dispatch the collect
+  // workflow: the same button re-reads instead, and the note says who can.
+  describe("canCollect={false} (a viewer who can't dispatch the workflow)", () => {
+    it("relabels the button to Refresh with its own tooltip", () => {
+      const onRefresh = vi.fn()
+      render(
+        <DataFreshness {...base} canCollect={false} onRefresh={onRefresh} />,
+      )
+      expect(screen.queryByText("submissions.collect.label")).toBeNull()
+      const btn = screen
+        .getByText("submissions.freshness.refreshLabel")
+        .closest("button") as HTMLButtonElement
+      expect(btn.title).toBe("submissions.freshness.refreshHelp")
+    })
+
+    it("still fires onRefresh on click", async () => {
+      const onRefresh = vi.fn()
+      render(
+        <DataFreshness {...base} canCollect={false} onRefresh={onRefresh} />,
+      )
+      await userEvent.click(
+        screen.getByText("submissions.freshness.refreshLabel"),
+      )
+      expect(onRefresh).toHaveBeenCalledTimes(1)
+    })
+
+    it("explains who can collect, and only for that viewer", () => {
+      const { rerender } = render(
+        <DataFreshness {...base} canCollect={false} />,
+      )
+      expect(
+        screen.getByText("submissions.freshness.collectRestricted"),
+      ).not.toBeNull()
+      rerender(<DataFreshness {...base} canCollect />)
+      expect(
+        screen.queryByText("submissions.freshness.collectRestricted"),
+      ).toBeNull()
+    })
+  })
 })
