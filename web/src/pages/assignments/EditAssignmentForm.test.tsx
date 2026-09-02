@@ -236,7 +236,10 @@ it("saves directly (no confirm) when accepted but no provisioning setting change
   expect(document.querySelector("dialog[open]")).toBeNull()
 })
 
-it("passes the lock toggle through the edit boundary", () => {
+it("sends locked as undefined when the toggle was not flipped", () => {
+  // The form was seeded when it opened; a lock applied since (row action,
+  // CLI, co-teacher) must survive a save that never touched the toggle, so an
+  // unchanged toggle asks editAssignment to carry the STORED state forward.
   submittedOverrides = { locked: false }
   render(
     <EditAssignmentForm
@@ -253,10 +256,9 @@ it("passes the lock toggle through the edit boundary", () => {
     />,
   )
   fireEvent.click(screen.getByRole("button", { name: "submit" }))
-  expect(mutateAsync).toHaveBeenCalledWith(
-    expect.objectContaining({ locked: false }),
-    expect.any(Object),
-  )
+  expect(mutateAsync).toHaveBeenCalledTimes(1)
+  const [input] = mutateAsync.mock.calls[0]
+  expect(input).toHaveProperty("locked", undefined)
 })
 
 it("confirms a lock even when no students have accepted, listing the lock item", async () => {
@@ -342,6 +344,8 @@ it("saves a locked assignment that stays locked without a prompt", () => {
   fireEvent.click(screen.getByRole("button", { name: "submit" }))
   expect(mutateAsync).toHaveBeenCalledTimes(1)
   expect(document.querySelector("dialog[open]")).toBeNull()
+  const [input] = mutateAsync.mock.calls[0]
+  expect(input).toHaveProperty("locked", undefined)
 })
 
 it("confirms a visibility or permission change only once students accepted", () => {
