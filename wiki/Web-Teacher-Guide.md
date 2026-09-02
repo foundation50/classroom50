@@ -797,6 +797,14 @@ never collected. Clicking **Collect all** dispatches a single
 assignment and rebuilds all of the classroom's collected scores; the table's
 per-assignment submission counts refresh when the run finishes.
 
+The **Submissions** count in that table is what the last collection found:
+graded submissions, plus repositories with pushes (or submission tags) that the
+autograder hasn't turned into a graded submission yet. Those repositories show
+as **Pending** on the assignment's submissions page, so the two views agree. A
+student who pushed but whose autograder run failed or never ran counts as
+submitted here; their score arrives once the autograder publishes a result and
+the assignment is collected again.
+
 Because the run walks every assignment's repositories, it takes longer than a
 single-assignment collection and uses more GitHub Actions minutes, so
 **Collect all** asks you to confirm before dispatching. To refresh one

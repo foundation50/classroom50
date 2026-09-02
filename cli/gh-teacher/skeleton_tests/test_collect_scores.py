@@ -118,6 +118,13 @@ def stub_team_members_by_slug(monkeypatch, by_slug: dict[str, list[str]]) -> Non
     monkeypatch.setattr(cs, "list_team_member_logins", fake)
 
 
+def stub_no_detections(monkeypatch) -> None:
+    """Stub detect_repo_submissions to find nothing. The graded path probes
+    every accepted repo that has no submit/* release, so a test about releases
+    alone needs the probe off the network."""
+    monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
+
+
 def write_minimal_classroom(root: pathlib.Path) -> pathlib.Path:
     """Create a tiny classroom fixture under `root` and return its path."""
     classroom = root / "cs-principles"
@@ -866,6 +873,10 @@ class TestListRepoCollaboratorLogins:
 
 
 class TestGroupCollectClassroom:
+    @pytest.fixture(autouse=True)
+    def _no_detections(self, monkeypatch):
+        stub_no_detections(monkeypatch)
+
     def _group_assignments(self):
         return {"assignments": [{"slug": "project", "mode": "group", "max_group_size": 3}]}
 
@@ -1550,6 +1561,10 @@ class TestListEnrolledLogins:
 
 
 class TestCollectClassroomTeamDriven:
+    @pytest.fixture(autouse=True)
+    def _no_detections(self, monkeypatch):
+        stub_no_detections(monkeypatch)
+
     def _assignments(self):
         return {"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]}
 
@@ -3160,6 +3175,7 @@ class TestCollectedAtStamp:
         # walked, so neither may be stamped; the group assignment reports its
         # mode so an absent bucket can be scaffolded with the right type.
         stub_team_members(monkeypatch, ["alice"])
+        stub_no_detections(monkeypatch)
         monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
         _, _, collected, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
@@ -3660,6 +3676,206 @@ def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
     assert results == []
     assert detected == {}
     assert "empty_repo" in capsys.readouterr().out
+
+
+# Autograded assignments: pushes without a graded release --------------------
+#
+# Discussion #677: the assignments list read 0 / 1 while the Submissions page
+# showed the student's two pushes as "Pending", because the list counts only
+# scores.json and the collector wrote `detected` for no_autograder only.
+
+
+def _release_for(username: str):
+    return [{
+        "tag_name": "submit/2026-06-01T10-00-00Z",
+        "assets": [{"name": "result.json", "url": f"https://api.github.com/a/{username}"}],
+    }]
+
+
+def test_autograded_assignment_detects_pushes_with_no_release(monkeypatch, capsys):
+    # alice pushed twice but the autograder never published a release; bob has
+    # no repo at all. alice is recorded as detected (count, newest push), bob is
+    # not, and no graded entry is invented for either.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+
+    def per_user(api_url, org, repo_name, token, mode, tags):
+        assert mode == "every-push"
+        return (
+            [
+                {"sha": "c2", "datetime": "2026-06-02T10:00:00Z"},
+                {"sha": "c1", "datetime": "2026-06-01T10:00:00Z"},
+            ]
+            if "alice" in repo_name
+            else []
+        )
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", per_user)
+    stub_team_members(monkeypatch, ["alice", "bob"])
+
+    results, _, collected, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+
+    assert results == []
+    assert collected["hw1"] == "individual"
+    atype, records, visited = detected["hw1"]
+    assert atype == "individual"
+    assert records == [
+        {"owner": "alice", "count": 2, "latest_datetime": "2026-06-02T10:00:00Z", "kind": "commit"}
+    ]
+    # Both repos were read: bob's "nothing" is a verdict, not a failed read.
+    assert visited == {"alice", "bob"}
+    assert "0/2 submitted, 1 with pushes but no graded submission" in capsys.readouterr().out
+
+
+def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
+    # A repo with a release is graded, full stop: detection isn't spent on it,
+    # and marking it visited retires a detected record left from a run before
+    # the autograder caught up, so `entries` and `detected` never share an owner.
+    probed: list[str] = []
+    monkeypatch.setattr(
+        cs, "all_submit_releases",
+        lambda a, o, repo, t: _release_for("alice") if "alice" in repo else [],
+    )
+    monkeypatch.setattr(
+        cs, "download_result_asset",
+        lambda *a, **k: make_result(username="alice", assignment="hw1"),
+    )
+    monkeypatch.setattr(
+        cs, "detect_repo_submissions", lambda a, o, repo, *rest: probed.append(repo) or []
+    )
+    stub_team_members(monkeypatch, ["alice", "bob"])
+
+    results, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+
+    assert [r["owner"] for r in results] == ["alice"]
+    assert probed == ["cs-principles-hw1-bob"]
+    _, records, visited = detected["hw1"]
+    assert records == []
+    assert visited == {"alice", "bob"}
+
+
+def test_autograded_detection_respects_tag_mode(monkeypatch):
+    # A tag-mode assignment probes tags, and (as for no_autograder) a tag's
+    # encoded time isn't trusted for lateness.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+    seen: dict[str, object] = {}
+
+    def fake_detect(api_url, org, repo_name, token, mode, tags):
+        seen["mode"], seen["tags"] = mode, tags
+        return [{"count": 1, "datetime": "2026-06-01T10:00:00Z"}]
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", fake_detect)
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{
+            "slug": "hw1", "mode": "individual", "tests": [],
+            "submission_mode": "tag", "submission_tags": ["phase1", ""],
+            "due": "2026-05-01T00:00:00Z",
+        }]},
+        service_token="token",
+    )
+
+    assert seen == {"mode": "tag", "tags": ["phase1"]}
+    (record,) = detected["hw1"][1]
+    assert record == {"owner": "alice", "count": 1, "kind": "tag"}
+
+
+def test_autograded_detection_failure_keeps_prior_record(monkeypatch, capsys):
+    # A failed probe warns and leaves the owner un-visited, so main() keeps the
+    # record from the last run instead of deleting a submitter over a 500.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+
+    def flaky(api_url, org, repo_name, token, mode, tags):
+        raise http_error(500, "Server Error")
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", flaky)
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+
+    _, records, visited = detected["hw1"]
+    assert records == [] and visited == set()
+    assert "submission detection failed" in capsys.readouterr().err
+
+
+def test_autograded_release_listing_failure_is_not_probed(monkeypatch):
+    # The release read failing says nothing about the repo's pushes; don't
+    # spend a probe on it, and don't touch the prior record (un-visited).
+    def fail_releases(*a, **k):
+        raise http_error(500, "Server Error")
+
+    monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
+
+    def fail_detect(*a, **k):
+        raise AssertionError("must not probe a repo whose release read failed")
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", fail_detect)
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+    assert detected["hw1"][1:] == ([], set())
+
+
+def test_main_writes_detected_for_autograded_bucket_beside_entries(tmp_path, monkeypatch):
+    # End to end: an autograded bucket carries both a graded entry and a
+    # detected record for a different owner, and a later run that grades the
+    # detected owner drops their record.
+    write_minimal_classroom(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+    monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+    stub_team_members(monkeypatch, [])
+    path = tmp_path / "cs-principles" / "scores.json"
+
+    monkeypatch.setattr(
+        cs, "collect_classroom",
+        lambda **kwargs: (
+            [make_update(username="alice")],
+            0,
+            {"hello": "individual"},
+            {"hello": ("individual", [{"owner": "bob", "count": 1, "kind": "commit"}], {"alice", "bob"})},
+        ),
+    )
+    assert cs.main() == 0
+    bucket = json.loads(path.read_text())["assignments"]["hello"]
+    assert [e["owner"] for e in bucket["entries"]] == ["alice"]
+    assert bucket["detected"] == [{"owner": "bob", "count": 1, "kind": "commit"}]
+
+    monkeypatch.setattr(
+        cs, "collect_classroom",
+        lambda **kwargs: (
+            [make_update(username="bob")],
+            0,
+            {"hello": "individual"},
+            {"hello": ("individual", [], {"alice", "bob"})},
+        ),
+    )
+    assert cs.main() == 0
+    bucket = json.loads(path.read_text())["assignments"]["hello"]
+    assert sorted(e["owner"] for e in bucket["entries"]) == ["alice", "bob"]
+    assert bucket["detected"] == []
 
 
 # Staff-team repo-access grant ------------------------------------------------
@@ -4592,6 +4808,7 @@ class TestPassesSkipMissingRepos:
 
     def test_collection_skips_names_without_a_repo(self, monkeypatch):
         polled: list[str] = []
+        probed: list[str] = []
 
         def fake_releases(api_url, org, repo, token):
             polled.append(repo)
@@ -4599,7 +4816,10 @@ class TestPassesSkipMissingRepos:
 
         monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
         monkeypatch.setattr(cs, "all_submit_releases", fake_releases)
-        cs.collect_classroom(
+        monkeypatch.setattr(
+            cs, "detect_repo_submissions", lambda a, o, repo, *rest: probed.append(repo) or []
+        )
+        _, _, _, detected = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META,
             assignments={"schema": cs.ASSIGNMENTS_SCHEMA_V1, "assignments": [{"slug": "hw1", "mode": "individual"}]},
@@ -4607,9 +4827,14 @@ class TestPassesSkipMissingRepos:
             repo_index=StubIndex({"cs-hw1-bob"}),
         )
         assert polled == ["cs-hw1-bob"]
+        # The push probe honors the index too, and a definite "no repo" retires
+        # any stale detected record for that owner.
+        assert probed == ["cs-hw1-bob"]
+        assert detected["hw1"][2] == {"alice", "bob"}
 
     def test_unknown_index_polls_everything(self, monkeypatch):
         polled: list[str] = []
+        stub_no_detections(monkeypatch)
         monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
         monkeypatch.setattr(cs, "all_submit_releases", lambda a, o, repo, t: polled.append(repo) or [])
         cs.collect_classroom(

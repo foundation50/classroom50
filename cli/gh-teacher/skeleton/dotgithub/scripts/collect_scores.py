@@ -463,8 +463,9 @@ def main() -> int:
         # prior record survives instead of a transient 500 silently deleting a
         # recorded submitter (the graded path keeps entries the same way). An
         # owner that WAS visited and detected nothing has its record dropped, so
-        # a withdrawn submission still disappears. `entries` is left untouched —
-        # these assignments never produce a graded entry.
+        # a withdrawn submission still disappears, and an owner graded this run
+        # is visited too, so `entries` and `detected` never name the same owner.
+        # `entries` is left untouched here.
         for slug, (atype, records, visited) in detected.items():
             bucket = scores["assignments"].setdefault(
                 slug, {"type": atype, "entries": []}
@@ -1003,6 +1004,93 @@ def list_enrolled_logins(
     return _dedupe_logins(logins), {u.strip().lower() for u in student_logins}
 
 
+class SubmissionDetector:
+    """Per-repo submission detection for one assignment, shared by the
+    no_autograder path (every repo) and the autograded path (repos with no
+    submit/* release yet).
+
+    Never records a score. `detect` returns (record, visited): `record` is None
+    when the repo has no detections or its read failed, and `visited` is False
+    only for a failed read, so main() keeps that owner's prior record rather
+    than deleting a recorded submitter over a transient 500 (the same
+    warn-and-keep policy the graded path applies to entries)."""
+
+    def __init__(
+        self,
+        *,
+        api_url: str,
+        org: str,
+        classroom_short: str,
+        slug: str,
+        entry: dict[str, Any],
+        service_token: str,
+        roster_logins: set[str],
+    ) -> None:
+        self._api_url = api_url
+        self._org = org
+        self._classroom_short = classroom_short
+        self._slug = slug
+        self._token = service_token
+        self._roster_logins = roster_logins
+        self._is_team = normalize_assignment_type(entry.get("mode")) == "team"
+
+        self._mode = "tag" if entry.get("submission_mode") == "tag" else "every-push"
+        raw_tags = entry.get("submission_tags")
+        self._tags = [t for t in (raw_tags or []) if isinstance(t, str) and t]
+
+        due_raw = entry.get("due")
+        self._due = parse_rfc3339(due_raw) if due_raw else None
+        if due_raw and self._due is None:
+            # Same advisory warning as the graded path — lateness silently absent
+            # would otherwise be indistinguishable from "no due date set".
+            emit_warning(
+                f"{classroom_short}/{slug}: due = {due_raw!r} is not an RFC 3339 "
+                f"timestamp with timezone; skipping late-marking for this assignment"
+            )
+
+    def detect(self, username: str, repo_name: str) -> tuple[dict[str, Any] | None, bool]:
+        try:
+            detections = detect_repo_submissions(
+                self._api_url, self._org, repo_name, self._token, self._mode, self._tags
+            )
+        except urllib.error.HTTPError as exc:
+            if classify(exc) is not SKIPPABLE:
+                raise
+            emit_warning(
+                f"{self._org}/{repo_name}: submission detection failed: HTTP {exc.code} "
+                f"({exc.reason or 'no reason'}); skipping"
+            )
+            return None, False
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{self._org}/{repo_name}: submission detection malformed ({exc}); skipping"
+            )
+            return None, False
+        if not detections:
+            return None, True
+        record = detected_record(
+            username, detections, self._due, trust_times=self._mode != "tag"
+        )
+        record["kind"] = "tag" if self._mode == "tag" else "commit"
+        if self._is_team:
+            # Same member resolution as the graded team path: credit the group
+            # team's enrolled members and record the team slug. A failed team
+            # read leaves the repo UN-visited so the prior record survives.
+            counter = team_repo_counter(username)
+            if counter is None:
+                return None, True
+            team_slug = group_team_slug(self._classroom_short, self._slug, counter)
+            members, failure_warning = attribute_team_members(
+                self._api_url, self._org, repo_name, team_slug, self._token, self._roster_logins
+            )
+            if members is None:
+                emit_warning(failure_warning)
+                return None, False
+            record["member_usernames"] = list(members)
+            record["team_slug"] = team_slug
+        return record, True
+
+
 def collect_detected(
     *,
     api_url: str,
@@ -1017,44 +1105,19 @@ def collect_detected(
     """Detected submissions for one no_autograder assignment: walk its repos and
     record presence/count per submitter. Returns (mode, records, visited owners).
 
-    Never records a score — these assignments are not graded. A repo with no
-    detections is OMITTED, so the record list is exactly the submitter set. A
-    per-repo failure warns and skips (same policy as the graded path) so one
-    unreadable repo can't void the assignment; `visited` names the owners whose
-    repo was actually read, so a failed read preserves rather than deletes a
-    prior record.
+    A repo with no detections is OMITTED, so the record list is exactly the
+    submitter set. `visited` names the owners whose repo was actually read
+    (successfully, or as a definite "not accepted"); see SubmissionDetector.
     """
-    raw_mode = entry.get("mode")
-    assignment_type = normalize_assignment_type(raw_mode)
+    assignment_type = normalize_assignment_type(entry.get("mode"))
     is_team = assignment_type == "team"
 
-    submission_mode = entry.get("submission_mode")
-    mode = "tag" if submission_mode == "tag" else "every-push"
-    raw_tags = entry.get("submission_tags")
-    submission_tags = [t for t in (raw_tags or []) if isinstance(t, str) and t]
-
-    due_raw = entry.get("due")
-    due = parse_rfc3339(due_raw) if due_raw else None
-    if due_raw and due is None:
-        # Same advisory warning as the graded path — lateness silently absent
-        # would otherwise be indistinguishable from "no due date set".
-        emit_warning(
-            f"{classroom_short}/{slug}: due = {due_raw!r} is not an RFC 3339 "
-            f"timestamp with timezone; skipping late-marking for this assignment"
-        )
-
     records: list[dict[str, Any]] = []
-    # Owners whose repo this run actually READ (successfully, or as a definite
-    # "not accepted"). A repo skipped because its read FAILED is not here, so
-    # main() can leave that owner's prior record intact rather than deleting a
-    # recorded submitter over a transient 500 — the same warn-and-keep policy the
-    # graded path applies to entries.
     visited: set[str] = set()
     # Team repos carry no username: poll the counter-derived `group-<n>`
     # owners instead (same target resolution as the graded path). An
     # unreadable target source returns nothing visited, preserving prior
-    # records. Member credit resolves from the GROUP TEAM, mirroring the
-    # graded team path — a failed team read skips the repo (not visited).
+    # records.
     if is_team:
         poll_owners, ok = team_poll_owners(
             api_url, org, classroom_short, slug, service_token, repo_index
@@ -1065,6 +1128,15 @@ def collect_detected(
     else:
         poll_owners = team_usernames
         roster_logins = set()
+    detector = SubmissionDetector(
+        api_url=api_url,
+        org=org,
+        classroom_short=classroom_short,
+        slug=slug,
+        entry=entry,
+        service_token=service_token,
+        roster_logins=roster_logins,
+    )
     # team_usernames arrives already case-insensitively deduped (the
     # list_enrolled_logins union), so each repo is polled exactly once.
     for username in poll_owners:
@@ -1074,51 +1146,11 @@ def collect_detected(
             # not a failed read — so a stale record for it should go.
             visited.add(username.lower())
             continue
-        try:
-            detections = detect_repo_submissions(
-                api_url,
-                org,
-                repo_name,
-                service_token,
-                mode,
-                submission_tags,
-            )
-        except urllib.error.HTTPError as exc:
-            if classify(exc) is not SKIPPABLE:
-                raise
-            emit_warning(
-                f"{org}/{repo_name}: submission detection failed: HTTP {exc.code} "
-                f"({exc.reason or 'no reason'}); skipping"
-            )
-            continue
-        except (json.JSONDecodeError, ValueError) as exc:
-            emit_warning(
-                f"{org}/{repo_name}: submission detection malformed ({exc}); skipping"
-            )
-            continue
-        visited.add(username.lower())
-        if not detections:
-            continue
-        record = detected_record(username, detections, due, trust_times=mode != "tag")
-        record["kind"] = "tag" if mode == "tag" else "commit"
-        if is_team:
-            # Same member resolution as the graded team path: credit the group
-            # team's enrolled members and record the team slug. A failed team
-            # read skips the repo UN-visited so the prior record survives.
-            counter = team_repo_counter(username)
-            if counter is None:
-                continue
-            detected_team_slug = group_team_slug(classroom_short, slug, counter)
-            members, failure_warning = attribute_team_members(
-                api_url, org, repo_name, detected_team_slug, service_token, roster_logins
-            )
-            if members is None:
-                visited.discard(username.lower())
-                emit_warning(failure_warning)
-                continue
-            record["member_usernames"] = list(members)
-            record["team_slug"] = detected_team_slug
-        records.append(record)
+        record, read = detector.detect(username, repo_name)
+        if read:
+            visited.add(username.lower())
+        if record is not None:
+            records.append(record)
 
     return assignment_type, records, visited
 
@@ -1152,8 +1184,10 @@ def collect_classroom(
     run refreshed — main() stamps their `collected_at` — and stays empty when
     collection was skipped wholesale (team unreadable/empty), so a skipped
     classroom never reads as freshly collected. The fourth carries DETECTED
-    submissions for no_autograder assignments (presence/count, never a score):
-    those repos publish no submit/* release, so this is their only signal.
+    submissions (presence/count, never a score): every submitter of a
+    no_autograder assignment (those repos publish no submit/* release, so this is
+    their only signal), and for an autograded assignment the accepted repos with
+    pushes but no submit/* release yet, so the two lists never share an owner.
 
     `roster_meta` is the best-effort roster join (username -> display metadata,
     see load_roster_metadata); when a collected owner has a matching row its
@@ -1173,9 +1207,9 @@ def collect_classroom(
     # Assignments this run actually walked (slug -> mode), for `collected_at`
     # stamping. Populated only past the team-read gate below.
     collected: dict[str, str] = {}
-    # Detected (ungraded) submissions per no_autograder assignment:
-    # slug -> (mode, records). Separate from `results` because these carry no
-    # score and must never enter the graded `entries` path.
+    # Detected (ungraded) submissions per assignment: slug -> (mode, records,
+    # visited owners). Separate from `results` because these carry no score and
+    # must never enter the graded `entries` path.
     detected: dict[str, tuple[str, list[dict[str, Any]], set[str]]] = {}
     # (assignment) buckets where every present submission was rejected by
     # validation (the mode-flip symptom). Returned so main() can suppress its
@@ -1313,6 +1347,24 @@ def collect_classroom(
             poll_owners = team_usernames
         collected[slug] = assignment_type
 
+        # A repo with no submit/* release yet may still hold pushes the
+        # autograder never turned into one (Actions off, a broken workflow, a
+        # tag not pushed). Record that presence so the assignments list agrees
+        # with the Submissions page, which detects it live. Only repos with no
+        # release are probed, so the graded and detected sets are disjoint.
+        detector = SubmissionDetector(
+            api_url=api_url,
+            org=org,
+            classroom_short=classroom_short,
+            slug=slug,
+            entry=entry,
+            service_token=service_token,
+            roster_logins=roster_logins,
+        )
+        detected_records: list[dict[str, Any]] = []
+        detected_visited: set[str] = set()
+        detected[slug] = (assignment_type, detected_records, detected_visited)
+
         # One-shot pre-rename slug (see validate_result): a non-string or empty
         # value reads as absent, matching the additive-schema tolerance rule.
         raw_renamed_from = entry.get("renamed_from")
@@ -1335,8 +1387,10 @@ def collect_classroom(
             repo_name = assignment_repo_name(classroom_short, slug, username)
             # A name the index doesn't know has no repo, so its release poll
             # would 404 and read as "not submitted" anyway — same outcome, one
-            # request less.
+            # request less. A definite "not accepted" also retires any stale
+            # detected record.
             if repo_index is not None and not repo_index.contains(repo_name):
+                detected_visited.add(username.lower())
                 continue
 
             try:
@@ -1353,8 +1407,15 @@ def collect_classroom(
                 emit_warning(f"{org}/{repo_name}: release listing malformed ({exc}); skipping")
                 continue
             if not releases:
-                # Student hasn't submitted/accepted/finished grading. Individual
-                # misses are quiet; the per-assignment summary reports the gap.
+                # No graded submission: the student hasn't accepted, hasn't
+                # pushed, or pushed without the autograder publishing. Detection
+                # tells the last two apart. Individual misses are quiet; the
+                # per-assignment summary reports the gap.
+                record, read = detector.detect(username, repo_name)
+                if read:
+                    detected_visited.add(username.lower())
+                if record is not None:
+                    detected_records.append(record)
                 continue
 
             # Collect EVERY submission, newest first. Each release's result.json
@@ -1543,6 +1604,8 @@ def collect_classroom(
             entry_row["submissions"] = history
 
             results.append(entry_row)
+            # Graded now, so a detected record from an earlier run is stale.
+            detected_visited.add(username.lower())
             submitted += 1
             if not is_team and username.strip().lower() not in student_logins:
                 staff_submitted += 1
@@ -1552,11 +1615,19 @@ def collect_classroom(
         # the coverage line reads as student coverage, not inflated by testers.
         # A team assignment counts GROUPS, not people — its poll targets are
         # the group repos.
+        ungraded = (
+            f", {len(detected_records)} with pushes but no graded submission"
+            if detected_records
+            else ""
+        )
         if is_team:
-            print(f"{classroom_short}/{slug}: {submitted}/{len(poll_owners)} group(s) submitted")
+            print(
+                f"{classroom_short}/{slug}: {submitted}/{len(poll_owners)} group(s) "
+                f"submitted{ungraded}"
+            )
         else:
             expected = len(student_logins) + staff_submitted
-            print(f"{classroom_short}/{slug}: {submitted}/{expected} submitted")
+            print(f"{classroom_short}/{slug}: {submitted}/{expected} submitted{ungraded}")
 
         if mode_flip_repos:
             mode_flip_assignments += 1

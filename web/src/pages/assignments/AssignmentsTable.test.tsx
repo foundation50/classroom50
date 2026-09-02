@@ -583,12 +583,13 @@ describe("AssignmentsTable — assignments that skip grading", () => {
     expect(ratioText()).toContain("3 / 4")
   })
 
-  it("never reads detection for a normally autograded assignment", () => {
-    // A graded row's count must keep coming from `submissions`; a stray
-    // `detected` bucket must not override it.
+  it("counts detected pushes for an autograded assignment alongside graded rows", () => {
+    // The collector records repos with pushes but no submit/* release under
+    // `detected` for autograded assignments too (#677), so the list agrees
+    // with the Submissions page, which shows those students as "Pending".
     scores.mockReturnValue({
       data: {
-        submissions: { hw1: [{}] },
+        submissions: { hw1: [{ owner: "dana" }] },
         detected: { hw1: detected(["a", "b", "c"]) },
       },
     })
@@ -600,7 +601,43 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         studentCount={4}
       />,
     )
-    expect(ratioText()).toContain("1 / 4")
+    expect(ratioText()).toContain("4 / 4")
+  })
+
+  it("does not double count an owner who is both graded and detected", () => {
+    // A hand-graded no_autograder owner still appears in detection; the union
+    // is by owner, case-insensitively, so they count once.
+    scores.mockReturnValue({
+      data: {
+        submissions: { hw1: [{ owner: "Alice" }, { owner: "bob" }] },
+        detected: { hw1: detected(["alice", "carol"]) },
+      },
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ no_autograder: true })]}
+        studentCount={5}
+      />,
+    )
+    expect(ratioText()).toContain("3 / 5")
+  })
+
+  it("never says not collected yet for an autograded assignment", () => {
+    // An autograded bucket written before detection existed has entries but
+    // no `detected` key; that is a real count, not an unwalked bucket.
+    scores.mockReturnValue({ data: { submissions: {}, detected: {} } })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        studentCount={4}
+      />,
+    )
+    expect(ratioText()).toContain("0 / 4")
+    expect(screen.queryByText("assignments.table.notCollectedYet")).toBeNull()
   })
 
   it("counts detected group submissions per repo", () => {
