@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -87,5 +87,21 @@ export function useAssignmentRepos({
   })
   const fullQuery = useGetOrgRepos(org, enabled && !scoped)
 
-  return scoped ? scopedQuery : fullQuery
+  // A manual refresh must reach GitHub. The scoped queryFn answers from a
+  // fresh full listing, so mark that listing invalidated first (without
+  // refetching its own observers) and the shortcut steps aside; the full
+  // query's own refetch already re-walks.
+  const refetchScoped = scopedQuery.refetch
+  const refetch = useCallback(
+    async (...args: Parameters<typeof refetchScoped>) => {
+      await queryClient.invalidateQueries({
+        queryKey: githubKeys.orgRepos(org),
+        refetchType: "none",
+      })
+      return refetchScoped(...args)
+    },
+    [queryClient, org, refetchScoped],
+  )
+
+  return scoped ? { ...scopedQuery, refetch } : fullQuery
 }

@@ -211,4 +211,31 @@ describe("useAssignmentRepos", () => {
       ),
     )
   })
+
+  it("re-reads on a manual refetch even when a fresh full listing is cached", async () => {
+    // Refresh / Collect now call refetch. The shortcut to a fresh full listing
+    // must not swallow that: the user asked for GitHub's current answer.
+    const { probed } = serveOrg({ lastPage: 20, existing: ["cs101-hw1-alice"] })
+    const client = makeClient()
+    client.setQueryData(githubKeys.orgRepos("acme"), [])
+    const { result } = renderHook(
+      () => useAssignmentRepos({ ...base, logins: ["alice"] }),
+      { wrapper: wrapper(client) },
+    )
+    await waitFor(() => expect(result.current.data).toBeDefined())
+    expect(probed).toEqual([])
+
+    await result.current.refetch()
+    expect(probed).toEqual(["cs101-hw1-alice"])
+    await waitFor(() =>
+      expect(result.current.data?.map((r) => r.name)).toContain(
+        "cs101-hw1-alice",
+      ),
+    )
+    // The full listing was only marked stale, not re-walked.
+    expect(request).not.toHaveBeenCalledWith(
+      expect.stringMatching(/page=2/),
+      expect.anything(),
+    )
+  })
 })

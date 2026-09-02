@@ -2635,6 +2635,22 @@ describe("assignmentRepoCandidateLogins", () => {
   it("is undefined for a shared-repo assignment", () => {
     expect(assignmentRepoCandidateLogins(true, [teamRow()])).toBeUndefined()
   })
+
+  it("is undefined when the roster is not known to this viewer", () => {
+    expect(
+      assignmentRepoCandidateLogins(false, [teamRow()], { rosterKnown: false }),
+    ).toBeUndefined()
+  })
+
+  it("is undefined when the roster read failed, even with staff rows loaded", () => {
+    // A members-read error leaves the staff rows in place. Scoping to those
+    // would make page one of the org the whole truth for acceptance and
+    // freshness, so the page falls back to the full listing instead.
+    const rows = [teamRow({ username: "Prof", roles: ["teacher"] })]
+    expect(
+      assignmentRepoCandidateLogins(false, rows, { rosterError: true }),
+    ).toBeUndefined()
+  })
 })
 
 describe("orgReposReadEnabled", () => {
