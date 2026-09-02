@@ -123,8 +123,8 @@ import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useAssignmentRepos } from "@/hooks/useAssignmentRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
-import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
-import useInvalidateAfterCollect from "@/hooks/useInvalidateAfterCollect"
+import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
+import { useCollectController } from "./submissions/useCollectController"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
@@ -132,7 +132,6 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { can } from "@/authz"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
@@ -165,26 +164,15 @@ const SubmissionsPageContent = () => {
   const { org, classroom, assignment } = useParams({ strict: false })
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  // Workflow dispatches (Collect now, Regrade all, per-row regrade) POST to the
-  // config repo's Actions API, which needs `push` there: the teacher and head-TA
-  // teams have it, a TA has `pull` and would 403. `authorAssignments` is exactly
-  // that write tier, so it gates every dispatch affordance; a TA gets a
-  // read-only Refresh instead. Page entry is gated on
-  // viewClassroomStaffContent. GitHub is the real enforcer; this is the UX gate.
-  const { role: classroomRole } = useClassroomRoleContext()
-  const canDispatchWorkflows = can("authorAssignments", { classroomRole })
-  const canRegradeAll = canDispatchWorkflows
-  // Org ownership gates only what needs repo ADMIN (bulk access/features/
-  // visibility, Open all PRs, the template grant). Reading student repos does
-  // not: the live and detection overlays run for every staff viewer with the
-  // VIEWER's token, and a repo they lack access to reads as 404, which both
-  // fan-outs already treat as "not accepted" (collect grants the staff teams
-  // per-repo read as it runs, so those repos appear after the next collect).
-  const { isOwner, isPending: ownerPending } = useIsOrgOwner()
-  // Whether the org repo list covers every repo. Asserted while the role is
-  // still resolving too: a confirmed owner would otherwise flash the non-owner
-  // "you can see" wording for a moment on every load.
-  const acceptanceComplete = isOwner || ownerPending
+  // Page entry is gated on viewClassroomStaffContent; what the viewer may DO
+  // here (dispatch workflows, owner-only bulk actions) comes from one place.
+  const {
+    isOwner,
+    acceptanceComplete,
+    canDispatchWorkflows,
+    canRegradeAll,
+    canChangeVisibility,
+  } = useStaffCapabilities()
   const {
     data: scoresData,
     refetch: refetchScores,
@@ -1094,17 +1082,29 @@ const SubmissionsPageContent = () => {
     })
   }, [effectiveFilters, query, missingRepoTeams, groupDisplayNames])
 
-  // Scope the manual collect to this assignment: the workflow serializes runs
-  // per scope and the Python side collects only the matching slug, so "Collect
-  // now" here doesn't rebuild every classroom's gradebook.
-  const collectScores = useTriggerScoreCollection(
+  // The read-only Refresh's own re-reads, for its spinner and latch (a viewer
+  // who dispatches is gated by the collect itself).
+  const refreshing =
+    !canDispatchWorkflows && (scoresRefetching || orgReposRefetching)
+  const {
+    collectScores,
+    collecting,
+    refresh: refreshSubmissions,
+  } = useCollectController({
     org,
-    classroom && assignment ? { classroom, assignment } : undefined,
-    {
+    classroom,
+    assignment,
+    names: {
       classroom: classroomMeta?.name || classroomMeta?.short_name,
       assignment: assignmentInfo?.name,
     },
-  )
+    canDispatch: canDispatchWorkflows,
+    refetchScores,
+    refetchOrgRepos,
+    refetchLive: liveCapable ? refetchLive : undefined,
+    refetchDetected: detectionCapable ? refetchDetected : undefined,
+    refreshing,
+  })
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   const { notify, announce } = useToast()
   // Lock/unlock this assignment. The page owns the mutation (like Regrade all)
@@ -1137,8 +1137,6 @@ const SubmissionsPageContent = () => {
   const { data: lastRun } = useGetLastCollectScoresRun(org)
   const collectWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}`
   const regradeWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}`
-  const collecting = collectScores.inFlight
-
   // Which action the single "View …" link points at and which status strip (if
   // any) shows. Running takes precedence; else most recently finished; else
   // null. Derived fresh every render so the link never gets stuck on a stale
@@ -1204,38 +1202,6 @@ const SubmissionsPageContent = () => {
   const snapshotStale =
     !isEmptyRepoAssignment &&
     snapshotIsStale(latestPush, effectiveLastCollectedAt)
-
-  // Refresh scores + last-run timestamp + org repo list once a manual collection
-  // finishes (or this client times out on the poll), so the table and the
-  // freshness line re-derive: the collect just consumed the pushes latestPush
-  // was flagging, and for a non-owner it also granted read on repos that were
-  // invisible before, which flips their rows from "not accepted" to accepted
-  // without a reload. Invalidation reaches the roster-scoped repo probe through
-  // its orgRepos-prefixed key; the probe honors it rather than serving a
-  // pre-collect listing from cache.
-  useInvalidateAfterCollect(org ?? "", classroom ?? "", collectScores.phase)
-  // The overlays read the repos directly and are outside that invalidation set.
-  // Re-run them too: for a non-owner, a repo the collect just granted read on
-  // 404'd into "not submitted" a moment ago, exactly like the manual button.
-  // Fires once per completed RUN (keyed on its id), not on every render while
-  // the phase reads "completed": a refetch re-renders the page, and re-firing
-  // on each render looped the fan-out against the API until a reload.
-  const overlayRefreshedForRun = useRef<number | null>(null)
-  useEffect(() => {
-    if (collectScores.phase !== "completed") return
-    const runId = collectScores.run?.id ?? -1
-    if (overlayRefreshedForRun.current === runId) return
-    overlayRefreshedForRun.current = runId
-    if (liveCapable) refetchLive()
-    if (detectionCapable) refetchDetected()
-  }, [
-    collectScores.phase,
-    collectScores.run?.id,
-    liveCapable,
-    detectionCapable,
-    refetchLive,
-    refetchDetected,
-  ])
 
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
@@ -1543,48 +1509,17 @@ const SubmissionsPageContent = () => {
                 lastCollectedLabel={lastCollectedLabel}
                 stale={snapshotStale}
                 collecting={collecting}
-                refreshing={
-                  !canDispatchWorkflows &&
-                  (scoresRefetching || orgReposRefetching)
-                }
+                refreshing={refreshing}
                 errorCount={liveErrorCount}
                 canCollect={canDispatchWorkflows}
                 // Stays mounted while collecting: the button IS the in-page
                 // progress indicator (it spins and goes inert), so it must
-                // not vanish the moment it's clicked.
+                // not vanish the moment it's clicked. Omitted only when a
+                // dispatching viewer has nobody to collect for.
                 onRefresh={
                   canDispatchWorkflows && emptyRoster.show
                     ? undefined
-                    : () => {
-                        // Collect now = re-collect (rebuild scores.json), for a
-                        // viewer who can dispatch it. A TA gets Refresh: the
-                        // same re-reads without the dispatch, so a collect a
-                        // teacher ran elsewhere lands without a reload. Re-read
-                        // the org repo list too so the staleness line
-                        // re-derives against the newest pushes (latestPush
-                        // would otherwise stay frozen at page load), and re-run
-                        // the overlays so presence refreshes alongside.
-                        // Button's `loading` already swallows the click; this
-                        // is the re-entrancy latch behind it.
-                        if (collecting) return
-                        if (
-                          !canDispatchWorkflows &&
-                          (scoresRefetching || orgReposRefetching)
-                        )
-                          return
-                        if (canDispatchWorkflows) {
-                          collectScores.collect()
-                        } else {
-                          void refetchScores()
-                        }
-                        refetchOrgRepos()
-                        if (liveCapable) {
-                          refetchLive()
-                        }
-                        if (detectionCapable) {
-                          refetchDetected()
-                        }
-                      }
+                    : refreshSubmissions
                 }
               />
             )
@@ -1880,7 +1815,7 @@ const SubmissionsPageContent = () => {
           // only — org policy blocks members from flipping visibility, and
           // GitHub 403s them regardless. Every repo shape qualifies (a bare or
           // group repo is still showcaseable).
-          canChangeVisibility={isOwner}
+          canChangeVisibility={canChangeVisibility}
           canRegrade={canDispatchWorkflows}
           publicRepoNames={publicRepoNames}
           initialLoading={initialLoading}

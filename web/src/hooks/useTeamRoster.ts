@@ -166,28 +166,30 @@ export function useTeamRoster(
   // never flashes the CSV before their role is known.
   const orgRoleResolved = githubOrgRole !== "unresolved"
   const definiteNonOwner = orgRoleResolved && !isOwner
-  const studentHidden =
-    definiteNonOwner && membersSuccess && (members ?? []).length === 0
-  const teacherHidden =
-    definiteNonOwner &&
-    teacherMembersQuery.isSuccess &&
-    (teacherMembers ?? []).length === 0
-  const htaHidden =
-    definiteNonOwner &&
-    htaMembersQuery.isSuccess &&
-    (htaMembers ?? []).length === 0
-  const taHidden =
-    definiteNonOwner &&
-    taMembersQuery.isSuccess &&
-    (taMembers ?? []).length === 0
-  const hiddenRoles = useMemo(() => {
-    const hidden = new Set<ClassroomRole>()
-    if (studentHidden) hidden.add("student")
-    if (teacherHidden) hidden.add("teacher")
-    if (htaHidden) hidden.add("hta")
-    if (taHidden) hidden.add("ta")
-    return hidden
-  }, [studentHidden, teacherHidden, htaHidden, taHidden])
+  const roleReads: Record<
+    ClassroomRole,
+    { isSuccess: boolean; data: unknown[] | undefined }
+  > = {
+    student: { isSuccess: membersSuccess, data: members },
+    teacher: teacherMembersQuery,
+    hta: htaMembersQuery,
+    ta: taMembersQuery,
+  }
+  const hiddenKey = (Object.keys(roleReads) as ClassroomRole[])
+    .filter((role) => {
+      const read = roleReads[role]
+      return (
+        definiteNonOwner && read.isSuccess && (read.data ?? []).length === 0
+      )
+    })
+    .join(",")
+  const hiddenRoles = useMemo(
+    () =>
+      new Set<ClassroomRole>(
+        hiddenKey ? (hiddenKey.split(",") as ClassroomRole[]) : [],
+      ),
+    [hiddenKey],
+  )
   const fallbackRows = useMemo(
     () => csvRowsForHiddenTeams(students, hiddenRoles),
     [students, hiddenRoles],

@@ -16,7 +16,7 @@ import type { Assignment } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useEditAssignment } from "@/hooks/mutations/useEditAssignment"
-import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import { useAssignmentRepos } from "@/hooks/useAssignmentRepos"
 import useGetStudents from "@/hooks/useGetStudents"
 import { assignmentRepoNames } from "@/pages/submissions/dashboard"
 import { EditImpactConfirmModal } from "@/components/modals/EditImpactConfirmModal"
@@ -62,12 +62,25 @@ const EditAssignmentForm = ({
   // Deterministic acceptance count for this assignment, derived from the org
   // repo list + roster the same way the submissions page does (no per-student
   // fetch). Gates the provisioning half of the edit confirm: zero accepted → a
-  // provisioning change saves silently; one or more → confirm first. Both reads
-  // are cached and shared with other views, so this adds no dedicated request
-  // beyond what a staff member already loads.
-  const { data: orgRepos } = useGetOrgRepos(org)
-  const { students } = useGetStudents(org, classroom)
+  // provisioning change saves silently; one or more → confirm first. The repo
+  // read is the roster-scoped one the submissions page uses, so a large org is
+  // not walked for one form; both reads share their cache with other views.
+  const { students, isLoading: studentsLoading } = useGetStudents(
+    org,
+    classroom,
+  )
   const isGroup = defaultData?.mode === "group"
+  const rosterLogins = useMemo(
+    () => (isGroup ? undefined : students.map((s) => s.username)),
+    [isGroup, students],
+  )
+  const { data: orgRepos } = useAssignmentRepos({
+    org,
+    classroom,
+    assignment,
+    logins: rosterLogins,
+    enabled: isGroup || !studentsLoading,
+  })
   const acceptedCount = useMemo(
     () =>
       assignmentRepoNames({
