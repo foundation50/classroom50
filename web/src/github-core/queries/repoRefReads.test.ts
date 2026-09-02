@@ -221,6 +221,39 @@ describe("getOrgRepos / getAssignmentRepos", () => {
     }
   })
 
+  it("aborts the sibling probes once one fails for good", async () => {
+    const seenSignals: AbortSignal[] = []
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        if (/[?&]page=1\b/.test(path)) {
+          options?.onHeaders?.(
+            new Headers({
+              link: `<${LIST}&page=2>; rel="next", <${LIST}&page=10>; rel="last"`,
+            }),
+          )
+          return [{ name: "a", private: true }]
+        }
+        if (options?.signal) seenSignals.push(options.signal)
+        if (path.endsWith("/cs-hw1-bob")) throw apiError(401)
+        // carol's probe is slow; it should be aborted, not completed.
+        await new Promise((_, reject) => {
+          options?.signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          )
+        })
+        return { name: "cs-hw1-carol", private: true }
+      },
+    )
+    await expect(
+      getAssignmentRepos({ request } as unknown as GitHubClient, "acme", [
+        "cs-hw1-bob",
+        "cs-hw1-carol",
+      ]),
+    ).rejects.toMatchObject({ status: 401 })
+    expect(seenSignals).toHaveLength(2)
+    expect(seenSignals.every((s) => s.aborted)).toBe(true)
+  })
+
   it("resolves null when the org itself 404s", async () => {
     const request = vi.fn().mockRejectedValue(notFound())
     await expect(

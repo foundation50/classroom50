@@ -1,5 +1,5 @@
 import type { GitHubClient } from "./client"
-import { GitHubAPIError, isDefinitiveGitHubStatus } from "./errors"
+import { GitHubAPIError } from "./errors"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
 import { mapWithConcurrency } from "@/util/concurrency"
@@ -98,6 +98,7 @@ export async function paginateRemaining<T>(
   // are aborted rather than left to finish (and retry) for nothing.
   const walk = new AbortController()
   const onCallerAbort = () => walk.abort(options.signal?.reason)
+  if (options.signal?.aborted) onCallerAbort()
   options.signal?.addEventListener("abort", onCallerAbort, { once: true })
   const pageOptions = { ...options, signal: walk.signal }
   const pages = Array.from({ length: lastPage - 1 }, (_, i) => i + 2)
@@ -168,8 +169,9 @@ export function lastPageNumber(linkHeader: string | null): number | null {
 }
 
 // Retry one read on transient failures (5xx, short rate limit, timeout,
-// network). Definitive statuses (401/403/404), caller aborts, and a rate limit
-// longer than MAX_RATE_LIMIT_WAIT_MS propagate at once.
+// network). Every other GitHub status (401/403/404, and a 409/422/451 a
+// re-request cannot change), caller aborts, and a rate limit longer than
+// MAX_RATE_LIMIT_WAIT_MS propagate at once.
 export async function withTransientRetry<T>(
   fn: () => Promise<T>,
   signal: AbortSignal | undefined,
@@ -205,7 +207,7 @@ function retryWaitMs(err: unknown, attempt: number): number | null {
 
 function isTransientPageError(err: unknown): boolean {
   if (err instanceof GitHubAPIError) {
-    return err.isRateLimited || !isDefinitiveGitHubStatus(err.status)
+    return err.isRateLimited || err.status >= 500
   }
   // A timeout (`TimeoutError` DOMException) or network failure.
   return !(err instanceof DOMException && err.name === "AbortError")
