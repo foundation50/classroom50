@@ -174,21 +174,9 @@ export async function getAssignmentRepos(
         ].filter((name) => !onFirstPage.has(name))
         // Same rule as the collect script: never more requests than the pages.
         if (unresolved.length <= first.lastPage - 1) {
-          const probed = await mapWithConcurrency(
-            unresolved,
-            REPO_READ_CONCURRENCY,
-            (name) =>
-              withGithubReadSlot(() =>
-                withTransientRetry(
-                  () => getRepo(client, owner, name, signal),
-                  signal,
-                ),
-              ),
-          )
+          const probed = await probeRepos(client, owner, unresolved, signal)
           return {
-            repos: first.items.concat(
-              probed.filter((repo): repo is GitHubRepo => repo !== null),
-            ),
+            repos: first.items.concat(probed),
             complete: false,
           }
         }
@@ -200,6 +188,42 @@ export async function getAssignmentRepos(
     },
     { repos: null, complete: false },
   )
+}
+
+// The candidate repos that exist, read by exact name. Mirrors paginateRemaining:
+// one probe failing definitively ends the fan-out and aborts its siblings, and
+// the retry waits outside the read slot so a throttled probe does not hold one
+// of the few slots while it sleeps.
+async function probeRepos(
+  client: GitHubClient,
+  owner: string,
+  names: readonly string[],
+  signal: AbortSignal | undefined,
+): Promise<GitHubRepo[]> {
+  const fanOut = new AbortController()
+  const onCallerAbort = () => fanOut.abort(signal?.reason)
+  if (signal?.aborted) onCallerAbort()
+  signal?.addEventListener("abort", onCallerAbort, { once: true })
+  try {
+    const probed = await mapWithConcurrency(
+      names,
+      REPO_READ_CONCURRENCY,
+      (name) =>
+        withTransientRetry(
+          () =>
+            withGithubReadSlot(() =>
+              getRepo(client, owner, name, fanOut.signal),
+            ),
+          fanOut.signal,
+        ),
+    )
+    return probed.filter((repo): repo is GitHubRepo => repo !== null)
+  } catch (err) {
+    fanOut.abort(err)
+    throw err
+  } finally {
+    signal?.removeEventListener("abort", onCallerAbort)
+  }
 }
 
 // Open PRs on a student/group repo. The autograde workflow opens one Feedback

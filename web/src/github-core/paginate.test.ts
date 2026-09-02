@@ -1,6 +1,12 @@
 import { describe, it, expect, vi } from "vitest"
 
-import { lastPageNumber, PAGE_FETCH_CONCURRENCY, paginateAll } from "./paginate"
+import {
+  lastPageNumber,
+  PAGE_FETCH_CONCURRENCY,
+  paginateAll,
+  paginateFirstPage,
+  paginateRemaining,
+} from "./paginate"
 import type { GitHubClient, GitHubRequestOptions } from "./client"
 import { GitHubAPIError } from "./errors"
 
@@ -265,6 +271,49 @@ describe("paginateAll", () => {
       paginateAll(client, makePath, { retryPages: true }),
     ).rejects.toMatchObject({ status: 404 })
     expect(requested.filter((p) => p === 2)).toHaveLength(1)
+  })
+
+  it("does not retry a 4xx that a re-request cannot change", async () => {
+    // 409 (empty repo), 422 (validation) and 451 (DMCA) are not in the
+    // definitive-role set but retrying them only burns the backoff budget.
+    for (const status of [409, 422, 451]) {
+      const { client, requested } = fakeClient({
+        pages: { 1: pageOf(1) },
+        last: 2,
+        failures: { 2: [apiError(status)] },
+      })
+      await expect(
+        paginateAll(client, makePath, { retryPages: true }),
+      ).rejects.toMatchObject({ status })
+      expect(requested.filter((p) => p === 2)).toHaveLength(1)
+    }
+  })
+
+  it("aborts the remaining pages when the caller had already aborted", async () => {
+    // Page 1 resolved before the abort landed; the walk must not start pages
+    // 2..N with a live signal just because the abort listener was added late.
+    const controller = new AbortController()
+    const seen: AbortSignal[] = []
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        if (options?.signal) seen.push(options.signal)
+        options?.onHeaders?.(new Headers({ link: linkHeader(3) }))
+        return pageOf(Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1))
+      },
+    )
+    const first = await paginateFirstPage<{ id: number }>(
+      { request } as unknown as GitHubClient,
+      makePath,
+      { signal: controller.signal },
+    )
+    controller.abort()
+    await paginateRemaining(
+      { request } as unknown as GitHubClient,
+      makePath,
+      first,
+      { signal: controller.signal },
+    ).catch(() => undefined)
+    expect(seen.slice(1).every((s) => s.aborted)).toBe(true)
   })
 
   it("gives up after the retry budget", async () => {
