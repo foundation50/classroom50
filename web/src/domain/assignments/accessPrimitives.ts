@@ -643,19 +643,6 @@ export async function resolveTemplate(
   }
 }
 
-// True when a parsed ref still points at the assignment's stored template, so
-// an edit can reuse the stored block instead of re-resolving live. Owner/repo
-// case-insensitive (per GitHub). Edit only.
-export function templateRefUnchanged(
-  parsed: ParsedTemplate,
-  existing: Assignment["template"] | undefined,
-): boolean {
-  if (!existing) return false
-  const sameOwner = parsed.owner.toLowerCase() === existing.owner.toLowerCase()
-  const sameRepo = parsed.repo.toLowerCase() === existing.repo.toLowerCase()
-  return sameOwner && sameRepo
-}
-
 // 404 -> false, 200 -> true, else throws. Wraps repoContentsPathExists for the
 // config repo (classroom50).
 export async function contentsPathExists(

@@ -72,7 +72,6 @@ import {
   log,
   parseTemplateRef,
   resolveTemplate,
-  templateRefUnchanged,
   contentsPathExists,
 } from "./accessPrimitives"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -239,10 +238,10 @@ export async function editAssignment(
   // permissive because it can't cheaply know the acceptance count.
 
   // Normalize the edit like create so it never leaves stray non-schema keys
-  // the CLI rejects. Pass the stored template so an unchanged ref is reused
-  // without a live lookup (non-template edits save even if the template moved).
+  // the CLI rejects. The template ref is re-resolved live either way (a
+  // template that went unusable fails the save before any commit).
   const { entry: editedAssignment, needsTeamGrant } =
-    await buildAssignmentEntry(client, input, targetAssignment.template)
+    await buildAssignmentEntry(client, input)
 
   // Renaming isn't supported: the slug is the assignment's repo-path identity
   // and its lookup key here. Pin the written slug to the stored one so the edit
@@ -376,14 +375,11 @@ async function ensureDeclarativeTestsWritable(
 // resolving the template the way the CLI does. Shared by create and edit so
 // both write the same schema-valid shape and apply the team grant.
 //
-// `existingTemplate` (edit only): an unchanged ref (same owner/repo, branch
-// unchanged or omitted) reuses the stored block WITHOUT a live lookup, so an
-// unrelated-field edit still saves when the template was deleted/un-templated/
-// made private-out-of-org. A changed ref is always re-resolved.
+// The template ref is always re-resolved live, changed or not (see the
+// resolveTemplate call below for why an unchanged ref is not reused as stored).
 async function buildAssignmentEntry(
   client: GitHubClient,
   input: CreateAssignmentInput,
-  existingTemplate?: Assignment["template"],
 ): Promise<{ entry: Assignment; needsTeamGrant: boolean }> {
   const userTests = input.tests.map(draftToTest)
 
@@ -573,23 +569,17 @@ async function buildAssignmentEntry(
   let needsTeamGrant = false
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
-    if (templateRefUnchanged(parsedTemplate, existingTemplate)) {
-      // Ref unchanged, but still re-resolve live via resolveTemplate — it fails
-      // closed before any commit on a template that went truly unusable
-      // (deleted, no longer a template, out-of-org private). Use the RESOLVED
-      // block (not the stored one) so an edit heals a legacy non-default
-      // `branch` down to the template's current default (#673): a custom branch
-      // can't be honored, so an unrelated edit shouldn't re-persist a stale one.
-      // Reuse needsTeamGrant so the unchanged-ref save re-affirms the
-      // (idempotent) team read a prior failure may have dropped.
-      const resolved = await resolveTemplate(client, input.org, parsedTemplate)
-      template = resolved.template
-      needsTeamGrant = resolved.needsTeamGrant
-    } else {
-      const resolved = await resolveTemplate(client, input.org, parsedTemplate)
-      template = resolved.template
-      needsTeamGrant = resolved.needsTeamGrant
-    }
+    // Re-resolved live even when the ref is unchanged: resolveTemplate fails
+    // closed before any commit on a template that went truly unusable (deleted,
+    // no longer a template, out-of-org private), and the RESOLVED block (not the
+    // stored one) heals a legacy non-default `branch` down to the template's
+    // current default (#673): a custom branch can't be honored, so an unrelated
+    // edit shouldn't re-persist a stale one. needsTeamGrant is reused so the
+    // unchanged-ref save re-affirms the (idempotent) team read a prior failure
+    // may have dropped.
+    const resolved = await resolveTemplate(client, input.org, parsedTemplate)
+    template = resolved.template
+    needsTeamGrant = resolved.needsTeamGrant
   }
 
   // Must match classroom50/assignments/v1 exactly — the CLI rejects unknown

@@ -1,9 +1,19 @@
 import { Trans, useTranslation } from "react-i18next"
-import { Alert, Button, Modal } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  CopyableCode,
+  ExternalLink,
+  Modal,
+} from "@/components/ui"
 import { LinkExternalIcon } from "@/components/ui/icons"
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { WIKI_URL } from "@/version"
 
 const WIKI_HREF = `${WIKI_URL}/Autograding-Basics#teacher-only-test-files`
+// The Run command a teacher pastes into a declarative test to reach a script in
+// the bundle; shown so it can be copied rather than retyped.
+const EXAMPLE_RUN_COMMAND = 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"'
 
 // Tells a teacher how to get test scripts into the assignment's bundle folder
 // without cloning the classroom50 repository: GitHub's upload page, plus the
@@ -25,6 +35,10 @@ export function TeacherFilesModal({
 }) {
   const { t } = useTranslation()
   const markup = { code: <code dir="ltr" />, strong: <strong /> }
+  const { copied: copiedCommand, copy: copyCommand } = useCopyToClipboard(
+    EXAMPLE_RUN_COMMAND,
+    1500,
+  )
 
   if (!bundlePath || !uploadUrl) {
     return (
@@ -88,22 +102,16 @@ export function TeacherFilesModal({
             components={markup}
           />
         </p>
-        <pre
-          dir="ltr"
-          className="overflow-x-auto rounded bg-base-200 p-3 text-xs"
-        >
-          {'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"'}
-        </pre>
+        <CopyableCode
+          value={EXAMPLE_RUN_COMMAND}
+          copied={copiedCommand}
+          onCopy={copyCommand}
+          label={t("assignments.autograder.teacherFiles.copyCommand")}
+        />
         <p>
-          <a
-            className="link inline-flex items-center gap-1"
-            href={WIKI_HREF}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <ExternalLink href={WIKI_HREF}>
             {t("assignments.autograder.teacherFiles.example")}
-            <LinkExternalIcon aria-hidden="true" className="size-3.5" />
-          </a>
+          </ExternalLink>
         </p>
         <p>
           <Trans
