@@ -1489,6 +1489,33 @@ class TestListEnrolledLogins:
         assert logins == ["alice"]
         assert students == {"alice"}
 
+    def test_unrecorded_staff_team_is_polled_via_derived_slug(self, monkeypatch):
+        # No `teams` block, but the derived hta team exists and has a member:
+        # that head TA is polled like any other staffer.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice"],
+            "classroom50-cs-principles-hta": ["headta"],
+        })
+        logins, _ = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", {}, "cs-principles", "token"
+        )
+        assert logins == ["alice", "headta"]
+
+    def test_derived_staff_team_404_is_quiet(self, monkeypatch, capsys):
+        import urllib.error
+
+        def fake(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-principles":
+                return ["alice"]
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake)
+        logins, _ = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", {}, "cs-principles", "token"
+        )
+        assert logins == ["alice"]
+        assert "::warning::" not in capsys.readouterr().err
+
     def test_soft_staff_error_skips_that_team(self, monkeypatch, capsys):
         import urllib.error
 
@@ -2612,6 +2639,13 @@ class TestCommitWalkEarlyStop:
 
 
 class TestMain:
+    @pytest.fixture(autouse=True)
+    def _no_team_members(self, monkeypatch):
+        # These tests stub collect_classroom and exercise main()'s plumbing; the
+        # grant pass still reads the student team (it now targets derived staff
+        # teams even without a `teams` block), so keep that read off the network.
+        stub_team_members(monkeypatch, [])
+
     def test_api_url_prefers_explicit_override_then_actions_value(
         self, tmp_path, monkeypatch
     ):
@@ -2928,6 +2962,7 @@ class TestDetectedPersistence:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        stub_team_members(monkeypatch, [])  # keep the grant pass off the network
 
     def _seed(self, tmp_path, detected):
         path = tmp_path / "cs-principles" / "scores.json"
@@ -3013,6 +3048,7 @@ class TestCollectedAtStamp:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        stub_team_members(monkeypatch, [])  # keep the grant pass off the network
 
     def test_utc_now_iso_matches_schema_shape(self):
         # The writer's stamp source must emit the schema's UTC-Z shape directly
@@ -3650,24 +3686,47 @@ class TestStaffTeamPermissions:
 
 
 class TestResolveStaffTeamSlugs:
-    def test_returns_present_roles_with_slugs(self):
+    def test_recorded_slugs_are_authoritative(self):
         meta = {
             "teams": {
-                "teacher": {"id": 1, "slug": "classroom50-cs-teacher"},
+                "teacher": {"id": 1, "slug": "classroom50-cs-teacher-1"},
                 "ta": {"id": 2, "slug": "classroom50-cs-ta"},
             }
         }
-        assert cs.resolve_staff_team_slugs(meta) == {
-            "teacher": "classroom50-cs-teacher",
-            "ta": "classroom50-cs-ta",
+        out = cs.resolve_staff_team_slugs(meta, "cs")
+        # A GitHub re-slug on collision (`-1`) is kept verbatim, never re-derived.
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher-1", recorded=True)
+        assert out["ta"] == cs.StaffTeam("classroom50-cs-ta", recorded=True)
+
+    def test_missing_roles_fall_back_to_derived_slug(self):
+        # hta is absent from a `teams` block written before the role existed:
+        # the web creates + populates `classroom50-cs-hta` on first use without
+        # recording it, so the grant pass must still find it.
+        meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs-ta"}}}
+        out = cs.resolve_staff_team_slugs(meta, "cs")
+        assert out["hta"] == cs.StaffTeam("classroom50-cs-hta", recorded=False)
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher", recorded=False)
+        assert set(out) == set(cs.STAFF_ROLES)
+
+    def test_no_teams_block_derives_every_role(self):
+        out = cs.resolve_staff_team_slugs({}, "cs")
+        assert out == {
+            role: cs.StaffTeam(f"classroom50-cs-{role}", recorded=False)
+            for role in cs.STAFF_ROLES
         }
 
-    def test_no_teams_block_yields_empty(self):
-        assert cs.resolve_staff_team_slugs({}) == {}
-
-    def test_skips_role_without_slug(self):
+    def test_role_without_slug_falls_back(self):
         meta = {"teams": {"ta": {"id": 2}, "teacher": {"slug": "  "}}}
-        assert cs.resolve_staff_team_slugs(meta) == {}
+        out = cs.resolve_staff_team_slugs(meta, "cs")
+        assert out["ta"] == cs.StaffTeam("classroom50-cs-ta", recorded=False)
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher", recorded=False)
+
+    def test_derived_slug_mirrors_go_contract(self):
+        # contract.StaffTeamSlug: ConfigRepoName + "-" + short + "-" + role.
+        assert cs.staff_team_slug("cs-principles", "hta") == "classroom50-cs-principles-hta"
+
+    def test_staff_roles_cover_every_grantable_role(self):
+        assert set(cs.STAFF_TEAM_PERMISSIONS) <= set(cs.STAFF_ROLES)
 
 
 class TestAssignmentTemplateRef:
@@ -3768,7 +3827,9 @@ class TestGrantClassroomTeamAccess:
 
     def test_grants_ta_pull_on_each_student_repo(self, monkeypatch):
         grants = self._capture_grants(monkeypatch)
-        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
+        )
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
@@ -3780,23 +3841,54 @@ class TestGrantClassroomTeamAccess:
         assert len([g for g in grants if g[2].startswith("cs-")]) == 4
         assert all(team == "classroom50-cs-ta" and perm == "pull" for team, _, _, perm in grants)
 
-    def test_no_teams_block_is_noop(self, monkeypatch):
+    def test_no_teams_block_grants_via_derived_slugs(self, monkeypatch):
+        # A legacy classroom.json with no `teams` block: the pass still targets
+        # the derived hta/ta teams, so a TA the web put on `classroom50-cs-ta`
+        # is granted even though nothing recorded that team.
         grants = self._capture_grants(monkeypatch)
-        called = {"members": False}
-
-        def fake_members(*a, **k):
-            called["members"] = True
-            return ["alice"]
-
-        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        stub_team_members_by_slug(
+            monkeypatch,
+            {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]},
+        )
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short_name": "cs"},
             assignments=self.ASSIGNMENTS, service_token="tok",
         )
-        assert grants == []
-        # No team block => no membership read either (fully short-circuited).
-        assert called["members"] is False
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-ta"}
+
+    def test_derived_team_404_is_quiet_recorded_team_404_warns(self, monkeypatch, capsys):
+        # A derived team that doesn't exist is expected (nothing said it would);
+        # a RECORDED team that 404s is a real inconsistency worth a warning.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs":
+                return ["alice"]
+            if team_slug == "classroom50-cs-hta":
+                return ["prof"]
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        # ta is recorded (and 404s); hta is derived and populated.
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        err = capsys.readouterr().err
+        assert "could not read staff team 'classroom50-cs-ta'" in err
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-hta"}
+
+        capsys.readouterr()
+        grants.clear()
+        # Now nothing recorded: the derived ta 404 must not warn at all.
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short_name": "cs"},
+            assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert "::warning::" not in capsys.readouterr().err
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-hta"}
 
     def test_grants_private_in_org_template_skips_public_and_out_of_org(self, monkeypatch):
         grants = self._capture_grants(monkeypatch)
@@ -3914,6 +4006,73 @@ class TestGrantClassroomTeamAccess:
         assert grants == []
         assert known_read["hit"] is False  # no bulk read for an empty team
 
+    def test_no_populated_staff_team_warns_instead_of_silent_success(self, monkeypatch, capsys):
+        # Discussion #768: every TA was promoted, leaving the ta team empty, and
+        # the hta team was never recorded and doesn't exist. The pass grants
+        # nothing, which used to look exactly like a healthy run. It must say so.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs":
+                return ["alice", "bob"]
+            if team_slug == "classroom50-cs-ta":
+                return []
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        out, err = capsys.readouterr()
+        assert "::warning::cs: no staff access was granted" in err
+        assert "classroom50-cs-ta" in err and "classroom50-cs-hta" in err
+        assert "gh teacher staff add cs50 cs" in err
+        # Per-team reasons on stdout so the log explains the verdict.
+        assert "'classroom50-cs-ta' (ta) has no members" in out
+        assert "no hta team recorded" in out
+
+    def test_no_warning_when_some_staff_team_is_populated(self, monkeypatch, capsys):
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch,
+            {"classroom50-cs": ["alice"], "classroom50-cs-ta": [], "classroom50-cs-hta": ["prof"]},
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META_TA_HTA, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_no_targets_does_not_warn_about_staff(self, monkeypatch, capsys):
+        # Nobody has accepted and there is no private template: there is nothing
+        # to grant, which is not a staffing problem.
+        self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(monkeypatch, {"classroom50-cs": [], "classroom50-cs-ta": []})
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_populated_team_always_prints_a_summary_line(self, monkeypatch, capsys):
+        # An idempotent re-run grants nothing new; the log still names the team
+        # so "no output" never means "no staff access".
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: False)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        out, err = capsys.readouterr()
+        assert "cs: classroom50-cs-ta needed no new pull grant (2 target repo(s) checked)" in out
+        assert "::warning::" not in err
+
     def test_empty_team_skip_is_per_slug_not_all_or_nothing(self, monkeypatch):
         # ta is empty, hta is populated: the hta team still gets its grants.
         grants = self._capture_grants(monkeypatch)
@@ -3934,7 +4093,8 @@ class TestGrantClassroomTeamAccess:
 
     def test_non_404_skippable_staff_read_skips_that_team(self, monkeypatch, capsys):
         # A 422 (not 401/403/599/throttle) reading staff membership is SKIPPABLE:
-        # skip that team for the run without failing, and don't grant.
+        # skip that team for the run without failing, and don't grant it. The
+        # other staff team is unaffected.
         grants = self._capture_grants(monkeypatch)
 
         def fake_members(api_url, org, team_slug, token):
@@ -3947,7 +4107,7 @@ class TestGrantClassroomTeamAccess:
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
         )
-        assert grants == []
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-hta"}
         assert "::warning::" in capsys.readouterr().err
 
     def test_hard_error_on_staff_read_propagates(self, monkeypatch):
@@ -4000,7 +4160,7 @@ class TestGrantClassroomTeamAccess:
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
         )
-        assert grants == []
+        assert "classroom50-cs-ta" not in {team for team, _, _, _ in grants}
         assert "::warning::" in capsys.readouterr().err
 
     # --- per-assignment scoping (change 2) ---
@@ -4408,7 +4568,9 @@ class TestPassesSkipMissingRepos:
     ASSIGNMENTS = TestGrantThrottled.ASSIGNMENTS
 
     def test_grant_pass_only_touches_existing_repos(self, monkeypatch):
-        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
+        )
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         seen: list[str] = []
 

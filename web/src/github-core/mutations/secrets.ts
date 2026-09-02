@@ -38,11 +38,14 @@ export async function encryptSecret(publicKey: string, secret: string) {
  *
  * Caveat: GET /repos/{org}/classroom50 proves access to the config repo, not the
  * student repos the workflows touch (fine-grained PATs don't expose their repo
- * selection via the API). Hence the UI requires "All repositories".
+ * selection via the API). Hence the UI requires "All repositories", and when
+ * `teacherClient` is supplied the token is also made to read one other private
+ * org repo (see assertTokenReachesOtherRepos).
  */
 export async function validateServiceToken(
   token: string,
   org: string | undefined,
+  teacherClient?: GitHubClient,
 ) {
   if (!org) throw new Error("org must be specified to validate a service token")
 
@@ -158,6 +161,49 @@ export async function validateServiceToken(
     }
     // Inconclusive (401/5xx/network) — proceed; the repo read already proved the
     // token valid.
+  }
+
+  if (teacherClient) {
+    await assertTokenReachesOtherRepos(tokenClient, teacherClient, org)
+  }
+}
+
+// The config-repo read proves nothing about the student repos: a token scoped
+// to "Only select repositories" (with classroom50 selected) passes every check
+// above, then 404s on every student repo, which surfaces weeks later as a
+// collect-time 403 on the first staff-team grant. The teacher's own client
+// picks a private org repo other than classroom50 (one they can see, so a token
+// they own with All repositories sees it too) and the token reads it. Only a
+// 404 is a verdict; no other private repo means nothing to prove, and any other
+// failure is inconclusive (the probe-token workflow is the exhaustive check).
+async function assertTokenReachesOtherRepos(
+  tokenClient: GitHubClient,
+  teacherClient: GitHubClient,
+  org: string,
+) {
+  let repos: { name: string }[]
+  try {
+    repos = await teacherClient.request<{ name: string }[]>(
+      `/orgs/${encodeURIComponent(org)}/repos?type=private&sort=created&direction=asc&per_page=10`,
+    )
+  } catch {
+    return
+  }
+  const probe = repos.find(
+    (r) => r.name.toLowerCase() !== CONFIG_REPO.toLowerCase(),
+  )
+  if (!probe) return
+  try {
+    await tokenClient.request(
+      `/repos/${encodeURIComponent(org)}/${encodeURIComponent(probe.name)}`,
+    )
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) {
+      throw new Error(
+        `This token can read ${org}/${CONFIG_REPO} but not ${org}/${probe.name}, so its Repository access is limited to selected repositories (or its Resource owner isn't ${org}). Collecting scores reads every student repository and grants staff teams access to them. Create the token again with Resource owner = ${org} and Repository access = All repositories, keeping the same permissions.`,
+        { cause: err },
+      )
+    }
   }
 }
 

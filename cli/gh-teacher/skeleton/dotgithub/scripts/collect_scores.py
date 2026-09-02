@@ -66,7 +66,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Callable, Iterable
+from typing import Any, Callable, Iterable, NamedTuple
 
 # Schema sentinels — keep in lockstep with the Go-side constants in
 # `cli/gh-teacher/classroom.go` and `cli/gh-teacher/assignments_json.go`.
@@ -87,6 +87,10 @@ SUBMIT_TAG_PREFIX = "submit/"
 # here gets nothing (the teacher team is an org owner with access via ownership,
 # so only the non-owner staff teams — head-TA and TA — need a grant).
 STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
+
+# Every staff role that has a classroom team. Mirrors Go contract.StaffRoles and
+# the web STAFF_ROLES; the derived slug for each is `classroom50-<short>-<role>`.
+STAFF_ROLES = ("teacher", "hta", "ta")
 
 # Body markers that identify a rate-limit response, for the cases no header
 # names: GitHub words the secondary limit and the abuse detector differently.
@@ -345,7 +349,9 @@ def main() -> int:
             else:
                 grant_hint = (
                     f" — grant staff teams repo access needs a fine-grained PAT with "
-                    f"Repository -> Administration: Read and write; run "
+                    f"Repository access: All repositories and Repository -> "
+                    f"Administration: Read and write (a token scoped to selected "
+                    f"repositories can't reach the student repos); run "
                     f"`gh teacher rotate-service-token {org}`"
                     if exc.code in (401, 403)
                     else ""
@@ -974,12 +980,16 @@ def list_enrolled_logins(
     # lowercases anyway, so casing is cosmetic — but keep it deterministic).
     student_logins = read(student_slug)
     logins = list(student_logins)
-    for role, staff_slug in resolve_staff_team_slugs(classroom_meta).items():
+    for role, staff_team in resolve_staff_team_slugs(classroom_meta, classroom_short).items():
+        staff_slug = staff_team.slug
         try:
             logins.extend(read(staff_slug))
         except urllib.error.HTTPError as exc:
             if classify(exc) is not SKIPPABLE:
                 raise
+            if exc.code == 404 and not staff_team.recorded:
+                # A derived team that was never recorded may simply not exist.
+                continue
             emit_warning(
                 f"{classroom_short}: could not read staff team {staff_slug!r} "
                 f"({role}) members: HTTP {exc.code} ({exc.reason or 'no reason'}); "
@@ -1732,22 +1742,46 @@ def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> s
     return f"classroom50-{classroom_short}"
 
 
-def resolve_staff_team_slugs(classroom_meta: dict[str, Any]) -> dict[str, str]:
-    """Map each staff role present in classroom.json `teams` to its authoritative
-    slug (role -> slug). Only roles with a non-empty slug are returned; a
-    classroom with no `teams` block yields {}. The slug is authoritative — never
-    re-derived — mirroring resolve_team_slug's contract for the student team."""
+class StaffTeam(NamedTuple):
+    slug: str
+    # False when the slug was derived because classroom.json doesn't record the
+    # role: the team may legitimately not exist, so a 404 on it is not news.
+    recorded: bool
+
+
+def resolve_staff_team_slugs(
+    classroom_meta: dict[str, Any], classroom_short: str
+) -> dict[str, StaffTeam]:
+    """Map each staff role to its GitHub team (role -> StaffTeam). A slug
+    recorded in classroom.json `teams` is authoritative (GitHub may re-slug on a
+    name collision); every other role in STAFF_ROLES falls back to the derived
+    `classroom50-<short>-<role>`, the same fallback the web app applies.
+
+    The fallback matters for classrooms whose `teams` block predates a role or
+    was never written: the web creates and populates that role's team on first
+    use without recording it, and without the fallback the grant pass would
+    never see it and the classroom's TAs would silently get no access.
+
+    Roles recorded under `teams` that aren't in STAFF_ROLES are kept as-is."""
+    out: dict[str, StaffTeam] = {}
     teams = classroom_meta.get("teams")
-    if not isinstance(teams, dict):
-        return {}
-    out: dict[str, str] = {}
-    for role, ref in teams.items():
-        if not isinstance(ref, dict):
-            continue
-        slug = ref.get("slug")
-        if isinstance(slug, str) and slug.strip():
-            out[role] = slug.strip()
+    if isinstance(teams, dict):
+        for role, ref in teams.items():
+            if not isinstance(ref, dict):
+                continue
+            slug = ref.get("slug")
+            if isinstance(slug, str) and slug.strip():
+                out[role] = StaffTeam(slug.strip(), recorded=True)
+    for role in STAFF_ROLES:
+        if role not in out:
+            out[role] = StaffTeam(staff_team_slug(classroom_short, role), recorded=False)
     return out
+
+
+def staff_team_slug(classroom_short: str, role: str) -> str:
+    """The derived staff team slug `classroom50-<short>-<role>`. Mirrors Go's
+    contract.StaffTeamSlug and the web's classroomTeamSlug(short, role)."""
+    return f"classroom50-{classroom_short}-{role}"
 
 
 def get_repo(api_url: str, owner: str, repo: str, token: str) -> dict[str, Any] | None:
@@ -1822,22 +1856,26 @@ def grant_classroom_team_access(
     each). A per-repo 404/422 (repo not accepted yet, or template not
     org-owned) is warned-and-skipped; a hard error (401/403/599) propagates so
     main() aborts; a throttle raises GrantThrottled, which main() reports as a
-    deferral rather than a failure. A classroom with no mapped staff team is a
-    no-op.
+    deferral rather than a failure. The head-TA and TA teams are resolved from
+    classroom.json `teams`, falling back to the derived slug (see
+    resolve_staff_team_slugs).
 
     A staff team with no members is skipped per-slug (its grants would benefit
-    nobody), so an empty ta team still lets a populated hta team grant.
+    nobody), so an empty ta team still lets a populated hta team grant. The pass
+    is never silent about its outcome: each populated team gets a summary line,
+    and when no staff team has members at all (so nothing was granted) a warning
+    says so, because that run otherwise looks identical to a healthy one.
 
     `assignment_filter` scopes the grant to one assignment (its student repos
     and its private template); blank grants every assignment as before.
     """
-    role_slugs = resolve_staff_team_slugs(classroom_meta)
-    grant_slugs = [
-        (slug, STAFF_TEAM_PERMISSIONS[role])
-        for role, slug in role_slugs.items()
+    staff_teams = resolve_staff_team_slugs(classroom_meta, classroom_short)
+    grant_teams = [
+        (role, team, STAFF_TEAM_PERMISSIONS[role])
+        for role, team in staff_teams.items()
         if role in STAFF_TEAM_PERMISSIONS
     ]
-    if not grant_slugs:
+    if not grant_teams:
         return
 
     # ALL slugs, not just the collectable subset: empty_repo assignments are
@@ -1885,7 +1923,7 @@ def grant_classroom_team_access(
         for slug in slugs
         for username in usernames
     ]
-    if repo_index is not None:
+    if repo_index is not None and candidates:
         repo_index.prefetch(candidates)
     targets: list[tuple[str, str]] = [
         (org, repo_name)
@@ -1901,7 +1939,11 @@ def grant_classroom_team_access(
     if not targets:
         return
 
-    for team_slug, permission in grant_slugs:
+    # Which teams the pass could work with, so the tail can tell "nothing to
+    # grant" (no populated staff team) from "already granted" (all idempotent).
+    populated_teams: list[str] = []
+    for role, staff_team, permission in grant_teams:
+        team_slug = staff_team.slug
         # Read this staff team's members to skip it when empty (see docstring).
         # Same SKIPPABLE-warn-and-skip contract as the student read above: any
         # non-401/403/599/throttle (404 = team not created yet, 422, …) skips
@@ -1915,6 +1957,12 @@ def grant_classroom_team_access(
         except urllib.error.HTTPError as exc:
             if classify(exc) is not SKIPPABLE:
                 raise
+            if exc.code == 404 and not staff_team.recorded:
+                print(
+                    f"{classroom_short}: no {role} team recorded in classroom.json and "
+                    f"{team_slug!r} does not exist on GitHub; nothing to grant for that role."
+                )
+                continue
             emit_warning(
                 f"{classroom_short}: could not read staff team {team_slug!r} members: "
                 f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping its grant this run."
@@ -1927,7 +1975,12 @@ def grant_classroom_team_access(
             )
             continue
         if not staff_logins:
+            print(
+                f"{classroom_short}: staff team {team_slug!r} ({role}) has no members; "
+                f"nothing to grant for that role."
+            )
             continue
+        populated_teams.append(team_slug)
 
         # One bulk read replaces grant_team_repo's per-repo access check: after
         # the first run nearly every target is already granted, so that check —
@@ -1968,6 +2021,33 @@ def grant_classroom_team_access(
 
         if granted:
             print(f"{classroom_short}: granted {team_slug} {permission} on {granted} repo(s)")
+        else:
+            print(
+                f"{classroom_short}: {team_slug} needed no new {permission} grant "
+                f"({len(targets)} target repo(s) checked)"
+            )
+
+    if not populated_teams:
+        emit_warning(warn_no_staff_to_grant(classroom_short, org, grant_teams))
+
+
+def warn_no_staff_to_grant(
+    classroom_short: str,
+    org: str,
+    grant_teams: list[tuple[str, StaffTeam, str]],
+) -> str:
+    """The verdict for a grant pass that found student repos but no populated
+    staff team to grant them to. Without it, "every TA was moved to a team the
+    pass can't see" exits 0 exactly like a healthy run, and the teacher learns
+    the TAs have no access only when they ask."""
+    slugs = ", ".join(team.slug for _, team, _ in grant_teams)
+    return (
+        f"{classroom_short}: no staff access was granted because no head-TA or TA "
+        f"team has members ({slugs}). Staff get read access to student repositories "
+        f"only through those teams. Check that each TA has the head TA or TA role on "
+        f"the roster page, or run `gh teacher staff add {org} {classroom_short} "
+        f"<username> --role ta`, then run this workflow again."
+    )
 
 
 def private_template_targets(

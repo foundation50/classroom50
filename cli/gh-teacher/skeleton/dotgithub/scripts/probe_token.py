@@ -34,11 +34,12 @@ Scope -> probe (mirrors the wiki REST table):
 Config + org scopes are ALWAYS probed. Per-classroom, the probe also reads the
 classroom team's members (the exact call collect-scores makes), which exercises
 team VISIBILITY — a secret team the token can't see 404/403s here even when the
-org-members proxy passes. It additionally reads each STAFF team (classroom.json
-`teams`, e.g., `classroom50-<short>-ta`) the collect-time grant targets, so a
-secret/invisible staff team fails RED here rather than silently granting TAs no
-access at collect time. A team that doesn't exist yet (404) is a PASS with a note (an
-early-term classroom legitimately has no team), never a failure.
+org-members proxy passes. It additionally reads each STAFF team the collect-time
+grant targets (classroom.json `teams`, falling back to the derived
+`classroom50-<short>-<role>`), so a secret/invisible staff team fails RED here
+rather than silently granting TAs no access at collect time. A team that doesn't
+exist yet (404) is a PASS with a note (an early-term classroom legitimately has
+no team), never a failure.
 
 Environment (set by `probe-token.yaml`):
   CLASSROOM50_SERVICE_TOKEN — the fine-grained PAT to probe.
@@ -72,6 +73,9 @@ CONFIG_REPO = "classroom50"
 
 # Schema sentinel for a classroom.json — keep aligned with collect_scores.py.
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
+
+# Staff roles with a classroom team; mirrors collect_scores.py STAFF_ROLES.
+STAFF_ROLES = ("teacher", "hta", "ta")
 
 # Throttle classifier constants, hand-mirrored from collect_scores.py (which
 # documents them); pinned by TestRateLimitMarkersParity_GoVsInlinePython.
@@ -398,20 +402,26 @@ def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> s
     return f"classroom50-{classroom_short}"
 
 
-def resolve_staff_team_slugs(classroom_meta: dict[str, Any]) -> dict[str, str]:
-    """role -> slug for each staff team present in classroom.json `teams`.
-    Mirrors collect_scores.py's resolve_staff_team_slugs so the probe reads the
-    EXACT staff teams the grant pass targets."""
-    teams = classroom_meta.get("teams")
-    if not isinstance(teams, dict):
-        return {}
+def resolve_staff_team_slugs(
+    classroom_meta: dict[str, Any], classroom_short: str
+) -> dict[str, str]:
+    """role -> slug for each staff team the grant pass targets: a slug recorded
+    in classroom.json `teams` is authoritative; every other role in STAFF_ROLES
+    falls back to the derived `classroom50-<short>-<role>`. Mirrors
+    collect_scores.py's resolve_staff_team_slugs so the probe reads the EXACT
+    staff teams the grant pass targets (a derived team that doesn't exist reads
+    as a 404, which check_staff_team_visible already treats as a skip)."""
     out: dict[str, str] = {}
-    for role, ref in teams.items():
-        if not isinstance(ref, dict):
-            continue
-        slug = ref.get("slug")
-        if isinstance(slug, str) and slug.strip():
-            out[role] = slug.strip()
+    teams = classroom_meta.get("teams")
+    if isinstance(teams, dict):
+        for role, ref in teams.items():
+            if not isinstance(ref, dict):
+                continue
+            slug = ref.get("slug")
+            if isinstance(slug, str) and slug.strip():
+                out[role] = slug.strip()
+    for role in STAFF_ROLES:
+        out.setdefault(role, f"{CONFIG_REPO}-{classroom_short}-{role}")
     return out
 
 
@@ -575,7 +585,7 @@ def main() -> int:
             print_check(check)
             checks.append(check)
             # Probe each staff team the grant targets (see check_staff_team_visible).
-            for role, staff_slug in resolve_staff_team_slugs(meta).items():
+            for role, staff_slug in resolve_staff_team_slugs(meta, classroom_short).items():
                 staff_check = check_staff_team_visible(
                     api_url, org, token, classroom_short, role, staff_slug
                 )

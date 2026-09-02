@@ -62,6 +62,22 @@ describe("useSaveServiceToken", () => {
     expect(seeded?.secretName).toBe("CLASSROOM50_SERVICE_TOKEN")
   })
 
+  it("hands the teacher's client to validation so the repo-access probe can run", async () => {
+    const queryClient = freshClient()
+    const { result } = renderHook(() => useSaveServiceToken(ORG), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    result.current.mutate({ serviceToken: "ghp_token" })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(validateServiceToken).toHaveBeenCalledWith(
+      "ghp_token",
+      ORG,
+      expect.objectContaining({ request: expect.any(Function) }),
+    )
+  })
+
   it("uses the same key useGetServiceTokenStatus reads, defaulting a missing org to ''", async () => {
     const queryClient = freshClient()
     const { result } = renderHook(() => useSaveServiceToken(undefined), {
