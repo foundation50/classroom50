@@ -2381,16 +2381,25 @@ def resolve_entrypoint(
 
 def run_entrypoint(
     finalize: Finalizer, entrypoint: pathlib.Path, workspace: pathlib.Path,
+    *, bundle_dir: pathlib.Path | None = None,
 ) -> int | None:
     """Exec the entrypoint with the helper env vars and cwd at the student's
     checkout. Returns an rc (already finalized as an error) on a failed
     invocation or a non-zero autograder exit, else None to continue.
 
+    `bundle_dir` is where fetch_bundle extracted the per-assignment bundle. It
+    is what CLASSROOM50_BUNDLE_DIR names, even for the classroom DEFAULT
+    entrypoint (written beside it, not inside it), so a default autograder.py
+    can still reach a bundle that ships only fixtures. With no bundle (a 404,
+    or nothing extracted) the entrypoint's own directory is the fallback.
+
     The USERNAME / *_URL helper env vars are read off `finalize` (the identity
     carrier), matching run_declarative, rather than re-threading them through
     the signature."""
     env = dict(os.environ)
-    env[BUNDLE_DIR_ENV] = str(entrypoint.parent.resolve())
+    if bundle_dir is None or not bundle_dir.is_dir():
+        bundle_dir = entrypoint.parent
+    env[BUNDLE_DIR_ENV] = str(bundle_dir.resolve())
     env["USERNAME"] = finalize.username
     env["OWNER"] = finalize.username
     env["ASSIGNMENT_TYPE"] = finalize.assignment_type
@@ -2634,7 +2643,9 @@ def main() -> int:
         if entrypoint is None:
             return rc  # declarative grader ran, vacuous pass, or fetch error
 
-        rc = run_entrypoint(finalize, entrypoint, workspace)
+        rc = run_entrypoint(
+            finalize, entrypoint, workspace, bundle_dir=runtime_dir / assignment,
+        )
         if rc is not None:
             return rc
 

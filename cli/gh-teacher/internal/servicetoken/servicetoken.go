@@ -107,22 +107,19 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 	return true, nil
 }
 
-// ValidateToken confirms a service token can do what the pipeline needs:
+// ValidateTokenVerbose confirms a service token can do what the pipeline needs:
 // Contents Read+Write in the org (collect reads, regrade pushes submit/* tags),
 // Administration: write (collect grants staff teams repo access via PUT
 // /orgs/{org}/teams/{slug}/repos/... — a scope not implied by Contents), AND
 // org Members: Read (collection is team-driven and lists the classroom team's
 // members — also not implied by any repository permission). Catches a
 // misconfigured PAT at provisioning time rather than as an opaque collect-time 403.
-func ValidateToken(token []byte, org string) error {
-	return ValidateTokenVerbose(token, org, nil, io.Discard)
-}
-
-// ValidateTokenVerbose is ValidateToken with a writer for advisory notes. When
-// the org-members probe is INCONCLUSIVE (401/5xx/timeout after a proven-live
-// repo read), validation still passes (fail-open) but warns to `out` so the
-// teacher knows Members: Read wasn't positively confirmed and should run the
-// `probe-token` workflow before relying on collection.
+//
+// `out` receives advisory notes. When the org-members probe is INCONCLUSIVE
+// (401/5xx/timeout after a proven-live repo read), validation still passes
+// (fail-open) but warns to `out` so the teacher knows Members: Read wasn't
+// positively confirmed and should run the `probe-token` workflow before relying
+// on collection.
 //
 // `teacher` is the caller's own authenticated client. When non-nil it is used
 // to find a private repo other than classroom50 to read as the token, which is
@@ -145,7 +142,7 @@ func ValidateTokenVerbose(token []byte, org string, teacher githubapi.Client, ou
 	return validateRepoScopeWithClients(tokenClient, teacher, org, out)
 }
 
-// validateTokenWithClient is ValidateToken's testable core: reads the config
+// validateTokenWithClient is ValidateTokenVerbose's testable core: reads the config
 // repo with a client authenticated as the token, asserts it can write contents
 // AND administer repos, then probes org members, mapping each failure mode to
 // an actionable error.
