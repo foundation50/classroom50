@@ -1085,6 +1085,9 @@ class _FakeRepoIndex:
     def is_private(self, repo_name):
         return True
 
+    def facts(self, repo_name):
+        return None
+
 
 class TestTeamCollectClassroom:
     """The team-mode attribution suite, mirroring TestGroupCollectClassroom:
@@ -2671,6 +2674,94 @@ class TestCommitWalkEarlyStop:
         ]
 
 
+class TestDetectionReusesTheListing:
+    """detect_repo_submissions used to spend GET /repos on every probed repo to
+    learn its default branch, which the org listing (RepoIndex) had already
+    said. Early in term most accepted repos have no release yet, so that read
+    dominated the run's request budget."""
+
+    def _stub_walk(self, monkeypatch, calls):
+        monkeypatch.setattr(
+            cs, "get_repo",
+            lambda *a, **k: calls.append("get_repo") or {"default_branch": "main"},
+        )
+        monkeypatch.setattr(
+            cs, "oldest_commit_sha_for_path",
+            lambda *a, **k: calls.append("baseline") or "base",
+        )
+        monkeypatch.setattr(
+            cs, "list_default_branch_commits",
+            lambda *a, **k: calls.append("commits") or [
+                {"sha": "s1", "commit": {"committer": {"date": "2026-06-01T10:00:00Z"}}},
+                {"sha": "base"},
+            ],
+        )
+
+    def test_known_default_branch_skips_the_repo_read(self, monkeypatch):
+        calls: list[str] = []
+        self._stub_walk(monkeypatch, calls)
+        got = cs.detect_repo_submissions(
+            "https://api.github.com", "cs50", "cs-hw1-alice", "tok", "every-push", [],
+            facts=cs.RepoFacts(True, default_branch="main", size=12),
+        )
+        assert calls == ["baseline", "commits"]
+        assert [d["sha"] for d in got] == ["s1"]
+
+    def test_commitless_repo_is_answered_without_a_request(self, monkeypatch):
+        calls: list[str] = []
+        self._stub_walk(monkeypatch, calls)
+        monkeypatch.setattr(
+            cs, "list_repo_tags", lambda *a, **k: calls.append("tags") or []
+        )
+        for mode in ("every-push", "tag"):
+            assert cs.detect_repo_submissions(
+                "https://api.github.com", "cs50", "cs-hw1-alice", "tok", mode, [],
+                facts=cs.RepoFacts(True, default_branch="main", size=0),
+            ) == []
+        assert calls == []
+
+    def test_no_facts_reads_the_repo_as_before(self, monkeypatch):
+        calls: list[str] = []
+        self._stub_walk(monkeypatch, calls)
+        cs.detect_repo_submissions(
+            "https://api.github.com", "cs50", "cs-hw1-alice", "tok", "every-push", []
+        )
+        assert calls == ["get_repo", "baseline", "commits"]
+
+    def test_detector_hands_the_index_facts_to_detection(self, monkeypatch):
+        seen: dict[str, object] = {}
+
+        def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None):
+            seen["facts"] = facts
+            return []
+
+        monkeypatch.setattr(cs, "detect_repo_submissions", fake_detect)
+        monkeypatch.setattr(
+            cs, "list_org_repos",
+            lambda *a, **k: {
+                "cs-hw1-alice": cs.RepoFacts(True, default_branch="trunk", size=3)
+            },
+        )
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        detector = cs.SubmissionDetector(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            slug="hw1", entry={}, service_token="tok", roster_logins=set(),
+            due=None, repo_index=index,
+        )
+        detector.detect("alice", "cs-hw1-alice")
+        assert seen["facts"] == cs.RepoFacts(True, default_branch="trunk", size=3)
+
+    def test_listing_keeps_default_branch_and_size(self):
+        facts = cs.repo_facts(
+            {"name": "r", "private": True, "default_branch": "main", "size": 0}
+        )
+        assert facts == cs.RepoFacts(True, "main", 0)
+        # Anything malformed is simply unknown; `private` stays strict.
+        assert cs.repo_facts({"name": "r", "private": "yes", "size": True}) == (
+            cs.RepoFacts(False, None, None)
+        )
+
+
 # main() hard-failure handling -------------------------------------------------
 
 
@@ -3527,7 +3618,7 @@ def test_no_autograder_detection_records_no_score(monkeypatch):
 def test_no_autograder_detection_omits_non_submitters(monkeypatch):
     # A repo with nothing detected is OMITTED rather than recorded as 0, so the
     # record list is exactly the submitter set (what the progress bar counts).
-    def per_user(api_url, org, repo_name, token, mode, tags):
+    def per_user(api_url, org, repo_name, token, mode, tags, facts=None):
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}] if "alice" in repo_name else []
 
     monkeypatch.setattr(cs, "detect_repo_submissions", per_user)
@@ -3579,7 +3670,7 @@ def test_no_autograder_detection_tag_mode_reads_tags(monkeypatch):
     # detectTagSubmissions mirrors.
     seen = {}
 
-    def capture(api_url, org, repo_name, token, mode, tags):
+    def capture(api_url, org, repo_name, token, mode, tags, facts=None):
         seen["mode"] = mode
         seen["tags"] = tags
         return [{"count": 2, "datetime": "2026-06-02T10:00:00Z"}]
@@ -3614,7 +3705,7 @@ def test_no_autograder_detection_tag_mode_reads_tags(monkeypatch):
 
 def test_no_autograder_detection_skips_unreadable_repo(monkeypatch, capsys):
     # One unreadable repo warns and is skipped; it must not void the assignment.
-    def flaky(api_url, org, repo_name, token, mode, tags):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
         if "bob" in repo_name:
             raise http_error(500, "Server Error")
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
@@ -3703,7 +3794,7 @@ def test_no_autograder_detection_tag_mode_does_not_trust_tag_times(monkeypatch):
 def test_no_autograder_detection_reports_visited_owners(monkeypatch):
     # `visited` names owners whose repo was actually read, so main() can tell a
     # failed read apart from "nothing detected" and preserve the prior record.
-    def flaky(api_url, org, repo_name, token, mode, tags):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
         if "bob" in repo_name:
             raise http_error(500, "Server Error")
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
@@ -3775,7 +3866,7 @@ def test_autograded_assignment_detects_pushes_with_no_release(monkeypatch, capsy
     # not, and no graded entry is invented for either.
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
 
-    def per_user(api_url, org, repo_name, token, mode, tags):
+    def per_user(api_url, org, repo_name, token, mode, tags, facts=None):
         assert mode == "every-push"
         return (
             [
@@ -3822,7 +3913,7 @@ def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
         lambda *a, **k: make_result(username="alice", assignment="hw1"),
     )
     monkeypatch.setattr(
-        cs, "detect_repo_submissions", lambda a, o, repo, *rest: probed.append(repo) or []
+        cs, "detect_repo_submissions", lambda a, o, repo, *rest, **kw: probed.append(repo) or []
     )
     stub_team_members(monkeypatch, ["alice", "bob"])
 
@@ -3846,7 +3937,7 @@ def test_autograded_detection_respects_tag_mode(monkeypatch):
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
     seen: dict[str, object] = {}
 
-    def fake_detect(api_url, org, repo_name, token, mode, tags):
+    def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None):
         seen["mode"], seen["tags"] = mode, tags
         return [{"count": 1, "datetime": "2026-06-01T10:00:00Z"}]
 
@@ -3874,7 +3965,7 @@ def test_autograded_detection_failure_keeps_prior_record(monkeypatch, capsys):
     # record from the last run instead of deleting a submitter over a 500.
     monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
 
-    def flaky(api_url, org, repo_name, token, mode, tags):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
         raise http_error(500, "Server Error")
 
     monkeypatch.setattr(cs, "detect_repo_submissions", flaky)
@@ -4882,6 +4973,9 @@ class StubIndex:
     def contains(self, repo_name):
         return repo_name.lower() in self._names
 
+    def facts(self, repo_name):
+        return None
+
 
 class TestPassesSkipMissingRepos:
     META = TestGrantThrottled.META
@@ -4918,7 +5012,7 @@ class TestPassesSkipMissingRepos:
         monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
         monkeypatch.setattr(cs, "all_submit_releases", fake_releases)
         monkeypatch.setattr(
-            cs, "detect_repo_submissions", lambda a, o, repo, *rest: probed.append(repo) or []
+            cs, "detect_repo_submissions", lambda a, o, repo, *rest, **kw: probed.append(repo) or []
         )
         _, _, _, detected = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
@@ -5145,7 +5239,9 @@ class TestOrgAndTeamListings:
         repos = cs.list_org_repos("https://api.github.com", "CS50", "tok")
         # The private flag rides along from the same bodies, so the grant pass
         # doesn't re-read each template. Strict boolean: a non-bool is not True.
-        assert repos == {"cs-hw1-alice": True, "cs-hw2-bob": False, "starter": False}
+        assert {n: f.private for n, f in repos.items()} == {
+            "cs-hw1-alice": True, "cs-hw2-bob": False, "starter": False
+        }
         # type=all keeps private student repos in the listing; without it the
         # index would call every private repo missing and skip its poll.
         assert "type=all" in self.seen_url and "per_page=100" in self.seen_url
@@ -5185,7 +5281,7 @@ class TestTemplatePrivacyFromTheIndex:
     def test_index_answers_privacy_without_a_per_template_read(self, monkeypatch):
         monkeypatch.setattr(
             cs, "list_org_repos",
-            lambda *a, **k: {"priv-tmpl": True, "pub-tmpl": False},
+            lambda *a, **k: {"priv-tmpl": cs.RepoFacts(True), "pub-tmpl": cs.RepoFacts(False)},
         )
         monkeypatch.setattr(
             cs, "get_repo", lambda *a, **k: pytest.fail("no per-template read expected")
@@ -5429,6 +5525,7 @@ class TestRepoIndexProbeMode:
         self, monkeypatch, *, last, page1=None, existing=(), fail=(), rest_error=None
     ):
         page1 = {"starter": False} if page1 is None else dict(page1)
+        page1 = {n: cs.RepoFacts(p) for n, p in page1.items()}
         probed: list[str] = []
         rest_reads: list[int] = []
 
@@ -5439,7 +5536,7 @@ class TestRepoIndexProbeMode:
             rest_reads.append(n)
             if rest_error is not None:
                 raise rest_error
-            return {name: False for name in existing}
+            return {name: cs.RepoFacts(False) for name in existing}
 
         def get_repo(api_url, owner, repo, token):
             probed.append(repo)
@@ -5629,6 +5726,9 @@ class TestCollectPassHintsEveryPoll:
         def is_private(self, name):
             return None
 
+        def facts(self, name):
+            return None
+
         def names(self):
             return []
 
@@ -5676,7 +5776,7 @@ class TestListOrgReposFirstPage:
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
         repos, last = cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok")
-        assert repos == {"a": True} and last == 90
+        assert repos == {"a": cs.RepoFacts(True)} and last == 90
         # Oldest first: a repo created mid-walk lands after the pages in flight.
         assert "sort=created" in self.url and "direction=asc" in self.url
 
@@ -5686,7 +5786,7 @@ class TestListOrgReposFirstPage:
 
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
         assert cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok") == (
-            {"a": False},
+            {"a": cs.RepoFacts(False)},
             1,
         )
 
@@ -5716,7 +5816,9 @@ class TestListOrgReposFirstPage:
         monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
         got = cs.list_org_repos_rest("https://api.github.com", "cs50", "tok", 4)
         assert sorted(seen) == [2, 3, 4]
-        assert got == {"r2": False, "r3": True, "r4": False}
+        assert got == {
+            "r2": cs.RepoFacts(False), "r3": cs.RepoFacts(True), "r4": cs.RepoFacts(False)
+        }
 
 
 class TestThrottleBudgetUnderConcurrency:
@@ -5774,7 +5876,7 @@ class TestProbeOrgRepos:
         got = cs.probe_org_repos(
             "https://api.github.com", "cs50", ["Priv", "pub", "gone", "blocked"], "tok"
         )
-        assert got == {"priv": True, "pub": False, "blocked": None}
+        assert got == {"priv": cs.RepoFacts(True), "pub": cs.RepoFacts(False), "blocked": None}
 
     def test_fatal_propagates(self, monkeypatch):
         def get_repo(*a, **k):
