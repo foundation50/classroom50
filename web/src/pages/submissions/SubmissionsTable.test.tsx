@@ -147,6 +147,23 @@ describe("SubmissionsTable non-submitter repo links", () => {
       />,
     )
     expect(screen.queryByRole("link")).toBeNull()
+    expect(screen.getByText("submissions.table.notAccepted")).not.toBeNull()
+  })
+
+  it("says 'not visible to you' rather than 'not accepted' when the viewer's repo list is incomplete", () => {
+    // A non-owner (TA/HTA) can't see a repo their team wasn't granted, and
+    // GitHub 404s it exactly like a missing one — so a missing repo is not
+    // evidence the student hasn't accepted.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set()}
+        acceptanceComplete={false}
+      />,
+    )
+    expect(screen.queryByText("submissions.table.notAccepted")).toBeNull()
+    expect(screen.getByText("submissions.table.repoNotVisible")).not.toBeNull()
   })
 
   it("renders unsubmitted group repos with a repo link even with no roster match", () => {

@@ -1526,6 +1526,7 @@ const SubmissionsPageContent = () => {
           onSortChange={setSort}
           isGroup={isGroupFlavor}
           acceptedAvailable={acceptedAvailable}
+          acceptanceComplete={isOwner}
           passingAvailable={passingEnabled}
           sections={sections}
           onShare={() => setAcceptOpen(true)}
@@ -1784,6 +1785,9 @@ const SubmissionsPageContent = () => {
           assignmentName={assignmentInfo?.name}
           maxGroupSize={assignmentInfo?.max_group_size}
           acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
+          // Only an owner sees every org repo; a non-owner's list is the repos
+          // they were granted, so an absence is "not visible", not "not accepted".
+          acceptanceComplete={isOwner}
           thresholdFraction={thresholdFraction}
           filtered={hasActiveFilter}
           onClearFilters={clearFilters}

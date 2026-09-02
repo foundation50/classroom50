@@ -94,8 +94,8 @@ assignments, submissions, and scores. The differences:
   score-collection workflow grants the staff teams read access to student
   repositories as it runs. A freshly accepted repository has no staff access
   yet, which is expected; it appears after the next collection run. Until
-  then that student reads as "not accepted" to staff, while the teacher sees
-  the repository.
+  then that student shows as **Not visible to you** for staff (they may or
+  may not have accepted), while the teacher sees the repository.
 
 With read access, TAs can open each student's work and leave reviews on the
 [feedback pull request](Autograding-Basics#feedback-pull-requests). There is no

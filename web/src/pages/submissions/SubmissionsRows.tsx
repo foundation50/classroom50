@@ -137,17 +137,20 @@ const NonSubmitterStatusBadge = ({
   isGroup,
   isTeam,
   acceptedUsernames,
+  acceptanceComplete,
 }: {
   username: string
   isGroup: boolean
   isTeam?: boolean
   acceptedUsernames?: Set<string>
+  acceptanceComplete?: boolean
 }) => {
   const { t } = useTranslation()
   const status = nonSubmitterStatus(username, {
     isGroup,
     isTeam,
     acceptedUsernames,
+    acceptanceComplete,
   })
   switch (status) {
     case "accepted-not-submitted":
@@ -166,6 +169,19 @@ const NonSubmitterStatusBadge = ({
           {t("submissions.table.notAccepted")}
           <span className="sr-only">
             {t("submissions.table.notAcceptedTitle")}
+          </span>
+        </Badge>
+      )
+    case "repo-not-visible":
+      return (
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.repoNotVisibleTitle")}
+        >
+          {t("submissions.table.repoNotVisible")}
+          <span className="sr-only">
+            {t("submissions.table.repoNotVisibleTitle")}
           </span>
         </Badge>
       )
@@ -392,6 +408,7 @@ export const NonSubmitterRow = ({
   isGroup,
   isTeam,
   acceptedUsernames,
+  acceptanceComplete = true,
   onProfile,
   actions,
   onManage,
@@ -406,6 +423,9 @@ export const NonSubmitterRow = ({
   isGroup: boolean
   isTeam?: boolean
   acceptedUsernames?: Set<string>
+  // False for a non-owner, whose repo list holds only the repos they can read:
+  // an absence renders as "not visible to you" rather than "not accepted".
+  acceptanceComplete?: boolean
   onProfile: (username: string) => void
   actions?: React.ReactNode
   // Row-level click target: the manage-submission modal, same as the actions
@@ -460,6 +480,7 @@ export const NonSubmitterRow = ({
             isGroup={isGroup}
             isTeam={isTeam}
             acceptedUsernames={acceptedUsernames}
+            acceptanceComplete={acceptanceComplete}
           />
           {publicRepo ? <PublicRepoBadge /> : null}
         </div>

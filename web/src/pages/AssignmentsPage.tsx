@@ -40,6 +40,7 @@ import useStudentCount from "@/hooks/useStudentCount"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { roleLabelKey, can } from "@/authz"
 import { isClassroomArchived } from "@/types/classroom"
 import StudentAssignmentList from "@/components/org/StudentAssignmentList"
@@ -152,6 +153,9 @@ export const TeacherAssignmentsView = ({
   // Author tier (teacher|hta) gates the mutating affordances; a TA sees the
   // list read-only. GitHub is the real enforcer (config-repo write), this is UX.
   const canAuthor = can("authorAssignments", { classroomRole: myRole })
+  // Only an org owner's repo list covers every repo; a non-owner sees the
+  // repos their staff team was granted, so the Accepted column is a lower bound.
+  const { isOwner } = useIsOrgOwner()
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
   const [query, setQuery] = useState("")
@@ -303,6 +307,7 @@ export const TeacherAssignmentsView = ({
           }
           archived={archived}
           canAuthor={canAuthor}
+          acceptanceComplete={isOwner}
           sort={sort}
           onSortChange={setSort}
           // Replay the row entrance on filter/sort changes; search is excluded
