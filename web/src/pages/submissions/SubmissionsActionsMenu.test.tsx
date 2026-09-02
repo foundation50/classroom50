@@ -61,6 +61,47 @@ describe("SubmissionsActionsMenu — Collect item", () => {
   })
 })
 
+// The trigger only spins for the action it owns (Regrade all). A collect is
+// indicated by the toolbar's Collect now button, so the menu must stay usable
+// meanwhile, with only the workflow items gated.
+describe("SubmissionsActionsMenu — in-flight indicator", () => {
+  const trigger = (container: HTMLElement) =>
+    container.querySelector(".dropdown > button") as HTMLButtonElement
+
+  it("keeps the trigger as 'Actions' during a collect, gating the workflow items", () => {
+    const { container } = render(
+      <SubmissionsActionsMenu {...baseProps} collecting />,
+    )
+    expect(trigger(container).textContent).toContain("submissions.menu.actions")
+    expect(trigger(container).getAttribute("aria-busy")).toBeNull()
+    const collectItem = screen
+      .getByText("submissions.collect.active")
+      .closest("button") as HTMLButtonElement
+    expect(collectItem.disabled).toBe(true)
+    const regradeItem = screen
+      .getByText("submissions.regradeAll.label")
+      .closest("button") as HTMLButtonElement
+    expect(regradeItem.disabled).toBe(true)
+    const csvItem = screen
+      .getByText("submissions.downloadCsv")
+      .closest("button") as HTMLButtonElement
+    expect(csvItem.disabled).toBe(false)
+  })
+
+  it("turns the trigger into 'Regrading…' while a regrade is in flight", () => {
+    const { container } = render(
+      <SubmissionsActionsMenu {...baseProps} regrading regradeAllActive />,
+    )
+    expect(trigger(container).textContent).not.toContain(
+      "submissions.menu.actions",
+    )
+    expect(trigger(container).textContent).toContain(
+      "submissions.regradeAll.active",
+    )
+    expect(trigger(container).getAttribute("aria-busy")).toBe("true")
+  })
+})
+
 describe("SubmissionsActionsMenu — Metrics item", () => {
   it("does not include Share (moved next to the search bar)", () => {
     render(<SubmissionsActionsMenu {...baseProps} />)
