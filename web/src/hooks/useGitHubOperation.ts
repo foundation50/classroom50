@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import type { GitHubWorkflowRun } from "@/github-core/types"
 
 // Lifecycle phase of a tracked workflow_dispatch operation, shared by every
-// dispatch-and-track hook (collect scores, regrade).
+// dispatch-and-track hook (collect scores, regrade, probe token).
 export type OperationPhase =
   "idle" | "dispatching" | "running" | "completed" | "failed" | "timeout"
 

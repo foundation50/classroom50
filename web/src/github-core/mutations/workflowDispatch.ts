@@ -53,8 +53,8 @@ async function openDispatch(
   const ref = repo.default_branch || DEFAULT_BRANCH
   return {
     sinceRunId: baseline.workflow_runs?.[0]?.id ?? null,
-    // A workflow with no declared inputs is dispatched with none: GitHub 422s
-    // an `inputs` key on a workflow that declares nothing.
+    // A workflow with no declared inputs is dispatched with no `inputs` key at
+    // all, as probe-token always was.
     post: (inputs) =>
       client
         .request(`${base}/dispatches`, {

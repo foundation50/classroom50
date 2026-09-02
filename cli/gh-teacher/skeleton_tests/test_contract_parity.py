@@ -3,9 +3,10 @@
 The scripts are standalone (each is copied into a classroom repo and run by a
 workflow), so they cannot import cli/shared or the web. Every constant they
 share with Go and TypeScript is spelled by hand, and this module reads the
-other sides' source to pin each spelling. The Go leg lives in
-init_skeleton_test.go (TestStaffRolesParity_GoVsPythonVsWeb); this is the
-Python leg plus the guidance text the three surfaces each phrase themselves.
+other sides' source to pin each spelling. The Go legs live in
+init_skeleton_test.go (TestStaffRolesParity_GoVsPythonVsWeb and
+TestStaffTeamSlugParity_GoVsPython); this is the Python leg plus the guidance
+text the three surfaces each phrase themselves.
 """
 
 from __future__ import annotations
@@ -77,9 +78,9 @@ class TestStaffTeamSlug:
             assert pt.resolve_staff_team_slugs({}, "cs")[role] == expected
 
 
-# The four settings a service token needs. Each surface below phrases them in
-# its own voice; every phrase must appear in each, or a permission added to one
-# goes missing from another.
+# The settings a service token needs. The Go constant and the rotate help must
+# name all of them; the collect grant hint names only the two a grant 401/403
+# can mean (see the tests below).
 TOKEN_PERMISSION_PHRASES = (
     "All repositories",
     "Contents: Read and write",

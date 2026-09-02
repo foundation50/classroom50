@@ -177,8 +177,8 @@ const AssignmentsTable = ({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: scoresData } = useGetScores(org, classroom)
-  // Org repo list, for the group-row denominator (accepted groups = group
-  // repos that exist). Shared react-query cache with the submissions page.
+  // Org repo list, for every row's Accepted count (this assignment's repos that
+  // exist). Shared react-query cache with the submissions page.
   const { data: orgRepos } = useGetOrgRepos(org)
   // Sibling slugs guard group-repo attribution against a slug-extending
   // sibling ("hw1-bonus" under "hw1") — derived from the full list so a

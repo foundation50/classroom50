@@ -1649,12 +1649,10 @@ export function showCheckingAccepted(args: {
   )
 }
 
+// See assignmentFunnelCounts for what each count means.
 export type AssignmentFunnelCounts = {
-  // Graded `entries` plus the bucket's `detected` list, united by owner.
   submitted: number
-  // This assignment's existing repos; undefined while the repo list loads.
   accepted: number | undefined
-  // No collect has walked this bucket yet, which is NOT "nobody submitted".
   notCollected: boolean
 }
 

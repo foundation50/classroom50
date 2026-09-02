@@ -750,8 +750,8 @@ class RepoIndex:
     def prefetch(self, repo_names: Iterable[str]) -> None:
         """Tell the index which names the caller is about to ask about, so it can
         resolve them in one parallel batch (and choose probing over the listing
-        when that is cheaper). Optional: `contains` and `is_private` answer
-        without it, one request per unseen name in probe mode."""
+        when that is cheaper). Optional: `contains`, `facts` and `is_private`
+        answer without it, one request per unseen name in probe mode."""
         names = list(dict.fromkeys(name.lower() for name in repo_names))
         if self._load(names) is not None or self._probe_state is None:
             return
@@ -840,9 +840,8 @@ class RepoIndex:
 
     def _complete_listing(self) -> dict[str, RepoFacts] | None:
         """Leave probe mode by reading the rest of the listing. Probed answers
-        are kept: a name found by probe is in the org whether or not it lands on
-        a page (a repo created mid-walk shifts the pages). A soft failure leaves
-        the listing unknown, like a failed first read."""
+        are kept (see _ProbeState.known). A soft failure leaves the listing
+        unknown, like a failed first read."""
         probe = self._probe_state
         assert probe is not None
         rest = self._soft_read(
@@ -1469,8 +1468,8 @@ def build_entry_row(
     detail ONLY inside `submissions` (newest first). `owner` is the stable
     per-bucket key (repo owner from the <classroom>-<assignment>-<username>
     formula), invariant across re-collects even when a group's member set
-    changes, so apply_updates replaces the entry in place. For a group entry
-    `member_usernames` sits right after `owner`. `_assignment` / `_type` are
+    changes, so apply_updates replaces the entry in place. For a group or team
+    entry `member_usernames` sits right after `owner`. `_assignment` / `_type` are
     transport-only hints for apply_updates (bucket slug + type), stripped on
     store."""
     entry_row: dict[str, Any] = {
@@ -1517,7 +1516,7 @@ def collect_classroom(
     """Return (validated result payloads for every (student, assignment) pair,
     count of assignments whose only submissions were rejected by validation,
     slug -> mode map of the assignments actually walked, slug -> (mode, detected
-    records) for assignments that skip grading).
+    records, visited owners) for every walked assignment).
     Per-repo failures warn and skip; hard failures (auth 401/403; network 599)
     propagate and main() converts them to exit 1. The second tuple element lets
     main() distinguish a mode-flip-induced empty result (which has its own loud
@@ -1776,9 +1775,7 @@ def collect_classroom(
                     mode_flip_repos.append(repo_name)
                 continue
 
-            # Who the entry credits (see attribute_submission_members). Resolved
-            # BEFORE building the entry so `member_usernames` sits right after
-            # `owner` in the written JSON key order.
+            # A skipped repo keeps its prior entry (see MemberAttribution.skipped).
             attribution = attribute_submission_members(
                 api_url, org, classroom_short, slug, repo_name, username,
                 is_team=is_team, is_group=is_group,
@@ -2296,8 +2293,8 @@ def grant_classroom_team_access(
     if not populated_teams:
         # Every staff team absent AND unrecorded means nothing was ever set up
         # (a solo teacher, or a classroom before its first TA): a notice, since
-        # there is nothing to fix. A team that exists but is empty is the
-        # misconfiguration the warning is for.
+        # there is nothing to fix. Anything else (an empty team, a recorded team
+        # that is missing, a failed read) is worth the warning.
         message = warn_no_staff_to_grant(classroom_short, org, grant_teams)
         if len(absent_teams) == len(grant_teams):
             emit_notice(message)
@@ -2314,7 +2311,9 @@ def warn_no_staff_to_grant(
     staff team to grant them to. Without it, "every TA was moved to a team the
     pass can't see" exits 0 exactly like a healthy run, and the teacher learns
     the TAs have no access only when they ask. The caller picks the level: a
-    warning when some team exists but is empty, a notice when none was set up."""
+    notice only when every staff team is both unrecorded and absent on GitHub
+    (nothing was ever set up); otherwise a warning, because a team exists but is
+    empty, a recorded team is missing, or a team read failed."""
     slugs = ", ".join(team.slug for _, team, _ in grant_teams)
     return (
         f"{classroom_short}: no staff access was granted because no head-TA or TA "
@@ -3569,7 +3568,7 @@ def _org_repos_page_url(api_url: str, org: str) -> Callable[[int], str]:
     )
 
 
-def list_org_repos(api_url: str, org: str, token: str) -> dict[str, bool]:
+def list_org_repos(api_url: str, org: str, token: str) -> dict[str, RepoFacts]:
     """Lowercased name -> RepoFacts for every repo in `org` the token can
     see, walking pagination in parallel. Hits GET /orgs/{org}/repos.
 

@@ -6,10 +6,11 @@ import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 // surface (toolbar, actions menu, row actions, table) reads the same verdicts
 // instead of re-deriving them from the role in six places.
 //
-// Two tiers. Workflow dispatches (Collect now, Regrade all, per-row regrade,
-// lock, delete) POST to the config repo's Actions API, which needs `push`
-// there: the teacher and head-TA teams have it, a TA has `pull` and would 403.
-// `authorAssignments` is exactly that write tier. Org ownership gates only what
+// Two tiers. Workflow dispatches (Collect now, Regrade all, per-row regrade)
+// POST to the config repo's Actions API and the assignments.json writes (lock,
+// delete) commit to it; both need `push` there: the teacher and head-TA teams
+// have it, a TA has `pull` and would 403. `authorAssignments` is exactly that
+// write tier. Org ownership gates only what
 // needs repo ADMIN (bulk access/features/visibility, Open all PRs, the template
 // grant). Reading student repos needs neither: the overlays run for every staff
 // viewer with the VIEWER's token, and a repo they lack access to reads as 404,
