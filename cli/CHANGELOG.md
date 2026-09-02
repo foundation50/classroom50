@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.41.0](https://github.com/foundation50/classroom50/compare/cli-v1.40.0...cli-v1.41.0) (2026-09-02)
+
+
+### Features
+
+* add team-based group assignments backed by GitHub Teams ([#827](https://github.com/foundation50/classroom50/issues/827)) ([63cb10f](https://github.com/foundation50/classroom50/commit/63cb10f6ab06ed76c7cbd69b366f61a65b3df5eb))
+
 ## [1.40.0](https://github.com/foundation50/classroom50/compare/cli-v1.39.1...cli-v1.40.0) (2026-08-31)
 
 
