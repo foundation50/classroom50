@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { NormalizedScores, SubmissionRow } from "@/hooks/useGetScores"
+import type { Assignment } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 import type { TeamRosterRow } from "@/util/teamRoster"
@@ -51,6 +52,7 @@ import {
   teamMissingForOwner,
   teamsWithoutRepos,
   assignmentRepoCandidateLogins,
+  assignmentFunnelCounts,
   orgReposReadEnabled,
   type SubmissionFilters,
 } from "./dashboard"
@@ -2721,6 +2723,69 @@ describe("showCheckingAccepted", () => {
         orgReposPending: true,
         isEmptyRepoAssignment: true,
       }),
+    ).toBe(false)
+  })
+})
+
+describe("assignmentFunnelCounts", () => {
+  const scores = (
+    over: Partial<Pick<NormalizedScores, "submissions" | "detected">>,
+  ): NormalizedScores => ({
+    schema: "classroom50/scores/v1",
+    submissions: {},
+    collectedAt: {},
+    detected: {},
+    ...over,
+  })
+  const assignment = (over: Partial<Assignment> = {}): Assignment =>
+    ({ slug: "hw1", name: "HW 1", mode: "individual", ...over }) as Assignment
+
+  it("counts graded and detected owners once each", () => {
+    // Alice was hand-graded AND detected; Bob only detected; Carol only graded.
+    const counts = assignmentFunnelCounts(
+      assignment(),
+      scores({
+        submissions: {
+          hw1: [row({ owner: "Alice" }), row({ owner: "carol" })],
+        },
+        detected: {
+          hw1: [
+            { owner: "alice", usernames: ["alice"], count: 2 },
+            { owner: "bob", usernames: ["bob"], count: 1 },
+          ],
+        },
+      }),
+      [repo("cs-hw1-alice"), repo("cs-hw1-bob"), repo("cs-hw2-alice")],
+      "cs",
+      ["hw1", "hw2"],
+    )
+    expect(counts).toEqual({ submitted: 3, accepted: 2, notCollected: false })
+  })
+
+  it("leaves accepted undefined while the repo list loads", () => {
+    expect(
+      assignmentFunnelCounts(assignment(), undefined, undefined, "cs", []),
+    ).toEqual({ submitted: 0, accepted: undefined, notCollected: false })
+  })
+
+  it("flags a no_autograder bucket no collect has walked, but not an autograded one", () => {
+    const skipping = assignment({ no_autograder: true })
+    expect(
+      assignmentFunnelCounts(skipping, scores({}), [], "cs", []).notCollected,
+    ).toBe(true)
+    // A `detected: []` means a collect walked it and found nobody.
+    expect(
+      assignmentFunnelCounts(
+        skipping,
+        scores({ detected: { hw1: [] } }),
+        [],
+        "cs",
+        [],
+      ).notCollected,
+    ).toBe(false)
+    expect(
+      assignmentFunnelCounts(assignment(), scores({}), [], "cs", [])
+        .notCollected,
     ).toBe(false)
   })
 })

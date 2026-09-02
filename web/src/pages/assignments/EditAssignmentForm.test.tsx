@@ -19,11 +19,11 @@ vi.mock("@/hooks/useTrackPublishDeploy", () => ({
 // repos gates the provisioning-change confirmation. `acceptedRepoNames` lets a
 // test set that count without wiring GitHub reads.
 let acceptedRepoNames: string[] = []
-vi.mock("@/hooks/useGetMyOrgRepos", () => ({
-  default: () => ({ data: [] }),
+vi.mock("@/hooks/useAssignmentRepos", () => ({
+  useAssignmentRepos: () => ({ data: [] }),
 }))
 vi.mock("@/hooks/useGetStudents", () => ({
-  default: () => ({ students: [] }),
+  default: () => ({ students: [], isLoading: false }),
 }))
 vi.mock("@/pages/submissions/dashboard", () => ({
   assignmentRepoNames: () => acceptedRepoNames,

@@ -40,7 +40,7 @@ import useStudentCount from "@/hooks/useStudentCount"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
+import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
 import { roleLabelKey, can } from "@/authz"
 import { isClassroomArchived } from "@/types/classroom"
 import StudentAssignmentList from "@/components/org/StudentAssignmentList"
@@ -155,10 +155,7 @@ export const TeacherAssignmentsView = ({
   const canAuthor = can("authorAssignments", { classroomRole: myRole })
   // Only an org owner's repo list covers every repo; a non-owner sees the
   // repos their staff team was granted, so the Accepted column is a lower bound.
-  // Asserted while the role still resolves so an owner never flashes the
-  // non-owner wording on load.
-  const { isOwner, isPending: ownerPending } = useIsOrgOwner()
-  const acceptanceComplete = isOwner || ownerPending
+  const { acceptanceComplete } = useStaffCapabilities()
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
   const [query, setQuery] = useState("")
