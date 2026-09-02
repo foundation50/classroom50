@@ -181,4 +181,5 @@ export const WORKFLOW_LABEL_KEY: Record<string, string> = {
   "publish-pages.yaml": "actionsBanner.workflow.publishPages",
   "collect-scores.yaml": "actionsBanner.workflow.collectScores",
   "regrade.yaml": "actionsBanner.workflow.regrade",
+  "probe-token.yaml": "actionsBanner.workflow.probeToken",
 }

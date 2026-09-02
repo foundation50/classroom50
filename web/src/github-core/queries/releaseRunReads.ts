@@ -4,7 +4,11 @@ import type { GitHubClient } from "../client"
 import type { GitHubRelease, GitHubWorkflowRun } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
-import { COLLECT_SCORES_WORKFLOW, REGRADE_WORKFLOW } from "../workflows"
+import {
+  COLLECT_SCORES_WORKFLOW,
+  PROBE_TOKEN_WORKFLOW,
+  REGRADE_WORKFLOW,
+} from "../workflows"
 import { githubKeys } from "./keys"
 
 // The submission-tag convention written by the autograde runner: each graded
@@ -372,6 +376,65 @@ export async function getRegradeRunAfterId(
     signal,
     REGRADE_WORKFLOW,
   )
+}
+
+export async function getProbeTokenRunAfterId(
+  client: GitHubClient,
+  org: string,
+  sinceRunId: number | null,
+  signal?: AbortSignal,
+): Promise<GitHubWorkflowRun | null> {
+  return getDispatchRunAfterId(
+    client,
+    org,
+    sinceRunId,
+    signal,
+    PROBE_TOKEN_WORKFLOW,
+  )
+}
+
+// One workflow-command annotation (`::error::`, `::warning::`, `::notice::`)
+// a run's job emitted, as GitHub attaches it to the job's check run.
+export type RunAnnotation = {
+  level: "failure" | "warning" | "notice"
+  message: string
+}
+
+// The annotations every job of a completed run emitted, in job order. Each
+// Actions job is a check run, so this is the jobs list followed by one
+// annotations read per job. Probe-token's verdict (the failed check names and
+// the fix) is delivered this way; a run that emitted none yields [].
+export async function getRunAnnotations(
+  client: GitHubClient,
+  org: string,
+  runId: number,
+  signal?: AbortSignal,
+): Promise<RunAnnotation[]> {
+  const repo = `/repos/${encodeURIComponent(org)}/${CONFIG_REPO}`
+  const { jobs } = await client.request<{ jobs: { id: number }[] }>(
+    `${repo}/actions/runs/${runId}/jobs?per_page=100`,
+    { method: "GET", signal },
+  )
+  const perJob = await Promise.all(
+    jobs.map((job) =>
+      client.request<{ annotation_level: string; message: string | null }[]>(
+        `${repo}/check-runs/${job.id}/annotations?per_page=100`,
+        {
+          method: "GET",
+          signal,
+        },
+      ),
+    ),
+  )
+  return perJob.flat().flatMap((a) => {
+    const message = a.message?.trim()
+    if (!message) return []
+    const level =
+      a.annotation_level === "failure" || a.annotation_level === "warning"
+        ? a.annotation_level
+        : "notice"
+    return [{ level, message }]
+  })
 }
 
 // The most recent *successful* collect-scores run (manual or scheduled), or null if

@@ -105,8 +105,10 @@ export {
 export {
   triggerScoreCollection,
   triggerRegrade,
+  triggerProbeToken,
   rerunFailedRun,
   CollectInputsUnsupportedError,
+  ProbeWorkflowMissingError,
 } from "./mutations/workflowDispatch"
 export {
   addRepoCollaborator,

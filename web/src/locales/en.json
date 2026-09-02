@@ -146,6 +146,7 @@
       "collectScoresClassroom": "Collecting scores for every assignment in \"{{classroom}}\"",
       "collectScoresAssignment": "Collecting scores for \"{{assignment}}\" in \"{{classroom}}\"",
       "regrade": "Regrading",
+      "probeToken": "Testing the service token",
       "generic": "GitHub Actions workflow"
     }
   },
@@ -2020,7 +2021,20 @@
       "validating": "Validating…",
       "saveButton": "Save token",
       "saved": "Service token saved.",
-      "savedNoMetadata": "Service token saved, but its expiry and name couldn't be recorded. The health chip may show \"expiry not tracked\" until you save again."
+      "savedNoMetadata": "Service token saved, but its expiry and name couldn't be recorded. The health chip may show \"expiry not tracked\" until you save again.",
+      "test": {
+        "button": "Test token",
+        "help": "Runs a read-only check in your classroom50 repository that exercises every permission the token needs, including the ones that can't be verified when you save it.",
+        "running": "Testing…",
+        "passed": "The token has every permission Classroom 50 needs.",
+        "failedTitle": "The token is missing permissions.",
+        "failedLoading": "Reading the check results…",
+        "failedNoDetails": "The check didn't report which permissions are missing. Open the run to see the log.",
+        "failedNext": "Create a new token with the required permissions, then use Set a new token to save it.",
+        "startFailed": "Couldn't start the token check: {{reason}}",
+        "workflowMissing": "This organization's workflow files don't include the token check yet. <updateLink>Update the workflow files</updateLink>, then test again.",
+        "timeout": "The check is taking longer than expected. Open the run to see the result when it finishes."
+      }
     },
     "audit": {
       "detail": {

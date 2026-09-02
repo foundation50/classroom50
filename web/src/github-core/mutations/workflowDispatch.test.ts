@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
   CollectInputsUnsupportedError,
+  ProbeWorkflowMissingError,
+  triggerProbeToken,
   triggerScoreCollection,
 } from "./workflowDispatch"
 import type { GitHubClient } from "../client"
@@ -288,5 +290,80 @@ describe("triggerScoreCollection display-name inputs", () => {
       ),
     ).rejects.toBeInstanceOf(GitHubAPIError)
     expect(dispatchBodies(request)).toHaveLength(1)
+  })
+})
+
+const notFound = () =>
+  new GitHubAPIError({
+    status: 404,
+    url: "https://api.github.com/x",
+    message: "Not Found",
+    body: { message: "Not Found" },
+    rateLimit: noRateLimit,
+  })
+
+// The probe has no inputs, so the only dispatch-side failure worth naming is
+// the workflow itself being absent from the org's classroom50 repo.
+describe("triggerProbeToken", () => {
+  it("dispatches probe-token.yaml with just the ref and returns the baseline", async () => {
+    const { client, request } = makeClient(() => ({}))
+
+    const result = await triggerProbeToken(client, "acme")
+
+    expect(result.sinceRunId).toBe(41)
+    const dispatchCall = request.mock.calls.find(([url]) =>
+      (url as string).endsWith("/dispatches"),
+    )
+    expect(dispatchCall?.[0]).toContain("/actions/workflows/probe-token.yaml/")
+    expect(dispatchCall?.[1]).toEqual({ method: "POST", body: { ref: "main" } })
+  })
+
+  it("maps a 404 on the dispatch to ProbeWorkflowMissingError", async () => {
+    const { client } = makeClient(() => {
+      throw notFound()
+    })
+    await expect(triggerProbeToken(client, "acme")).rejects.toBeInstanceOf(
+      ProbeWorkflowMissingError,
+    )
+  })
+
+  it("maps a 404 on the baseline runs read to ProbeWorkflowMissingError", async () => {
+    // GitHub 404s the runs listing of a workflow file that doesn't exist, so
+    // the verdict is known before any POST is attempted.
+    const request = vi.fn<(url: string) => Promise<unknown>>((url) => {
+      if (url.endsWith("/repos/acme/classroom50")) {
+        return Promise.resolve({ default_branch: "main" })
+      }
+      if (url.includes("/runs?")) return Promise.reject(notFound())
+      return Promise.resolve({})
+    })
+    const client = { request } as unknown as GitHubClient
+
+    await expect(triggerProbeToken(client, "acme")).rejects.toBeInstanceOf(
+      ProbeWorkflowMissingError,
+    )
+    expect(
+      request.mock.calls.some(([url]) => url.endsWith("/dispatches")),
+    ).toBe(false)
+  })
+
+  it("leaves other dispatch failures untouched", async () => {
+    const { client } = makeClient(() => {
+      throw new GitHubAPIError({
+        status: 403,
+        url: "https://api.github.com/x",
+        message: "Forbidden",
+        body: null,
+        rateLimit: noRateLimit,
+      })
+    })
+    const err = await triggerProbeToken(client, "acme").catch((e) => e)
+    expect(err).toBeInstanceOf(GitHubAPIError)
+    expect(err).not.toBeInstanceOf(ProbeWorkflowMissingError)
+  })
+
+  it("requires an org", async () => {
+    const { client } = makeClient(() => ({}))
+    await expect(triggerProbeToken(client, undefined)).rejects.toThrow(/org/)
   })
 })

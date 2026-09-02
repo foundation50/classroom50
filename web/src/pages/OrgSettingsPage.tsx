@@ -17,6 +17,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import { useRenameServiceToken } from "@/hooks/mutations/useRenameServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
+import useTestServiceToken from "@/hooks/useTestServiceToken"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {
   useHashSectionHighlight,
@@ -31,6 +32,7 @@ import RerunOrgSetup from "@/pages/orgSettings/RerunOrgSetup"
 import TeardownSection from "@/pages/orgSettings/TeardownSection"
 import TeamCreationSection from "@/pages/orgSettings/TeamCreationSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
+import ServiceTokenTestResult from "@/pages/orgSettings/ServiceTokenTestResult"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
 import { errorText } from "@/types/localizedMessage"
@@ -457,6 +459,9 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
 
   const saveMutation = useSaveServiceToken(org)
   const renameMutation = useRenameServiceToken(org)
+  // The full-scope check runs in the org's Actions, since the save-time
+  // validation can only prove what the config repo reveals about the token.
+  const tokenTest = useTestServiceToken(org)
 
   const [modalOpen, setModalOpen] = useState(false)
   // Advisory-metadata warning from the last save, shown as a banner in this
@@ -548,10 +553,26 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
                 </span>
               )}
             </span>
-            <Button variant="outline" size="sm" onClick={openModal}>
-              {t("orgSettings.serviceToken.rotateButton")}
-            </Button>
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                loading={tokenTest.inFlight}
+                loadingLabel={t("orgSettings.serviceToken.test.running")}
+                title={t("orgSettings.serviceToken.test.help")}
+                onClick={tokenTest.test}
+              >
+                {tokenTest.inFlight
+                  ? t("orgSettings.serviceToken.test.running")
+                  : t("orgSettings.serviceToken.test.button")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={openModal}>
+                {t("orgSettings.serviceToken.rotateButton")}
+              </Button>
+            </span>
           </div>
+
+          <ServiceTokenTestResult state={tokenTest} />
 
           {!expiresDate && (
             <span className="inline-flex items-center gap-2 text-sm text-warning">

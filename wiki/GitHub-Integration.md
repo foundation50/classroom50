@@ -193,7 +193,9 @@ template.
 ### 7. Verify the service token
 
 After `init`/`rotate`, or when collect/regrade returns 401/403, run the
-read-only probe:
+read-only probe. In the web app, open the organization settings page and use
+**Test token** in the **Service token** section; the result shows in place.
+From the CLI:
 
 ```sh
 gh workflow run probe-token.yaml --repo <org>/classroom50
