@@ -17,6 +17,19 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.44.0](https://github.com/foundation50/classroom50/compare/web-v1.43.0...web-v1.44.0) (2026-09-03)
+
+
+### Features
+
+* **web:** show who made each commit in a team's submissions ([#875](https://github.com/foundation50/classroom50/issues/875)) ([8a8daed](https://github.com/foundation50/classroom50/commit/8a8daed53d7a51c64c57f8ee504551677b01801b))
+* **web:** toggle to count teaching staff in the assignments funnel ([#871](https://github.com/foundation50/classroom50/issues/871)) ([dccef9e](https://github.com/foundation50/classroom50/commit/dccef9e7d56017f654c2ba2ef96c56eebae4a0d2))
+
+
+### Bug Fixes
+
+* **web:** add a refresh control to the language pickers ([ff47389](https://github.com/foundation50/classroom50/commit/ff473890fac438edf50d21950aaf2ccf43814e41))
+
 ## [1.43.0](https://github.com/foundation50/classroom50/compare/web-v1.42.0...web-v1.43.0) (2026-09-03)
 
 

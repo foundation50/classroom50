@@ -17,6 +17,14 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.44.0](https://github.com/foundation50/classroom50/compare/cli-v1.43.0...cli-v1.44.0) (2026-09-03)
+
+
+### Bug Fixes
+
+* **cli:** stop blaming the service token when the Actions budget cap fails ([#865](https://github.com/foundation50/classroom50/issues/865)) ([eb4521f](https://github.com/foundation50/classroom50/commit/eb4521fa84275211222ab6cd7216378ca8cdb22f))
+* **cli:** stop grading the accept commit of a template-less assignment ([#876](https://github.com/foundation50/classroom50/issues/876)) ([7d84698](https://github.com/foundation50/classroom50/commit/7d84698fbe706e9dfbf09c559341d6e75b1cc37d))
+
 ## [1.43.0](https://github.com/foundation50/classroom50/compare/cli-v1.42.0...cli-v1.43.0) (2026-09-03)
 
 
