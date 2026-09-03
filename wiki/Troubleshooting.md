@@ -270,7 +270,7 @@ enrolled that way, because GitHub won't invite an existing member and Classroom
 **kept on the roster as "Unlinked"**. The same happens to a row that carries
 only a **name** (an SIS export before students have GitHub accounts).
 
-To reconcile unlinked rows yourself, open the roster's **Unlinked** filter, then:
+To link or remove unlinked rows yourself, open the roster's **Unlinked** filter, then:
 
 - Click a row and use **Link to organization member** to attach the right
   account, which also enrolls them on the classroom team. The picker suggests

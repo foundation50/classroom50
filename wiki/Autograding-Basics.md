@@ -599,7 +599,7 @@ team's `team_slug`:
   submissions page flags a deleted team as **Group team missing** so you can
   recreate it.
 - **An empty credit is loud.** A team whose live members are all unenrolled
-  still writes its entry, with nobody credited and a warning, so the drift is
+  still writes its entry, with nobody credited and a warning, so the problem is
   visible rather than silent.
 
 **Group (legacy)** assignments are graded in the founder's repository.

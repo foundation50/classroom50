@@ -744,7 +744,7 @@ Above the list:
 - **Refresh group info.** Re-read every group's live membership from GitHub
   and update the recorded group info (the `teams.json` snapshot in the
   `classroom50` repository). The page also refreshes automatically on load
-  when membership has drifted.
+  when live membership no longer matches the recorded group info.
 
 An **Unassigned students** panel lists roster students who aren't in a group
 yet: choose a group with room, then add them.

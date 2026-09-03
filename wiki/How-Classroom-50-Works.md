@@ -393,7 +393,7 @@ repository is the authoritative link between the two. Three consequences:
   intended membership to `<classroom>/teams.json` in the `classroom50`
   repository. GitHub Teams stay authoritative for who can push; the snapshot
   is the baseline the teacher views diff live membership against to surface
-  drift, and what makes a deleted group team attributable and recoverable
+  changes, and what makes a deleted group team attributable and recoverable
   afterward.
 
 A group's display name (for example, "The Sharks") is display metadata only,
