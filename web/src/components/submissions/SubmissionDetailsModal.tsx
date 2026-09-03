@@ -8,7 +8,7 @@ import {
   TagIcon,
 } from "@/components/ui/icons"
 
-import { Button, Modal, MonoLtr } from "@/components/ui"
+import { Button, Modal, MonoLtr, cx } from "@/components/ui"
 
 // One row in the submission-details list. `kind` picks the icon and action
 // label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
@@ -81,11 +81,23 @@ export function SubmissionDetailsModal({
     dialogRef.current?.showModal()
   }, [])
 
+  // Wide enough that a typical `<classroom>-<assignment>-<owner>` repo name and
+  // a row's "View commit · View grade" actions fit on one line; a longer name
+  // wraps rather than truncating, since the name is what identifies the repo.
+  const repoClass = "mt-2 flex w-fit max-w-full items-start gap-1.5"
+  const repoName = (
+    <MonoLtr className="min-w-0 break-words text-sm">{repo}</MonoLtr>
+  )
+  // Optically aligns the 16px icon with the first 20px text line.
+  const repoIcon = (
+    <RepoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+  )
+
   return (
     <Modal
       dialogRef={dialogRef}
       onClose={onClose}
-      size="lg"
+      size="xl"
       title={<span className="block truncate">{title}</span>}
       subtitle={
         subtitle ? (
@@ -97,19 +109,19 @@ export function SubmissionDetailsModal({
     >
       {repoHref ? (
         <a
-          className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"
+          className={cx("link link-hover", repoClass)}
           href={repoHref}
           target="_blank"
           rel="noreferrer"
           title={t("submissions.details.viewRepository")}
         >
-          <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
-          <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
+          {repoIcon}
+          {repoName}
         </a>
       ) : (
-        <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
-          <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
-          <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
+        <p className={cx(repoClass, "text-base-content/50")}>
+          {repoIcon}
+          {repoName}
         </p>
       )}
 
@@ -146,13 +158,16 @@ export function SubmissionDetailsModal({
             return (
               <li
                 key={item.key}
-                className="flex items-center gap-3 rounded-box border border-base-300 bg-base-100 px-3 py-2 text-sm"
+                // The label block keeps a readable minimum, so on a narrow
+                // screen the actions wrap below it instead of squeezing the
+                // author and date down to ellipses.
+                className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-box border border-base-300 bg-base-100 px-3 py-2 text-sm"
               >
                 <Icon
                   aria-hidden="true"
                   className="size-4 shrink-0 text-base-content/70"
                 />
-                <span className="flex min-w-0 flex-col">
+                <span className="flex min-w-[10rem] flex-1 flex-col">
                   <MonoLtr className="truncate font-medium">
                     {item.label}
                   </MonoLtr>
@@ -201,30 +216,32 @@ export function SubmissionDetailsModal({
                     </span>
                   ) : null}
                 </span>
-                {item.href ? (
-                  <a
-                    className="link link-hover ms-auto inline-flex shrink-0 items-center gap-1"
-                    href={item.href}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {actionLabel}
-                  </a>
-                ) : (
-                  <span className="ms-auto shrink-0 text-base-content/50">
-                    {t("submissions.details.unavailable")}
-                  </span>
-                )}
-                {item.releaseHref ? (
-                  <a
-                    className="link link-hover inline-flex shrink-0 items-center gap-1 text-base-content/70 before:me-1 before:text-base-content/30 before:content-['·']"
-                    href={item.releaseHref}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    {t("submissions.details.viewGrade")}
-                  </a>
-                ) : null}
+                <span className="ms-auto flex shrink-0 items-center">
+                  {item.href ? (
+                    <a
+                      className="link link-hover inline-flex items-center gap-1"
+                      href={item.href}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {actionLabel}
+                    </a>
+                  ) : (
+                    <span className="text-base-content/50">
+                      {t("submissions.details.unavailable")}
+                    </span>
+                  )}
+                  {item.releaseHref ? (
+                    <a
+                      className="link link-hover ms-3 inline-flex items-center gap-1 text-base-content/70 before:me-1 before:text-base-content/30 before:content-['·']"
+                      href={item.releaseHref}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {t("submissions.details.viewGrade")}
+                    </a>
+                  ) : null}
+                </span>
               </li>
             )
           })}

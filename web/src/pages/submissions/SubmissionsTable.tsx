@@ -157,15 +157,18 @@ type OverrideModalRow = {
 // A viewer without the detection overlay (a non-owner, or the owner before
 // detection resolves) falls back to the collected `submissions`, so the modal
 // never shows a false "no submissions" state beside a positive count chip.
-// A team row labels each detected push with who made it (the collected
-// fallback carries no author).
+// A team row labels each detected push with who made it, by roster name when
+// the login is on the roster (the collected fallback carries no author).
 function buildDetailItems(
   row: SubmissionRow,
   mode: SubmissionMode,
   org: string,
   repo: string,
   t: (key: string, opts?: Record<string, unknown>) => string,
-  { isTeam = false }: { isTeam?: boolean } = {},
+  {
+    isTeam = false,
+    students = [],
+  }: { isTeam?: boolean; students?: Student[] } = {},
 ): SubmissionDetailItem[] {
   const detectedCommits = (row.detectedEntries ?? []).filter(
     (e) => e.kind === "commit",
@@ -214,6 +217,7 @@ function buildDetailItems(
       commits,
       collectedTags,
       showAuthors: isTeam,
+      authorName: (login) => getName(login, students),
     },
     mode,
     org,
@@ -619,7 +623,7 @@ const SubmissionsTable = ({
           org,
           repo,
           t,
-          { isTeam },
+          { isTeam, students },
         ),
       })
     // The row's primary action: the manage-submission modal. Shared by the
