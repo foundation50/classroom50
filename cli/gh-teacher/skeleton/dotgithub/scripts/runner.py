@@ -169,6 +169,15 @@ ACCEPT_COMMIT_PATHS = frozenset(
     }
 )
 
+# Paths the accept commit may DELETE (never add or modify): an init_shim accept
+# creates the repo with auto_init, which seeds a README the assignment contract
+# says must not exist, so the same commit removes it. Both accept clients
+# hand-mirror the path: classroomcfg.SeededReadmePath (gh-student) and the
+# init_shim deletePaths in web/src/domain/assignments/accept.ts -- keep in
+# lockstep. Deletion-only, so a tip accept commit that ADDS or EDITS a README
+# (a student's amended work) still grades.
+ACCEPT_COMMIT_DELETED_PATHS = frozenset({"README.md"})
+
 # Paths a teacher-side submission-mode shim retrofit touches: exactly the shim,
 # nothing else. Such a commit carries `[skip ci]` so the workflow normally
 # never fires; is_shim_update_commit is the backstop for environments that
@@ -667,11 +676,12 @@ def is_acceptance_commit(workspace: pathlib.Path, head_sha: str) -> bool:
     empty head_sha, or no accept commit.
 
     Final guard: the tip accept commit must touch ONLY the known setup paths
-    (`ACCEPT_COMMIT_PATHS`). A student can rewrite history so the marker commit
-    is the tip yet carries real work (amend + force-push, or a squash); skipping
-    it would silently drop gradeable work, so an accept commit touching anything
-    outside the setup set fails open (grade). A git error reading its paths also
-    fails open.
+    (`ACCEPT_COMMIT_PATHS`), plus at most a deletion of a path in
+    `ACCEPT_COMMIT_DELETED_PATHS`. A student can rewrite history so the marker
+    commit is the tip yet carries real work (amend + force-push, or a squash);
+    skipping it would silently drop gradeable work, so an accept commit touching
+    anything outside the setup set fails open (grade). A git error reading its
+    paths also fails open.
     """
     if not head_sha:
         return False
@@ -683,11 +693,15 @@ def is_acceptance_commit(workspace: pathlib.Path, head_sha: str) -> bool:
 
 def _accept_commit_is_setup_only(workspace: pathlib.Path, head_sha: str) -> bool:
     """True only when every path the commit touches is in the known setup set
-    (`ACCEPT_COMMIT_PATHS`). Fails open (False -> grade) on any git error or an
-    empty path list, so a commit we can't fully inspect is treated as a
-    submission rather than silently skipped.
+    (`ACCEPT_COMMIT_PATHS`), or is a deletion of a path in
+    `ACCEPT_COMMIT_DELETED_PATHS` (the auto_init README an init_shim accept
+    removes). Fails open (False -> grade) on any git error or an empty path
+    list, so a commit we can't fully inspect is treated as a submission rather
+    than silently skipped.
     """
-    return _commit_touches_only(workspace, head_sha, ACCEPT_COMMIT_PATHS)
+    return _commit_touches_only(
+        workspace, head_sha, ACCEPT_COMMIT_PATHS, ACCEPT_COMMIT_DELETED_PATHS
+    )
 
 
 def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
@@ -714,12 +728,15 @@ def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
 
 
 def _commit_touches_only(
-    workspace: pathlib.Path, head_sha: str, allowed: frozenset[str]
+    workspace: pathlib.Path,
+    head_sha: str,
+    allowed: frozenset[str],
+    allowed_deletions: frozenset[str] = frozenset(),
 ) -> bool:
-    """True only when every path the commit touches is in `allowed`. Fails
-    open (False -> grade) on any git error or an empty path list, so a commit
-    we can't fully inspect is treated as a submission rather than silently
-    skipped.
+    """True only when every path the commit touches is in `allowed`, or is a
+    DELETION of a path in `allowed_deletions`. Fails open (False -> grade) on
+    any git error or an empty path list, so a commit we can't fully inspect is
+    treated as a submission rather than silently skipped.
     """
 
     def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -729,19 +746,34 @@ def _commit_touches_only(
         )
 
     try:
-        # Names of every path the commit changed vs its parent (root commit:
-        # vs the empty tree). -r recurses, --no-renames keeps paths literal,
-        # -z NUL-delimits so unusual filenames survive.
+        # Status + name of every path the commit changed vs its parent (root
+        # commit: vs the empty tree). -r recurses, --no-renames keeps paths
+        # literal (and statuses to A/M/D/T), -z NUL-delimits so unusual
+        # filenames survive: the stream alternates status, path, status, path.
         changed = git(
-            "show", "--no-renames", "--name-only", "--format=", "-r", "-z",
+            "show", "--no-renames", "--name-status", "--format=", "-r", "-z",
             head_sha,
         )
         if changed.returncode != 0:
             return False
-        paths = [p for p in changed.stdout.split("\0") if p]
-        if not paths:
+        fields = changed.stdout.split("\0")
+        # Well-formed output is status/path pairs plus a trailing empty field,
+        # so an even length means a dangling status. zip would silently drop
+        # it, and a dropped entry errs toward a false skip, so treat it as
+        # uninspectable instead.
+        if len(fields) % 2 == 0:
             return False
-        return all(p in allowed for p in paths)
+        entries = [
+            (status, path)
+            for status, path in zip(fields[0::2], fields[1::2])
+            if path
+        ]
+        if not entries:
+            return False
+        return all(
+            path in allowed or (status == "D" and path in allowed_deletions)
+            for status, path in entries
+        )
     except (OSError, subprocess.SubprocessError):
         return False
 
