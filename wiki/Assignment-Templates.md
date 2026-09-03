@@ -8,7 +8,7 @@ every submission. This page describes the expected layout.
 
 > [!NOTE]
 > **Templates are optional.** An assignment without a template gives each
-> student an initialized repository with a README and the autograding setup —
+> student an initialized repository with a README and the autograding setup,
 > good for write-from-scratch or short-answer work. See
 > [Repository shapes](#repository-shapes) for every option. The rest of this
 > page applies to assignments that ship a template.
@@ -32,8 +32,8 @@ Two rules apply across all of them:
 
 - **Shape changes affect future accepts only.** Every shape can be changed
   after creation, but repositories students already accepted keep their
-  original setup; nothing is retrofitted. (**Assignment type** — individual
-  or group — is the exception: it stays locked once set.)
+  original setup; nothing is retrofitted. (**Assignment type**, individual
+  or group, is the exception: it stays locked once set.)
 - **A template brings only its default branch** unless the assignment turns
   on **Include all branches** (`include_all_branches: true`), which copies
   every branch into each generated repository. Template-only; it has no
@@ -48,65 +48,70 @@ see [`gh teacher assignment add`](gh-teacher#assignment-add).
 
 ## Structure
 
-```
+```text
 .
 ├── README.md              # student-facing assignment description
 ├── .gitignore             # optional, re-fetched on every gh student submit
 ├── .github/               # optional, re-fetched on every gh student submit
-│   └── workflows/         # CI for student copies (NOT autograde — see below)
-├── pull_request_template.md  # optional, can drive the Feedback PR body
+│   └── workflows/         # CI for student copies (NOT autograde, see below)
+├── pull_request_template.md  # optional, can drive the feedback pull request body
 └── <starter code>         # whatever files the assignment needs
 ```
 
-- **`README.md`** — what the student sees on their copy. Describe the assignment,
-  expected output, and evaluation criteria.
-- **`.gitignore`** (optional) — re-fetched from the template on every submit, so
+- **`README.md`.** What the student sees on their copy. Describe the
+  assignment, expected output, and evaluation criteria.
+- **`.gitignore`** (optional). Re-fetched from the template on every submit, so
   updating it once propagates to every student's next submission.
-- **`.github/`** (optional) — same re-fetch behavior. Put non-autograde
+- **`.github/`** (optional). Same re-fetch behavior. Put non-autograde
   workflows here (linters, formatters, dependabot).
-- **`pull_request_template.md`** (optional) — GitHub's native pull request
-  template (`.github/pull_request_template.md`, root, or `docs/`). If the
-  assignment enables **Use the template's pull request template as the Feedback
-  PR body**, Classroom 50 uses this file's contents as each student's Feedback
-  PR body instead of the built-in text. See
-  [Autograders](Autograding-Basics#feedback-pull-requests).
-- **Starter code** — any files the student starts from, from a single file to a
+- **`pull_request_template.md`** (optional). GitHub's native pull request
+  template (`.github/pull_request_template.md`, the repository root, or
+  `docs/`). If the assignment enables **Use the template's pull request
+  template as the Feedback PR body**, Classroom 50 uses this file's contents as
+  each student's feedback pull request body instead of the built-in text. The
+  web form turns the option on automatically when it finds such a file in the
+  template. See
+  [Feedback pull requests](Autograding-Basics#feedback-pull-requests).
+- **Starter code.** Any files the student starts from, from a single file to a
   full project.
 
 > [!WARNING]
 > **Never put `.github/workflows/autograde.yaml` in the template.** The autograde
-> shim is written by `gh student accept` (it's embedded in `gh-student`) and
+> workflow is written by `gh student accept` (it's embedded in `gh-student`) and
 > never changes after accept. A copy in the template would be clobbered by
 > submit's `.github/` re-fetch and double-grade or break grading. Autograding
-> logic lives in your `classroom50` repository, not the template — see [Autograding Basics](Autograding-Basics).
+> logic lives in your `classroom50` repository, not the template. See
+> [Autograding Basics](Autograding-Basics).
 
 ## Set it up
 
-1. **Create a repository** with the structure above, then register it:
+1. **Create a repository** with the structure above and push at least one
+   commit.
+2. **Set visibility** (see [Template visibility](#template-visibility)).
+3. **Mark it as a template.** On the repository's **Settings** page, under
+   **General**, select **Template repository**.
+4. **Register the assignment:**
 
    ```sh
-   gh teacher assignment add <org> <classroom> <slug> --name "…" --template <owner>/<repo>
+   gh teacher assignment add cs50-fall-2026 cs-principles hello --name "Hello" --template cs50-fall-2026/hello-template
    ```
 
-   The assignment **slug** (e.g., `hello`) is what students pass to
+   The assignment **slug** (`hello` here) is what students pass to
    `gh student accept`; it needn't match the repository name.
-
-2. **Set visibility** (see below).
-3. **Mark it as a template** in **Settings → General → Template repository**.
 
 Students can then run:
 
 ```sh
-gh student accept <org> <classroom> <slug>
+gh student accept cs50-fall-2026 cs-principles hello
 ```
 
-…which creates `<org>/<classroom>-<slug>-<username>` (lowercased) from your
-template.
+This creates `cs50-fall-2026/cs-principles-hello-USERNAME` (lowercased) from
+your template, where `USERNAME` is the student's GitHub username.
 
 ## Template visibility
 
 A **public** template always works. A **private** template works only if it's
-**inside your organization** — registering the assignment grants the
+**inside your organization**: registering the assignment grants the
 classroom's team read access to it. A private template **outside** your
 organization is rejected (students can't be granted access, so accept would
 404). Enterprise Cloud's "internal" visibility also works.
@@ -125,46 +130,46 @@ organization is rejected (students can't be granted access, so accept would
 ## Template requirements and gotchas
 
 - **The template must have at least one commit.** A freshly created, commitless
-  repository is rejected when you register the assignment — GitHub can't
+  repository is rejected when you register the assignment: GitHub can't
   generate a copy of nothing. (A brand-new template with real commits can
   briefly be misreported by GitHub right after a push; if a just-pushed
   template is rejected, wait a minute and retry.)
-- **Forked templates can trip other orgs' OAuth restrictions.** With a
+- **Forked templates can trip other organizations' OAuth restrictions.** With a
   template that is a **fork of a repository in a different organization**,
   GitHub evaluates OAuth-app access restrictions against the fork's *parent*
-  organization too — accept can fail with an HTTP 403 naming OAuth App access
-  restrictions even though your own org has approved Classroom 50. Either have
-  the upstream organization approve Classroom 50 as well, or (simpler) copy
+  organization too, so accept can fail with an HTTP 403 naming OAuth App access
+  restrictions even though your own organization has approved Classroom 50.
+  Either have the upstream organization approve Classroom 50 as well, or copy
   the content into a fresh, fork-free repository in your organization and flag
   that as the template.
 - **Only the default branch is copied** unless the assignment enables
   **Include all branches** (`include_all_branches`), which passes every branch
-  through to each generated student repo.
+  through to each generated student repository.
 - **GitHub's template-generate copies files, not settings.** Classroom 50
   compensates at accept time:
   - The **About description and topics** are copied when the assignment's
-    **Copy About from template** / **Copy topics from template** toggles are on
-    (the default for new assignments). This runs on the web accept path; a
-    student who accepts with `gh student accept` gets the repository without
-    them.
+    **Copy About from template** and **Copy topics from template** toggles are
+    on (both on by default for a new assignment). This runs on the web accept
+    path; a student who accepts with `gh student accept` gets the repository
+    without them.
   - **Repository features** (Issues, Wiki, Projects, Pull requests) follow the
-    assignment's Repository features settings — by default each **inherits the
-    template's current setting**; you can force any of them on or off per
-    assignment. This applies on both the web and CLI accept paths. Repos
-    accepted before a change can be updated with the submissions page's
+    assignment's repository features settings: by default each **inherits the
+    template's current setting**, and you can force any of them on or off per
+    assignment. This applies on both the web and CLI accept paths. Repositories accepted
+    before a change can be updated with the submissions page's
     **Update repository features** action.
 
 ## Reusing one template across assignments
 
-The same repository can be the template for any number of assignments — each
+The same repository can be the template for any number of assignments; each
 accept generates an independent copy of the template **as it exists at that
 moment**. That makes an evolving course repository workable: register
-assignment A, keep committing, register assignment B later from the same repo.
-Two things to keep in mind:
+assignment A, keep committing, register assignment B later from the same
+repository. Two things to keep in mind:
 
 - Students who accept the *same* assignment at different times can start from
-  different template states — late accepters get the newer content. Freeze the
-  template (or cut a dedicated template repo per assignment) if identical
+  different template states, so late accepters get the newer content. Freeze the
+  template (or cut a dedicated template repository per assignment) if identical
   starting points matter.
 - `.gitignore` and `.github/` are re-fetched from the template on every
   submit (see below), so changes to those files propagate to **every**
@@ -174,7 +179,7 @@ Two things to keep in mind:
 
 On every submission, `gh student submit` re-fetches `.gitignore` and `.github/`
 from the template (recorded in `.classroom50.yaml`). Starter code and the README
-are **not** re-fetched — they belong to the student once accepted. Runtime,
+are **not** re-fetched; they belong to the student once accepted. Runtime,
 dependency, and grading-logic changes propagate separately, through the runner
 workflow and `assignments.json`, which the runner fetches fresh on every
 submission.

@@ -31,7 +31,9 @@ so staff added in one show up in the other.
 **Web app:** open the classroom, click **Settings**, and use the
 **Staff and roles** section. Enter a GitHub username, pick a role, and click
 **Add**. The section also links each role's GitHub team and shows pending
-invitations.
+invitations. You can also add a staff member from the classroom's **Roster**
+page: click **Add member**, set **Role** to the staff role, and enter a GitHub
+username (staff roles need a username there, not an email address).
 
 **CLI:**
 
@@ -45,13 +47,13 @@ gh teacher staff add cs50-fall-2026 cs-principles octocat --role ta
 but doesn't touch their organization membership.
 
 Staff can also be invited by email, from the web app only. On the classroom's
-**Roster** page, use **Upload** with a file of addresses (one per line, or a
-roster CSV with an `email` column), then set each person's role in the preview's
-**Role** column, or supply a `role` column in the CSV. Choosing **Teacher**
-requires a separate confirmation, because the teacher role makes that person an
-organization owner. As with a student, the address goes onto the roster as a
-pending row and is matched to their GitHub account when they accept. See
-[Invitations by email](How-Classroom-50-Works#invitations-by-email).
+**Roster** page, click **Upload roster** and choose a file of addresses (one per
+line, or a roster CSV with an `email` column), then set each person's role in
+the preview's **Role** column, or supply a `role` column in the CSV. Rows marked
+**Teacher** show a warning before you confirm, because the teacher role makes
+that person an organization owner. As with a student, the address goes onto the
+roster as a pending row and is matched to their GitHub account when they accept.
+See [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
 `gh teacher roster invite` has no `--role` flag: it sends student invitations
 only, so a mistyped address can never be handed organization ownership. From the
@@ -85,7 +87,7 @@ assignments, submissions, and scores. The differences:
   enrolled since then appears after a teacher opens the roster (which syncs
   the file). Organization owners always see live membership.
 - **Collecting and regrading are for teachers and head TAs.** Both run
-  workflows in the classroom's config repository, which needs write access.
+  workflows in the `classroom50` repository, which needs write access.
   Head TAs have it and can use **Collect now** to refresh submission data
   themselves. TAs have read-only access, so they see a **Refresh** button
   that re-reads the latest collected data and live repository status, plus a
@@ -100,7 +102,8 @@ assignments, submissions, and scores. The differences:
 With read access, TAs can open each student's work and leave reviews on the
 [feedback pull request](Autograding-Basics#feedback-pull-requests). There is no
 automatic reviewer assignment yet; TAs pick up repositories from the
-submissions page (**Open all Feedback PRs** steps through them).
+submissions page. (**Open all feedback PRs**, which opens any missing feedback
+pull requests in bulk, is owner-only.)
 
 Because TAs and head TAs are ordinary organization members, graders don't
 need owner rights to do their work. If your institution's privacy rules (such

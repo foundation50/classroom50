@@ -169,18 +169,21 @@ names, fresh numbering.
 
 ## Resetting an organization (destructive)
 
-**Tear down organization** (web app: organization settings, Danger zone; CLI:
-`gh teacher teardown`) deletes every repository Classroom 50 manages in the
-organization, along with each classroom's GitHub team, after you type an
-explicit confirmation. The CLI also removes any invite teams it finds and
-sweeps each classroom's group teams, so no assignment's groups are left
-behind. Teardown
-exists for development resets and complete decommissioning.
+**Tear down organization** (web app: organization settings, **Danger zone**;
+CLI: `gh teacher teardown`) deletes **every** repository in the organization,
+not only the ones Classroom 50 created, along with each classroom's GitHub
+teams, after you type an explicit confirmation. The `classroom50` repository is
+deleted last, so an interrupted run can be re-run safely. The CLI also removes
+any invite teams it finds and sweeps each classroom's group teams, so no
+assignment's groups are left behind. Teardown exists for development resets and
+complete decommissioning.
 
 > [!WARNING]
-> Teardown deletes student work permanently. Export scores and download
-> submissions first. It requires the `delete_repo` scope, which the CLI only
-> requests when you opt in (`gh teacher login -s delete_repo`).
+> Teardown deletes every repository in the organization, including student work
+> and any repository you created by hand, permanently. Export scores and
+> download submissions first. It requires the `delete_repo` scope, which the
+> CLI only requests when you opt in (`gh teacher login -s delete_repo`) and the
+> web app requests on demand.
 
 ## Further reading
 
