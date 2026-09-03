@@ -99,16 +99,23 @@ export function collectedTagDetailItems(
   }))
 }
 
+// How a view labels a commit's author. `showAuthors` is on for a team's shared
+// repo, where the members' commits need telling apart, and off for an
+// individual repo, where the author is always the student. `authorName`
+// resolves a linked login to a roster name; only the teacher has a roster, so
+// the student view leaves it unset and sees logins.
+export type AuthorLabelOptions = {
+  showAuthors?: boolean
+  authorName?: (login: string) => string | undefined
+}
+
 // Map normalized push submissions to details-modal items, newest first (the
 // caller supplies them newest-first, matching both the collected history and
 // GitHub's default commit order). Numbered #N…#1 so the newest reads highest.
-// `showAuthors` attaches who made each commit: on for a team's shared repo,
-// where the members' commits need telling apart; off for an individual repo,
-// where the author is always the student.
 export function commitDetailItems(
   commits: PushSubmission[],
   t: Translate,
-  { showAuthors = false }: { showAuthors?: boolean } = {},
+  { showAuthors = false, authorName }: AuthorLabelOptions = {},
 ): SubmissionDetailItem[] {
   return commits.map((commit, i) => ({
     key: commit.key,
@@ -119,22 +126,28 @@ export function commitDetailItems(
       : undefined,
     href: safeHttpUrl(commit.commitHref),
     releaseHref: safeHttpUrl(commit.releaseHref),
-    author: showAuthors ? detailItemAuthor(commit.author) : undefined,
+    author: showAuthors
+      ? detailItemAuthor(commit.author, authorName)
+      : undefined,
     count: 1,
   }))
 }
 
-// The modal's author chip: the login when GitHub linked the commit to an
-// account (with its avatar), else the git author name, else nothing.
+// The modal's author chip. A linked account shows its roster name when the
+// view can resolve one, else the login, with its avatar either way; an unlinked
+// commit shows the git author name; a commit with neither shows nothing.
 function detailItemAuthor(
   author: CommitAuthor | undefined,
+  authorName: AuthorLabelOptions["authorName"],
 ): SubmissionDetailItem["author"] {
-  const label = author?.login ?? author?.name
-  if (!label) return undefined
-  return {
-    label,
-    avatarUrl: author?.login ? safeHttpUrl(author.avatarUrl) : undefined,
+  if (author?.login) {
+    return {
+      label: authorName?.(author.login) || author.login,
+      avatarUrl: safeHttpUrl(author.avatarUrl),
+    }
   }
+  if (!author?.name) return undefined
+  return { label: author.name, avatarUrl: undefined }
 }
 
 // The one type-aware item builder both views use: tag entries in tag mode, push
@@ -143,26 +156,27 @@ function detailItemAuthor(
 // unit), so the unused side is simply empty. In tag mode, when the detection
 // overlay is empty (a viewer without it) but collected tag submissions exist,
 // fall back to those so the modal never contradicts a positive count chip.
-// `showAuthors` (a team repo) labels each push with who made it.
+// `showAuthors` (a team repo) labels each push with who made it, by roster
+// name when `authorName` resolves one.
 export function buildSubmissionDetailItems(
   {
     tags,
     commits,
     collectedTags = [],
     showAuthors = false,
+    authorName,
   }: {
     tags: DetectedSubmission[]
     commits: PushSubmission[]
     collectedTags?: CollectedTagSubmission[]
-    showAuthors?: boolean
-  },
+  } & AuthorLabelOptions,
   mode: SubmissionMode | undefined,
   org: string,
   repo: string,
   t: Translate,
 ): SubmissionDetailItem[] {
   if (resolveSubmissionMode(mode) !== "tag") {
-    return commitDetailItems(commits, t, { showAuthors })
+    return commitDetailItems(commits, t, { showAuthors, authorName })
   }
   const detected = tagDetailItems(tags, org, repo, t)
   return detected.length > 0

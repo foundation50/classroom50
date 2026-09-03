@@ -989,10 +989,17 @@ describe("SubmissionsTable submission details modal", () => {
     const detectedEntries = [
       {
         kind: "commit" as const,
+        label: "ccc3333",
+        count: 1,
+        sha: "ccc3333",
+        author: { login: "alice", avatarUrl: "https://avatars/alice" },
+      },
+      {
+        kind: "commit" as const,
         label: "bbb2222",
         count: 1,
         sha: "bbb2222",
-        author: { login: "alice", avatarUrl: "https://avatars/alice" },
+        author: { login: "zed", avatarUrl: "https://avatars/zed" },
       },
       {
         kind: "commit" as const,
@@ -1020,22 +1027,25 @@ describe("SubmissionsTable submission details modal", () => {
         scores={[
           scoreRow({
             owner: "group-1",
-            usernames: ["alice", "bob"],
-            submissionCount: 2,
+            usernames: ["alice", "zed"],
+            submissionCount: 3,
             submissions: [],
             detectedEntries,
           }),
         ]}
-        acceptedUsernames={new Set(["alice", "bob"])}
+        acceptedUsernames={new Set(["alice", "zed"])}
       />,
     )
     await user.click(
       screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
     )
-    // Linked account: avatar + login. Unlinked commit: the git author name.
+    // Linked account on the roster: its roster name. Linked account off the
+    // roster: the login. Unlinked commit: the git author name.
     const byLines = screen.getAllByText("submissions.details.commitBy")
-    expect(byLines).toHaveLength(2)
-    expect(screen.getByText("alice")).toBeTruthy()
+    expect(byLines).toHaveLength(3)
+    expect(screen.getByText("Alice A")).toBeTruthy()
+    expect(screen.queryByText("alice")).toBeNull()
+    expect(screen.getByText("zed")).toBeTruthy()
     expect(screen.getByText("Bob Git")).toBeTruthy()
     teamView.unmount()
 
@@ -1047,7 +1057,7 @@ describe("SubmissionsTable submission details modal", () => {
         assignmentMode="every-push"
         scores={[
           scoreRow({
-            submissionCount: 2,
+            submissionCount: 3,
             submissions: [],
             detectedEntries,
           }),

@@ -61,6 +61,48 @@ describe("commitDetailItems", () => {
     expect(item.author).toEqual({ label: "Alice Git", avatarUrl: undefined })
   })
 
+  it("prefers the roster name for a linked login, falling back to the login", () => {
+    const roster: Record<string, string> = { alice: "Alice Anderson" }
+    const items = commitDetailItems(
+      [
+        {
+          key: "a",
+          author: { login: "alice", avatarUrl: "https://avatars/alice" },
+        },
+        {
+          key: "b",
+          author: { login: "bob", avatarUrl: "https://avatars/bob" },
+        },
+        // An unlinked commit has no login to resolve, so the resolver is skipped
+        // and the git author name stands.
+        { key: "c", author: { name: "Carol Git" } },
+      ],
+      t,
+      { showAuthors: true, authorName: (login) => roster[login] },
+    )
+    expect(items[0].author).toEqual({
+      label: "Alice Anderson",
+      avatarUrl: "https://avatars/alice",
+    })
+    expect(items[1].author).toEqual({
+      label: "bob",
+      avatarUrl: "https://avatars/bob",
+    })
+    expect(items[2].author).toEqual({
+      label: "Carol Git",
+      avatarUrl: undefined,
+    })
+  })
+
+  it("treats an empty resolved name as unavailable", () => {
+    const [item] = commitDetailItems(
+      [{ key: "a", author: { login: "alice" } }],
+      t,
+      { showAuthors: true, authorName: () => "" },
+    )
+    expect(item.author?.label).toBe("alice")
+  })
+
   it("guards the avatar URL and skips an authorless commit", () => {
     const items = commitDetailItems(
       [
@@ -80,15 +122,20 @@ describe("buildSubmissionDetailItems", () => {
     const items = buildSubmissionDetailItems(
       {
         tags: [],
-        commits: [{ key: "c", author: { login: "bob" } }],
+        commits: [
+          { key: "c", author: { login: "bob" } },
+          { key: "d", author: { login: "dan" } },
+        ],
         showAuthors: true,
+        authorName: (login) => (login === "bob" ? "Bob Brown" : undefined),
       },
       "every-push",
       "acme",
       "cs101-hw1-group-1",
       t,
     )
-    expect(items[0].author?.label).toBe("bob")
+    expect(items[0].author?.label).toBe("Bob Brown")
+    expect(items[1].author?.label).toBe("dan")
   })
   it("uses tag entries in tag mode", () => {
     const items = buildSubmissionDetailItems(
