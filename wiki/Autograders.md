@@ -3,15 +3,15 @@
 This page was split into four focused pages. Start from the one that matches
 your task:
 
-- **[Autograding Basics](Autograding-Basics)** — how grading works, grading
+- **[Autograding Basics](Autograding-Basics)**: how grading works, grading
   modes, declarative tests, which commits grade, reading results, and score
   exports.
-- **[Autograder Recipes](Autograder-Recipes)** — working setups for Python,
+- **[Autograder Recipes](Autograder-Recipes)**: working setups for Python,
   Java, C#, C and C++, Rust, and bring-your-own-CI.
-- **[Advanced Autograding](Advanced-Autograding)** — writing an
+- **[Advanced Autograding](Advanced-Autograding)**: writing an
   `autograder.py`, the `result.json` contract, the `runtime` block, and
   custom runner workflows.
-- **[Managing Actions cost](Managing-Actions-Cost)** — the cost playbook:
+- **[Managing Actions Cost](Managing-Actions-Cost)**: the cost playbook:
   submission types, pausing, self-hosted runners, and the spending cap.
 
 The headings below preserve links to this page's former sections; each
