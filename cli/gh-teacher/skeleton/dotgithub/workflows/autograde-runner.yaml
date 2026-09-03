@@ -1001,6 +1001,23 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ${{ needs.setup.outputs.apt }}
 
+      # GitHub-hosted images ship all of these, but a self-hosted runner or a
+      # custom container image may not (issue #863: `gh` is the usual gap).
+      # Without this check the job grades fine and then dies in the commit
+      # status / release steps with a bare `gh: command not found`. Runs after
+      # the toolchain steps so a setup-python-provided python3 counts.
+      - name: Check runner tools
+        run: |
+          set -euo pipefail
+          MISSING=()
+          for TOOL in git curl python3 gh; do
+            command -v "$TOOL" >/dev/null 2>&1 || MISSING+=("$TOOL")
+          done
+          if (( ${#MISSING[@]} > 0 )); then
+            echo "::error::This runner is missing tools the grade job needs: ${MISSING[*]}. Install them on the self-hosted runner or in the container image, then re-run. See https://github.com/foundation50/classroom50/wiki/Advanced-Autograding#the-runtime-block"
+            exit 1
+          fi
+
       # === Run runner.py (which execs the autograder) ===
       # runner.py is fetched fresh every run so updates to the
       # runner-side bootstrap propagate without editing this file.

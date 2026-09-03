@@ -787,6 +787,17 @@ this used to mean a missing `pytest`; the built-in autograder now installs
   your tests import there. See the
   [Python recipe](Autograder-Recipes#python).
 
+### `gh: command not found` or "Check runner tools" fails on a self-hosted runner
+
+The grade job itself needs a few programs besides your assignment's toolchain:
+`git`, `curl`, `python3`, and the GitHub CLI (`gh`), which posts the commit
+status and publishes the submission release. GitHub-hosted runners preinstall
+all of them; a self-hosted runner or a custom `container` image has only what
+you installed, and `gh` is the usual gap. Install the missing ones on the
+runner and re-run the workflow. The **Check runner tools** step lists
+everything missing at once. See
+[Custom and self-hosted runners](Advanced-Autograding#the-runtime-block).
+
 ### `tests.json is a bare test array` or `tests.json is not a JSON object` in the grading log
 
 Every submission ends as an error, and the **Grade details** step says the

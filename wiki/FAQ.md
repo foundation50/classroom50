@@ -248,7 +248,9 @@ and what each one trades away.
 Yes. Set `runs-on` in the assignment's runtime to your self-hosted labels (for
 example `["self-hosted", "gpu"]`). Self-hosted runners keep their own
 toolchains, so Classroom 50 skips managed toolchain setup on them. Provision
-what your assignments need in the runner image. See
+what your assignments need in the runner image, plus the tools the grade job
+itself calls: `git`, `curl`, `python3`, and the GitHub CLI (`gh`), which
+GitHub-hosted runners preinstall but the runner agent doesn't install. See
 [The `runtime` block](Advanced-Autograding#the-runtime-block).
 
 ### Can the autograder show students *why* a test failed?
