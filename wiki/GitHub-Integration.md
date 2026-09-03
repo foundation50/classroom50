@@ -296,22 +296,42 @@ browser itself must reach these hosts.
 
 ### The GitHub proxy
 
-A browser can't do everything GitHub requires directly, so the web app sends two
-operations through a small proxy. It defaults to the Fifty Foundation Cloudflare
-Worker at `classroom50.fifty-foundation.workers.dev`:
+Two GitHub endpoints refuse cross-origin requests from a browser, so the web
+app sends those two operations, and only those two, through a small proxy. It
+defaults to the Fifty Foundation Cloudflare Worker at
+`classroom50.fifty-foundation.workers.dev`:
 
 1. **OAuth sign-in**, both the browser redirect flow and the device-code flow.
-   Exchanging the login code for an access token needs the OAuth client secret,
-   which can't be shipped in browser JavaScript. The proxy holds the secret and
-   performs the exchange.
+   GitHub's token endpoint sends no CORS headers, and exchanging the login code
+   for an access token needs the OAuth client secret, which can't be shipped in
+   browser JavaScript. The proxy holds the secret and performs the exchange.
 2. **Repository downloads.** GitHub's archive endpoint redirects to
    `codeload.github.com`, which doesn't send the CORS headers a browser needs to
    follow the redirect. The proxy follows it server-side and streams the zip
    back.
 
+The proxy is stateless: it keeps no copy of tokens or downloaded files, holds
+nothing between requests, and accepts requests only from the Classroom 50 web
+app's own origins. What passes through it:
+
+| Operation | What the proxy handles |
+|---|---|
+| Sign-in | The one-time login code from GitHub and the access token GitHub returns for it. |
+| Repository download | Your access token, used for that one request, and the zip archive as it streams to your browser. |
+
+Both limits are GitHub's, not design choices, and the proxy exists only until
+GitHub lifts them. [Issue #877](https://github.com/foundation50/classroom50/issues/877)
+tracks the workaround and the upstream work: the
+[single page app support for GitHub Apps](https://github.com/github/roadmap/issues/1153)
+item on the GitHub roadmap would remove the sign-in half, and the download half
+waits on CORS support for `codeload.github.com`
+([octokit/rest.js#3](https://github.com/octokit/rest.js/issues/3)).
+
 The proxy is configurable: set `VITE_GITHUB_PROXY_BASE` at build time to point
-the app at your own proxy instead of the default worker. Everything else the web
-app does talks to `api.github.com` directly and doesn't involve the proxy.
+the app at your own proxy instead of the default worker (the source is
+[`cloudflare_worker.js`](https://github.com/foundation50/classroom50/blob/main/cloudflare_worker.js)).
+Everything else the web app does talks to `api.github.com` directly and doesn't
+involve the proxy, and the `gh teacher` and `gh student` CLIs never use it.
 
 ### If the proxy domain is blocked
 
@@ -337,6 +357,47 @@ Some networks can't allow `workers.dev`. When the proxy is unreachable:
 - **A fuller fix:** host the proxy yourself on a domain your network already
   allows and point `VITE_GITHUB_PROXY_BASE` at it. This restores both the normal
   sign-in and repository downloads.
+
+---
+
+## Privacy and FERPA
+
+Classroom 50 doesn't collect, store, or process student records. It has no
+server, database, or account system of its own, so there is no Classroom 50
+data to request, export, or delete. Every classroom record (roster, assignment
+repositories, scores, feedback) lives in your GitHub organization under your
+organization's own access controls, and Classroom 50 acts on it only with a
+token you or your students grant. If your institution needs a data processing
+agreement, the party to that agreement is GitHub; see the
+[GitHub Data Protection Agreement](https://github.com/customer-terms/github-data-protection-agreement).
+
+How each surface reaches GitHub:
+
+| Surface | Where data goes |
+|---|---|
+| Web app | Your browser talks to `api.github.com` directly. Sign-in and repository downloads pass through the stateless proxy described in [The GitHub proxy](#the-github-proxy); signing in with a personal access token skips the proxy entirely. |
+| `gh teacher` and `gh student` | Your machine talks to GitHub directly. The CLIs never use the proxy. |
+| Autograding and score collection | Run in GitHub Actions inside your organization, and results are stored in your organization's repositories. |
+
+Classroom 50 can't make a course FERPA compliant on its own: compliance depends
+on how your institution and GitHub handle the data. What you can control is how
+much student data reaches GitHub in the first place:
+
+- **Pseudonymous accounts.** Students don't need to give GitHub a real name or a
+  school email. Let them use a pseudonym, and keep the mapping from pseudonym to
+  student in your institution's own systems.
+- **Roster contents.** The roster holds only the columns you give it, and only a
+  GitHub username or id is required. Leave out names, and use `section` labels
+  that don't identify anyone. Inviting by email sends that address to GitHub as
+  an organization invitation. See [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
+- **A small teacher role.** Organization owners can reach every repository.
+  Keep that group small and use the head TA and TA roles for graders. See
+  [Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers).
+- **End-of-term cleanup.** Archive or delete student repositories when the
+  course ends. See [End of term](Course-Lifecycle-and-End-of-Term#end-of-term).
+
+This section describes how Classroom 50 handles data; it isn't legal advice.
+Confirm your obligations with your institution's privacy office.
 
 ---
 

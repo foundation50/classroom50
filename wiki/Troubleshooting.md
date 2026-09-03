@@ -47,18 +47,21 @@ Workarounds:
 
 ### "Couldn't reach the sign-in service"
 
-Browser sign-in routes the OAuth exchange through a small Cloudflare Worker,
-and this message ("Couldn't reach the sign-in service. It may be down. Check
-your connection and try again.") means your browser couldn't reach it. Two
-causes:
+Browser sign-in routes the OAuth exchange through a small Cloudflare Worker
+(see [The GitHub proxy](GitHub-Integration#the-github-proxy) for what it does
+and why), and this message ("Couldn't reach the sign-in service. It may be
+down. Check your connection and try again.") means your browser couldn't reach
+it. Two causes:
 
 - **You're offline.** Check your connection; the app shows a separate
   "You appear to be offline" notice when it can tell.
 - **A school or corporate filter blocks the proxy.** Ask IT to allow the
   domains in
   [Network and allowed domains](GitHub-Integration#network-and-allowed-domains),
-  or select **Sign in with token** to sign in with a personal access token,
-  which skips the proxy entirely.
+  or sign in with a personal access token, which skips the proxy entirely: on
+  the sign-in card, click **Other sign-in methods**, then click **Use a
+  personal access token (classic)** or **Use a personal access token
+  (fine-grained)**.
 
 ### `redirect_uri is not associated with this application`
 
