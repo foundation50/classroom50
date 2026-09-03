@@ -14,6 +14,8 @@ import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import type { Student } from "@/types/classroom"
 import type { StudentSortMode } from "@/util/students"
+import type { ClassroomRole } from "@/util/teamRoster"
+import { RoleBadges } from "@/pages/students/RoleBadges"
 
 // Secondary avatar line: the GitHub login plus the section (e.g.
 // "octocat · Period 3"), dropping whichever piece is missing. The login is
@@ -101,6 +103,23 @@ export const PublicRepoBadge = () => {
       <GlobeIcon aria-hidden="true" className="size-3" />
       {t("submissions.publicRepo.badge")}
     </Badge>
+  )
+}
+
+// Role chips marking a teaching-staff row (a teacher/head TA/TA who accepted
+// the assignment to test it), so their rows read apart from students' at a
+// glance. Nothing for a plain student, which is the norm. The chips reuse the
+// roster's RoleBadges; the wrapper carries the "why is staff listed" hint.
+export const StaffRoleBadges = ({ roles }: { roles?: ClassroomRole[] }) => {
+  const { t } = useTranslation()
+  if (!roles || roles.length === 0) return null
+  return (
+    <span
+      className="inline-flex flex-wrap items-center gap-1"
+      title={t("submissions.table.staffRowTitle")}
+    >
+      <RoleBadges roles={roles} />
+    </span>
   )
 }
 
@@ -417,6 +436,7 @@ export const NonSubmitterRow = ({
   thresholdFraction = null,
   nameMode = "first",
   publicRepo = false,
+  staffRoles,
 }: {
   student: Student
   students: Student[]
@@ -448,6 +468,9 @@ export const NonSubmitterRow = ({
   // Whether this student's (accepted) repo is currently public — renders the
   // warning badge beside the status chip.
   publicRepo?: boolean
+  // Staff roles this row holds (teacher/head TA/TA); renders the role chips
+  // beside the name. Absent for a plain student.
+  staffRoles?: ClassroomRole[]
 }) => {
   const canGrade =
     overrideGrade?.mode === "manual" &&
@@ -457,19 +480,22 @@ export const NonSubmitterRow = ({
   const cells = (
     <>
       <td>
-        <Avatar
-          name={getDisplayName(student.username, students, nameMode)}
-          initials={getInitials(student.username, students)}
-          github={student.username || student.email}
-          subtitle={identitySubtitle(
-            getName(student.username, students),
-            student.username,
-            student.section,
-          )}
-          onClick={
-            student.username ? () => onProfile(student.username) : undefined
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Avatar
+            name={getDisplayName(student.username, students, nameMode)}
+            initials={getInitials(student.username, students)}
+            github={student.username || student.email}
+            subtitle={identitySubtitle(
+              getName(student.username, students),
+              student.username,
+              student.section,
+            )}
+            onClick={
+              student.username ? () => onProfile(student.username) : undefined
+            }
+          />
+          <StaffRoleBadges roles={staffRoles} />
+        </div>
       </td>
       {/* Team mode's Members column: a student on no team has no count. */}
       {isTeam && <td>—</td>}

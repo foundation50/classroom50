@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent } from "@testing-library/react"
 import type { ReactNode } from "react"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -39,14 +39,16 @@ vi.mock("@/components/ui", async (importOriginal) => {
   }
 })
 
-const studentCount = vi.fn()
+const funnelRoster = vi.fn()
 const getStudents = vi.fn()
 const getClassroom = vi.fn()
 const getAssignments = vi.fn()
 
-vi.mock("@/hooks/useStudentCount", () => ({
-  default: (...a: unknown[]) => studentCount(...a),
-}))
+vi.mock("@/hooks/useFunnelRoster", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useFunnelRoster")>()
+  return { ...actual, default: (...a: unknown[]) => funnelRoster(...a) }
+})
 vi.mock("@/hooks/useGetStudents", () => ({
   default: (...a: unknown[]) => getStudents(...a),
 }))
@@ -82,7 +84,22 @@ vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
 // Stub the heavy children so the test targets only the page's own wiring. The
 // toolbar mock exposes its slots so the collect-action gating is observable;
 // the collect button itself is covered in ClassroomCollectButton.test.tsx.
-vi.mock("@/pages/assignments/AssignmentsTable", () => ({ default: () => null }))
+// The table mock echoes the funnel props so the toggle's effect is observable.
+vi.mock("@/pages/assignments/AssignmentsTable", () => ({
+  default: ({
+    roster,
+    includeStaff,
+  }: {
+    roster?: { counted: ReadonlySet<string> }
+    includeStaff?: boolean
+  }) => (
+    <div
+      data-testid="table"
+      data-counted={roster ? [...roster.counted].sort().join(",") : ""}
+      data-include-staff={String(Boolean(includeStaff))}
+    />
+  ),
+}))
 vi.mock("@/pages/assignments/AssignmentsToolbar", () => ({
   default: ({
     leading,
@@ -103,10 +120,40 @@ vi.mock("@/pages/assignments/ClassroomCollectButton", () => {
 })
 
 import { TeacherAssignmentsView } from "./AssignmentsPage"
+import { INCLUDE_STAFF_STORAGE_KEY } from "@/lib/includeStaffPref"
+
+// happy-dom doesn't back window.localStorage here, so install a minimal
+// in-memory store (same shape the HiddenOrgsProvider / useTheme tests use).
+function installLocalStorage() {
+  const store = new Map<string, string>()
+  Object.defineProperty(window, "localStorage", {
+    value: {
+      getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
+      setItem: (k: string, v: string) => void store.set(k, String(v)),
+      removeItem: (k: string) => void store.delete(k),
+      clear: () => store.clear(),
+      key: (i: number) => [...store.keys()][i] ?? null,
+      get length() {
+        return store.size
+      },
+    },
+    configurable: true,
+  })
+}
+
+// A resolved funnel roster: `students` and `staff` logins (staff may overlap).
+const resolvedRoster = (students: string[], staff: string[] = []) => ({
+  studentLogins: new Set(students),
+  staffLogins: new Set(staff),
+  isLoading: false,
+  isError: false,
+  isUnknown: false,
+})
 
 beforeEach(() => {
+  installLocalStorage()
   orgRepoCreationWarning.mockReturnValue({ show: false })
-  studentCount.mockReset()
+  funnelRoster.mockReset()
   getStudents.mockReset()
   getClassroom.mockReset()
   getAssignments.mockReset()
@@ -123,30 +170,36 @@ afterEach(cleanup)
 describe("Assignments header student count", () => {
   it("renders the role-aware count, not the total roster row count", () => {
     getStudents.mockReturnValue({ students: new Array(14).fill({}) })
-    studentCount.mockReturnValue({
-      studentCount: 11,
-      isLoading: false,
-      isError: false,
-    })
+    funnelRoster.mockReturnValue(
+      resolvedRoster(
+        Array.from({ length: 11 }, (_, i) => `s${i}`),
+        ["prof", "ta"],
+      ),
+    )
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
     expect(screen.getByText(/assignments\.studentCount:11/)).toBeTruthy()
+    expect(screen.queryByText(/assignments\.staffCount/)).toBeNull()
   })
 
   it("shows the loading placeholder until the count resolves", () => {
-    studentCount.mockReturnValue({
-      studentCount: undefined,
+    funnelRoster.mockReturnValue({
+      studentLogins: undefined,
+      staffLogins: undefined,
       isLoading: true,
       isError: false,
+      isUnknown: false,
     })
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
     expect(screen.getByText("…")).toBeTruthy()
   })
 
   it("hides the count entirely on a role-count error, not a wrong number", () => {
-    studentCount.mockReturnValue({
-      studentCount: undefined,
+    funnelRoster.mockReturnValue({
+      studentLogins: undefined,
+      staffLogins: undefined,
       isLoading: false,
       isError: true,
+      isUnknown: false,
     })
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
     // Not the loading "…" either — that reads as still-loading forever.
@@ -155,16 +208,65 @@ describe("Assignments header student count", () => {
   })
 })
 
+// The "Include teaching staff" toggle widens what the table counts from the
+// student team to the union of the student and staff teams (#860), and is
+// remembered per browser.
+describe("Include teaching staff toggle", () => {
+  const assignments = [{ slug: "hw1", mode: "individual" }]
+  const renderView = () => {
+    getAssignments.mockReturnValue({ data: { assignments }, isLoading: false })
+    // "dual" is a TA who is also on the student team: counted once.
+    funnelRoster.mockReturnValue(
+      resolvedRoster(["alice", "dual"], ["prof", "dual"]),
+    )
+    render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
+  }
+  const toggle = () =>
+    screen.getByRole("checkbox", { name: /assignments\.includeStaff/ })
+  const table = () => screen.getByTestId("table")
+
+  it("counts students only by default", () => {
+    renderView()
+    expect(table().dataset.counted).toBe("alice,dual")
+    expect(table().dataset.includeStaff).toBe("false")
+  })
+
+  it("adds staff to the counted set, once each, when switched on", () => {
+    renderView()
+    fireEvent.click(toggle())
+    expect(table().dataset.counted).toBe("alice,dual,prof")
+    expect(table().dataset.includeStaff).toBe("true")
+    // The header adds the staff-only head count so the denominator adds up.
+    expect(screen.getByText(/assignments\.staffCount:1/)).toBeTruthy()
+  })
+
+  it("persists the choice and restores it on the next render", () => {
+    renderView()
+    fireEvent.click(toggle())
+    expect(window.localStorage.getItem(INCLUDE_STAFF_STORAGE_KEY)).toBe("1")
+    cleanup()
+    renderView()
+    expect(table().dataset.counted).toBe("alice,dual,prof")
+  })
+
+  it("is absent on an archived classroom", () => {
+    getClassroom.mockReturnValue({
+      data: { name: "CS 101", active: false },
+      isLoading: false,
+    })
+    renderView()
+    expect(
+      screen.queryByRole("checkbox", { name: /assignments\.includeStaff/ }),
+    ).toBeNull()
+  })
+})
+
 // The drift-after-creation case: a teacher who created assignments before the
 // setting flipped never reopens create or edit, so without the list surface the
 // warning never reaches them and students accept days later.
 describe("Assignments org repo-creation warning", () => {
   const renderView = () => {
-    studentCount.mockReturnValue({
-      studentCount: 1,
-      isLoading: false,
-      isError: false,
-    })
+    funnelRoster.mockReturnValue(resolvedRoster(["alice"]))
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
   }
 
@@ -195,11 +297,7 @@ describe("Assignments org repo-creation warning", () => {
 describe("Classroom-wide collect visibility", () => {
   const assignments = [{ slug: "hw1", type: "individual" }]
   const renderView = () => {
-    studentCount.mockReturnValue({
-      studentCount: 1,
-      isLoading: false,
-      isError: false,
-    })
+    funnelRoster.mockReturnValue(resolvedRoster(["alice"]))
     render(<TeacherAssignmentsView org="acme" classroom="cs101" />)
   }
 

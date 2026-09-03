@@ -11,7 +11,7 @@ import type { DetectedSubmission } from "@/domain/assignments/submissionDetectio
 import type { Assignment, Student } from "@/types/classroom"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { BadgeTone } from "@/components/ui"
-import type { TeamRosterRow } from "@/util/teamRoster"
+import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import {
@@ -97,6 +97,23 @@ export function submissionRosterStudents(
     if (acceptedStaffLogins.has(login) || groupRepoMembers.has(login)) {
       out.push(rowToStudent(row))
     }
+  }
+  return out
+}
+
+// Lowercased login -> the staff roles an enrolled member holds, for the row
+// badge that marks a teacher/head TA/TA testing an assignment. Student-only
+// members are absent, so a lookup miss means "plain student, no badge".
+export function staffRolesByLogin(
+  teamRows: TeamRosterRow[],
+): Map<string, ClassroomRole[]> {
+  const out = new Map<string, ClassroomRole[]>()
+  for (const row of teamRows) {
+    if (row.state !== "enrolled") continue
+    const login = row.username.trim().toLowerCase()
+    if (!login) continue
+    const staff = row.roles.filter((role) => role !== "student")
+    if (staff.length > 0) out.set(login, staff)
   }
   return out
 }
@@ -1654,6 +1671,19 @@ export type AssignmentFunnelCounts = {
   submitted: number
   accepted: number | undefined
   notCollected: boolean
+  // Existing repos of excluded staff (see FunnelRoster). 0 without a roster.
+  hiddenStaffRepos: number
+}
+
+// Who the assignments table's funnel counts, keyed by lowercased login so the
+// numerators can be joined to the same people the denominator counts.
+export type FunnelRoster = {
+  // Denominator members: students, or students plus staff when the
+  // "Include teaching staff" toggle is on.
+  counted: ReadonlySet<string>
+  // Staff left out of `counted` (toggle off). Their repos are tallied
+  // separately so the cell can say what it hides and how to reveal it.
+  excludedStaff: ReadonlySet<string>
 }
 
 // The assignments table's per-row funnel, shared by its Accepted and Submitted
@@ -1675,14 +1705,27 @@ export type AssignmentFunnelCounts = {
 // `accepted`: this assignment's existing repos, reverse-parsed from the org repo
 // list. Individual student repos and group repos share the
 // <classroom>-<slug>-<owner> name shape, so one parse serves both modes.
+//
+// With a `roster`, an individual assignment's `accepted` and `submitted` count
+// only owners in `roster.counted`, so both stay within the denominator by
+// construction (a staff test repo, or a dropped student's, no longer inflates
+// them). Shared-repo modes are keyed by group owner, not login, and keep the
+// raw counts; so does every mode while the roster is unresolved.
 export function assignmentFunnelCounts(
   assignment: Assignment,
   scores: NormalizedScores | undefined,
   orgRepos: GitHubRepo[] | null | undefined,
   classroom: string,
   siblingSlugs: readonly string[],
+  roster?: FunnelRoster,
 ): AssignmentFunnelCounts {
-  const gradedRows = scores?.submissions?.[assignment.slug] ?? []
+  const join = roster && assignment.mode === "individual" ? roster : undefined
+  const counts = (owner: unknown) =>
+    !join ||
+    (typeof owner === "string" && join.counted.has(owner.toLowerCase()))
+  const gradedRows = (scores?.submissions?.[assignment.slug] ?? []).filter(
+    (row) => counts(row.owner),
+  )
   const detectedRows = scores?.detected?.[assignment.slug]
   const gradedOwners = new Set(
     gradedRows.flatMap((row) =>
@@ -1690,17 +1733,21 @@ export function assignmentFunnelCounts(
     ),
   )
   const detectedOnly = (detectedRows ?? []).filter(
-    (row) => !gradedOwners.has(row.owner.toLowerCase()),
+    (row) => !gradedOwners.has(row.owner.toLowerCase()) && counts(row.owner),
   ).length
+  const repos = orgRepos
+    ? existingGroupRepos(orgRepos, classroom, assignment.slug, siblingSlugs)
+    : undefined
   return {
     submitted: gradedRows.length + detectedOnly,
-    accepted: orgRepos
-      ? existingGroupRepos(orgRepos, classroom, assignment.slug, siblingSlugs)
-          .length
-      : undefined,
+    accepted: repos?.filter((repo) => counts(repo.owner)).length,
     notCollected:
       isNoAutograderAssignment(assignment) &&
       !detectedRows &&
       gradedRows.length === 0,
+    hiddenStaffRepos: join
+      ? (repos ?? []).filter((repo) => join.excludedStaff.has(repo.owner))
+          .length
+      : 0,
   }
 }

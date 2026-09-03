@@ -93,6 +93,7 @@ import {
   showsNonSubmitters,
   snapshotIsStale,
   sortNameMode,
+  staffRolesByLogin,
   studentInSection,
   submissionRosterStudents,
   teamsWithoutRepos,
@@ -428,6 +429,9 @@ const SubmissionsPageContent = () => {
       ),
     [teamRows, acceptedStaffLogins, groupRepoFounders, rosterSortMode],
   )
+  // Staff roles per login, for the row chips that mark a teacher/TA testing
+  // the assignment (they enter the spine via acceptedStaffLogins above).
+  const staffRoles = useMemo(() => staffRolesByLogin(teamRows), [teamRows])
   // Gate Regrade all / Collect now on an empty roster: dispatching with no
   // students is wasted effort. `show` is loading-aware (won't flash before the
   // roster resolves).
@@ -1717,6 +1721,7 @@ const SubmissionsPageContent = () => {
           isTeam={isTeamAssignment}
           groupDisplayNames={groupDisplayNames}
           groupMemberLogins={groupMemberLogins}
+          staffRolesByLogin={staffRoles}
           teamsByOwner={isTeamAssignment ? teamByOwner : undefined}
           teamsWithoutRepos={
             isTeamAssignment ? visibleMissingRepoTeams : undefined

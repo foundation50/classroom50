@@ -36,7 +36,10 @@ import { ClaimTeacherNotice } from "./classes/ClaimTeacherNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useStudentCount from "@/hooks/useStudentCount"
+import useFunnelRoster, { unionLogins } from "@/hooks/useFunnelRoster"
+import { IncludeStaffToggle } from "@/pages/assignments/IncludeStaffToggle"
+import { persistIncludeStaff, readIncludeStaff } from "@/lib/includeStaffPref"
+import type { FunnelRoster } from "@/pages/submissions/dashboard"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -132,15 +135,44 @@ export const TeacherAssignmentsView = ({
     assignmentsErrorObj instanceof GitHubAPIError &&
     assignmentsErrorObj.status === 404
   const assignmentsError = Boolean(assignmentsErrorObj) && !assignmentsNotFound
-  // Authoritative student-role count for the header and the table denominator,
-  // so neither counts teachers/TAs. The count comes from team membership
-  // (one source); roster.csv identity is fetched by useStudentCount internally.
+  // Who the header and the table's funnel count. Team membership is the one
+  // source (roster.csv identity is fetched inside useFunnelRoster); the toggle
+  // widens the counted set from students to students plus teaching staff so a
+  // staff test run registers (#860).
   const {
-    studentCount,
+    studentLogins,
+    staffLogins,
     isLoading: studentsLoading,
     isError: studentCountError,
     isUnknown: studentCountUnknown,
-  } = useStudentCount(org, classroom)
+  } = useFunnelRoster(org, classroom)
+  const [includeStaff, setIncludeStaff] = useState(readIncludeStaff)
+  const toggleIncludeStaff = (on: boolean) => {
+    setIncludeStaff(on)
+    persistIncludeStaff(on)
+  }
+  // Staff who are not also students, so a TA on the student team is never
+  // counted twice (in the header or the union).
+  const staffOnly = useMemo(
+    () =>
+      staffLogins && studentLogins
+        ? new Set([...staffLogins].filter((l) => !studentLogins.has(l)))
+        : undefined,
+    [staffLogins, studentLogins],
+  )
+  const roster = useMemo<FunnelRoster | undefined>(() => {
+    if (!studentLogins || !staffOnly) return undefined
+    return includeStaff
+      ? {
+          counted: unionLogins(studentLogins, staffOnly),
+          excludedStaff: new Set(),
+        }
+      : { counted: studentLogins, excludedStaff: staffOnly }
+  }, [studentLogins, staffOnly, includeStaff])
+  const studentCount = studentLogins?.size
+  const staffOnlyCount = staffOnly?.size ?? 0
+  const countKnown =
+    !studentsLoading && !studentCountError && !studentCountUnknown
   const {
     data: classroomData,
     isLoading: classroomLoading,
@@ -207,6 +239,21 @@ export const TeacherAssignmentsView = ({
         emptyRoster={emptyRoster.show}
       />
     ) : null
+  // Beside Collect all: the two together are "what the counts measure".
+  // Available to every staff viewer (a TA testing an assignment is the case),
+  // but pointless on an archived classroom.
+  const leadingActions =
+    hasAssignments && !archived ? (
+      <>
+        {collectAction}
+        <IncludeStaffToggle
+          checked={includeStaff}
+          onChange={toggleIncludeStaff}
+        />
+      </>
+    ) : (
+      collectAction
+    )
 
   return (
     <div className="flex flex-col gap-6">
@@ -232,6 +279,11 @@ export const TeacherAssignmentsView = ({
                 studentCountError || studentCountUnknown
                 ? null
                 : t("assignments.studentCount", { count: studentCount ?? 0 })}
+            {/* With staff counted, say how many so the table's denominator
+                adds up against the header. */}
+            {countKnown && includeStaff
+              ? ` • ${t("assignments.staffCount", { count: staffOnlyCount })}`
+              : null}
           </>
         }
       />
@@ -269,7 +321,7 @@ export const TeacherAssignmentsView = ({
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          leading={collectAction}
+          leading={leadingActions}
           trailing={primaryAction}
         />
       )}
@@ -294,7 +346,8 @@ export const TeacherAssignmentsView = ({
           secretPending={classroomLoading || classroomError}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
-          studentCount={studentCount}
+          roster={roster}
+          includeStaff={includeStaff}
           loading={assignmentsLoading}
           loadError={assignmentsError}
           onRetryLoad={() => void refetchAssignments()}
@@ -311,9 +364,9 @@ export const TeacherAssignmentsView = ({
           acceptanceComplete={acceptanceComplete}
           sort={sort}
           onSortChange={setSort}
-          // Replay the row entrance on filter/sort changes; search is excluded
-          // so typing doesn't remount the rows on every keystroke.
-          viewSignature={`${JSON.stringify(filters)}|${sort}`}
+          // Replay the row entrance on filter/sort/toggle changes; search is
+          // excluded so typing doesn't remount the rows on every keystroke.
+          viewSignature={`${JSON.stringify(filters)}|${sort}|${includeStaff}`}
         />
       )}
     </div>

@@ -49,6 +49,7 @@ import {
   GroupRepoRow,
   NonSubmitterRow,
   PublicRepoBadge,
+  StaffRoleBadges,
   TeamMembersCountCell,
   TeamWithoutRepoRow,
   identitySubtitle,
@@ -90,6 +91,7 @@ import { submissionModeCountKey } from "@/domain/assignments/submissionDetection
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDisplayName } from "@/util/groupTeam"
 import type { Student, SubmissionMode, TeamFormation } from "@/types/classroom"
+import type { ClassroomRole } from "@/util/teamRoster"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import { blockEnter } from "@/lib/motion"
@@ -273,6 +275,7 @@ const SubmissionsTable = ({
   isTeam = false,
   groupDisplayNames,
   groupMemberLogins,
+  staffRolesByLogin,
   teamsByOwner,
   teamsWithoutRepos = [],
   teamsSettled = false,
@@ -323,6 +326,9 @@ const SubmissionsTable = ({
   // name / live member logins.
   groupDisplayNames?: ReadonlyMap<string, string>
   groupMemberLogins?: ReadonlyMap<string, string[]>
+  // Lowercased login -> staff roles, for the badge that marks a teacher/head
+  // TA/TA row (staff testing the assignment). A student-only login is absent.
+  staffRolesByLogin?: ReadonlyMap<string, ClassroomRole[]>
   // Team mode: owner segment -> the full team ref (slug recorded on override
   // entries; the whole ref feeds the shared manage-group dialog).
   teamsByOwner?: ReadonlyMap<string, GroupTeamRef>
@@ -548,6 +554,9 @@ const SubmissionsTable = ({
   const isPublicRepo = (repoName: string) =>
     Boolean(publicRepoNames?.has(repoName.toLowerCase()))
 
+  const staffRoles = (login: string) =>
+    staffRolesByLogin?.get(login.trim().toLowerCase())
+
   // A group row's display label: the team's record name for team mode
   // ("Group <n>" default supplied by the page), else the repo name.
   const groupLabel = (owner: string, repo: string) =>
@@ -681,6 +690,7 @@ const SubmissionsTable = ({
                 )}
                 onClick={() => setProfileUsername(usernames[0])}
               />
+              <StaffRoleBadges roles={staffRoles(usernames[0])} />
               {isPublicRepo(repo) ? <PublicRepoBadge /> : null}
             </div>
           )}
@@ -1071,6 +1081,7 @@ const SubmissionsTable = ({
                     }
                     thresholdFraction={passBar}
                     nameMode={nameDisplayMode}
+                    staffRoles={staffRoles(student.username)}
                     publicRepo={
                       Boolean(student.username) &&
                       isPublicRepo(
