@@ -38,19 +38,21 @@ const renderConfirm = (
 // renders only what the caller supplies, so a reversible action can't inherit
 // an irreversibility claim by default.
 describe("ConfirmModal — warning slot", () => {
-  it("renders nothing in the callout slot without a warning", () => {
-    renderConfirm({ needsConfirm: false })
-    expect(screen.queryByText(/undo/i)).toBeNull()
-    expect(screen.queryByTestId("warning")).toBeNull()
+  const callout = (root: HTMLElement) =>
+    root.querySelector(".rounded-box.border")
+
+  it("renders no callout without a warning", () => {
+    const { view } = renderConfirm({ needsConfirm: false })
+    expect(callout(view.baseElement)).toBeNull()
   })
 
   it("renders the caller's warning on the acknowledge step and drops it on the typed step", () => {
-    renderConfirm({ warning: <span data-testid="warning">own copy</span> })
-    expect(screen.getByTestId("warning")).toBeTruthy()
+    const { view } = renderConfirm({ warning: "own copy" })
+    expect(callout(view.baseElement)?.textContent).toBe("own copy")
 
     fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
 
-    expect(screen.queryByTestId("warning")).toBeNull()
+    expect(callout(view.baseElement)).toBeNull()
   })
 })
 
