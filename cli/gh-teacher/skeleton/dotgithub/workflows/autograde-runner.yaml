@@ -1001,6 +1001,26 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ${{ needs.setup.outputs.apt }}
 
+      # Fail early with a clear message instead of `gh: command not found`
+      # after grading (issue #863). Placed after the toolchain steps so a
+      # setup-python-provided python3 counts. Only tools whose absence already
+      # fails the job are fatal; runner.py degrades on purpose without git.
+      - name: Check runner tools
+        run: |
+          set -euo pipefail
+          WIKI="https://github.com/foundation50/classroom50/wiki/Advanced-Autograding#the-runtime-block"
+          MISSING=()
+          for TOOL in curl python3 gh; do
+            command -v "$TOOL" >/dev/null 2>&1 || MISSING+=("$TOOL")
+          done
+          if (( ${#MISSING[@]} > 0 )); then
+            echo "::error::This runner is missing tools the grade job needs: ${MISSING[*]}. Install them on the self-hosted runner or in the container image, then re-run. See $WIKI"
+            exit 1
+          fi
+          if ! command -v git >/dev/null 2>&1; then
+            echo "::warning::git is not installed on this runner. Grading continues, but allowed_files is not enforced, the review diff link is missing, and submission timestamps fall back to the grading time. Install git to restore them. See $WIKI"
+          fi
+
       # === Run runner.py (which execs the autograder) ===
       # runner.py is fetched fresh every run so updates to the
       # runner-side bootstrap propagate without editing this file.

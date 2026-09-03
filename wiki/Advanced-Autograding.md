@@ -296,6 +296,27 @@ those into the runner image; `runner.py` still installs `pytest` /
 `pytest-json-report` on demand. Detection uses `runner.environment`, so keep
 the runner agent (v2.294.0 or later) up to date.
 
+**Self-hosted runners must supply the grading tools too.** GitHub-hosted
+images preinstall them, but the Actions runner agent installs none of them, so
+the runner has only what you put there. Make sure these are on the runner (or
+in its image) before pointing an assignment at it:
+
+- `bash`: every grade step runs with `shell: bash`. Present on any Linux or
+  macOS host; it matters for minimal container images.
+- `curl`: fetches `runner.py` from your classroom's Pages site.
+- `python3` with `pip`: runs `runner.py`, which installs `pytest` on demand.
+- The [GitHub CLI (`gh`)](https://cli.github.com/): posts the commit status,
+  publishes the submission release, and opens the feedback pull request.
+- `git`, strongly recommended: `runner.py` reads the submission's history
+  with it. Grading still runs without it, but `allowed_files` is not
+  enforced, the review diff link is missing, and submission timestamps fall
+  back to the grading time. The grade job warns when it's absent.
+
+`gh` is the one most often missed. It needs no login on the runner: each step
+that calls it sets `GH_TOKEN` to the job's own `GITHUB_TOKEN`. The **Check
+runner tools** step in the grade job fails early and lists everything missing,
+so you can fix the runner in one pass.
+
 </details>
 
 <details>
@@ -314,6 +335,11 @@ error. `image` is required and injection-checked; `user` accepts
 The grade job runs `runner.py` with the container's `python3`, so the image
 must provide one. If it doesn't, set `python` in the same `runtime` block and
 the `setup-python` action installs it inside the container.
+
+Every grade step runs inside the container, so the image also needs the other
+tools listed under self-hosted runners above: `bash`, `curl`, the GitHub CLI
+(`gh`), and ideally `git`. Base images such as `gcc` or `python` don't include
+`gh`; add it to your Dockerfile.
 
 </details>
 
