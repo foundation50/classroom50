@@ -38,9 +38,58 @@ describe("commitDetailItems", () => {
     expect(items[1].href).toBeUndefined()
     expect(items[1].releaseHref).toBeUndefined()
   })
+
+  it("omits the author unless asked (an individual repo's author is the student)", () => {
+    const commits = [
+      {
+        key: "c",
+        author: { login: "alice", avatarUrl: "https://avatars/alice" },
+      },
+    ]
+    expect(commitDetailItems(commits, t)[0].author).toBeUndefined()
+    expect(
+      commitDetailItems(commits, t, { showAuthors: true })[0].author,
+    ).toEqual({ label: "alice", avatarUrl: "https://avatars/alice" })
+  })
+
+  it("names an unlinked commit by its git author, without an avatar", () => {
+    const [item] = commitDetailItems(
+      [{ key: "c", author: { name: "Alice Git" } }],
+      t,
+      { showAuthors: true },
+    )
+    expect(item.author).toEqual({ label: "Alice Git", avatarUrl: undefined })
+  })
+
+  it("guards the avatar URL and skips an authorless commit", () => {
+    const items = commitDetailItems(
+      [
+        { key: "a", author: { login: "alice", avatarUrl: "javascript:x" } },
+        { key: "b" },
+      ],
+      t,
+      { showAuthors: true },
+    )
+    expect(items[0].author).toEqual({ label: "alice", avatarUrl: undefined })
+    expect(items[1].author).toBeUndefined()
+  })
 })
 
 describe("buildSubmissionDetailItems", () => {
+  it("labels pushes with their author on a shared repo", () => {
+    const items = buildSubmissionDetailItems(
+      {
+        tags: [],
+        commits: [{ key: "c", author: { login: "bob" } }],
+        showAuthors: true,
+      },
+      "every-push",
+      "acme",
+      "cs101-hw1-group-1",
+      t,
+    )
+    expect(items[0].author?.label).toBe("bob")
+  })
   it("uses tag entries in tag mode", () => {
     const items = buildSubmissionDetailItems(
       {

@@ -29,6 +29,7 @@ import { safeHttpUrl } from "@/util/url"
 import type { GitHubCommit, GitHubRelease } from "@/github-core/types"
 import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import {
+  commitAuthor,
   submissionModeCountKey,
   latestDetectedAt,
 } from "@/domain/assignments/submissionDetection"
@@ -98,6 +99,7 @@ const toPushSubmissions = (
     commitHref: commit.html_url,
     datetime: commit.commit.committer?.date ?? commit.commit.author?.date,
     releaseHref: releaseHrefBySha.get(commit.sha.slice(0, 7)),
+    author: commitAuthor(commit),
   }))
 }
 
@@ -241,8 +243,14 @@ const SubmissionBody = ({
   const latestReleaseHref = safeHttpUrl(releases?.[0]?.html_url)
   const commitSubmissions = toPushSubmissions(pushSubmissions, releases)
 
+  // A team repo lists who made each push, so members can tell their commits
+  // apart; on an individual repo the author is always the viewer.
   const detailItems: SubmissionDetailItem[] = buildSubmissionDetailItems(
-    { tags: taggedSubmissions, commits: commitSubmissions },
+    {
+      tags: taggedSubmissions,
+      commits: commitSubmissions,
+      showAuthors: isTeamMode,
+    },
     submissionMode,
     org,
     repoName,

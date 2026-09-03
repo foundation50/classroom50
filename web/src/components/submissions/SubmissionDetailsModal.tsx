@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   GitCommitIcon,
   MarkGithubIcon,
+  PersonIcon,
   RepoIcon,
   TagIcon,
 } from "@/components/ui/icons"
@@ -12,8 +13,10 @@ import { Button, Modal, MonoLtr } from "@/components/ui"
 // One row in the submission-details list. `kind` picks the icon and action
 // label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
 // link (omit to render the row inert). `sublabel` is a secondary line such as
-// the submission time; `releaseHref` adds a "View grade" link. `count` is how
-// many submissions the row represents (1 for a single tag/commit; N for a glob
+// the submission time; `releaseHref` adds a "View grade" link. `author` names
+// who made a commit (set only for a team's shared repo, where it disambiguates
+// members); `avatarUrl` is an already-guarded URL. `count` is how many
+// submissions the row represents (1 for a single tag/commit; N for a glob
 // group that bundles N tags into one row), so the modal header count matches
 // the row's count chip even when a group renders as one row.
 export type SubmissionDetailItem = {
@@ -23,6 +26,7 @@ export type SubmissionDetailItem = {
   sublabel?: string
   href?: string
   releaseHref?: string
+  author?: { label: string; avatarUrl?: string }
   count: number
 }
 
@@ -152,9 +156,48 @@ export function SubmissionDetailsModal({
                   <MonoLtr className="truncate font-medium">
                     {item.label}
                   </MonoLtr>
-                  {item.sublabel ? (
-                    <span className="truncate text-xs text-base-content/60">
-                      {item.sublabel}
+                  {item.author || item.sublabel ? (
+                    <span className="flex min-w-0 items-center gap-x-1.5 text-xs text-base-content/60">
+                      {item.author ? (
+                        <span
+                          className="inline-flex min-w-0 items-center gap-1"
+                          title={t("submissions.details.commitBy", {
+                            author: item.author.label,
+                          })}
+                        >
+                          {item.author.avatarUrl ? (
+                            <img
+                              src={item.author.avatarUrl}
+                              alt=""
+                              className="size-4 shrink-0 rounded-full"
+                            />
+                          ) : (
+                            <PersonIcon
+                              aria-hidden="true"
+                              className="size-3.5 shrink-0"
+                            />
+                          )}
+                          <span className="sr-only">
+                            {t("submissions.details.commitBy", {
+                              author: item.author.label,
+                            })}
+                          </span>
+                          <span aria-hidden="true" className="truncate">
+                            {item.author.label}
+                          </span>
+                        </span>
+                      ) : null}
+                      {item.sublabel ? (
+                        <span
+                          className={
+                            item.author
+                              ? "truncate before:me-1.5 before:text-base-content/30 before:content-['·']"
+                              : "truncate"
+                          }
+                        >
+                          {item.sublabel}
+                        </span>
+                      ) : null}
                     </span>
                   ) : null}
                 </span>

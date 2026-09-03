@@ -984,6 +984,84 @@ describe("SubmissionsTable submission details modal", () => {
     )
   })
 
+  it("names who made each detected push on a team row, but not on an individual row", async () => {
+    const user = userEvent.setup()
+    const detectedEntries = [
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        author: { login: "alice", avatarUrl: "https://avatars/alice" },
+      },
+      {
+        kind: "commit" as const,
+        label: "aaa1111",
+        count: 1,
+        sha: "aaa1111",
+        author: { name: "Bob Git" },
+      },
+    ]
+    const teamView = render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={
+          new Map<string, GroupTeamRef>([
+            [
+              "group-1",
+              { slug: "classroom50-group-x-1", id: 1, n: 1, name: "Rocket" },
+            ],
+          ])
+        }
+        scores={[
+          scoreRow({
+            owner: "group-1",
+            usernames: ["alice", "bob"],
+            submissionCount: 2,
+            submissions: [],
+            detectedEntries,
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice", "bob"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    // Linked account: avatar + login. Unlinked commit: the git author name.
+    const byLines = screen.getAllByText("submissions.details.commitBy")
+    expect(byLines).toHaveLength(2)
+    expect(screen.getByText("alice")).toBeTruthy()
+    expect(screen.getByText("Bob Git")).toBeTruthy()
+    teamView.unmount()
+
+    // The same detected entries on an individual row stay author-less: the
+    // author is always the student, so it would only add noise.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 2,
+            submissions: [],
+            detectedEntries,
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    expect(screen.queryByText("submissions.details.commitBy")).toBeNull()
+    expect(screen.queryByText("Bob Git")).toBeNull()
+  })
+
   it("shows the empty state with a tags link when a tag-mode row has no submissions", async () => {
     const user = userEvent.setup()
     render(
