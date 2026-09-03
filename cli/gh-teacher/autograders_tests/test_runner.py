@@ -493,6 +493,40 @@ class TestIsAcceptanceCommit:
         _git(repo, "commit", "-q", "-m", "Accept x/y (and sneak in a README)")
         assert ag.is_acceptance_commit(repo, self._head(repo)) is False
 
+    def test_init_shim_accept_editing_seeded_readme_grades(self, tmp_path):
+        # The realistic sneak on a template-less repo: the student amends the
+        # accept commit and writes their work into the auto_init README, which
+        # turns the expected D into an M against the seeded parent -> grade.
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-q", "-b", "main")
+        (repo / "README.md").write_text("# seeded by auto_init\n")
+        _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "Initial commit")
+        (repo / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        (repo / "README.md").write_text("# my write-up\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "Initialize .classroom50.yaml and autograde workflow")
+        assert ag.is_acceptance_commit(repo, self._head(repo)) is False
+
+    def test_setup_only_guard_malformed_path_listing_grades(self, tmp_path, monkeypatch):
+        # A status with no path (an even field count) means git's output was
+        # truncated; pairing would drop it silently and could skip real work,
+        # so the guard fails open instead.
+        repo = tmp_path / "repo"
+        shas = _make_repo(repo, ["Initial commit", ACCEPT])
+        real_run = subprocess.run
+
+        def fake_run(cmd, *args, **kwargs):
+            if (isinstance(cmd, (list, tuple)) and "show" in cmd
+                    and "--name-status" in cmd):
+                return subprocess.CompletedProcess(
+                    cmd, 0, stdout=f"A\0{ag.ACCEPT_MARKER_PATH}\0D\0", stderr="",
+                )
+            return real_run(cmd, *args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        assert ag.is_acceptance_commit(repo, shas[1]) is False
+
     def test_setup_only_guard_git_error_grades(self, tmp_path, monkeypatch):
         # The accept commit is the tip, but reading its touched paths
         # errors -> fail open (grade) rather than skip on partial info.

@@ -171,9 +171,11 @@ ACCEPT_COMMIT_PATHS = frozenset(
 
 # Paths the accept commit may DELETE (never add or modify): an init_shim accept
 # creates the repo with auto_init, which seeds a README the assignment contract
-# says must not exist, so the same commit removes it. Mirrors
-# classroomcfg.SeededReadmePath -- keep in lockstep. Deletion-only, so a tip
-# accept commit that ADDS a README (a student's amended work) still grades.
+# says must not exist, so the same commit removes it. Both accept clients
+# hand-mirror the path: classroomcfg.SeededReadmePath (gh-student) and the
+# init_shim deletePaths in web/src/domain/assignments/accept.ts -- keep in
+# lockstep. Deletion-only, so a tip accept commit that ADDS or EDITS a README
+# (a student's amended work) still grades.
 ACCEPT_COMMIT_DELETED_PATHS = frozenset({"README.md"})
 
 # Paths a teacher-side submission-mode shim retrofit touches: exactly the shim,
@@ -674,11 +676,12 @@ def is_acceptance_commit(workspace: pathlib.Path, head_sha: str) -> bool:
     empty head_sha, or no accept commit.
 
     Final guard: the tip accept commit must touch ONLY the known setup paths
-    (`ACCEPT_COMMIT_PATHS`). A student can rewrite history so the marker commit
-    is the tip yet carries real work (amend + force-push, or a squash); skipping
-    it would silently drop gradeable work, so an accept commit touching anything
-    outside the setup set fails open (grade). A git error reading its paths also
-    fails open.
+    (`ACCEPT_COMMIT_PATHS`), plus at most a deletion of a path in
+    `ACCEPT_COMMIT_DELETED_PATHS`. A student can rewrite history so the marker
+    commit is the tip yet carries real work (amend + force-push, or a squash);
+    skipping it would silently drop gradeable work, so an accept commit touching
+    anything outside the setup set fails open (grade). A git error reading its
+    paths also fails open.
     """
     if not head_sha:
         return False
@@ -754,6 +757,12 @@ def _commit_touches_only(
         if changed.returncode != 0:
             return False
         fields = changed.stdout.split("\0")
+        # Well-formed output is status/path pairs plus a trailing empty field,
+        # so an even length means a dangling status. zip would silently drop
+        # it, and a dropped entry errs toward a false skip, so treat it as
+        # uninspectable instead.
+        if len(fields) % 2 == 0:
+            return False
         entries = [
             (status, path)
             for status, path in zip(fields[0::2], fields[1::2])
