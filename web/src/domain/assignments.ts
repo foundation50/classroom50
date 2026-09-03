@@ -90,13 +90,6 @@ export {
   type OpenAllProgress,
 } from "./assignments/feedbackPr"
 export {
-  submitAssignment,
-  normalizeRepoPath,
-  isReservedUploadPath,
-  type UploadFile,
-  type SubmitAssignmentResult,
-} from "./assignments/submit"
-export {
   downloadAllSubmissions,
   streamSubmissionsToDirectory,
   ZipAssemblyError,
