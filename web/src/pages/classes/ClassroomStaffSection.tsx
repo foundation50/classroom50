@@ -422,7 +422,7 @@ const StaffMemberRow = ({
       </div>
       <ConfirmModal
         open={confirmingRemove}
-        dangerous
+        tone="warning"
         needsConfirm={false}
         title={t("classes.staff.confirmRemoveTitle", {
           login: member.login,

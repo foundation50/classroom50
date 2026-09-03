@@ -241,7 +241,7 @@ export function ClassroomCollectButton({
         description={t("assignments.collect.confirmBody")}
         confirmLabel={t("assignments.collect.confirmAction")}
         cancelLabel={t("common.cancel")}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           collect.collect()

@@ -374,7 +374,7 @@ export const LockAssignmentAction = ({
         }
         confirmLabel={copy.confirm}
         cancelLabel={t("assignments.table.lockCancel")}
-        dangerous={!locked}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           await setLock.mutateAsync({
@@ -439,7 +439,8 @@ export const DeleteAssignmentAction = ({
         confirmText={assignment.slug}
         confirmLabel={t("assignments.table.deleteConfirm")}
         cancelLabel={t("assignments.table.deleteCancel")}
-        dangerous
+        tone="error"
+        warning={t("assignments.table.deleteWarning")}
         onConfirm={async () => {
           await deleteAssignmentMutation.mutateAsync({
             org,

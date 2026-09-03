@@ -88,7 +88,12 @@ const RemoveConfirmDialog = ({
   return (
     <ConfirmModal
       open={open}
-      dangerous
+      tone="error"
+      warning={
+        removeIsOrgWide
+          ? t("orgMembers.bulk.confirmRemoveOrgWarning")
+          : undefined
+      }
       needsConfirm
       confirmText={t("orgMembers.bulk.confirmPhrase")}
       title={

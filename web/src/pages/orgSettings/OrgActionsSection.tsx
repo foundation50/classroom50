@@ -279,7 +279,7 @@ const OrgActionsSection = ({
 
       <ConfirmModal
         open={confirmPause}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         title={t("orgSettings.actions.confirmTitle")}
         description={t("orgSettings.actions.confirmBody")}

@@ -192,7 +192,7 @@ const ActiveRegradeButton = ({
         confirmText="regrade"
         confirmLabel={t("submissions.rowRegrade.confirmLabel")}
         cancelLabel={t("common.cancel")}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           regrade()
@@ -673,7 +673,8 @@ const ChangeVisibilityButton = ({
         }
         confirmLabel={t("submissions.rowVisibility.confirmLabel")}
         cancelLabel={t("common.cancel")}
-        dangerous
+        tone="warning"
+        warning={t("submissions.rowVisibility.confirmWarning")}
         needsConfirm={false}
         onConfirm={apply}
         onClose={() => setConfirmOpen(false)}

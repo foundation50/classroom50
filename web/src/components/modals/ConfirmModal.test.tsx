@@ -25,6 +25,7 @@ const renderConfirm = (
       open
       title="title"
       confirmText="confirm"
+      tone="error"
       onConfirm={onConfirm}
       onClose={onClose}
       {...props}
@@ -32,6 +33,26 @@ const renderConfirm = (
   )
   return { view, onConfirm, onClose }
 }
+
+// The old fixed "hard or impossible to undo" callout is gone: the boxed slot
+// renders only what the caller supplies, so a reversible action can't inherit
+// an irreversibility claim by default.
+describe("ConfirmModal — warning slot", () => {
+  it("renders nothing in the callout slot without a warning", () => {
+    renderConfirm({ needsConfirm: false })
+    expect(screen.queryByText(/undo/i)).toBeNull()
+    expect(screen.queryByTestId("warning")).toBeNull()
+  })
+
+  it("renders the caller's warning on the acknowledge step and drops it on the typed step", () => {
+    renderConfirm({ warning: <span data-testid="warning">own copy</span> })
+    expect(screen.getByTestId("warning")).toBeTruthy()
+
+    fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
+
+    expect(screen.queryByTestId("warning")).toBeNull()
+  })
+})
 
 describe("ConfirmModal — children and confirmDisabled", () => {
   it("renders children before acknowledging and removes them on the typed step", () => {
@@ -67,6 +88,7 @@ describe("ConfirmModal — children and confirmDisabled", () => {
       open: true,
       title: "title",
       confirmText: "confirm",
+      tone: "error" as const,
       onConfirm,
       onClose,
     }
@@ -129,6 +151,7 @@ describe("ConfirmModal — rejecting onConfirm", () => {
         needsConfirm={false}
         title="title"
         confirmText="confirm"
+        tone="error"
         onConfirm={onConfirm}
         onClose={onClose}
       />,
@@ -160,6 +183,7 @@ describe("ConfirmModal — rejecting onConfirm", () => {
         needsConfirm={false}
         title="title"
         confirmText="confirm"
+        tone="error"
         onConfirm={onConfirm}
         onClose={vi.fn()}
       />,
