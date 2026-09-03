@@ -764,7 +764,7 @@ describe("toSubmitValues — runtime field clearing", () => {
     // The built-in-only field clearing keys off the built-in autograder toggle
     // (autograding_state), NOT the grading choice — so a built-in assignment
     // graded Manually must KEEP its advanced config on submit even though the
-    // (immutable) Manual choice hides the panes in the UI. Guards the invariant
+    // Manual choice hides the panes in the UI. Guards the invariant
     // deriveFormShape's showBuiltInConfig doc calls out.
     const out = toSubmitValues({
       ...base,

@@ -117,10 +117,11 @@ export type CreateAssignmentFormValues = {
   // feedback_pr_template. Auto-checked when the form detects a template PR file.
   feedback_pr_template: boolean
   // Truly bare student repos: no starter content, no control files, autograding
-  // and the Feedback PR off. Immutable after creation (the edit form renders it
-  // locked). While checked, the template/autograding/advanced grading sections
-  // are hidden and their values cleared on submit, mirroring runtime_env's
-  // conditional-clear idiom.
+  // and the Feedback PR off. Editable, but a change only affects repos accepted
+  // from then on (the edit form confirms once students have accepted). While
+  // checked, the template/autograding/advanced grading sections are hidden and
+  // their values cleared on submit, mirroring runtime_env's conditional-clear
+  // idiom.
   empty_repo: boolean
   // UI-only repository-source discriminator (never sent verbatim; folds into
   // empty_repo + template_repo on submit). "template" = start from a template
@@ -875,7 +876,7 @@ export const assignmentToFormValues = (
     // a template-less repo that is neither bare (empty_repo) nor shim-only
     // (init_shim) — those two no-README states must round-trip to add_readme
     // false so deriveFormShape re-derives empty_repo/init_shim, not a README
-    // repo (which would silently try to flip the immutable flag on re-save).
+    // repo (which would silently flip the provisioning flag on re-save).
     repo_source: assignment.template ? "template" : "none",
     add_readme:
       !(assignment.empty_repo ?? false) && !(assignment.init_shim ?? false),

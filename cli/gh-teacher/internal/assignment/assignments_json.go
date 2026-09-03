@@ -1184,9 +1184,9 @@ func validateInitShimExclusions(entry AssignmentEntry) error {
 // mutually exclusive with the template-less states empty_repo and init_shim
 // (neither is ever generated). It is compatible with everything else, including
 // no_autograder and the grading-adjacent fields (branches do not affect
-// grading). Unlike empty_repo/no_autograder/init_shim it is NOT immutable —
-// changing it affects only repos generated from now on (no retrofit), so there
-// is no ValidateIncludeAllBranchesUnchanged.
+// grading). Like empty_repo/no_autograder/init_shim, changing it affects only
+// repos generated from now on (no retrofit), so there is no
+// ValidateIncludeAllBranchesUnchanged.
 func validateIncludeAllBranchesExclusions(entry AssignmentEntry) error {
 	if entry.Template == nil {
 		return errors.New("include_all_branches requires a template: it only affects the template generate call; a template-less repo is never generated")

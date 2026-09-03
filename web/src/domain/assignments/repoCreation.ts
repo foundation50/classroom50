@@ -424,18 +424,21 @@ export type CreateAssignmentInput = {
   feedback_pr_template?: boolean
   // Truly bare student repos (no auto-init, no control files, autograding and
   // Feedback PR off). Mutually exclusive with template/tests/feedback_pr/
-  // allowed_files/release_assets/pass_threshold; immutable after creation
-  // (edit rejects a change). Mirrors the CLI's --empty-repo.
+  // allowed_files/release_assets/pass_threshold. Editable, but never
+  // retrofitted: a change applies only to repos accepted from then on, so the
+  // edit form confirms once students have accepted. Mirrors the CLI's --empty-repo.
   empty_repo?: boolean
   // Teacher-supplied CI on a templated assignment: accept commits no autograde
   // shim. Mutually exclusive with empty_repo, a non-default autograder, and the
-  // grading-adjacent fields; permits a template and the Feedback PR. Immutable
-  // after creation. Mirrors the CLI's no_autograder field.
+  // grading-adjacent fields; permits a template and the Feedback PR. Editable
+  // with the same accept-time-only caveat as empty_repo. Mirrors the CLI's
+  // no_autograder field.
   no_autograder?: boolean
   // Built-in autograder on an otherwise-empty, template-less repo: accept
   // initializes the repo with only the marker + default shim (no README) and it
   // autogrades. Mutually exclusive with empty_repo, a template, and
-  // no_autograder. Immutable after creation. Mirrors the CLI's init_shim field.
+  // no_autograder. Editable with the same accept-time-only caveat as
+  // empty_repo. Mirrors the CLI's init_shim field.
   init_shim?: boolean
   // Copy all template branches at generate (POST /generate include_all_branches).
   // Requires a template; mutually exclusive with empty_repo/init_shim. Mutable.
@@ -484,8 +487,8 @@ export type CreateAssignmentInput = {
   // The teacher's grading intent (off/auto/manual) with a manual max_points.
   // Undefined reads as "auto" (today's behavior). Orthogonal to the autograding
   // tri-state; buildAssignmentEntry omits the block when it resolves to plain
-  // auto with no max. The mode is immutable after creation (edit rejects a
-  // change). Mirrors the CLI's grading object.
+  // auto with no max. Editable after creation; the edit form confirms the
+  // change once students have accepted. Mirrors the CLI's grading object.
   grading?: Grading
   // Per-assignment repo feature overrides (tri-state per key: undefined =
   // inherit, true = force on, false = force off). buildAssignmentEntry omits

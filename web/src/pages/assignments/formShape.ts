@@ -71,8 +71,8 @@ export type FormShape = {
   // the provisioning-based "the built-in shim is committed" flag
   // (autogradingState === "built-in", incl. init_shim): it drives the
   // built-in-only field clearing in toSubmitValues, so a stored built-in
-  // assignment never loses its config even when its (immutable) grading choice
-  // hides the panes. The UI renders the Advanced/Tests panes only when BOTH
+  // assignment never loses its config even when its grading choice hides the
+  // panes. The UI renders the Advanced/Tests panes only when BOTH
   // showAutogradingConfig AND showBuiltInConfig hold.
   showAutogradingConfig: boolean
   showBuiltInConfig: boolean
