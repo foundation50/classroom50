@@ -564,7 +564,7 @@ slug is too long.
 | `--team-formation teacher\|student` | Who forms a team assignment's groups: `teacher` (you create the group teams; see [Manage group teams](#manage-group-teams)) or `student` (the first student founds a group with `gh student accept --new-team`). Required with `--mode team`. |
 | `--max-group-size <N>` | Maximum group size (2 to 100). Enforced by Classroom 50 clients when groups form; advisory beyond that. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest and Python 3.14. See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
-| `--tests <path>` | JSON array of declarative tests (or `-` for stdin). Sets the whole `tests` block at once; add one test at a time with `assignment test add` instead. Mutually exclusive with a per-assignment `autograder.py`. |
+| `--tests <path>` | Declarative tests as a bare JSON array or the generated `tests.json` envelope (or `-` for stdin). Sets the whole `tests` block at once when creating an assignment; to change only the tests later, use `assignment test set`. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
 | `--feedback-pr` | One long-lived feedback PR per student repo for inline review. On by default; `--feedback-pr=false` disables. |
 | `--empty-repo` | Truly bare student repos (no README, marker, or autograde workflow) for students who build everything from scratch. Disables autograding and the feedback PR. |
@@ -598,14 +598,17 @@ gh teacher assignment test add cs50-fall-2026 cs-principles hello --name compile
 gh teacher assignment test add cs50-fall-2026 cs-principles hello --name "prints hello" --type io --setup "gcc -o hello hello.c" --run ./hello --expected "Hello, world!" --comparison included --points 2
 gh teacher assignment test list cs50-fall-2026 cs-principles hello
 gh teacher assignment test remove cs50-fall-2026 cs-principles hello compiles
+gh teacher assignment test set cs50-fall-2026 cs-principles hello --tests hello-tests.json   # replace the whole list from a file
 ```
 
 `add` upserts by `--name` and is refused while the assignment has a
-hand-written `autograder.py`. Tests are stored on the assignment and bundled
-into a `tests.json` when Pages publishes, so never commit a `tests.json` under
-`<classroom>/autograders/<slug>/`. For every flag, see
-[`assignment test`](gh-teacher#assignment-test); for the field semantics, see
-[Declarative tests](Autograding-Basics#declarative-tests).
+hand-written `autograder.py`. `set` replaces every test from a file you keep
+outside the `classroom50` repository (a bare JSON array, or the generated
+`tests.json` envelope) and touches nothing else on the assignment. Tests are
+stored on the assignment and bundled into a `tests.json` when Pages publishes,
+so never commit a `tests.json` under `<classroom>/autograders/<slug>/`. For
+every flag, see [`assignment test`](gh-teacher#assignment-test); for the field
+semantics, see [Declarative tests](Autograding-Basics#declarative-tests).
 
 **Manage the classroom default autograder:**
 

@@ -22,8 +22,8 @@ two scopes:
 
 Declarative tests sit between the two: the **Publish Pages** workflow generates
 them into the bundle as `CLASSROOM/autograders/ASSIGNMENT/tests.json`. You
-never create or commit that file. See
-[Where tests live](Autograding-Basics#where-tests-live).
+never create or commit that file; it is not the file you pass to the CLI's
+`--tests` flag. See [Where tests live](Autograding-Basics#where-tests-live).
 
 If none of the three exist, the runner emits a vacuous pass (score 0/0) and the
 submission still lands as a tagged Release, a valid mid-setup state.
@@ -39,7 +39,8 @@ The runner resolves the grading entrypoint in this order:
 4. None of the above: vacuous pass.
 
 To keep precedence from silently swallowing tests, the CLI refuses `assignment
-test add` / `--tests` while a per-assignment `autograder.py` exists.
+test add` / `assignment test set` / `--tests` while a per-assignment
+`autograder.py` exists.
 
 ### Contract
 

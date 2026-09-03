@@ -99,6 +99,7 @@ class TestMaterialize:
         assert "::warning::" in out
         assert "replaced by the tests stored on the assignment" in out
         assert "gh teacher assignment test add" in out
+        assert "gh teacher assignment test set --tests" in out
 
     def test_rejects_traversal_slug(self, tmp_path):
         # A hand-edited manifest with a path-traversal slug must not escape

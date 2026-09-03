@@ -973,6 +973,147 @@ func TestRunAssignmentAdd_ExplicitEmptyTestsClearsSilently(t *testing.T) {
 	}
 }
 
+func TestRunAssignmentAdd_EnvelopeDefaultsPersist(t *testing.T) {
+	server, fix := newTestCmdServer(t, helloAssignments(""), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout, stderr bytes.Buffer
+	p := helloAddParams()
+	p.Tests = []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}}
+	p.TestDefaults = &assignment.TestDefaults{FailureDetails: "none"}
+	if err := runAssignmentAdd(client, &stdout, &stderr, p); err != nil {
+		t.Fatalf("runAssignmentAdd: %v", err)
+	}
+	entry := decodeCommitted(t, fix).Assignments[0]
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "none" {
+		t.Errorf("test_defaults from the --tests envelope not persisted: %#v", entry.TestDefaults)
+	}
+}
+
+// helloAssignmentsWithDefaults is helloAssignments plus a test_defaults block,
+// for the `test set` keep-vs-replace checks.
+func helloAssignmentsWithDefaults(testsJSON string) string {
+	body := helloAssignments(testsJSON)
+	return strings.Replace(body, `"autograder": "default"`, `"autograder": "default",
+      "test_defaults": { "failure-details": "actual-only" }`, 1)
+}
+
+func TestRunAssignmentTestSet_ReplacesListKeepsEntry(t *testing.T) {
+	existing := `[{"name":"old","type":"run","run":"false","points":1}]`
+	server, fix := newTestCmdServer(t, helloAssignmentsWithDefaults(existing), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{Tests: []assignment.TestSpec{
+		{Name: "compiles", Type: "run", Run: "gcc -o hello hello.c", Points: 1},
+		{Name: "prints", Type: "io", Run: "./hello", Expected: "hi", Comparison: "included", Points: 2},
+	}}
+	if err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed); err != nil {
+		t.Fatalf("runAssignmentTestSet: %v", err)
+	}
+
+	entry := decodeCommitted(t, fix).Assignments[0]
+	if len(entry.Tests) != 2 || entry.Tests[0].Name != "compiles" || entry.Tests[1].Name != "prints" {
+		t.Errorf("committed tests = %#v, want the two new specs", entry.Tests)
+	}
+	// Unlike `assignment add`, the rest of the entry must survive untouched.
+	if entry.Template == nil || entry.Template.Repo != "hello-template" || entry.Name != "Hello" {
+		t.Errorf("test set must not touch other fields, got %#v", entry)
+	}
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "actual-only" {
+		t.Errorf("a bare array must keep test_defaults, got %#v", entry.TestDefaults)
+	}
+	if !strings.Contains(stdout.String(), "set 2 tests on hello") {
+		t.Errorf("stdout = %q, want set confirmation", stdout.String())
+	}
+}
+
+func TestRunAssignmentTestSet_EnvelopeReplacesDefaults(t *testing.T) {
+	existing := `[{"name":"old","type":"run","run":"false","points":1}]`
+	server, fix := newTestCmdServer(t, helloAssignmentsWithDefaults(existing), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{
+		Tests:    []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}},
+		Defaults: &assignment.TestDefaults{FailureDetails: "none"},
+		Envelope: true,
+	}
+	if err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed); err != nil {
+		t.Fatalf("runAssignmentTestSet: %v", err)
+	}
+	entry := decodeCommitted(t, fix).Assignments[0]
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "none" {
+		t.Errorf("envelope defaults should replace test_defaults, got %#v", entry.TestDefaults)
+	}
+
+	// An envelope without defaults clears them: it is the whole picture.
+	server2, fix2 := newTestCmdServer(t, helloAssignmentsWithDefaults(existing), false)
+	client2 := githubtest.NewTestClient(t, server2)
+	parsed.Defaults = nil
+	if err := runAssignmentTestSet(client2, &stdout, "o", "cs-principles", "hello", parsed); err != nil {
+		t.Fatalf("runAssignmentTestSet (no defaults): %v", err)
+	}
+	if got := decodeCommitted(t, fix2).Assignments[0].TestDefaults; got != nil {
+		t.Errorf("envelope without defaults should clear test_defaults, got %#v", got)
+	}
+}
+
+func TestRunAssignmentTestSet_EmptyArrayClears(t *testing.T) {
+	existing := `[{"name":"old","type":"run","run":"false","points":1}]`
+	server, fix := newTestCmdServer(t, helloAssignments(existing), true)
+	client := githubtest.NewTestClient(t, server)
+
+	// autograderExists=true: clearing must not trip the mutual-exclusion
+	// probe, since removing tests is exactly how a teacher moves to
+	// autograder.py.
+	var stdout bytes.Buffer
+	if err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", &assignment.TestsFile{Tests: []assignment.TestSpec{}}); err != nil {
+		t.Fatalf("runAssignmentTestSet: %v", err)
+	}
+	if got := decodeCommitted(t, fix).Assignments[0].Tests; len(got) != 0 {
+		t.Errorf("empty array should clear tests, got %#v", got)
+	}
+	if !strings.Contains(stdout.String(), "removed all tests from hello") {
+		t.Errorf("stdout = %q, want removed confirmation", stdout.String())
+	}
+}
+
+func TestRunAssignmentTestSet_RejectsExistingAutograder(t *testing.T) {
+	server, fix := newTestCmdServer(t, helloAssignments(""), true)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{Tests: []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}}}
+	err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutual-exclusion error, got %v", err)
+	}
+	fix.mu.Lock()
+	if fix.committed != nil || fix.refPatched {
+		t.Error("conflict must not land a commit")
+	}
+	fix.mu.Unlock()
+}
+
+func TestRunAssignmentTestSet_UnregisteredSlugFails(t *testing.T) {
+	empty := `{"schema":"classroom50/assignments/v1","assignments":[]}`
+	server, fix := newTestCmdServer(t, empty, false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{Tests: []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}}}
+	err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed)
+	if err == nil || !strings.Contains(err.Error(), "not registered") {
+		t.Fatalf("expected unregistered-slug error, got %v", err)
+	}
+	fix.mu.Lock()
+	if fix.committed != nil {
+		t.Error("unregistered slug must not land a commit")
+	}
+	fix.mu.Unlock()
+}
+
 func TestRunAssignmentTestRemove_HappyPath(t *testing.T) {
 	existing := `[
     {"name":"compiles","type":"run","run":"gcc -o hello hello.c","points":1},

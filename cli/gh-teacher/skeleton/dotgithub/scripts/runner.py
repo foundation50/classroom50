@@ -1954,7 +1954,8 @@ HAND_WRITTEN_TESTS_HINT = (
     "Declarative tests are stored on the assignment and tests.json is generated "
     "from them when the classroom50 repository publishes. Remove the tests.json "
     "you committed under CLASSROOM/autograders/ASSIGNMENT/ and add the tests "
-    "with the web assignment form or `gh teacher assignment test add` instead.")
+    "with the web assignment form, `gh teacher assignment test add`, or "
+    "`gh teacher assignment test set --tests FILE` with that same file instead.")
 
 
 def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
