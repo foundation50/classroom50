@@ -96,11 +96,13 @@ gh teacher assignment test list cs50-fall-2026 cs-principles hello
 gh teacher assignment test remove cs50-fall-2026 cs-principles hello compiles
 ```
 
-To set the whole list at once, pass a file to `gh teacher assignment add ...
---tests hello-tests.json` (`--tests -` reads stdin). The file is a bare JSON
-array, the same shape `assignment test list --json` emits. Keep it anywhere
-outside the `classroom50` repository; the CLI copies its contents into the
-assignment.
+To set the whole list at once, pass a file with `gh teacher assignment test set
+... --tests hello-tests.json` (`--tests -` reads stdin). `gh teacher assignment
+add --tests` takes the same file when creating an assignment. Keep the file
+anywhere outside the `classroom50` repository; the CLI copies its contents into
+the assignment. The file is a bare JSON array, the same shape `assignment test
+list --json` prints, so `list --json > hello-tests.json` exports and `test set
+--tests hello-tests.json` imports:
 
 ```json
 [
@@ -114,13 +116,25 @@ assignment.
 ]
 ```
 
+`--tests` also accepts the generated `tests.json` envelope described next, so a
+copy of that file works as input too. With an envelope, `test set` also
+replaces the assignment's report defaults from its `defaults` block (clearing
+them when the block is absent); with a bare array it leaves them alone.
+
 #### Where tests live
 
-You never write a `tests.json` yourself. When you push to the `classroom50`
-repository, the **Publish Pages** workflow reads each assignment's tests and
-generates `CLASSROOM/autograders/ASSIGNMENT/tests.json` inside the published
-bundle, wrapped in an envelope (`schema`, `tests`, and optional `defaults`)
-that the runner checks at grade time.
+Two different files are easy to confuse:
+
+| File | Where | Shape | Who writes it |
+|---|---|---|---|
+| The `--tests` file (`hello-tests.json` above) | Anywhere outside the `classroom50` repository | A bare JSON array of tests | You |
+| `CLASSROOM/autograders/ASSIGNMENT/tests.json` | Inside the published Pages bundle | An envelope: `schema`, `tests`, and optional `defaults` | The **Publish Pages** workflow |
+
+Tests are stored on the assignment (its entry in `assignments.json`). When you
+push to the `classroom50` repository, the **Publish Pages** workflow reads each
+assignment's tests and generates the bundled `tests.json` from them, and the
+runner checks that envelope at grade time. You never write the bundled file
+yourself.
 
 Don't commit a `tests.json` to `CLASSROOM/autograders/ASSIGNMENT/` in the
 `classroom50` repository:
@@ -132,10 +146,12 @@ Don't commit a `tests.json` to `CLASSROOM/autograders/ASSIGNMENT/` in the
   [Troubleshooting](Troubleshooting#testsjson-is-a-bare-test-array-or-testsjson-is-not-a-json-object-in-the-grading-log).
 
 That directory is for the files tests read: fixtures for `input-file` and
-`expected-file`, and grading scripts students must not see. See
-[Teacher-only test files](#teacher-only-test-files). In paths and commands on
-this page, replace `CLASSROOM` with the classroom's short name and `ASSIGNMENT`
-with the assignment slug.
+`expected-file`, and grading scripts students must not see. Nothing in it is
+copied into the student's checkout; a `setup` or `run` command reaches a
+script there as `"$CLASSROOM50_BUNDLE_DIR/check.sh"`, never as `./check.sh`.
+See [Teacher-only test files](#teacher-only-test-files). In paths and commands
+on this page, replace `CLASSROOM` with the classroom's short name and
+`ASSIGNMENT` with the assignment slug.
 
 #### Test types
 
@@ -155,11 +171,11 @@ with the assignment slug.
 |---|---|
 | `name` | Required. Unique within the assignment; at most 100 UTF-8 bytes; no control characters. |
 | `type` | Required. `io`, `run`, or `python`. |
-| `run` | Required. Shell command, run in the student checkout. `$CLASSROOM50_BUNDLE_DIR` points at the assignment's bundle; see [Teacher-only test files](#teacher-only-test-files). |
+| `run` | Required. Shell command, run in the student checkout. Bundled files are not copied there; `$CLASSROOM50_BUNDLE_DIR` points at the assignment's bundle, see [Teacher-only test files](#teacher-only-test-files). |
 | `setup` | Optional pre-command (for example, compile). Non-zero exit fails the test. Same working directory and `$CLASSROOM50_BUNDLE_DIR` as `run`. |
 | `input` / `input-file` | `io` only, mutually exclusive. Inline stdin or a bundled fixture. |
 | `expected` / `expected-file` | `io` only, mutually exclusive. Must be non-empty for `included`/`regex`. |
-| `comparison` | `io` only. `included` (substring), `exact` (trimmed equality), or `regex` (Python `re.search`, multiline). |
+| `comparison` | `io` only, and required for `io` (no default). `included` (substring), `exact` (trimmed equality), or `regex` (Python `re.search`, multiline). The web form preselects `included`. |
 | `timeout` | Seconds, 1 to 600. Omit or 0 for the default of 10s. Applies to `setup` and `run` separately. |
 | `exit-code` | `run` only, 0 to 255. Omit to require 0. |
 | `points` | Required, 0 to 1000. A 0-point test does not affect the numeric score; a failure still sets the autograde status to `failure`. |
@@ -284,8 +300,11 @@ copy on every grading run, so nothing a student changes in their repository
 affects it.
 
 Every `setup` and `run` command receives the bundle's absolute path in
-`CLASSROOM50_BUNDLE_DIR`. Commands still start in the student checkout, so
-student files stay relative and teacher files go through the variable.
+`CLASSROOM50_BUNDLE_DIR`. Commands still start in the student checkout, and
+nothing from the bundle is copied there, so student files stay relative
+(`python3 add.py`) and teacher files go through the variable
+(`"$CLASSROOM50_BUNDLE_DIR/check.sh"`). A plain `bash check.sh` fails with `No
+such file or directory` because the script is not in the checkout.
 
 The following example grades a Python assignment where students implement
 `add.py` and the checks live in a script students never see. Replace `ORG` with

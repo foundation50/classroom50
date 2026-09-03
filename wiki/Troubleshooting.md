@@ -800,8 +800,10 @@ there.
 1. Delete `CLASSROOM/autograders/ASSIGNMENT/tests.json` from the `classroom50`
    repository and push.
 2. Add the tests on the assignment instead: the web form's **Autograding
-   tests** section, `gh teacher assignment test add`, or `gh teacher assignment
-   add --tests FILE` with the bare-array file.
+   tests** section, `gh teacher assignment test add` for one test, or
+   `gh teacher assignment test set ORG CLASSROOM ASSIGNMENT --tests FILE` to
+   load the whole list from a file. `--tests` accepts both the bare array and
+   the envelope, so the file you deleted in step 1 works as-is.
 3. Wait for the **Publish Pages** workflow to finish, then submit as a test
    student.
 
@@ -809,6 +811,27 @@ If the assignment already had tests, the publish log also warns
 `replaced by the tests stored on the assignment`: grading works, but delete
 the committed file so the next person doesn't edit it. See
 [Where tests live](Autograding-Basics#where-tests-live).
+
+### `No such file or directory` for a script in `CLASSROOM/autograders/ASSIGNMENT/`
+
+A declarative test's `setup` or `run` command fails with something like
+`bash: check.sh: No such file or directory`, even though `check.sh` is
+committed next to the assignment's fixtures and shows up in the bundle.
+
+Commands run in the student's checkout, and nothing from the bundle is copied
+there. Only `input-file` and `expected-file` are read from the bundle for you;
+every other file is reached through the `CLASSROOM50_BUNDLE_DIR` variable.
+Change the command to go through it:
+
+```sh
+gh teacher assignment test add ORG CLASSROOM ASSIGNMENT \
+    --name "hidden checks" --type run \
+    --run 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"' --points 5
+```
+
+In the web form, enter `bash "$CLASSROOM50_BUNDLE_DIR/check.sh"` as the **Run
+command**. On a Windows runner, write `%CLASSROOM50_BUNDLE_DIR%` instead. See
+[Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
 ## Collecting scores and downloading submissions
 

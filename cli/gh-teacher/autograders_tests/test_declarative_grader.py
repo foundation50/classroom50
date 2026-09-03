@@ -403,6 +403,7 @@ class TestLoadTests:
         assert "--tests" in msg
         assert "Remove the tests.json" in msg
         assert "gh teacher assignment test add" in msg
+        assert "gh teacher assignment test set --tests" in msg
 
     def test_non_object_scalar_points_to_authoring_path(self, tmp_path):
         p = self._write(tmp_path, '"hello"')

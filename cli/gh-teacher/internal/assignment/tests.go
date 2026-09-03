@@ -253,15 +253,38 @@ func validateNoControlChars(s, label string) error {
 	return nil
 }
 
-// ParseTestsFile loads and validates `--tests <path>` (`-` = stdin): a bare
-// JSON array of test specs. Empty path → (nil, nil). DisallowUnknownFields so a
-// typo'd key fails loudly.
-func ParseTestsFile(path string) ([]TestSpec, error) {
+// TestsSchemaV1 is the `schema` value of the tests.json envelope that
+// publish-pages generates and runner.py reads (schemas/tests-v1.schema.json).
+const TestsSchemaV1 = "classroom50/tests/v1"
+
+// TestsFile is the parsed content of a `--tests` file. Defaults is nil for a
+// bare array and for an envelope without `defaults`; the caller decides what
+// nil means (keep vs clear the assignment's test_defaults).
+type TestsFile struct {
+	Tests    []TestSpec
+	Defaults *TestDefaults
+	// Envelope reports which of the two accepted shapes the file used.
+	Envelope bool
+}
+
+// testsEnvelope mirrors schemas/tests-v1.schema.json, the shape of the
+// generated bundle file. Accepted on input so a teacher can round-trip that
+// file (or keep one in a course repo) instead of learning a second format.
+type testsEnvelope struct {
+	Schema   string        `json:"schema"`
+	Tests    []TestSpec    `json:"tests"`
+	Defaults *TestDefaults `json:"defaults,omitempty"`
+}
+
+// ParseTestsFile loads and validates `--tests <path>` (`-` = stdin): either a
+// bare JSON array of test specs or the generated tests.json envelope. Empty
+// path → (nil, nil). DisallowUnknownFields so a typo'd key fails loudly.
+func ParseTestsFile(path string) (*TestsFile, error) {
 	return parseTestsFileFrom(path, os.Stdin)
 }
 
 // parseTestsFileFrom is the testable seam for ParseTestsFile.
-func parseTestsFileFrom(path string, stdin io.Reader) ([]TestSpec, error) {
+func parseTestsFileFrom(path string, stdin io.Reader) (*TestsFile, error) {
 	if path == "" {
 		return nil, nil
 	}
@@ -280,22 +303,45 @@ func parseTestsFileFrom(path string, stdin io.Reader) ([]TestSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read --tests %s: %w", label, err)
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
 		return nil, fmt.Errorf("--tests %s is empty", label)
 	}
-	var tests []TestSpec
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&tests); err != nil {
-		return nil, fmt.Errorf("parse --tests %s: %w", label, err)
+	parsed := &TestsFile{}
+	switch trimmed[0] {
+	case '[':
+		if err := dec.Decode(&parsed.Tests); err != nil {
+			return nil, fmt.Errorf("parse --tests %s: %w", label, err)
+		}
+	case '{':
+		var env testsEnvelope
+		if err := dec.Decode(&env); err != nil {
+			return nil, fmt.Errorf("parse --tests %s: %w (expected a JSON array of tests, or the generated tests.json envelope with \"schema\": %q)", label, err, TestsSchemaV1)
+		}
+		if env.Schema != TestsSchemaV1 {
+			return nil, fmt.Errorf("--tests %s: \"schema\" is %q, want %q", label, env.Schema, TestsSchemaV1)
+		}
+		if env.Tests == nil {
+			return nil, fmt.Errorf("--tests %s: envelope is missing the \"tests\" array", label)
+		}
+		if env.Defaults != nil {
+			if err := ValidateTestDefaults(*env.Defaults); err != nil {
+				return nil, fmt.Errorf("--tests %s: defaults: %w", label, err)
+			}
+		}
+		parsed.Tests, parsed.Defaults, parsed.Envelope = env.Tests, env.Defaults, true
+	default:
+		return nil, fmt.Errorf("--tests %s: expected a JSON array of tests, or the generated tests.json envelope, got %q", label, string(trimmed[0]))
 	}
 	if err := expectEOF(dec); err != nil {
 		return nil, fmt.Errorf("parse --tests %s: %w", label, err)
 	}
-	if err := ValidateTests(tests); err != nil {
+	if err := ValidateTests(parsed.Tests); err != nil {
 		return nil, fmt.Errorf("--tests %s: %w", label, err)
 	}
-	return tests, nil
+	return parsed, nil
 }
 
 // UpsertTest replaces a test by Name (position-preserving) or appends it.

@@ -301,9 +301,16 @@ func assignmentAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tests, err := assignment.ParseTestsFile(strings.TrimSpace(testsFile))
+			parsedTests, err := assignment.ParseTestsFile(strings.TrimSpace(testsFile))
 			if err != nil {
 				return err
+			}
+			var (
+				tests        []assignment.TestSpec
+				testDefaults *assignment.TestDefaults
+			)
+			if parsedTests != nil {
+				tests, testDefaults = parsedTests.Tests, parsedTests.Defaults
 			}
 
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -328,6 +335,7 @@ func assignmentAddCmd() *cobra.Command {
 					Autograder:            autograderVal,
 					Runtime:               runtime,
 					Tests:                 tests,
+					TestDefaults:          testDefaults,
 					FeedbackPR:            feedbackPRVal,
 					EmptyRepo:             emptyRepo,
 					AllowedFiles:          allowedFiles,
@@ -355,7 +363,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&teamFormation, "team-formation", "", "Who forms the groups of a team assignment: `teacher` (you create the teams) or `student` (the first student founds a team and adds teammates). Required with --mode team")
 	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the classroom50 repository")
 	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest and Python 3.14")
-	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file with a bare array of declarative test specs (io/run/python), or `-` to read from stdin. Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder. See `gh teacher assignment test --help`")
+	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file of declarative test specs (io/run/python), or `-` to read from stdin: either a bare array or the generated tests.json envelope ({\"schema\": \"classroom50/tests/v1\", \"tests\": [...]}). Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder. To change only the tests on an existing assignment, use `gh teacher assignment test set`")
 	cmd.Flags().BoolVar(&feedbackPR, "feedback-pr", true, "Open one long-lived Feedback pull request per student repo so you can leave inline review comments on the full starter-to-submission diff. Accept freezes a base branch at the baseline commit and opens the PR right away, so it exists even with GitHub Actions disabled; the autograde runner then adopts and maintains it (and opens it on the first submission if accept could not). Default on; pass --feedback-pr=false to disable. Requires `gh teacher init` to have set up the org prerequisites")
 	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos (no README or initial commit, no .classroom50.yaml marker, no autograde workflow) for assignments where students build the repo, including their own GitHub Actions, from scratch. Autograding and the Feedback PR are disabled. Changing this on a same-slug re-add applies only to accepts from now on (repositories students already accepted are not retrofitted; a warning is printed). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file")
@@ -658,6 +666,9 @@ type addAssignmentParams struct {
 	Autograder        string
 	Runtime           *assignment.RuntimeRef
 	Tests             []assignment.TestSpec
+	// TestDefaults comes only from a `--tests` envelope; a bare array leaves
+	// it nil.
+	TestDefaults      *assignment.TestDefaults
 	FeedbackPR        bool
 	EmptyRepo         bool
 	AllowedFiles      []string
@@ -765,6 +776,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		Autograder:        autograder,
 		Runtime:           runtime,
 		Tests:             tests,
+		TestDefaults:      p.TestDefaults,
 		FeedbackPR:        feedbackPR,
 		EmptyRepo:         p.EmptyRepo,
 		AllowedFiles:      allowedFiles,
@@ -1089,7 +1101,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	}
 	if droppedTests > 0 {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its %d declarative test(s): `assignment add` rewrites the whole entry. Pass --tests to keep them, or re-add with `gh teacher assignment test add`.\n",
+			"Warning: replacing %q dropped its %d declarative test(s): `assignment add` rewrites the whole entry. Pass --tests to keep them, or restore them with `gh teacher assignment test set`.\n",
 			slug, droppedTests)
 	}
 	if droppedTemplate != nil {

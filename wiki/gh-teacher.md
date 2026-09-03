@@ -40,7 +40,7 @@ per-step API and git detail; most commands that print progress also accept
 | `assignment submission-mode <org> <classroom> <slug> --tag\|--every-push` | Change when the autograder fires and retrofit existing repos' shims. |
 | `assignment lock <org> <classroom> <slug>` | Lock (or `--unlock`) an assignment against student access. |
 | `assignment feedback-pr <org> <classroom> <assignment>` | Open or repair the feedback PR on every student repo. Flags: `--user`, `-q`. |
-| `assignment test add/list/remove` | Manage an assignment's declarative tests. |
+| `assignment test add/set/list/remove` | Manage an assignment's declarative tests. |
 | `team create <org> <classroom> <assignment>` | Create a group team for a team assignment. Flags: `--name`, `--member` (repeatable). |
 | `team list <org> <classroom> <assignment>` | List a team assignment's group teams, members, and drift. |
 | `team add` / `remove <org> <classroom> <assignment> <team> <username>` | Add or remove a rostered student on a group team. |
@@ -601,7 +601,7 @@ the CLI warns that students with long usernames can't accept it.
 | `--team-formation teacher\|student` | Who forms a team assignment's groups: `teacher` (you create the group teams with [`team create`](#team-create); students not in a group can't accept) or `student` (the first student founds a group with `gh student accept --new-team` and adds teammates). Required with `--mode team`. |
 | `--max-group-size <N>` | Maximum group size (2 to 100). Enforced by Classroom 50 clients when groups form; advisory beyond that (direct GitHub-UI changes can bypass it). |
 | `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
-| `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
+| `--tests <path>` | Declarative tests as a bare JSON array or the generated `tests.json` envelope (`-` for stdin). Mutually exclusive with a per-assignment `autograder.py`. To change only the tests on an existing assignment, use [`assignment test set`](#assignment-test). |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
 | `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. Requires the org prerequisites `gh teacher init` sets up. |
 | `--empty-repo` | Truly bare repos (no README, marker, or shim); autograding and the feedback PR are disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with `--template`, `--tests`, `--feedback-pr`, `--allowed-files`, `--pass-threshold`, `--submission-mode`, and `--submission-tag`. |
@@ -836,6 +836,7 @@ re-running never fixes it.
 
 ```sh
 gh teacher assignment test add <org> <classroom> <slug> --name "<n>" --type {io,run,python} --run "<cmd>" [options]
+gh teacher assignment test set <org> <classroom> <slug> --tests <path>
 gh teacher assignment test list <org> <classroom> <slug> [--json] [-q]
 gh teacher assignment test remove <org> <classroom> <slug> <test-name>
 ```
@@ -843,14 +844,23 @@ gh teacher assignment test remove <org> <classroom> <slug> <test-name>
 Manage the declarative `tests` block: GitHub Classroom-style io/run/python
 checks graded with no `autograder.py`. `add` upserts by `--name`; it's refused
 while a per-assignment `autograder.py` exists, and it fails if the slug isn't
-registered yet. Commands run in the student checkout;
-`$CLASSROOM50_BUNDLE_DIR` points at the teacher-only files in
+registered yet. Commands run in the student checkout, and bundled files are
+not copied there: `$CLASSROOM50_BUNDLE_DIR` points at the teacher-only files in
 `<classroom>/autograders/<slug>/` (see
 [Teacher-only test files](Autograding-Basics#teacher-only-test-files)). See
 [Declarative tests](Autograding-Basics#declarative-tests) for fields and
 semantics and [Report options](Autograding-Basics#report-options) for what
-each failure-details level shows. For bulk edits, use
-`assignment add --tests <file.json>`.
+each failure-details level shows.
+
+**`test set`** replaces the whole test list from `--tests <path>` (`-` for
+stdin) and changes nothing else on the assignment, so it's the command for
+keeping tests in a file outside the `classroom50` repository and syncing them.
+The file is either a bare JSON array (what `test list --json` prints) or the
+generated `tests.json` envelope (`schema`, `tests`, optional `defaults`). A bare
+array leaves the assignment's `test_defaults` alone; an envelope replaces them
+from its `defaults` block, clearing them when the block is absent. An empty
+array removes every test. `assignment add --tests` takes the same file when
+creating an assignment; unlike `test set`, it rewrites the whole entry.
 
 **`test add` flags** (`--name`, `--type`, and `--run` are required):
 
@@ -864,7 +874,7 @@ each failure-details level shows. For bulk edits, use
 | `--timeout <s>` | Seconds before the test fails (`0` = the default of 10 s). |
 | `--input <text>` / `--input-file <name>` | `io` only: inline stdin, or a bundled fixture file fed on stdin. |
 | `--expected <text>` / `--expected-file <name>` | `io` only: inline expected stdout, or a bundled fixture file holding it. |
-| `--comparison included\|exact\|regex` | `io` only: how stdout is compared. |
+| `--comparison included\|exact\|regex` | `io` only, required: how stdout is compared. No default. |
 | `--exit-code <N>` | `run` only: required exit code (default `0`). |
 | `--failure-details full\|actual-only\|none` | How much failure detail students see; omit for the assignment default. |
 | `--show-output` | Include captured setup/run output in the report even when the test passes (`--show-output=false` opts one test out of a `show-output` default). |
