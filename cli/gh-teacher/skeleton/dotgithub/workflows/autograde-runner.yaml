@@ -1006,16 +1006,26 @@ jobs:
       # Without this check the job grades fine and then dies in the commit
       # status / release steps with a bare `gh: command not found`. Runs after
       # the toolchain steps so a setup-python-provided python3 counts.
+      #
+      # Only tools whose absence already fails the job are fatal here. git is
+      # a warning: actions/checkout falls back to a REST download without it
+      # and runner.py degrades on purpose (no review diff link, timestamps
+      # fall back to now, allowed_files enforcement skipped), so a git-less
+      # runner that grades today keeps grading.
       - name: Check runner tools
         run: |
           set -euo pipefail
+          WIKI="https://github.com/foundation50/classroom50/wiki/Advanced-Autograding#the-runtime-block"
           MISSING=()
-          for TOOL in git curl python3 gh; do
+          for TOOL in curl python3 gh; do
             command -v "$TOOL" >/dev/null 2>&1 || MISSING+=("$TOOL")
           done
           if (( ${#MISSING[@]} > 0 )); then
-            echo "::error::This runner is missing tools the grade job needs: ${MISSING[*]}. Install them on the self-hosted runner or in the container image, then re-run. See https://github.com/foundation50/classroom50/wiki/Advanced-Autograding#the-runtime-block"
+            echo "::error::This runner is missing tools the grade job needs: ${MISSING[*]}. Install them on the self-hosted runner or in the container image, then re-run. See $WIKI"
             exit 1
+          fi
+          if ! command -v git >/dev/null 2>&1; then
+            echo "::warning::git is not installed on this runner. Grading continues, but allowed_files is not enforced, the review diff link is missing, and submission timestamps fall back to the grading time. Install git to restore them. See $WIKI"
           fi
 
       # === Run runner.py (which execs the autograder) ===
