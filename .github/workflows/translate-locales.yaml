@@ -88,12 +88,13 @@ jobs:
   # so a lagging language catches up), then upload its pack for open-pr to
   # collect. fail-fast: false so one failure doesn't sink the rest. A full
   # retranslation is ~50 sequential model calls (large sections are split to
-  # fit one response), and the patch-then-full self-heal path runs both, so
-  # the timeout has to cover roughly two full passes.
+  # fit one response) and takes ~35 min for a dense script such as Hebrew; the
+  # patch-then-full self-heal path runs a large patch pass (~13 min) on top,
+  # so the timeout has to cover both with margin.
   translate:
     needs: matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
