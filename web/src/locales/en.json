@@ -2777,6 +2777,7 @@
       "viewGrade": "View score",
       "unavailable": "Unavailable",
       "pushEntry": "Commit #{{number}}",
+      "commitBy": "Committed by {{author}}",
       "tagEntry": "Submission #{{number}}",
       "emptyEveryPush": "No commits on the default branch yet. The repository still exists, so open it to see the code.",
       "emptyTag": "No tagged submissions yet. The repository still exists, so open its tags to see submissions as they arrive.",

@@ -4,7 +4,10 @@ import {
   jumpableTagEntries,
   resolveSubmissionMode,
 } from "@/domain/assignments/submissionDetection"
-import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import type {
+  CommitAuthor,
+  DetectedSubmission,
+} from "@/domain/assignments/submissionDetection"
 import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import { formatSubmissionDateTime } from "@/util/formatDate"
@@ -19,12 +22,14 @@ type Translate = (key: string, opts?: Record<string, unknown>) => string
 // A normalized push (default-branch commit) submission, mode-agnostic across the
 // two views: the teacher maps its collected scores.json attempts to this shape,
 // the student maps its live default-branch commits. `commitHref`/`releaseHref`
-// are raw (possibly unsafe) URLs — the builder guards them.
+// are raw (possibly unsafe) URLs — the builder guards them. `author` is who made
+// the commit, when the source knows (live commits do; collected attempts don't).
 export type PushSubmission = {
   key: string
   commitHref?: string | null
   datetime?: string
   releaseHref?: string | null
+  author?: CommitAuthor
 }
 
 // A normalized tag submission collected in scores.json — the FALLBACK tag
@@ -97,9 +102,13 @@ export function collectedTagDetailItems(
 // Map normalized push submissions to details-modal items, newest first (the
 // caller supplies them newest-first, matching both the collected history and
 // GitHub's default commit order). Numbered #N…#1 so the newest reads highest.
+// `showAuthors` attaches who made each commit: on for a team's shared repo,
+// where the members' commits need telling apart; off for an individual repo,
+// where the author is always the student.
 export function commitDetailItems(
   commits: PushSubmission[],
   t: Translate,
+  { showAuthors = false }: { showAuthors?: boolean } = {},
 ): SubmissionDetailItem[] {
   return commits.map((commit, i) => ({
     key: commit.key,
@@ -110,8 +119,22 @@ export function commitDetailItems(
       : undefined,
     href: safeHttpUrl(commit.commitHref),
     releaseHref: safeHttpUrl(commit.releaseHref),
+    author: showAuthors ? detailItemAuthor(commit.author) : undefined,
     count: 1,
   }))
+}
+
+// The modal's author chip: the login when GitHub linked the commit to an
+// account (with its avatar), else the git author name, else nothing.
+function detailItemAuthor(
+  author: CommitAuthor | undefined,
+): SubmissionDetailItem["author"] {
+  const label = author?.login ?? author?.name
+  if (!label) return undefined
+  return {
+    label,
+    avatarUrl: author?.login ? safeHttpUrl(author.avatarUrl) : undefined,
+  }
 }
 
 // The one type-aware item builder both views use: tag entries in tag mode, push
@@ -120,15 +143,18 @@ export function commitDetailItems(
 // unit), so the unused side is simply empty. In tag mode, when the detection
 // overlay is empty (a viewer without it) but collected tag submissions exist,
 // fall back to those so the modal never contradicts a positive count chip.
+// `showAuthors` (a team repo) labels each push with who made it.
 export function buildSubmissionDetailItems(
   {
     tags,
     commits,
     collectedTags = [],
+    showAuthors = false,
   }: {
     tags: DetectedSubmission[]
     commits: PushSubmission[]
     collectedTags?: CollectedTagSubmission[]
+    showAuthors?: boolean
   },
   mode: SubmissionMode | undefined,
   org: string,
@@ -136,7 +162,7 @@ export function buildSubmissionDetailItems(
   t: Translate,
 ): SubmissionDetailItem[] {
   if (resolveSubmissionMode(mode) !== "tag") {
-    return commitDetailItems(commits, t)
+    return commitDetailItems(commits, t, { showAuthors })
   }
   const detected = tagDetailItems(tags, org, repo, t)
   return detected.length > 0

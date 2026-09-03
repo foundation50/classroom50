@@ -21,13 +21,35 @@ import { SUBMISSION_MODES, type SubmissionMode } from "@/types/classroom"
 // a commit sha); `sha` points at the underlying commit when known. `datetime`
 // is the submission's ISO time when the source carries one: branch-mode
 // commits always do, canonical submit/* tags encode it in the name, and
-// milestone tags get it filled by a per-commit lookup in the fan-out.
+// milestone tags get it filled by a per-commit lookup in the fan-out. `author`
+// is who made a branch-mode commit, so a group's members can be told apart.
 export type DetectedSubmission = {
   kind: "commit" | "tag" | "tag-group"
   label: string
   count: number
   sha?: string
   datetime?: string
+  author?: CommitAuthor
+}
+
+// Who made a commit: the linked GitHub account when GitHub resolves one, else
+// the git author name (an unlinked email, or a commit made in a web editor
+// under another identity). Absent when the commit carries neither.
+export type CommitAuthor = {
+  login?: string
+  name?: string
+  avatarUrl?: string
+}
+
+export function commitAuthor(commit: GitHubCommit): CommitAuthor | undefined {
+  const login = commit.author?.login
+  const name = commit.commit.author?.name
+  if (!login && !name) return undefined
+  return {
+    login: login || undefined,
+    name: name || undefined,
+    avatarUrl: commit.author?.avatar_url || undefined,
+  }
 }
 
 // A glob pattern uses any Actions tag-filter metacharacter; an exact pattern is
@@ -93,6 +115,7 @@ export function detectBranchSubmissions(
     count: 1,
     sha: c.sha,
     datetime: c.commit.committer?.date ?? c.commit.author?.date,
+    author: commitAuthor(c),
   }))
 }
 
