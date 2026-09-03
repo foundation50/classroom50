@@ -17,15 +17,15 @@ when minutes run out.
 - **Each run bills at least a minute.** GitHub rounds every job up to the
   next minute, so even a near-empty grading run (a vacuous pass with no
   tests) bills about a minute.
-- **In the default submission type, every push grades.** An assignment in
-  `every-push` mode grades each push to the default branch: five pushes in
-  ten minutes are five graded runs. Multiply by roster size to estimate an
-  assignment's cost.
+- **In the default submission type, every push grades.** An assignment whose
+  **Submission type** is **Every push to the default branch** (`every-push`)
+  grades each push to the default branch: five pushes in ten minutes are five
+  graded runs. Multiply by roster size to estimate an assignment's cost.
 - **Score collection bills too, by scope.** A collection run is one job in
-  your `classroom50` repository that walks every repository in its scope. A
-  per-assignment **Collect now** stays cheap; **Collect all** on a classroom's
-  assignments list walks every assignment in the classroom in one run
-  (capped at 30 minutes), which is why it asks you to confirm first.
+  your `classroom50` repository that walks every repository in its scope, and
+  stops after 30 minutes. A per-assignment **Collect now** stays cheap;
+  **Collect all** on a classroom's assignments list walks every assignment in
+  the classroom in one run, which is why it asks you to confirm first.
 
 ## The levers, by impact
 
@@ -37,8 +37,9 @@ when minutes run out.
 2. **Skip the built-in autograder where you don't need it.** For assignments
    graded by hand or by your own CI, pick **Do not use the built-in
    autograder**; accept then installs no grading workflow at all. An
-   assignment with **no tests** still runs a lightweight workflow to tag
-   submissions, which uses far fewer minutes than grading.
+   assignment that uses the built-in autograder but has **no tests** still
+   runs the workflow on each submission to tag it and record it, skipping the
+   toolchain installs, so it costs less than a graded run but not nothing.
 3. **Pause autograding over a break.** Per assignment, or organization-wide;
    the next section covers both and how **Regrade all** behaves afterward.
 4. **Use self-hosted runners.** Grading on your own hardware costs no GitHub
@@ -53,31 +54,33 @@ when minutes run out.
 Beyond choosing [when commits grade](Autograding-Basics#which-commits-grade),
 you can turn the pipeline off entirely:
 
-- **Per assignment, at creation** — pick **Do not use the built-in
-  autograder** (`no_autograder` in assignments.json). Accept installs no
+- **Per assignment, in the assignment form.** Pick **Do not use the built-in
+  autograder** (`no_autograder` in `assignments.json`). Accept installs no
   autograding workflow at all; a templated assignment's own CI workflows run
-  instead, and score collection records who submitted but no scores.
-  Changeable later, but
-  only affects repositories accepted from then on (existing ones keep their
-  setup). See [`gh teacher` reference](gh-teacher#assignment-add).
-- **Per assignment, temporarily** — **Pause autograding** in the submissions
+  instead, and score collection records who submitted but no scores. You can
+  change it later, but the change only affects repositories accepted from
+  then on (existing ones keep their setup). See
+  [`gh teacher` reference](gh-teacher#assignment-add).
+- **Per assignment, temporarily.** **Pause autograding** in the submissions
   page's **Actions** menu disables the `autograde.yaml` workflow in every
-  student repository through GitHub's workflow-disable API. No files change, students'
-  other workflows keep running, and **Resume autograding** re-enables it.
-  Available on individual assignments using the built-in autograder (a single
-  repository can also be paused from its row). A student with admin on their own
-  repository can technically re-enable the workflow — a known limitation.
-- **Org-wide** — the organization settings' **Pause autograding for all
-  student repositories** toggle narrows the organization's GitHub Actions policy to the
-  `classroom50` repository. **This stops all workflows in student repositories**, including any
-  course CI — prefer the per-assignment pause unless that's what you want.
+  student repository through GitHub's workflow-disable API. No files change,
+  students' other workflows keep running, and **Resume autograding**
+  re-enables it. Available on individual assignments using the built-in
+  autograder (a single repository can also be paused from its row). A student
+  with admin on their own repository can technically re-enable the workflow,
+  which is a known limitation.
+- **Organization-wide.** The organization settings' **Pause autograding for
+  all student repositories** toggle narrows the organization's GitHub Actions
+  policy to the `classroom50` repository. **This stops all workflows in
+  student repositories**, including any course CI, so prefer the
+  per-assignment pause unless that's what you want.
 
 **Catching up after a pause.** Work pushed while autograding was off is not
-graded retroactively. After resuming, run **Regrade all** from the
+graded retroactively. After resuming, click **Regrade all** in the
 submissions page's **Actions** menu: it triggers one grading run per
 repository instead of one per missed push. Each repository's latest
 submission is re-run, and a never-graded repository is graded at its current
-state. See
+state. Then click **Collect now** to pull the new scores. See
 [Grading a specific commit](Autograding-Basics#grading-a-specific-commit)
 for the details of what a regrade re-runs.
 

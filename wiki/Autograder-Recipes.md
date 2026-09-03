@@ -8,7 +8,7 @@ file; adjust names, commands, and points to your assignment.
 
 Two conventions apply throughout:
 
-- **Timeouts are per command** (`setup` and `run` separately), 1–600
+- **Timeouts are per command** (`setup` and `run` separately), 1 to 600
   seconds, default 10. Builds and dependency installs usually need more than
   the default; the assignment's **Setup command** starts at 120 seconds.
 - **Every command starts in a fresh shell** in the student checkout. Files
@@ -18,8 +18,8 @@ Two conventions apply throughout:
 
 ## Python
 
-The default runtime already provides Python; pin a version with a `runtime`
-of `{ "python": "3.14" }` if you need one.
+The default runtime already provides Python 3.14; pin another version with a
+`runtime` of `{ "python": "3.12" }` if you need one.
 
 - **Template:** starter code, `requirements.txt` if the assignment has
   dependencies, and your `test_*.py` files.
@@ -38,12 +38,12 @@ of `{ "python": "3.14" }` if you need one.
 
 Common failures:
 
-- `ModuleNotFoundError` — a dependency wasn't installed; add the
+- `ModuleNotFoundError`: a dependency wasn't installed. Add the
   requirements install to the Setup command.
-- Imports work locally but not in grading — pytest can't see a `src/`
+- Imports work locally but not in grading: pytest can't see a `src/`
   layout. Set `pythonpath` in `pyproject.toml` or `pytest.ini`, or prefix
   the run command: `PYTHONPATH=src python -m pytest -q`.
-- Environment variables vanish between tests — expected; writes to
+- Environment variables vanish between tests. This is expected; writes to
   `$GITHUB_ENV` don't reach later tests. Set variables inline per command.
 
 ## Java
@@ -72,10 +72,10 @@ For partial credit, add one `run` test per test class:
 
 Common failures:
 
-- `Permission denied: ./gradlew` — the wrapper lost its executable bit; run
+- `Permission denied: ./gradlew`: the wrapper lost its executable bit. Run
   it as `sh ./gradlew` (as above) or restore the bit in the template.
-- Timeouts on the first test — dependency downloads exceeded the limit;
-  raise the test's timeout rather than splitting the build.
+- Timeouts on the first test: dependency downloads exceeded the limit.
+  Raise the test's timeout rather than splitting the build.
 
 ## C\#
 
@@ -83,8 +83,12 @@ GitHub-hosted Ubuntu runners ship recent .NET SDKs, so most assignments need
 no runtime block. To pin an exact SDK, grade in a container:
 
 ```json
-{ "container": { "image": "mcr.microsoft.com/dotnet/sdk:8.0" } }
+{ "container": { "image": "mcr.microsoft.com/dotnet/sdk:8.0" }, "python": "3.14" }
 ```
+
+The grading runner is a Python script, so a container image must provide
+`python3`; the `python` field installs one inside the container when the image
+doesn't ship it.
 
 - **Template:** a solution or project with the student code and an
   `xunit`/`NUnit`/`MSTest` test project.
@@ -102,7 +106,7 @@ For partial credit, filter per test group:
 
 Common failures:
 
-- Timeouts — the first restore and build dominate; put `dotnet restore` in
+- Timeouts: the first restore and build dominate. Put `dotnet restore` in
   the Setup command so test timeouts only cover the tests.
 
 ## C and C++
@@ -134,7 +138,7 @@ For partial credit with Catch2, run tagged subsets:
 Common failures:
 
 - Compile errors surface as a failed `setup`; the captured compiler output
-  is in the Release body and the run's Grade details log.
+  is in the Release body and the run's **Grade details** log.
 - A crashing binary fails an `io` test with the captured stderr; a hanging
   one hits the test's timeout.
 
@@ -165,7 +169,7 @@ carries its own points.
 
 Common failures:
 
-- Timeouts on `cargo test` — the build happened inside the test; add the
+- Timeouts on `cargo test`: the build happened inside the test. Add the
   `cargo build` test first (as above) so compilation and testing budget
   separately.
 
