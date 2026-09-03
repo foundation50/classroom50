@@ -23,10 +23,21 @@ export function useLanguageRegistry() {
   const [registry, setRegistry] = useState<RegistryLanguage[] | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  // Brief "done" state after a refresh: one that finds nothing new is otherwise
+  // indistinguishable from a click that did nothing.
+  const [refreshed, setRefreshed] = useState(false)
+  const refreshedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [error, setError] = useState(false)
   // Synchronous re-entry lock for refresh: `refreshing` is async React state,
   // so a fast double-click would fire two forced fetches.
   const refreshingRef = useRef(false)
+
+  useEffect(
+    () => () => {
+      if (refreshedTimer.current) clearTimeout(refreshedTimer.current)
+    },
+    [],
+  )
 
   // Prefetch on mount so the list is ready when a switcher opens. Set state only
   // after the fetch resolves, and bail if unmounted mid-flight.
@@ -68,10 +79,13 @@ export function useLanguageRegistry() {
   // published minutes ago is otherwise invisible until the next visit), then
   // pull any installed registry packs whose marker changed. Updated packs toast
   // via LanguagePackUpdateToaster. Resolves to the fresh list, or null when
-  // the registry couldn't be reached (the caller shows `error`).
+  // the registry couldn't be reached (the caller shows `error`). On success
+  // `refreshed` is true for two seconds so the UI can confirm the outcome.
   const refresh = useCallback(async (): Promise<RegistryLanguage[] | null> => {
     if (refreshingRef.current) return null
     refreshingRef.current = true
+    if (refreshedTimer.current) clearTimeout(refreshedTimer.current)
+    setRefreshed(false)
     setRefreshing(true)
     setError(false)
     try {
@@ -79,6 +93,8 @@ export function useLanguageRegistry() {
       setRegistry(langs)
       // The forced fetch above just repopulated the memo, so this hits it.
       await refreshInstalledPacks()
+      setRefreshed(true)
+      refreshedTimer.current = setTimeout(() => setRefreshed(false), 2000)
       return langs
     } catch {
       setError(true)
@@ -118,6 +134,7 @@ export function useLanguageRegistry() {
     offered,
     loading,
     refreshing,
+    refreshed,
     error,
     loadRegistry,
     refresh,

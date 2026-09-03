@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import {
   CheckIcon,
@@ -51,6 +51,7 @@ export const LanguageSwitcher = ({
     offered,
     error: registryError,
     refreshing,
+    refreshed,
     refresh,
     installAndActivate,
   } = useLanguageRegistry()
@@ -62,10 +63,6 @@ export const LanguageSwitcher = ({
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
   const [preview, setPreview] = useState<PackPreview | null>(null)
-  // Brief "done" state on the refresh button: a refresh that finds nothing new
-  // is otherwise indistinguishable from a click that did nothing.
-  const [refreshed, setRefreshed] = useState(false)
-  const refreshedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Accordion: at most one section open at a time so the modal stays bounded.
   const [openSection, setOpenSection] = useState<AccordionSectionId | null>(
     null,
@@ -181,22 +178,6 @@ export const LanguageSwitcher = ({
     }
   }
 
-  const handleRefresh = async () => {
-    if (refreshedTimer.current) clearTimeout(refreshedTimer.current)
-    setRefreshed(false)
-    const langs = await refresh()
-    if (langs === null) return
-    setRefreshed(true)
-    refreshedTimer.current = setTimeout(() => setRefreshed(false), 2000)
-  }
-
-  useEffect(
-    () => () => {
-      if (refreshedTimer.current) clearTimeout(refreshedTimer.current)
-    },
-    [],
-  )
-
   const handleCancel = () => {
     setPreview(null)
     setError(null)
@@ -253,7 +234,7 @@ export const LanguageSwitcher = ({
               refreshed ? t("language.refreshDone") : t("language.refreshList")
             }
             title={t("language.refreshList")}
-            onClick={() => void handleRefresh()}
+            onClick={() => void refresh()}
             disabled={refreshing || installingSelected}
           >
             {refreshing ? (
