@@ -4,6 +4,7 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CopyIcon,
+  SyncIcon,
   TrashIcon,
   UploadIcon,
   XIcon,
@@ -49,6 +50,9 @@ export const LanguageSwitcher = ({
   const {
     offered,
     error: registryError,
+    refreshing,
+    refreshed,
+    refresh,
     installAndActivate,
   } = useLanguageRegistry()
 
@@ -217,17 +221,38 @@ export const LanguageSwitcher = ({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <label className="label py-0" htmlFor="lang-select">
-          <span className="label-text font-bold">
-            {t("language.activeLabel")}
-          </span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="label py-0" htmlFor="lang-select">
+            <span className="label-text font-bold">
+              {t("language.activeLabel")}
+            </span>
+          </label>
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label={
+              refreshed ? t("language.refreshDone") : t("language.refreshList")
+            }
+            title={t("language.refreshList")}
+            onClick={() => void refresh()}
+            disabled={refreshing || installingSelected}
+          >
+            {refreshing ? (
+              <InlineSpinner />
+            ) : refreshed ? (
+              <CheckIcon className="size-4 text-success" aria-hidden="true" />
+            ) : (
+              <SyncIcon className="size-4" aria-hidden="true" />
+            )}
+            {refreshed ? t("language.refreshDone") : t("language.refresh")}
+          </Button>
+        </div>
         <select
           id="lang-select"
           className="select select-bordered w-full"
           value={lang}
           onChange={(e) => void handleSelectLang(e.target.value)}
-          disabled={installingSelected}
+          disabled={installingSelected || refreshing}
         >
           {langOptions.map(({ code: c, install }) => (
             <option key={c} value={c}>
