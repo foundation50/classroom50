@@ -7,7 +7,7 @@ if you're developing the extensions themselves.
 ## Prerequisites
 
 - [GitHub CLI (`gh`)](https://cli.github.com/)
-- [Go](https://go.dev/doc/install) — only for the build-from-source path.
+- [Go](https://go.dev/doc/install), only for the build-from-source path.
 
 You don't need to run `gh auth login` first. The `login` commands below handle
 GitHub authentication with the right scopes.
@@ -37,10 +37,10 @@ Or update everything at once with `gh extension upgrade --all`. `gh` also checks
 for new releases in the background and tells you when an extension is out of
 date.
 
-To pin a version, pass `--pin <tag>`:
+To pin a version, pass `--pin` with a release tag:
 
 ```sh
-gh extension install foundation50/gh-teacher --pin v1.0.0
+gh extension install foundation50/gh-teacher --pin v1.42.0
 ```
 
 ## Log in
@@ -54,7 +54,7 @@ gh student login
 ```
 
 If you skip this and run another command first, the CLI runs the login flow for
-you automatically. `gh teacher logout` / `gh student logout` mirror
+you automatically. `gh teacher logout` and `gh student logout` mirror
 `gh auth logout`.
 
 ## Next steps
@@ -76,7 +76,7 @@ cd classroom50
 (cd cli/gh-student && go build . && gh extension install .)
 ```
 
-After pulling new commits, rebuild — you don't need to reinstall:
+After pulling new commits, rebuild. You don't need to reinstall:
 
 ```sh
 (cd cli/gh-teacher && go build .)
@@ -86,15 +86,16 @@ After pulling new commits, rebuild — you don't need to reinstall:
 ## Verify a download (optional)
 
 Each release ships a `checksums.txt` and build provenance attestations. To
-confirm a binary came from the official release pipeline:
+confirm a binary came from the official release pipeline, replace `PATH-TO-BINARY`
+with the downloaded file:
 
 ```sh
 # Build provenance (gh 2.49+). Point --repo at the source monorepo, where the
-# attestations are recorded (not the extension repo the binary came from):
-gh attestation verify <path-to-binary> --repo foundation50/classroom50
+# attestations are recorded (not the extension repository the binary came from):
+gh attestation verify PATH-TO-BINARY --repo foundation50/classroom50
 
 # Or check the SHA-256 against the release's checksums.txt:
-sha256sum <path-to-binary>
+sha256sum PATH-TO-BINARY
 ```
 
 > [!NOTE]

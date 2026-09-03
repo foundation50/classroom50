@@ -11,14 +11,14 @@ fixes, see [Troubleshooting](Troubleshooting); for terms, see the
 You need a GitHub organization on the **Team** or **Enterprise** plan.
 Verified educators get GitHub Team **free** through
 [GitHub Education](https://github.com/education/teachers), which unlocks
-everything Classroom 50 relies on (notably GitHub Pages from a private repo).
-Free/personal organizations can't host a classroom.
+everything Classroom 50 relies on (notably GitHub Pages from a private
+repository). Free/personal organizations can't host a classroom.
 
 ### How is Classroom 50 different from GitHub Classroom?
 
-The teaching model is familiar — you create assignments (optionally with
+The teaching model is familiar: you create assignments (optionally with
 starter code), students accept to get their own repository, and submissions are
-auto-graded — but Classroom 50 has no server or database of its own. Your
+autograded. But Classroom 50 has no server or database of its own. Your
 classroom settings, roster, assignments, and scores are stored in a private
 `classroom50` repository in your organization, and grading runs in GitHub
 Actions. See [How Classroom 50 Works](How-Classroom-50-Works) for the full
@@ -62,13 +62,13 @@ for how to choose.
 Yes. Classroom 50 has four roles: **teacher** (organization owner, full
 control), **head TA** (write access to the `classroom50` repository, not an
 owner), **TA** (read-only access to the `classroom50` repository), and
-**student**. Manage staff in the web app under a classroom's
-**Settings → Staff and roles**, or with `gh teacher staff add`. See the
+**student**. Manage staff in the web app under a classroom's **Settings**, in
+the **Staff and roles** section, or with `gh teacher staff add`. See the
 [Glossary](Glossary#roles) for what each role can do.
 
 ### Can students join a classroom themselves with a link?
 
-Not on their own — GitHub requires an organization owner to invite members. Add
+Not on their own: GitHub requires an organization owner to invite members. Add
 students to the roster (by username, by email, or by bulk CSV upload), which
 sends the organization invitation. **Once they've joined the organization**, the
 assignment accept links work without any further action from you.
@@ -77,8 +77,8 @@ assignment accept links work without any further action from you.
 
 ### Can I add students in bulk, or by email?
 
-Yes. In the web app, use **Upload** with a roster CSV or a plain text list. A
-row can identify a student by `github_id`, GitHub username, or **email
+Yes. In the web app, use **Upload roster** with a roster CSV or a plain text
+list. A row can identify a student by `github_id`, GitHub username, or **email
 address**, so one file can mix students whose handle you know with ones you
 only have an address for. Each address goes onto the roster right away as a
 pending row, and is matched to the student's GitHub account when they accept.
@@ -97,7 +97,7 @@ invitation alone. See
 ### Can I see the whole roster, including students who haven't accepted?
 
 Yes. The submissions view lists every rostered student, not only those who
-accepted, with their status — so you can see at a glance who hasn't started.
+accepted, with their status, so you can see at a glance who hasn't started.
 Students you invited by email appear too, listed by address until they accept,
 though only organization owners see them: GitHub keeps pending invitations
 owner-only, so a TA's view leaves them out.
@@ -109,52 +109,52 @@ They're separate actions, on purpose:
 - **Unenroll** removes the student from the classroom roster and team. It does
   **not** remove them from the organization and does **not** delete their
   assignment repositories.
-- **Remove from the organization** revokes their access to every repo (including
-  their assignment repos) but still doesn't delete anything.
+- **Remove from the organization** revokes their access to every repository
+  (including their assignment repositories) but still doesn't delete anything.
 - **Deleting a repository** is always a separate, manual step.
 
 Both actions are available per member and in bulk on the organization's
 **Members** page. For more information, see
-[Manage organization members](Web-Teacher-Guide#manage-organization-members).
-
-See [How Classroom 50 Works](How-Classroom-50-Works#lifecycle-enroll-unenroll-and-remove-are-separate).
+[Manage organization members](Web-Teacher-Guide#manage-organization-members)
+and
+[Lifecycle: enroll, unenroll, and remove are separate](How-Classroom-50-Works#lifecycle-enroll-unenroll-and-remove-are-separate).
 
 ## Assignments
 
 ### Can I use a private repository as an assignment template?
 
-Yes, if the template lives **inside your organization** — registering the
+Yes, if the template lives **inside your organization**: registering the
 assignment grants the classroom's team read access to it. A private template
 outside your organization can't be shared with students; a public one works
 from anywhere. See
 [Template visibility](Assignment-Templates#template-visibility), including
 why a private template added to an existing assignment can 404 on accept.
 
-### Can I customize the Feedback PR's first comment?
+### Can I customize the feedback pull request's first comment?
 
 Yes, for a templated assignment. Turn on **Use the template's pull request
 template as the Feedback PR body** and Classroom 50 uses your template
 repository's own pull request template (`.github/pull_request_template.md`,
 `pull_request_template.md`, or `docs/pull_request_template.md`) as each
-student's Feedback PR body instead of the built-in text. The assignment form
-auto-checks this when it detects such a file, and you can toggle it off.
+student's feedback pull request body instead of the built-in text. The
+assignment form auto-checks this when it detects such a file, and you can toggle
+it off.
 
 Note this is not GitHub's native behavior. GitHub only fills a
 `pull_request_template.md` into pull requests opened through the web "compare
-and pull request" flow, never for the API-created Feedback PR, so dropping the
-file in alone does nothing until you enable this option. If the file is missing
-or can't be read, the built-in body is used. It's set in the web app; there is
-no `gh teacher` flag for it.
+and pull request" flow, never for the API-created feedback pull request, so
+dropping the file in alone does nothing until you enable this option. If the
+file is missing or can't be read, the built-in body is used. It's set in the web
+app; there is no `gh teacher` flag for it.
 
 ### Can I set a due date with a specific time of day?
 
-Yes. Due dates support a date **and** time (down to the second, in your
-timezone). Submissions after the due date are **marked late**; nothing is
-blocked automatically.
+Yes. Due dates support a date **and** time, in your timezone. Submissions after
+the due date are **marked late**; nothing is blocked automatically.
 
 ### Does the due date cut off student access?
 
-No — there is no cutoff date; the due date only marks later submissions late.
+No. There is no cutoff date; the due date only marks later submissions late.
 To actually end an assignment, use **Close submission**, which blocks new
 accepts and sets every student's repository to read-only. See
 [Due dates mark late; closing enforces](Course-Lifecycle-and-End-of-Term#due-dates-mark-late-closing-enforces).
@@ -163,24 +163,25 @@ accepts and sets every student's repository to read-only. See
 
 Both start from no template; the difference is what (if anything) is committed:
 
-- **Template-less with a README** (**Add a README** on): students get a repo
-  with an initial commit and the autograder setup — good for write-from-scratch
-  or short-answer work.
+- **Template-less with a README** (**Add a README** on): students get a
+  repository with an initial commit and the autograder setup. Good for
+  write-from-scratch or short-answer work.
 - **Empty repository** (**Add a README** off, built-in autograder off): a
-  completely bare repo with no commit at all — no starter files **and** no
+  completely bare repository with no commit at all. No starter files **and** no
   autograding or feedback pull request, ever. Use it when students build
   everything themselves, including their own GitHub Actions.
 - (**Add a README** off with the built-in autograder **on** is a third,
-  in-between shape: an initialized repo carrying only the control files, no
-  README, which grades normally.)
+  in-between shape: an initialized repository carrying only the control files,
+  no README, which grades normally.)
 
 **These repository-shape choices can be changed after creation, but a change
-only affects repositories accepted from then on** — repositories students
+only affects repositories accepted from then on.** Repositories students
 already accepted aren't retrofitted, so they keep their original shape. The web
-edit form asks you to confirm when students have already accepted. (**Assignment
-type** — Individual or Group — is the exception and stays locked, since
-switching it would invalidate existing submissions.) For every shape in one
-table, see [Repository shapes](Assignment-Templates#repository-shapes).
+edit form asks you to confirm when students have already accepted.
+(**Assignment type**, that is Individual, Group, or Group (legacy), is the
+exception and stays locked, since switching it would invalidate existing
+submissions.) For every shape in one table, see
+[Repository shapes](Assignment-Templates#repository-shapes).
 
 ### How do group assignments work?
 
@@ -207,9 +208,10 @@ repository isn't recommended.
 
 ### Does the assignment description show to students?
 
-The description is stored with the assignment, but student-facing instructions
-are best placed in the template's `README.md` — that's what students see when
-they open their repository. See [Assignment Templates](Assignment-Templates).
+Yes. The accept page shows it under **Assignment details**, rendered as
+Markdown. Longer instructions still belong in the template's `README.md`, which
+is what students see when they open their repository. See
+[Assignment Templates](Assignment-Templates).
 
 ## Autograding and Actions
 
@@ -238,28 +240,29 @@ determined student can still read it. See
 Yes. Grade only on explicit submits (**Submission type: A tagged commit**),
 skip the built-in autograder for assignments graded elsewhere, pause
 autograding per assignment or organization-wide, or grade on self-hosted
-runners. [Managing Actions cost](Managing-Actions-Cost) covers every lever
+runners. [Managing Actions Cost](Managing-Actions-Cost) covers every lever
 and what each one trades away.
 
 ### Can I use my own (self-hosted) runners?
 
 Yes. Set `runs-on` in the assignment's runtime to your self-hosted labels (for
 example `["self-hosted", "gpu"]`). Self-hosted runners keep their own
-toolchains, so Classroom 50 skips managed toolchain setup on them — provision
+toolchains, so Classroom 50 skips managed toolchain setup on them. Provision
 what your assignments need in the runner image. See
-[Autograders](Advanced-Autograding#the-runtime-block).
+[The `runtime` block](Advanced-Autograding#the-runtime-block).
 
 ### Can the autograder show students *why* a test failed?
 
 Yes. Each submission's Release and the Actions run summary include a per-test
-breakdown (expected against actual output for I/O tests, captured stderr). A custom
+breakdown (expected against actual output for I/O tests, captured stderr),
+unless you limit it with the assignment's failure-details setting. A custom
 `autograder.py` can add its own diagnostic messages to `result.json`.
 
 ### Can students use GitHub Codespaces?
 
 If Codespaces is enabled for your organization, students can open their
-assignment repository in Codespaces like any other repo. Classroom 50 doesn't
-manage Codespaces itself — any education Codespaces benefit is handled on
+assignment repository in Codespaces like any other repository. Classroom 50
+doesn't manage Codespaces itself; any education Codespaces benefit is handled on
 GitHub's side.
 
 ## Scores and submissions
@@ -273,9 +276,12 @@ A few common reasons:
   the assignment you're viewing, so it's fast even in a big classroom).
 - **GitHub Pages is still deploying.** Right after a config change, published
   files can take a few minutes to go live.
-- **The student's repo predates a workflow update.** If you updated Classroom 50
-  after they accepted, have them re-accept (or re-create the repo) to pick up the
-  current setup.
+- **The assignment grades only tagged submissions.** With **Submission type**
+  set to **A tagged commit**, a plain push isn't graded; the student runs
+  `gh student submit` or pushes a `submit/*` tag.
+- **The assignment isn't autograded.** An assignment with **Grading** set to
+  **Manual** or **Not graded**, or one whose template ships its own grading
+  workflow, records no built-in score.
 
 See [Troubleshooting](Troubleshooting) for specific error messages.
 
@@ -283,21 +289,21 @@ See [Troubleshooting](Troubleshooting) for specific error messages.
 
 Not yet. Scores live in each student's repository: every graded submission
 publishes a **Release** with the score and a per-test breakdown, which is what
-the student-facing **View grade** link opens. Showing scores inside the app is
-blocked by a technical limitation — Classroom 50 has no server, and the
-browser can't read Release assets cross-origin — but it's on the wish list
-(see [#567](https://github.com/foundation50/classroom50/issues/567)). Point
-students at their repository's Releases page (or the Feedback PR) for
+the student-facing **View score** link opens. Showing scores inside the app is
+blocked by a technical limitation (Classroom 50 has no server, and the browser
+can't read Release assets cross-origin) but it's on the wish list (see
+[#567](https://github.com/foundation50/classroom50/issues/567)). Point
+students at their repository's Releases page (or the feedback pull request) for
 results.
 
 ### Can I manually override or adjust a score?
 
-Yes, right in the web app — for both **manual** and **autograded** assignments.
-On the submissions page, each row's score cell has an edit button that opens a
-score-override dialog:
+Yes, right in the web app, for both **manual** and **autograded** assignments.
+On the submissions page, each row's score cell has an **Add score**, **Edit
+score**, or **Override score** control that opens a dialog:
 
-- **Manual assignments** — enter a score out of the assignment's **Max points**.
-- **Autograded assignments** — enter a score to override the autograded result.
+- **Manual assignments.** Enter a score out of the assignment's **Max points**.
+- **Autograded assignments.** Enter a score to override the autograded result.
   The original autograded score is preserved; clearing the override restores it.
   If the submission hasn't been autograded yet, the dialog also asks for the max
   points to grade out of.
@@ -306,9 +312,9 @@ Overridden scores show a **Manual** badge and aren't changed by autograding
 until you clear the override. Use **Clear override** in the dialog to revert.
 
 This editor appears only for organization owners (writing a score writes the
-`classroom50` repository). Under the hood, an override is an entry in the classroom's
-`scores.json` with `"override": true`, which collection leaves untouched on
-future runs — so you can still edit it by hand if you prefer (see
+`classroom50` repository). Under the hood, an override is an entry in the
+classroom's `scores.json` with `"override": true`, which collection leaves
+untouched on future runs, so you can still edit it by hand if you prefer (see
 [Collect scores](CLI-Teacher-Guide#9-collect-scores)).
 
 ### How do I export scores, or download student work in bulk?
@@ -317,17 +323,17 @@ Download scores as a CSV from the submissions page
 (**Download scores (CSV)**). For the work itself, **Download all submissions**
 in the same **Actions** menu bundles every repository's latest submission into
 a single zip (built in your browser). For real clones, to run your own
-tooling locally, `gh teacher download` clones every submission repository and also
-writes a `scores.csv` summary at the destination root (the submissions page's
-**Clone all submissions** button hands you that command ready to copy). The
-raw score data also
-lives in `scores.json` in your `classroom50` repository, so you can build your own
-automations against it. The column-by-column reference for both CSVs is in
+tooling locally, `gh teacher download` clones every submission repository and
+also writes a `scores.csv` summary at the destination root (the submissions
+page's **Clone all submissions** button hands you that command ready to copy).
+The raw score data also lives in `scores.json` in your `classroom50` repository,
+so you can build your own automations against it. The column-by-column
+reference for both CSVs is in
 [Score exports](Autograding-Basics#score-exports) in Autograding Basics.
 
 ### As a teacher, can I test an assignment as a student?
 
-You can — Classroom 50 doesn't currently disallow one account holding both a
+You can: Classroom 50 doesn't currently disallow one account holding both a
 staff and a student role. Add yourself to the roster with `gh teacher roster
 add` (or the web app) while remaining on a staff team; you'll then show **both**
 roles and be graded as a student. For how the app behaves with a dual-role
@@ -335,18 +341,18 @@ account, see
 [Staff who are also students](Staff-TAs-and-Multiple-Teachers#staff-who-are-also-students-dual-roles).
 
 One caveat: as an **organization owner** you keep `admin` on your own assignment
-repo (GitHub won't let an owner reduce their own access to `write`), so it won't
-match a real student's `write`-level setup. To test the exact student
+repository (GitHub won't let an owner reduce their own access to `write`), so it
+won't match a real student's `write`-level setup. To test the exact student
 experience, use a **separate** GitHub account added to the classroom as a
 student.
 
 ## Coming from GitHub Classroom
 
-### Will my existing scripts that manipulate student repos still work?
+### Will my existing scripts that manipulate student repositories still work?
 
 Likely yes. As with GitHub Classroom, each student gets a normal GitHub
 repository named `<classroom>-<assignment>-<username>`, so scripts that automate
-git operations against those repos generally carry over. For how GitHub
+git operations against those repositories generally carry over. For how GitHub
 Classroom's vocabulary (cutoff date, Download grades, roster identifiers, teams)
 maps onto Classroom 50's, see
 [Coming from GitHub Classroom?](Glossary#coming-from-github-classroom).
@@ -356,9 +362,9 @@ maps onto Classroom 50's, see
 ### Why does signing in ask for access to all my repositories?
 
 Classroom 50 authenticates the same way the GitHub CLI does, using GitHub's
-`repo` scope. That scope is all-or-nothing — GitHub provides no way to limit it
-to a single organization's repositories — so the grant covers your repos even
-though Classroom 50 only acts on classroom ones. This matches the CLI's
+`repo` scope. That scope is all-or-nothing (GitHub provides no way to limit it
+to a single organization's repositories), so the grant covers your repositories
+even though Classroom 50 only acts on classroom ones. This matches the CLI's
 behavior. For what every scope grants and why, see
 [Permissions and access](GitHub-Integration#permissions-and-access);
 if you want to grant less, a fine-grained token scoped to one organization is
@@ -371,7 +377,7 @@ Yes. Sign-in requests one scope set for everyone, on purpose: one person can be
 both a teacher and a student (a teacher testing an assignment, a TA who also
 takes the course), so Classroom 50 never asks you to declare a role at sign-in.
 What you can *do* is decided afterward by your role in the organization and
-classroom, not by your token — a student's grant is broader than what a student
+classroom, not by your token. A student's grant is broader than what a student
 actually uses (they never exercise the organization-administration or
 repository-deletion powers). To grant less than the default, sign in with a
 fine-grained token scoped to one organization. Why per-organization classic
@@ -388,23 +394,23 @@ else ever deletes a repository. See
 [the full explanation](GitHub-Integration#2-teacher-authentication) in GitHub
 Integration.
 
-### Can I edit the config files in the `classroom50` repo by hand?
+### Can I edit the config files in the `classroom50` repository by hand?
 
 It's not recommended. Some state is derived from both the config files and the
 live state on GitHub.com, and the app updates the files automatically to keep
-them in sync; a hand-edit can create a state the
-tools don't know how to handle (and makes problems much harder to
-troubleshoot). Manage the classroom through the web app or the `gh teacher`
-CLI instead; the one documented exception is a `scores.json` score override
-(see above).
+them in sync; a hand-edit can create a state the tools don't know how to handle
+(and makes problems much harder to troubleshoot). Manage the classroom through
+the web app or the `gh teacher` CLI instead; the one documented exception is a
+`scores.json` score override (see above).
 
 ### What is the service token, and is it the same one the web app set up?
 
 The **service token** is a fine-grained personal access token stored as a secret
 in your `classroom50` repository; the score-collection, regrade, and token-probe
-workflows use it. It's the
-**same** token whether you set it up through the web app or the CLI — you only
-need one per organization. See
+workflows use it. It's the **same** token whether you set it up through the web
+app or the CLI: you only need one per organization. To check that the stored
+token still has every permission it needs, use **Test token** under **Service
+token** in the organization's **Settings**. See
 [the service-token setup](CLI-Teacher-Guide#create-the-service-token).
 
 ## Roadmap

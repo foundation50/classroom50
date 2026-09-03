@@ -1,4 +1,4 @@
-# Known limitations
+# Known Limitations
 
 Classroom 50 has no server: state lives in GitHub, and work runs as you or
 as GitHub Actions in your organization. That design keeps your data in your
@@ -12,9 +12,12 @@ workaround where one exists.
 find an account from an email address, so an emailed invitation can't be
 matched to a student until they accept it. Classroom 50 records the address
 on the roster as a pending row and fills in the account at the next sync,
-from either tool. To have usernames from the start, collect them up front; a
-signup form works well. See [Add students](Web-Teacher-Guide#add-students)
-and [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
+from either tool. The one shortcut is your own data: an address that a
+previous classroom's roster in the same organization already links to an
+account is enrolled directly instead of invited. To have usernames from the
+start, collect them up front; a signup form works well. See
+[Add students](Web-Teacher-Guide#add-students) and
+[What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 **A retained address is the one you invited.** When you invite by email, the
 address stored on the roster is what you typed, which is not necessarily the
@@ -39,7 +42,7 @@ waiting to be claimed.
 as a Release on each student's repository, and the browser can't read
 Release assets across origins (GitHub redirects them to storage that lacks
 CORS headers). Point students at their repository's Releases page or the
-feedback pull request; the student view's **View grade** link opens the
+feedback pull request; the student view's **View score** link opens the
 right Release. In-app scores are on the wish list; see
 [#567](https://github.com/foundation50/classroom50/issues/567).
 
@@ -51,9 +54,9 @@ requests).
 
 **State refreshes only when a page loads.** With no server polling in the
 background, the app reads GitHub's current state when you open or reload a
-page, and scores update only when collection runs (**Collect now**, or a manual
-`collect-scores` run).
-If a view looks stale, reload it. See
+page, and scores update only when collection runs (**Collect now** on the
+submissions page, **Collect all** on the assignments page, or a manual
+`collect-scores` run). If a view looks stale, reload it. See
 [When state refreshes](How-Classroom-50-Works#when-state-refreshes).
 
 ## Templates and student repositories
@@ -88,7 +91,7 @@ by the repository name (`<classroom>-<assignment>-<username>`). A renamed
 repository disappears from the submissions view. Tell students not to rename
 their repositories; if one already did, rename it back. The one supported
 rename is the slug update for an assignment whose repository names can exceed
-GitHub's 100-character limit — it renames every student repository
+GitHub's 100-character limit: it renames every student repository
 consistently, and only once per assignment. See
 [Updating an over-budget assignment slug](Web-Teacher-Guide#updating-an-over-budget-assignment-slug).
 
@@ -144,11 +147,11 @@ briefly fail or show stale data; wait a minute and retry.
   claims.
 - **Per-organization sign-in access** isn't possible with a classic OAuth
   sign-in: GitHub's `repo` scope is all-or-nothing, so the grant covers all
-  your repositories, not just the classroom org's. The tighter path is a
+  your repositories, not only the classroom org's. The tighter path is a
   fine-grained personal access token scoped to one organization; see
   [Reducing what you grant](GitHub-Integration#reducing-what-you-grant).
 - **Separate teacher and student sign-in profiles** would require choosing a
-  role at sign-in, which the design avoids — one person can be both a teacher
+  role at sign-in, which the design avoids: one person can be both a teacher
   and a student in the same organization. What you can do is gated by your
   org and classroom role after sign-in, not by your token's scopes; see
   [Permissions and access](GitHub-Integration#permissions-and-access).

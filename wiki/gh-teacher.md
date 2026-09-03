@@ -4,8 +4,9 @@ Every command and flag for the teacher CLI. For a walkthrough, see the
 [CLI Teacher Guide](CLI-Teacher-Guide).
 
 Run `gh teacher <command> --help` for the live flag list. Errors go to stderr
-with a non-zero exit code. Pass `--quiet` / `-q` to suppress informational
-output, or `--verbose` / `-v` for per-step detail.
+with a non-zero exit code. Every command accepts `--verbose` / `-v` for
+per-step API and git detail; most commands that print progress also accept
+`--quiet` / `-q` to suppress informational output.
 
 ## Commands at a glance
 
@@ -38,7 +39,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | `assignment list <org> <classroom>` | List assignment slugs. Flags: `--json`, `-q`. |
 | `assignment submission-mode <org> <classroom> <slug> --tag\|--every-push` | Change when the autograder fires and retrofit existing repos' shims. |
 | `assignment lock <org> <classroom> <slug>` | Lock (or `--unlock`) an assignment against student access. |
-| `assignment feedback-pr <org> <classroom> <assignment>` | Open or repair the Feedback PR on every student repo. Flags: `--user`, `-q`. |
+| `assignment feedback-pr <org> <classroom> <assignment>` | Open or repair the feedback PR on every student repo. Flags: `--user`, `-q`. |
 | `assignment test add/list/remove` | Manage an assignment's declarative tests. |
 | `team create <org> <classroom> <assignment>` | Create a group team for a team assignment. Flags: `--name`, `--member` (repeatable). |
 | `team list <org> <classroom> <assignment>` | List a team assignment's group teams, members, and drift. |
@@ -70,33 +71,43 @@ gh teacher init <org> --yes        # skip the workflow-refresh prompt
 Idempotent: re-running resumes where a prior run stopped and offers to refresh
 stale workflow files (after a confirmation prompt).
 
+Setup checks run first and are read-only: your OAuth scopes, organization
+access and ownership, the organization plan (a warning if the plan can't serve
+Pages from a private repository; advisory only), and that a service token is
+available. A hard failure stops `init` before it changes anything.
+
 <details>
 <summary>Steps <code>init</code> performs, in order</summary>
 
-1. **Org plan check** — warns if not on Team/Enterprise Cloud (Pages from a
-   private repo). Advisory.
-2. **Tighten member defaults** — `default_repository_permission: none`, plus
-   private-repo creation enabled so `gh student accept` works. On a plan-gated
-   rejection it retries per policy and warns per field.
-3. **Enable org Actions** — turns Actions on if it's off org-wide.
-4. **Set the $0 Actions budget cap** — stops paid overage; applied only when
-   the org has no budget yet. Advisory.
-5. **Allow Actions to create pull requests** — org-wide, so the autograde
-   runner can open Feedback PRs.
-6. **Install branch rulesets** — two org-wide rulesets protecting submission
-   history and the frozen Feedback PR base. See
+1. **Org member-privilege lockdown.** Sets `default_repository_permission` to
+   `none` and turns every member privilege off except private-repo creation
+   (so `gh student accept` works), public Pages creation (so the `classroom50`
+   repository can publish), and team creation (for student-formed groups).
+   Plan-gated rejections are retried per field and reported.
+2. **Org Actions.** Turns GitHub Actions on if it's off org-wide.
+3. **$0 Actions budget cap.** Stops paid overage; created only when the org
+   has no Actions budget yet. Never fatal.
+4. **Actions may create pull requests.** Org-wide, so the autograde runner can
+   open feedback PRs.
+5. **Branch rulesets.** Two org-wide rulesets protecting submission history
+   and the frozen feedback PR base. See
    [How student repositories are protected](How-Classroom-50-Works#how-student-repositories-are-protected).
-7. **Create or fetch the `classroom50` repository** — private, with `auto_init`.
-8. **Enable repo-level Actions** — on the `classroom50` repository itself.
-9. **Commit or refresh workflow and script files** — commits the embedded
-   workflows and scripts; on re-runs, refreshes stale files after confirmation
+6. **The `classroom50` repository.** Created private with `auto_init`, or
+   fetched if it exists.
+7. **Repo-level Actions.** Enabled on the `classroom50` repository itself.
+8. **Workflow and script files.** Commits the embedded workflows and scripts
+   in one commit; on re-runs, refreshes stale files after confirmation
    (`--yes` skips).
-10. **Enable Pages** — public, so students and the runner can fetch published
-    files unauthenticated.
-11. **Branch protection** — no force-push or deletion on the default branch.
-12. **Workflow permissions** — raises `GITHUB_TOKEN` to write.
-13. **Reusable-workflow access** — lets student shims call the runner workflow.
-14. **Service token** — validates and uploads `CLASSROOM50_SERVICE_TOKEN`.
+9. **GitHub Pages.** Public, so students and the runner can fetch published
+   files unauthenticated.
+10. **Branch protection.** No force-push or deletion on the default branch.
+11. **Workflow permissions.** Raises `GITHUB_TOKEN` to write.
+12. **Reusable-workflow access.** Lets student shims call the runner workflow.
+13. **Service token.** Validates and uploads `CLASSROOM50_SERVICE_TOKEN`.
+
+When it finishes, `init` prints the future Pages URL
+(`https://<org>.github.io/classroom50/`) and suggests
+`gh teacher classroom add <org> <short-name>` as the next command.
 
 </details>
 
@@ -120,7 +131,7 @@ in GitHub Integration.
 | `.github/scripts/runner.py` | Grading bootstrap fetched from Pages each submission. |
 | `.github/scripts/collect_scores.py` | Team-driven score collector. |
 | `.github/scripts/probe_token.py` | Service-token scope probe. |
-| `.github/scripts/ensure_feedback_pr.py` | Feedback PR maintainer run by the autograde runner. |
+| `.github/scripts/ensure_feedback_pr.py` | Maintains the feedback PR; run by the autograde runner. |
 | `.github/scripts/materialize_tests.py` | Writes each assignment's declarative `tests` block to a `tests.json` before publishing to Pages. |
 | `.github/scripts/regrade_repos.py` | Fan-out driver behind `regrade.yaml`. |
 | `README.md` | Describes the `classroom50` repository layout. |
@@ -174,22 +185,24 @@ gh teacher classroom add <org> <short-name> [--name "<full name>"] [--term <term
 gh teacher classroom add cs50-fall-2026 cs-principles --name "CS Principles" --term Fall-2026
 ```
 
-**Short-name rules:** `^[a-z0-9][a-z0-9-]{1,99}$` — lowercase
-letters/digits/hyphens, starting with a letter or digit, and at most 40
-characters for a new classroom. The short-name flows into student repo names
+**Short-name rules:** `^[a-z0-9][a-z0-9-]{1,99}$` (lowercase letters, digits,
+and hyphens, starting with a letter or digit), and at most 40 characters for a
+new classroom. The short-name flows into student repo names
 (`<short-name>-<assignment>-<username>`), which GitHub caps at 100 characters,
 so the 40-character cap leaves room for the assignment slug and any username.
 Existing classrooms with longer short-names stay readable and operable.
 
 `--unlisted` publishes the classroom's resources at an unguessable URL path
-segment (the web app's "Use an unlisted link" option — obscurity, not access
-control; it prompts to accept a generated key). `--key <key>` supplies a
-specific access key instead of the generated one (implies `--unlisted`).
+segment (the web app's **Use an unlisted link for this classroom** option).
+This is obscurity, not access control; the command prompts you to accept a
+generated key. `--key <key>` supplies a specific access key instead of the
+generated one (implies `--unlisted`); it must be 4 to 64 lowercase letters or
+digits.
 
-Scaffolds four files in one commit — `classroom.json`, `assignments.json`,
-`roster.csv`, `scores.json` — and creates the `classroom50-<short-name>` GitHub
-team (plus the `classroom50-<short-name>-{teacher,hta,ta}` staff teams). Refuses to overwrite an existing
-classroom.
+Scaffolds four files in one commit (`classroom.json`, `assignments.json`,
+`roster.csv`, `scores.json`) and creates the `classroom50-<short-name>` GitHub
+team plus the `classroom50-<short-name>-{teacher,hta,ta}` staff teams. Refuses
+to overwrite an existing classroom.
 
 <details>
 <summary>What the scaffold does and doesn't include</summary>
@@ -207,13 +220,14 @@ accept).
 
 </details>
 
-**Errors:** missing `classroom50` repository → `run gh teacher init <org> first`; existing
-classroom directory → refuses to overwrite; bad short-name → prints the rule.
+**Errors:** a missing `classroom50` repository points at `gh teacher init
+<org>`; an existing classroom directory is refused rather than overwritten; a
+bad short-name prints the rule.
 
 ### `classroom list`
 
 ```sh
-gh teacher classroom list <org> [--all] [--json] [--quiet]
+gh teacher classroom list <org> [--all] [--json] [-q]
 ```
 
 One short-name per line on stdout. Archived classrooms (`active: false`) are
@@ -245,7 +259,7 @@ idempotent.
 
 > [!NOTE]
 > Student `accept` is blocked only after the next `publish-pages` run updates the
-> published index — a documented v1 limitation, matching the web app.
+> published index. This is a documented v1 limitation, matching the web app.
 
 ### `classroom remove`
 
@@ -262,7 +276,7 @@ repos.
 Manage student rows in `<org>/classroom50/<classroom>/roster.csv`. All write
 subcommands retry on top of each other (up to 5 attempts), so concurrent
 teacher edits don't lose each other's work. Every row for a student who has
-joined carries an immutable numeric `github_id` (CLI-managed — don't hand-edit
+joined carries an immutable numeric `github_id` (CLI-managed; don't hand-edit
 it) so a username change doesn't desynchronize records. A student invited by
 email has neither a username nor a `github_id` until they accept: `roster invite`
 creates that pending row, and `roster sync` completes it once they've joined.
@@ -278,7 +292,7 @@ objects (`github_id` is `0` when unresolved; `role` is `""` when unknown);
 `--quiet` prints one username per line. The table and `--json` include pending
 rows for students invited by email; `--quiet` omits them, since they have no
 username yet and a blank line would feed scripts an empty argument. The `role`
-column is a display snapshot of the account's highest team-derived role — see
+column is a display snapshot of the account's highest team-derived role. See
 [Dual roles](#dual-roles-staff-who-are-also-students). Read-only.
 
 ### `roster add`
@@ -336,11 +350,10 @@ gh teacher roster invite <org> <classroom> --file <path>
 
 Pass `--file` in place of the positional `<email>` to invite a whole list.
 The file is plaintext, one address per line; blank lines and `#` comment lines
-are ignored. Every address is validated up front — one unusable line refuses the
+are ignored. Every address is validated up front: one unusable line refuses the
 whole run and nothing is sent. Each address takes the same path as a single
-invite, is reported as it resolves, and the successfully-invited batch is retained
-in **one** roster commit. Every skipped or failed address is named with its file
-line.
+invite, is reported as it resolves, and the invited batch is retained in **one**
+roster commit. Every skipped or failed address is named with its file line.
 
 Bulk mode is student-only and carries no name/section metadata, so
 `--first-name`, `--last-name`, and `--section` are rejected with `--file`. Fill
@@ -391,16 +404,22 @@ gh teacher roster sync <org> <classroom> --write    # apply
 ```
 
 Catches `roster.csv` up with GitHub: records the students who accepted an email
-invitation, fills in a missing `github_id` from the classroom team's membership,
-drops the pending rows nothing backs, and deletes the invite teams that are done.
-The web app runs this same sync when a teacher opens the roster; here it's
-explicit and script-callable. The web app's pass does two things more: it
-refreshes each row's recorded `role` from live team membership, and it adds a row
-for a classroom-team member the roster is missing.
+invitation (username and `github_id`, onto their own pending row), fills in a
+missing `github_id` from the classroom team's membership, and deletes the
+invite teams that are done. If no row claims a recovered invitation (the
+pending row was deleted, or `roster invite`'s commit never landed), it appends
+a row so the address isn't lost. The web app runs this same sync when a teacher
+opens the roster; here it's explicit and script-callable. The web app's pass
+does two things more: it refreshes each row's recorded `role` from live team
+membership, and it adds a row for a classroom-team member the roster is
+missing.
 
-Its scope is the email-invite lifecycle and `github_id`. It never rewrites a
-`role` already recorded on a row, and it doesn't add rows for organization
-members who were never invited through Classroom 50; see
+The sync **never removes a roster row**. An email-only row nothing backs (an
+expired or canceled invitation) stays on the roster for you to link or delete
+by hand; the web app shows it as unlinked. Its scope is the email-invite
+lifecycle and `github_id`. It never rewrites a `role` already recorded on a
+row, and it doesn't add rows for organization members who were never invited
+through Classroom 50; see
 [Already an org member, but not on the roster](Troubleshooting#already-an-org-member-but-not-on-the-roster).
 A row it *adds* for an accepted invitation records the role of the classroom team
 the account was found on, highest rank first (`teacher > hta > ta > student`), so
@@ -420,17 +439,17 @@ Exit codes follow `terraform plan -detailed-exitcode`:
 | Code | Meaning |
 | --- | --- |
 | `0` | Nothing to do, or `--write` applied everything. |
-| `1` | An error, or a degraded read left the pass incomplete (nothing was removed and no invite team was deleted). |
+| `1` | An error, or a degraded read left the pass incomplete (no invite team was deleted). |
 | `2` | A dry run found changes pending. |
 
 Conservative by construction. Any degraded read (the pending-invitation list, a
-team) makes the whole pass report-only: no row is dropped and **no invite team is
-deleted at all**, not even one whose address the roster already records. Such a
-pass doesn't report a deletion it won't make. A team whose stored address no
-longer hashes to its name, or that has more than one member, is reported on
-stderr and left standing. A member-less team is collected only once it's more than
-24 hours old with no pending invitation for its address, and a recovered team is
-deleted only after the roster commit carrying its address has landed.
+team) makes the whole pass report-only: **no invite team is deleted at all**,
+not even one whose address the roster already records. Such a pass doesn't
+report a deletion it won't make. A team whose stored address no longer hashes
+to its name, or that has more than one member, is reported on stderr and left
+standing. A member-less team is collected only once it's more than 24 hours old
+with no pending invitation for its address, and a recovered team is deleted
+only after the roster commit carrying its address has landed.
 
 ### `roster update`
 
@@ -449,7 +468,7 @@ required; an unknown username is an error.
 gh teacher roster remove <org> <classroom> <username>
 ```
 
-Drops the row (idempotent). Does **not** remove organization membership — use
+Drops the row (idempotent). Does **not** remove organization membership; use
 `gh teacher remove <org> <username>` for that.
 
 ### `roster import`
@@ -478,11 +497,11 @@ Each row is routed by what identifies it:
   address with no pending row is skipped with a notice. Send the invitation with
   [`roster invite`](#roster-invite) first.
 - **A `github_id` with no `username`.** The one shape a round-trip can't
-  preserve: `import` resolves
-  students by username and has no id-to-account lookup, so the row is skipped
-  with a notice pointing at the web app's **Upload**, and anything stored for
-  that student is left untouched. A row whose `github_id` cell is present but
-  unusable is skipped the same way.
+  preserve: `import` resolves students by username and has no id-to-account
+  lookup, so the row is skipped with a notice pointing at the web app's
+  **Upload roster** dialog, and anything stored for that student is left
+  untouched. A row whose `github_id` cell is present but unusable is skipped
+  the same way.
 
 `role` is carried, never applied: import grants no role beyond the organization
 invitation and classroom-team membership each `username` row gets, and never
@@ -495,16 +514,17 @@ so a partial-import state can't appear on the repository. After it lands, every
 `username` row's student is added to the classroom team and, unless they're
 already a member or already invited, invited to the organization.
 
-**Errors common to roster commands:** missing `classroom50` repository → `run gh teacher init
-<org> first`; missing `roster.csv` → points at `classroom add`; bad header →
-prints the offending header; unknown GitHub user → prints the username; repeated
-rebase failures → `lost the rebase race`, retry.
+**Errors common to roster commands:** a missing `classroom50` repository points
+at `gh teacher init <org>`; a missing `roster.csv` points at `classroom add`; a
+bad header prints the offending header; an unknown GitHub user prints the
+username; repeated rebase failures print `lost the rebase race` (retry).
 
 ## `staff`
 
-Manage a classroom's **staff teams** — `classroom50-<classroom>-{teacher,hta,ta}`.
-The `teacher` and `hta` (head TA) teams get write on the `classroom50` repository; `ta` gets
-read-only. The classroom's GitHub teams — not the `role` column in `roster.csv` —
+Manage a classroom's **staff teams**: `classroom50-<classroom>-{teacher,hta,ta}`.
+The `teacher` and `hta` (head TA) teams get write on the `classroom50`
+repository; `ta` gets read-only. Head TAs are organization members, never
+owners. The classroom's GitHub teams, not the `role` column in `roster.csv`,
 are the role authority, so a classroom's staff is the same from the CLI or the
 web app.
 
@@ -535,12 +555,12 @@ The CLI-visible effects:
   is recorded with their staff role.
 - **`roster add` prints a note** when the target is already staff, so the
   later `role`-column rewrite isn't a surprise.
-- **`roster remove` (unenroll) drops only the student side** — the roster row
+- **`roster remove` (unenroll) drops only the student side**: the roster row
   and student-team membership; any staff role stays intact.
 
 ## `assignment`
 
-Manage entries in `<org>/classroom50/<classroom>/assignments.json` — the manifest
+Manage entries in `<org>/classroom50/<classroom>/assignments.json`, the manifest
 the autograde workflow and `gh student accept` both read. Writes retry on top of
 each other, the same as roster commands.
 
@@ -553,10 +573,13 @@ gh teacher assignment add cs50-fall-2026 cs-principles reflection --name "Reflec
 gh teacher assignment add cs50-fall-2026 cs-principles actions-lab --name "Actions Lab" --empty-repo
 ```
 
-Registers or upserts one assignment. Re-running with the same slug replaces the
-entry wholesale (dropping tests or a template you don't re-pass — the CLI warns).
-The slug must match `^[a-z0-9][a-z0-9-]{1,99}$`, and a **new** slug must fit
-the repo-name budget: `<classroom>-<slug>` plus a worst-case 39-character
+Registers or upserts one assignment. Re-running with the same slug rebuilds the
+entry from the flags you pass: a template, tests, allowed files, pass
+threshold, or student permission you don't re-pass is dropped (the CLI warns).
+The lock state, submission mode and tags, repository visibility, release
+assets, and every field the CLI has no flag for are carried forward. The slug
+must match `^[a-z0-9][a-z0-9-]{1,99}$`, and a **new** slug must fit the
+repo-name budget: `<classroom>-<slug>` plus a worst-case 39-character
 username must stay within GitHub's 100-character repo-name limit, so the
 classroom short-name and the slug share 59 characters. A slug retired by
 `assignment rename` is permanently reserved. A same-slug replace of an
@@ -569,71 +592,81 @@ the CLI warns that students with long usernames can't accept it.
 
 | Flag | Purpose |
 | --- | --- |
-| `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). A `@branch` suffix is tolerated but ignored, with a warning — the assignment always copies the template's default branch. To use a different branch, change the template repository's default branch. |
+| `--template <owner>/<repo>[@branch]` | Starter-code repo (must be flagged as a template). Omit for a template-less assignment (an initialized repo: README plus the control files). A `@branch` suffix is tolerated but ignored, with a warning: the assignment always copies the template's default branch. To use a different branch, change the template repository's default branch. |
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, such as `2026-09-15T23:59:00-04:00`. Stored as UTC; the machine's local timezone is assumed if you omit the offset. |
 | `--available-from <ISO-8601>` | Release date; stored as UTC (local timezone assumed without an offset). Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Listing-only, not access control: students who already accepted always see it. |
 | `--locked` | Register the assignment locked: students can't see or accept it, and a private in-org template stays unreadable to the classroom team until you unlock. Same effect as [`assignment lock`](#assignment-lock). On a same-slug re-add, `--locked=false` unlocks and omitting the flag keeps the stored lock. See [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments). |
 | `--mode individual\|group\|team` | `individual` (default), `team` (a group assignment: one shared repository per group, owned by a GitHub Team; see [`team`](#team)), or `group` (the legacy collaborator-based shared repository). Both group modes require `--max-group-size`; `team` also requires `--team-formation`. |
 | `--team-formation teacher\|student` | Who forms a team assignment's groups: `teacher` (you create the group teams with [`team create`](#team-create); students not in a group can't accept) or `student` (the first student founds a group with `gh student accept --new-team` and adds teammates). Required with `--mode team`. |
-| `--max-group-size <N>` | Maximum group size (2–100). Enforced by Classroom 50 clients when groups form; advisory beyond that (direct GitHub-UI changes can bypass it). |
+| `--max-group-size <N>` | Maximum group size (2 to 100). Enforced by Classroom 50 clients when groups form; advisory beyond that (direct GitHub-UI changes can bypass it). |
 | `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Advanced Autograding](Advanced-Autograding#the-runtime-block). |
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
-| `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. |
-| `--empty-repo` | Truly bare repos (no README/marker/shim); autograding and feedback PR disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with template/tests/feedback-pr/allowed-files/pass-threshold/submission-mode/submission-tag/no-autograder/init-shim. |
+| `--feedback-pr` | One review PR per student repo. **On by default**; `--feedback-pr=false` disables. Requires the org prerequisites `gh teacher init` sets up. |
+| `--empty-repo` | Truly bare repos (no README, marker, or shim); autograding and the feedback PR are disabled; changeable on a same-slug re-add (warns; only affects future accepts); mutually exclusive with `--template`, `--tests`, `--feedback-pr`, `--allowed-files`, `--pass-threshold`, `--submission-mode`, and `--submission-tag`. |
 | `--allowed-files <pattern>` | Ordered `.gitignore`-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file. See [Advanced Autograding](Advanced-Autograding#restricting-submission-files-allowed_files). |
 | `--student-permission <role>` | Collaborator role each student gets on their **own** repo at accept: `pull`, `triage`, `push`, `maintain`, or `admin`. Omit for the default (`push` individual, `admin` group). Affects future accepts only. Caution: `admin` lets the student manage the repo's settings and collaborators; the org lockdown from `init` still blocks visibility changes. |
-| `--repo-visibility private\|public` | Visibility each student repo is **created** with at accept: `private` (default) or `public` (peer-review, portfolio, or showcase work — accept warns the student upfront that their work will be publicly visible). If org policy blocks a student from creating a public repo, accept falls back to private and says so. Affects future accepts only; flip existing repos with the submissions page's **Change repository visibility**. Re-adding without the flag keeps the stored value. |
-| `--pass-threshold <0–100>` | Advisory passing bar shown on the submissions page. Off when omitted (distinct from `0`). |
-| `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag — plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
+| `--repo-visibility private\|public` | Visibility each student repo is **created** with at accept: `private` (default) or `public` (peer-review, portfolio, or showcase work; accept warns the student upfront that their work will be publicly visible). If org policy blocks a student from creating a public repo, accept falls back to private and says so. Affects future accepts only; flip existing repos with the submissions page's **Change repository visibility**. Re-adding without the flag keeps the stored value. |
+| `--pass-threshold <0-100>` | Advisory passing bar shown on the submissions page. Off when omitted (distinct from `0`). |
+| `--submission-mode every-push\|tag` | When the autograder fires: `every-push` (default) grades every push; `tag` grades only `submit/*` tag pushes (the submit clients push the tag; plain `git push` costs no Actions minutes). Change it later with `assignment submission-mode`. |
 | `--submission-tag <pattern>` | Milestone tag (repeatable) that also triggers grading: `git tag phase1 && git push origin phase1` grades that commit. Simple globs (`v*`) work; exact names are safer. The record still lives at the canonical `submit/*` tag. Mutually exclusive with `--empty-repo`. |
 
-**Where grading logic lives** (increasing effort): declarative `--tests` → a
-per-assignment `<classroom>/autograders/<slug>/autograder.py` → a classroom
-default with `gh teacher autograder set-default`. See
+**Where grading logic lives**, in increasing effort: declarative `--tests`, then
+a per-assignment `<classroom>/autograders/<slug>/autograder.py`, then a
+classroom default with `gh teacher autograder set-default`. See
 [Autograding Basics](Autograding-Basics#declarative-tests) and
 [Advanced Autograding](Advanced-Autograding#writing-an-autograderpy).
 
 **Repository shapes.** Three more provisioning settings live in
-`assignments.json` only — there is no `assignment add` flag for them; set them
+`assignments.json` only; there is no `assignment add` flag for them. Set them
 in the web assignment form or by editing the file. All three are mutable but
 affect only repositories accepted from then on. The concept-level comparison
 of every shape is in
 [Repository shapes](Assignment-Templates#repository-shapes).
 
-- **`no_autograder: true`** (web: **Do not use the built-in autograder**) —
-  accept commits the `.classroom50.yaml` marker and the template's content but
+- **`no_autograder: true`** (web: **Do not use the built-in autograder**).
+  Accept commits the `.classroom50.yaml` marker and the template's content but
   no autograde workflow, so the template's own CI runs instead. Requires a
-  template (it carries the workflows); keeps the Feedback PR. Score collection
+  template (it carries the workflows); keeps the feedback PR. Score collection
   records who submitted but no scores (there are no `submit/*` releases);
   regrade skips it. Mutually exclusive with
   `empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
   (tests/allowed-files/release-assets/pass-threshold/submission-mode/
   submission-tag).
 - **`init_shim: true`** (web: **No template**, **Add a README** off, built-in
-  autograder on) — an initialized but README-less repo carrying only the
+  autograder on). An initialized but README-less repo carrying only the
   control files, which autogrades and is collected like any built-in
   assignment. Requires the default autograder and no template; mutually
   exclusive with `empty_repo`, `template`, `no_autograder`, and a non-default
   `--autograder`; permits the grading-adjacent fields.
-- **`include_all_branches: true`** (web: **Include all branches**) — accept
+- **`include_all_branches: true`** (web: **Include all branches**). Accept
   passes `include_all_branches` to GitHub's generate call, so each student
   repo gets **all** of the template's branches. Requires a template; mutually
   exclusive with `empty_repo` and `init_shim`; compatible with everything
   else.
 
+Several other fields are also JSON-only from the CLI's point of view and are
+carried forward unchanged on a same-slug re-add: `release_assets` (files
+attached to each submission release), `copy_about` and `copy_topics` (copy the
+template's About text and topics onto each new student repo), `feedback_pr_template`
+(use the template's pull request template as the feedback PR body), `closed`
+(the web app's **Close submission** state), and `grading` (the web app's
+grading-mode choice). Set them in the web app or by editing the file; the
+field reference is `schemas/assignments-v1.schema.json`.
+
 <details>
 <summary>Errors</summary>
 
-- Missing `classroom50` repository / `assignments.json` → points at `init` / `classroom add`.
-- Template 404 → make it public or copy it into the org.
-- Template private and outside `<org>` → rejected (students can't be granted
+- A missing `classroom50` repository or `assignments.json` points at `init` or
+  `classroom add`.
+- Template 404: make it public or copy it into the org.
+- Template private and outside `<org>`: rejected (students can't be granted
   access).
-- Template not flagged as a template → names the Settings toggle.
-- `--autograder <name>` references a missing file → tells you to create it.
-- `--runtime` / `--tests` fail validation → names the offending field.
-- Repeated rebase failures → `lost the rebase race`.
+- Template not flagged as a template: names the Settings toggle.
+- `--autograder <name>` references a missing file: tells you to create it.
+- `--runtime` or `--tests` fails validation: names the offending field.
+- Repeated rebase failures: `lost the rebase race`.
 
 **Same-slug concurrent writes** are last-writer-wins; both commits stay in git
 history, so an unexpected overwrite is recoverable with `git revert`.
@@ -646,17 +679,17 @@ history, so an unexpected overwrite is recoverable with `git revert`.
 gh teacher assignment reuse <org> <source-slug> --from <src-classroom> --to <dst-classroom> [--slug <new>] [--name "<new>"] [--json]
 ```
 
-Copies an assignment record into another classroom in the **same org** — the
-scriptable version of the web app's "reuse assignment". Every field is copied
-verbatim (including unknown/future ones); only slug and name can change. Student
-repos and scores are not copied.
+Copies an assignment record into another classroom in the **same org**: the
+scriptable version of the web app's **Reuse assignment** action. Every field is
+copied verbatim (including unknown/future ones); only slug and name can change.
+Student repos and scores are not copied.
 
 - Without `--slug`, the copy keeps the source slug, trimmed to the target
-  classroom's repo-name budget and auto-suffixed `-2`, `-3`, … past collisions
-  (a trim is reported on stderr). An explicit `--slug` refuses a collision, an
-  over-budget value, or a reserved pre-rename slug. Read the final slug from
-  `--json`, not the prose — `auto_suffixed` is true for a collision suffix or
-  a budget trim.
+  classroom's repo-name budget and auto-suffixed `-2`, `-3`, and so on past
+  collisions (a trim is reported on stderr). An explicit `--slug` refuses a
+  collision, an over-budget value, or a reserved pre-rename slug. Read the
+  final slug from `--json`, not the prose: `auto_suffixed` is true for a
+  collision suffix or a budget trim.
 - Re-grants the target classroom's team read on a private in-org template.
   In-org only (v1). Refuses an archived target.
 
@@ -690,8 +723,8 @@ Confirmation requires typing the new slug (skip with `--yes` in scripted
 runs); `--dry-run` prints the plan without writing anything. Per-repo failures
 never abort the batch: re-running the same command resumes, skipping
 already-renamed repos and healing stragglers. The assignment stays locked
-while any repo is unrenamed — an accept would occupy the new repo name and
-strand the straggler's rename.
+while any repo is unrenamed, because an accept would occupy the new repo name
+and strand the straggler's rename.
 
 Historical submissions keep their scores (collection accepts the pre-rename
 slug through `renamed_from`). Students run `git pull` once before their next
@@ -699,7 +732,7 @@ slug through `renamed_from`). Students run `git pull` once before their next
 marker names a different assignment (a sibling slug sharing the prefix), or
 with no readable marker, are skipped untouched.
 
-**Flags:** `--dry-run`, `--yes`, `--quiet`.
+**Flags:** `--dry-run`, `--yes`, `-q, --quiet`.
 
 ### `assignment remove`
 
@@ -707,7 +740,7 @@ with no readable marker, are skipped untouched.
 gh teacher assignment remove <org> <classroom> <slug>
 ```
 
-Drops the entry (idempotent). Does **not** touch existing student repos — only
+Drops the entry (idempotent). Does **not** touch existing student repos; only
 new `gh student accept` calls stop finding the slug.
 
 ### `assignment list`
@@ -728,13 +761,13 @@ gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --tag -
 gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --every-push --dry-run
 ```
 
-Sets when the autograder fires — `--every-push` (every default-branch push
-grades; the default behavior) or `--tag` (**only** `submit/*` tag pushes
-grade; `gh student submit`, or a hand-pushed `submit/*`
-tag; plain `git push` costs no Actions minutes) — and, by default,
-**retrofits the autograde shim in every existing student repo** to match.
-The trigger lives in each repo's workflow file, so a mode change doesn't
-reach already-accepted repos without the retrofit.
+Sets when the autograder fires and, by default, **retrofits the autograde shim
+in every existing student repo** to match. `--every-push` grades every
+default-branch push (the default behavior; `submit/*` tag pushes grade too).
+`--tag` grades **only** `submit/*` tag pushes: `gh student submit` pushes the
+tag, a hand-pushed `submit/*` tag works too, and plain `git push` costs no
+Actions minutes. The trigger lives in each repo's workflow file, so a mode
+change doesn't reach already-accepted repos without the retrofit.
 
 | Flag | Purpose |
 | --- | --- |
@@ -745,19 +778,19 @@ reach already-accepted repos without the retrofit.
 
 Details that matter:
 
-- **Idempotent** — an already-set field and already-current shims commit
+- **Idempotent.** An already-set field and already-current shims commit
   nothing; re-running only fills gaps.
 - The retrofit commit carries `[skip ci]`, so it **never triggers grading**.
-- Repos whose shim was hand-edited are **reported and left untouched** —
-  the rewrite only touches a recognizable default-shim trigger block.
-- **Custom autograders**: the command refuses to rewrite a teacher-authored
+- Repos whose shim was hand-edited are **reported and left untouched**: the
+  rewrite only touches a recognizable default-shim trigger block.
+- **Custom autograders.** The command refuses to rewrite a teacher-authored
   shim. Edit its `on:` block yourself, then re-run with
   `--update-shims=false` (the field still controls whether the submit
   clients push the tag).
 - `empty_repo` assignments are rejected (no shim exists).
 - Needs the `workflow` OAuth scope to commit workflow files
   (`gh auth refresh -s workflow` if you see a scope error).
-- **Tell students to `git pull` afterward** — clones made before the change
+- **Tell students to `git pull` afterward.** Clones made before the change
   conflict on their next push.
 
 ### `assignment lock`
@@ -786,13 +819,14 @@ gh teacher assignment feedback-pr <org> <classroom> <assignment>
 gh teacher assignment feedback-pr --user alice <org> <classroom> <assignment>
 ```
 
-Opens (or repairs) the [Feedback PR](Autograding-Basics#feedback-pull-requests)
-on every existing student repo for an assignment, retroactively and
-idempotently, for repos that predate the feature or missed the PR because of
-an outage. It re-runs the same ensure flow accept uses, so the runner adopts
-the PR and teachers never see two. Repos that already have a Feedback PR (in
-any state) are left as-is. Pass `--user` to target a single student, `-q` to
-suppress per-repo output. Requires owner/admin access to the org's repos.
+Opens (or repairs) the
+[feedback pull request](Autograding-Basics#feedback-pull-requests) on every
+existing student repo for an assignment, retroactively and idempotently, for
+repos that predate the feature or missed the PR because of an outage. It
+re-runs the same ensure flow accept uses, so the runner adopts the PR and
+teachers never see two. Repos that already have a feedback PR (in any state)
+are left as-is. Pass `--user` to target a single student, `-q` to suppress
+per-repo output. Requires owner/admin access to the org's repos.
 
 A student-precreated `feedback` branch frozen at the wrong commit is reported
 as **BLOCKED**: an org admin must delete that branch before the PR can open;
@@ -806,25 +840,45 @@ gh teacher assignment test list <org> <classroom> <slug> [--json] [-q]
 gh teacher assignment test remove <org> <classroom> <slug> <test-name>
 ```
 
-Manage the declarative `tests` block — GitHub Classroom-style io/run/python
+Manage the declarative `tests` block: GitHub Classroom-style io/run/python
 checks graded with no `autograder.py`. `add` upserts by `--name`; it's refused
-while a per-assignment `autograder.py` exists. Two flags control the
-submission report: `--failure-details {full,actual-only,none}` sets how much
-failure detail students see (omit for the assignment's default), and
-`--show-output` includes the test's captured setup/run output in the report
-even when it passes (`--show-output=false` opts one test out of a
-`show-output` default). Commands run in the student checkout;
+while a per-assignment `autograder.py` exists, and it fails if the slug isn't
+registered yet. Commands run in the student checkout;
 `$CLASSROOM50_BUNDLE_DIR` points at the teacher-only files in
 `<classroom>/autograders/<slug>/` (see
 [Teacher-only test files](Autograding-Basics#teacher-only-test-files)). See
-[Autograders](Autograding-Basics#declarative-tests) for fields and semantics
-and [Report options](Autograding-Basics#report-options) for what each level
-shows. For bulk edits, use `assignment add --tests <file.json>`.
+[Declarative tests](Autograding-Basics#declarative-tests) for fields and
+semantics and [Report options](Autograding-Basics#report-options) for what
+each failure-details level shows. For bulk edits, use
+`assignment add --tests <file.json>`.
+
+**`test add` flags** (`--name`, `--type`, and `--run` are required):
+
+| Flag | Purpose |
+| --- | --- |
+| `--name <n>` | Test name, unique within the assignment. |
+| `--type io\|run\|python` | `io` compares stdout, `run` checks the exit code, `python` runs pytest (points are split across discovered cases at grade time). |
+| `--run <cmd>` | Command to run. |
+| `--setup <cmd>` | Optional command run before `--run` (a compile step, for example). |
+| `--points <N>` | Points the test is worth. |
+| `--timeout <s>` | Seconds before the test fails (`0` = the default of 10 s). |
+| `--input <text>` / `--input-file <name>` | `io` only: inline stdin, or a bundled fixture file fed on stdin. |
+| `--expected <text>` / `--expected-file <name>` | `io` only: inline expected stdout, or a bundled fixture file holding it. |
+| `--comparison included\|exact\|regex` | `io` only: how stdout is compared. |
+| `--exit-code <N>` | `run` only: required exit code (default `0`). |
+| `--failure-details full\|actual-only\|none` | How much failure detail students see; omit for the assignment default. |
+| `--show-output` | Include captured setup/run output in the report even when the test passes (`--show-output=false` opts one test out of a `show-output` default). |
+
+`--input-file` and `--expected-file` name a fixture you committed alongside the
+assignment at `<classroom>/autograders/<slug>/`; it's bundled and read at grade
+time. `test list` prints one test name per line (`--json` for the full array,
+`-q` to drop the stderr summary); `test remove` is idempotent and errors only
+if the slug itself isn't registered.
 
 ## `team`
 
 Manage the GitHub Teams behind a `--mode team` assignment. Each group is a
-GitHub Team named `classroom50-group-<hash>-<n>` that owns the shared
+secret GitHub Team named `classroom50-group-<hash>-<n>` that owns the shared
 repository `<classroom>-<assignment>-group-<n>`. Membership writes also update
 `<classroom>/teams.json` in the `classroom50` repository: the snapshot of
 intended membership that survives drift (GitHub Teams stay authoritative for
@@ -928,8 +982,9 @@ gh teacher autograder remove <org> <classroom> [--yes]
 
 - **`set-default`** replaces `<classroom>/autograder.py` with `--from` (a file or
   `-` for stdin). With no `--from`, it installs a diagnostic stub that echoes the
-  runner's environment and emits a vacuous pass — useful for verifying the
-  pipeline. The classroom must already exist.
+  runner's environment and emits a vacuous pass, which is useful for verifying
+  the pipeline. Re-running with identical content skips the commit. The
+  classroom must already exist.
 - **`show`** prints the default to stdout; `--json` emits metadata
   `{path, exists, is_stub, size, sha}`. Read-only.
 - **`list`** enumerates named shims (`<name>.yaml`) and per-assignment override
@@ -939,7 +994,7 @@ gh teacher autograder remove <org> <classroom> [--yes]
   Prompts unless `--yes`. Idempotent.
 
 Named shims and per-assignment `autograder.py` overrides are **read-only from the
-CLI** — author them with ordinary git operations. See
+CLI**; author them with ordinary git operations. See
 [Advanced Autograding](Advanced-Autograding).
 
 ## `invite`
@@ -980,10 +1035,10 @@ spot mismatches, such as a student who never accepted their invitation. Default 
 aligned table; `--json` emits `{login, kind, role, github_id}`; `--quiet` prints
 one login per line. Reading org invitations needs `admin:org`. Read-only.
 
-On a `member` or `collaborator` row, `github_id` is the account's id. On a
-`pending invitation` row it is the **invitation's** id instead, since GitHub's
-invitations API reports no account id for an invitee, so don't join it against
-`roster.csv`'s `github_id`.
+On a `member` or `collaborator` row, `github_id` is the account's id. On an
+`invitation` row (a pending invitation) it is the **invitation's** id instead,
+since GitHub's invitations API reports no account id for an invitee, so don't
+join it against `roster.csv`'s `github_id`.
 
 ## `download`
 
@@ -1015,13 +1070,13 @@ gh teacher teardown <org>          # typed org-name prompt
 gh teacher teardown --yes <org>    # skip the prompt (scripts only)
 ```
 
-Deletes **every** repository in `<org>` — a development reset. It confirms the
-`classroom50` marker repo exists (refusing otherwise), lists all repos, prompts
-for the typed org name, then deletes each (the `classroom50` repository last, so an
-interrupted run stays safe to re-run). It then removes the classroom and invite
-teams it finds, so no invited address is left behind, and sweeps each
-classroom's group teams (`classroom50-group-…`), verifying each team's group
-record before deleting it.
+Deletes **every** repository in `<org>`; this is a development reset. It
+confirms the `classroom50` marker repo exists (refusing otherwise), lists all
+repos, prompts for the typed org name, then deletes each (the `classroom50`
+repository last, so an interrupted run stays safe to re-run). It then removes
+the classroom and invite teams it finds, so no invited address is left behind,
+and sweeps each classroom's group teams (`classroom50-group-…`), verifying each
+team's group record before deleting it.
 
 > [!WARNING]
 > Requires the `delete_repo` scope, which is **not** in the default set. Opt in
@@ -1029,15 +1084,15 @@ record before deleting it.
 
 ## `whoami` / `login` / `logout`
 
-- `whoami` — prints the authenticated GitHub user.
-- `login` — wraps `gh auth login` with the required scopes (`admin:org`,
+- `whoami` prints the authenticated GitHub user.
+- `login` wraps `gh auth login` with the required scopes (`admin:org`,
   `read:org`, `repo`, `workflow`); add more with `-s`. It always mints a new
   token and **replaces** your stored github.com auth, so when one already
   exists it warns and asks for confirmation first. Other commands don't: they
   reuse a sufficiently-scoped token untouched, and widen an under-scoped
   gh-managed one in place with `gh auth refresh`. See
   [Will `gh teacher login` disturb my existing `gh` setup?](Troubleshooting#will-gh-teacher-login-disturb-my-existing-gh-setup).
-- `logout` — runs `gh auth logout`.
+- `logout` runs `gh auth logout`.
 
 ## Contributing
 

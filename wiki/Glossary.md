@@ -76,9 +76,10 @@ changes its team slug or its repository name.
 
 The `<classroom>/teams.json` file in the `classroom50` repository: the
 recorded intent of each group's membership. GitHub Teams stay authoritative
-for who can push; the snapshot exists so intended membership survives
-**drift** (members changed on GitHub since the last refresh, which the teacher
-views surface) and so cleanup can attribute a group team after it is deleted.
+for who can push; the snapshot exists so intended membership survives members
+being changed directly on GitHub (which the teacher views flag as **Members
+changed since the last refresh**) and so cleanup can attribute a group team
+after it is deleted.
 
 #### Roster
 
@@ -86,8 +87,9 @@ The list of students in a classroom. Backed by a `roster.csv`
 file, but the classroom's GitHub team is the source of truth for who is
 enrolled. A row identifies a student by `github_id` or GitHub username; a student
 invited by email has a **pending row**, identified by their address, until they
-accept. There is no equivalent of GitHub Classroom's roster identifier or student
-self-linking.
+accept. A row with a name but no account is an **unlinked row**, kept for you to
+link to an organization member. There is no equivalent of GitHub Classroom's
+roster identifier or student self-linking.
 
 #### Pending row
 
@@ -95,8 +97,9 @@ A `roster.csv` row for someone invited by email who hasn't
 accepted yet. It holds the invited address and role, with no username or
 `github_id`, because GitHub offers no way to look up an account from an email
 address. A sync fills in the account once they accept; cancelling the
-invitation removes the row immediately, and an expired one is cleared by the next
-sync, from either tool.
+invitation removes the row immediately. A sync never removes a row, so a row
+whose invitation expired stays on the roster as an unlinked row until you link
+or delete it.
 
 #### Invite team
 
@@ -113,11 +116,20 @@ information, see
 
 A pass that catches `roster.csv` up with the classroom's GitHub state:
 it records the students who accepted an email invitation, fills in a missing
-`github_id`, drops the pending rows nothing backs, and retires the invite teams
-that are done. Nothing runs on its own: the web app runs a sync when a teacher
-opens a classroom or its roster, and `gh teacher roster sync` runs one on demand.
-This is not **Collect now**, which collects scores. See
+`github_id`, and retires the invite teams that are done. It never removes a
+row. Nothing runs on its own: the web app runs a sync when a teacher
+opens a classroom or its roster (**Refresh roster** runs one on demand), and
+`gh teacher roster sync` runs one from a terminal. This is not **Collect now**,
+which collects scores. See
 [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
+
+#### Invite link
+
+The URL a teacher shares so a student can accept an assignment (the web app
+also calls the classroom-level one the **onboarding link**). It only works for
+a student who has already been invited to the organization; it never enrolls
+anyone on its own. An assignment with no release date is reachable only
+through its invite link.
 
 #### Organization (org)
 
@@ -129,6 +141,16 @@ setup. Requires the Team or Enterprise plan.
 The private repository named `classroom50`
 in your organization. It holds every classroom's settings, roster,
 assignments, autograders, and scores. Classroom 50 has no other backend.
+
+#### Published resources
+
+The files a classroom publishes through your organization's GitHub Pages site:
+the assignment list an invite link resolves against, autograder workflow files,
+and test bundles. Students' tools read them without special access, so they are
+public (see **Unlisted classroom**). The **Published** page in the web app
+(headed **Published resources**) browses them, and the **Publish Pages**
+workflow in the `classroom50`
+repository regenerates them after every change.
 
 ## Roles
 
@@ -174,10 +196,47 @@ it are marked *late*; nothing is blocked, unlike GitHub Classroom's cutoff
 date. To actually stop submissions, use **Close submission** on the
 submissions page.
 
+#### Release date
+
+An optional date from which an assignment is listed on students' assignments
+page for everyone in the classroom. Until then (or with no release date) the
+assignment is reachable only through its invite link; students who already
+accepted always see it. Listing only, not access control. The CLI flag is
+`--available-from`.
+
+#### Locked assignment
+
+An assignment students can't see or accept, including students who already
+accepted. For a private template in your organization, the classroom team also
+loses read access to the template until you unlock. Use it to stage a timed
+assessment (**Lock assignment** in the web app, `gh teacher assignment lock` or
+`--locked` in the CLI). Existing student repositories are kept.
+
+#### Closed submission
+
+The state after **Close submission** on the submissions page: no new student
+can accept, and every student's repository is set to read-only until you use
+**Reopen submission**. This is the enforcement step a due date doesn't perform.
+
+#### Submission type
+
+When the autograder fires, set per assignment. **Every push to the default
+branch** (CLI `--submission-mode every-push`, the default) grades each push;
+**A tagged commit** (`--submission-mode tag`) grades only `submit/*` tags, which
+`gh student submit` pushes, so plain pushes cost no Actions minutes. A
+**milestone tag** (`--submission-tag`, for example `phase1`) is an extra tag
+pattern the teacher names that also grades.
+
 #### Autograder
 
 The grading logic that runs on each submission. Can be
 declarative tests (defined in the assignment) or a Python script you write.
+
+#### Grading mode
+
+How an assignment is scored: **Autograded** (the built-in autograder),
+**Manual** (the teacher enters each score on the submissions page, out of
+**Max points**), or **Not graded** (no score recorded).
 
 #### Declarative tests
 
@@ -187,6 +246,14 @@ of GitHub Classroom's `autograding.json` presets; an existing
 `autograding.json` workflow can be kept with a
 [custom runner workflow](Advanced-Autograding#custom-runner-workflow-rare).
 
+#### Bundle directory
+
+The folder `CLASSROOM/autograders/ASSIGNMENT/` in the `classroom50` repository
+that holds an assignment's teacher-only test files and fixtures. The runner
+fetches it fresh on every grading run and exposes it to test commands as
+`$CLASSROOM50_BUNDLE_DIR`, so grading files never enter a student's repository.
+In the web app, **Upload test files** opens it.
+
 #### Runner
 
 The shared grading engine that runs in GitHub Actions on every
@@ -195,15 +262,15 @@ submission.
 #### Submission
 
 A push to a student's assignment repository triggers one graded run, which
-tags and publishes a GitHub Release — so grading is per push. The submissions
+tags and publishes a GitHub Release, so grading is per push. The submissions
 page, however, counts per commit: each student commit past the starter commit
 on the default branch (excluding the tool's own bookkeeping commits), so a push
 of several commits is graded once but counted several times.
 
 #### Feedback pull request
 
-An optional, long-lived pull request per student
-repository for inline review of a student's work.
+An optional, long-lived pull request per student repository for inline review
+of a student's work. "Feedback PR" where space is tight.
 
 #### Score / collected scores
 
@@ -227,6 +294,7 @@ cleared. Used for manual grading and for overriding an autograded result
 A fine-grained personal access token (PAT) stored as a
 secret in the `classroom50` repository. The score-collection, regrade, and
 token-probe workflows use it to read and update student repositories.
+**Test token** in the organization's **Settings** runs the probe on demand.
 
 #### Workflow files
 
@@ -241,13 +309,29 @@ the template.
 
 #### Submit
 
-The student action that pushes work for grading.
+The student action that pushes work for grading: `gh student submit` from a
+terminal, or a plain `git push` (or a `submit/*` tag).
 
 #### Unlisted classroom
 
 A classroom whose published files live at an
 unguessable URL instead of a predictable one. This is obscurity, not access
 control: anyone with the link can read the files.
+
+#### Access key
+
+The random path segment (`<classroom>/<key>/...`) that makes an unlisted
+classroom's URL unguessable. Students pass it to the CLI with `--key`; the web
+app's invite links carry it. It can't be changed later without students
+re-accepting.
+
+#### Custom Pages domain
+
+A classroom setting for organizations whose GitHub Pages site uses a custom
+domain. GitHub then redirects `github.io` requests, which students' browsers
+refuse, so Classroom 50 reads the published resources from the domain you enter
+instead. See
+[Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain).
 
 ## Repository naming
 
