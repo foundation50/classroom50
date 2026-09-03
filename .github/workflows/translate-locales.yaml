@@ -86,11 +86,14 @@ jobs:
 
   # Patch + gate each language in parallel (each diffs against its own marker,
   # so a lagging language catches up), then upload its pack for open-pr to
-  # collect. fail-fast: false so one failure doesn't sink the rest.
+  # collect. fail-fast: false so one failure doesn't sink the rest. A full
+  # retranslation is ~50 sequential model calls (large sections are split to
+  # fit one response), and the patch-then-full self-heal path runs both, so
+  # the timeout has to cover roughly two full passes.
   translate:
     needs: matrix
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
