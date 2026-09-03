@@ -340,6 +340,11 @@ roles and be graded as a student. For how the app behaves with a dual-role
 account, see
 [Staff who are also students](Staff-TAs-and-Multiple-Teachers#staff-who-are-also-students-dual-roles).
 
+To try an assignment without enrolling yourself, accept it as staff. Your
+repository appears on the submissions page with your role badge, and the
+assignments table counts it once you turn on **Include teaching staff** next
+to **Collect all**.
+
 One caveat: as an **organization owner** you keep `admin` on your own assignment
 repository (GitHub won't let an owner reduce their own access to `write`), so it
 won't match a real student's `write`-level setup. To test the exact student
