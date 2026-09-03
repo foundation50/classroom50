@@ -15,6 +15,7 @@ import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import {
   assignmentFunnelCounts,
   type AssignmentFunnelCounts,
+  type FunnelRoster,
 } from "@/pages/submissions/dashboard"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
@@ -109,7 +110,8 @@ const AssignmentsTable = ({
   secretPending,
   assignments,
   allAssignments,
-  studentCount,
+  roster,
+  includeStaff = false,
   loading = false,
   loadError = false,
   onRetryLoad,
@@ -142,9 +144,13 @@ const AssignmentsTable = ({
   // siblings from it would drop a hidden slug-extending sibling and
   // mis-attribute its repos. Falls back to `assignments` when omitted.
   allAssignments?: Assignment[]
-  // Authoritative student-role count (from useStudentCount), the denominator for
-  // the submission ratio. undefined while the count is still resolving.
-  studentCount?: number
+  // Who the funnel counts (from useFunnelRoster): `counted` is the denominator
+  // and the numerators are joined to it. undefined while the roster resolves
+  // or is unknowable, which renders the cells as a placeholder.
+  roster?: FunnelRoster
+  // Whether `roster.counted` includes teaching staff; only changes the copy
+  // ("students" vs "students and staff") and the hidden-staff hint.
+  includeStaff?: boolean
   loading?: boolean
   // A failed (non-404) assignments.json read. Rendered as an error row with
   // retry — never as the "No assignments created" empty state, which would
@@ -201,11 +207,12 @@ const AssignmentsTable = ({
           orgRepos,
           classroom,
           siblingSlugs,
+          roster,
         ),
       )
     }
     return byShown
-  }, [assignments, scoresData, orgRepos, classroom, siblingSlugs])
+  }, [assignments, scoresData, orgRepos, classroom, siblingSlugs, roster])
   const funnelCounts = (assignment: Assignment): AssignmentFunnelCounts =>
     funnel.get(assignment.slug) ??
     assignmentFunnelCounts(
@@ -214,7 +221,28 @@ const AssignmentsTable = ({
       orgRepos,
       classroom,
       siblingSlugs,
+      roster,
     )
+  const total = roster?.counted.size ?? 0
+  // Nobody to measure against: the roster resolved to zero counted people (a
+  // classroom before students join, or a staff-only test run with the toggle
+  // off). A "0 / 0" bar would read as "nobody accepted" when the real answer
+  // is "no students yet", so say that, and name the toggle when it hides
+  // repos (#860).
+  const emptyRosterCell = (hiddenStaffRepos: number) => (
+    <span
+      className="inline-block w-28 whitespace-nowrap text-center text-base-content/60"
+      title={
+        hiddenStaffRepos > 0 && !includeStaff
+          ? t("assignments.table.hiddenStaffReposTitle", {
+              count: hiddenStaffRepos,
+            })
+          : t("assignments.table.noStudentsYetTitle")
+      }
+    >
+      {t("assignments.table.noStudentsYet")}
+    </span>
+  )
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
@@ -441,7 +469,8 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    const { submitted, accepted } = funnelCounts(assignment)
+                    const { accepted, submitted, hiddenStaffRepos } =
+                      funnelCounts(assignment)
                     if (accepted === undefined) {
                       // Org repo list still loading — no acceptance signal yet.
                       return <span className="text-base-content/60">—</span>
@@ -475,30 +504,30 @@ const AssignmentsTable = ({
                         />
                       )
                     }
-                    const total = studentCount ?? 0
-                    // Clamp (KTD4-style): a staff/extra repo could push the
-                    // count past the student-role total, and a recorded
-                    // submission implies its repo existed.
-                    const shown = Math.min(
-                      Math.max(accepted, Math.min(submitted, total)),
-                      total,
-                    )
+                    // Roster still resolving (or unknowable to this viewer):
+                    // no denominator, so no ratio.
+                    if (!roster) {
+                      return <span className="text-base-content/60">—</span>
+                    }
+                    if (total === 0) return emptyRosterCell(hiddenStaffRepos)
+                    // Both numerators are joined to the same roster as the
+                    // denominator (assignmentFunnelCounts), so no clamp. A
+                    // recorded submission implies its repo exists even when
+                    // a non-owner's repo list can't show it.
+                    const shown = Math.max(accepted, submitted)
+                    const titleKey = acceptanceComplete
+                      ? includeStaff
+                        ? "assignments.table.acceptedTitleWithStaff"
+                        : "assignments.table.acceptedTitle"
+                      : includeStaff
+                        ? "assignments.table.acceptedVisibleTitleWithStaff"
+                        : "assignments.table.acceptedVisibleTitle"
                     return (
                       <MetricBar
                         value={shown}
                         max={total}
                         tone="info"
-                        title={
-                          acceptanceComplete
-                            ? t("assignments.table.acceptedTitle", {
-                                accepted: shown,
-                                total,
-                              })
-                            : t("assignments.table.acceptedVisibleTitle", {
-                                accepted: shown,
-                                total,
-                              })
-                        }
+                        title={t(titleKey, { accepted: shown, total })}
                       />
                     )
                   })()}
@@ -513,8 +542,12 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    const { submitted, accepted, notCollected } =
-                      funnelCounts(assignment)
+                    const {
+                      submitted,
+                      accepted,
+                      notCollected,
+                      hiddenStaffRepos,
+                    } = funnelCounts(assignment)
                     if (notCollected) {
                       return (
                         <span className="whitespace-nowrap text-base-content/60">
@@ -561,24 +594,25 @@ const AssignmentsTable = ({
                         />
                       )
                     }
-                    // Denominator is the authoritative student-role count, not
-                    // the roster row count (which includes staff). The
-                    // numerator is a repo-count from scores.json with no role
-                    // join, so a submission from a non-student repo could push
-                    // it past the denominator — clamp the displayed fraction
-                    // and the bar to 100% (KTD4). undefined count reads as 0
-                    // until it resolves.
-                    const total = studentCount ?? 0
-                    const shown = Math.min(submitted, total)
+                    // Roster still resolving (or unknowable to this viewer):
+                    // no denominator, so no ratio.
+                    if (!roster) {
+                      return <span className="text-base-content/60">—</span>
+                    }
+                    if (total === 0) return emptyRosterCell(hiddenStaffRepos)
+                    // The numerator is joined to the same roster as the
+                    // denominator (assignmentFunnelCounts), so no clamp.
                     return (
                       <MetricBar
-                        value={shown}
+                        value={submitted}
                         max={total}
                         tone="success"
-                        title={t("assignments.table.submittedTitle", {
-                          submitted: shown,
-                          total,
-                        })}
+                        title={t(
+                          includeStaff
+                            ? "assignments.table.submittedTitleWithStaff"
+                            : "assignments.table.submittedTitle",
+                          { submitted, total },
+                        )}
                       />
                     )
                   })()}

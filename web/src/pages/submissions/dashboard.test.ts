@@ -49,6 +49,7 @@ import {
   snapshotIsStale,
   statusSelectValue,
   submissionRosterStudents,
+  staffRolesByLogin,
   teamMissingForOwner,
   teamsWithoutRepos,
   assignmentRepoCandidateLogins,
@@ -143,6 +144,22 @@ describe("rowOnRoster / rosterScopedRows", () => {
   it("ignores blank roster usernames (never matches an empty login)", () => {
     const rows = [row({ owner: "", usernames: [""] })]
     expect(rosterScopedRows(rows, [student({ username: "" })])).toEqual([])
+  })
+})
+
+describe("staffRolesByLogin", () => {
+  it("maps enrolled staff logins (lowercased) to their staff roles only", () => {
+    const map = staffRolesByLogin([
+      teamRow({ username: "Alice", roles: ["student"] }),
+      teamRow({ username: "Prof", roles: ["teacher"] }),
+      teamRow({ username: "dual", roles: ["ta", "student"] }),
+      teamRow({ username: "gone", roles: ["hta"], state: "pending" }),
+      teamRow({ username: "", email: "x@example.com", roles: ["ta"] }),
+    ])
+    expect([...map.entries()]).toEqual([
+      ["prof", ["teacher"]],
+      ["dual", ["ta"]],
+    ])
   })
 })
 
@@ -2759,13 +2776,109 @@ describe("assignmentFunnelCounts", () => {
       "cs",
       ["hw1", "hw2"],
     )
-    expect(counts).toEqual({ submitted: 3, accepted: 2, notCollected: false })
+    expect(counts).toEqual({
+      submitted: 3,
+      accepted: 2,
+      notCollected: false,
+      hiddenStaffRepos: 0,
+    })
   })
 
   it("leaves accepted undefined while the repo list loads", () => {
     expect(
       assignmentFunnelCounts(assignment(), undefined, undefined, "cs", []),
-    ).toEqual({ submitted: 0, accepted: undefined, notCollected: false })
+    ).toEqual({
+      submitted: 0,
+      accepted: undefined,
+      notCollected: false,
+      hiddenStaffRepos: 0,
+    })
+  })
+
+  describe("with a roster", () => {
+    const roster = (counted: string[], excludedStaff: string[] = []) => ({
+      counted: new Set(counted),
+      excludedStaff: new Set(excludedStaff),
+    })
+    const data = scores({
+      submissions: { hw1: [row({ owner: "Alice" }), row({ owner: "prof" })] },
+      detected: {
+        hw1: [
+          { owner: "bob", usernames: ["bob"], count: 1 },
+          { owner: "ta1", usernames: ["ta1"], count: 1 },
+        ],
+      },
+    })
+    const repos = [
+      repo("cs-hw1-alice"),
+      repo("cs-hw1-bob"),
+      repo("cs-hw1-prof"),
+      repo("cs-hw1-ta1"),
+      repo("cs-hw1-ghost"), // a dropped student: on no team
+    ]
+
+    it("counts only owners in the roster, case-insensitively", () => {
+      const counts = assignmentFunnelCounts(
+        assignment(),
+        data,
+        repos,
+        "cs",
+        ["hw1"],
+        roster(["alice", "bob", "carol"], ["prof", "ta1"]),
+      )
+      expect(counts).toEqual({
+        submitted: 2,
+        accepted: 2,
+        notCollected: false,
+        hiddenStaffRepos: 2,
+      })
+    })
+
+    it("counts staff once they are in the roster (toggle on)", () => {
+      const counts = assignmentFunnelCounts(
+        assignment(),
+        data,
+        repos,
+        "cs",
+        ["hw1"],
+        roster(["alice", "bob", "carol", "prof", "ta1"]),
+      )
+      expect(counts).toEqual({
+        submitted: 4,
+        accepted: 4,
+        notCollected: false,
+        hiddenStaffRepos: 0,
+      })
+    })
+
+    it("still says not collected when the only graded rows were staff's", () => {
+      const counts = assignmentFunnelCounts(
+        assignment({ no_autograder: true }),
+        scores({ submissions: { hw1: [row({ owner: "prof" })] } }),
+        [],
+        "cs",
+        ["hw1"],
+        roster(["alice"], ["prof"]),
+      )
+      expect(counts.notCollected).toBe(true)
+    })
+
+    it("leaves shared-repo modes on raw counts (owners are groups, not logins)", () => {
+      const counts = assignmentFunnelCounts(
+        assignment({ mode: "team" }),
+        scores({ submissions: { hw1: [row({ owner: "group-1" })] } }),
+        [repo("cs-hw1-group-1"), repo("cs-hw1-group-2")],
+        "cs",
+        ["hw1"],
+        roster(["alice"], ["prof"]),
+      )
+      expect(counts).toEqual({
+        submitted: 1,
+        accepted: 2,
+        notCollected: false,
+        hiddenStaffRepos: 0,
+      })
+    })
   })
 
   it("flags a no_autograder bucket no collect has walked, but not an autograded one", () => {

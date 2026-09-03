@@ -75,6 +75,18 @@ const wrap = (ui: ReactNode) => {
 const assignment = (over: Partial<Assignment> = {}): Assignment =>
   ({ slug: "hw1", name: "HW 1", mode: "individual", ...over }) as Assignment
 
+// The funnel roster the page derives from team membership: `counted` is the
+// denominator, `excludedStaff` the staff left out when the toggle is off.
+const roster = (counted: string[], excludedStaff: string[] = []) => ({
+  counted: new Set(counted),
+  excludedStaff: new Set(excludedStaff),
+})
+// n distinct student logins ("s1".."sn").
+const studentsOf = (n: number) =>
+  Array.from({ length: n }, (_, i) => `s${i + 1}`)
+// Graded rows owned by the first n students of studentsOf.
+const gradedBy = (owners: string[]) => owners.map((owner) => ({ owner }))
+
 const inOrgTemplate = { owner: "acme", repo: "tmpl", branch: "main" }
 
 describe("AssignmentsTable load error vs empty state", () => {
@@ -162,60 +174,137 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("AssignmentsTable submission denominator", () => {
-  it("uses the student-role count as the denominator, not roster rows", () => {
-    scores.mockReturnValue({ data: { submissions: { hw1: [{}, {}, {}] } } })
-    wrap(
-      <AssignmentsTable
-        org="acme"
-        classroom="cs101"
-        assignments={[assignment()]}
-        studentCount={11}
-      />,
-    )
-    // 3 submitted out of 11 students (not the 14 roster rows).
-    expect(ratioText()).toContain("3 / 11")
-  })
-
-  it("clamps so a non-student submission can't push the ratio above 100%", () => {
-    // 5 submission repos but only 3 student-role members: display clamps to 3/3.
+  it("uses the counted roster as the denominator, not the total roster rows", () => {
+    const students = studentsOf(11)
     scores.mockReturnValue({
-      data: { submissions: { hw1: [{}, {}, {}, {}, {}] } },
+      data: { submissions: { hw1: gradedBy(students.slice(0, 3)) } },
     })
     wrap(
       <AssignmentsTable
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={3}
+        roster={roster(students, ["prof", "ta1", "ta2"])}
+      />,
+    )
+    // 3 submitted out of 11 students (not the 14 roster rows).
+    expect(ratioText()).toContain("3 / 11")
+  })
+
+  it("leaves a staff submission out of the count while the toggle is off", () => {
+    // 3 students, all submitted, plus the teacher's own test repo: the join
+    // drops the teacher, so the ratio can't exceed 100%.
+    const students = studentsOf(3)
+    scores.mockReturnValue({
+      data: { submissions: { hw1: gradedBy([...students, "prof"]) } },
+    })
+    orgRepos.mockReturnValue({
+      data: [...students, "prof"].map((o) => ({ name: `cs101-hw1-${o}` })),
+    })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        roster={roster(students, ["prof"])}
       />,
     )
     expect(ratioText()).toContain("3 / 3")
     expect(ratioText()).toContain("100%")
   })
 
-  it("renders an empty 0% bar without dividing by zero when there are no students", () => {
-    scores.mockReturnValue({ data: { submissions: { hw1: [{}] } } })
+  it("counts staff in both numerator and denominator when the toggle is on", () => {
+    const students = studentsOf(3)
+    scores.mockReturnValue({
+      data: { submissions: { hw1: gradedBy(["s1", "prof"]) } },
+    })
+    orgRepos.mockReturnValue({
+      data: ["s1", "s2", "prof"].map((o) => ({ name: `cs101-hw1-${o}` })),
+    })
     wrap(
       <AssignmentsTable
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={0}
+        roster={roster([...students, "prof"])}
+        includeStaff
       />,
     )
-    expect(ratioText()).toContain("0 / 0")
-    expect(ratioText()).toContain("0%")
+    expect(ratioText()).toContain("3 / 4")
+    expect(ratioText()).toContain("2 / 4")
+    expect(
+      screen.getByTitle("assignments.table.submittedTitleWithStaff"),
+    ).toBeTruthy()
+  })
+
+  it("says no students yet instead of 0 / 0 when nobody is counted", () => {
+    // A staff-only test run (#860): the teacher accepted and submitted, but
+    // with the toggle off the denominator is empty. The cell must not read as
+    // "nobody accepted"; it says why and how to reveal the repo.
+    scores.mockReturnValue({
+      data: { submissions: { hw1: gradedBy(["prof"]) } },
+    })
+    orgRepos.mockReturnValue({ data: [{ name: "cs101-hw1-prof" }] })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        roster={roster([], ["prof"])}
+      />,
+    )
+    expect(ratioText()).not.toContain("0 / 0")
+    expect(bars()).toBe(0)
+    expect(screen.getAllByText("assignments.table.noStudentsYet").length).toBe(
+      2,
+    )
+    // The hint names the hidden staff repo (plural key resolved by count).
+    expect(
+      screen.getAllByTitle("assignments.table.hiddenStaffReposTitle").length,
+    ).toBe(2)
+  })
+
+  it("uses the plain no-students hint when no staff repo is hidden", () => {
+    orgRepos.mockReturnValue({ data: [] })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+        roster={roster([], ["prof"])}
+      />,
+    )
+    expect(
+      screen.getAllByTitle("assignments.table.noStudentsYetTitle").length,
+    ).toBe(2)
+  })
+
+  it("shows a placeholder, not 0 / 0, while the roster is unresolved", () => {
+    scores.mockReturnValue({ data: { submissions: { hw1: gradedBy(["s1"]) } } })
+    orgRepos.mockReturnValue({ data: [{ name: "cs101-hw1-s1" }] })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment()]}
+      />,
+    )
+    expect(ratioText()).not.toContain("0 / 0")
+    expect(bars()).toBe(0)
   })
 
   it("shows the accepted column from existing repos once the repo list loads", () => {
-    scores.mockReturnValue({ data: { submissions: { hw1: [{}, {}] } } })
+    const students = studentsOf(5)
+    scores.mockReturnValue({
+      data: { submissions: { hw1: gradedBy(["s1", "s2"]) } },
+    })
     orgRepos.mockReturnValue({
       data: [
-        { name: "cs101-hw1-alice" },
-        { name: "cs101-hw1-bob" },
-        { name: "cs101-hw1-carol" },
-        { name: "cs101-hw1-dave" },
-        { name: "cs101-hw2-erin" }, // another assignment's repo — excluded
+        { name: "cs101-hw1-s1" },
+        { name: "cs101-hw1-s2" },
+        { name: "cs101-hw1-s3" },
+        { name: "cs101-hw1-s4" },
+        { name: "cs101-hw2-s5" }, // another assignment's repo — excluded
       ],
     })
     wrap(
@@ -223,7 +312,7 @@ describe("AssignmentsTable submission denominator", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={5}
+        roster={roster(students)}
       />,
     )
     // Accepted 4 of 5 and submitted 2 of 5, each with its own bar.
@@ -239,7 +328,7 @@ describe("AssignmentsTable submission denominator", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ mode: "group" })]}
-        studentCount={11}
+        roster={roster(studentsOf(11))}
       />,
     )
     expect(ratioText()).toContain("assignments.table.groupsSubmitted")
@@ -261,7 +350,7 @@ describe("AssignmentsTable submission denominator", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ mode: "group" })]}
-        studentCount={11}
+        roster={roster(studentsOf(11))}
       />,
     )
     // Accepted is a bare count (no roster denominator for groups; the tooltip
@@ -283,7 +372,7 @@ describe("AssignmentsTable submission denominator", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ mode: "group" })]}
-        studentCount={11}
+        roster={roster(studentsOf(11))}
       />,
     )
     expect(ratioText()).toContain("2 / 2")
@@ -301,7 +390,7 @@ describe("AssignmentsTable submission denominator", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ mode: "group" })]}
-        studentCount={11}
+        roster={roster(studentsOf(11))}
       />,
     )
     expect(screen.getByText("assignments.table.noGroupsYet")).toBeTruthy()
@@ -318,7 +407,6 @@ describe("AssignmentsTable — Template access action (in the hub)", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ template: inOrgTemplate })]}
-        studentCount={0}
       />,
     )
     // Not a quick action anymore — it lives behind the Manage trigger.
@@ -335,7 +423,6 @@ describe("AssignmentsTable — Template access action (in the hub)", () => {
         assignments={[
           assignment({ template: { ...inOrgTemplate, owner: "other" } }),
         ]}
-        studentCount={0}
       />,
     )
     openHub()
@@ -348,7 +435,6 @@ describe("AssignmentsTable — Template access action (in the hub)", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={0}
       />,
     )
     openHub()
@@ -361,7 +447,6 @@ describe("AssignmentsTable — Template access action (in the hub)", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ template: inOrgTemplate })]}
-        studentCount={0}
         archived
       />,
     )
@@ -375,7 +460,6 @@ describe("AssignmentsTable — Template access action (in the hub)", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ template: inOrgTemplate })]}
-        studentCount={0}
       />,
     )
     openHub()
@@ -392,7 +476,6 @@ describe("AssignmentsTable — assignment hub", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ template: inOrgTemplate })]}
-        studentCount={0}
         canAuthor
       />,
     )
@@ -414,7 +497,6 @@ describe("AssignmentsTable — assignment hub", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ template: inOrgTemplate })]}
-        studentCount={0}
         canAuthor
       />,
     )
@@ -441,7 +523,6 @@ describe("AssignmentsTable — assignment hub", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={0}
       />,
     )
     openHub()
@@ -459,7 +540,6 @@ describe("AssignmentsTable — Release date column", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={0}
       />,
     )
     expect(screen.getByText("assignments.table.releaseNotSet")).toBeTruthy()
@@ -471,7 +551,6 @@ describe("AssignmentsTable — Release date column", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ available_from: "2999-01-01T00:00:00Z" })]}
-        studentCount={0}
       />,
     )
     expect(screen.getByText("assignments.table.scheduled")).toBeTruthy()
@@ -484,7 +563,6 @@ describe("AssignmentsTable — Release date column", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ available_from: "2020-01-01T00:00:00Z" })]}
-        studentCount={0}
       />,
     )
     expect(screen.queryByText("assignments.table.releaseNotSet")).toBeNull()
@@ -508,7 +586,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ no_autograder: true })]}
-        studentCount={3}
+        roster={roster(["alice", "bob", "carol"])}
       />,
     )
     expect(ratioText()).toContain("2 / 3")
@@ -525,7 +603,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ no_autograder: true })]}
-        studentCount={3}
+        roster={roster(studentsOf(3))}
       />,
     )
     expect(ratioText()).toContain("0 / 3")
@@ -540,7 +618,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ no_autograder: true })]}
-        studentCount={3}
+        roster={roster(studentsOf(3))}
       />,
     )
     expect(screen.getByText("assignments.table.notCollectedYet")).toBeTruthy()
@@ -552,14 +630,14 @@ describe("AssignmentsTable — assignments that skip grading", () => {
     // entries-based count rather than waiting for a `detected` list no writer
     // produces — otherwise it would read "not collected yet" forever.
     scores.mockReturnValue({
-      data: { submissions: { hw1: [{}] }, detected: {} },
+      data: { submissions: { hw1: gradedBy(["s1"]) }, detected: {} },
     })
     wrap(
       <AssignmentsTable
         org="acme"
         classroom="cs101"
         assignments={[assignment({ empty_repo: true })]}
-        studentCount={2}
+        roster={roster(studentsOf(2))}
       />,
     )
     expect(ratioText()).toContain("1 / 2")
@@ -570,14 +648,17 @@ describe("AssignmentsTable — assignments that skip grading", () => {
     // A teacher can hand-grade a no_autograder assignment, which writes real
     // entries. An empty or partial detection must not hide them.
     scores.mockReturnValue({
-      data: { submissions: { hw1: [{}, {}, {}] }, detected: { hw1: [] } },
+      data: {
+        submissions: { hw1: gradedBy(["s1", "s2", "s3"]) },
+        detected: { hw1: [] },
+      },
     })
     wrap(
       <AssignmentsTable
         org="acme"
         classroom="cs101"
         assignments={[assignment({ no_autograder: true })]}
-        studentCount={4}
+        roster={roster(studentsOf(4))}
       />,
     )
     expect(ratioText()).toContain("3 / 4")
@@ -598,7 +679,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={4}
+        roster={roster(["a", "b", "c", "dana"])}
       />,
     )
     expect(ratioText()).toContain("4 / 4")
@@ -618,7 +699,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ no_autograder: true })]}
-        studentCount={5}
+        roster={roster(["alice", "bob", "carol", "dana", "erin"])}
       />,
     )
     expect(ratioText()).toContain("3 / 5")
@@ -633,7 +714,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment()]}
-        studentCount={4}
+        roster={roster(studentsOf(4))}
       />,
     )
     expect(ratioText()).toContain("0 / 4")
@@ -649,7 +730,7 @@ describe("AssignmentsTable — assignments that skip grading", () => {
         org="acme"
         classroom="cs101"
         assignments={[assignment({ no_autograder: true, mode: "group" })]}
-        studentCount={5}
+        roster={roster(studentsOf(5))}
       />,
     )
     expect(screen.getByText("assignments.table.groupsSubmitted")).toBeTruthy()

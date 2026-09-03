@@ -65,6 +65,7 @@ import SubmissionsTable from "./SubmissionsTable"
 import type { Student } from "@/types/classroom"
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import type { ClassroomRole } from "@/util/teamRoster"
 
 const student = (over: Partial<Student> = {}): Student => ({
   username: "alice",
@@ -1092,5 +1093,53 @@ describe("SubmissionsTable team/repo mismatch indicators", () => {
       />,
     )
     expect(screen.queryByText("submissions.table.teamMissing")).toBeNull()
+  })
+})
+
+// Teaching staff who accepted an assignment (to test it) sit in the roster
+// spine beside students; their rows carry role chips so a teacher can tell a
+// staff test grade from a student's at a glance.
+describe("SubmissionsTable staff role badges", () => {
+  const staffRoles = new Map<string, ClassroomRole[]>([["prof", ["teacher"]]])
+
+  it("marks a submitter row from teaching staff with its role", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[student(), student({ username: "prof", role: "teacher" })]}
+        scores={[scoreRow({ owner: "Prof", usernames: ["Prof"] })]}
+        staffRolesByLogin={staffRoles}
+      />,
+    )
+    expect(screen.getByText("students.roleTeacher")).toBeTruthy()
+    expect(screen.getByTitle("submissions.table.staffRowTitle")).toBeTruthy()
+  })
+
+  it("marks a staff non-submitter row too", () => {
+    const prof = student({ username: "prof", role: "teacher" })
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[student(), prof]}
+        nonSubmitters={[prof]}
+        acceptedUsernames={new Set(["prof"])}
+        staffRolesByLogin={staffRoles}
+      />,
+    )
+    expect(screen.getByText("students.roleTeacher")).toBeTruthy()
+  })
+
+  it("leaves a plain student row unbadged", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        nonSubmitters={[student({ username: "bob" })]}
+        staffRolesByLogin={staffRoles}
+      />,
+    )
+    expect(screen.queryByText("students.roleStudent")).toBeNull()
+    expect(screen.queryByText("students.roleTeacher")).toBeNull()
+    expect(screen.queryByTitle("submissions.table.staffRowTitle")).toBeNull()
   })
 })
