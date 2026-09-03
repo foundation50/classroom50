@@ -77,8 +77,8 @@ assignment accept links work without any further action from you.
 
 ### Can I add students in bulk, or by email?
 
-Yes. In the web app, use **Upload** with a roster CSV or a plain text list. A
-row can identify a student by `github_id`, GitHub username, or **email
+Yes. In the web app, use **Upload roster** with a roster CSV or a plain text
+list. A row can identify a student by `github_id`, GitHub username, or **email
 address**, so one file can mix students whose handle you know with ones you
 only have an address for. Each address goes onto the roster right away as a
 pending row, and is matched to the student's GitHub account when they accept.
@@ -240,7 +240,7 @@ determined student can still read it. See
 Yes. Grade only on explicit submits (**Submission type: A tagged commit**),
 skip the built-in autograder for assignments graded elsewhere, pause
 autograding per assignment or organization-wide, or grade on self-hosted
-runners. [Managing Actions cost](Managing-Actions-Cost) covers every lever
+runners. [Managing Actions Cost](Managing-Actions-Cost) covers every lever
 and what each one trades away.
 
 ### Can I use my own (self-hosted) runners?

@@ -1,4 +1,4 @@
-# Known limitations
+# Known Limitations
 
 Classroom 50 has no server: state lives in GitHub, and work runs as you or
 as GitHub Actions in your organization. That design keeps your data in your

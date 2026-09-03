@@ -97,12 +97,17 @@ exists on GitHub, so a reload lands on the same step.
 3. Click **Done** to open the organization.
 
 The organization's **Settings** page (owners only) keeps every setting from
-setup in one place: **Service token**, **GitHub Actions** (a switch that pauses
-autograding for every student repository in the organization, plus this month's
-Actions minutes), [Member team creation](#member-team-creation), **Organization
-policy** (an audit of what setup configured, with **Fix it** for anything
-changed outside Classroom 50), **Re-run setup**, and a **Danger zone** that
-tears the organization down.
+setup in one place:
+
+- **Service token**: the token described above, with **Test token** and **Set
+  a new token**.
+- **GitHub Actions**: a switch that pauses autograding for every student
+  repository in the organization, plus this month's Actions minutes.
+- **Member team creation**: see [Member team creation](#member-team-creation).
+- **Organization policy**: an audit of what setup configured, with **Fix it**
+  for anything changed outside Classroom 50.
+- **Re-run setup**: refresh the workflow files and settings after an upgrade.
+- **Danger zone**: tear the organization down.
 
 ### Add a service token
 
@@ -201,7 +206,7 @@ If TAs or co-teachers help run the classroom, add them before students arrive:
 open the classroom, click **Settings**, and use the **Staff and roles**
 section. Enter a **GitHub username**, choose a **Role**, and click **Add**. For
 the four roles, what each can see, and how to structure multi-teacher setups,
-see [Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
+see [Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers).
 
 ## Create an assignment
 
@@ -335,12 +340,14 @@ graded.
   such as `phase1`, `phase2`, and `complete`, one per line, that also trigger
   grading. A student pushes the tag with plain git (`git tag phase1 && git push
   origin phase1`) and that commit grades; the result appears as a normal
-  `submit/*` release titled "via phase1". Prefer exact names: a broad pattern
-  like `v*` grades every matching tag. Changing them later requires the same
-  trigger update as the submission type (see below).
+  `submit/*` release whose title ends with `(via phase1)`. Prefer exact names:
+  a broad pattern like `v*` grades every matching tag. Changing them later
+  requires the same trigger update as the submission type; see
+  [Changing the submission type later](#changing-the-submission-type-later).
 - **Grading**: **Not graded** (the default), **Manual (enter scores by hand)**,
   or **Autograded**. **Manual** adds a **Max points** field (100 by default),
-  and you enter each student's score on the submissions page (see below).
+  and you enter each student's score on the submissions page; see
+  [Scores and overrides](#scores-and-overrides).
   **Autograded** reveals the autograder settings below. Grading can be changed
   after creation; scores recorded under the old mode may read differently.
 - **Built-in autograder** (under **Autograded**): **Use the built-in
@@ -498,8 +505,8 @@ same controls appear in the middle of the page):
 - **Share** opens the links students use to accept the invitation and sign in.
 - **Edit** (organization owners only) switches the table into batch editing.
 
-Only organization owners see these controls; TAs and non-owner teachers get a
-read-only roster.
+Only organization owners see these controls; head TAs and TAs get a read-only
+roster.
 
 ### Adding one student
 
@@ -539,16 +546,20 @@ Not sure what the file should look like? **Download template** on the upload
 dialog saves a five-row example CSV (rows with a username only, an email only,
 and both) to fill in with your own students.
 
-If any row carries a value the upload can't use (an address that isn't valid, a
-`github_id` matching no account, or a line that's neither a username nor an
-address), the dialog lists those rows with their line numbers and imports none
-of them. Fix the file and upload it again; re-uploading is safe, because
-students already in the classroom are left alone. The check covers every
-identity column independently, so a shifted column is caught even when the
-row's other cells look fine. A row with a name but no identifying column
-(usually a student who hasn't given you a GitHub account yet) is kept on the
-roster as an **Unlinked** row you can link or remove later. Only a row with
-nothing usable at all is skipped, and everyone else is imported.
+The upload checks every row before it changes anything:
+
+- A row with a value the upload can't use (an address that isn't valid, a
+  `github_id` matching no account, or a line that's neither a username nor an
+  address) blocks the import. The dialog lists those rows with their line
+  numbers and imports none of them. Fix the file and upload it again;
+  re-uploading is safe, because students already in the classroom are left
+  alone.
+- Every identity column is checked independently, so a shifted column is caught
+  even when the row's other cells look fine.
+- A row with a name but no identifying column (usually a student who hasn't
+  given you a GitHub account yet) is kept on the roster as an **Unlinked** row
+  you can link or remove later.
+- Only a row with nothing usable at all is skipped; everyone else is imported.
 
 ### Roster CSV fields
 
@@ -636,7 +647,9 @@ email, and the address is recorded as a pending roster row:
   identifies the invitation: to use a different one, cancel and invite the new
   address.
 - If you cancel the invitation, the row is removed with it. An expired
-  invitation is cleared by the next roster refresh, from either tool.
+  invitation's row is not removed: it stays on the roster as **Unlinked** for
+  you to link or remove, and the next roster refresh only retires the
+  invitation's bookkeeping.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
 or `github_id`. Either tool reads that file back: **Upload roster** matches
@@ -687,19 +700,23 @@ The toolbar narrows and groups the table:
 
 - **Search**: match members by name, username, or email.
 - **Show**: one filter covering both status (**Enrolled**, **Pending**,
-  **Needs a role**, **Not in org**, **Unlinked** while such rows exist) and
-  role (**Student**, **Teacher**, **Head TA**, **TA**).
+  **Needs a role**, **Not in organization**, **Unlinked** while such rows
+  exist) and role (**Student**, **Teacher**, **Head TA**, **TA**).
 - A **section filter**, shown when members have sections.
 - **Group by**: group the rows by role or by section.
 
 Selecting rows (with the row checkboxes, or the select-all in the header)
 replaces the toolbar's left side with a selection bar carrying one
-**Actions** menu: **Invite** re-sends the selected students' organization
-invitations, **Cancel** cancels their pending invitations, **Unenroll**
-removes them from the classroom, and, when the selection includes unlinked
-rows, **Remove rows** deletes those rows from roster.csv. Each action asks
-you to confirm, then reports its results. Bulk actions apply to students only;
-staff are managed in the classroom's **Settings**.
+**Actions** menu:
+
+- **Invite** re-sends the selected students' organization invitations.
+- **Cancel** cancels their pending invitations.
+- **Unenroll** removes them from the classroom.
+- **Remove rows** (when the selection includes unlinked rows) deletes those
+  rows from `roster.csv`.
+
+Each action asks you to confirm, then reports its results. Bulk actions apply
+to students only; staff are managed in the classroom's **Settings**.
 
 **Edit** (owners only) switches the table into an editing surface:
 names and sections become inputs, and unlinked rows offer a username picker
@@ -1028,12 +1045,13 @@ spreadsheet or external tool. The column-by-column reference is in
 ## Edit assignments and classrooms
 
 - **Manage an assignment from the list.** Each row on the **Assignments** page
-  keeps four quick actions (copy accept link, clone submissions, edit, lock)
+  keeps four quick actions (copy invite link, clone submissions, edit, lock)
   plus **Manage assignment**, a dialog gathering every per-assignment action in
   one place: the quick four, **Template access** (review which teams can read
   the template, and re-grant the classroom teams' read), **Reuse in another
-  classroom**, and **Delete assignment** (which asks you to type the slug to
-  confirm; student repositories are kept). The submissions page's **Actions**
+  classroom**, and **Delete assignment**.
+- **Delete an assignment.** **Delete assignment** asks you to type the slug to
+  confirm; student repositories are kept. The submissions page's **Actions**
   menu carries the same **Delete assignment**.
 - **Edit an assignment.** Open the assignment, then click **Settings** in the
   sidebar (the page is titled **Assignment settings**; the pencil icon in the
@@ -1058,7 +1076,7 @@ spreadsheet or external tool. The column-by-column reference is in
   filter to **Archived** or **All** to see it) and stops new assignments,
   accepts, and enrollments. Its roster and assignments are kept read-only, and
   **Unarchive** restores it. For end-of-term guidance, see
-  [Course lifecycle and end of term](Course-Lifecycle-and-End-of-Term).
+  [Course Lifecycle and End of Term](Course-Lifecycle-and-End-of-Term).
 
 ### Using a custom Pages domain
 

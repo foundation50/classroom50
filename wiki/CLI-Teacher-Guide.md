@@ -280,7 +280,7 @@ membership), use `gh teacher staff add <org> <classroom> <username> --role
 teacher|hta|ta` (`teacher` is the default). `gh teacher staff remove` takes the
 role away again without touching org membership. For the roles and what each
 can see, see
-[Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
+[Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers).
 
 **Inviting by email:** `gh teacher roster invite <org> <classroom> <email>`
 invites a student by address and records them on the roster until they accept.
@@ -801,11 +801,9 @@ skipped.
 
 </details>
 
-> [!NOTE]
-> **Override a score.** To grant partial credit or fix a misgrade, edit
-> `<classroom>/scores.json`, change the submission's `score`, add
-> `"override": true` to the entry, and commit. Later collection runs leave it
-> alone.
+To grant partial credit or fix a misgrade, edit `<classroom>/scores.json`,
+change the submission's `score`, add `"override": true` to the entry, and
+commit. Later collection runs leave it alone.
 
 > [!WARNING]
 > If the service token expires mid-semester, collection fails with a 401/403.

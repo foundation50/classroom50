@@ -30,7 +30,8 @@ gh student accept <org> <classroom> <assignment> --new-team --team-name "The Sha
 Creates a repository at `<org>/<classroom>-<assignment>-<username>` (all
 lowercase), then prints a `git clone` command. If the assignment has starter
 code, your repository starts as a copy of it; with no starter code, it starts
-with only the autograding setup. On a team assignment the repository is
+with a README and the autograding setup (only the autograding setup when your
+teacher turned the README off). On a team assignment the repository is
 instead the group's shared `<classroom>-<assignment>-group-<n>`, created by
 whichever group member accepts first.
 

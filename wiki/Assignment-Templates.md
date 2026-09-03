@@ -8,8 +8,9 @@ every submission. This page describes the expected layout.
 
 > [!NOTE]
 > **Templates are optional.** An assignment without a template gives each
-> student an initialized repository with a README and the autograding setup,
-> good for write-from-scratch or short-answer work. See
+> student an initialized repository with the autograding setup, plus a README
+> when **Add a README** is on (the CLI's default), good for write-from-scratch
+> or short-answer work. See
 > [Repository shapes](#repository-shapes) for every option. The rest of this
 > page applies to assignments that ship a template.
 

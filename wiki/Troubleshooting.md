@@ -314,7 +314,7 @@ Every row in a CSV you import with `gh teacher roster import` must carry at leas
 one column that identifies a student. The line number points at the row where all
 three cells are blank, commonly a row of empty cells, a leftover row from another
 export, or a row that carries only a name (the CLI has no action for a row it
-can't address; the web app's **Upload** keeps such rows as unlinked). Fill one in
+can't address; the web app's **Upload roster** keeps such rows as unlinked). Fill one in
 or delete the row, then re-run. Every unusable line is reported in one pass and
 nothing is committed, so one editing pass fixes the whole file. For the accepted
 columns, see [Roster CSV fields](Web-Teacher-Guide#roster-csv-fields).
@@ -335,7 +335,7 @@ by email is read too: its name and section are updated, matched by address, and
 the invitation itself is never sent or cancelled. A row identified **solely** by
 `github_id` is skipped, because `import` resolves students by username and has no
 way to look up an account from an id. Its notice points at the web app's
-**Upload**, and nothing stored for that student is touched.
+**Upload roster**, and nothing stored for that student is touched.
 
 ### `github_id … is not this account's id` when importing a roster CSV
 
@@ -353,7 +353,7 @@ so correcting the file and re-running is safe.
 
 ### The upload says a row can't be imported
 
-The web app's **Upload** reads every row before changing anything, and if any row
+The web app's **Upload roster** reads every row before changing anything, and if any row
 carries a value it can't use, it lists those rows and imports none of them. Each
 line in the report names the file line and the offending value, so one editing
 pass fixes the file. Re-uploading is safe: students already in the classroom are
@@ -379,7 +379,7 @@ as a caption, and guessing would leave that student silently out of the import.
 
 ### A row can't be imported because its `github_id` doesn't match an account
 
-The web app's **Upload** reads a `github_id` column as the row's identity and
+The web app's **Upload roster** reads a `github_id` column as the row's identity and
 looks up that account's current username, which is what lets a re-uploaded export
 still find a student who renamed their GitHub account. When an id matches no
 account, the upload reports that row and stops rather than falling back to the

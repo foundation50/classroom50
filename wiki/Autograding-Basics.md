@@ -6,7 +6,7 @@ the submissions page and export as CSV. For custom grading scripts and
 environments, see [Advanced Autograding](Advanced-Autograding); for
 ready-made per-language setups, see
 [Autograder Recipes](Autograder-Recipes); for reducing what grading costs,
-see [Managing Actions cost](Managing-Actions-Cost).
+see [Managing Actions Cost](Managing-Actions-Cost).
 
 ## How grading works
 
@@ -54,8 +54,10 @@ Each assignment has a **Grading** choice (the web form's **Grading** field; the
 - **Not graded.** Records no score, and the submissions page offers no score
   entry. Submissions still tag and publish Releases, and the feedback pull
   request still works.
-- **Autograded.** The default: tests or an `autograder.py` score each
-  submission automatically. The rest of this page is about this mode.
+- **Autograded.** Tests or an `autograder.py` score each submission
+  automatically. This is what an assignment with no `grading` setting means
+  (the CLI writes none); the web form preselects **Not graded**. The rest of
+  this page is about this mode.
 - **Manual (enter scores by hand).** You enter each score on the submissions
   page, out of the assignment's **Max points**. No autograder score is used,
   though the built-in workflow still runs on submissions unless you also turn
@@ -500,7 +502,7 @@ After a retrofit, students must `git pull`. Clones made before the change
 conflict on their next push.
 
 To turn autograding off for an assignment, pause it over a break, or reduce
-what grading costs, see [Managing Actions cost](Managing-Actions-Cost).
+what grading costs, see [Managing Actions Cost](Managing-Actions-Cost).
 
 ## Reading results
 
@@ -632,7 +634,7 @@ custom.
 
 **Download scores (CSV)** on the submissions page saves
 `CLASSROOM-ASSIGNMENT-scores.csv` with **one row per student (or group)**, in
-the table's current sort order (by last name by default), with the latest
+the table's current sort order (by first name by default), with the latest
 submission's data:
 
 | Column | Description |

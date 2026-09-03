@@ -220,7 +220,8 @@ reports and removes nothing: no row is dropped and no invite team is deleted,
 because an invite team it couldn't read can't prove that a pending row is dead.
 `gh teacher roster sync` reports by default and changes nothing until you pass
 `--write`. See [`roster sync`](gh-teacher#roster-sync) for its exit codes.
-Deleting a classroom removes its invite teams too.
+Deleting a classroom in the web app removes its invite teams too;
+`gh teacher classroom remove` leaves them for the next sync or `teardown`.
 
 ### Who sees what
 
@@ -263,7 +264,7 @@ Three consequences worth calling out:
 - **Students can read their classroom's private templates.** The whole
   classroom team gets read access so accept can copy the template. Never
   commit solutions to a template. See
-  [Known limitations](Known-Limitations).
+  [Known Limitations](Known-Limitations).
 - **Only owners can read pending invitations.** A TA viewing the roster can't
   see who has been invited but hasn't accepted yet, so an invited-but-pending
   student may look missing to them.

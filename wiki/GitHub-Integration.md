@@ -21,8 +21,9 @@ The CLI never creates the organization. Before running any CLI command:
 
 `gh teacher init` locks organization member privileges to least-privilege
 automatically. After it runs, a member can only create a **private** repository
-(so `gh student accept` works) and publish a **public** Pages site (so the
-`classroom50` repository's `assignments.json` stays reachable).
+(so `gh student accept` works), publish a **public** Pages site (so the
+`classroom50` repository's `assignments.json` stays reachable), and create
+teams (so students can form their own groups).
 
 <details>
 <summary>Why broad access to their own repository is safe for students</summary>

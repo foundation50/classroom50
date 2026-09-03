@@ -1,4 +1,4 @@
-# Managing Actions cost
+# Managing Actions Cost
 
 Autograding runs in GitHub Actions in your organization, and GitHub bills the
 organization for those minutes, never the students. This page is the cost

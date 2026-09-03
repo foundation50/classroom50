@@ -1,4 +1,4 @@
-# Staff, TAs, and multiple teachers
+# Staff, TAs, and Multiple Teachers
 
 How to run a classroom with more than one person on staff: the four roles,
 how to grant them, what each role can see, and how to structure organizations
@@ -162,5 +162,5 @@ service token).
 - [How Classroom 50 Works](How-Classroom-50-Works) for the permission model
   behind roles.
 - [`gh teacher staff`](gh-teacher#staff) for command syntax.
-- [Course lifecycle and end of term](Course-Lifecycle-and-End-of-Term) for
+- [Course Lifecycle and End of Term](Course-Lifecycle-and-End-of-Term) for
   end-of-term staff housekeeping.

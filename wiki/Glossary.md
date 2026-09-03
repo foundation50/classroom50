@@ -147,8 +147,9 @@ assignments, autograders, and scores. Classroom 50 has no other backend.
 The files a classroom publishes through your organization's GitHub Pages site:
 the assignment list an invite link resolves against, autograder workflow files,
 and test bundles. Students' tools read them without special access, so they are
-public (see **Unlisted classroom**). The **Published resources** page in the web
-app browses them, and the **Publish Pages** workflow in the `classroom50`
+public (see **Unlisted classroom**). The **Published** page in the web app
+(headed **Published resources**) browses them, and the **Publish Pages**
+workflow in the `classroom50`
 repository regenerates them after every change.
 
 ## Roles

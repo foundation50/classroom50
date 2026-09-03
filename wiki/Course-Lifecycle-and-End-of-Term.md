@@ -1,4 +1,4 @@
-# Course lifecycle and end of term
+# Course Lifecycle and End of Term
 
 The moments in a course that aren't covered by day-to-day assignment work:
 staging an assignment before release, ending one at the due date, updating
@@ -187,7 +187,7 @@ complete decommissioning.
 
 ## Further reading
 
-- [Managing Actions cost](Managing-Actions-Cost) for pausing grading over a
+- [Managing Actions Cost](Managing-Actions-Cost) for pausing grading over a
   break.
 - [Which commits grade](Autograding-Basics#which-commits-grade) for submission modes
   and milestone tags.
