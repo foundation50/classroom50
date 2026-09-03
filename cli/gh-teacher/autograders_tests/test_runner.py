@@ -461,6 +461,38 @@ class TestIsAcceptanceCommit:
         _git(repo, "commit", "-q", "-m", "Initialize .classroom50.yaml and autograde workflow")
         assert ag.is_acceptance_commit(repo, self._head(repo)) is True
 
+    def test_init_shim_accept_deleting_seeded_readme_is_acceptance(self, tmp_path):
+        # Regression (#628 follow-up): a template-less (init_shim) accept
+        # creates the repo with auto_init, which seeds a README, and removes
+        # it in the same accept commit. That deletion is setup, not work: the
+        # guard must not fail open and grade the accept (which produced a
+        # phantom "1 commit, 0/10" submission before any student push).
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-q", "-b", "main")
+        (repo / "README.md").write_text("# seeded by auto_init\n")
+        _git(repo, "add", "-A"); _git(repo, "commit", "-q", "-m", "Initial commit")
+        (repo / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        wf = repo / ".github" / "workflows"
+        wf.mkdir(parents=True)
+        (wf / "autograde.yaml").write_text("name: Autograde\n")
+        _git(repo, "rm", "-q", "README.md")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "Initialize .classroom50.yaml and autograde workflow")
+        assert ag.is_acceptance_commit(repo, self._head(repo)) is True
+
+    def test_accept_commit_adding_readme_grades(self, tmp_path):
+        # The README allowance is deletion-only: an accept commit that ADDS
+        # (or edits) a README carries student work, so it fails open -> grade.
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        _git(repo, "init", "-q", "-b", "main")
+        (repo / ag.ACCEPT_MARKER_PATH).write_text("classroom: x\n")
+        (repo / "README.md").write_text("# my write-up\n")
+        _git(repo, "add", "-A")
+        _git(repo, "commit", "-q", "-m", "Accept x/y (and sneak in a README)")
+        assert ag.is_acceptance_commit(repo, self._head(repo)) is False
+
     def test_setup_only_guard_git_error_grades(self, tmp_path, monkeypatch):
         # The accept commit is the tip, but reading its touched paths
         # errors -> fail open (grade) rather than skip on partial info.
@@ -472,7 +504,7 @@ class TestIsAcceptanceCommit:
             # Only the `git show` path-listing fails; _baseline_scan's
             # earlier calls succeed so we reach the guard.
             if (isinstance(cmd, (list, tuple)) and "show" in cmd
-                    and "--name-only" in cmd):
+                    and "--name-status" in cmd):
                 return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="boom")
             return real_run(cmd, *args, **kwargs)
 
@@ -545,7 +577,7 @@ class TestIsShimUpdateCommit:
 
         def fake_run(cmd, *args, **kwargs):
             if (isinstance(cmd, (list, tuple)) and cmd[0] == "git"
-                    and "--name-only" in cmd):
+                    and "--name-status" in cmd):
                 return subprocess.CompletedProcess(cmd, 128, stdout="", stderr="boom")
             return real_run(cmd, *args, **kwargs)
 
