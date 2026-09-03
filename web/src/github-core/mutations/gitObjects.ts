@@ -9,8 +9,6 @@ import type { CreateClassroomInput } from "@/domain/classrooms"
 import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { prefixCommit } from "@/util/commit"
-import { paginateAll } from "../paginate"
-import { SUBMISSION_TAG_PREFIX } from "../queries/releaseRunReads"
 import type { ClassroomTeamRef, StaffTeamRefs } from "./teams"
 
 // The branch a config repo's default is renamed TO when normalizing it.
@@ -358,57 +356,6 @@ export function updateRefForRepo(params: {
   )
 }
 
-// Create a lightweight tag ref at a commit. Used by the tag-mode submit flow
-// to push the submit/<UTC-timestamp>-<short-sha> tag with the user's token —
-// user pushes fire workflows, which is exactly the point (the runner's own
-// github.token tag pushes deliberately don't).
-export function createTagRefForRepo(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  tag: string
-  commitSha: string
-}) {
-  const { client, owner, repo, tag, commitSha } = params
-
-  return client.request<GitHubRef>(`/repos/${owner}/${repo}/git/refs`, {
-    method: "POST",
-    body: {
-      ref: `refs/tags/${tag}`,
-      sha: commitSha,
-    },
-  })
-}
-
-// First submit/* tag pointing at `sha`, or null. The tag-mode submit flow
-// checks this before creating a fresh tag — mirroring the runner's ls-remote
-// idempotency check — so a retry after a tag-push failure reuses the existing
-// tag and the same commit never grades twice. matching-refs is a prefix match
-// (the prefix's slash needs encoding); the response carries each ref's target.
-// Paginated: a tag-mode repo accrues one submit/* tag per submission, so a
-// semester's worth easily exceeds one page — an unpaginated read would miss
-// the existing tag and mint a duplicate (one redundant graded run).
-export async function findSubmitTagAtSha(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  sha: string
-}): Promise<string | null> {
-  const { client, owner, repo, sha } = params
-  const prefix = encodeURIComponent(SUBMISSION_TAG_PREFIX)
-  const refs = await paginateAll<GitHubRef>(
-    client,
-    (page) =>
-      `/repos/${owner}/${repo}/git/matching-refs/tags/${prefix}?per_page=100&page=${page}`,
-  )
-  for (const ref of refs) {
-    if (ref.object?.sha === sha) {
-      return ref.ref.replace(/^refs\/tags\//, "")
-    }
-  }
-  return null
-}
-
 // One entry in a git tree write. GitHub accepts either inline `content` or a
 // `sha` (existing blob, or `null` to delete the path).
 export type GitTreeFileMode = "100644" | "100755" | "120000"
@@ -481,27 +428,6 @@ export async function createBlob(
   )
 }
 
-// Create a blob in an ARBITRARY repo with an explicit encoding. Unlike createBlob
-// (pinned to CONFIG_REPO + utf-8), this backs student-repo writes that may carry
-// binary content (base64). The caller base64-encodes bytes and passes
-// encoding:"base64"; utf-8 text can pass through as-is. A longer timeout suits a
-// large upload blob (the default request timeout is tuned for small JSON writes).
-export async function createBlobForRepo(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  content: string
-  encoding: "utf-8" | "base64"
-  timeoutMs?: number
-}) {
-  const { client, owner, repo, content, encoding, timeoutMs } = params
-  return client.request<GitHubBlob>(`/repos/${owner}/${repo}/git/blobs`, {
-    method: "POST",
-    body: { content, encoding },
-    ...(timeoutMs ? { timeoutMs } : {}),
-  })
-}
-
 // One entry in a raw git tree read. GitHub returns `mode` too, which a tree
 // rewrite must echo back so a file's executable/symlink bit isn't lost.
 export type GitHubTreeEntryFull = {
@@ -511,10 +437,8 @@ export type GitHubTreeEntryFull = {
   sha: string
 }
 
-// Recursively list every entry in a repo's tree at `treeSha`. Used to carry
-// preserved paths (.github/**, .classroom50.yaml) into a replace-all snapshot by
-// their existing blob SHAs. `truncated` is surfaced so a caller can refuse to
-// build a partial (and thus destructive) tree from an incomplete listing.
+// Recursively list every entry in a repo's tree at `treeSha`. `truncated` is
+// surfaced so a caller can refuse to act on an incomplete listing.
 export async function getRepoTreeRecursive(params: {
   client: GitHubClient
   owner: string
@@ -525,22 +449,6 @@ export async function getRepoTreeRecursive(params: {
   return client.request<{ tree: GitHubTreeEntryFull[]; truncated: boolean }>(
     `/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`,
   )
-}
-
-// Create an AUTHORITATIVE tree in an arbitrary repo from explicit entries.
-// Omitting base_tree means only the listed paths exist, so a replace-all
-// snapshot drops prior files not carried over (the submit semantics).
-export async function createTreeFromFullEntries(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  tree: GitHubTreeEntryFull[]
-}) {
-  const { client, owner, repo, tree } = params
-  return client.request<GitHubTree>(`/repos/${owner}/${repo}/git/trees`, {
-    method: "POST",
-    body: { tree },
-  })
 }
 
 export async function createTreeFromEntries(
