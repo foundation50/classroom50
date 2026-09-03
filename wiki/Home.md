@@ -35,7 +35,9 @@ assignment run at the time you perform them and record the resulting state.
 Teachers therefore stay more involved in administration than they would with a
 hosted service.
 
-For the full model, see [How Classroom 50 Works](How-Classroom-50-Works).
+For the full model, see [How Classroom 50 Works](How-Classroom-50-Works). For
+where student data lives and what leaves your browser, including FERPA
+considerations, see [Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
 
 ## What you can do
 

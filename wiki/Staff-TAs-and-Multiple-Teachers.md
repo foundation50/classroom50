@@ -108,7 +108,9 @@ pull requests in bulk, is owner-only.)
 Because TAs and head TAs are ordinary organization members, graders don't
 need owner rights to do their work. If your institution's privacy rules (such
 as FERPA) require limiting who holds administrative access to student data,
-keep the teacher role small and use head TA and TA for everyone else.
+keep the teacher role small and use head TA and TA for everyone else. For
+where student data lives and what leaves the browser, see
+[Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
 
 ## Staff who are also students (dual roles)
 

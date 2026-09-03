@@ -155,6 +155,13 @@ briefly fail or show stale data; wait a minute and retry.
   and a student in the same organization. What you can do is gated by your
   org and classroom role after sign-in, not by your token's scopes; see
   [Permissions and access](GitHub-Integration#permissions-and-access).
+- **Fully proxy-free web app.** Two GitHub endpoints refuse cross-origin
+  requests from a browser (the OAuth token exchange and repository archive
+  downloads), so those two operations pass through a small stateless proxy
+  until GitHub lifts the limits
+  ([#877](https://github.com/foundation50/classroom50/issues/877) tracks
+  the upstream work). Everything else already goes straight to GitHub; see
+  [The GitHub proxy](GitHub-Integration#the-github-proxy).
 
 Classroom 50 is open source and actively developed; if one of these matters
 to your course, share your use case in

@@ -413,6 +413,17 @@ token still has every permission it needs, use **Test token** under **Service
 token** in the organization's **Settings**. See
 [the service-token setup](CLI-Teacher-Guide#create-the-service-token).
 
+### Is Classroom 50 FERPA compliant? Where does student data go?
+
+Classroom 50 has no server or database, so it holds no student data to be
+compliant about. Everything lives in your GitHub organization, and your
+browser or machine talks to GitHub directly, with one exception: browser
+sign-in and repository downloads pass through a small stateless proxy that
+stores nothing. Compliance therefore depends on your institution's agreement
+with GitHub and on how much identifying data you put on GitHub. For the full
+picture, including practices that keep student data off GitHub, see
+[Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
+
 ## Roadmap
 
 Some capabilities from GitHub Classroom aren't available today, including
