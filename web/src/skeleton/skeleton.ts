@@ -24,7 +24,7 @@ const rawModules = import.meta.glob<string>(
 )
 
 // The org-relative paths the GUI deploys into `<org>/classroom50`. A subset of
-// the CLI skeleton tree — enough to stand a classroom up and run regrade.
+// the CLI skeleton tree, enough to stand a classroom up and run regrade.
 export const SKELETON_PATHS = [
   "workflows/publish-pages.yaml",
   "workflows/collect-scores.yaml",

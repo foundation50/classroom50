@@ -16,12 +16,12 @@ best-effort source of optional display metadata (name/section/email).
 `scores.json` is keyed by assignment slug under root `assignments`: each value
 is `{ "type": "individual"|"group", "entries": [...] }`. An `entry` is one
 student repo's record (one per repo owner): identity/keying at the top
-(`owner`; plus `member_usernames` for group — the credited collaborators) and
+(`owner`; plus `member_usernames` for group, the credited collaborators) and
 the full per-submission history in `submissions` (newest first). Each
 `submissions` item is a validated `result.json` payload minus the redundant
 `assignment` bucket key (it carries `owner` + `assignment_type` + optional
 `submitted_by`, no `usernames`). When the assignment has a `due` date, each
-record carries `"late": true|false` (its `datetime` vs. `due`) — advisory only;
+record carries `"late": true|false` (its `datetime` vs. `due`), advisory only;
 late submissions are still collected and scored.
 
 Single writer per scores.json. Re-runs are idempotent: unchanged submissions
@@ -31,23 +31,23 @@ os.replace). A missing release is not an error (student hasn't
 accepted/submitted); the per-assignment "X of Y submitted" log shows coverage.
 
 Environment (set by `collect-scores.yaml`):
-  CLASSROOM50_SERVICE_TOKEN — fine-grained PAT. Needs Organization ->
-                              Members: Read (collection lists the classroom
-                              team), Repository -> Contents: Read and write
-                              (read scope used here; write scope shared with
-                              regrade.yaml), and Repository -> Administration:
-                              Read and write (grant staff teams repo access via
-                              PUT teams/.../repos/...).
-  CLASSROOM_FILTER          — optional single-classroom limit.
-  GITHUB_REPOSITORY_OWNER   — org name (auto-set by Actions).
-  GITHUB_API_URL            — API URL on GHES runners.
-  GH_API_URL                — explicit override (test servers).
+  CLASSROOM50_SERVICE_TOKEN: fine-grained PAT. Needs Organization ->
+                             Members: Read (collection lists the classroom
+                             team), Repository -> Contents: Read and write
+                             (read scope used here; write scope shared with
+                             regrade.yaml), and Repository -> Administration:
+                             Read and write (grant staff teams repo access via
+                             PUT teams/.../repos/...).
+  CLASSROOM_FILTER:          optional single-classroom limit.
+  GITHUB_REPOSITORY_OWNER:   org name (auto-set by Actions).
+  GITHUB_API_URL:            API URL on GHES runners.
+  GH_API_URL:                explicit override (test servers).
 
 Exit codes:
-  0 — success.
-  1 — operational failure (missing token, malformed scores.json, unrecoverable
-      network error). The run log points at `gh teacher rotate-service-token`
-      for PAT issues.
+  0: success.
+  1: operational failure (missing token, malformed scores.json, unrecoverable
+     network error). The run log points at `gh teacher rotate-service-token`
+     for PAT issues.
 """
 
 from __future__ import annotations
@@ -68,7 +68,7 @@ import urllib.parse
 import urllib.request
 from typing import Any, Callable, Iterable, NamedTuple, Sequence
 
-# Schema sentinels — keep in lockstep with the Go-side constants in
+# Schema sentinels; keep in lockstep with the Go-side constants in
 # `cli/gh-teacher/classroom.go` and `cli/gh-teacher/assignments_json.go`.
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
 ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
@@ -80,12 +80,12 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 SUBMIT_TAG_PREFIX = "submit/"
 
 # Repo permission the grant gives each staff role's team. Hand-mirrored from Go
-# StaffTeamRepoPermissions (source of truth; parity-tested) — keep in lockstep.
+# StaffTeamRepoPermissions (source of truth; parity-tested); keep in lockstep.
 # The head-TA/TA-team template read is granted eagerly at assignment add/reuse
 # (Go side, which hardcodes read there); this collect-time
 # grant reads the value below and is the idempotent re-affirm. A role absent
 # here gets nothing (the teacher team is an org owner with access via ownership,
-# so only the non-owner staff teams — head-TA and TA — need a grant).
+# so only the non-owner staff teams, head-TA and TA, need a grant).
 STAFF_TEAM_PERMISSIONS = {"hta": "pull", "ta": "pull"}
 
 # Every staff role that has a classroom team. Mirrors Go contract.StaffRoles and
@@ -94,7 +94,7 @@ STAFF_ROLES = ("teacher", "hta", "ta")
 
 # Body markers that identify a rate-limit response, for the cases no header
 # names: GitHub words the secondary limit and the abuse detector differently.
-# "abuse" is the bare stem on purpose — it catches every "abuse detection
+# "abuse" is the bare stem on purpose: it catches every "abuse detection
 # mechanism" phrasing.
 #
 # The first two mirror Go's ghutil.IsRateLimited; "rate limit exceeded" is a
@@ -117,7 +117,7 @@ TRANSIENT_RETRY_CAP_SECONDS = 30
 
 # How long the whole run may spend asleep waiting out throttles. A throttle that
 # RECOVERS raises nothing, so without a ceiling a few dozen of them silently
-# spend the workflow's `timeout-minutes` and the job is killed mid-run — no
+# spend the workflow's `timeout-minutes` and the job is killed mid-run: no
 # summary, no scores.json, no diagnosis. Spending the budget instead surfaces
 # the throttle through the named THROTTLED path.
 MAX_TOTAL_THROTTLE_SLEEP_SECONDS = 300
@@ -162,7 +162,7 @@ RFC3339_RE = re.compile(
 )
 
 # Release asset name written by the autograde runner. Cross-binary
-# contract — keep aligned with autograde-runner.yaml and download.go.
+# contract; keep aligned with autograde-runner.yaml and download.go.
 RESULT_ASSET_NAME = "result.json"
 
 # Hard cap on result.json size. Real payloads sit well under 1 MiB; 10 MiB
@@ -173,14 +173,14 @@ MAX_RESULT_BYTES = 10 * 1024 * 1024
 # RosterColumns in cli/gh-teacher/internal/configrepo/students_csv.go and the
 # web app's STUDENT_CSV_FIELDS. Identity/metadata columns; the trailing `role`
 # (teacher/ta/student, or "") is best-effort recorded metadata refreshed from
-# the classroom's GitHub teams — the teams, not this column, remain the
+# the classroom's GitHub teams. The teams, not this column, remain the
 # enrollment authority. role was added additively, so a file written before it
 # still reads fine: DictReader is header-keyed and a missing column just
 # yields "".
 ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id", "role")
 
 # Per-classroom roster file. Mirrors contract.RosterFilename in
-# cli/shared/contract/contract.go with NO compile-time link — keep
+# cli/shared/contract/contract.go with NO compile-time link; keep
 # byte-identical.
 ROSTER_FILENAME = "roster.csv"
 
@@ -188,7 +188,7 @@ ROSTER_FILENAME = "roster.csv"
 # `classroom50-group-<hash>-<n>` whose shared repo is
 # `<classroom>-<assignment>-group-<n>`. Mirrors contract.GroupTeamPrefix /
 # GroupHashHexLen / GroupRepoSegment (cli/shared/contract/contract.go) and the
-# web teamSlug.ts with NO compile-time link — keep byte-identical; the shared
+# web teamSlug.ts with NO compile-time link; keep byte-identical; the shared
 # vectors in cli/shared/testdata/group_vectors.json pin every mirror.
 GROUP_TEAM_PREFIX = "classroom50-group-"
 GROUP_HASH_HEX_LEN = 16
@@ -198,7 +198,7 @@ GROUP_REPO_SEGMENT = "group-"
 def group_team_hash(classroom: str, assignment: str) -> str:
     """First GROUP_HASH_HEX_LEN hex chars of SHA-256 over
     `<lowercased classroom>\\x00<lowercased assignment>`. Byte-identical with
-    Go's contract.GroupTeamHash and the web's groupTeamHash — the NUL
+    Go's contract.GroupTeamHash and the web's groupTeamHash. The NUL
     separator prevents ("ab","c")/("a","bc") colliding, and lowercasing
     mirrors the repo-name formula."""
     digest = hashlib.sha256(
@@ -215,7 +215,7 @@ def group_team_slug(classroom: str, assignment: str, counter: int) -> str:
 
 def normalize_assignment_type(raw_mode: Any) -> str:
     """Map a manifest `mode` to the scores/result assignment_type: 'group' and
-    'team' verbatim, anything else (absent/typo'd) individual — the stricter
+    'team' verbatim, anything else (absent/typo'd) individual, the stricter
     default, so a malformed mode can never loosen validation."""
     mode = raw_mode.lower() if isinstance(raw_mode, str) else ""
     if mode in ("group", "team"):
@@ -224,7 +224,7 @@ def normalize_assignment_type(raw_mode: Any) -> str:
 
 # The exact on-disk roster.csv header. Must equal FullRosterHeader in the Go
 # students_csv.go (asserted by TestFullRosterHeader) and the web app's
-# STUDENT_CSV_FIELDS header — a three-way lockstep. Retained as the Python leg
+# STUDENT_CSV_FIELDS header, a three-way lockstep. Retained as the Python leg
 # of that lockstep (the Go download-metadata join and the web writer share it),
 # pinned by test_full_roster_header_matches_go_constant.
 FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS)
@@ -276,12 +276,12 @@ def main() -> int:
 
     org = (os.environ.get("GITHUB_REPOSITORY_OWNER") or "").strip()
     if not org:
-        emit_error("GITHUB_REPOSITORY_OWNER is empty — this script must run inside a GitHub Actions workflow")
+        emit_error("GITHUB_REPOSITORY_OWNER is empty: this script must run inside a GitHub Actions workflow")
         return 1
 
     service_token = (os.environ.get("CLASSROOM50_SERVICE_TOKEN") or "").strip()
     if not service_token:
-        emit_error("CLASSROOM50_SERVICE_TOKEN is empty — run `gh teacher rotate-service-token <org>` to provision it")
+        emit_error("CLASSROOM50_SERVICE_TOKEN is empty: run `gh teacher rotate-service-token <org>` to provision it")
         return 1
 
     api_url = (
@@ -294,7 +294,7 @@ def main() -> int:
     if not classroom_dirs:
         if classroom_filter:
             # An explicit filter matching nothing is a FAILED run (typo, or a
-            # stale checkout) — a green run that collected nothing would read
+            # stale checkout): a green run that collected nothing would read
             # as "collected" to the web app's freshness tracking.
             emit_error(
                 f"no classroom in {base_dir} matches "
@@ -310,7 +310,7 @@ def main() -> int:
     total_changes = 0
     failed_classrooms: list[str] = []
     # Whether ASSIGNMENT_FILTER named a slug that exists in at least one
-    # collected classroom's manifest — a no-match scoped run fails like a
+    # collected classroom's manifest; a no-match scoped run fails like a
     # no-match classroom filter.
     assignment_filter_matched = not assignment_filter
     for classroom_short, classroom_meta, assignments in classroom_dirs:
@@ -326,7 +326,7 @@ def main() -> int:
             scores = load_scores(scores_path)
         except ScoresFileError as exc:
             # A malformed/hand-edited scores.json is a per-CLASSROOM data
-            # problem — isolate it (like iter_classrooms does for a bad
+            # problem: isolate it (like iter_classrooms does for a bad
             # classroom.json) so one broken file can't deny collection to the
             # rest. The run still exits non-zero at the end so CI surfaces it.
             emit_error(f"{classroom_short}: {exc}")
@@ -341,7 +341,7 @@ def main() -> int:
         # Staff-team grant is a SEPARATE, non-fatal pass: it needs Administration
         # (collection doesn't), so its failure must not abort the core job. On
         # failure, warn and mark the classroom failed (non-zero exit) but still
-        # collect — here and for every later classroom.
+        # collect, here and for every later classroom.
         try:
             grant_classroom_team_access(
                 api_url=api_url,
@@ -356,7 +356,7 @@ def main() -> int:
             )
         except GrantThrottled as exc:
             # NOT a failure: collection is untouched, the pass is idempotent, and
-            # the token is healthy. Each classroom is still retried on its own —
+            # the token is healthy. Each classroom is still retried on its own:
             # a secondary limit clears in about a minute, so a later grant may
             # well succeed in this same run.
             warn_grant_deferred(classroom_short, str(exc))
@@ -372,7 +372,7 @@ def main() -> int:
                 )
             else:
                 grant_hint = (
-                    f" — grant staff teams repo access needs a fine-grained PAT with "
+                    f". Granting staff teams repo access needs a fine-grained PAT with "
                     f"Repository access: All repositories and Repository -> "
                     f"Administration: Read and write (a token scoped to selected "
                     f"repositories can't reach the student repos); run "
@@ -403,16 +403,16 @@ def main() -> int:
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
-            # are GLOBAL — the token can't read repos/members or GitHub is
+            # are GLOBAL: the token can't read repos/members or GitHub is
             # unreachable, so every remaining classroom would fail identically.
             # Abort the whole run loudly rather than warn-and-skip per classroom
             # (which would report a broken run as success that collected
-            # nothing). The staff-grant pass above is excluded — its
+            # nothing). The staff-grant pass above is excluded, since its
             # Administration scope isn't needed to collect.
             throttle_reason = rate_limit_reason(exc)
             if throttle_reason is not None:
-                # A throttle survived the transport's retries. Still fatal —
-                # collection is incomplete — but naming the cause keeps the
+                # A throttle survived the transport's retries. Still fatal
+                # (collection is incomplete), but naming the cause keeps the
                 # operator from rotating a healthy token.
                 emit_error(
                     f"{classroom_short}: collection was throttled by GitHub "
@@ -423,7 +423,7 @@ def main() -> int:
             elif exc.code in (401, 403):
                 emit_error(
                     f"{classroom_short}: service token was rejected with HTTP {exc.code} "
-                    f"({exc.reason or 'no reason'}){body_note(exc)} — run "
+                    f"({exc.reason or 'no reason'}){body_note(exc)}. Run "
                     f"`gh teacher rotate-service-token {org}` "
                     f"with a fine-grained PAT scoped to Organization -> Members: Read (collection "
                     f"lists the classroom team's members) AND Repository -> Contents: Read and write "
@@ -438,7 +438,7 @@ def main() -> int:
 
         # A service token that can't read the student repos returns 404 for
         # every repo (GitHub hides existence), indistinguishable from "not
-        # submitted" — so collect_classroom reports the whole team as
+        # submitted", so collect_classroom reports the whole team as
         # unsubmitted and the run exits cleanly (the 401/403 guard never trips).
         # A non-empty assignment set yielding zero readable submissions often
         # means the team has no members yet OR the token lacks repo access.
@@ -477,8 +477,8 @@ def main() -> int:
 
         n_changes = apply_updates(scores, updates)
         # Stamp the buckets this run actually walked (even when nothing changed)
-        # so per-assignment freshness is knowable — an org-wide run timestamp
-        # can't say whether a scoped run touched a given assignment. A bucket
+        # so per-assignment freshness is knowable (an org-wide run timestamp
+        # can't say whether a scoped run touched a given assignment). A bucket
         # with no submissions yet is created empty so the stamp has a home.
         collected_at = utc_now_iso()
         for slug, atype in collected.items():
@@ -486,7 +486,7 @@ def main() -> int:
                 slug, {"type": atype, "entries": []}
             )
             # Keep the bucket type in sync with the manifest-derived mode even
-            # when no entry changed — apply_updates only syncs buckets it
+            # when no entry changed: apply_updates only syncs buckets it
             # touches, so a detected-only or update-less bucket would otherwise
             # keep a stale type across a mode flip.
             bucket["type"] = atype
@@ -516,7 +516,7 @@ def main() -> int:
             merged.sort(key=lambda rec: str(rec.get("owner", "")).lower())
             # Write [] rather than dropping the key when nothing is detected: the
             # web distinguishes "collected, nobody submitted" (honest 0 / N) from
-            # "never collected" (absent key) — popping it here would make a real
+            # "never collected" (absent key), so popping it here would make a real
             # collect that found no submitters look like no collect at all.
             bucket["detected"] = merged
             # Compared against the prior LIST, not the raw key: writing [] into a
@@ -528,7 +528,7 @@ def main() -> int:
         try:
             save_scores(scores_path, scores)
         except ScoresFileError as exc:
-            # Per-classroom write failure — isolate like the load failure above.
+            # Per-classroom write failure: isolate like the load failure above.
             emit_error(f"{classroom_short}: {exc}")
             failed_classrooms.append(classroom_short)
             continue
@@ -554,7 +554,7 @@ def main() -> int:
         # naming an assignment no collected classroom has must fail loudly.
         emit_error(
             f"no assignment matches ASSIGNMENT_FILTER={assignment_filter!r} in "
-            f"the collected classroom(s) — check the slug, or pull the latest "
+            f"the collected classroom(s). Check the slug, or pull the latest "
             f"config repo"
         )
         return 1
@@ -623,8 +623,8 @@ def iter_classrooms(
 
 def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str]]:
     """Best-effort roster read for optional display metadata, keyed by
-    lowercased username, from roster.csv. The classroom GitHub team — not this
-    file — is authoritative for enrollment, so a missing/unreadable/malformed
+    lowercased username, from roster.csv. The classroom GitHub team, not this
+    file, is authoritative for enrollment, so a missing/unreadable/malformed
     roster is NOT fatal: it just yields no metadata (blank name/section/email),
     never a crash or a dropped student.
     """
@@ -714,7 +714,7 @@ class RepoIndex:
     """The org's repos (lowercased name -> RepoFacts), read once per run and only
     when something asks.
 
-    Both passes walk the (team member × assignment) product — thousands of names
+    Both passes walk the (team member × assignment) product, thousands of names
     for an ordinary course, of which only the accepted ones exist. Collection
     absorbs the misses quietly (a 404 on /releases reads as "not submitted"), but
     the grant pass spends two requests and a warning on each, which is what trips
@@ -724,7 +724,7 @@ class RepoIndex:
     lists exactly the repos it is scoped to, so that name was going to 404. The
     premise is load-bearing: a listing that looks complete but omits a readable
     repo would read a real submission as "not submitted". Both detectable shapes
-    fail open instead — empty reads as unknown, truncated raises
+    fail open instead: empty reads as unknown, truncated raises
     IncompleteListing.
 
     Two ways to answer. A caller that knows its candidate names up front
@@ -782,7 +782,7 @@ class RepoIndex:
             emit_warning(
                 f"{self._org}: could not list the org's repositories: HTTP "
                 f"{exc.code} ({exc.reason or 'no reason'}); falling back to "
-                f"probing every (member, assignment) repo name — slower, and "
+                f"probing every (member, assignment) repo name, which is slower, with "
                 f"one warning per repo that has not been accepted yet."
             )
             return None
@@ -885,7 +885,7 @@ class RepoIndex:
         return repos
 
     def contains(self, repo_name: str) -> bool:
-        """Whether `repo_name` exists — True whenever the listing is unknown, so
+        """Whether `repo_name` exists: True whenever the listing is unknown, so
         an unreadable index never hides a repo from either pass."""
         name = repo_name.lower()
         answers = self._answers(name)
@@ -920,7 +920,7 @@ class RepoIndex:
 def is_empty_repo(entry: dict[str, Any]) -> bool:
     """True only when empty_repo is the boolean `true`. The wire contract is a
     JSON boolean (schema type "boolean"; Go decodes into a strict `bool`), so a
-    non-boolean value from a hand-edited manifest is not empty_repo — matching
+    non-boolean value from a hand-edited manifest is not empty_repo, matching
     the Go and TypeScript readers (TS uses `=== true`). Every Python reader
     (collect/regrade/runner) MUST use this predicate so all tools agree."""
     return entry.get("empty_repo") is True
@@ -929,7 +929,7 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
 def is_no_autograder(entry: dict[str, Any]) -> bool:
     """True only when no_autograder is the boolean `true` (strict, like
     is_empty_repo). A templated no_autograder assignment commits no shim, so it
-    never autogrades and produces no submit/* releases — collection and regrade
+    never autogrades and produces no submit/* releases, so collection and regrade
     skip it exactly as they skip empty_repo. Keep byte-identical across
     collect/regrade and the autograde-runner read step so every tool agrees."""
     return entry.get("no_autograder") is True
@@ -938,7 +938,7 @@ def is_no_autograder(entry: dict[str, Any]) -> bool:
 def is_init_shim(entry: dict[str, Any]) -> bool:
     """True only when init_shim is the boolean `true` (strict, like
     is_empty_repo). An init_shim assignment is a template-less repo initialized
-    with only the marker + default shim — it DOES autograde and produces
+    with only the marker + default shim. It DOES autograde and produces
     submit/* releases, so unlike empty_repo/no_autograder it is NOT part of
     skips_grading(): collection and regrade treat it as a normal grading
     assignment. Provided for symmetry and tests."""
@@ -946,17 +946,17 @@ def is_init_shim(entry: dict[str, Any]) -> bool:
 
 
 def skips_grading(entry: dict[str, Any]) -> bool:
-    """True when the assignment never autogrades — either a bare empty_repo or a
+    """True when the assignment never autogrades: either a bare empty_repo or a
     templated no_autograder (teacher-supplied CI). The "does not autograde"
     predicate family; collection/regrade poll neither. NOTE: init_shim is
-    deliberately EXCLUDED — an init_shim repo commits the default shim and
+    deliberately EXCLUDED, since an init_shim repo commits the default shim and
     autogrades, so it must be collected/regraded like any built-in assignment."""
     return is_empty_repo(entry) or is_no_autograder(entry)
 
 
 def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     """Slugs worth collecting: non-empty strings, in manifest order, excluding
-    assignments that never autograde (empty_repo or no_autograder — their repos
+    assignments that never autograde (empty_repo or no_autograder; their repos
     produce no submit/* releases, so polling them would only produce dead
     gradebook rows). main()'s zero-submission guard counts these; the collect
     loop applies the same predicate inline (it also needs each entry's `due`),
@@ -1014,8 +1014,8 @@ def poll_candidate_names(
 class TeamMembers:
     """Team member logins, read once per team per classroom.
 
-    Both passes ask for the same student team — the grant pass to build its
-    target product, collection to build the poll roster — and on a large course
+    Both passes ask for the same student team (the grant pass to build its
+    target product, collection to build the poll roster) and on a large course
     that listing is several paginated requests.
 
     Failures are not cached, so each caller still handles them on its own terms
@@ -1049,12 +1049,12 @@ def list_enrolled_logins(
     """Return (polled logins, student logins). The first is the case-insensitive
     dedup union of the student team and every staff team's members, first-seen
     order/casing preserved (student team first). The second is the lowercased
-    set of STUDENT-team logins — used only so the per-assignment "X of Y
+    set of STUDENT-team logins, used only so the per-assignment "X of Y
     submitted" denominator counts students (expected to submit) rather than
     every staffer polled (a non-accepting TA is a tester, not missing work).
 
     Collection polls staff (teacher/hta/ta) too so a staff member testing an
-    assignment is graded like a student — but only when they've ACCEPTED: a
+    assignment is graded like a student, but only when they've ACCEPTED: a
     staff member with no `<classroom>-<assignment>-<username>` repo returns no
     releases and so produces no entry (the accepted gate falls out of the
     per-repo poll; no explicit staff check is needed). A staff member on no
@@ -1069,7 +1069,7 @@ def list_enrolled_logins(
         lambda slug: list_team_member_logins(api_url, org, slug, service_token)
     )
     # Student team first so its casing wins in the dedup (the repo-name formula
-    # lowercases anyway, so casing is cosmetic — but keep it deterministic).
+    # lowercases anyway, so casing is cosmetic, but keep it deterministic).
     student_logins = read(student_slug)
     logins = list(student_logins)
     for role, staff_team in resolve_staff_team_slugs(classroom_meta, classroom_short).items():
@@ -1260,8 +1260,8 @@ def collect_detected(
     for username in poll_owners:
         repo_name = assignment_repo_name(classroom_short, slug, username)
         if repo_index is not None and not repo_index.contains(repo_name):
-            # The index says the repo doesn't exist — a definite "not accepted",
-            # not a failed read — so a stale record for it should go.
+            # The index says the repo doesn't exist (a definite "not accepted",
+            # not a failed read), so a stale record for it should go.
             visited.add(username.lower())
             continue
         record, read = detector.detect(username, repo_name)
@@ -1325,7 +1325,7 @@ def collect_release_history(
 
         # validate_result enforces identity (owner == repo owner) AND that
         # `assignment_type` matches the manifest mode, so a mode-flipped or
-        # mis-typed result is rejected here — no separate assignment_type
+        # mis-typed result is rejected here; no separate assignment_type
         # cross-check needed afterward.
         try:
             validate_result(
@@ -1387,12 +1387,12 @@ def attribute_submission_members(
     """Resolve the credited members for one submitted repo.
 
     Group attribution: the runner emits owner-only (it can't read
-    collaborators). Collection is authoritative — list the repo's collaborators
+    collaborators). Collection is authoritative: list the repo's collaborators
     intersected with the roster and credit them all via `member_usernames`. On a
     read failure, force owner-only (never trust student-supplied data) and warn,
     so a scope/transient issue degrades gracefully. Individual entries carry no
     member list. Team attribution instead credits the GROUP TEAM's live members
-    (never repo collaborators), and a failed team read SKIPS the repo — the
+    (never repo collaborators), and a failed team read SKIPS the repo, since the
     owner `group-<n>` is not a person, so an owner-only degrade would credit
     nobody and revoke every member."""
     if is_team:
@@ -1414,7 +1414,7 @@ def attribute_submission_members(
             return MemberAttribution(None, entry_team_slug, skipped="team-read-failed")
         if not members:
             # A team whose live members are all unenrolled (or the team is
-            # empty) still writes its entry — the drift is loud, not silent.
+            # empty) still writes its entry, so the drift is loud, not silent.
             emit_warning(
                 f"{org}/{repo_name}: team {entry_team_slug!r} has no enrolled "
                 f"members to credit; the submission is recorded but nobody "
@@ -1441,13 +1441,13 @@ def attribute_submission_members(
             emit_warning(degraded_warning)
             return MemberAttribution(members, None, degraded=True)
         if len(members) == 1:
-            # Read succeeded but credited only the owner — no other rostered
+            # Read succeeded but credited only the owner: no other rostered
             # collaborator found. Often expected (a solo group submission), but
             # also the symptom of a real misconfig (teammates not on the roster,
             # or not added as collaborators), which would otherwise be silent.
             emit_warning(
                 f"{org}/{repo_name}: group submission credited to the owner "
-                f"{username!r} only — no other team member is a collaborator "
+                f"{username!r} only: no other team member is a collaborator "
                 f"on the repo. If this is a team submission, ensure each teammate "
                 f"is on the {classroom_short} classroom team AND a collaborator on "
                 f"the repo (added via `gh student invite`)."
@@ -1521,7 +1521,7 @@ def collect_classroom(
     propagate and main() converts them to exit 1. The second tuple element lets
     main() distinguish a mode-flip-induced empty result (which has its own loud
     warning) from a token-access problem. The third records which buckets this
-    run refreshed — main() stamps their `collected_at` — and stays empty when
+    run refreshed (main() stamps their `collected_at`) and stays empty when
     collection was skipped wholesale (team unreadable/empty), so a skipped
     classroom never reads as freshly collected. The fourth carries DETECTED
     submissions (presence/count, never a score): every submitter of a
@@ -1531,18 +1531,18 @@ def collect_classroom(
 
     `roster_meta` is the best-effort roster join (username -> display metadata,
     see load_roster_metadata); when a collected owner has a matching row its
-    name/section/email are attached to the entry. Absent/blank is fine — the
+    name/section/email are attached to the entry. Absent/blank is fine; the
     join never gates collection.
 
     `assignment_filter` (an assignment slug, empty for all) narrows the walk to
-    one assignment — the web app's per-assignment "Sync now" scope. Sibling
+    one assignment, the web app's per-assignment "Sync now" scope. Sibling
     assignments' buckets in scores.json are untouched (apply_updates upserts).
     """
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
     group_attribution_degraded = 0
     # Team submissions skipped because the group team's member list could not
-    # be read (prior credit preserved) — aggregated into one warning below.
+    # be read (prior credit preserved), aggregated into one warning below.
     team_attribution_failed = 0
     # Assignments this run actually walked (slug -> mode), for `collected_at`
     # stamping. Populated only past the team-read gate below.
@@ -1563,7 +1563,7 @@ def collect_classroom(
     # from the team member lists, NOT the CSV. The set is the union of the
     # STUDENT team and every STAFF team (teacher/hta/ta) so a staff member who
     # accepted an assignment (to test the autograde flow) is collected like a
-    # student — staff who never accepted have no repo, hence no releases, hence
+    # student. Staff who never accepted have no repo, hence no releases, hence
     # no entry (the accepted gate is implicit in the per-repo poll). A 404
     # (student team missing) or empty union yields no pairs (warn + return). A
     # hard auth/network error propagates so main() aborts the whole run loudly.
@@ -1580,7 +1580,7 @@ def collect_classroom(
             f"{classroom_short}: could not read team {team_slug!r} members: "
             f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping collection for "
             f"this classroom. Ensure CLASSROOM50_SERVICE_TOKEN has Organization -> "
-            f"Members: Read (a fine-grained PAT permission) — rotate it with "
+            f"Members: Read (a fine-grained PAT permission). Rotate it with "
             f"`gh teacher rotate-service-token {org}`."
         )
         return results, mode_flip_assignments, collected, detected
@@ -1594,12 +1594,12 @@ def collect_classroom(
     if not team_usernames:
         emit_warning(
             f"{classroom_short}: teams {team_slug!r} (and staff teams) have no "
-            f"members — no (username, assignment) pairs to poll; skipping."
+            f"members, so there are no (username, assignment) pairs to poll; skipping."
         )
         return results, mode_flip_assignments, collected, detected
 
     # Group attribution credits a collaborator only if on a classroom team
-    # (owner always credited) — same trust model, team-sourced set. Staff are in
+    # (owner always credited): same trust model, team-sourced set. Staff are in
     # the union, so a staff collaborator on a group repo can be credited too.
     roster_logins = {u.lower() for u in team_usernames}
     if repo_index is not None:
@@ -1615,16 +1615,16 @@ def collect_classroom(
             continue
         if assignment_filter and slug != assignment_filter:
             continue
-        # Assignments that never autograde (empty_repo or no_autograder) —
+        # Assignments that never autograde (empty_repo or no_autograder):
         # same predicate as valid_assignment_slugs, kept in lockstep. There are
         # no submit/* releases to ingest and no scores to record, but a
         # submission still HAPPENED, so detect it from repo state instead
-        # (presence/count only, never a grade) — issue #659. An empty_repo
+        # (presence/count only, never a grade); see issue #659. An empty_repo
         # assignment has no submission definition at all, so it stays skipped.
         if skips_grading(entry):
             if is_empty_repo(entry):
                 print(
-                    f"{classroom_short}/{slug}: empty_repo assignment — "
+                    f"{classroom_short}/{slug}: empty_repo assignment: "
                     f"autograding is disabled; skipping collection"
                 )
                 continue
@@ -1641,7 +1641,7 @@ def collect_classroom(
             detected[slug] = (detected_type, detected_records, detected_visited)
             collected[slug] = detected_type
             print(
-                f"{classroom_short}/{slug}: no_autograder assignment — "
+                f"{classroom_short}/{slug}: no_autograder assignment: "
                 f"autograding is disabled; detected "
                 f"{len(detected_records)} submitter(s) from repo state"
             )
@@ -1660,9 +1660,9 @@ def collect_classroom(
         ):
             # A typo'd mode would silently collect as individual and reject
             # every group/team submission via the owner-identity check (reading
-            # as a mode flip) — name the real cause up front.
+            # as a mode flip), so name the real cause up front.
             emit_warning(
-                f"{classroom_short}/{slug}: unknown mode {raw_mode!r} — "
+                f"{classroom_short}/{slug}: unknown mode {raw_mode!r}; "
                 f"expected 'individual', 'group', or 'team'; collecting as individual"
             )
 
@@ -1713,7 +1713,7 @@ def collect_classroom(
         submitted = 0
         # Staff (non-student-team) members who actually submitted this
         # assignment. They count toward the "X of Y" denominator only when they
-        # submitted — a non-accepting staffer is a tester, not missing work, so
+        # submitted: a non-accepting staffer is a tester, not missing work, so
         # counting every polled staffer in Y would understate student coverage.
         staff_submitted = 0
         # Repos under THIS assignment whose only submissions were rejected by
@@ -1722,7 +1722,7 @@ def collect_classroom(
         for username in poll_owners:
             repo_name = assignment_repo_name(classroom_short, slug, username)
             # A name the index doesn't know has no repo, so its release poll
-            # would 404 and read as "not submitted" anyway — same outcome, one
+            # would 404 and read as "not submitted" anyway: same outcome, one
             # request less. A definite "not accepted" also retires any stale
             # detected record.
             if repo_index is not None and not repo_index.contains(repo_name):
@@ -1801,7 +1801,7 @@ def collect_classroom(
         # Denominator: students (expected to submit) + staff who actually
         # submitted. Non-accepting staff (polled but no repo) are excluded so
         # the coverage line reads as student coverage, not inflated by testers.
-        # A team assignment counts GROUPS, not people — its poll targets are
+        # A team assignment counts GROUPS, not people; its poll targets are
         # the group repos.
         ungraded = (
             f", {len(detected_records)} with pushes but no graded submission"
@@ -1821,7 +1821,7 @@ def collect_classroom(
             mode_flip_assignments += 1
             emit_warning(
                 f"{classroom_short}/{slug}: {len(mode_flip_repos)} repo(s) had submit-tag "
-                f"release(s) but NONE were creditable — every present submission was rejected "
+                f"release(s) but NONE were creditable: every present submission was rejected "
                 f"by validation. This is the symptom of switching this assignment's mode "
                 f"(individual/group/team): prior submissions' assignment_type no longer matches "
                 f"{assignment_type!r}, so affected students show as not-submitted until they "
@@ -1834,7 +1834,7 @@ def collect_classroom(
             f"{classroom_short}: {group_attribution_degraded} group submission(s) "
             f"credited to the repo owner only because the collaborator read failed "
             f"(teammates not credited). This usually means CLASSROOM50_SERVICE_TOKEN "
-            f"lacks the collaborator-read permission — rotate it with `gh teacher rotate-service-token`."
+            f"lacks the collaborator-read permission. Rotate it with `gh teacher rotate-service-token`."
         )
     if team_attribution_failed:
         emit_warning(
@@ -1858,7 +1858,7 @@ def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
 def team_repo_counter(owner_segment: str) -> int | None:
     """Recover n from a team repo's owner segment (`group-<n>`), or None when
     the segment isn't that shape. MODE-GATED by the caller ("group-3" is a
-    syntactically valid GitHub login) — mirrors contract.ParseGroupRepoCounter:
+    syntactically valid GitHub login). Mirrors contract.ParseGroupRepoCounter:
     counters start at 1, no leading zeros."""
     if not owner_segment.startswith(GROUP_REPO_SEGMENT):
         return None
@@ -1906,8 +1906,8 @@ def team_poll_owners(
 ) -> tuple[list[str], bool]:
     """The `group-<n>` owner segments a team assignment polls, sorted by
     counter. Team repos carry no username, so the targets come from the org
-    repo listing (already read once per run) or — when that listing is
-    unreadable — from enumerating the assignment's group teams. Returns
+    repo listing (already read once per run) or, when that listing is
+    unreadable, from enumerating the assignment's group teams. Returns
     (owners, ok): ok=False (with a warning) when neither source is readable,
     so the caller skips the assignment and prior state is preserved rather
     than collected-as-empty."""
@@ -1989,7 +1989,7 @@ def attribute_team_members(
 
 def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> str:
     """The classroom's GitHub team slug: persisted classroom.json `team.slug`
-    when present (authoritative — GitHub may re-slug on a name collision, e.g.
+    when present (authoritative, since GitHub may re-slug on a name collision, e.g.
     `classroom50-cs-1`), else the derived `classroom50-<short>`. Mirrors the web
     app's resolveClassroomTeam and Go's ResolveClassroomTeam so all three target
     the same team."""
@@ -2109,8 +2109,8 @@ def grant_classroom_team_access(
     private, in-org assignment template. Additive + idempotent, so re-running
     collection re-affirms access cheaply.
 
-    Student-repo targets are the (team member × assignment) product — the same
-    set collect_classroom polls — narrowed to the repos that exist when
+    Student-repo targets are the (team member × assignment) product (the same
+    set collect_classroom polls), narrowed to the repos that exist when
     `repo_index` can say (thousands of names per classroom, two wasted requests
     each). A per-repo 404/422 (repo not accepted yet, or template not
     org-owned) is warned-and-skipped; a hard error (401/403/599) propagates so
@@ -2246,8 +2246,8 @@ def grant_classroom_team_access(
         populated_teams.append(team_slug)
 
         # One bulk read replaces grant_team_repo's per-repo access check: after
-        # the first run nearly every target is already granted, so that check —
-        # not the PUT — is the request that dominates. None means "unknown".
+        # the first run nearly every target is already granted, so that check,
+        # not the PUT, is the request that dominates. None means "unknown".
         known_repos = known_team_repos(
             api_url, org, team_slug, service_token, classroom_short
         )
@@ -2276,7 +2276,7 @@ def grant_classroom_team_access(
                 if classify(exc) is FATAL:
                     raise
                 # 404 = repo not accepted yet; 422 = not org-owned. Neither is
-                # a token problem — skip that repo.
+                # a token problem, so skip that repo.
                 emit_warning(
                     f"{t_owner}/{t_repo}: could not grant {team_slug!r} {permission}: "
                     f"HTTP {exc.code} ({exc.reason or 'no reason'}){body_note(exc)}; skipping"
@@ -2338,7 +2338,7 @@ def private_template_targets(
     Public templates need no grant and an out-of-org private template can't be
     granted to this org's team, so both are skipped; a template that can't be
     read is warned about and dropped, while a hard error propagates. Resolved
-    once for all staff roles — the read doesn't depend on the team.
+    once for all staff roles, since the read doesn't depend on the team.
 
     `repo_index` already knows each in-org repo's `private` flag from the org
     listing, so the per-template read only happens when it can't say.
@@ -2346,7 +2346,7 @@ def private_template_targets(
     `assignment_filter` scopes to one assignment's template; blank keeps all."""
     targets: list[tuple[str, str]] = []
     # Deduped on the REF, not the kept targets: assignments commonly share one
-    # starter template, and only private ones are kept — so deduping on the
+    # starter template, and only private ones are kept, so deduping on the
     # output would re-read every public template once per assignment.
     seen: set[tuple[str, str]] = set()
     for entry in assignments.get("assignments") or []:
@@ -2385,7 +2385,7 @@ def known_team_repos(
 ) -> set[str] | None:
     """Lowercased `owner/repo` of every repo `team_slug` already has access to,
     or None when the listing failed. None means "unknown", which makes callers
-    fall back to the per-repo access check — never to "not granted", which
+    fall back to the per-repo access check, never to "not granted", which
     would re-PUT every repo on every run."""
     try:
         return list_team_repo_full_names(api_url, org, team_slug, token)
@@ -2431,7 +2431,7 @@ def utc_now_iso() -> str:
 def parse_rfc3339(value: Any) -> datetime.datetime | None:
     """Parse an RFC 3339 timestamp into an aware datetime, or None when it
     isn't one (non-string, unparseable, or missing a timezone offset). Naive
-    timestamps are rejected rather than guessed — lateness is a cross-timezone
+    timestamps are rejected rather than guessed: lateness is a cross-timezone
     comparison, so an ambiguous wall-clock time must not silently pick one.
     """
     if not isinstance(value, str) or not value:
@@ -2450,7 +2450,7 @@ def parse_rfc3339(value: Any) -> datetime.datetime | None:
 def mark_late(payload: dict[str, Any], due: datetime.datetime) -> bool:
     """Set payload["late"] by comparing the runner's submission `datetime`
     against the assignment's due date. Submitting exactly at the deadline is on
-    time. Returns False — leaving the payload unmarked — when the timestamp
+    time. Returns False (leaving the payload unmarked) when the timestamp
     doesn't parse; lateness is advisory and must never drop a submission.
     """
     submitted = parse_rfc3339(payload.get("datetime"))
@@ -2488,7 +2488,7 @@ def load_scores(path: pathlib.Path) -> dict[str, Any]:
 
     `assignments` must be the canonical object keyed by slug, each value an
     object `{ "type": ..., "entries": [...] }`. Legacy shapes are not migrated
-    (see normalize_assignments) — a non-canonical file hard-fails.
+    (see normalize_assignments); a non-canonical file hard-fails.
     """
     if not path.is_file():
         return {"schema": SCORES_SCHEMA_V1, "assignments": {}}
@@ -2512,7 +2512,7 @@ def load_scores(path: pathlib.Path) -> dict[str, Any]:
         scores["assignments"] = normalize_assignments(scores.get("assignments"))
     except ValueError as exc:
         raise ScoresFileError(f"{path}: {exc}") from exc
-    # Drop the legacy root field if a hand-edit left it — `assignments` is
+    # Drop the legacy root field if a hand-edit left it; `assignments` is
     # authoritative.
     scores.pop("submissions", None)
     return scores
@@ -2524,7 +2524,7 @@ def normalize_assignments(assignments: Any) -> dict[str, dict[str, Any]]:
     `{ "type": <"individual"|"group"|"team">, "entries": [...] }`.
 
     Anything else hard-fails. Legacy shapes (flat array, "{}" string wrapper,
-    the old `submissions`-keyed map) are NOT migrated — backward compat is
+    the old `submissions`-keyed map) are NOT migrated: backward compat is
     intentionally dropped, so a non-canonical file fails loudly.
     """
     if assignments is None:
@@ -2598,10 +2598,10 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
 
     Each bucket is `{ "type": ..., "entries": [...] }`. Existing entries with
     `"override": true` are preserved verbatim. Entries within a bucket are keyed
-    by the repo OWNER (`row_key`), invariant for a repo — so a group entry whose
+    by the repo OWNER (`row_key`), invariant for a repo, so a group entry whose
     member set changes between collects REPLACES its prior entry instead of
     orphaning it and appending a duplicate. Entries without an `owner` are not
-    keyable and are skipped — no legacy migration.
+    keyable and are skipped; there is no legacy migration.
     """
     assignments: dict[str, Any] = scores["assignments"]
     # Per-bucket index: assignment slug -> {row_key: entry index}.
@@ -2665,7 +2665,7 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
                 f"drop is intended (e.g., an unenrollment) and not a team-vs-roster "
                 f"divergence, since the shared score is now revoked for them."
             )
-        # Preserve an explicit "override": false on replacement — the teacher's
+        # Preserve an explicit "override": false on replacement, the teacher's
         # "I reviewed this, keep refreshing" signal.
         if "override" in existing and "override" not in entry:
             entry = dict(entry)
@@ -2710,11 +2710,11 @@ def row_key(record: dict[str, Any]) -> str | None:
     """The stable per-bucket key: the repo OWNER login, lowercased.
 
     Requires the explicit `owner` field (set by collection from the repo-name
-    formula). Returns None when `owner` is missing or not a non-empty string —
+    formula). Returns None when `owner` is missing or not a non-empty string;
     such a record is unkeyable and apply_updates skips it. No sole-username
     fallback and no legacy migration: every canonical row carries `owner`.
 
-    Keying on the owner — not the credited `usernames` set — is what makes a
+    Keying on the owner, not the credited `usernames` set, is what makes a
     group re-collect replace its row instead of duplicating it when the member
     set changes.
 
@@ -2755,7 +2755,7 @@ def validate_result(
 ) -> None:
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
-    trying to land in someone else's scores.json — the triple must match the
+    trying to land in someone else's scores.json: the triple must match the
     source repo's expected identity.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
@@ -2769,7 +2769,7 @@ def validate_result(
     `renamed_from` is the manifest entry's pre-rename slug (one-shot, so a
     single value): a historical release published before the rename carries it
     in the immutable result.json, and is accepted so old grades survive the
-    rename. Exactly that value — never an arbitrary third slug.
+    rename. Exactly that value, never an arbitrary third slug.
     """
     if not isinstance(payload, dict):
         raise ValueError(f"top-level value must be an object, got {type(payload).__name__}")
@@ -2889,7 +2889,7 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
 #
 # An assignment with autograding disabled publishes no submit/* release, so the
 # graded path above has nothing to ingest. These helpers derive submissions from
-# repo state instead — presence and count only, never a score — mirroring the
+# repo state instead (presence and count only, never a score), mirroring the
 # web app's src/domain/assignments/submissionDetection.ts. Keep the two in step:
 # a divergence makes the assignments list and the submissions page disagree.
 
@@ -2928,7 +2928,7 @@ def commit_subject(message: Any) -> str:
 def submit_tag_datetime(tag_name: str) -> str | None:
     """The instant encoded in a canonical `submit/<UTC-ts>-<short-sha>` tag name
     (buildSubmitTag replaces the timestamp's colons with dashes to keep the ref
-    valid). None for a milestone or malformed name — the caller then has no free
+    valid). None for a milestone or malformed name; the caller then has no free
     time source and leaves the record dateless."""
     match = _SUBMIT_TAG_TIME_RE.match(tag_name or "")
     if not match:
@@ -2983,7 +2983,7 @@ def _compile_tag_pattern(pattern: str) -> "re.Pattern[str] | None":
     return compiled
 
 
-# The safe-pattern charset — literal-name characters plus the glob
+# The safe-pattern charset: literal-name characters plus the glob
 # metacharacters GitHub Actions tag filters support. Keep in lockstep with Go
 # contract.SubmissionTagCharsetRE and the web SUBMISSION_TAG_PATTERN_RE.
 _TAG_PATTERN = re.compile(r"^[A-Za-z0-9._/*?+\[\]-]+$")
@@ -2991,7 +2991,7 @@ _TAG_PATTERN = re.compile(r"^[A-Za-z0-9._/*?+\[\]-]+$")
 # A leading `?`/`+` (nothing to repeat) or a `+` stacked on another quantifier
 # (`v*+`, `a++`). LOAD-BEARING in a Python mirror: those translate to POSSESSIVE
 # quantifiers, which Python 3.11+ compiles (and matches!) while Go RE2 and JS
-# reject — without this guard the matcher copies diverge on exactly these
+# reject. Without this guard the matcher copies diverge on exactly these
 # patterns. Keep in lockstep with Go contract.stackedQuantifierRE and the web.
 _STACKED_QUANTIFIER = re.compile(r"^[?+]|[*?+]\+")
 
@@ -3000,7 +3000,7 @@ def matches_submission_tag(patterns: Iterable[str], tag_name: str) -> bool:
     """Whether `tag_name` matches ANY of the Actions tag-filter `patterns`; an
     empty list matches nothing. By-value copy of Go's
     contract.MatchesSubmissionTag, the web matchesSubmissionTag, and
-    regrade_repos.py's copy — all pinned to identical output by the shared
+    regrade_repos.py's copy, all pinned to identical output by the shared
     golden fixture cli/shared/testdata/submission_tag_match_cases.json. The same
     strings are rendered into the shim's on.push.tags, so this matcher and
     GitHub's own filter evaluation must agree on what fires. Keep in lockstep."""
@@ -3020,7 +3020,7 @@ def detect_branch_submissions(
 ) -> list[dict[str, Any]]:
     """Branch mode: every default-branch commit past the accept baseline that the
     tool didn't author is one submission. `commits` is newest-first (GitHub's
-    order), so the baseline's index is the cut point — everything at or before it
+    order), so the baseline's index is the cut point: everything at or before it
     is accept-time setup, including the template's ancestor commits."""
     cut = len(commits)
     if baseline_sha:
@@ -3091,7 +3091,7 @@ def list_default_branch_commits(
     stop_at_sha: str | None = None,
 ) -> list[dict[str, Any]]:
     """A repo's default-branch commits, newest first. With `stop_at_sha` (the
-    accept baseline) the walk ends on the page that contains it — everything at
+    accept baseline) the walk ends on the page that contains it, since everything at
     or past the baseline is accept-time setup the caller cuts anyway, so paging
     through the rest of a long history would be pure waste."""
     return _paginate_objects(
@@ -3113,7 +3113,7 @@ def list_default_branch_commits(
 def oldest_commit_sha_for_path(
     api_url: str, owner: str, repo: str, path: str, token: str
 ) -> str | None:
-    """The oldest commit touching a path — the accept-marker baseline. None when
+    """The oldest commit touching a path, the accept-marker baseline. None when
     the path has no history (a bare repo), which trims nothing."""
     commits = _paginate_objects(
         lambda page: (
@@ -3189,7 +3189,7 @@ def detected_record(
     trust_times: bool = True,
 ) -> dict[str, Any]:
     """Fold one repo's detections into the scores/v1 `detected` record: a count,
-    the newest instant, and the late flag derived from it. Carries no score —
+    the newest instant, and the late flag derived from it. Carries no score;
     these assignments are never graded.
 
     `trust_times` is False in TAG mode, where the only available instant is
@@ -3197,7 +3197,7 @@ def detected_record(
     student could backdate it to dodge a late flag or forge a "last submitted"
     time. The web side refuses tag times for lateness for exactly this reason
     (see latestCommitDetectedAt), so neither `latest_datetime` nor `late` is
-    recorded from one — the count still is, since tag EXISTENCE isn't forgeable.
+    recorded from one. The count still is, since tag EXISTENCE isn't forgeable.
     """
     count = sum(int(d.get("count", 1) or 1) for d in detections)
     record: dict[str, Any] = {"owner": owner, "count": count}
@@ -3205,7 +3205,7 @@ def detected_record(
         return record
     # Latest by PARSED time, not lexicographic max: a commit date carrying a
     # non-Z offset would missort as a string, and an unparseable string must
-    # not shadow a parseable older one — mirrors the web's latestDetectedAt.
+    # not shadow a parseable older one. Mirrors the web's latestDetectedAt.
     times = [
         parsed
         for d in detections
@@ -3226,14 +3226,14 @@ def all_submit_releases(
     api_url: str, owner: str, repo: str, token: str
 ) -> list[dict[str, Any]]:
     """Every submit-tag release for a repo, newest first, walking the full
-    /releases pagination — the complete submission history (a student who pushed
+    /releases pagination: the complete submission history (a student who pushed
     N times has N submit/* releases, all returned). Non-submit releases (e.g., a
     hand-created tag) are filtered out. A 404 (no releases, or repo not
     accepted) yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
     chain or the page cap) raises IncompleteListing rather than returning a
-    truncated history — a partial list would replace the student's prior entry
+    truncated history; a partial list would replace the student's prior entry
     with fewer submissions, and the caller's warn-and-skip preserves it instead.
     """
     base = f"{_repo_url(api_url, owner, repo)}/releases"
@@ -3254,13 +3254,13 @@ def all_submit_releases(
         if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX)
         # A read-write token also lists draft releases. The runner never
         # publishes drafts, so a draft submit/* tag is hand-made noise whose
-        # assets aren't downloadable anyway — skip it.
+        # assets aren't downloadable anyway, so skip it.
         and release.get("draft") is not True
     ]
 
 
 class IncompleteListing(ValueError):
-    """A paginated walk that could not be completed — a looping `Link` chain or
+    """A paginated walk that could not be completed: a looping `Link` chain or
     the page cap. Distinct from a malformed body so callers can tell a partial
     list from a non-list: a partial list must never be persisted as the whole
     set."""
@@ -3431,7 +3431,7 @@ def _paginate_objects(
     back to page+1 and stops on a short page (len < per_page).
 
     `stop_after` (optional) ends the walk once any object on the current page
-    satisfies it — for callers that only need the prefix up to a sentinel (the
+    satisfies it, for callers that only need the prefix up to a sentinel (the
     accept-baseline commit), sparing the rest of a long history. The whole page
     is still returned, so the caller cuts precisely.
 
@@ -3441,7 +3441,7 @@ def _paginate_objects(
     Raises urllib.error.HTTPError on any non-2xx (including 404) so the caller
     can choose soft fallback vs. hard failure; raises ValueError on a non-array
     body, and IncompleteListing (a ValueError) when the walk can't be completed
-    — a self/looping rel="next" or the page cap.
+    (a self/looping rel="next" or the page cap).
     """
     per_page = 100
     max_pages = 100
@@ -3507,11 +3507,11 @@ def list_repo_collaborator_logins(
     """Logins of every direct collaborator on owner/repo, walking pagination.
 
     Returns ALL collaborators regardless of permission level. The crediting gate
-    is NOT permission level — it's classroom-team membership, applied by the
+    is NOT permission level; it's classroom-team membership, applied by the
     caller (group_member_usernames intersects with the team). Filtering on
     `role_name == "admin"` here was a bug: a group teammate who is also an org
     owner (admin on every repo), or a founder kept as repo `admin` to invite
-    teammates, is `admin` yet a legitimate student — the old filter dropped
+    teammates, is `admin` yet a legitimate student, so the old filter dropped
     them, crediting only the owner. Non-student teachers/TAs/org-owners are
     excluded downstream because they're not on the roster, so dropping the admin
     filter here loses no protection.
@@ -3572,7 +3572,7 @@ def list_org_repos(api_url: str, org: str, token: str) -> dict[str, RepoFacts]:
     """Lowercased name -> RepoFacts for every repo in `org` the token can
     see, walking pagination in parallel. Hits GET /orgs/{org}/repos.
 
-    Read once per run — see RepoIndex, which documents why a name absent here
+    Read once per run; see RepoIndex, which documents why a name absent here
     can be skipped. The `private` flag rides along from the same response
     bodies, so the staff-team grant doesn't re-read each template to learn it.
 
@@ -3655,7 +3655,7 @@ def list_team_repo_full_names(
     api_url: str, org: str, team_slug: str, token: str
 ) -> set[str]:
     """Lowercased `owner/repo` of every repo `team_slug` has access to, walking
-    pagination. Hits GET /orgs/{org}/teams/{slug}/repos — the bulk form of
+    pagination. Hits GET /orgs/{org}/teams/{slug}/repos, the bulk form of
     team_has_repo_access, read once instead of once per candidate repo.
 
     Raises urllib.error.HTTPError on any non-2xx (including 404 when the team
@@ -3690,14 +3690,14 @@ def group_member_usernames(
     owner-only.
 
     (`roster_logins` is the case-folded set of classroom-team logins the caller
-    passes in — the team is authoritative for enrollment; the name is legacy.)
+    passes in; the team is authoritative for enrollment; the name is legacy.)
 
     TRUST ASSUMPTION (F6, documented residual): every teammate on the classroom
     team who is a collaborator on the repo is credited. GitHub doesn't record HOW
     a collaborator was added, so collection can't distinguish a teammate the
     founder invited via `gh student invite` from one a student added via the UI.
-    The team intersection bounds the blast radius to classmates on the team — a
-    stranger can never be credited — but a student could add a teammate on the
+    The team intersection bounds the blast radius to classmates on the team (a
+    stranger can never be credited), but a student could add a teammate on the
     team and credit them this score. Treating that as acceptable (classmates on
     the team are mutually trusted within a classroom) is the deliberate, simple
     model; see wiki/Autograders.md. Tightening it would require a teacher-approved
@@ -3730,12 +3730,12 @@ def attribute_group_members(
 
     Returns (usernames, warning). On success `usernames` is the rostered
     collaborator list (owner always included) and `warning` is None. On a
-    collaborator-read failure `usernames` is forced to [owner] — never the
-    runner/student-supplied list — and `warning` is a message the caller should
+    collaborator-read failure `usernames` is forced to [owner] (never the
+    runner/student-supplied list) and `warning` is a message the caller should
     emit and count as a degraded attribution.
 
     Two failures are NOT degraded but propagated, because degrading here
-    PERSISTS an owner-only member list into scores.json — silently uncrediting
+    PERSISTS an owner-only member list into scores.json, silently uncrediting
     real teammates and then blaming the token in the aggregate warning:
 
       * a THROTTLE (a rate-limit burst mid-run), and
@@ -3811,7 +3811,7 @@ def download_result_asset(
 def rewrite_asset_url(asset_url: str, api_url: str) -> str:
     """Rewrite an asset API URL to the configured API host. Asset records still
     carry api.github.com URLs even when GH_API_URL points at a test server or
-    GHES — parse and swap scheme+netloc rather than string-slice a hardcoded
+    GHES: parse and swap scheme+netloc rather than string-slice a hardcoded
     prefix. Preserves a GHES-style /api/v3 prefix when the asset URL lacks it.
     """
     parsed_asset = urllib.parse.urlsplit(asset_url)
@@ -3919,7 +3919,7 @@ def _http_request(
         except (urllib.error.URLError, TimeoutError, OSError) as exc:
             # A connect-phase failure is wrapped in URLError, but a timeout/reset
             # during resp.read() raises socket.timeout (= TimeoutError, an
-            # OSError) which is NOT a URLError — so a stalled response body would
+            # OSError) which is NOT a URLError, so a stalled response body would
             # otherwise escape this retry path and crash past main()'s HTTPError
             # handler. Catch all three so a read-phase stall retries and wraps
             # into the synthetic 599 that classify() treats as FATAL.
@@ -4037,7 +4037,7 @@ def error_body_snippet(exc: urllib.error.HTTPError) -> str:
 def body_note(exc: urllib.error.HTTPError) -> str:
     """error_body_snippet formatted for appending to a log line."""
     snippet = error_body_snippet(exc)
-    return f" — response: {snippet}" if snippet else ""
+    return f", response: {snippet}" if snippet else ""
 
 
 def rate_limit_verdict(
@@ -4156,12 +4156,12 @@ def retry_delay(exc: urllib.error.HTTPError, attempt: int) -> float | None:
 def classify(exc: urllib.error.HTTPError) -> str:
     """The ONE verdict every error handler branches on, throttle checked FIRST.
 
-    THROTTLED — GitHub is rate limiting. The token is healthy and the work is
+    THROTTLED: GitHub is rate limiting. The token is healthy and the work is
         deferrable; never report it as a scope problem.
-    FATAL     — 401/403 (bad or under-scoped token) or 599 (synthetic
+    FATAL:     401/403 (bad or under-scoped token) or 599 (synthetic
         network-unavailable after retries). Aborts the run: treating these as
         per-student "not submitted" would report a broken run as success.
-    SKIPPABLE — everything else (404 = not accepted yet, 422 = not org-owned).
+    SKIPPABLE: everything else (404 = not accepted yet, 422 = not org-owned).
 
     NOTE a throttle is NOT fatal, so this alone is not a "propagate?" test:
     handlers that warn-and-skip must re-raise a throttle too, which is why they

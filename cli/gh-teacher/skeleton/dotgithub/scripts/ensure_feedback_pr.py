@@ -15,8 +15,8 @@ it auto-updates on every submission. PRs opened by GITHUB_TOKEN don't retrigger
 workflows, so there's no loop.
 
 Since issue #228 the accept clients (gh student accept / the web GUI) create
-the PR at accept time with the student's own token — same base/head, title,
-labels, and body (byte-mirrored via cli/shared/contract) — so it exists even
+the PR at accept time with the student's own token (same base/head, title,
+labels, and body, byte-mirrored via cli/shared/contract) so it exists even
 with Actions disabled. find_pr matches by base+head only, so this script
 ADOPTS that PR; this create path remains the fallback for pre-feature repos
 and accepts whose best-effort PR step failed.
@@ -71,7 +71,7 @@ STATUS_CONTEXT = "classroom50/feedback-pr"
 
 # Mode -> (PR label, color). Mirrors GitHub Classroom's Individual/Group
 # feedback labels so a teacher can tell them apart. Both shared-repo modes
-# (legacy group and team) carry the Group label — keep in lockstep with
+# (legacy group and team) carry the Group label; keep in lockstep with
 # contract.FeedbackLabelForMode.
 _LABELS = {
     "group": ("Group Assignment", "5319E7"),
@@ -132,7 +132,7 @@ def existing_base_sha(repo: str) -> str | None:
     """SHA the `feedback` branch points at, or None if it doesn't exist.
 
     Uses the API (not `git ls-remote`) so this runs without a config-repo
-    checkout — the reusable workflow only checks out the student repo.
+    checkout: the reusable workflow only checks out the student repo.
 
     A genuine 404 (branch absent) returns None -> caller creates it. Any OTHER
     failure (403/429/5xx/network) RAISES GhError rather than masquerading as
@@ -154,7 +154,7 @@ def existing_base_sha(repo: str) -> str | None:
 
 def create_base(repo: str, base_sha: str) -> bool:
     """Create the frozen `feedback` branch at base_sha. Returns True on success.
-    A failure is non-fatal (logged as a notice) — the ruleset leaves creation
+    A failure is non-fatal (logged as a notice): the ruleset leaves creation
     open to GITHUB_TOKEN, but a transient error shouldn't abort; the next
     submission retries."""
     try:
@@ -215,14 +215,14 @@ def pr_body(head: str, release_url: str) -> str:
         "automatically as you push. "
         "**Don't close or merge this pull request** unless your teacher tells you to.",
         "",
-        f"Each commit is automatically graded — the latest autograding result "
+        f"Each commit is automatically graded. The latest autograding result "
         f"is [here]({release_url}).",
         "",
         "Your teacher can leave comments and feedback on your code here. Click "
         "the **Subscribe** button to be notified when that happens.",
         "",
         f"Open the **Files changed** or **Commits** tab to see everything "
-        f"you've pushed to `{head}` since you accepted the assignment — your "
+        f"you've pushed to `{head}` since you accepted the assignment. Your "
         f"teacher sees the same view.",
         "",
         "<details>",
@@ -237,7 +237,7 @@ def pr_body(head: str, release_url: str) -> str:
         "status / check on each submission.",
         f"- The [latest autograding result]({release_url}) has the per-test "
         f"detail behind that status.",
-        "- This page is an overview — commits, line comments, and a general "
+        "- This page is an overview: commits, line comments, and a general "
         "comment box below.",
         "",
         f"The base branch (`{BASE_BRANCH}`) is frozen at the starter so the diff "
@@ -301,13 +301,13 @@ def read_template_pr_body(template_repo: str, template_branch: str) -> str | Non
                      "-H", "Accept: application/vnd.github.raw+json",
                      "-f", f"ref={template_branch}", check=False)
         if not content:
-            continue  # missing (404) or unreadable — try the next path
+            continue  # missing (404) or unreadable; try the next path
         if len(content.encode("utf-8")) > _TEMPLATE_PR_BODY_MAX_BYTES:
             print(f"::warning::template PR body {path} exceeds "
                   f"{_TEMPLATE_PR_BODY_MAX_BYTES} bytes; using the built-in body")
             return None
         if not content.strip():
-            continue  # empty/whitespace-only — not a usable body
+            continue  # empty/whitespace-only, not a usable body
         return content
     return None
 
@@ -349,12 +349,12 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
     rewrites its body, so a teacher-supplied full-replace body survives. On the
     fallback create path (no PR exists) it honors the assignment settings: when
     use_template is set and the template file is readable it uses the teacher
-    body, else the built-in body (best-effort — the runner token may not read an
+    body, else the built-in body (best-effort, since the runner token may not read an
     external/private template).
     """
     run_url = f"{server_url}/{repo}/actions/runs/{run_id}"
     # Static "latest" pointer (set-latest job keeps it current), not a pinned
-    # submit-tag URL — the body is written once at creation, so a tag would go
+    # submit-tag URL: the body is written once at creation, so a tag would go
     # stale but /releases/latest self-updates. See #262.
     release_url = f"{server_url}/{repo}/releases/latest"
 
@@ -393,7 +393,7 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
                 return ("success", "Feedback PR in place (created concurrently)", race_url)
             print(f"::warning::could not open Feedback PR (base={BASE_BRANCH} head={head}): {exc.output}")
             print("::warning::if this reports that Actions is not permitted to create "
-                  "pull requests, the org setting is off — re-run 'gh teacher init', or "
+                  "pull requests, the org setting is off. Re-run 'gh teacher init', or "
                   "enable Settings → Actions → 'Allow GitHub Actions to create and approve "
                   "pull requests'")
             return ("error",
@@ -408,7 +408,7 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
         # A failed reopen must NOT report success (F8). Trust `gh pr reopen`'s
         # own exit: if it raises, the reopen genuinely failed -> failure. If it
         # succeeds, a follow-up `pr view` only DOWNGRADES to failure when it
-        # *confirms* the PR is still CLOSED — a transient/empty view is treated
+        # *confirms* the PR is still CLOSED. A transient/empty view is treated
         # as success, so a flaky read can't flip a reopened PR to a false failure.
         try:
             gh("pr", "reopen", pr["number"], "--repo", repo)
@@ -462,7 +462,7 @@ def main() -> int:
 
     if not (repo and sha and base_sha):
         print("::error::ensure_feedback_pr requires GITHUB_REPOSITORY, GITHUB_SHA, "
-              "and BASE_SHA — running outside the autograde-runner workflow?",
+              "and BASE_SHA. Running outside the autograde-runner workflow?",
               file=sys.stderr)
         return 1
 

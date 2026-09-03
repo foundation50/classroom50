@@ -1236,4 +1236,4 @@ class TestRateLimitClassification:
         first = rr.error_body_snippet(exc)
         assert "secondary rate limit" in first
         assert rr.error_body_snippet(exc) == first
-        assert rr.body_note(exc).startswith(" — response: ")
+        assert rr.body_note(exc).startswith(", response: ")
