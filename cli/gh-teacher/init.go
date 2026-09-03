@@ -57,15 +57,15 @@ func initCmd() *cobra.Command {
 			"    history, process listings, and CI logs.\n" +
 			"  - Create a fine-grained personal access token with Resource\n" +
 			"    owner = your organization, Repository access = All repositories,\n" +
-			"    Contents: Read and write, Actions: Read and write, and\n" +
-			"    Organization permissions -> Members: Read and Administration:\n" +
-			"    Read and write. Student repos are created on demand, so an\n" +
+			"    Contents: Read and write, Actions: Read and write,\n" +
+			"    Administration: Read and write, and Organization permissions ->\n" +
+			"    Members: Read. Student repos are created on demand, so an\n" +
 			"    \"Only select repositories\" scope silently misses them.\n" +
 			"  - Why each permission: Contents read collects scores; Contents\n" +
 			"    write pushes submit/* tags; Actions write re-runs autograde\n" +
-			"    workflows when regrading; Members read lists the classroom\n" +
-			"    team (collection is team-driven); Organization Administration\n" +
-			"    sets the $0 Actions spending cap.\n" +
+			"    workflows when regrading; Administration write lets collection\n" +
+			"    grant staff teams read access to student repos; Members read\n" +
+			"    lists the classroom team (collection is team-driven).\n" +
 			"  - init validates the token before storing it. A re-run leaves an\n" +
 			"    already-configured token untouched; replace it with\n" +
 			"    `gh teacher rotate-service-token <org>`.\n" +

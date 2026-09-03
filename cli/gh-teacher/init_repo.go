@@ -257,7 +257,7 @@ func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, o
 
 	budgets, err := githubapi.ListOrgBudgets(client, org)
 	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't read org billing budgets (%v); this usually means the token lacks Organization permissions -> Administration: Read, or the org/plan doesn't expose budgets. Set a $0 GitHub Actions budget by hand at %s to hard-stop paid Actions minutes.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't read org billing budgets (%v); billing is probably managed at the enterprise level, or the plan doesn't expose organization budgets. Set a $0 GitHub Actions budget by hand at %s to hard-stop paid Actions minutes.\n",
 			org, err, settingsURL)
 		return "unreadable"
 	}
@@ -277,7 +277,7 @@ func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, o
 	status, err := githubapi.CreateOrgActionsBudgetCap(client, org)
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't create the $0 Actions budget cap (%v); add Organization permissions -> Administration: Read and write to your token, or create the $0 GitHub Actions budget by hand at %s.\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't create the $0 Actions budget cap (%v); GitHub refused the write, which usually means billing is managed at the enterprise level. Create the $0 GitHub Actions budget by hand at %s.\n",
 				org, err, settingsURL)
 			return "failed"
 		}
