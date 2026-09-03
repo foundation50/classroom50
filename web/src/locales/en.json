@@ -2661,6 +2661,7 @@
       "repo": "Creating your repository",
       "access": "Setting your repository access",
       "setup": "Setting up autograding",
+      "setupWaiting": "Setting up autograding (your repository is still initializing on GitHub, this can take up to a minute)",
       "feedback": "Opening feedback pull request",
       "team": "Finding your group"
     },
@@ -2718,6 +2719,11 @@
       "havingTrouble": "Having trouble?",
       "hint": "Autograding not running, or setup files missing? Re-run setup to repair your repository.",
       "rerun": "Re-run setup"
+    },
+    "keepTabOpen": "Keep this tab open until setup finishes. Closing it early can leave your repository half set up.",
+    "setupIncomplete": {
+      "title": "Setup didn't finish",
+      "body": "Your repository exists, but its setup files are missing, so autograding won't run and your teacher can't leave feedback. Re-run setup to finish. This is safe and keeps any work you've already pushed."
     },
     "modeTeam": "Group assignment",
     "teamBlocked": {
@@ -3039,7 +3045,7 @@
       "repairing": "Repairing…",
       "created": "Opened the feedback pull request for {{repo}}.",
       "alreadyExists": "A feedback pull request already exists for {{repo}}.",
-      "noBaseline": "This repository has no starter code to compare against (for example, an empty-repo assignment), so a feedback pull request can't be opened. Nothing to repair.",
+      "noBaseline": "This repository is missing its Classroom 50 setup files, which means the student's accept stopped partway. Until setup finishes, autograding won't run and a feedback pull request can't be opened. Ask the student to open the assignment link and choose Re-run setup, then repair the PR again.",
       "repoNotFound": "Couldn't find the repository {{repo}}. The student may not have accepted yet.",
       "baseMismatch": "The feedback branch on this repository points at the wrong commit, so opening the PR here would show an empty diff. An org admin must delete the feedback branch before it can be re-created correctly. Re-running won't fix this.",
       "failed": "Couldn't open the feedback pull request: {{reason}}. Try again."
@@ -3059,12 +3065,14 @@
       "summaryOpened_other": "{{count}} feedback PRs opened",
       "summaryExisted_one": "{{count}} repository already had one",
       "summaryExisted_other": "{{count}} repositories already had one",
-      "summaryUnsupported_one": "{{count}} repository skipped (no starter code to compare against)",
-      "summaryUnsupported_other": "{{count}} repositories skipped (no starter code to compare against)",
+      "summaryUnsupported_one": "{{count}} repository skipped (setup never finished)",
+      "summaryUnsupported_other": "{{count}} repositories skipped (setup never finished)",
       "summaryBlocked_one": "{{count}} repository blocked (needs an org admin)",
       "summaryBlocked_other": "{{count}} repositories blocked (need an org admin)",
       "summaryFailed_one": "{{count}} repository failed",
       "summaryFailed_other": "{{count}} repositories failed",
+      "unsupportedTitle": "These repositories never finished setup:",
+      "unsupportedHint": "Each student's accept stopped before the setup files were written, so autograding won't run and no feedback PR can be opened. Ask each student to open the assignment link and choose Re-run setup, then run this action again.",
       "failedTitle": "These repositories couldn't be processed:",
       "failedHint": "This is often a transient GitHub error. Run the action again to retry only the repositories still missing a PR.",
       "blockedTitle": "These repositories need an org admin:",
@@ -3346,6 +3354,9 @@
       "open": "Manage submission",
       "openAria": "Manage {{owner}}'s submission",
       "accepted": "Accepted",
+      "setup": "Setup",
+      "setupIncomplete": "Incomplete",
+      "setupIncompleteHint": "The student's accept stopped before the setup files were written, so autograding won't run and no feedback PR can be opened. Ask the student to open the assignment link and choose Re-run setup.",
       "lastPush": "Last push",
       "access": "Access",
       "autograding": "Autograding",

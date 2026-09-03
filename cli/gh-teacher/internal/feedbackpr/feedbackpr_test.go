@@ -155,7 +155,7 @@ func TestRun_BulkOpensMissingSkipsExistingAndUnaccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "1 opened, 1 already had one, 0 blocked, 0 failed (of 2 repo(s))") {
+	if !strings.Contains(out, "1 opened, 1 already had one, 0 blocked, 0 setup incomplete, 0 failed (of 2 repo(s))") {
 		t.Errorf("summary not as expected:\n%s", out)
 	}
 	if !strings.Contains(out, "Opened Feedback PR on cs-hello-alice") {
@@ -178,7 +178,7 @@ func TestRun_UserTargetsSingleRepo(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "1 opened, 0 already had one, 0 blocked, 0 failed (of 1 repo(s))") {
+	if !strings.Contains(out, "1 opened, 0 already had one, 0 blocked, 0 setup incomplete, 0 failed (of 1 repo(s))") {
 		t.Errorf("summary not as expected:\n%s", out)
 	}
 }
@@ -213,7 +213,7 @@ func TestRun_ProbeFailureIsFailedBucketAndExitsNonZero(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a non-nil error when a repo fails, got nil")
 	}
-	if !strings.Contains(out, "0 opened, 0 already had one, 0 blocked, 1 failed (of 1 repo(s))") {
+	if !strings.Contains(out, "0 opened, 0 already had one, 0 blocked, 0 setup incomplete, 1 failed (of 1 repo(s))") {
 		t.Errorf("summary not as expected:\n%s", out)
 	}
 	if !strings.Contains(errOut, "probe failed") || !strings.Contains(errOut, "cs-hello-alice") {
@@ -250,11 +250,53 @@ func TestRun_BlockedBaseMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("want a non-nil error when a repo is blocked, got nil")
 	}
-	if !strings.Contains(out, "0 opened, 0 already had one, 1 blocked, 0 failed") {
+	if !strings.Contains(out, "0 opened, 0 already had one, 1 blocked, 0 setup incomplete, 0 failed") {
 		t.Errorf("summary not as expected:\n%s", out)
 	}
 	if !strings.Contains(errOut, "cs-hello-alice") || !strings.Contains(errOut, "org admin") {
 		t.Errorf("blocked stderr detail not as expected:\n%s", errOut)
+	}
+}
+
+// TestRun_IncompleteSetupIsNotFailed pins the issue #502 shape: a repo that
+// exists but whose accept never committed .classroom50.yaml (the commits query
+// for the marker is empty) lands in its own "setup incomplete" bucket, not the
+// retryable "failed" one, and the stderr detail tells the teacher to have the
+// student re-run setup rather than to re-run this command.
+func TestRun_IncompleteSetupIsNotFailed(t *testing.T) {
+	mux := classroomMux(t, assignmentsJSON(t, helloEntry), []string{"alice"}, nil)
+	base := "/repos/o/cs-hello-alice"
+	mux.HandleFunc(base, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
+	})
+	mux.HandleFunc(base+"/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	})
+	mux.HandleFunc(base+"/commits", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]string{})
+	})
+	mux.HandleFunc(base+"/git/refs", func(_ http.ResponseWriter, _ *http.Request) {
+		t.Error("must not freeze a feedback base with no accept marker")
+	})
+
+	out, errOut, err := runCmd(t, mux, params(nil))
+	if err == nil {
+		t.Fatal("want a non-nil error when a repo never finished setup, got nil")
+	}
+	if !strings.Contains(err.Error(), "never finished setup") {
+		t.Errorf("error should name the incomplete-setup cause, got: %v", err)
+	}
+	if !strings.Contains(out, "0 opened, 0 already had one, 0 blocked, 1 setup incomplete, 0 failed") {
+		t.Errorf("summary not as expected:\n%s", out)
+	}
+	if !strings.Contains(out, "Setup incomplete: cs-hello-alice") {
+		t.Errorf("per-repo line not as expected:\n%s", out)
+	}
+	if !strings.Contains(errOut, "cs-hello-alice") || !strings.Contains(errOut, "Re-run setup") {
+		t.Errorf("incomplete stderr detail not as expected:\n%s", errOut)
+	}
+	if strings.Contains(errOut, "transient") {
+		t.Errorf("incomplete setup must not be reported as a transient failure:\n%s", errOut)
 	}
 }
 
@@ -303,7 +345,7 @@ func TestRun_NonMainDefaultBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !strings.Contains(out, "1 opened, 0 already had one, 0 blocked, 0 failed (of 1 repo(s))") {
+	if !strings.Contains(out, "1 opened, 0 already had one, 0 blocked, 0 setup incomplete, 0 failed (of 1 repo(s))") {
 		t.Errorf("summary not as expected:\n%s", out)
 	}
 	if listedHead != "o:master" {

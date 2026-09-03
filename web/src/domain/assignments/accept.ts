@@ -68,6 +68,23 @@ import { groupRepoName } from "@/util/studentRepo"
 // withFreshRepoRetry, re-reading the ref + parent commit each attempt and
 // requiring non-empty SHAs before writing. Safe because the student's
 // just-accepted repo has no concurrent writers.
+//
+// The budget is deliberately generous (~50s, polling every 8s once warmed up):
+// the accept flow can't resume itself, so giving up here strands the student
+// on a repo without its setup files (issue #502). The CLI waits a comparable
+// span (WaitForStableBranch + CommitWithFreshRepoRetry).
+const ACCEPT_SETUP_RETRY = {
+  attempts: 10,
+  baseDelayMs: 500,
+  backoffFactor: 2,
+  maxDelayMs: 8_000,
+} as const
+
+// Retries before the step message switches from "Setting up" to "still
+// initializing": ~3.5s in, long enough that silence would start to read as a
+// hang.
+const SETUP_WAITING_AFTER_RETRIES = 2
+
 async function commitAcceptFilesWithFreshRepoRetry(params: {
   client: GitHubClient
   owner: string
@@ -87,6 +104,8 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   // default branch, which is only known after GitHub's async template copy
   // settles (see below). Omitted for branch-agnostic (teacher-authored) shims.
   rerenderShimForBranch?: (branch: string) => string
+  // Called once the wait has gone on long enough to be worth explaining.
+  onStillInitializing?: () => void
 }): Promise<{ commitSha: string; branch: string }> {
   const {
     client,
@@ -97,80 +116,94 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
     autogradeYaml,
     removeSeededReadme = false,
     rerenderShimForBranch,
+    onStillInitializing,
   } = params
 
-  return await withFreshRepoRetry(async () => {
-    // A freshly template-generated repo's real branch (copied from the template,
-    // e.g., `master`) only materializes after GitHub finishes the async copy —
-    // until then `default_branch` transiently reports the org default (`main`)
-    // and no ref exists. Re-resolve the live default branch each attempt so we
-    // commit to the branch that actually appears, not a pre-guessed `main` that
-    // may never exist. Fall back to the caller's branch while it's still empty.
-    const live = await getRepo(client, owner, repo)
-    const targetBranch = live?.default_branch || branch
-    const ref = await getBranchRefRepo(client, owner, repo, targetBranch)
-    const parentSha = ref.object.sha
-    const currentCommit = await getCommitByRepo(client, owner, repo, parentSha)
-    const baseTreeSha = currentCommit.tree?.sha
-
-    if (!parentSha || !baseTreeSha) {
-      throw freshRepoNotReadyError(owner, repo)
-    }
-
-    // Re-render the default shim's push trigger for the branch that actually
-    // materialized (targetBranch), so autograde fires on the repo's real
-    // default branch rather than a transiently-reported `main`.
-    const shim = rerenderShimForBranch
-      ? rerenderShimForBranch(targetBranch)
-      : autogradeYaml
-
-    let deletePaths: string[] = []
-    if (removeSeededReadme) {
-      const baseTree = await getRepoTreeRecursive({
+  return await withFreshRepoRetry(
+    async () => {
+      // A freshly template-generated repo's real branch (copied from the template,
+      // e.g., `master`) only materializes after GitHub finishes the async copy —
+      // until then `default_branch` transiently reports the org default (`main`)
+      // and no ref exists. Re-resolve the live default branch each attempt so we
+      // commit to the branch that actually appears, not a pre-guessed `main` that
+      // may never exist. Fall back to the caller's branch while it's still empty.
+      const live = await getRepo(client, owner, repo)
+      const targetBranch = live?.default_branch || branch
+      const ref = await getBranchRefRepo(client, owner, repo, targetBranch)
+      const parentSha = ref.object.sha
+      const currentCommit = await getCommitByRepo(
         client,
         owner,
         repo,
-        treeSha: baseTreeSha,
+        parentSha,
+      )
+      const baseTreeSha = currentCommit.tree?.sha
+
+      if (!parentSha || !baseTreeSha) {
+        throw freshRepoNotReadyError(owner, repo)
+      }
+
+      // Re-render the default shim's push trigger for the branch that actually
+      // materialized (targetBranch), so autograde fires on the repo's real
+      // default branch rather than a transiently-reported `main`.
+      const shim = rerenderShimForBranch
+        ? rerenderShimForBranch(targetBranch)
+        : autogradeYaml
+
+      let deletePaths: string[] = []
+      if (removeSeededReadme) {
+        const baseTree = await getRepoTreeRecursive({
+          client,
+          owner,
+          repo,
+          treeSha: baseTreeSha,
+        })
+        deletePaths = baseTree.tree.some((e) => e.path === "README.md")
+          ? ["README.md"]
+          : []
+      }
+
+      const tree = await createTreeForAssignment({
+        client,
+        owner,
+        repo,
+        baseTreeSha,
+        metadataYaml,
+        autogradeYaml: shim,
+        deletePaths,
       })
-      deletePaths = baseTree.tree.some((e) => e.path === "README.md")
-        ? ["README.md"]
-        : []
-    }
 
-    const tree = await createTreeForAssignment({
-      client,
-      owner,
-      repo,
-      baseTreeSha,
-      metadataYaml,
-      autogradeYaml: shim,
-      deletePaths,
-    })
+      const commit = await createCommitForAssignment({
+        client,
+        owner,
+        repo,
+        // The accept commit that lands `.classroom50.yaml` — the marker the
+        // runner uses to resolve the Feedback-PR baseline (see the constant).
+        message: ACCEPT_COMMIT_SUBJECT,
+        treeSha: tree.sha,
+        parentSha,
+      })
 
-    const commit = await createCommitForAssignment({
-      client,
-      owner,
-      repo,
-      // The accept commit that lands `.classroom50.yaml` — the marker the
-      // runner uses to resolve the Feedback-PR baseline (see the constant).
-      message: ACCEPT_COMMIT_SUBJECT,
-      treeSha: tree.sha,
-      parentSha,
-    })
+      await updateRefForRepo({
+        client,
+        owner,
+        repo,
+        branch: targetBranch,
+        commitSha: commit.sha,
+      })
 
-    await updateRefForRepo({
-      client,
-      owner,
-      repo,
-      branch: targetBranch,
-      commitSha: commit.sha,
-    })
-
-    // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
-    // branch it actually landed on — the caller's pre-guessed branch may be a
-    // transient `main` on a `master` template.
-    return { commitSha: commit.sha, branch: targetBranch }
-  })
+      // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
+      // branch it actually landed on — the caller's pre-guessed branch may be a
+      // transient `main` on a `master` template.
+      return { commitSha: commit.sha, branch: targetBranch }
+    },
+    {
+      ...ACCEPT_SETUP_RETRY,
+      onRetry: (attempt) => {
+        if (attempt === SETUP_WAITING_AFTER_RETRIES) onStillInitializing?.()
+      },
+    },
+  )
 }
 
 type AcceptAssignmentResult = {
@@ -331,6 +364,12 @@ async function provisionAcceptedRepo(params: {
         autogradeYaml,
         removeSeededReadme,
         rerenderShimForBranch,
+        onStillInitializing: () =>
+          onStepUpdate?.({
+            id: "setup",
+            status: "running",
+            message: { key: "accept.steps.setupWaiting" },
+          }),
       }),
   )
 

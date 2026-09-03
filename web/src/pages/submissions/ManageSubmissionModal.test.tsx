@@ -39,6 +39,18 @@ vi.mock("@/hooks/useGetRepoCollaborators", () => ({
 vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => autogradeStateData(),
 }))
+// The setup-marker probe, configurable so a test can drive the issue #502
+// "Incomplete" badge.
+const repoSetupData = vi.fn(
+  () =>
+    ({ state: "complete", isLoading: false }) as {
+      state: "unknown" | "complete" | "incomplete"
+      isLoading: boolean
+    },
+)
+vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
+  default: () => repoSetupData(),
+}))
 vi.mock("@/hooks/mutations/useSetAutogradeState", () => ({
   default: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -88,6 +100,7 @@ afterEach(() => {
     isLoading: false,
     isError: false,
   })
+  repoSetupData.mockReturnValue({ state: "complete", isLoading: false })
 })
 
 describe("ManageSubmissionModal", () => {
@@ -141,6 +154,56 @@ describe("ManageSubmissionModal", () => {
       .getAllByRole("link")
       .filter((a) => a.getAttribute("href") === latest)
     expect(commitLinks.length).toBe(2)
+  })
+
+  // Issue #502: "Accepted" is only repo existence. When the marker probe says
+  // the setup commit never landed, the hub says so next to the timestamp and
+  // tells the teacher what the student must do.
+  it("flags an accepted repo whose setup never finished", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-07-22T21:42:00Z" },
+    })
+    repoSetupData.mockReturnValue({ state: "incomplete", isLoading: false })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={individualAction}
+      />,
+    )
+    expect(screen.getByText("submissions.manageModal.accepted")).toBeTruthy()
+    expect(screen.getByText("submissions.manageModal.setup")).toBeTruthy()
+    expect(
+      screen.getByText("submissions.manageModal.setupIncomplete"),
+    ).toBeTruthy()
+    expect(
+      screen.getByText("submissions.manageModal.setupIncompleteHint"),
+    ).toBeTruthy()
+  })
+
+  it("shows no setup row for a healthy repo", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={individualAction}
+      />,
+    )
+    expect(screen.queryByText("submissions.manageModal.setup")).toBeNull()
+    expect(
+      screen.queryByText("submissions.manageModal.setupIncompleteHint"),
+    ).toBeNull()
   })
 
   it("shows the autograding status when the assignment autogrades", () => {

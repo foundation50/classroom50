@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
-import { retryOnRateLimit, withGithubReadSlot, withRetry } from "./shared"
+import {
+  retryOnRateLimit,
+  withFreshRepoRetry,
+  withGithubReadSlot,
+  withRetry,
+} from "./shared"
 
 const noRateLimit: GitHubRateLimit = {
   limit: null,
@@ -83,6 +88,41 @@ describe("withRetry", () => {
       [0, 1],
       [1, 2],
     ])
+  })
+})
+
+describe("withFreshRepoRetry", () => {
+  it("caps each wait at maxDelayMs and forwards the retry hook", async () => {
+    const onRetry = vi.fn()
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(plainError(404))
+      .mockRejectedValueOnce(plainError(404))
+      .mockRejectedValueOnce(plainError(404))
+      .mockResolvedValue("ok")
+    await expect(
+      withFreshRepoRetry(fn, {
+        attempts: 5,
+        baseDelayMs: 1,
+        backoffFactor: 4,
+        maxDelayMs: 5,
+        onRetry,
+      }),
+    ).resolves.toBe("ok")
+    // 1, 4, then 16 capped to 5.
+    expect(onRetry.mock.calls).toEqual([
+      [0, 1],
+      [1, 4],
+      [2, 5],
+    ])
+  })
+
+  it("does not retry a non-lag error", async () => {
+    const fn = vi.fn().mockRejectedValue(plainError(500))
+    await expect(
+      withFreshRepoRetry(fn, { attempts: 4, baseDelayMs: 0 }),
+    ).rejects.toMatchObject({ status: 500 })
+    expect(fn).toHaveBeenCalledTimes(1)
   })
 })
 

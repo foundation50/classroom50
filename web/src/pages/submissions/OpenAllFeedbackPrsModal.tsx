@@ -174,6 +174,17 @@ export function OpenAllFeedbackPrsModal({
               </li>
             )}
           </ul>
+          {/* Only the no-marker repos: a `repo-not-found` is a listing race,
+              not a student action item, and can't be handed to a student. */}
+          {summary.unsupported.some((r) => r.reason === "no-baseline") && (
+            <RepoListAlert
+              repos={summary.unsupported.filter(
+                (r) => r.reason === "no-baseline",
+              )}
+              title={t("submissions.openAllPrs.unsupportedTitle")}
+              hint={t("submissions.openAllPrs.unsupportedHint")}
+            />
+          )}
           {summary.blocked.length > 0 && (
             <RepoListAlert
               repos={summary.blocked}

@@ -474,8 +474,10 @@ export async function repairFeedbackPullRequest(params: {
   const acceptCommitSha = await resolveFeedbackBaselineSha(client, org, repo)
   if (!acceptCommitSha) {
     // No .classroom50.yaml marker means no frozen baseline to open the PR
-    // against (an empty_repo assignment, or a repo that isn't a Classroom 50
-    // assignment repo). The runner refuses the same case.
+    // against. For the repos the teacher UI offers this on (never empty_repo,
+    // which is gated out upstream) that means the student's accept stopped
+    // before the setup commit (issue #502); the student's "Re-run setup" is
+    // the repair. The runner refuses the same case.
     return { ok: false, reason: "no-baseline", unsupported: true }
   }
 
