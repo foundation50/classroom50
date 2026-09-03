@@ -598,11 +598,14 @@ const FETCH_TIMEOUT_MS = 10_000
 // Fetch a pack from a URL into a preview. Requires http/https, bounds the
 // response size, times out, and maps every failure to a LanguagePackError. Code
 // is inferred from the URL's last path segment when omitted. `requireHttps`
-// rejects cleartext http (used by the unattended auto-refresh path).
+// rejects cleartext http (used by the unattended auto-refresh path). `cache`
+// is passed through to fetch; the registry serves packs with a 10-minute
+// max-age, so a caller that knows the pack changed passes "no-cache" to
+// revalidate instead of receiving the browser's stale copy.
 export async function prepareFromUrl(
   url: string,
   code?: string,
-  options?: { requireHttps?: boolean },
+  options?: { requireHttps?: boolean; cache?: RequestCache },
 ): Promise<PackPreview> {
   let parsed: URL
   try {
@@ -631,7 +634,10 @@ export async function prepareFromUrl(
 
   let res: Response
   try {
-    res = await fetch(parsed.toString(), { signal })
+    res = await fetch(parsed.toString(), {
+      signal,
+      ...(options?.cache ? { cache: options.cache } : {}),
+    })
   } catch {
     throw new LanguagePackError(
       "Couldn't fetch (CORS/network) — download the file and upload it instead.",
@@ -675,19 +681,35 @@ export function resetRegistryCache(): void {
 
 // Fetch the manifest and return the offered language codes, memoized. Invalid
 // entries are skipped; a fetch/parse failure throws LanguagePackError for the
-// UI to show.
-export function fetchRegistry(): Promise<RegistryLanguage[]> {
-  if (registryInFlight) return registryInFlight
-  if (registryCache && Date.now() - registryCache.at < REGISTRY_CACHE_TTL_MS) {
-    return Promise.resolve(registryCache.langs)
+// UI to show. `force` is the user-driven refresh: it skips the memo AND asks
+// the browser to revalidate. The registry serves index.json with a 10-minute
+// max-age, so a plain fetch after a publish can return yesterday's list; the
+// memo is dropped first so a concurrent memoized caller can't hand back the
+// stale list mid-refresh.
+export function fetchRegistry(options?: {
+  force?: boolean
+}): Promise<RegistryLanguage[]> {
+  if (options?.force) {
+    registryCache = null
+  } else {
+    if (registryInFlight) return registryInFlight
+    if (
+      registryCache &&
+      Date.now() - registryCache.at < REGISTRY_CACHE_TTL_MS
+    ) {
+      return Promise.resolve(registryCache.langs)
+    }
   }
-  const request = fetchRegistryUncached()
+  const request = fetchRegistryUncached(options?.force ? "no-cache" : undefined)
     .then((langs) => {
-      registryCache = { at: Date.now(), langs }
+      // A forced refresh supersedes an older in-flight request; if that one
+      // resolves later it must not overwrite the fresh list with a stale one.
+      if (registryInFlight === request)
+        registryCache = { at: Date.now(), langs }
       return langs
     })
     .finally(() => {
-      registryInFlight = null
+      if (registryInFlight === request) registryInFlight = null
     })
   registryInFlight = request
   return request
@@ -695,7 +717,9 @@ export function fetchRegistry(): Promise<RegistryLanguage[]> {
 
 // Fetch the manifest and return the offered language codes. Invalid entries are
 // skipped; a fetch/parse failure throws LanguagePackError for the UI to show.
-async function fetchRegistryUncached(): Promise<RegistryLanguage[]> {
+async function fetchRegistryUncached(
+  cache?: RequestCache,
+): Promise<RegistryLanguage[]> {
   // Controller for the size-cap aborts, platform deadline for the timeout, which
   // has to cover the streaming read (see prepareFromUrl).
   const controller = new AbortController()
@@ -706,7 +730,10 @@ async function fetchRegistryUncached(): Promise<RegistryLanguage[]> {
 
   let res: Response
   try {
-    res = await fetch(REGISTRY_INDEX_URL, { signal })
+    res = await fetch(REGISTRY_INDEX_URL, {
+      signal,
+      ...(cache ? { cache } : {}),
+    })
   } catch {
     throw new LanguagePackError(
       "Couldn't reach the language registry — check your connection or try again.",
@@ -767,20 +794,28 @@ function packUrl(code: string): string {
 // publish workflow builds index.json from the packs it actually deploys, so a
 // listed code always resolves — no per-pack probe needed (an earlier HEAD-probe
 // pass silently dropped languages when a cross-origin HEAD hiccuped).
-export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
-  return fetchRegistry()
+export async function availableBuiltInLangs(options?: {
+  force?: boolean
+}): Promise<RegistryLanguage[]> {
+  return fetchRegistry(options)
 }
 
 // Preview a registry language by reusing the URL loader (same size/timeout/
 // validation guardrails). Pass `requireHttps` for the silent auto-refresh path,
-// and `entry` (the manifest row) to stamp the registry source + version/hash.
+// `entry` (the manifest row) to stamp the registry source + version/hash, and
+// `cache` to revalidate a pack the manifest says has changed.
 export async function prepareFromBuiltIn(
   code: string,
-  options?: { requireHttps?: boolean; entry?: RegistryLanguage },
+  options?: {
+    requireHttps?: boolean
+    entry?: RegistryLanguage
+    cache?: RequestCache
+  },
 ): Promise<PackPreview> {
   const resolved = normalizeLangCode(code)
   const preview = await prepareFromUrl(packUrl(resolved), resolved, {
     requireHttps: options?.requireHttps,
+    cache: options?.cache,
   })
   const version = options?.entry?.version
   const manifestHash = options?.entry?.hash
@@ -871,7 +906,10 @@ function registryPackChanged(
 // Every failure is swallowed so a flaky network never wipes a working pack.
 // Returns (and emits) the updated codes. Never changes the active language;
 // installPack -> addResourceBundle live-updates the active pack's strings.
-export async function refreshInstalledPacks(): Promise<string[]> {
+// `force` re-reads the manifest past both caches (user-driven refresh).
+export async function refreshInstalledPacks(options?: {
+  force?: boolean
+}): Promise<string[]> {
   const packs = readStoredPacks()
   const registryPacks = Object.values(packs).filter(
     (p) => p.source === "registry",
@@ -880,7 +918,7 @@ export async function refreshInstalledPacks(): Promise<string[]> {
 
   let offered: RegistryLanguage[]
   try {
-    offered = await fetchRegistry()
+    offered = await fetchRegistry(options)
   } catch {
     // Offline / registry unreachable — keep everything as-is.
     return []
@@ -893,9 +931,14 @@ export async function refreshInstalledPacks(): Promise<string[]> {
     if (!entry) continue // no longer offered — leave the installed copy.
     if (!registryPackChanged(pack, entry)) continue // cheap skip, no fetch.
     try {
+      // The manifest says this pack changed, so the browser's copy (10-minute
+      // max-age) is stale by definition: revalidate rather than read it back.
+      // Otherwise the stale bundle compares equal below and the new marker is
+      // stamped onto old content, ending refreshes for this pack for good.
       const preview = await prepareFromBuiltIn(pack.code, {
         requireHttps: true,
         entry,
+        cache: "no-cache",
       })
       // The per-pack fetch above is an await window in which another tab may
       // have removed this pack. Re-read storage and skip if it's gone, so we

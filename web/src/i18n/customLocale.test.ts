@@ -661,6 +661,72 @@ describe("fetchRegistry memoization", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
+  it("force skips the memo and asks the browser to revalidate", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+          status: 200,
+        }),
+      )
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ languages: [{ code: "ja" }, { code: "ca" }] }),
+          { status: 200 },
+        ),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+    expect(await fetchRegistry()).toEqual([{ code: "ja" }])
+
+    const forced = await fetchRegistry({ force: true })
+    expect(forced.map((l) => l.code)).toEqual(["ja", "ca"])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    // The first (memoized) call is a plain fetch; the forced one bypasses the
+    // browser's max-age copy via a conditional request.
+    expect(fetchMock.mock.calls[0][1]).not.toHaveProperty("cache")
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ cache: "no-cache" })
+
+    // The forced result becomes the new memoized value.
+    const memoized = await fetchRegistry()
+    expect(memoized.map((l) => l.code)).toEqual(["ja", "ca"])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("a stale in-flight request can't overwrite a forced refresh's result", async () => {
+    let resolveSlow: (r: Response) => void = () => {}
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveSlow = resolve
+          }),
+      )
+      .mockResolvedValue(
+        new Response(
+          JSON.stringify({ languages: [{ code: "ja" }, { code: "ca" }] }),
+          { status: 200 },
+        ),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const slow = fetchRegistry()
+    const fresh = await fetchRegistry({ force: true })
+    expect(fresh.map((l) => l.code)).toEqual(["ja", "ca"])
+
+    resolveSlow(
+      new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+        status: 200,
+      }),
+    )
+    expect(await slow).toEqual([{ code: "ja" }])
+
+    // Memo still holds the fresh list, not the late stale one.
+    const memoized = await fetchRegistry()
+    expect(memoized.map((l) => l.code)).toEqual(["ja", "ca"])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
   it("does not cache a failure (a later call retries)", async () => {
     const fetchMock = vi
       .fn()
@@ -748,7 +814,9 @@ describe("refreshInstalledPacks", () => {
         },
       }),
     })
-    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async (input) => {
       const u = String(input)
       if (/index\.json$/.test(u)) {
         return new Response(
@@ -774,6 +842,45 @@ describe("refreshInstalledPacks", () => {
     expect(
       urls.some((u) => u.startsWith(httpsRegistry) && /\/de\.json$/.test(u)),
     ).toBe(true)
+    // A changed marker means the browser's max-age copy is stale: the pack
+    // fetch must revalidate, or the new marker gets stamped onto old content.
+    const packCall = fetchMock.mock.calls.find((c) =>
+      /\/de\.json$/.test(String(c[0])),
+    )
+    expect(packCall?.[1]).toMatchObject({ cache: "no-cache" })
+  })
+
+  it("force re-reads the manifest past the memo", async () => {
+    stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "alt" },
+        },
+      }),
+    })
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(async (input) => {
+      const u = String(input)
+      if (/index\.json$/.test(u)) {
+        return new Response(
+          JSON.stringify({ languages: [{ code: "de", version: "1" }] }),
+          { status: 200 },
+        )
+      }
+      throw new Error("no pack fetch expected: marker unchanged")
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await refreshInstalledPacks()
+    await refreshInstalledPacks()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    await refreshInstalledPacks({ force: true })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1]).toMatchObject({ cache: "no-cache" })
   })
 
   it("preserves an unknown pack field across a read-modify-write", async () => {

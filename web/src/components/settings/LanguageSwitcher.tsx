@@ -1,9 +1,10 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import {
   CheckIcon,
   ChevronRightIcon,
   CopyIcon,
+  SyncIcon,
   TrashIcon,
   UploadIcon,
   XIcon,
@@ -49,6 +50,8 @@ export const LanguageSwitcher = ({
   const {
     offered,
     error: registryError,
+    refreshing,
+    refresh,
     installAndActivate,
   } = useLanguageRegistry()
 
@@ -59,6 +62,10 @@ export const LanguageSwitcher = ({
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
   const [preview, setPreview] = useState<PackPreview | null>(null)
+  // Brief "done" state on the refresh button: a refresh that finds nothing new
+  // is otherwise indistinguishable from a click that did nothing.
+  const [refreshed, setRefreshed] = useState(false)
+  const refreshedTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Accordion: at most one section open at a time so the modal stays bounded.
   const [openSection, setOpenSection] = useState<AccordionSectionId | null>(
     null,
@@ -174,6 +181,22 @@ export const LanguageSwitcher = ({
     }
   }
 
+  const handleRefresh = async () => {
+    if (refreshedTimer.current) clearTimeout(refreshedTimer.current)
+    setRefreshed(false)
+    const langs = await refresh()
+    if (langs === null) return
+    setRefreshed(true)
+    refreshedTimer.current = setTimeout(() => setRefreshed(false), 2000)
+  }
+
+  useEffect(
+    () => () => {
+      if (refreshedTimer.current) clearTimeout(refreshedTimer.current)
+    },
+    [],
+  )
+
   const handleCancel = () => {
     setPreview(null)
     setError(null)
@@ -217,17 +240,38 @@ export const LanguageSwitcher = ({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <label className="label py-0" htmlFor="lang-select">
-          <span className="label-text font-bold">
-            {t("language.activeLabel")}
-          </span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="label py-0" htmlFor="lang-select">
+            <span className="label-text font-bold">
+              {t("language.activeLabel")}
+            </span>
+          </label>
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label={
+              refreshed ? t("language.refreshDone") : t("language.refreshList")
+            }
+            title={t("language.refreshList")}
+            onClick={() => void handleRefresh()}
+            disabled={refreshing || installingSelected}
+          >
+            {refreshing ? (
+              <InlineSpinner />
+            ) : refreshed ? (
+              <CheckIcon className="size-4 text-success" aria-hidden="true" />
+            ) : (
+              <SyncIcon className="size-4" aria-hidden="true" />
+            )}
+            {refreshed ? t("language.refreshDone") : t("language.refresh")}
+          </Button>
+        </div>
         <select
           id="lang-select"
           className="select select-bordered w-full"
           value={lang}
           onChange={(e) => void handleSelectLang(e.target.value)}
-          disabled={installingSelected}
+          disabled={installingSelected || refreshing}
         >
           {langOptions.map(({ code: c, install }) => (
             <option key={c} value={c}>

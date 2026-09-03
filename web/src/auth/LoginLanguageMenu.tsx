@@ -1,6 +1,6 @@
 import { useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
-import { CheckIcon, GlobeIcon } from "@/components/ui/icons"
+import { CheckIcon, GlobeIcon, SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { Button, DropdownMenu } from "@/components/ui"
@@ -19,8 +19,10 @@ export function LoginLanguageMenu() {
   const {
     offered: more,
     loading: loadingRegistry,
+    refreshing,
     error: registryError,
     loadRegistry,
+    refresh,
     installAndActivate,
   } = useLanguageRegistry()
 
@@ -146,6 +148,27 @@ export function LoginLanguageMenu() {
               </li>
             ))}
           </>
+        )}
+
+        {/* Refresh past the browser's cached manifest so a language published
+            since the last visit shows up without a hard reload. Hidden while
+            the first load is still in flight (nothing to refresh yet). */}
+        {!loadingRegistry && (
+          <li className="mt-1 border-t border-base-300 pt-1">
+            <button
+              type="button"
+              className="flex items-center gap-2 text-xs text-base-content/70"
+              onClick={() => void refresh()}
+              disabled={refreshing || switchingCode !== null}
+            >
+              {refreshing ? (
+                <InlineSpinner className="shrink-0" />
+              ) : (
+                <SyncIcon className="size-4 shrink-0" aria-hidden="true" />
+              )}
+              {t("language.refreshList")}
+            </button>
+          </li>
         )}
       </DropdownMenu>
     </div>
