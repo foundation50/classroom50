@@ -25,8 +25,6 @@ You don't need to accept the organization invite in the GitHub UI —
 gh student login
 ```
 
-![gh student login](images/gh_student_auth.gif)
-
 This runs `gh auth login` with the scopes you need. If you skip it, the next
 command logs you in automatically. `gh student logout` mirrors `gh auth logout`.
 
@@ -35,8 +33,6 @@ command logs you in automatically. `gh student logout` mirrors `gh auth logout`.
 ```sh
 gh student accept <org> <classroom> <assignment>
 ```
-
-![gh student accept](images/gh_student_accept.gif)
 
 - `<org>` — your classroom's GitHub organization.
 - `<classroom>` — the classroom your teacher set up (e.g., `cs-principles`).
@@ -156,8 +152,6 @@ From inside the cloned repository:
 ```sh
 gh student submit
 ```
-
-![gh student submit](images/gh_student_submit.gif)
 
 This snapshots your current branch and pushes it as a new commit. The autograde
 workflow runs automatically: it tags the commit `submit/<UTC-timestamp>-<short-sha>`,

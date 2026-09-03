@@ -40,8 +40,6 @@ Four settings have no API and are listed as a manual checklist in that step.
 gh teacher login
 ```
 
-![gh teacher login](images/gh_teacher_auth.gif)
-
 This runs `gh auth login` with the scopes the teacher commands need
 (`admin:org`, `read:org`, `repo`, `workflow`) and opens a browser to authorize.
 It's the same scope set `gh student login` requests, so one sign-in covers both
@@ -252,8 +250,6 @@ only for ad-hoc cases, like inviting a TA who isn't a student:
 ```sh
 gh teacher invite <org> <username>
 ```
-
-![gh teacher invite](images/gh_teacher_invite.gif)
 
 The student gets an email invitation, or `gh student accept` auto-accepts the
 pending invite when they accept their first assignment.
@@ -745,8 +741,6 @@ Pull every student's latest submission for an assignment:
 ```sh
 gh teacher download <org> <classroom> <assignment>
 ```
-
-![gh teacher download](images/gh_teacher_download.gif)
 
 By default this is **team-driven**: it lists the classroom team's members, and
 for each one probes for the expected repo, clones it (or reports `Missing:

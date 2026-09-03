@@ -30,8 +30,6 @@ You need:
 
 ## Sign in
 
-![Classroom 50 login screen](images/web_login_screen.png)
-
 At [classroom50.org](https://classroom50.org), sign in with GitHub using
 [OAuth 2](https://oauth.net/2/). Two options:
 
@@ -45,11 +43,7 @@ owner approve it in the organization's OAuth settings. If an organization you
 belong to is missing later, see
 [My organization doesn't appear](Troubleshooting#my-organization-doesnt-appear).
 
-![Classroom 50 login flow](images/web_login_flow.png)
-
 ## View your organizations
-
-![Organizations view](images/web_organizations.png)
 
 After signing in, you'll see the organizations you can use:
 
@@ -64,8 +58,6 @@ Classroom 50 access to — see
 [My organization doesn't appear](Troubleshooting#my-organization-doesnt-appear).
 
 ## Set up an organization (one-time)
-
-![Setup steps](images/web_setup.png)
 
 Click **Set up** on an uninitialized organization, then **Run setup**. This
 configures your organization's settings and creates a `classroom50` repository
@@ -84,8 +76,6 @@ permission table is in
 [GitHub Integration](GitHub-Integration#4-fine-grained-pat-for-score-collection).
 Classroom 50 stores it as the `CLASSROOM50_SERVICE_TOKEN` secret in your
 `classroom50` repository, where the score-collection workflow uses it.
-
-![Service token setup](images/web_pat.png)
 
 Classroom 50 sends you to GitHub to create the token, then you paste it back
 into the form to finish setup.
@@ -123,8 +113,6 @@ type.
 
 ## Create a classroom
 
-![Classrooms in an organization](images/web_classes.png)
-
 Open a set-up organization from its card, or visit
 `https://classroom50.org/<ORG>`, to see its classrooms.
 
@@ -135,8 +123,6 @@ Open a set-up organization from its card, or visit
 
 On **My classrooms**, click **Create classroom**:
 
-![Create classroom form](images/web_create_classroom.png)
-
 - **Name** — the classroom's display name.
 - **Slug** — a unique identifier used in URLs and repository names, auto-filled
   from the name (letters with diacritics transliterate, so "Álgebra" becomes
@@ -144,8 +130,6 @@ On **My classrooms**, click **Create classroom**:
   name, and GitHub limits repository names to 100 characters.
 - **Term** (optional) — shown in various places to distinguish course
   offerings.
-
-![Unlisted links toggle](images/web_create_classroom_hash.png)
 
 **Use an unlisted link for this classroom** (optional) publishes this
 classroom's assignment data at an unguessable URL instead of a predictable one
@@ -157,8 +141,6 @@ based on the slug.
 
 After creating, you'll get a URL of the form
 `https://classroom50.org/<ORG>/<CLASSROOM>` to view your new classroom.
-
-![Create classroom success](images/web_create_classroom_success.png)
 
 > [!NOTE]
 > Behind the scenes, this adds a subdirectory to your `classroom50` repository
@@ -173,8 +155,6 @@ multi-teacher setups, see
 [Staff, TAs, and multiple teachers](Staff-TAs-and-Multiple-Teachers).
 
 ## Create an assignment
-
-![Assignment form](images/web_create_assignment.png)
 
 On the classroom page, click **+ Assignment**. Fill in:
 
@@ -348,8 +328,6 @@ submission type). The list collapses to keep the form scannable; click its
 heading to expand it, or **Add test** to add one (saving a test expands the
 list automatically).
 
-![Autograding tests](images/web_create_assignment_tests.png)
-
 Each test has:
 
 - **Test name** — shown to students to indicate what passed or failed.
@@ -369,8 +347,6 @@ The three test types add their own fields:
 
 **Input/Output** — provide input and check the output.
 
-![Input/Output test](images/web_create_assignment_tests.png)
-
 - **Input (stdin)** — text sent to standard input.
 - **Expected output** — text to check for in standard output.
 - **Comparison** — **Included** (expected appears somewhere in the output),
@@ -378,14 +354,10 @@ The three test types add their own fields:
 
 **Run command** — pass when a command returns a given exit code.
 
-![Run command test](images/web_create_assignment_tests_run_command.png)
-
 - **Required exit code** — the exit code needed to pass.
 
 **Python (pytest)** — runs `pytest` against test files in the template. No extra
 fields.
-
-![Python pytest test](images/web_create_assignment_tests_python_pytest.png)
 
 Below the tests table, a **Report defaults** panel sets the same two report
 options for every test: **Default failure details** and **Include passing
@@ -401,55 +373,75 @@ without cloning the repository. For the full walkthrough, see
 
 When you're done, click **Create assignment**.
 
-![Classroom with one assignment](images/web_classroom_with_assignment.png)
-
 ## Add students
 
 Students must be on the classroom roster before they can accept assignments.
 
-![Roster page, empty](images/web_students_none.png)
+Open the classroom, then select **Roster** in the left sidebar. The page lists
+everyone in the classroom and shows who has joined and who still has a pending
+invitation. Adding a student sends them an invitation to join your GitHub
+organization, and they must accept it before they can work on assignments.
 
-On a classroom's **Roster** page, add students and see who has joined and who
-has a pending invitation. Adding a student sends them an invitation to join your
-GitHub organization.
+The toolbar above the roster table has three controls (on an empty roster, the
+same controls appear in the middle of the page):
 
-> [!IMPORTANT]
-> Students must accept the organization invitation before they can work on
-> assignments.
+- **Upload roster**, the primary button, adds students from a file.
+- The arrow next to **Upload roster** opens a menu with **Add member**, which
+  adds one person at a time.
+- **Share** opens the links students use to accept the invitation and sign in.
+- **Edit** (organization owners only) switches the table into batch editing.
 
-**Add member** (in the **Upload roster** button's dropdown menu) — add one
-student by GitHub username (name and email
-optional). You can enter an email instead of a username; that student then
-completes a separate onboarding process (see below).
+Only organization owners see these controls; TAs and non-owner teachers get a
+read-only roster.
 
-**Upload roster** — bulk-add
-students from a file. Roster CSV is how every upload is
-read, and it handles all three shapes; the other two entries in **Read the file
-as** are overrides that force one interpretation:
+### Adding one student
 
-- **A roster CSV**: a header row plus one student per line. See the fields and
-  example below.
-- **A plain list**: one GitHub username or one email address per line, no
-  header. Each line is read for what it is, so a mixed list works.
-- **The overrides**: choose **GitHub usernames** to read every line as a handle
-  even if it looks like an address, or **Email addresses** to read every line as
-  an address and no columns at all. Either one is you telling the app what every
-  line is, so a line that doesn't fit is reported rather than read the other way.
+Click the arrow next to **Upload roster**, then click **Add member**. In the
+dialog, choose a **Role** (**Student** is preselected), then enter the student's
+**GitHub username**. **First name**, **Last name**, **Email**, and **Section**
+are optional. Click **Add member**.
+
+To invite a student who hasn't given you a GitHub username yet, enter their
+**Email** and leave **GitHub username** empty. The address goes onto the roster
+as a pending row and is matched to the student's account when they accept. For
+what happens next, see [Invitations by email](#invitations-by-email) below.
+
+The same dialog adds staff: choose **Teacher**, **Head TA**, or **TA** as the
+role and enter their GitHub username. For what each role can do, see
+[Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers).
+
+### Uploading a roster file
+
+Click **Upload roster**, then drop a `.csv` or `.txt` file on the dialog or
+click to choose one. The upload reads three shapes of file, and **Read the file
+as** shows which one it detected:
+
+- **Roster CSV**: a header row plus one student per line. This is the default
+  and the format the app understands best; see the fields and examples below.
+- **GitHub usernames (one per line)**: a plain list with no header. Choose it
+  to read every line as a username, even one that looks like an email address.
+- **Email addresses (one per line)**: a plain list with no header. Choose it to
+  read every line as an email address.
+
+A plain list without a header is read line by line, so a file that mixes
+usernames and email addresses works under **Roster CSV**. The two list options
+are overrides: a line that doesn't fit the one you chose is reported rather
+than read the other way.
 
 Not sure what the file should look like? **Download template** on the upload
-dialog saves a five-row example CSV — rows with a username only, an email only,
-and both — to fill in with your own students.
+dialog saves a five-row example CSV (rows with a username only, an email only,
+and both) to fill in with your own students.
 
-If any row carries a value the upload can't use — an address that isn't valid, a
-`github_id` matching no account, a line that's neither a handle nor an address —
-it lists those rows with their line numbers and imports none of them. Fix the
-file and upload it again; re-uploading is safe, because students already in the
-classroom are left alone. That check covers every identity column independently, so
-a shifted column is caught even when the row's other cells look fine. A row with a
-name but no identifying column — usually a student who hasn't given you a GitHub
-account yet — is kept on the roster as an **Unlinked** row you can link or remove
-later; only a row with nothing usable at all is reported and skipped, and everyone
-else is imported.
+If any row carries a value the upload can't use (an address that isn't valid, a
+`github_id` matching no account, or a line that's neither a username nor an
+address), the dialog lists those rows with their line numbers and imports none
+of them. Fix the file and upload it again; re-uploading is safe, because
+students already in the classroom are left alone. The check covers every
+identity column independently, so a shifted column is caught even when the
+row's other cells look fine. A row with a name but no identifying column
+(usually a student who hasn't given you a GitHub account yet) is kept on the
+roster as an **Unlinked** row you can link or remove later. Only a row with
+nothing usable at all is skipped, and everyone else is imported.
 
 ### Roster CSV fields
 
@@ -457,12 +449,12 @@ Each row needs at least one column that identifies a student: `github_id`,
 `username`, or `email`. Every other column is optional. Headers are matched
 case-insensitively, and any unrecognized column is ignored, so a CSV exported
 from your SIS or gradebook usually works unchanged. Save the file as UTF-8
-when you can (Excel's **CSV UTF-8** export); a file that isn't is read as
-Windows-1252 — Excel's plain "CSV" export — and the upload shows a notice so
+when you can (Excel's **CSV UTF-8** export). A file that isn't UTF-8 is read as
+Windows-1252 (Excel's plain "CSV" export), and the upload shows a notice so
 you can check that accented names survived.
 
-When a row has more than one, they're used in that order — `github_id` first,
-then `username`, then `email`:
+When a row has more than one identifying column, they're used in this order:
+`github_id` first, then `username`, then `email`.
 
 | Column | Identifies a student | Description |
 | --- | --- | --- |
@@ -477,7 +469,7 @@ then `username`, then `email`:
 
 > [!NOTE]
 > If a row's `github_id` and `username` disagree, the upload uses the account
-> the id belongs to and asks you to confirm before importing — the preview shows
+> the id belongs to and asks you to confirm before importing: the preview shows
 > both, and the roster's stored username is corrected to match. An id that
 > doesn't match any GitHub account stops the import rather than falling back to
 > the username, since the username could belong to someone else entirely.
@@ -508,8 +500,9 @@ hubot
 octofez
 ```
 
-So is a file that identifies some students by account and others only by email —
-useful at the start of term, when not everyone has reported a GitHub username:
+So is a file that identifies some students by account and others only by email,
+which is useful at the start of term, when not everyone has reported a GitHub
+username:
 
 ```csv
 github_id,username,email,first_name,section
@@ -521,46 +514,55 @@ github_id,username,email,first_name,section
 Here `octocat` is found by id (even after a rename), `hubot` by username, and
 `octofez` is invited by email and appears as a pending row until they accept.
 
-> [!NOTE]
-> A row identified by account (`github_id` or `username`) is both invited **and**
-> added to the roster. A row identified only by an email address is invited by
-> email, and the address is recorded as a pending roster row. That row is matched
-> to the student's GitHub account when they accept; if you cancel the invitation
-> the row is removed with it, and an expired one is cleared by the next sync,
-> from either tool. The recorded address is the one **you invited**, not
-> necessarily the email on the student's GitHub account. A name and section
-> supplied in the CSV are kept on the pending row, so they're already there when
-> the student joins, and you can correct them from the row while the invitation
-> is still pending. The address itself can't be changed there, because it
-> identifies the invitation: to use a different one, cancel and invite the new
-> address.
+### Invitations by email
+
+A row identified by account (`github_id` or `username`) is both invited and
+added to the roster. A row identified only by an email address is invited by
+email, and the address is recorded as a pending roster row:
+
+- The row is matched to the student's GitHub account when they accept.
+- The recorded address is the one you invited, not necessarily the email on the
+  student's GitHub account.
+- A name and section supplied with the row are kept on it, so they're already
+  there when the student joins. You can correct them from the row while the
+  invitation is pending. The address itself can't be changed there, because it
+  identifies the invitation: to use a different one, cancel and invite the new
+  address.
+- If you cancel the invitation, the row is removed with it. An expired
+  invitation is cleared by the next roster refresh, from either tool.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
 or `github_id`. Either tool reads that file back: **Upload roster** matches
-those rows
-by email, and `gh teacher roster import` corrects a pending row's name and
-section by address without touching the invitation. A row identified only by
-`github_id` is the exception, since `import` resolves students by username: it
-skips that row with a notice and leaves whatever is stored for it alone. For
-more information, see
+those rows by email, and `gh teacher roster import` corrects a pending row's
+name and section by address without touching the invitation. A row identified
+only by `github_id` is the exception, since `import` resolves students by
+username: it skips that row with a notice and leaves whatever is stored for it
+alone. For more information, see
 [Invitations by email](How-Classroom-50-Works#invitations-by-email).
 
-> [!TIP]
-> Adding students who are **already in your organization** (for example, from a
-> previous course) is a different action. Inviting them again does nothing:
-> GitHub reports "Already a member," and it won't put them on this classroom's
-> roster. To enroll an existing member, open the organization's **Members** page
-> in Classroom 50, select their row (or several), and use **Actions**, then
-> **Add to classroom**. For more information, see
-> [Manage organization members](Web-Teacher-Guide#manage-organization-members).
+### Enrolling existing organization members
 
-**Share** — shareable links for students you've already invited. The **Share
-classroom links** dialog holds two: an onboarding link, with which a student
-accepts the invitation and signs in to Classroom 50 in one step (the link
-most classrooms share), and a GitHub organization invitation link for a
-student who can't use the onboarding one. Neither link enrolls anyone on its
-own: invite the student from the roster first, then share a link so they can
-accept and sign in.
+Adding students who are already in your organization (for example, from a
+previous course) is a different action. Inviting them again does nothing:
+GitHub reports "Already a member," and it won't put them on this classroom's
+roster. To enroll an existing member, open the organization's **Members** page
+in Classroom 50, select their row (or several), click **Actions**, then click
+**Add to classroom**. For more information, see
+[Manage organization members](#manage-organization-members).
+
+### Sharing the invitation links
+
+Click **Share** to open the **Share classroom links** dialog. It holds two
+links for students you've already invited:
+
+- **Classroom onboarding link**: a student accepts the invitation and signs in
+  to Classroom 50 in one step. This is the link most classrooms share.
+- **GitHub organization invitation link**: a student accepts the invitation
+  directly on github.com. Share it when a student can't use the onboarding
+  link.
+
+Neither link enrolls anyone on its own: invite the student from the roster
+first, then share a link so they can accept and sign in.
 
 ### The roster view
 
@@ -723,8 +725,6 @@ see
 
 ## Collect submissions
 
-![Assignment with no submissions](images/web_viewing_assignment.png)
-
 Once an assignment exists, share its accept link with students: expand the
 **How students accept** panel and copy the URL. To grab the same link without
 opening the assignment, use the link icon in the assignment's row on the
@@ -732,18 +732,12 @@ opening the assignment, use the link icon in the assignment's row on the
 including the access key when the classroom uses an unlisted URL. When a student
 opens the link, they're taken to the accept page:
 
-![Accepting an assignment](images/web_accept_assignment.png)
-
 Accepting creates a repository named `<CLASSROOM>-<ASSIGNMENT>-<USERNAME>`.
 Pushing to it triggers autograding, which builds a Release containing a
 `result.json` file. The score-collection workflow (run on demand)
 aggregates those results into the classroom's scores.
 
-![Accept success](images/web_accept_assignment_success.png)
-
 ### View submissions
-
-![Assignment with submissions](images/web_viewing_assignment_submissions.png)
 
 Scores update when collection runs: click **Collect now** in the freshness
 strip at the top of the submissions page (the **Actions** menu carries the same

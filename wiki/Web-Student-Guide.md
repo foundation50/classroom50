@@ -25,8 +25,6 @@ When your teacher invites you, GitHub emails you a link to join.
 
 ## Sign in
 
-![Classroom 50 login screen](images/web_login_screen.png)
-
 At [classroom50.org](https://classroom50.org), sign in with GitHub using
 [OAuth 2](https://oauth.net/2/). Two options:
 
@@ -34,23 +32,15 @@ At [classroom50.org](https://classroom50.org), sign in with GitHub using
 - **Use a device code instead** — a manual fallback. Paste a code into a
   GitHub page, and Classroom 50 detects when you've authorized it.
 
-![Classroom 50 login flow](images/web_login_flow_student.png)
-
 ## View your organizations
-
-![Organizations view](images/web_organizations_student.png)
 
 After signing in, find the organization for your classroom — it has a
 **Student** label. Open it to see the assignments you have access to.
-
-![No assignments yet](images/web_assignments_none_student.png)
 
 ## Accept an assignment
 
 When your teacher shares an assignment link, open it and accept on a page like
 this:
-
-![Accepting an assignment](images/web_accept_assignment_student.png)
 
 Accepting creates a GitHub repository for you, named after the classroom, the
 assignment, and your username — for example,
@@ -63,8 +53,6 @@ assignment, and your username — for example,
 > your code, commits, and name.
 
 Afterward, your organization page lists the assignment repository you now own:
-
-![One assignment](images/web_assignments_student.png)
 
 ## Submit your work
 
@@ -122,11 +110,7 @@ For an assignment tagged **Group (legacy)**, there is no group team:
 To add collaborators, click the edit pencil at the top-right of a group
 assignment:
 
-![Group assignment page](images/web_assignment_edit_student.png)
-
 Then click **Manage collaborators**:
-
-![Manage collaborators](images/web_assignment_manage_collaborators_student.png)
 
 > [!NOTE]
 > Collaborators must be members of the organization and enrolled in the
@@ -141,12 +125,8 @@ menu item is **Group submission** instead, and the page shows your group and
 teammates alongside the shared **Group repository**; the assignments list
 offers the same views as **View group submission** and **View group**.
 
-![Assignment submission](images/web_assignment_submission_student.png)
-
 If your teacher configured autograding, click **View grade** to see your results
 on GitHub:
-
-![Submission on GitHub](images/web_assignment_github_release_student.png)
 
 > [!NOTE]
 > Scores live on your repository's GitHub **Releases** — each graded submission
