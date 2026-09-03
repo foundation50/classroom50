@@ -1001,17 +1001,10 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends ${{ needs.setup.outputs.apt }}
 
-      # GitHub-hosted images ship all of these, but a self-hosted runner or a
-      # custom container image may not (issue #863: `gh` is the usual gap).
-      # Without this check the job grades fine and then dies in the commit
-      # status / release steps with a bare `gh: command not found`. Runs after
-      # the toolchain steps so a setup-python-provided python3 counts.
-      #
-      # Only tools whose absence already fails the job are fatal here. git is
-      # a warning: actions/checkout falls back to a REST download without it
-      # and runner.py degrades on purpose (no review diff link, timestamps
-      # fall back to now, allowed_files enforcement skipped), so a git-less
-      # runner that grades today keeps grading.
+      # Fail early with a clear message instead of `gh: command not found`
+      # after grading (issue #863). Placed after the toolchain steps so a
+      # setup-python-provided python3 counts. Only tools whose absence already
+      # fails the job are fatal; runner.py degrades on purpose without git.
       - name: Check runner tools
         run: |
           set -euo pipefail
