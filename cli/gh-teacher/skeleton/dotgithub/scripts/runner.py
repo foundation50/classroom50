@@ -6,14 +6,14 @@ every submission. Reads env, resolves an entrypoint (per-assignment
 autograder.py > per-assignment tests.json > classroom-default autograder.py
 > vacuous pass), execs it in the student checkout, then reads/synthesizes
 result.json + release-body.md + $GITHUB_OUTPUT so downstream steps always
-have a v1-shaped payload. Per-assignment grading lives in autograder.py —
-see the Advanced-Autograding wiki page.
+have a v1-shaped payload. Per-assignment grading lives in autograder.py; see
+the Advanced-Autograding wiki page.
 
 Exits 0 for EVERY grading outcome, including failures (reported via a
 synthetic error result + status=error) so the release/commit-status steps
 still fire and the gradebook ingests the submission. Only missing required
 identity env (PAGES_BASE_URL, CLASSROOM, ASSIGNMENT, SUBMISSION_TAG) fails
-fast with exit 1 — those are needed to synthesize a v1 result.json, and
+fast with exit 1: those are needed to synthesize a v1 result.json, and
 this only happens when run outside the workflow.
 
 Environment (set by the autograde-runner workflow):
@@ -57,7 +57,7 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-# Schema sentinel — keep in lockstep with collect_scores.py::validate_result
+# Schema sentinel. Keep in lockstep with collect_scores.py::validate_result
 # (cli/gh-teacher/skeleton/dotgithub/scripts/collect_scores.py).
 RESULT_SCHEMA_V1 = "classroom50/result/v1"
 
@@ -99,7 +99,7 @@ BUNDLE_DIR_ENV = "CLASSROOM50_BUNDLE_DIR"
 MAX_CAPTURED_CHARS = 2000
 
 # Far roomier cap for the Actions log, where long failure output (a LaTeX
-# build log, a compiler spew) is the whole point (#612) — the log viewer
+# build log, a compiler spew) is the whole point (#612). The log viewer
 # handles megabytes, the release body must stay skimmable.
 MAX_LOG_CAPTURED_CHARS = 100_000
 
@@ -135,7 +135,7 @@ COMPARISON_REGEX = "regex"
 COMPARISONS = (COMPARISON_INCLUDED, COMPARISON_EXACT, COMPARISON_REGEX)
 
 # Bounded retry for Pages fetches: 1s then 2s between attempts (final attempt
-# raises) on transient network errors / HTTP 5xx. 404 is NOT retried — for the
+# raises) on transient network errors / HTTP 5xx. 404 is NOT retried: for the
 # bundle URL it means "no per-assignment override"; for the classroom-default
 # URL it means the classroom hasn't run `gh teacher autograder set-default`
 # (falls back to a vacuous-pass result).
@@ -172,7 +172,7 @@ ACCEPT_COMMIT_PATHS = frozenset(
 # Paths a teacher-side submission-mode shim retrofit touches: exactly the shim,
 # nothing else. Such a commit carries `[skip ci]` so the workflow normally
 # never fires; is_shim_update_commit is the backstop for environments that
-# strip it. Mirrors contract.ShimUpdateCommitMessage's write path — keep in
+# strip it. Mirrors contract.ShimUpdateCommitMessage's write path; keep in
 # lockstep with classroomcfg.AutogradeWorkflowPath.
 SHIM_UPDATE_COMMIT_PATHS = frozenset({".github/workflows/autograde.yaml"})
 
@@ -214,7 +214,7 @@ def runtime_root() -> pathlib.Path:
 
 
 # ---------------------------------------------------------------------------
-# Pure helpers (no I/O — fully unit-testable)
+# Pure helpers (no I/O, fully unit-testable)
 # ---------------------------------------------------------------------------
 
 
@@ -276,7 +276,7 @@ def classroom_default_autograder_url(pages_base_url: str, classroom: str, secret
     """Pages URL for a classroom's default autograder.py.
 
     Published verbatim by publish-pages.yaml from `<classroom>/autograder.py`.
-    Optional — classrooms that haven't run `gh teacher autograder set-default`
+    Optional: classrooms that haven't run `gh teacher autograder set-default`
     won't have one, and the runner falls back to a vacuous-pass result.
     """
     return f"{pages_base_url}/{_classroom_segment(classroom, secret)}/{ENTRYPOINT_FILENAME}"
@@ -369,7 +369,7 @@ def empty_result(
     submitted_by: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """A v1-valid result.json payload with no tests (score 0/0). Used for
-    every error path — collect-scores ingests it as "submitted, error"; the
+    every error path: collect-scores ingests it as "submitted, error"; the
     workflow log carries the actual failure reason.
     """
     return make_result(
@@ -392,7 +392,7 @@ def empty_result(
 def derive_status_and_summary(result: dict[str, Any]) -> tuple[str, str]:
     """Map a result.json payload to a commit-status state + summary line.
 
-    `success` when all tests pass (or zero tests — vacuous pass, "no
+    `success` when all tests pass (or zero tests: vacuous pass, "no
     autograder configured"). `failure` when any test failed. The error path
     is set explicitly by the runner, never derived here.
     """
@@ -404,7 +404,7 @@ def derive_status_and_summary(result: dict[str, Any]) -> tuple[str, str]:
     if not tests:
         return (
             "success",
-            f"classroom50 autograde: submitted — no autograder configured for {assignment}",
+            f"classroom50 autograde: submitted, no autograder configured for {assignment}",
         )
 
     passed = sum(1 for t in tests if t.get("passed"))
@@ -452,8 +452,8 @@ def validate_result(
     Mirrors collect_scores.py::validate_result so a payload passing here also
     passes gradebook ingest. Without parity, a malformed result.json (missing
     `owner`, non-int score, non-dict test entry, ...) would silently pass the
-    runner, get published, and only be rejected on the next collect-scores run
-    — the student appears not-yet-submitted with no signal in the log.
+    runner, get published, and only be rejected on the next collect-scores run,
+    so the student appears not-yet-submitted with no signal in the log.
 
     `owner` (repo owner login) is the identity anchor: when provided it must
     equal `data["owner"]`. `assignment_type` must equal the run's
@@ -498,7 +498,7 @@ def validate_result(
     # submit/* here is the RECORD namespace, deliberately not the configurable
     # submission_tags patterns: a milestone-tag run (e.g. phase1) mints/reuses
     # the canonical submit/<ts>-<sha> tag in the workflow's tag step BEFORE
-    # grading, so SUBMISSION_TAG — and thus result.json's `submission` — is
+    # grading, so SUBMISSION_TAG (and thus result.json's `submission`) is
     # always canonical. Custom tags trigger; submit/* records.
     submission = data.get("submission")
     if not isinstance(submission, str) or not submission.startswith("submit/"):
@@ -539,7 +539,7 @@ def validate_result(
             return f"{RESULT_FILENAME} 'tests[{i}].score' ({ts}) > 'tests[{i}].max-score' ({tm})"
 
     # submitted_by is optional (older results omit it). When present: object
-    # with a non-empty string username and int-or-null id — stamped by the
+    # with a non-empty string username and int-or-null id, stamped by the
     # runner from GITHUB_ACTOR/GITHUB_ACTOR_ID.
     err = validate_submitted_by(data.get("submitted_by"), RESULT_FILENAME)
     if err is not None:
@@ -700,7 +700,7 @@ def is_shim_update_commit(workspace: pathlib.Path, head_sha: str) -> bool:
     shim-only commit has nothing to grade regardless of who authored it, and a
     student hand-editing their shim gets a skip either way (the edit alone is
     never gradeable work). Fails open (False -> grade) on any uncertainty.
-    The acceptance check takes precedence at the call site — the accept commit
+    The acceptance check takes precedence at the call site: the accept commit
     also touches the shim but additionally lands the marker, so the path sets
     never overlap in practice.
 
@@ -877,7 +877,7 @@ def open_release_asset_source(
     return the pinned file descriptor. Every segment is opened with
     O_NOFOLLOW/O_DIRECTORY so a symlink swapped onto a parent or the leaf after
     validation (a student process double-forked during grading survives into
-    post-grade staging) is rejected at open time — closing the validate-then-
+    post-grade staging) is rejected at open time, closing the validate-then-
     reopen TOCTOU. The returned fd is what _copy_release_asset reads from, so
     the copy can never re-resolve the path against a mutated tree. Caller owns
     closing the fd."""
@@ -937,7 +937,7 @@ def _copy_release_asset(
 ) -> int:
     """Copy from an already-open, symlink-free source fd (see
     open_release_asset_source) to `destination`, capped at max_bytes. Reading
-    the pinned fd — never re-opening by path — is what makes this copy immune to
+    the pinned fd (never re-opening by path) is what makes this copy immune to
     a symlink swapped in after validation."""
     copied = 0
     created = False
@@ -1090,7 +1090,7 @@ def _walk_workspace_files(workspace: pathlib.Path) -> list[str]:
 
 def _classify_disallowed(patterns: list[str], paths: list[str]) -> list[str] | None:
     """Subset of `paths` the `patterns` disallow, or None when the matcher
-    couldn't run (caller then skips enforcement — fail open). Delegates to `git
+    couldn't run (caller then skips enforcement: fail open). Delegates to `git
     check-ignore` against a throwaway, config-isolated repo. Mirrors Go's
     ignorematch.Disallowed; both pinned by the shared fixture
     cli/shared/testdata/allowed_files_matcher_cases.json."""
@@ -1099,7 +1099,7 @@ def _classify_disallowed(patterns: list[str], paths: list[str]) -> list[str] | N
     git_env = _isolated_git_env()
     # A hung git raises subprocess.TimeoutExpired (a SubprocessError, not an
     # OSError); a missing git binary raises OSError. Both must surface as
-    # "matcher couldn't run" (return None), not an uncaught traceback —
+    # "matcher couldn't run" (return None), not an uncaught traceback,
     # mirroring _baseline_scan's SubprocessError handling.
     try:
         with tempfile.TemporaryDirectory(prefix="classroom50-ignore-") as tmp:
@@ -1369,7 +1369,7 @@ def commit_submitted_at(sha: str, workspace: pathlib.Path) -> datetime.datetime:
     """The SUBMISSION instant for a graded commit: its committer date, read
     from git in the (full-depth) checkout and normalized to aware UTC. Invariant
     for a given commit, so re-grading it reproduces the identical `datetime` in
-    result.json — the submission time and `late` flag never move.
+    result.json, so the submission time and `late` flag never move.
 
     Falls back to now_utc() when the SHA is empty or git can't read the committer
     date (shallow clone, detached state, git error): lateness is advisory and a
@@ -1408,7 +1408,7 @@ def commit_submitted_at(sha: str, workspace: pathlib.Path) -> datetime.datetime:
 
 def mode_is_group(mode: str | None) -> bool:
     """True only when the assignment mode is exactly 'group' (case- and
-    whitespace-insensitive). Anything else — None, '', or unrecognized — is
+    whitespace-insensitive). Anything else (None, '', or unrecognized) is
     individual, so a missing/typo'd MODE env can never loosen validation (only
     require the stricter individual `assignment_type`). Mirrors the setup job's
     mode normalization."""
@@ -1418,7 +1418,7 @@ def mode_is_group(mode: str | None) -> bool:
 def assignment_type_for_mode(mode: str | None) -> str:
     """Map the MODE env (the manifest mode, via the setup job) to the
     result.json assignment_type: 'group' and 'team' pass through verbatim;
-    anything else — None, '', or unrecognized — is individual, the strictest
+    anything else (None, '', or unrecognized) is individual, the strictest
     type, so a missing/typo'd MODE can never loosen validation. Keep the
     accepted set in lockstep with the setup job's mode allow-list and
     collect_scores.py's normalize_assignment_type."""
@@ -1466,7 +1466,7 @@ class Finalizer:
         self.review_link = review_link
         self.submitted_by = submitted_by
         self.assignment_type = assignment_type
-        # The graded commit's committer date — the invariant submission instant
+        # The graded commit's committer date: the invariant submission instant
         # written as `datetime`. Defaults to now only when a caller didn't
         # resolve it (keeps older call sites / tests working).
         self.submitted_at = submitted_at or now_utc()
@@ -1488,7 +1488,7 @@ class Finalizer:
         summary = f"classroom50 autograde: {message}"
         (self.workspace / RESULT_FILENAME).write_text(json.dumps(result, indent=2) + "\n")
         (self.workspace / RELEASE_BODY_FILENAME).write_text(render_release_body(result, summary))
-        # Always overwrite — the autograder may have written a stale
+        # Always overwrite: the autograder may have written a stale
         # status= before exiting non-zero or producing bad output.
         append_outputs(self.github_output, "error", summary)
         return 0
@@ -1526,7 +1526,7 @@ class Finalizer:
 # Grades a bundled tests.json with a built-in interpreter. The specs are DATA,
 # never code: `run`/`setup` strings are teacher-authored shell, executed in the
 # student checkout at the same privilege as an autograder.py. They arrive via
-# the Pages bundle — never interpolated into workflow YAML — and students can't
+# the Pages bundle (never interpolated into workflow YAML) and students can't
 # edit assignments.json. The interpreter re-validates spec shape because the
 # file is hand-editable. Write-time validator: tests.go; trust-boundary
 # rationale: the Advanced-Autograding wiki page.
@@ -1857,7 +1857,7 @@ def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
 
 
 def _validate_test_spec(t: Any) -> str | None:
-    """Re-validate one spec at grade time — a lower bar than tests.go that
+    """Re-validate one spec at grade time: a lower bar than tests.go that
     keeps a hand-edited assignments.json from crashing the grader."""
     if not isinstance(t, dict):
         return "not an object"
@@ -1866,7 +1866,7 @@ def _validate_test_spec(t: Any) -> str | None:
         return "name must be a non-empty string"
     # Mirror tests.go / tests-v1.schema.json: names are echoed into the release
     # body and, since the log report, into a column-0 `::group::FAIL: {name}`
-    # line — a control char there could inject a workflow command.
+    # line, where a control char could inject a workflow command.
     if any(ord(c) < 0x20 or ord(c) == 0x7f for c in name):
         return "name must not contain control characters"
     if t.get("type") not in TEST_TYPES:
@@ -1999,8 +1999,8 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
             # or pattern, so those keep the verbatim expected/actual blocks.
             # The exact comparison also sees separator characters splitlines()
             # folds away (\x0c, \x85, \u2028, a literal \r in an inline
-            # expected), so a failing exact test can yield an empty diff —
-            # fall back to the same verbatim blocks rather than show FAIL with
+            # expected), so a failing exact test can yield an empty diff.
+            # Fall back to the same verbatim blocks rather than show FAIL with
             # no explanation.
             diff = (_unified_diff(cap.get("expected") or "", stdout)
                     if comparison == COMPARISON_EXACT else "")
@@ -2107,7 +2107,7 @@ def _strip_control_chars(text: str) -> str:
 def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
     """Per-test report for the workflow log: a PASS/FAIL line per test, then
     one collapsible ::group:: per failing test with its captured detail, then
-    one per passing show-output test. Only those get groups — folding every
+    one per passing show-output test. Only those get groups: folding every
     passing test would bury the red ones. The release body carries the same
     data as Markdown; this is the log-surface rendering (ANSI is fine here,
     Markdown tables are not). The log clips at MAX_LOG_CAPTURED_CHARS, far
@@ -2116,7 +2116,7 @@ def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
 
     Detail lines are indented two spaces: detail carries student-controlled
     program output, and GitHub only interprets workflow commands (::error::,
-    ::endgroup::, ::stop-commands::) at column 0 — the indent makes command
+    ::endgroup::, ::stop-commands::) at column 0, so the indent makes command
     injection impossible. This is the log-surface analogue of _fence on the
     Markdown surface.
     """
@@ -2268,7 +2268,7 @@ def run_declarative(tests_path: pathlib.Path, finalize: Finalizer,
         submitted_at=finalize.submitted_at,
     )
     # Backstop: execute_test/load_tests handle expected failures; the broad
-    # catch guarantees the "grading outcomes always exit 0" invariant — an
+    # catch guarantees the "grading outcomes always exit 0" invariant: an
     # unexpected exception becomes a published error result, never a crash.
     try:
         result, outcomes = grader.grade(tests)
@@ -2310,22 +2310,22 @@ def run_declarative(tests_path: pathlib.Path, finalize: Finalizer,
 def fetch_bundle(finalize: Finalizer, *, pages_base_url: str, classroom: str,
                  assignment: str, runtime_dir: pathlib.Path, secret: str = "") -> int | None:
     """Download the per-assignment bundle from Pages and extract it into
-    `runtime_dir`. A 404 means "no per-assignment override" — fine, the resolver
-    falls through to the classroom default. Returns an rc (already finalized as
+    `runtime_dir`. A 404 means "no per-assignment override", which is fine: the
+    resolver falls through to the classroom default. Returns an rc (already finalized as
     an error) on a hard fetch/extract failure, or None to continue."""
     burl = bundle_url(pages_base_url, classroom, assignment, secret)
     print(f"runner: fetching bundle {burl}")
     try:
         bundle = fetch_url(burl)
     except (urllib.error.HTTPError, urllib.error.URLError, ValueError) as exc:
-        return finalize.error(f"bundle fetch failed: {exc} — see workflow logs")
+        return finalize.error(f"bundle fetch failed: {exc}. See workflow logs")
 
     if bundle is not None:
         print(f"runner: bundle size {len(bundle)} bytes")
         try:
             extract_tarball(bundle, runtime_dir)
         except (tarfile.TarError, OSError, ValueError) as exc:
-            return finalize.error(f"bundle extraction failed: {exc} — see workflow logs")
+            return finalize.error(f"bundle extraction failed: {exc}. See workflow logs")
     return None
 
 
@@ -2342,8 +2342,8 @@ def resolve_entrypoint(
     the same slug (it's the escape hatch).
 
     Returns exactly one of two shapes (never both-set, never both-None):
-      (entrypoint, None)  — a Python entrypoint to exec; main() continues.
-      (None, rc)          — the step is TERMINAL and rc is main()'s return
+      (entrypoint, None): a Python entrypoint to exec; main() continues.
+      (None, rc):         the step is TERMINAL and rc is main()'s return
                             value: declarative grader ran (run_declarative),
                             nothing configured (no_autograder), or the default
                             fetch failed (error).
@@ -2424,7 +2424,7 @@ def finalize_result(finalize: Finalizer) -> int:
     """Read + validate the autograder's result.json, then synthesize the release
     body and status/summary outputs it didn't write. Returns the runner's exit
     code (0 on success; an error rc when the result is missing/malformed/invalid).
-    Identity/paths — including the expected `assignment_type` — are read off
+    Identity/paths (including the expected `assignment_type`) are read off
     `finalize`."""
     workspace = finalize.workspace
     github_output = finalize.github_output
@@ -2438,7 +2438,7 @@ def finalize_result(finalize: Finalizer) -> int:
 
     # Stamp the runner-authoritative identity fields BEFORE validation. A custom
     # autograder builds its own result.json and can't be trusted to set `owner`
-    # (repo owner) or `assignment_type` (mode) — the runner knows both. Overwrite
+    # (repo owner) or `assignment_type` (mode); the runner knows both. Overwrite
     # so a student-influenced result.json can't claim a different owner/type.
     if isinstance(result, dict):
         result["owner"] = finalize.username
@@ -2451,7 +2451,7 @@ def finalize_result(finalize: Finalizer) -> int:
         result["graded_at"] = now_utc().strftime("%Y-%m-%dT%H:%M:%SZ")
         # The actual pusher (GITHUB_ACTOR), also runner-authoritative. Stamp
         # unconditionally: set it when known, DROP any autograder-written
-        # `submitted_by` when the actor couldn't be resolved — never let a
+        # `submitted_by` when the actor couldn't be resolved. Never let a
         # custom result.json's self-asserted (student-influenced) pusher survive.
         if finalize.submitted_by is not None:
             result["submitted_by"] = finalize.submitted_by
@@ -2506,12 +2506,12 @@ def detect_acceptance_mode() -> int:
             fh.write(f"is-shim-update={'true' if is_shim_update else 'false'}\n")
     if is_acceptance:
         print(
-            "::notice::acceptance commit detected — nothing to grade yet; "
+            "::notice::acceptance commit detected, nothing to grade yet; "
             "submit work (gh student submit) to be graded"
         )
     elif is_shim_update:
         print(
-            "::notice::autograder-trigger update detected — nothing to grade"
+            "::notice::autograder-trigger update detected, nothing to grade"
         )
     else:
         print("runner: not an acceptance commit; grading proceeds")
@@ -2529,7 +2529,7 @@ def main() -> int:
     if not (pages_base_url and classroom and assignment and submission):
         print(
             "::error::runner requires PAGES_BASE_URL, CLASSROOM, "
-            "ASSIGNMENT, and SUBMISSION_TAG — running outside the autograde-runner workflow?",
+            "ASSIGNMENT, and SUBMISSION_TAG. Running outside the autograde-runner workflow?",
             file=sys.stderr,
         )
         return 1
@@ -2541,8 +2541,8 @@ def main() -> int:
     secret = os.environ.get("SECRET", "").strip()
     if secret and not re.fullmatch(r"[a-z0-9]{4,64}", secret):
         print(
-            f"::error::SECRET {secret!r} is malformed (must be [a-z0-9]{{4,64}}) — "
-            "re-run `gh student accept` to regenerate .classroom50.yaml",
+            f"::error::SECRET {secret!r} is malformed (must be [a-z0-9]{{4,64}}). "
+            "Re-run `gh student accept` to regenerate .classroom50.yaml",
             file=sys.stderr,
         )
         return 1
@@ -2561,7 +2561,7 @@ def main() -> int:
     username = username_from_repo(repository, classroom, assignment, actor)
     commit_link = commit_url(server_url, repository, sha)
     release_link = release_url(server_url, repository, submission)
-    # Submission instant is the graded commit's committer date — stable across
+    # Submission instant is the graded commit's committer date, stable across
     # regrades, so re-grading the same commit never moves `datetime`/`late`.
     submitted_at = commit_submitted_at(sha, workspace)
     # Resolve the baseline once: both the review-compare link and the Feedback
@@ -2621,7 +2621,7 @@ def main() -> int:
             f.unlink()
 
     # Enforce allowed_files before grading so the autograder only sees allowed
-    # files. Fails open — if the matcher can't run, returns [] and grading
+    # files. Fails open: if the matcher can't run, returns [] and grading
     # proceeds on the unfiltered tree (see its docstring to flip to fail-closed).
     # The removed list is appended to release-body.md on every exit path below.
     removed_files = enforce_allowed_files(workspace, parse_allowed_files(os.environ.get("ALLOWED_FILES")))
@@ -2657,7 +2657,7 @@ def main() -> int:
         rc = _grade()
     finally:
         append_removed_files_note(workspace, removed_files)
-        # Mirror the FINAL release body to the run's Summary page from here —
+        # Mirror the FINAL release body to the run's Summary page from here,
         # the one point every exit path (success, error, vacuous pass) passes
         # through, after the removed-files note has been folded in. Doing it
         # here (not in run_declarative / finalize_result / the note) keeps the

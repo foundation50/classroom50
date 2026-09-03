@@ -1,6 +1,6 @@
 # Classroom50 autograder shim.
 #
-# Intentionally inert — delegates everything to the reusable
+# Intentionally inert: delegates everything to the reusable
 # autograde-runner workflow in your teacher's config repo
 # ({{ORG}}/classroom50/.github/workflows/autograde-runner.yaml).
 # Auto-tagging, runtime dispatch, fetching runner.py, executing the
@@ -12,11 +12,11 @@
 # This file should not be edited.
 #
 # Triggers:
-#   • push to the repo's default branch — every commit grades (except
+#   • push to the repo's default branch: every commit grades (except
 #                         the acceptance commit, which the runner detects
 #                         and skips); the runner creates the
 #                         submit/<UTC-timestamp>-<short-sha> tag itself
-#   • push of submit/*  — manual or web-UI tag pushes work too;
+#   • push of submit/*:   manual or web-UI tag pushes work too;
 #                         the runner reuses the pushed tag
 
 name: Autograde
@@ -29,7 +29,7 @@ on:
 jobs:
   grade:
     # `uses:` quoted so the unsubstituted {{ORG}}/{{CONFIG_BRANCH}} placeholders
-    # parse as a plain string rather than a YAML flow mapping —
+    # parse as a plain string rather than a YAML flow mapping, so
     # actionlint and any other YAML pre-flight tool can validate
     # the embed before substitution.
     uses: "{{ORG}}/classroom50/.github/workflows/autograde-runner.yaml@{{CONFIG_BRANCH}}"

@@ -13,7 +13,7 @@ built-in interpreter (run_declarative).
 Validation lives elsewhere (tests.go at write time, runner.py at grade time),
 so this script stays forgiving: a malformed manifest emits a ::warning:: and is
 skipped rather than failing the Pages deploy. tests.json-vs-autograder.py
-precedence is resolved in ONE place — runner.py's entrypoint resolution — so it
+precedence is resolved in ONE place (runner.py's entrypoint resolution) so it
 isn't special-cased here.
 """
 

@@ -1070,7 +1070,7 @@ class TestRenderReleaseBody:
     def test_empty_tests_renders_summary_only(self):
         result = {"score": 0, "max-score": 0, "tests": []}
         body = ag.render_release_body(
-            result, summary="submitted — no autograder configured"
+            result, summary="submitted, no autograder configured"
         )
         assert "### classroom50 autograde: 0/0" in body
         assert "no autograder configured" in body

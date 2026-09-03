@@ -7,11 +7,11 @@ name: Collect Scores
 # enrollment; roster.csv is optional display metadata). The polled
 # members are the union of the STUDENT team and the STAFF teams
 # (teacher/hta/ta), so a staff member who accepted an assignment to test
-# the autograde flow is collected like a student — staff who never
+# the autograde flow is collected like a student; staff who never
 # accepted have no repo, hence no releases, hence no entry. It pages
 # through each expected `<classroom>-<assignment>-<username>` repo's
 # `submit/*` releases and downloads `result.json` from each. Single-writer
-# by design — no concurrent ingest, no per-student dispatch event, no broad
+# by design: no concurrent ingest, no per-student dispatch event, no broad
 # cross-repo write secret.
 
 # The run list shows only the workflow name by default, so a scoped collect
@@ -86,7 +86,7 @@ jobs:
           # members), Repository -> Contents: Read and write on
           # <classroom>-* student repos, and Repository ->
           # Administration: Read and write (collection grants staff teams
-          # — e.g., TAs — read access to student repos and private
+          # (e.g., TAs) read access to student repos and private
           # templates via PUT teams/.../repos/...). Collection READS
           # (team members, releases + result.json) and grants team access;
           # the contents-write scope is shared with regrade.yaml, which
@@ -145,7 +145,7 @@ jobs:
             git pull --ff-only
             python3 .github/scripts/collect_scores.py
             if ! commit_scores; then
-              # An idempotent re-collect produced no diff — the remote already
+              # An idempotent re-collect produced no diff: the remote already
               # carries equivalent data, so there is nothing left to push.
               echo "re-collect produced no changes; remote already current"
               exit 0
