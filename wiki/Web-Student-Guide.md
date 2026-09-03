@@ -190,7 +190,8 @@ many submissions you've made, and when you last submitted. The row's actions
 open your repository on GitHub, list your submissions (**View submissions**),
 and, once a submission has been graded, open the latest result
 (**View autograder details**). In the submissions list, each graded submission
-has a **View score** link.
+has a **View score** link. On a group assignment, the list also names the
+teammate who made each commit.
 
 The **Assignments** page offers the same views: **View my submission**, or on a
 group assignment **View group submission** and **View group**.

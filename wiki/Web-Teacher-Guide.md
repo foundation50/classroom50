@@ -903,10 +903,11 @@ Each row shows a student's (or group's) latest submission plus its full history
 and links to the repository, the commit, the feedback pull request
 (**View feedback PR** on the row; its manage dialog carries the same link as
 **Review**), and the Release (**View autograder details**). A row whose work
-was pushed after the last collection shows **Pending** until you collect. For
-where every result lives (per-test breakdowns, past attempts, grading a
-specific commit, and who submitted), see
-[Reading results](Autograding-Basics#reading-results).
+was pushed after the last collection shows **Pending** until you collect. On a
+group assignment, each entry in the history also names the member who made the
+commit, so you can tell one teammate's work from another's. For where every
+result lives (per-test breakdowns, past attempts, grading a specific commit,
+and who submitted), see [Reading results](Autograding-Basics#reading-results).
 
 On a group assignment, rows are titled by group name, and a **Members** column
 shows each group's live member count; click it to open the group's manage
@@ -935,6 +936,17 @@ as **Pending** on the assignment's submissions page, so the two views agree. A
 student who pushed but whose autograder run failed or never ran counts as
 submitted here; their score arrives once the autograder publishes a result and
 the assignment is collected again.
+
+The **Accepted** and **Submitted** columns count enrolled students only, so a
+repository that a teacher, head TA, or TA accepted to try the assignment is
+left out of both. To count teaching staff alongside students, turn on
+**Include teaching staff** next to **Collect all**. The toggle is a preference
+for this browser and applies to every classroom you view; while it's on, the
+classroom header shows how many staff are counted so the columns add up. Before
+any student is enrolled, the columns read **No students yet**, and the tooltip
+notes how many staff repositories the toggle would count. On the submissions
+page, a staff member's row shows their role badge in place of a student's, so
+a test run is never mistaken for a student's work.
 
 Because the run walks every assignment's repositories, it takes longer than a
 single-assignment collection and uses more GitHub Actions minutes, so

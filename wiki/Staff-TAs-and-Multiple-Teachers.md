@@ -130,7 +130,10 @@ GitHub teams are the authority for enrollment and role; the `role` column in
   the snapshot updating, not a change to enrollment.
 - **Submissions** list any account with a student enrollment as a student. A
   pure-staff account appears in submissions only once it has accepted an
-  assignment repository.
+  assignment repository; its row shows the staff role badge, and the
+  assignments table leaves it out of the **Accepted** and **Submitted** counts
+  unless **Include teaching staff** is on. For more information, see
+  [Collect the whole classroom](Web-Teacher-Guide#collect-the-whole-classroom).
 - **Unenroll** drops only the student side (the roster row and student-team
   membership); the staff role stays.
 
