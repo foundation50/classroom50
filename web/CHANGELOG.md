@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.43.0](https://github.com/foundation50/classroom50/compare/web-v1.42.0...web-v1.43.0) (2026-09-03)
+
+
+### Features
+
+* **web:** add Catalan (ca) language pack ([#858](https://github.com/foundation50/classroom50/issues/858)) ([c2105e7](https://github.com/foundation50/classroom50/commit/c2105e76ac33f6b6139e9cdefca1c5dfd928ca5a)), closes [#857](https://github.com/foundation50/classroom50/issues/857)
+
 ## [1.42.0](https://github.com/foundation50/classroom50/compare/web-v1.41.0...web-v1.42.0) (2026-09-02)
 
 
