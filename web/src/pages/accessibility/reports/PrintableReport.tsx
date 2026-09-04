@@ -126,6 +126,7 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
         {t("accessibility.print.reportMeta", {
           standard: vpat.standard,
           target: vpat.target,
+          versions: vpat.wcagVersions.join(", "),
           date: vpat.generated,
         })}
       </p>

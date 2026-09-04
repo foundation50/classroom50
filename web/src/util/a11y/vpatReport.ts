@@ -25,6 +25,12 @@ export type VpatReportJson = {
   /** Bump when the JSON shape changes so consumers can guard. */
   schema: "vpat-report/v1"
   standard: "WCAG 2.2"
+  /**
+   * The WCAG versions a reviewer can file this report against. WCAG 2.2 A/AA is
+   * a superset of the 2.0 and 2.1 A/AA criteria (4.1.1 Parsing, dropped in 2.2,
+   * gets its own row), so one assessment answers all three.
+   */
+  wcagVersions: typeof WCAG_VERSIONS
   editions: ["2.5Rev-wcag"]
   target: "AA"
   product: string
@@ -37,6 +43,7 @@ export type VpatReportJson = {
 }
 
 const PRODUCT = "Classroom50 web app"
+export const WCAG_VERSIONS = ["2.0", "2.1", "2.2"] as const
 
 /**
  * Derive the contrast criteria's conformance from the live contrast audit.
@@ -152,6 +159,7 @@ export function buildVpatReport(
   return {
     schema: "vpat-report/v1",
     standard: "WCAG 2.2",
+    wcagVersions: WCAG_VERSIONS,
     editions: ["2.5Rev-wcag"],
     target: "AA",
     product: PRODUCT,
@@ -181,9 +189,11 @@ function criterionRow(c: Criterion, fallbackDate: string): string {
   return `| ${c.id} ${c.name} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${date} | ${remark} |`
 }
 
-// Preamble: product, date, evaluation methods, and the honest automated-vs-
-// manual boundary a reviewer needs to weight the claims.
+// Preamble: product, date, the standards covered, evaluation methods, and the
+// honest automated-vs-manual boundary a reviewer needs to weight the claims.
 function preamble(report: VpatReportJson): string[] {
+  const versions = report.wcagVersions.map((v) => `WCAG ${v}`)
+  const versionList = `${versions.slice(0, -1).join(", ")}, and ${versions[versions.length - 1]}`
   return [
     `# Accessibility Conformance Report — ${report.product}`,
     "",
@@ -191,6 +201,18 @@ function preamble(report: VpatReportJson): string[] {
     `**Standard:** WCAG ${report.standard.replace("WCAG ", "")}, target Level ${report.target}`,
     `**Product:** ${report.product}`,
     `**Report date:** ${report.generated}`,
+    "",
+    `**Applicable standards/guidelines:** ${versionList}, Level A and Level ` +
+      "AA. Level AAA is not a conformance target; 1.4.6 Contrast (Enhanced) is " +
+      "reported for transparency only. The WCAG 2.2 Level A and AA criteria are " +
+      "a superset of the WCAG 2.0 and 2.1 Level A and AA criteria, so one " +
+      "assessment covers all three versions. 4.1.1 Parsing, which WCAG 2.2 " +
+      "removed, has its own row for reviewers working from WCAG 2.0 or 2.1.",
+    "",
+    "**Scope:** Every Level A and AA success criterion is listed with an " +
+      "explicit conformance level. A criterion the product cannot trigger " +
+      "(for example, captions when there is no media) is marked *Not " +
+      "Applicable* with the reason; nothing is omitted.",
     "",
     "**Evaluation methods:** Automated checks (color-contrast audit computed " +
       "per rendered pixel and guarded in CI; static and axe-based rule scans) " +
@@ -210,7 +232,7 @@ function preamble(report: VpatReportJson): string[] {
 function summaryLine(report: VpatReportJson): string {
   const s = report.summary.byStatus
   return (
-    `**Summary (${report.summary.total} applicable criteria):** ` +
+    `**Summary (${report.summary.total} criteria):** ` +
     `${s.supports} Supports, ${s.partially} Partially, ` +
     `${s.doesNotSupport} Does Not Support, ${s.notApplicable} Not Applicable, ` +
     `${s.notEvaluated} Not Evaluated.`

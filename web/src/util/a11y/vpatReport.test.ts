@@ -16,6 +16,7 @@ describe("buildVpatReport (JSON source of truth)", () => {
   it("carries schema, standard, editions, target, product, and date", () => {
     expect(report.schema).toBe("vpat-report/v1")
     expect(report.standard).toBe("WCAG 2.2")
+    expect(report.wcagVersions).toEqual(["2.0", "2.1", "2.2"])
     expect(report.editions).toEqual(["2.5Rev-wcag"])
     expect(report.target).toBe("AA")
     expect(report.product.length).toBeGreaterThan(0)
@@ -114,6 +115,22 @@ describe("renderVpatReport (WCAG edition)", () => {
     expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
     expect(md).toContain("WCAG 2.2, target Level AA")
     expect(md).toContain("Report date:** 2026-08-04")
+  })
+
+  it("declares WCAG 2.0, 2.1, and 2.2 at Level A and AA as the applicable standards", () => {
+    expect(md).toContain(
+      "**Applicable standards/guidelines:** WCAG 2.0, WCAG 2.1, and WCAG 2.2, Level A and Level AA.",
+    )
+    expect(md).toContain(
+      "4.1.1 Parsing, which WCAG 2.2 removed, has its own row",
+    )
+  })
+
+  it("renders Not Applicable rows with their reason instead of omitting them", () => {
+    expect(md).toContain(
+      "| 1.2.2 Captions (Prerecorded) | A | Not Applicable |",
+    )
+    expect(md).toContain("| 4.1.1 Parsing | A | Not Applicable |")
   })
 
   it("has one table per WCAG principle", () => {

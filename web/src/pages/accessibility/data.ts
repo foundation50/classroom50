@@ -40,6 +40,7 @@ export type Vpat = Pick<
   | "summary"
   | "criteria"
   | "standard"
+  | "wcagVersions"
   | "target"
 >
 
