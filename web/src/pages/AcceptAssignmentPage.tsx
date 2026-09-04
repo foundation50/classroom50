@@ -56,6 +56,8 @@ import {
   GROUP_REPO_SEGMENT,
 } from "@/util/studentRepo"
 import useGetRepo from "@/hooks/useGetRepo"
+import useAssignmentRepoSetup from "@/hooks/useAssignmentRepoSetup"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
@@ -1056,6 +1058,19 @@ const AcceptAssignmentPage = () => {
   const repoExistsAlready =
     Boolean(repoLookupName) && checkedRepo?.name === repoLookupName
 
+  // An existing repo isn't proof the accept finished (issue #502): the flow
+  // can die between repo creation and the setup commit, leaving a repo that
+  // clones fine but never autogrades. Probe the marker so the page can lead
+  // with "Re-run setup" instead of a success-looking "Open repository". Wait
+  // for the assignment to resolve first: an empty_repo assignment never writes
+  // the marker, and the repo read can settle before the manifest does.
+  const repoSetup = useAssignmentRepoSetup(org, repoLookupName, {
+    enabled:
+      repoExistsAlready &&
+      assignmentData !== undefined &&
+      assignmentData.empty_repo !== true,
+  })
+
   const [steps, setSteps] = useState<StepState>(initialStepState)
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
   const [repairOpen, setRepairOpen] = useState(false)
@@ -1099,9 +1114,27 @@ const AcceptAssignmentPage = () => {
         if (result.status === "created") {
           fireConfetti()
         }
+        // A heal re-run just landed the marker; drop the stale "incomplete"
+        // verdict so the card flips to the healthy state.
+        void repoSetup.refetch()
       },
     })
   }
+
+  // The accept is a chain of GitHub writes with no rollback. Leaving mid-run
+  // strands a repo the student can already push to but that never autogrades,
+  // so hold the tab while any step is in flight.
+  useBeforeUnloadGuard(acceptMutation.isPending)
+
+  // The repo exists but the accept never finished. Cleared once a re-run
+  // succeeds in this session (the mutation's data is the authoritative signal
+  // until the marker probe refetches). Never raised for an empty_repo
+  // assignment, whose repos legitimately carry no marker.
+  const setupIncomplete =
+    repoExistsAlready &&
+    assignmentData?.empty_repo !== true &&
+    repoSetup.state === "incomplete" &&
+    !acceptMutation.isSuccess
 
   // Accept errors name their message ({ key, params }) rather than carrying
   // assembled English, so the remedy renders in the student's language. An error
@@ -1111,6 +1144,7 @@ const AcceptAssignmentPage = () => {
   if (
     loadingAssignments ||
     isLoadingRepo ||
+    repoSetup.isLoading ||
     loadingOrgMembership ||
     loadingEnrollment ||
     (isTeamMode && loadingMyTeam)
@@ -1359,6 +1393,34 @@ const AcceptAssignmentPage = () => {
               />
             )}
 
+            {acceptMutation.isPending && (
+              <p className="text-sm text-base-content/70" role="status">
+                {t("accept.keepTabOpen")}
+              </p>
+            )}
+
+            {setupIncomplete && !acceptMutation.isPending && (
+              <Alert tone="warning" className="items-start">
+                <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
+                <div className="flex-1">
+                  <div className="font-bold">
+                    {t("accept.setupIncomplete.title")}
+                  </div>
+                  <div className="mt-1 text-sm">
+                    {t("accept.setupIncomplete.body")}
+                  </div>
+                  <Button
+                    variant="warning"
+                    className="mt-3 w-full"
+                    disabled={!username}
+                    onClick={() => void runAccept(() => runAcceptFlow())}
+                  >
+                    {t("accept.repair.rerun")}
+                  </Button>
+                </div>
+              </Alert>
+            )}
+
             {acceptMutation.isError && (
               <Alert tone="error" className="items-start">
                 <div>
@@ -1401,7 +1463,9 @@ const AcceptAssignmentPage = () => {
                   >
                     <Button
                       as="a"
-                      variant="primary"
+                      // Demoted while setup is incomplete so the warning's
+                      // "Re-run setup" reads as the one thing to do next.
+                      variant={setupIncomplete ? "outline" : "primary"}
                       className="w-full text-lg p-5"
                       href={
                         acceptMutation?.data?.repo.html_url ||
@@ -1477,7 +1541,9 @@ const AcceptAssignmentPage = () => {
 
             {(repoExistsAlready || acceptMutation.isError) &&
               !acceptMutation.data &&
-              !acceptMutation.isPending && (
+              !acceptMutation.isPending &&
+              // The incomplete-setup warning already carries the re-run button.
+              !setupIncomplete && (
                 <RepairToggle
                   disabled={!username || acceptMutation.isPending}
                   onRerun={() => {

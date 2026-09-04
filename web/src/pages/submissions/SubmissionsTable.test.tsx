@@ -26,6 +26,9 @@ vi.mock("@/hooks/useGetRepo", () => ({
 vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => ({ data: undefined, isLoading: false, isError: false }),
 }))
+vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
+  default: () => ({ state: "complete", isLoading: false }),
+}))
 const feedbackRefetch = vi.fn()
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: feedbackRefetch }),

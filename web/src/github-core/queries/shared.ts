@@ -182,8 +182,14 @@ export type FreshRepoRetryOptions = {
   baseDelayMs?: number
   // Backoff multiplier between retries. 1 = fixed delay. Default 2.
   backoffFactor?: number
+  // Ceiling on any single wait, so a long budget polls steadily instead of
+  // sleeping through most of it in one final back-off. Default: uncapped.
+  maxDelayMs?: number
   // Which errors count as retryable lag. Default isFreshRepoLagError.
   shouldRetry?: (error: unknown) => boolean
+  // Observe each retry (0-based `attempt` just failed), e.g. to tell the user
+  // the repo is still initializing.
+  onRetry?: (attempt: number, waitMs: number) => void
 }
 
 // Retry `fn` while it hits fresh-repo lag. `fn` must re-read its own state each
@@ -195,11 +201,15 @@ export function withFreshRepoRetry<T>(
 ): Promise<T> {
   const baseDelayMs = options.baseDelayMs ?? 500
   const backoffFactor = options.backoffFactor ?? 2
+  const maxDelayMs = options.maxDelayMs ?? Infinity
   return withRetry(fn, {
     attempts: options.attempts ?? 6,
     shouldRetry: options.shouldRetry ?? isFreshRepoLagError,
-    waitMs: (_err, attempt) => baseDelayMs * backoffFactor ** attempt,
-    onRetry: (attempt) =>
-      log.debug("fresh-repo lag, retrying read", { attempt: attempt + 1 }),
+    waitMs: (_err, attempt) =>
+      Math.min(baseDelayMs * backoffFactor ** attempt, maxDelayMs),
+    onRetry: (attempt, waitMs) => {
+      log.debug("fresh-repo lag, retrying read", { attempt: attempt + 1 })
+      options.onRetry?.(attempt, waitMs)
+    },
   })
 }

@@ -832,6 +832,12 @@ A student-precreated `feedback` branch frozen at the wrong commit is reported
 as **BLOCKED**: an org admin must delete that branch before the PR can open;
 re-running never fixes it.
 
+A repo that exists but never received its `.classroom50.yaml` setup commit
+(the student's accept stopped partway) is reported as **Setup incomplete**.
+There is no baseline to open a PR against, so re-running this command doesn't
+help; ask the student to open the assignment link and choose **Re-run setup**,
+then run the command again.
+
 ### `assignment test`
 
 ```sh

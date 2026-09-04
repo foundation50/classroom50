@@ -72,10 +72,11 @@ export const FeedbackPrAction = ({
   }
 
   // Map the domain's failure to friendly copy. Structural verdicts
-  // (`no-baseline` / `repo-not-found` — no Feedback PR is possible for this
-  // repo) and the blocked `base-mismatch` (only an org admin can fix it) are
-  // terminal messages shown in the modal, not retryable toasts. Everything else
-  // is a transient failure the teacher can retry.
+  // (`no-baseline` — the accept never wrote the marker, so the student must
+  // re-run setup — / `repo-not-found`) and the blocked `base-mismatch` (only
+  // an org admin can fix it) are terminal messages shown in the modal, not
+  // retryable toasts. Everything else is a transient failure the teacher can
+  // retry.
   const repairReasonMessage = (
     result: Extract<
       ReturnType<typeof useRepairFeedbackPr>["data"],

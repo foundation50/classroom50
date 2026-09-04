@@ -102,22 +102,25 @@ type runParams struct {
 }
 
 // outcome is one repo's classified result, kept for the summary. The blocked /
-// failed split matters because their remedies differ: blocked needs an org
-// admin (never retryable), failed is transient (re-run fills the gap). Mirrors
-// the web bulk summary's buckets (web/src/domain/assignments/feedbackPr.ts).
+// incomplete / failed split matters because their remedies differ: blocked
+// needs an org admin (never retryable), incomplete needs the student to re-run
+// setup (never retryable from here), failed is transient (re-run fills the
+// gap). Mirrors the web bulk summary's buckets
+// (web/src/domain/assignments/feedbackPr.ts).
 type outcome int
 
 const (
-	outcomeCreated outcome = iota // opened a new Feedback PR
-	outcomeExisted                // already had one (any state) — idempotent no-op
-	outcomeBlocked                // `feedback` frozen at the wrong SHA — org admin must delete it
-	outcomeFailed                 // transient error — re-running retries
+	outcomeCreated    outcome = iota // opened a new Feedback PR
+	outcomeExisted                   // already had one (any state) — idempotent no-op
+	outcomeBlocked                   // `feedback` frozen at the wrong SHA — org admin must delete it
+	outcomeIncomplete                // accept never landed .classroom50.yaml — student must re-run setup
+	outcomeFailed                    // transient error — re-running retries
 )
 
 type repoResult struct {
 	repo    string
 	outcome outcome
-	reason  string // set for blocked/failed
+	reason  string // set for blocked/failed; incomplete has one fixed cause
 }
 
 // run enumerates the assignment's student repos from the classroom team and
@@ -239,6 +242,8 @@ func ensureOne(client githubapi.Client, org, repo, branch, mode string, tmpl *fe
 		return repoResult{repo: repo, outcome: outcomeExisted}
 	case isBaseMismatch(err):
 		return repoResult{repo: repo, outcome: outcomeBlocked, reason: err.Error()}
+	case isNoAcceptMarker(err):
+		return repoResult{repo: repo, outcome: outcomeIncomplete}
 	default:
 		return repoResult{repo: repo, outcome: outcomeFailed, reason: err.Error()}
 	}
@@ -314,16 +319,19 @@ func reportRepo(out io.Writer, res repoResult, quiet, verbose bool) {
 		}
 	case outcomeBlocked:
 		_, _ = fmt.Fprintf(out, "Blocked: %s (%s)\n", res.repo, res.reason)
+	case outcomeIncomplete:
+		_, _ = fmt.Fprintf(out, "Setup incomplete: %s (accept never wrote %s)\n", res.repo, metadataPath)
 	case outcomeFailed:
 		_, _ = fmt.Fprintf(out, "Failed: %s (%s)\n", res.repo, res.reason)
 	}
 }
 
-// summarize prints the aggregate counts plus the blocked/failed detail lists,
-// and returns a non-nil error when any repo is blocked or failed.
+// summarize prints the aggregate counts plus the blocked/incomplete/failed
+// detail lists, and returns a non-nil error when any repo is blocked,
+// incomplete, or failed.
 func summarize(out, errOut io.Writer, p runParams, results []repoResult) error {
 	var created, existed int
-	var blocked, failed []repoResult
+	var blocked, incomplete, failed []repoResult
 	for _, r := range results {
 		switch r.outcome {
 		case outcomeCreated:
@@ -332,14 +340,16 @@ func summarize(out, errOut io.Writer, p runParams, results []repoResult) error {
 			existed++
 		case outcomeBlocked:
 			blocked = append(blocked, r)
+		case outcomeIncomplete:
+			incomplete = append(incomplete, r)
 		case outcomeFailed:
 			failed = append(failed, r)
 		}
 	}
 
 	if !p.quiet {
-		_, _ = fmt.Fprintf(out, "%s: %d opened, %d already had one, %d blocked, %d failed (of %d repo(s))\n",
-			p.org, created, existed, len(blocked), len(failed), len(results))
+		_, _ = fmt.Fprintf(out, "%s: %d opened, %d already had one, %d blocked, %d setup incomplete, %d failed (of %d repo(s))\n",
+			p.org, created, existed, len(blocked), len(incomplete), len(failed), len(results))
 	}
 
 	if len(blocked) > 0 {
@@ -348,6 +358,13 @@ func summarize(out, errOut io.Writer, p runParams, results []repoResult) error {
 			_, _ = fmt.Fprintf(errOut, "  %s: %s\n", r.repo, r.reason)
 		}
 	}
+	if len(incomplete) > 0 {
+		_, _ = fmt.Fprintf(errOut, "Setup incomplete (%s was never written, so autograding won't run):\n", metadataPath)
+		for _, r := range incomplete {
+			_, _ = fmt.Fprintf(errOut, "  %s\n", r.repo)
+		}
+		_, _ = fmt.Fprintln(errOut, "Ask each student to open the assignment link and choose \"Re-run setup\", then re-run this command.")
+	}
 	if len(failed) > 0 {
 		_, _ = fmt.Fprintln(errOut, "Failed (transient; re-run to retry just these):")
 		for _, r := range failed {
@@ -355,13 +372,17 @@ func summarize(out, errOut io.Writer, p runParams, results []repoResult) error {
 		}
 	}
 
+	problems := len(failed) + len(blocked) + len(incomplete)
 	switch {
-	case len(failed) > 0 && len(blocked) > 0:
-		return fmt.Errorf("%d repo(s) failed and %d blocked; see stderr above", len(failed), len(blocked))
-	case len(failed) > 0:
+	case problems == 0:
+		return nil
+	case len(failed) > 0 && len(blocked) == 0 && len(incomplete) == 0:
 		return fmt.Errorf("%d of %d repo(s) failed", len(failed), len(results))
-	case len(blocked) > 0:
+	case len(blocked) > 0 && len(failed) == 0 && len(incomplete) == 0:
 		return fmt.Errorf("%d of %d repo(s) blocked by a mis-frozen `feedback` branch (an org admin must delete it)", len(blocked), len(results))
+	case len(incomplete) > 0 && len(failed) == 0 && len(blocked) == 0:
+		return fmt.Errorf("%d of %d repo(s) never finished setup (each student must re-run setup)", len(incomplete), len(results))
+	default:
+		return fmt.Errorf("%d repo(s) failed, %d blocked, %d setup incomplete; see stderr above", len(failed), len(blocked), len(incomplete))
 	}
-	return nil
 }

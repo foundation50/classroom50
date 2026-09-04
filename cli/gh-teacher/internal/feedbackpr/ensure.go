@@ -46,14 +46,18 @@ const metadataPath = contract.MetadataPath
 // caller routes it to the distinct "blocked" bucket rather than the retryable
 // "failed" one. errAlreadyExists marks the idempotent no-op (a Feedback PR
 // already exists in some state) so the summary can count it apart from a fresh
-// open.
+// open. errNoAcceptMarker marks a repo whose accept never landed the
+// .classroom50.yaml commit (issue #502): there is no baseline to freeze, and
+// re-running this command can't help; only the student's "Re-run setup" can.
 var (
-	errBaseMismatch  = errors.New("feedback base mismatch")
-	errAlreadyExists = errors.New("feedback PR already exists")
+	errBaseMismatch   = errors.New("feedback base mismatch")
+	errAlreadyExists  = errors.New("feedback PR already exists")
+	errNoAcceptMarker = errors.New("no accept marker")
 )
 
-func isBaseMismatch(err error) bool  { return errors.Is(err, errBaseMismatch) }
-func isAlreadyExists(err error) bool { return errors.Is(err, errAlreadyExists) }
+func isBaseMismatch(err error) bool   { return errors.Is(err, errBaseMismatch) }
+func isAlreadyExists(err error) bool  { return errors.Is(err, errAlreadyExists) }
+func isNoAcceptMarker(err error) bool { return errors.Is(err, errNoAcceptMarker) }
 
 // feedbackPRAttempts / isFeedbackPRRetryable bound retries of the whole ensure
 // against GitHub's post-create git-data lag. The ensure is idempotent (a PR in
@@ -202,7 +206,7 @@ func acceptCommitSHA(client githubapi.Client, org, repoName string) (string, err
 		return "", err
 	}
 	if len(commits) == 0 {
-		return "", fmt.Errorf("no commits touch %s in %s/%s", metadataPath, org, repoName)
+		return "", fmt.Errorf("%w: no commits touch %s in %s/%s", errNoAcceptMarker, metadataPath, org, repoName)
 	}
 	// Newest-first, so the last entry is the accept commit.
 	return commits[len(commits)-1].SHA, nil

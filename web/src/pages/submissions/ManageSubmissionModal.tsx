@@ -7,6 +7,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
+import useAssignmentRepoSetup from "@/hooks/useAssignmentRepoSetup"
 import {
   CollaboratorIdentity,
   normalizeUsername,
@@ -39,6 +40,7 @@ const SubmissionDetails = ({
   repoLoading,
   latestCommitHref,
   canPauseAutograding = false,
+  emptyRepoAssignment = false,
 }: {
   org: string
   repo: string
@@ -50,12 +52,19 @@ const SubmissionDetails = ({
   // Whether this assignment autogrades (owner + default-autograder). Gates the
   // read-only "Autograding" status row so it only shows where a shim exists.
   canPauseAutograding?: boolean
+  // An empty_repo assignment never writes the setup marker, so there is no
+  // incomplete-setup state to probe for.
+  emptyRepoAssignment?: boolean
 }) => {
   const { t } = useTranslation()
   const { data: collaborators, isLoading: collaboratorsLoading } =
     useGetRepoCollaborators(org, repo)
   const { data: autogradeState, isLoading: autogradeLoading } =
     useGetAutogradeState(org, repo, { enabled: canPauseAutograding })
+  // Distinguishes "accepted" (repo exists) from "set up" (marker landed).
+  const repoSetup = useAssignmentRepoSetup(org, repo, {
+    enabled: !emptyRepoAssignment,
+  })
 
   const ownerLogin = normalizeUsername(owner)
   const ownerAccess = useMemo(() => {
@@ -78,6 +87,16 @@ const SubmissionDetails = ({
     rows.push({
       label: t("submissions.manageModal.accepted"),
       value: formatDateTime(repoData.created_at),
+    })
+  }
+  if (repoSetup.state === "incomplete") {
+    rows.push({
+      label: t("submissions.manageModal.setup"),
+      value: (
+        <Badge tone="warning">
+          {t("submissions.manageModal.setupIncomplete")}
+        </Badge>
+      ),
     })
   }
   if (repoData?.pushed_at) {
@@ -222,6 +241,11 @@ const SubmissionDetails = ({
           </div>
         ) : null}
       </dl>
+      {repoSetup.state === "incomplete" ? (
+        <p className="mt-2 border-t border-base-content/10 pt-2 text-xs text-warning">
+          {t("submissions.manageModal.setupIncompleteHint")}
+        </p>
+      ) : null}
       {otherCollaborators.length > 0 ? (
         <div className="mt-2 border-t border-base-content/10 pt-2">
           <p className="mb-1 text-sm text-base-content/60">
@@ -392,6 +416,7 @@ export const ManageSubmissionModal = ({
           repoLoading={repoLoading}
           latestCommitHref={latestCommitHref}
           canPauseAutograding={action.canPauseAutograding}
+          emptyRepoAssignment={action.emptyRepoAssignment}
         />
       ) : null}
 

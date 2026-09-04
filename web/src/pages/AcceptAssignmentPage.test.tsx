@@ -22,12 +22,31 @@ let orgRole = "member"
 let enrollmentVerdict: "enrolled" | "not-enrolled" | "unresolved" = "enrolled"
 // Whether the fetched assignment is closed to new submissions, reset per test.
 let assignmentClosed = false
+// Whether the fetched assignment is an empty_repo one (never writes the setup
+// marker), reset per test.
+let assignmentEmptyRepo = false
 // The repo useGetRepo returns (null = the student hasn't accepted yet), reset
 // per test. Set to acceptedRepo to model an already-accepted student.
 let existingRepo: GitHubRepo | null = null
+// The marker probe's verdict for an existing repo, reset per test. "incomplete"
+// models the issue #502 shape: repo created, setup commit never landed. The
+// spy records the hook's arguments so a test can assert on its `enabled` gate.
+let repoSetupState: "unknown" | "complete" | "incomplete" = "complete"
+const repoSetupRefetch = vi.fn()
+const repoSetupSpy = vi.fn()
 
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (...args: unknown[]) => acceptAssignment(...args),
+}))
+vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
+  default: (...args: unknown[]) => {
+    repoSetupSpy(...args)
+    return {
+      state: repoSetupState,
+      isLoading: false,
+      refetch: repoSetupRefetch,
+    }
+  },
 }))
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: (org?: string, classroom?: string, secret?: string) => {
@@ -40,6 +59,7 @@ vi.mock("@/hooks/usePagesAssignments", () => ({
           mode: "individual",
           autograder: "default",
           ...(assignmentClosed ? { closed: true } : {}),
+          ...(assignmentEmptyRepo ? { empty_repo: true } : {}),
         },
       ],
       isLoading: false,
@@ -190,7 +210,11 @@ beforeEach(() => {
   orgRole = "member"
   enrollmentVerdict = "enrolled"
   assignmentClosed = false
+  assignmentEmptyRepo = false
   existingRepo = null
+  repoSetupState = "complete"
+  repoSetupRefetch.mockReset()
+  repoSetupSpy.mockReset()
   __resetGitHubHealthForTest()
 })
 
@@ -592,5 +616,158 @@ describe("AcceptAssignmentPage closed gate", () => {
     expect(
       screen.queryByRole("button", { name: "accept.acceptButton" }),
     ).not.toBeNull()
+  })
+})
+
+// Issue #502: an existing repo isn't proof the accept finished. When the
+// marker probe says the setup commit never landed, the page must lead with
+// "Re-run setup" instead of a success-looking "Open repository".
+describe("AcceptAssignmentPage incomplete setup", () => {
+  const renderWith = () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    renderPage(client)
+    return client
+  }
+
+  it("shows the incomplete-setup warning with a re-run button and demotes Open repository", () => {
+    existingRepo = acceptedRepo
+    repoSetupState = "incomplete"
+    renderWith()
+
+    expect(screen.queryByText("accept.setupIncomplete.title")).not.toBeNull()
+    expect(screen.queryByText("accept.setupIncomplete.body")).not.toBeNull()
+    // The re-run button is exposed directly, not behind the collapsed toggle.
+    expect(
+      screen.queryByRole("button", { name: "accept.repair.rerun" }),
+    ).not.toBeNull()
+    expect(screen.queryByText("accept.repair.havingTrouble")).toBeNull()
+    // Open repository is still reachable but no longer the primary action.
+    const open = screen.getByText("accept.openRepository").closest("a")
+    expect(open?.className).toContain("btn-outline")
+  })
+
+  it("keeps the healthy already-accepted view when the marker is present", () => {
+    existingRepo = acceptedRepo
+    repoSetupState = "complete"
+    renderWith()
+
+    expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
+    expect(screen.queryByText("accept.repair.havingTrouble")).not.toBeNull()
+    const open = screen.getByText("accept.openRepository").closest("a")
+    expect(open?.className).not.toContain("btn-outline")
+  })
+
+  it("fails open on an unknown probe verdict (a transient read error)", () => {
+    existingRepo = acceptedRepo
+    repoSetupState = "unknown"
+    renderWith()
+    expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
+  })
+
+  it("enables the probe only for an existing repo on a non-empty_repo assignment", () => {
+    existingRepo = acceptedRepo
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      acceptedRepo.name,
+      expect.objectContaining({ enabled: true }),
+    )
+  })
+
+  it("does not probe, or warn, for an empty_repo assignment", () => {
+    existingRepo = acceptedRepo
+    assignmentEmptyRepo = true
+    // Even a stale "incomplete" from the mock must not surface: the page
+    // decides from the assignment, not from the probe alone.
+    repoSetupState = "incomplete"
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      acceptedRepo.name,
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
+    expect(screen.queryByText("accept.repair.havingTrouble")).not.toBeNull()
+  })
+
+  it("does not probe before the student has a repo", () => {
+    existingRepo = null
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      expect.any(String),
+      expect.objectContaining({ enabled: false }),
+    )
+  })
+
+  it("re-runs the accept from the warning and re-probes the marker on success", async () => {
+    existingRepo = acceptedRepo
+    repoSetupState = "incomplete"
+    acceptAssignment.mockResolvedValue({
+      status: "already-accepted",
+      repo: acceptedRepo,
+      cloneCommand: "gh repo clone acme/repo",
+    })
+    renderWith()
+
+    fireEvent.click(screen.getByRole("button", { name: "accept.repair.rerun" }))
+
+    await waitFor(() => expect(acceptAssignment).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(repoSetupRefetch).toHaveBeenCalledTimes(1))
+    // The heal succeeded this session, so the warning is gone even before the
+    // probe's refetch lands.
+    expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
+  })
+})
+
+// The accept is a chain of writes with no rollback: hold the tab while it runs
+// and say why, then release it.
+describe("AcceptAssignmentPage leave-page guard", () => {
+  const renderWith = () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    renderPage(client)
+  }
+
+  it("blocks beforeunload and shows the keep-tab-open note only while the accept is pending", async () => {
+    let finish!: (value: unknown) => void
+    acceptAssignment.mockImplementation(
+      () => new Promise((resolve) => (finish = resolve)),
+    )
+    renderWith()
+
+    const fire = () => {
+      const event = new Event("beforeunload", { cancelable: true })
+      window.dispatchEvent(event)
+      return event.defaultPrevented
+    }
+
+    expect(fire()).toBe(false)
+    expect(screen.queryByText("accept.keepTabOpen")).toBeNull()
+
+    fireEvent.click(screen.getByRole("button", { name: "accept.acceptButton" }))
+    await waitFor(() =>
+      expect(screen.queryByText("accept.keepTabOpen")).not.toBeNull(),
+    )
+    expect(fire()).toBe(true)
+
+    finish({
+      status: "created",
+      repo: acceptedRepo,
+      cloneCommand: "gh repo clone acme/repo",
+    })
+    await waitFor(() =>
+      expect(screen.queryByText("accept.keepTabOpen")).toBeNull(),
+    )
+    expect(fire()).toBe(false)
   })
 })
