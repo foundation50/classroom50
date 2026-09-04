@@ -581,7 +581,8 @@ const RosterBulkActionsBar = ({
 
       <ConfirmModal
         open={confirmingUnenroll && !disabled}
-        dangerous
+        tone="error"
+        warning={t("students.bulk.confirmUnenrollWarning")}
         needsConfirm={false}
         title={t("students.bulk.confirmUnenrollTitle", {
           count: unenrollableSelected.length,
@@ -599,7 +600,7 @@ const RosterBulkActionsBar = ({
 
       <ConfirmModal
         open={confirmingInvite && !disabled}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         title={t("students.bulk.confirmInviteTitle", {
           count: invitableSelected,
@@ -617,7 +618,7 @@ const RosterBulkActionsBar = ({
 
       <ConfirmModal
         open={confirmingRemoveRows && !disabled}
-        dangerous
+        tone="warning"
         needsConfirm={false}
         title={t("students.bulk.confirmRemoveRowsTitle", {
           count: unlinkedSelected.length,
@@ -635,7 +636,7 @@ const RosterBulkActionsBar = ({
 
       <ConfirmModal
         open={confirmingCancel && !disabled}
-        dangerous
+        tone="error"
         needsConfirm={false}
         title={t("students.bulk.confirmCancelTitle", {
           count: cancellableSelected.length,

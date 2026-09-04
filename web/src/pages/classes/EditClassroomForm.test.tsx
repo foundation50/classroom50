@@ -33,7 +33,7 @@ const ORG = "acme"
 const SLUG = "cs101"
 
 // Walks the ConfirmModal from trigger to confirmed: open, acknowledge the
-// dangerous prompt, type the required "<org>/<slug>" phrase, confirm.
+// warning step, type the required "<org>/<slug>" phrase, confirm.
 async function confirmDelete() {
   const user = userEvent.setup()
   await user.click(screen.getByLabelText("classes.deleteClassroomAria"))

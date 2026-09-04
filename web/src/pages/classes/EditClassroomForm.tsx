@@ -94,7 +94,8 @@ export const DeleteClassroomButton = ({
         confirmText={`${org}/${classroom}`}
         confirmLabel={t("classes.deleteClassroomConfirm")}
         cancelLabel={t("classes.deleteClassroomCancel")}
-        dangerous
+        tone="error"
+        warning={t("classes.deleteClassroomWarning")}
         onConfirm={async () => {
           const result = await deleteClassroomMutation.mutateAsync({
             org,
@@ -176,7 +177,7 @@ const ArchiveClassroomButton = ({
         cancelLabel={t("common.cancel")}
         confirmText=""
         needsConfirm={false}
-        dangerous={false}
+        tone="warning"
         onConfirm={async () => {
           try {
             await archiveMutation.mutateAsync(archived)
@@ -255,7 +256,7 @@ const CleanupInviteDataButton = ({
         cancelLabel={t("common.cancel")}
         confirmText=""
         needsConfirm={false}
-        dangerous={false}
+        tone="warning"
         onConfirm={async () => {
           try {
             const result = await purgeMutation.mutateAsync()

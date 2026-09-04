@@ -179,7 +179,8 @@ const TeardownSection = ({
 
       <ConfirmModal
         open={open}
-        dangerous
+        tone="error"
+        warning={t("orgSettings.teardown.confirmWarning")}
         needsConfirm
         confirmText={t("orgSettings.teardown.confirmText", { org })}
         confirmLabel={t("orgSettings.teardown.confirmLabel")}

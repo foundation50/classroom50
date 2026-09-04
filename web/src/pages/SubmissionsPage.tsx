@@ -1871,7 +1871,7 @@ const SubmissionsPageContent = () => {
         confirmText="regrade"
         confirmLabel={t("submissions.regradeAll.label")}
         cancelLabel={t("common.cancel")}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           regradeAll.regrade()
@@ -1902,7 +1902,7 @@ const SubmissionsPageContent = () => {
             : t("submissions.lock.lockLabel")
         }
         cancelLabel={t("common.cancel")}
-        dangerous={!isLockedAssignment}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           await setLock.mutateAsync({
@@ -1934,7 +1934,8 @@ const SubmissionsPageContent = () => {
         confirmText={assignment}
         confirmLabel={t("assignments.table.deleteConfirm")}
         cancelLabel={t("assignments.table.deleteCancel")}
-        dangerous
+        tone="error"
+        warning={t("assignments.table.deleteWarning")}
         onConfirm={async () => {
           await deleteAssignmentMutation.mutateAsync({
             org,

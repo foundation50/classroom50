@@ -414,6 +414,7 @@ export function RosterEditMode({
           count: stagedCount,
         })}
         confirmLabel={t("students.editRoster.discardConfirm")}
+        tone="error"
         needsConfirm={false}
         onConfirm={async () => {
           onCancel()

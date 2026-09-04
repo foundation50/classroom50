@@ -656,7 +656,7 @@ const OrgPolicyAuditPane = ({
         title={t("orgSettings.audit.renameModalTitle")}
         description={t("orgSettings.audit.renameModalBody")}
         confirmLabel={t("orgSettings.audit.renameToMain")}
-        dangerous
+        tone="error"
         needsConfirm={false}
         onConfirm={() => runFix(() => renameMutation.mutateAsync())}
         onClose={() => setConfirmRename(false)}

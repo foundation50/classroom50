@@ -349,7 +349,7 @@ const BulkActionsBar = ({
 
       <ConfirmModal
         open={confirmingAdd}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         title={t("orgMembers.bulk.addModalTitle", {
           count: selectedRows.length,

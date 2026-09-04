@@ -330,7 +330,7 @@ function ClassroomMenu({
         confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
         cancelLabel={t("common.cancel")}
         needsConfirm={false}
-        dangerous={false}
+        tone="warning"
         onConfirm={async () => {
           try {
             await archiveMutation.mutateAsync(archived, {
@@ -378,7 +378,8 @@ function ClassroomMenu({
         confirmText={`${org}/${slug}`}
         confirmLabel={t("classes.deleteClassroomConfirm")}
         cancelLabel={t("classes.deleteClassroomCancel")}
-        dangerous
+        tone="error"
+        warning={t("classes.deleteClassroomWarning")}
         onConfirm={async () => {
           try {
             await deleteMutation.mutateAsync(

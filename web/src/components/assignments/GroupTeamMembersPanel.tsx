@@ -320,6 +320,7 @@ export function GroupTeamMembersPanel({
         })}
         confirmText={groupName}
         confirmLabel={t("components.groupTeamMembers.leaveConfirm")}
+        tone="error"
         onConfirm={handleLeave}
         onClose={() => setConfirmingLeave(false)}
       />

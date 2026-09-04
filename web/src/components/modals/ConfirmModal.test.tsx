@@ -25,6 +25,7 @@ const renderConfirm = (
       open
       title="title"
       confirmText="confirm"
+      tone="error"
       onConfirm={onConfirm}
       onClose={onClose}
       {...props}
@@ -32,6 +33,28 @@ const renderConfirm = (
   )
   return { view, onConfirm, onClose }
 }
+
+// The old fixed "hard or impossible to undo" callout is gone: the boxed slot
+// renders only what the caller supplies, so a reversible action can't inherit
+// an irreversibility claim by default.
+describe("ConfirmModal — warning slot", () => {
+  const callout = (root: HTMLElement) =>
+    root.querySelector(".rounded-box.border")
+
+  it("renders no callout without a warning", () => {
+    const { view } = renderConfirm({ needsConfirm: false })
+    expect(callout(view.baseElement)).toBeNull()
+  })
+
+  it("renders the caller's warning on the acknowledge step and drops it on the typed step", () => {
+    const { view } = renderConfirm({ warning: "own copy" })
+    expect(callout(view.baseElement)?.textContent).toBe("own copy")
+
+    fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
+
+    expect(callout(view.baseElement)).toBeNull()
+  })
+})
 
 describe("ConfirmModal — children and confirmDisabled", () => {
   it("renders children before acknowledging and removes them on the typed step", () => {
@@ -67,6 +90,7 @@ describe("ConfirmModal — children and confirmDisabled", () => {
       open: true,
       title: "title",
       confirmText: "confirm",
+      tone: "error" as const,
       onConfirm,
       onClose,
     }
@@ -129,6 +153,7 @@ describe("ConfirmModal — rejecting onConfirm", () => {
         needsConfirm={false}
         title="title"
         confirmText="confirm"
+        tone="error"
         onConfirm={onConfirm}
         onClose={onClose}
       />,
@@ -160,6 +185,7 @@ describe("ConfirmModal — rejecting onConfirm", () => {
         needsConfirm={false}
         title="title"
         confirmText="confirm"
+        tone="error"
         onConfirm={onConfirm}
         onClose={vi.fn()}
       />,
