@@ -17,6 +17,16 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.45.0](https://github.com/foundation50/classroom50/compare/web-v1.44.0...web-v1.45.0) (2026-09-04)
+
+
+### Bug Fixes
+
+* surface and repair accept runs that stopped before the setup commit ([#885](https://github.com/foundation50/classroom50/issues/885)) ([cad2e01](https://github.com/foundation50/classroom50/commit/cad2e01738717fc666d368e47a67cade59a1ac59))
+* **web:** replace the generic undo warning in confirm dialogs with tailored copy ([#886](https://github.com/foundation50/classroom50/issues/886)) ([3905257](https://github.com/foundation50/classroom50/commit/39052570a75953ec472ee2b455ca72570338d593))
+* **web:** show roster names and fit long repo names in the submissions modal ([#880](https://github.com/foundation50/classroom50/issues/880)) ([9f23e2e](https://github.com/foundation50/classroom50/commit/9f23e2e7d413bc81e2e356a3bdc530d0ee756c63))
+* **web:** warn when a release date leaves a private template readable ([#887](https://github.com/foundation50/classroom50/issues/887)) ([669bdd7](https://github.com/foundation50/classroom50/commit/669bdd7fef4ac87231a998c6a4b0a69aaeba671d))
+
 ## [1.44.0](https://github.com/foundation50/classroom50/compare/web-v1.43.0...web-v1.44.0) (2026-09-03)
 
 
