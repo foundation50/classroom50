@@ -246,6 +246,7 @@ const CreateAssignmentForm = ({
                 />
                 <ScheduleSection
                   form={form}
+                  org={org}
                   onReset={onReset("schedule")}
                   dueDateEnabled={dueDateEnabled}
                   setDueDateEnabled={setDueDateEnabled}
