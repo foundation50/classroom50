@@ -22,23 +22,31 @@ let orgRole = "member"
 let enrollmentVerdict: "enrolled" | "not-enrolled" | "unresolved" = "enrolled"
 // Whether the fetched assignment is closed to new submissions, reset per test.
 let assignmentClosed = false
+// Whether the fetched assignment is an empty_repo one (never writes the setup
+// marker), reset per test.
+let assignmentEmptyRepo = false
 // The repo useGetRepo returns (null = the student hasn't accepted yet), reset
 // per test. Set to acceptedRepo to model an already-accepted student.
 let existingRepo: GitHubRepo | null = null
 // The marker probe's verdict for an existing repo, reset per test. "incomplete"
-// models the issue #502 shape: repo created, setup commit never landed.
+// models the issue #502 shape: repo created, setup commit never landed. The
+// spy records the hook's arguments so a test can assert on its `enabled` gate.
 let repoSetupState: "unknown" | "complete" | "incomplete" = "complete"
 const repoSetupRefetch = vi.fn()
+const repoSetupSpy = vi.fn()
 
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (...args: unknown[]) => acceptAssignment(...args),
 }))
 vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
-  default: () => ({
-    state: repoSetupState,
-    isLoading: false,
-    refetch: repoSetupRefetch,
-  }),
+  default: (...args: unknown[]) => {
+    repoSetupSpy(...args)
+    return {
+      state: repoSetupState,
+      isLoading: false,
+      refetch: repoSetupRefetch,
+    }
+  },
 }))
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: (org?: string, classroom?: string, secret?: string) => {
@@ -51,6 +59,7 @@ vi.mock("@/hooks/usePagesAssignments", () => ({
           mode: "individual",
           autograder: "default",
           ...(assignmentClosed ? { closed: true } : {}),
+          ...(assignmentEmptyRepo ? { empty_repo: true } : {}),
         },
       ],
       isLoading: false,
@@ -201,9 +210,11 @@ beforeEach(() => {
   orgRole = "member"
   enrollmentVerdict = "enrolled"
   assignmentClosed = false
+  assignmentEmptyRepo = false
   existingRepo = null
   repoSetupState = "complete"
   repoSetupRefetch.mockReset()
+  repoSetupSpy.mockReset()
   __resetGitHubHealthForTest()
 })
 
@@ -656,6 +667,42 @@ describe("AcceptAssignmentPage incomplete setup", () => {
     repoSetupState = "unknown"
     renderWith()
     expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
+  })
+
+  it("enables the probe only for an existing repo on a non-empty_repo assignment", () => {
+    existingRepo = acceptedRepo
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      acceptedRepo.name,
+      expect.objectContaining({ enabled: true }),
+    )
+  })
+
+  it("does not probe, or warn, for an empty_repo assignment", () => {
+    existingRepo = acceptedRepo
+    assignmentEmptyRepo = true
+    // Even a stale "incomplete" from the mock must not surface: the page
+    // decides from the assignment, not from the probe alone.
+    repoSetupState = "incomplete"
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      acceptedRepo.name,
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(screen.queryByText("accept.setupIncomplete.title")).toBeNull()
+    expect(screen.queryByText("accept.repair.havingTrouble")).not.toBeNull()
+  })
+
+  it("does not probe before the student has a repo", () => {
+    existingRepo = null
+    renderWith()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      expect.any(String),
+      expect.objectContaining({ enabled: false }),
+    )
   })
 
   it("re-runs the accept from the warning and re-probes the marker on success", async () => {

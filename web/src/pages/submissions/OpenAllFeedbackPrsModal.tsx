@@ -152,6 +152,13 @@ export function OpenAllFeedbackPrsModal({
                 count: summary.existed,
               })}
             </li>
+            {summary.incomplete.length > 0 && (
+              <li className="text-warning">
+                {t("submissions.openAllPrs.summaryIncomplete", {
+                  count: summary.incomplete.length,
+                })}
+              </li>
+            )}
             {summary.unsupported.length > 0 && (
               <li>
                 {t("submissions.openAllPrs.summaryUnsupported", {
@@ -174,15 +181,11 @@ export function OpenAllFeedbackPrsModal({
               </li>
             )}
           </ul>
-          {/* Only the no-marker repos: a `repo-not-found` is a listing race,
-              not a student action item, and can't be handed to a student. */}
-          {summary.unsupported.some((r) => r.reason === "no-baseline") && (
+          {summary.incomplete.length > 0 && (
             <RepoListAlert
-              repos={summary.unsupported.filter(
-                (r) => r.reason === "no-baseline",
-              )}
-              title={t("submissions.openAllPrs.unsupportedTitle")}
-              hint={t("submissions.openAllPrs.unsupportedHint")}
+              repos={summary.incomplete}
+              title={t("submissions.openAllPrs.incompleteTitle")}
+              hint={t("submissions.openAllPrs.incompleteHint")}
             />
           )}
           {summary.blocked.length > 0 && (

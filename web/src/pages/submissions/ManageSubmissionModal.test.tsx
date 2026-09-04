@@ -40,7 +40,8 @@ vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => autogradeStateData(),
 }))
 // The setup-marker probe, configurable so a test can drive the issue #502
-// "Incomplete" badge.
+// "Incomplete" badge. The spy records the hook's arguments for the
+// empty_repo gate assertion.
 const repoSetupData = vi.fn(
   () =>
     ({ state: "complete", isLoading: false }) as {
@@ -48,8 +49,12 @@ const repoSetupData = vi.fn(
       isLoading: boolean
     },
 )
+const repoSetupSpy = vi.fn()
 vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
-  default: () => repoSetupData(),
+  default: (...args: unknown[]) => {
+    repoSetupSpy(...args)
+    return repoSetupData()
+  },
 }))
 vi.mock("@/hooks/mutations/useSetAutogradeState", () => ({
   default: () => ({ mutateAsync: vi.fn(), isPending: false }),
@@ -101,6 +106,7 @@ afterEach(() => {
     isError: false,
   })
   repoSetupData.mockReturnValue({ state: "complete", isLoading: false })
+  repoSetupSpy.mockReset()
 })
 
 describe("ManageSubmissionModal", () => {
@@ -204,6 +210,37 @@ describe("ManageSubmissionModal", () => {
     expect(
       screen.queryByText("submissions.manageModal.setupIncompleteHint"),
     ).toBeNull()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+      expect.objectContaining({ enabled: true }),
+    )
+  })
+
+  it("does not probe the setup marker for an empty_repo assignment", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{
+          ...individualAction,
+          skipsGrading: true,
+          emptyRepoAssignment: true,
+        }}
+      />,
+    )
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+      expect.objectContaining({ enabled: false }),
+    )
   })
 
   it("shows the autograding status when the assignment autogrades", () => {

@@ -1061,10 +1061,14 @@ const AcceptAssignmentPage = () => {
   // An existing repo isn't proof the accept finished (issue #502): the flow
   // can die between repo creation and the setup commit, leaving a repo that
   // clones fine but never autogrades. Probe the marker so the page can lead
-  // with "Re-run setup" instead of a success-looking "Open repository". An
-  // empty_repo assignment never writes the marker, so there's nothing to probe.
+  // with "Re-run setup" instead of a success-looking "Open repository". Wait
+  // for the assignment to resolve first: an empty_repo assignment never writes
+  // the marker, and the repo read can settle before the manifest does.
   const repoSetup = useAssignmentRepoSetup(org, repoLookupName, {
-    enabled: repoExistsAlready && assignmentData?.empty_repo !== true,
+    enabled:
+      repoExistsAlready &&
+      assignmentData !== undefined &&
+      assignmentData.empty_repo !== true,
   })
 
   const [steps, setSteps] = useState<StepState>(initialStepState)
@@ -1124,9 +1128,11 @@ const AcceptAssignmentPage = () => {
 
   // The repo exists but the accept never finished. Cleared once a re-run
   // succeeds in this session (the mutation's data is the authoritative signal
-  // until the marker probe refetches).
+  // until the marker probe refetches). Never raised for an empty_repo
+  // assignment, whose repos legitimately carry no marker.
   const setupIncomplete =
     repoExistsAlready &&
+    assignmentData?.empty_repo !== true &&
     repoSetup.state === "incomplete" &&
     !acceptMutation.isSuccess
 

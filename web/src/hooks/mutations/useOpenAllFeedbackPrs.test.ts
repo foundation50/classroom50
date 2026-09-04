@@ -29,6 +29,7 @@ const summary = (
   total: 1,
   created: 1,
   existed: 0,
+  incomplete: [],
   unsupported: [],
   blocked: [],
   failed: [],

@@ -120,7 +120,7 @@ const (
 type repoResult struct {
 	repo    string
 	outcome outcome
-	reason  string // set for blocked/incomplete/failed
+	reason  string // set for blocked/failed; incomplete has one fixed cause
 }
 
 // run enumerates the assignment's student repos from the classroom team and
@@ -243,7 +243,7 @@ func ensureOne(client githubapi.Client, org, repo, branch, mode string, tmpl *fe
 	case isBaseMismatch(err):
 		return repoResult{repo: repo, outcome: outcomeBlocked, reason: err.Error()}
 	case isNoAcceptMarker(err):
-		return repoResult{repo: repo, outcome: outcomeIncomplete, reason: err.Error()}
+		return repoResult{repo: repo, outcome: outcomeIncomplete}
 	default:
 		return repoResult{repo: repo, outcome: outcomeFailed, reason: err.Error()}
 	}
@@ -359,10 +359,11 @@ func summarize(out, errOut io.Writer, p runParams, results []repoResult) error {
 		}
 	}
 	if len(incomplete) > 0 {
-		_, _ = fmt.Fprintf(errOut, "Setup incomplete (the accept stopped before %s was written, so autograding won't run; ask each student to open the assignment link and choose \"Re-run setup\", then re-run):\n", metadataPath)
+		_, _ = fmt.Fprintf(errOut, "Setup incomplete (%s was never written, so autograding won't run):\n", metadataPath)
 		for _, r := range incomplete {
 			_, _ = fmt.Fprintf(errOut, "  %s\n", r.repo)
 		}
+		_, _ = fmt.Fprintln(errOut, "Ask each student to open the assignment link and choose \"Re-run setup\", then re-run this command.")
 	}
 	if len(failed) > 0 {
 		_, _ = fmt.Fprintln(errOut, "Failed (transient; re-run to retry just these):")

@@ -95,9 +95,10 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   // An init_shim accept creates the repo with auto_init (GitHub needs an
   // initial commit to write against), which seeds a README the assignment
   // contract says must not exist — remove it in the same accept commit so the
-  // repo's initial shape lands atomically. The base tree is inspected first:
-  // the Trees API rejects deleting a path absent from base_tree (possible on
-  // a heal re-run), and an absent README just means nothing to remove.
+  // repo's initial shape lands atomically. Only while the branch is still at
+  // that seed (a root commit): on a heal re-run after the student has pushed,
+  // README.md is theirs to keep (issue #502). The base tree is inspected first
+  // because the Trees API rejects deleting a path absent from base_tree.
   removeSeededReadme?: boolean
   // Rebuild the autograde shim for the branch that actually materialized. The
   // default shim's push-trigger branch must match the generated repo's real
@@ -151,7 +152,8 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
         : autogradeYaml
 
       let deletePaths: string[] = []
-      if (removeSeededReadme) {
+      const atSeedCommit = (currentCommit.parents?.length ?? 0) === 0
+      if (removeSeededReadme && atSeedCommit) {
         const baseTree = await getRepoTreeRecursive({
           client,
           owner,

@@ -300,6 +300,76 @@ func TestRun_IncompleteSetupIsNotFailed(t *testing.T) {
 	}
 }
 
+// TestRun_MarkerReadErrorStaysFailed pins the boundary of the incomplete
+// bucket: only an EMPTY marker history means the accept never finished. A
+// marker read that fails outright (5xx) is transient and must stay in the
+// retryable failed bucket, never send the teacher chasing the student.
+func TestRun_MarkerReadErrorStaysFailed(t *testing.T) {
+	mux := classroomMux(t, assignmentsJSON(t, helloEntry), []string{"alice"}, nil)
+	base := "/repos/o/cs-hello-alice"
+	mux.HandleFunc(base, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
+	})
+	mux.HandleFunc(base+"/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	})
+	mux.HandleFunc(base+"/commits", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"message":"boom"}`)
+	})
+
+	out, errOut, err := runCmd(t, mux, params(nil))
+	if err == nil {
+		t.Fatal("want a non-nil error when a repo fails, got nil")
+	}
+	if !strings.Contains(out, "0 blocked, 0 setup incomplete, 1 failed (of 1 repo(s))") {
+		t.Errorf("summary not as expected:\n%s", out)
+	}
+	if strings.Contains(errOut, "Setup incomplete") || strings.Contains(errOut, "Re-run setup") {
+		t.Errorf("a failed marker read must not be diagnosed as incomplete setup:\n%s", errOut)
+	}
+}
+
+// TestRun_MixedOutcomesCombinedError pins the combined exit message when
+// more than one problem bucket is non-empty, and that each bucket's stderr
+// section still renders alongside the others.
+func TestRun_MixedOutcomesCombinedError(t *testing.T) {
+	mux := classroomMux(t, assignmentsJSON(t, helloEntry), []string{"alice", "bob"}, nil)
+	// alice: exists, no marker -> setup incomplete.
+	alice := "/repos/o/cs-hello-alice"
+	mux.HandleFunc(alice, func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
+	})
+	mux.HandleFunc(alice+"/pulls", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{})
+	})
+	mux.HandleFunc(alice+"/commits", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]string{})
+	})
+	// bob: the repo probe 500s -> failed.
+	mux.HandleFunc("/repos/o/cs-hello-bob", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = io.WriteString(w, `{"message":"boom"}`)
+	})
+
+	out, errOut, err := runCmd(t, mux, params(nil))
+	if err == nil {
+		t.Fatal("want a non-nil error, got nil")
+	}
+	if !strings.Contains(err.Error(), "1 repo(s) failed, 0 blocked, 1 setup incomplete") {
+		t.Errorf("combined error not as expected: %v", err)
+	}
+	if !strings.Contains(out, "0 blocked, 1 setup incomplete, 1 failed (of 2 repo(s))") {
+		t.Errorf("summary not as expected:\n%s", out)
+	}
+	if !strings.Contains(errOut, "Setup incomplete") || !strings.Contains(errOut, "cs-hello-alice") {
+		t.Errorf("incomplete section missing:\n%s", errOut)
+	}
+	if !strings.Contains(errOut, "Failed (transient") || !strings.Contains(errOut, "cs-hello-bob") {
+		t.Errorf("failed section missing:\n%s", errOut)
+	}
+}
+
 // TestRun_NonMainDefaultBranch pins that the head branch is resolved from the
 // repo's settled default branch, not a hardcoded `main`: a repo whose default
 // is `master` is probed, opened, and counted against the org:master head. The

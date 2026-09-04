@@ -96,4 +96,30 @@ describe("useAssignmentRepoSetup", () => {
     expect(disabled.current.isLoading).toBe(false)
     expect(unnamed.current.isLoading).toBe(false)
   })
+
+  it("does not fetch on refetch() while disabled", async () => {
+    const { result } = renderHook(
+      () =>
+        useAssignmentRepoSetup("acme", "cs101-hw-alice", { enabled: false }),
+      { wrapper: wrapper() },
+    )
+    await result.current.refetch()
+    expect(request).not.toHaveBeenCalled()
+    expect(result.current.state).toBe("unknown")
+  })
+
+  // The page learns an assignment is empty_repo only once its manifest loads,
+  // which can be after the repo read. A 404 cached in that window must not
+  // survive as "incomplete" once the probe is switched off.
+  it("reports unknown when disabled after a cached incomplete verdict", async () => {
+    rejectWith(404)
+    const { result, rerender } = renderHook(
+      ({ enabled }: { enabled: boolean }) =>
+        useAssignmentRepoSetup("acme", "cs101-hw-alice", { enabled }),
+      { wrapper: wrapper(), initialProps: { enabled: true } },
+    )
+    await waitFor(() => expect(result.current.state).toBe("incomplete"))
+    rerender({ enabled: false })
+    expect(result.current.state).toBe("unknown")
+  })
 })

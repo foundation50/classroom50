@@ -45,6 +45,8 @@ export type GitHubCommitRef = {
   tree: {
     sha: string
   }
+  // Empty for a root commit (e.g. GitHub's auto_init seed).
+  parents: { sha: string }[]
 }
 
 export type GitHubCreateTree = {

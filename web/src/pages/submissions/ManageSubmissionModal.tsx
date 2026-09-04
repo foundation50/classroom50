@@ -61,9 +61,7 @@ const SubmissionDetails = ({
     useGetRepoCollaborators(org, repo)
   const { data: autogradeState, isLoading: autogradeLoading } =
     useGetAutogradeState(org, repo, { enabled: canPauseAutograding })
-  // "Accepted" above is only repo existence. This probe tells the teacher when
-  // the accept died before the setup commit (issue #502), the one case where an
-  // accepted-looking repo never autogrades and has no feedback PR baseline.
+  // Distinguishes "accepted" (repo exists) from "set up" (marker landed).
   const repoSetup = useAssignmentRepoSetup(org, repo, {
     enabled: !emptyRepoAssignment,
   })
