@@ -17,6 +17,20 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.45.0](https://github.com/foundation50/classroom50/compare/cli-v1.44.0...cli-v1.45.0) (2026-09-04)
+
+
+### Features
+
+* **cli:** accept the tests.json envelope in --tests and add assignment test set ([#882](https://github.com/foundation50/classroom50/issues/882)) ([6d12e07](https://github.com/foundation50/classroom50/commit/6d12e07286cb0daee980063c3197d3aca09fb003))
+
+
+### Bug Fixes
+
+* **cli:** document and check the tools self-hosted autograde runners need ([#883](https://github.com/foundation50/classroom50/issues/883)) ([947cdb6](https://github.com/foundation50/classroom50/commit/947cdb63dbfaffb0396cbeb92ae1906022891d38))
+* surface and repair accept runs that stopped before the setup commit ([#885](https://github.com/foundation50/classroom50/issues/885)) ([cad2e01](https://github.com/foundation50/classroom50/commit/cad2e01738717fc666d368e47a67cade59a1ac59))
+* **web:** warn when a release date leaves a private template readable ([#887](https://github.com/foundation50/classroom50/issues/887)) ([669bdd7](https://github.com/foundation50/classroom50/commit/669bdd7fef4ac87231a998c6a4b0a69aaeba671d))
+
 ## [1.44.0](https://github.com/foundation50/classroom50/compare/cli-v1.43.0...cli-v1.44.0) (2026-09-03)
 
 
