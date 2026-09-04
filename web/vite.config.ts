@@ -132,20 +132,23 @@ function contrastAuditPlugin(): Plugin {
 // vpatGuard.test.ts is the enforcement. Same dev + build wiring as the contrast
 // audit above.
 function vpatReportPlugin(): Plugin {
+  // The ACR names the release it describes (a VPAT "Name of Product/Version"
+  // requirement); the pure renderer can't read the build's version itself.
+  const options = { version: release.version }
   const assets: { fileName: string; source: string; type: string }[] = [
     {
       fileName: "vpat-report.json",
-      source: renderVpatJson(),
+      source: renderVpatJson(undefined, options),
       type: "application/json",
     },
     {
       fileName: "VPAT.md",
-      source: renderVpatReport(),
+      source: renderVpatReport(undefined, options),
       type: "text/markdown; charset=utf-8",
     },
     {
       fileName: "ACCESSIBILITY-REPORT.md",
-      source: renderCombinedReport(),
+      source: renderCombinedReport(undefined, options),
       type: "text/markdown; charset=utf-8",
     },
   ]

@@ -141,6 +141,11 @@ function VpatConformanceTable({
                           {c.id}
                         </span>{" "}
                         {c.name}
+                        {c.since && (
+                          <span className="ms-1 text-xs text-base-content/60">
+                            ({t(`accessibility.vpat.since.${c.since}`)})
+                          </span>
+                        )}
                       </td>
                       <td className="align-top font-mono text-xs">{c.level}</td>
                       <td className="align-top">

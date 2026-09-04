@@ -121,7 +121,14 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
 
   return (
     <section className="report-doc">
-      <h1>{t("accessibility.print.reportTitle", { product: vpat.product })}</h1>
+      <h1>{t("accessibility.print.reportTitle", { vendor: vpat.vendor })}</h1>
+      <p className="report-meta">
+        {t("accessibility.print.reportProduct", {
+          product: vpat.version
+            ? `${vpat.product}, ${vpat.version}`
+            : vpat.product,
+        })}
+      </p>
       <p className="report-meta">
         {t("accessibility.print.reportMeta", {
           standard: vpat.standard,
@@ -159,6 +166,12 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
                   <tr key={c.id}>
                     <td>
                       <span className="mono report-sub">{c.id}</span> {c.name}
+                      {c.since && (
+                        <span className="report-sub">
+                          {" "}
+                          ({t(`accessibility.vpat.since.${c.since}`)})
+                        </span>
+                      )}
                     </td>
                     <td className="mono">{c.level}</td>
                     <td>{CONFORMANCE_LABEL[c.status]}</td>

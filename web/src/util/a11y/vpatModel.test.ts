@@ -132,10 +132,39 @@ describe("vpatModel — criteria integrity", () => {
     }
   })
 
-  it("marks 4.1.1 Parsing as Not Applicable (removed in WCAG 2.2)", () => {
+  it("marks 4.1.1 Parsing as Supports for WCAG 2.0/2.1, as the VPAT template instructs", () => {
     const c = CRITERIA.find((x) => x.id === "4.1.1")
-    expect(c?.status).toBe("notApplicable")
+    expect(c?.status).toBe("supports")
+    expect(c?.evidence).toBe("architectural")
     expect(c?.remark).toContain("WCAG 2.2 removed 4.1.1")
+  })
+
+  // The VPAT WCAG edition flags criteria added after 2.0 as "2.1 and 2.2" or
+  // "2.2 only" so a reviewer on an older version knows which rows to skip.
+  it("tags exactly the WCAG 2.1 and 2.2 additions with `since`", () => {
+    const since = (v: "2.1" | "2.2") =>
+      CRITERIA.filter((c) => c.since === v)
+        .map((c) => c.id)
+        .sort()
+    expect(since("2.1")).toEqual(
+      [
+        "1.3.4",
+        "1.3.5",
+        "1.4.10",
+        "1.4.11",
+        "1.4.12",
+        "1.4.13",
+        "2.1.4",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "4.1.3",
+      ].sort(),
+    )
+    expect(since("2.2")).toEqual(
+      ["2.4.11", "2.5.7", "2.5.8", "3.2.6", "3.3.7", "3.3.8"].sort(),
+    )
   })
 
   it("covers exactly the applicable success-criteria set", () => {

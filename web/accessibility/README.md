@@ -109,15 +109,30 @@ The live, no-auth report is always at `/accessibility` in the running app.
 ## Report format
 
 The ACR follows **VPAT® 2.5Rev** (the ITI industry-standard template), WCAG
-edition, kept concise: a short preamble (product, date, applicable standards,
-evaluation methods, conformance terms), a one-line summary, and per-principle
-tables with columns **Criterion · Level · Conformance Level · Assessed ·
-Remarks**. The `Assessed` column carries each verdict's date so remarks stay
-focused on the finding.
+edition. The header carries every field the template's "Essential Requirements
+for Authors" mandate: the "[Company] Accessibility Conformance Report" title,
+template version, Name of Product/Version, Report Date, Product Description,
+Contact Information, Notes, Evaluation Methods Used, the Applicable
+Standards/Guidelines table (WCAG 2.0, 2.1, 2.2 at Level A and AA), and the ITI
+term definitions verbatim. The version comes from the build (`release.version`
+in `vite.config.ts`, `npm_package_version` for the local generator).
+
+The tables use columns **Criteria · Level · Conformance Level · Assessed ·
+Remarks and Explanations**, grouped by WCAG principle (the template allows
+combining its per-level tables; numerical order is preserved within each). The
+`Assessed` column carries each verdict's date so remarks stay focused on the
+finding. Criteria added after WCAG 2.0 are marked "(2.1 and 2.2)" or "(2.2
+only)" as in the template, via `since` on the model.
 
 The report lists **every** WCAG 2.2 Level A and AA criterion (55), so a
 reviewer can file it against WCAG 2.0, 2.1, or 2.2. Nothing is omitted: a
 criterion the product cannot trigger (captions with no media, motion actuation
 with no sensors) is marked _Not Applicable_ with the reason in its remark, and
-anything else without a verdict shows _Not Evaluated_. `vpatGuard.test.ts`
-pins the count so the list cannot silently shrink.
+4.1.1 Parsing is answered _Supports_ for 2.0/2.1 as the template instructs.
+`vpatGuard.test.ts` pins the count so the list cannot silently shrink.
+
+**Not Evaluated on A/AA rows is a declared deviation.** ITI reserves that term
+for Level AAA. Until the manual assessment covers every A/AA criterion, the
+renderer adds a Notes bullet listing the pending ids as a deviation from the
+ITI terms (the template requires deviations to be declared there). Recording
+the outstanding verdicts through `/assess` removes the bullet automatically.

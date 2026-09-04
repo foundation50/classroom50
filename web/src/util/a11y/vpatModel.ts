@@ -65,6 +65,12 @@ export type Criterion = {
   name: string
   level: WcagLevel
   principle: WcagPrinciple
+  /**
+   * The WCAG version that introduced the criterion, when later than 2.0. The
+   * VPAT WCAG edition marks these rows ("2.1 and 2.2" / "2.2 only") so a
+   * reviewer filing against 2.0 or 2.1 knows which rows to disregard.
+   */
+  since?: "2.1" | "2.2"
   status: ConformanceLevel
   /** Required whenever status is `supports` (the overclaim guard enforces this). */
   evidence?: EvidenceKind
@@ -202,6 +208,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Orientation",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -210,6 +217,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Identify Input Purpose",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -256,6 +264,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Non-text Contrast",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "supports",
     evidence: "contrast",
     remark: "Resolved from the automated contrast audit.",
@@ -287,6 +296,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Reflow",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "supports",
     evidence: "automated",
     remark:
@@ -300,6 +310,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Text Spacing",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "supports",
     evidence: "automated",
     remark:
@@ -314,6 +325,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Content on Hover or Focus",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -339,6 +351,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Character Key Shortcuts",
     level: "A",
     principle: "Operable",
+    since: "2.1",
     status: "notApplicable",
     evidence: "architectural",
     remark:
@@ -436,6 +449,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Focus Not Obscured (Minimum)",
     level: "AA",
     principle: "Operable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -444,6 +458,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Pointer Gestures",
     level: "A",
     principle: "Operable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -452,6 +467,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Pointer Cancellation",
     level: "A",
     principle: "Operable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -460,6 +476,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Label in Name",
     level: "A",
     principle: "Operable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -468,6 +485,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Motion Actuation",
     level: "A",
     principle: "Operable",
+    since: "2.1",
     status: "notApplicable",
     evidence: "architectural",
     remark:
@@ -480,6 +498,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Dragging Movements",
     level: "AA",
     principle: "Operable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -488,6 +507,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Target Size (Minimum)",
     level: "AA",
     principle: "Operable",
+    since: "2.2",
     status: "supports",
     evidence: "automated",
     remark:
@@ -555,6 +575,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Consistent Help",
     level: "A",
     principle: "Understandable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -606,6 +627,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Redundant Entry",
     level: "A",
     principle: "Understandable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -614,6 +636,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Accessible Authentication (Minimum)",
     level: "AA",
     principle: "Understandable",
+    since: "2.2",
     status: "notEvaluated",
     remark:
       "Authentication is delegated entirely to GitHub's OAuth / device-code " +
@@ -623,19 +646,20 @@ const BASE_CRITERIA: Criterion[] = [
   },
   // ── Robust ─────────────────────────────────────────────────────────────────
   {
-    // Not a WCAG 2.2 criterion, but reviewers evaluating against 2.0/2.1 expect
-    // a row for it, so the report says why it carries no verdict.
+    // Removed in WCAG 2.2, but the VPAT WCAG edition keeps the row and
+    // instructs authors to answer Supports for 2.0/2.1 (the 2023 errata make it
+    // always satisfied), so reviewers on those versions see a verdict.
     id: "4.1.1",
     name: "Parsing",
     level: "A",
     principle: "Robust",
-    status: "notApplicable",
+    status: "supports",
     evidence: "architectural",
     remark:
-      "Not applicable: WCAG 2.2 removed 4.1.1 Parsing, and the W3C's 2023 " +
-      "errata treat it as always satisfied under WCAG 2.0 and 2.1 for content " +
-      "using HTML. The markup issues it once caught are reported under 1.3.1 " +
-      "and 4.1.2 instead.",
+      "For WCAG 2.0 and 2.1, the September 2023 errata state this criterion " +
+      "is always satisfied for HTML content, so it is answered Supports as the " +
+      "VPAT template instructs. WCAG 2.2 removed 4.1.1; the markup issues it " +
+      "once caught are reported under 1.3.1 and 4.1.2.",
   },
   {
     id: "4.1.2",
@@ -650,6 +674,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Status Messages",
     level: "AA",
     principle: "Robust",
+    since: "2.1",
     status: "supports",
     evidence: "automated",
     remark:
