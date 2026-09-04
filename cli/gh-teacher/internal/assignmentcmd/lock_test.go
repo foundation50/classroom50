@@ -522,6 +522,94 @@ func TestRunAssignmentAdd_LockedFalseOnReAddUnlocksAndRegrants(t *testing.T) {
 	}
 }
 
+// TestRunAssignmentAdd_FutureReleaseUnlockedNotes: a future --available-from on
+// an UNLOCKED private in-org template still grants the student team read (the
+// release date is listing-only), so stderr must say the template is readable
+// now and point at the lock as the fix (issue #884).
+func TestRunAssignmentAdd_FutureReleaseUnlockedNotes(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "exam",
+		Name:          "Exam",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		AvailableFrom: "2999-01-01T00:00:00Z",
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(future release, unlocked): %v", err)
+	}
+	fix.mu.Lock()
+	granted := fix.grantedURL
+	fix.mu.Unlock()
+	if granted == "" {
+		t.Errorf("an unlocked add must still grant the student team read (the note explains the consequence), got no PUT")
+	}
+	if !strings.Contains(errOut.String(), "can read the private template o/hello-template now") {
+		t.Errorf("expected the readable-before-release note on stderr, got %q", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "gh teacher assignment lock o dst exam") {
+		t.Errorf("expected the note to name the lock command, got %q", errOut.String())
+	}
+}
+
+// TestRunAssignmentAdd_FutureReleaseNoteSilentWhenNotApplicable: the note is
+// specific to an open private in-org template with a release still ahead. A
+// past release date, a locked entry, or a public template each have nothing to
+// warn about.
+func TestRunAssignmentAdd_FutureReleaseNoteSilentWhenNotApplicable(t *testing.T) {
+	cases := []struct {
+		name            string
+		templatePrivate bool
+		availableFrom   string
+		locked          bool
+	}{
+		{name: "past release", templatePrivate: true, availableFrom: "2000-01-01T00:00:00Z"},
+		{name: "no release", templatePrivate: true},
+		{name: "locked", templatePrivate: true, availableFrom: "2999-01-01T00:00:00Z", locked: true},
+		{name: "public template", templatePrivate: false, availableFrom: "2999-01-01T00:00:00Z"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server, _ := newLockServer(t, lockServerConfig{
+				assignments:     lockAssignmentsBody(false),
+				classroom:       lockClassroomBody(),
+				templatePrivate: tc.templatePrivate,
+			})
+			client := githubtest.NewTestClient(t, server)
+
+			var out, errOut bytes.Buffer
+			err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+				Org:           "o",
+				Classroom:     "dst",
+				Slug:          "exam",
+				Name:          "Exam",
+				Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+				AvailableFrom: tc.availableFrom,
+				Mode:          assignment.ModeIndividual,
+				Autograder:    "default",
+				Locked:        tc.locked,
+				LockedChanged: tc.locked,
+			})
+			if err != nil {
+				t.Fatalf("runAssignmentAdd: %v", err)
+			}
+			if strings.Contains(errOut.String(), "can read the private template") {
+				t.Errorf("readable-before-release note must not fire, got %q", errOut.String())
+			}
+		})
+	}
+}
+
 // TestRunAssignmentAdd_PreservesClosed guards that re-running `assignment add`
 // on a same-slug CLOSED entry keeps it closed. closed is owned by the web
 // "Close submission" action, not `add`; without the carry-forward a same-slug

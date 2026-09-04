@@ -5,14 +5,14 @@ import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
 import { Alert, Button, cx, FormField, Radio, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { getRepo } from "@/github-core/repoReads"
-import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
+import { repoContentsPathExists } from "@/domain/assignments"
 import {
   REPO_PERMISSIONS,
   REPO_VISIBILITIES,
   defaultStudentPermission,
 } from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
+import { parseTemplateRefSafe, useTemplateRepo } from "../useTemplateRepo"
 import { ToggleField } from "@/components/ui"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
@@ -465,27 +465,6 @@ const REPO_FEATURE_KEYS = [
   { field: "repo_feature_pull_requests", key: "pull_requests" },
 ] as const
 
-// Resolve a template ref for the advisory feature read, accepting the same
-// inputs the Template field does: `owner/repo`, `owner/repo@branch`, and a bare
-// `repo` name (owner defaults to the org). Returns null on an empty/invalid ref
-// or an unresolved owner (a bare name with no org), so the read (and the
-// refresh button) stay gated on a resolvable template. Reuses the canonical
-// parseTemplateRef so a bare name like "my-template" enables the read instead
-// of silently disabling it.
-function parseTemplateRefSafe(
-  ref: string,
-  org: string | undefined,
-): { owner: string; repo: string } | null {
-  if (!ref.trim()) return null
-  try {
-    const { owner, repo } = parseTemplateRef(ref, org ?? "")
-    // A bare name with no org resolves to an empty owner — not usable.
-    return owner && repo ? { owner, repo } : null
-  } catch {
-    return null
-  }
-}
-
 // Native GitHub pull request template paths, probed in this order — mirrors the
 // accept clients and the runner. Detection auto-checks the toggle.
 const TEMPLATE_PR_BODY_PATHS = [
@@ -614,22 +593,17 @@ export const RepoFeatureControls = ({
   emptyRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const client = useOptionalGitHubClient()
-  const parsed = parseTemplateRefSafe(templateRepo, org)
 
   // Read the template's current feature flags so the "Inherit from template"
   // choice can name its resolved outcome (e.g. "matches template: on").
   // Advisory only: a failed/absent read falls back to a plain label. Skipped
   // for a bare empty_repo and when there's no full owner/repo ref yet — a
   // template-less assignment shows "Default" (no override) instead.
-  const enabled = Boolean(client && parsed && !emptyRepo)
-  const templateRepoQuery = useQuery({
-    queryKey: ["template-repo-features", parsed?.owner, parsed?.repo],
-    queryFn: () => getRepo(client!, parsed!.owner, parsed!.repo),
+  const {
+    parsed,
     enabled,
-    staleTime: 30_000,
-    retry: false,
-  })
+    query: templateRepoQuery,
+  } = useTemplateRepo(templateRepo, org, !emptyRepo)
   const template = enabled ? templateRepoQuery.data : null
   // While a (re)fetch is in flight for a real template, put the feature controls
   // in a loading state: disable them and show a loading label on the inherit

@@ -357,7 +357,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&template, "template", "", "Optional template repository as <owner>/<repo> (or <owner>/<repo>@<branch>). Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup). A custom source branch (@<branch>) is tolerated but ignored; the assignment uses the template's default branch, so change that to use a different one")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
 	cmd.Flags().StringVar(&due, "due", "", "Optional due date, for example 2026-09-15T23:59:00-04:00; stored as UTC. Omit the offset to use the machine's local timezone")
-	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date, for example 2026-09-15T00:00:00-04:00; stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone")
+	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date, for example 2026-09-15T00:00:00-04:00; stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it. Listing only, not access control: a private in-org template stays readable to the classroom team, so pair it with --locked to hide the template until release. Omit the offset to use the machine's local timezone")
 	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default), `group` (legacy shared repo through collaborators), or `team` (shared repo owned by a GitHub Team). Group and team modes require --max-group-size; team mode also requires --team-formation")
 	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum group size (>= 2; required with --mode group or --mode team). Enforced within Classroom 50 clients when groups form; direct GitHub-UI changes can bypass it")
 	cmd.Flags().StringVar(&teamFormation, "team-formation", "", "Who forms the groups of a team assignment: `teacher` (you create the teams) or `student` (the first student founds a team and adds teammates). Required with --mode team")
@@ -1089,6 +1089,14 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
 			return err
 		}
+		// A future release date reads like an access control but only gates
+		// the student list; the grant above already opened the template. Say
+		// so now, with the lock as the fix (issue #884).
+		if releaseIsFuture(availableFrom) {
+			_, _ = fmt.Fprintf(errOut,
+				"Note: %q has a release date (%s) but isn't locked, so the classroom student team can read the private template %s/%s now. The release date controls listing only, not access. To keep the template hidden until then, lock the assignment with `gh teacher assignment lock %s %s %s` and unlock it on the release date with `--unlock`.\n",
+				slug, availableFrom, resolved.Owner, resolved.Repo, org, classroom, slug)
+		}
 	}
 	if resolved != nil && templatePrivate && inOrg && committedLocked {
 		if action == "updated" && !previousLocked && p.LockedChanged {
@@ -1272,6 +1280,16 @@ func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
 // normalizeDueDate; both share normalizeLocalDate and reuse the DueMeta pair.
 func normalizeAvailableFrom(raw string) (string, *assignment.DueMeta, error) {
 	return normalizeLocalDate("--available-from", raw)
+}
+
+// releaseIsFuture reports whether a stored (RFC 3339 UTC) release date is still
+// ahead. Empty or unparseable values are never "future".
+func releaseIsFuture(availableFrom string) bool {
+	if availableFrom == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, availableFrom)
+	return err == nil && t.After(time.Now())
 }
 
 // normalizeLocalDate normalizes a wall-clock date flag value to a stored UTC

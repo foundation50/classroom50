@@ -12,14 +12,19 @@ Two controls build on that:
 
 - **Release date** lists the assignment for everyone once the date passes.
   It controls listing only, not access: a student with the invite link can
-  still accept early, and students who already accepted always see the
-  assignment.
+  still accept early, students who already accepted always see the
+  assignment, and for a private template in your organization the classroom
+  team can read the template as soon as you save. When you set a future
+  release date on such a template without locking, the form says so and
+  offers to lock the assignment in one click.
 - **Lock assignment** blocks access entirely: students can't see or accept
   it, and for a private template in your organization the classroom team
   loses read access to the template. Unlocking reverses both. The toggle is
   in the **Schedule and access** section of the assignment form and in the
   submissions page's **Actions** menu; the CLI equivalents are
   `gh teacher assignment add --locked` and `gh teacher assignment lock`.
+  Nothing unlocks at the release date: to release a locked assignment, unlock
+  it yourself when the date arrives.
 
 ### Timed assessments
 
