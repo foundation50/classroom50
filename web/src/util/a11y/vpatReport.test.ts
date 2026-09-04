@@ -113,7 +113,7 @@ describe("renderVpatReport (WCAG edition)", () => {
   const md = renderVpatReport(FIXED, { version: "1.45.0" })
 
   it("carries every field the VPAT 2.5Rev essential requirements list", () => {
-    expect(md).toContain("# Fifty Foundation Accessibility Conformance Report")
+    expect(md).toContain("# Classroom 50 Accessibility Conformance Report")
     expect(md).toContain("**WCAG Edition** (Based on VPAT® Version 2.5Rev)")
     expect(md).toContain(
       "**Name of Product/Version:** Classroom50 web app, version 1.45.0",
@@ -206,7 +206,7 @@ describe("renderVpatJson", () => {
     const parsed = JSON.parse(renderVpatJson(FIXED))
     expect(parsed.summary).toEqual(buildVpatReport(FIXED).summary)
     expect(parsed.generated).toBe("2026-08-04")
-    expect(parsed.vendor).toBe("Fifty Foundation")
+    expect(parsed.vendor).toBe("Classroom 50")
     expect(parsed.version).toBeUndefined()
   })
 

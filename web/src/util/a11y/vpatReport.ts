@@ -46,8 +46,8 @@ export type VpatReportJson = {
 }
 
 // The VPAT title format is "[Company Name] Accessibility Conformance Report";
-// Classroom 50 is published by the Fifty Foundation (see the repo README).
-const VENDOR = "Fifty Foundation"
+// the product name stands in for the company, as is usual for open source.
+const VENDOR = "Classroom 50"
 const PRODUCT = "Classroom50 web app"
 const PRODUCT_DESCRIPTION =
   "Classroom 50 is a free, open-source web app for creating and grading " +
