@@ -174,6 +174,7 @@ vi.mock("@/components/ui", async (importOriginal) => {
 })
 
 import AcceptAssignmentPage from "./AcceptAssignmentPage"
+import { KeepTabOpenGuard } from "@/components/status/KeepTabOpenGuard"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import { __resetGitHubHealthForTest } from "@/lib/githubHealth/githubHealthStore"
 
@@ -195,9 +196,13 @@ const acceptedRepo: GitHubRepo = {
 
 const orgReposKey = ["github", "org-repos", "acme"] as const
 
+// The tab hold is app-level (main.tsx mounts KeepTabOpenGuard once), so the
+// leave-page test renders it beside the page to exercise the accept mutation's
+// keepTabOpen flag end to end.
 const renderPage = (client: QueryClient) =>
   render(
     <QueryClientProvider client={client}>
+      <KeepTabOpenGuard />
       <AcceptAssignmentPage />
     </QueryClientProvider>,
   )

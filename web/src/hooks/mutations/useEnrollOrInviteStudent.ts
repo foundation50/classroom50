@@ -43,6 +43,7 @@ export function useEnrollOrInviteStudent(
   const resolveEmails = useResolveEmailRows(githubClient, org)
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async (value: EnrollOrInviteFormValues) => {
       const first_name = value.first_name.trim()
       const last_name = value.last_name.trim()

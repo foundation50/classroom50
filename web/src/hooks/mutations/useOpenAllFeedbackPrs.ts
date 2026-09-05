@@ -36,6 +36,7 @@ export function useOpenAllFeedbackPrs() {
     Error,
     OpenAllFeedbackPrsInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: ({ org, repos, mode }) => {
       setProgress({ done: 0, total: repos.length })
       return openAllFeedbackPullRequests({

@@ -37,6 +37,7 @@ export function useEditAssignment(opts?: {
     GitHubAPIError,
     CreateAssignmentInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: (input) =>
       editAssignmentWithConflictRetry(client, {
         ...input,

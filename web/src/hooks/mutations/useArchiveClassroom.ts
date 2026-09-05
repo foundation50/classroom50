@@ -33,6 +33,7 @@ export function useArchiveClassroom(org: string, classroom: string) {
     // not the true original. A shared scope id makes React Query run same-key
     // toggles one at a time, so each snapshot sees a settled state.
     scope: { id: `archive-classroom:${org}:${classroom}` },
+    meta: { keepTabOpen: true },
     mutationFn: (active: boolean) =>
       editClassroomWithConflictRetry(client, { org, slug: classroom, active }),
     onMutate: async (active: boolean) => {

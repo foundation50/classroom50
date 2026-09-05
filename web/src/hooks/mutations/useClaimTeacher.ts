@@ -23,6 +23,7 @@ export function useClaimTeacher(
   const { user } = useGithubAuth()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async () => {
       const username = user?.login
       if (!username) throw new Error(messages.somethingWentWrong)

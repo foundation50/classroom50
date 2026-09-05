@@ -57,7 +57,6 @@ import {
 } from "@/util/studentRepo"
 import useGetRepo from "@/hooks/useGetRepo"
 import useAssignmentRepoSetup from "@/hooks/useAssignmentRepoSetup"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
 import useGroupTeams from "@/hooks/useGroupTeams"
@@ -1120,11 +1119,6 @@ const AcceptAssignmentPage = () => {
       },
     })
   }
-
-  // The accept is a chain of GitHub writes with no rollback. Leaving mid-run
-  // strands a repo the student can already push to but that never autogrades,
-  // so hold the tab while any step is in flight.
-  useBeforeUnloadGuard(acceptMutation.isPending)
 
   // The repo exists but the accept never finished. Cleared once a re-run
   // succeeds in this session (the mutation's data is the authoritative signal

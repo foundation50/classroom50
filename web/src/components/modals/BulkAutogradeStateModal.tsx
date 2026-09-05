@@ -21,6 +21,7 @@ import { getName } from "@/util/students"
 import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkAutogradeStateModalProps = {
   open: boolean
@@ -201,6 +202,7 @@ export function BulkAutogradeStateModal({
   }
 
   const busy = phase === "working"
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal

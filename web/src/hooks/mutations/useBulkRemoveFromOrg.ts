@@ -13,6 +13,7 @@ export function useBulkRemoveFromOrg(org: string) {
   const { t } = useTranslation()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: {
       rows: OrgMemberRow[]
       onProgress?: (progress: BulkRemoveProgress) => void

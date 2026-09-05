@@ -35,6 +35,28 @@ Hooks stay `t()`-free: a caller passes pre-translated strings via a `messages`
 bag. The boundary is a convention, not yet lint-enforced (P7 earmarks
 `eslint-plugin-boundaries`).
 
+## Hold the tab on multi-write chains
+
+A hook whose `mutationFn` issues more than one GitHub write, or fans out over
+many repos or students, declares `meta: { keepTabOpen: true }`. `KeepTabOpenGuard`
+(mounted once in `main.tsx`) reads the flag off the mutation cache and asks the
+browser to confirm before the tab closes while any such mutation is pending; the
+hold survives the page unmounting because the cache, not the component, is the
+signal. Closing mid-chain otherwise strands partial state: a repo with no marker
+commit, a team without its roster row, a renamed manifest with half the repos
+still on the old name.
+
+Not flagged, on purpose:
+
+- One write. A single PATCH, or one git-data commit (tree and commit objects
+  are dangling until the ref moves), either lands or doesn't.
+- Convergent background passes (`useSyncRoster`, the reconcile hooks). They run
+  on page open and are designed to be re-run; prompting would nag on every
+  early exit.
+- A fan-out orchestrated by a component over single-write hooks (the bulk
+  modals) or domain functions (the roster bars). Those call
+  `useBeforeUnloadGuard(running)` themselves; see that hook.
+
 ## Deliberate exceptions
 
 The boundary is **GitHub data writes** against the app's query cache. Two

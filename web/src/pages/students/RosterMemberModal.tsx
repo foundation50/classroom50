@@ -15,6 +15,7 @@ import {
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useUnenrollStudent } from "@/hooks/mutations/useUnenrollStudent"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
@@ -169,6 +170,9 @@ const RosterMemberModal = ({
     resolving ||
     changingRole ||
     linkWorking
+  // Most of these actions chain team, invitation, and roster writes directly
+  // (no mutation hook), so the modal holds the tab off the same composite.
+  useBeforeUnloadGuard(busy)
 
   const handleClose = () => {
     if (busy) return

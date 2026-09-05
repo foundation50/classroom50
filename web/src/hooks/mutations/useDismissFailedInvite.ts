@@ -18,6 +18,7 @@ export function useDismissFailedInvite(org: string, classroom: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async (input: {
       invitationId: number
       inviteEmail?: string | null

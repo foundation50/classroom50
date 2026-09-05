@@ -23,6 +23,7 @@ export function useEditClassroom(
   const queryClient = useQueryClient()
 
   return useMutation<EditClassroomResult, GitHubAPIError, EditClassroomInput>({
+    meta: { keepTabOpen: true },
     mutationFn: (input) => editClassroomWithConflictRetry(client, input),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({

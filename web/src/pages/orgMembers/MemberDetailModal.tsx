@@ -9,6 +9,7 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   AnimatedAlert,
   Badge,
@@ -70,6 +71,8 @@ const MemberDetailModal = ({
   const [confirming, setConfirming] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [working, setWorking] = useState(false)
+  // removeMemberFromOrg unenrolls from every classroom before the org removal.
+  useBeforeUnloadGuard(working)
   const [inviting, setInviting] = useState(false)
   // Failure of the in-dialog remove action, rendered as an in-dialog banner.
   const [actionError, setActionError] = useState<string | null>(null)

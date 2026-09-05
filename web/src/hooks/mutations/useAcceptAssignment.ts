@@ -28,6 +28,7 @@ export function useAcceptAssignment(params: {
     params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: () =>
       acceptAssignment({
         client,

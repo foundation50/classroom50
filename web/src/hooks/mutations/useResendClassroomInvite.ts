@@ -25,6 +25,7 @@ export function useResendClassroomInvite(
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async (input: {
       login: string | null
       invitationId: number

@@ -14,6 +14,7 @@ import MemberLinkPicker, {
   type OrgPoolStatus,
 } from "@/pages/students/MemberLinkPicker"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   applyRosterEdits,
@@ -76,6 +77,8 @@ export function RosterEditMode({
   const [linkQueries, setLinkQueries] = useState<Record<string, string>>({})
   const [openPickerKey, setOpenPickerKey] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
+  // applyRosterEdits commits the roster, then team-adds each linked login.
+  useBeforeUnloadGuard(saving)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)
   // One mode-wide widening (not per row): a teacher reconciling several rows

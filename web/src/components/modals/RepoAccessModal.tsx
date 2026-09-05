@@ -25,6 +25,7 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
@@ -256,6 +257,9 @@ export function RepoAccessModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
+  // Removes and upserts fan out as separate writes; hold the tab so a partial
+  // apply can't be mistaken for the saved draft.
+  useBeforeUnloadGuard(isSaving)
 
   // A change is: a new/restored collaborator, a struck-through server row, or a
   // permission level that differs from the server's.

@@ -32,6 +32,7 @@ export function useRenameAssignment() {
     Error,
     RenameAssignmentInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: (input) => {
       setProgress(null)
       return renameAssignment(client, input, { onProgress: setProgress })

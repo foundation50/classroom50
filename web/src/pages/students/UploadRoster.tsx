@@ -29,6 +29,7 @@ import {
   type UploadKind,
 } from "@/pages/students/uploadClassify"
 import { useResolveEmailRows } from "@/hooks/useIdentityDirectory"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import { DetectedFormatSelect } from "@/pages/students/DetectedFormatSelect"
 import {
   identityKey,
@@ -111,6 +112,10 @@ const UploadRoster = ({
   const resolveUploadedEmails = useResolveEmailRows(client, org)
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
+  // The import is several sequential roster.csv commits plus the invite pass
+  // (see runRosterImport); an interrupted run leaves rows imported but
+  // uninvited.
+  useBeforeUnloadGuard(phase === "importing")
   const [fileName, setFileName] = useState("")
   // The raw uploaded text, kept so switching the format re-parses without
   // re-reading the file, and the format the parse is read under. Roster CSV is
