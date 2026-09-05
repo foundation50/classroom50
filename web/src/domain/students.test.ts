@@ -32,6 +32,7 @@ import {
 import { removeEmailInviteRow } from "./students/rosterPrimitives"
 import { inviteTeamName, marshalInviteDescription } from "@/util/inviteTeam"
 import { GitHubAPIError } from "@/github-core/errors"
+import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import type { GitHubClient } from "@/github-core/client"
 
 // An already-org-member must land `enrolled` (not stuck "awaiting"), the per-row
@@ -600,11 +601,22 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // 500 every per-invite metadata team create — the invite must then be
     // reported as failed rather than sent without email retention.
     failInviteTeams?: boolean
+    // Park every successful POST /invitations until a macrotask after the
+    // first rateLimitEmails 429 was issued. By then the throttled rejection has
+    // fully unwound (flag flipped, idle worker drained the queue as deferred),
+    // so the peers in flight when it hit are exactly the ones that get sent.
+    // Without it the count depends on how the libuv threadpool orders each
+    // target's inviteTeamName digest, which drifts with machine load.
+    holdInvitesUntilThrottled?: boolean
   }) => {
     const memberEmails = new Set(opts?.memberEmails ?? [])
     const rateLimitEmails = new Set(opts?.rateLimitEmails ?? [])
     const failEmails = new Set(opts?.failEmails ?? [])
     let inviteAttempts = 0
+    let releaseHeldInvites = () => {}
+    const heldInvites = new Promise<void>((resolve) => {
+      releaseHeldInvites = resolve
+    })
     const state = {
       // roster.csv content committed by the batch pending-row write (null =
       // no roster write happened).
@@ -738,10 +750,17 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
               return Promise.reject(apiError(422, "already a member"))
             }
             if (rateLimitEmails.has(body.email)) {
+              setTimeout(releaseHeldInvites, 0)
               return Promise.reject(apiError(429, "rate limited"))
             }
             if (failEmails.has(body.email)) {
               return Promise.reject(apiError(500, "server error"))
+            }
+            if (opts?.holdInvitesUntilThrottled) {
+              return heldInvites.then(() => {
+                state.inviteBodies.push(body)
+                return {}
+              })
             }
             state.inviteBodies.push(body)
             return Promise.resolve({})
@@ -907,15 +926,19 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
   })
 
   it("defers the rest once a mid-batch rate limit hits, sending no new invites", async () => {
-    // More targets than REPO_READ_CONCURRENCY (=8): once the throttled invite
-    // sets the rateLimited flag, every not-yet-started target short-circuits to
+    // More targets than REPO_READ_CONCURRENCY: once the throttled invite sets
+    // the rateLimited flag, every not-yet-started target short-circuits to
     // `deferred` (never `failed`), and no invite body is recorded for them.
     const total = 20
     const targets = Array.from({ length: total }, (_, i) => ({
       email: `u${i}@x.edu`,
     }))
-    // Throttle the very first target so the flag flips as early as possible.
-    const { client, state } = makeClient({ rateLimitEmails: ["u0@x.edu"] })
+    // Throttle the very first target so the flag flips as early as possible;
+    // hold the peers so the flip lands before any worker can pick up more.
+    const { client, state } = makeClient({
+      rateLimitEmails: ["u0@x.edu"],
+      holdInvitesUntilThrottled: true,
+    })
 
     const result = await bulkInviteByEmail(client, {
       org: "acme",
@@ -928,17 +951,12 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // The throttled email is deferred; nothing is misrouted to `failed`.
     expect(result.deferred).toContain("u0@x.edu")
     expect(result.failed).toEqual([])
-    // Every target is accounted for exactly once across the buckets.
-    expect(
-      result.invited.length +
-        result.skipped.length +
-        result.failed.length +
-        result.deferred.length,
-    ).toBe(total)
-    // The short-circuit actually fired: with the flag set early, most targets
-    // are deferred rather than sent (bounded by the concurrency window that was
-    // already in flight when the flag flipped).
-    expect(result.deferred.length).toBeGreaterThan(total / 2)
+    expect(result.skipped).toEqual([])
+    // Only the peers already past the flag check when u0 was throttled (the
+    // rest of the concurrency window) were sent; every later target deferred.
+    const peersInFlight = REPO_READ_CONCURRENCY - 1
+    expect(result.invited).toHaveLength(peersInFlight)
+    expect(result.deferred).toHaveLength(total - peersInFlight)
     // No invite was sent for a deferred email.
     const sentEmails = new Set(state.inviteBodies.map((b) => b.email))
     for (const email of result.deferred) {
