@@ -20,6 +20,7 @@ import {
 
 import {
   TONE_DOT_CLASS,
+  VPAT_SINCE_KEY,
   VPAT_STATUS_ORDER,
   tabClass,
   useVpatReport,
@@ -176,7 +177,7 @@ function VpatConformanceTable({
                           {c.name}
                           {c.since && (
                             <span className="ms-1 text-xs text-base-content/60">
-                              ({t(`accessibility.vpat.since.${c.since}`)})
+                              ({t(VPAT_SINCE_KEY[c.since])})
                             </span>
                           )}
                         </td>
