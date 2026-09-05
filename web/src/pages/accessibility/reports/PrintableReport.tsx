@@ -133,7 +133,7 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
         {t("accessibility.print.reportMeta", {
           standard: vpat.standard,
           target: vpat.target,
-          versions: vpat.wcagVersions.join(", "),
+          versions: (vpat.wcagVersions ?? []).join(", "),
           date: vpat.generated,
         })}
       </p>
@@ -150,7 +150,7 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
       {PRINCIPLE_ORDER.filter((p) => criteriaByPrinciple[p].length > 0).map(
         (principle) => (
           <div key={principle}>
-            <h2>{principle}</h2>
+            <h2>{t(`accessibility.vpat.principle.${principle}`)}</h2>
             <table>
               <thead>
                 <tr>

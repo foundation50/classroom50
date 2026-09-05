@@ -1,4 +1,4 @@
-import { Fragment, useId, useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
@@ -72,7 +72,15 @@ function VpatConformanceTable({
     activeTab === "all"
       ? criteria
       : criteria.filter((c) => c.principle === activeTab)
-  const showGroups = activeTab === "all" && groupByPrinciple
+  // One <tbody> per principle in the All view so each heading row is a proper
+  // row-group header (scope="rowgroup"); a single unlabeled group otherwise.
+  const groups: { principle: WcagPrinciple | null; rows: Criterion[] }[] =
+    activeTab === "all" && groupByPrinciple
+      ? PRINCIPLE_ORDER.map((p) => ({
+          principle: p,
+          rows: rows.filter((c) => c.principle === p),
+        })).filter((g) => g.rows.length > 0)
+      : [{ principle: null, rows }]
 
   return (
     <Card shadow={false}>
@@ -94,7 +102,9 @@ function VpatConformanceTable({
               onClick={() => setActiveTab(tab)}
               {...tabProps(index)}
             >
-              {tab === "all" ? t("accessibility.vpat.tabAll") : tab}
+              {tab === "all"
+                ? t("accessibility.vpat.tabAll")
+                : t(`accessibility.vpat.principle.${tab}`)}
               <span
                 className={cx(
                   "text-xs tabular-nums",
@@ -144,22 +154,21 @@ function VpatConformanceTable({
                     </th>
                   </tr>
                 </thead>
-                <tbody>
-                  {rows.map((c, i) => (
-                    <Fragment key={c.id}>
-                      {showGroups &&
-                        (i === 0 || rows[i - 1].principle !== c.principle) && (
-                          <tr className="bg-base-200/50">
-                            <th
-                              scope="colgroup"
-                              colSpan={5}
-                              className="text-xs font-semibold tracking-wide text-base-content/70 uppercase"
-                            >
-                              {c.principle}
-                            </th>
-                          </tr>
-                        )}
-                      <tr>
+                {groups.map((group) => (
+                  <tbody key={group.principle ?? "all"}>
+                    {group.principle && (
+                      <tr className="bg-base-200/50">
+                        <th
+                          scope="rowgroup"
+                          colSpan={5}
+                          className="text-xs font-semibold tracking-wide text-base-content/70 uppercase"
+                        >
+                          {t(`accessibility.vpat.principle.${group.principle}`)}
+                        </th>
+                      </tr>
+                    )}
+                    {group.rows.map((c) => (
+                      <tr key={c.id}>
                         <td className="align-top">
                           <span className="font-mono text-xs text-base-content/60">
                             {c.id}
@@ -190,9 +199,9 @@ function VpatConformanceTable({
                           )}
                         </td>
                       </tr>
-                    </Fragment>
-                  ))}
-                </tbody>
+                    ))}
+                  </tbody>
+                ))}
               </table>
             </div>
           )}

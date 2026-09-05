@@ -195,7 +195,7 @@
     "status": "supports",
     "evidence": "manual",
     "assessed": "2026-09-05",
-    "remark": "Walked the destructive actions in the browser and cancelled each: Unenroll student opens a confirmation stating exactly what happens ('This will remove student X from the classroom... repositories will not be deleted') with Keep student / Unenroll student choices; Archive classroom opens 'Archive classroom?' with Cancel / Archive. Assignment deletion and other irreversible actions use the shared ConfirmModal, which requires typing the item name for the highest-impact ones. Roster and assignment forms can be reviewed and edited before submit. Every deletion or data change is confirmed before commit."
+    "remark": "Walked the destructive actions in the browser and cancelled each: Unenroll student opens a confirmation stating exactly what happens ('This will remove student X from the classroom... repositories will not be deleted') with Keep student / Unenroll student choices; Archive classroom opens 'Archive classroom?' with Cancel / Archive. Verified in source (not exercised in the browser): assignment deletion, classroom deletion, and group deletion use the shared ConfirmModal with type-to-confirm (the assignment slug, org/classroom slug, or group name), and bulk member removal requires a confirm phrase. Roster and assignment forms can be reviewed and edited before submit. Every deletion or data change is confirmed before commit."
   },
   "3.3.7": {
     "status": "supports",

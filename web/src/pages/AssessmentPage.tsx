@@ -47,7 +47,7 @@ const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
   contrast: "Automated (contrast)",
   automated: "Automated",
   manual: "Manual",
-  architectural: "Architectural (N/A)",
+  architectural: "Architectural (from the design)",
 }
 
 // A criterion is manually-owned when it is still notEvaluated with no evidence,

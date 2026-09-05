@@ -126,6 +126,12 @@
       "since": {
         "2.1": "WCAG 2.1 and 2.2",
         "2.2": "WCAG 2.2 only"
+      },
+      "principle": {
+        "Perceivable": "Perceivable",
+        "Operable": "Operable",
+        "Understandable": "Understandable",
+        "Robust": "Robust"
       }
     }
   },
