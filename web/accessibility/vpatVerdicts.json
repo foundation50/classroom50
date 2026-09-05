@@ -17,17 +17,41 @@
     "assessed": "2026-08-05",
     "remark": "guided visual + DOM-order review on the Organizations grid and the assignments table: the DOM/reading order matches the visual order (sidebar -> breadcrumb -> heading -> toolbar -> rows top-to-bottom, each row left-to-right). Card grids read left-then-right in source order; no CSS reordering scrambles the sequence."
   },
+  "1.3.3": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Scanned every instruction, empty state, help text, and alert on the organizations, classrooms, assignments, roster, members, submissions, activity, settings, accept, and assignment-settings pages for shape/size/position/color-only wording (left/right/above/below/the green one). None found: every instruction names its target (e.g. 'Upload roster', 'Refresh roster'). Interactive controls are labeled by name, not by where they sit."
+  },
+  "1.3.4": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Chromium emulation at tablet portrait (768x1024), tablet landscape (1024x768), and phone portrait (390x844) on the organizations, assignments, and student accept pages: the layout reflows in every case (sidebar collapses to a menu, toolbar wraps), no horizontal overflow, main content and headings visible. No orientation lock in CSS, no web-app manifest, and screen.orientation.lock is never called."
+  },
   "1.3.5": {
     "status": "supports",
     "evidence": "manual",
     "assessed": "2026-08-05",
     "remark": "guided review: the app collects almost no information about the user themselves — text inputs capture classroom data (org/assignment/section) or a THIRD party's details (a student's name/username/email on the roster form), for which autocomplete tokens are inappropriate. The user's own identity is delegated to GitHub OAuth/device-code. So 1.3.5 is met by not applying self-autofill where it doesn't belong."
   },
+  "1.4.1": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Reviewed the organizations, classrooms, assignments, roster, members, submissions, and activity pages in grayscale (CSS filter) and via the DOM: every status/role/grade badge carries text ('Enrolled', 'Pending invite', 'Teacher', '10/10'); the active sidebar item has a left bar plus background, not color alone, and is exposed with aria-current=page; form errors are text. Prose links in the org-details panel are green with no underline at rest but gain an underline on hover/focus and sit at about 3.1:1 against body text (G183). No information conveyed by color alone found."
+  },
   "1.4.13": {
     "status": "partially",
     "evidence": "manual",
     "assessed": "2026-08-05",
     "remark": "Manual inspection in Chromium of the tooltips on /accessibility: they are DaisyUI CSS .tooltip on non-focusable <span> elements, so they appear on mouse hover only (not keyboard focus), have no Escape-to-dismiss, and are not hoverable (CSS pseudo-content). They elaborate on already-visible values, so essential info is not lost, but the hover/focus content itself is not dismissible/hoverable/keyboard-reachable per 1.4.13."
+  },
+  "1.4.5": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Enumerated every <img> and CSS background image on ten teacher/student pages: all images are GitHub avatars (decorative alt=\"\" beside the visible name, or named 'X's avatar') and the inline SVG logo. Headings, badges, buttons, and code slugs are real text. No images of text."
   },
   "2.1.1": {
     "status": "partially",
@@ -41,6 +65,18 @@
     "assessed": "2026-08-05",
     "remark": "Manual keyboard test in Chromium of the About modal (native <dialog>): on open, focus moves into the dialog; Tab cycles only among the dialog's controls (focus stays contained across 6 presses); Escape closes it and focus returns to the triggering button. No keyboard trap; escape is always available."
   },
+  "2.2.1": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Reviewed the app's time limits. Non-error toasts auto-dismiss after 6 s (DEFAULT_TOAST_MS) with no way to extend, pause, or turn the timer off; error toasts persist until dismissed; the same outcome is reflected in page state, so no data is lost. The only other limit is GitHub's device-code expiry on the login screen, which shows the countdown and lets the user request a new code. No app-side session timeout. Partially: a pause-on-hover/focus or a 'keep notifications until dismissed' setting would meet the criterion."
+  },
+  "2.2.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "The only moving content is loading spinners and the skeleton shimmer (progress indicators, exempt as essential) plus sub-second transitions; the activity timeline auto-refreshes only while an operation is in flight (progress of a process the user started) and stops when idle. Verified in Chromium that the shimmer is disabled under prefers-reduced-motion. Note: the in-app 'Interface motion: Off' toggle (data-reduce-motion) does not yet stop the shimmer, only the OS setting does; a follow-up."
+  },
   "2.4.1": {
     "status": "partially",
     "evidence": "manual",
@@ -52,6 +88,12 @@
     "evidence": "manual",
     "assessed": "2026-08-05",
     "remark": "guided visual + layout review: the only sticky element is the left sidebar column (0-240px), which sits beside main content rather than over it, and the top banner is position:static (not floating). No sticky top/bottom bar overlays focus, so a keyboard-focused control is never entirely hidden on the desktop layout."
+  },
+  "2.4.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Visited 14 routes (organizations, classrooms, members, activity, org settings, assignments, roster, classroom settings, new assignment, submissions, assignment settings, student accept, settings, accessibility): each sets a descriptive document.title of the form 'Page · Classroom 50' via useDocumentTitle, and it changes on client-side navigation. Titles name the page type but not the specific classroom or assignment; that is acceptable for 2.4.2 and the breadcrumb supplies the context."
   },
   "2.4.3": {
     "status": "supports",
@@ -65,6 +107,12 @@
     "assessed": "2026-08-05",
     "remark": "Manual keyboard + accessibility-tree pass in Chromium on the authenticated Organizations flow: all 33 visible links carry meaningful accessible names (e.g. 'Open', 'Review the service token for <org>'); no bare 'click here'/'link'/empty-name links found. Verified via the a11y tree, not a speaking screen reader."
   },
+  "2.4.5": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Every teacher page is reachable at least two ways: the persistent sidebar navigation on all routes, breadcrumbs on classroom and assignment routes (Classrooms > AP CS Principles > Assignments > Hello world), and card/row links on the organizations, classrooms, and assignments pages. The student accept/submit pages are steps in a process reached from an invite link and are exempt."
+  },
   "2.4.6": {
     "status": "supports",
     "evidence": "manual",
@@ -77,11 +125,47 @@
     "assessed": "2026-08-05",
     "remark": "Manual keyboard pass + screenshots in Chromium on the Organizations flow: tabbing through search, sort, view toggles, action buttons, card links, and open dropdown-menu items shows a visible focus indicator on each (2px solid outline, plus a background change on menu items). Native inputs/selects confirmed visually focus-ringed. Verified on the primary authenticated flow; a full per-route sweep remains."
   },
+  "2.5.1": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "No functionality requires a multipoint or path-based gesture: there are no touch, swipe, or pinch handlers in the source, and the only drag interaction (dropping a file onto the roster/upload dropzones) has a single-tap alternative (click opens the native file picker). Verified in the browser on the roster upload dialog."
+  },
+  "2.5.2": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Pointer test in Chromium on classroom card links, the New classroom button, and menu triggers: pressing, dragging off the target, and releasing did not activate them (click fires on the up-event), and no element has an inline mousedown/pointerdown handler. Exception: the shared Combobox (template-repo picker, member link picker) commits the highlighted option on pointerdown, so the choice cannot be aborted by dragging off; the selection can be changed afterwards (undo), which mitigates but does not fully meet the criterion. Moving that handler to click would resolve it."
+  },
   "2.5.3": {
     "status": "partially",
     "evidence": "manual",
     "assessed": "2026-08-05",
     "remark": "Manual accessibility-tree inspection in Chromium: several controls' accessible names do not contain their visible label text — e.g. links whose visible chip reads 'No service token' / 'Expiry not tracked' are named 'Review the service token for <org>', and the account button shows the user's name visually but is named 'Account menu'. This can break voice-control ('click <visible text>')."
+  },
+  "2.5.7": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "The only drag interactions are the file dropzones (roster upload, FileDropzone). Verified on the roster Upload roster dialog: the dropzone is a role=button with tabindex=0 and the text 'Drop a file here, or click to choose'; click and Enter/Space open the native file picker, so dragging is never required. No list reordering or resizing by drag exists."
+  },
+  "3.1.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Switched the UI to Simplified Chinese and Arabic via the Language dialog: <html lang> updates to zh-CN/ar and dir to rtl for Arabic; the document title and all UI strings translate. Text-node scan of the classrooms, assignments, roster, and settings pages found no untranslated UI strings, only the product name 'Classroom 50' and the classroom's proper name, which are exempt as names. No mixed-language passages needing a lang attribute."
+  },
+  "3.2.1": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Keyboard pass in Chromium tabbing through every focusable element on the organizations (14), classrooms (43), assignments (25), roster, submissions, and settings pages: focusing a control never navigated, submitted, opened a dialog, or moved focus. Card and row 'More actions' menus become visible when their trigger receives focus (CSS focus-within) while focus stays on the trigger; per WCAG this is not a change of context. (That trigger lacks aria-expanded, tracked under 4.1.2.)"
+  },
+  "3.2.2": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Changed every visible <select> on the classrooms, assignments, roster, and members pages (term, sort, type, due-date, status, section, group-by, classroom filters) and the Active/Archived/All and grid/list toggles: the list updates in place, the URL does not change, and focus stays on the control. The Language dialog's select applies the language immediately, which changes content but not context. No auto-submit on input."
   },
   "3.2.3": {
     "status": "supports",
@@ -94,6 +178,24 @@
     "evidence": "manual",
     "assessed": "2026-08-05",
     "remark": "guided review of repeated actions across flows: same-function components are identified consistently — 'Settings'/'Sign out' are worded identically everywhere, overflow menus follow 'More actions for {name}', row actions follow '{verb} {item}' ('Delete/Lock {assignment}'), and the card links use 'Open {org}' / 'View assignments for {classroom}'. No same-function control is labeled inconsistently."
+  },
+  "3.2.6": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Help mechanisms are the Docs link, About entry, and Accessibility link in the sidebar footer, plus 'Ask a question' and 'Report an issue' in the account menu. Checked 14 routes: they appear in the same relative order on every route that shows the sidebar, including the student accept page."
+  },
+  "3.3.3": {
+    "status": "partially",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Submitted the new-classroom, new-assignment, and add-member forms with missing or invalid input in Chromium. Required-field errors are clear and inline ('Classroom name is required.', 'Assignment name is required.'). The add-member form with an unknown GitHub username shows 'Couldn't add <name>: Not Found', which passes through GitHub's raw error and offers no suggestion (check the spelling, or invite by email instead), and it is not in a live region. Partially until that message suggests a fix."
+  },
+  "3.3.4": {
+    "status": "supports",
+    "evidence": "manual",
+    "assessed": "2026-09-05",
+    "remark": "Walked the destructive actions in the browser and cancelled each: Unenroll student opens a confirmation stating exactly what happens ('This will remove student X from the classroom... repositories will not be deleted') with Keep student / Unenroll student choices; Archive classroom opens 'Archive classroom?' with Cancel / Archive. Assignment deletion and other irreversible actions use the shared ConfirmModal, which requires typing the item name for the highest-impact ones. Roster and assignment forms can be reviewed and edited before submit. Every deletion or data change is confirmed before commit."
   },
   "3.3.7": {
     "status": "supports",
