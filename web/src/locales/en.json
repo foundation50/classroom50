@@ -125,8 +125,8 @@
         "notEvaluated": "Not Evaluated"
       },
       "since": {
-        "2.1": "WCAG 2.1 and 2.2",
-        "2.2": "WCAG 2.2 only"
+        "wcag21": "WCAG 2.1 and 2.2",
+        "wcag22": "WCAG 2.2 only"
       },
       "principle": {
         "Perceivable": "Perceivable",

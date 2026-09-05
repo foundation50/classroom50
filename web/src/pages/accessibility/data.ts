@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import type { BadgeTone } from "@/types/badgeTone"
 import { cx } from "@/components/ui"
-import { type ConformanceLevel } from "@/util/a11y/vpatModel"
+import { type ConformanceLevel, type Criterion } from "@/util/a11y/vpatModel"
 import type {
   ContrastAuditJson,
   ContrastStatus,
@@ -89,6 +89,13 @@ export const TONE_DOT_CLASS: Record<BadgeTone, string> = {
   info: "bg-info",
   primary: "bg-primary",
   secondary: "bg-secondary",
+}
+
+// The WCAG version number can't be the key segment itself: every flattener in
+// the i18n pipeline splits keys on ".", so "since.2.1" is unresolvable.
+export const VPAT_SINCE_KEY: Record<NonNullable<Criterion["since"]>, string> = {
+  "2.1": "accessibility.vpat.since.wcag21",
+  "2.2": "accessibility.vpat.since.wcag22",
 }
 
 // The order the VPAT summary chips + status filter render in: best-first, then

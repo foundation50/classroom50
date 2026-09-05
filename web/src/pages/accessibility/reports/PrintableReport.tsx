@@ -12,7 +12,13 @@ import {
 } from "@/util/a11y/vpatModel"
 import { DownloadIcon, FileIcon } from "@/components/ui/icons"
 
-import { useContrastAudit, useVpatReport, type Audit, type Vpat } from "../data"
+import {
+  VPAT_SINCE_KEY,
+  useContrastAudit,
+  useVpatReport,
+  type Audit,
+  type Vpat,
+} from "../data"
 
 // Which report the browser print / Save-as-PDF should render. The full report
 // prints every document; the others print just their own.
@@ -176,7 +182,7 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
                       {c.since && (
                         <span className="report-sub">
                           {" "}
-                          ({t(`accessibility.vpat.since.${c.since}`)})
+                          ({t(VPAT_SINCE_KEY[c.since])})
                         </span>
                       )}
                     </td>
