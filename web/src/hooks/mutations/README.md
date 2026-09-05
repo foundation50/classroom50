@@ -49,8 +49,9 @@ still on the old name.
 Convergent background passes (`useSyncRoster`, `useBestEffortOwnerReconcile`)
 are flagged too, plus `backgroundPass: true`. They are safe to re-run, but a
 pass cut off mid-way still leaves a gap until the next open, so the close-tab
-friction applies; and since the viewer didn't start them, `BackgroundPassBar`
-shows a blue top bar while one runs so the prompt has a visible cause.
+friction applies; and since the viewer didn't start them, `BackgroundPassTag`
+shows a small "Syncing with GitHub…" tag at the top while one runs so the
+prompt has a visible cause.
 
 Not flagged, on purpose:
 

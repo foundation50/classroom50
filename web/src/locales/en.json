@@ -136,6 +136,9 @@
       }
     }
   },
+  "backgroundPass": {
+    "syncing": "Syncing with GitHub…"
+  },
   "actionsBanner": {
     "totalActions_one": "{{count}} action",
     "totalActions_other": "{{count}} actions",

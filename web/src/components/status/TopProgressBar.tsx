@@ -5,38 +5,47 @@ import {
   useMotionValue,
   animate,
   type AnimationPlaybackControls,
-  type MotionValue,
 } from "motion/react"
 import { cx } from "@/components/ui"
 import { EASE_OUT } from "@/lib/motion"
 
-// The thin top-of-viewport trickle bar shared by RouteProgressBar (reads) and
-// BackgroundPassBar (background writes). Each binds `active` to its own React
-// Query counter; this owns the reveal/trickle/complete/fade lifecycle. The bar
-// trickles toward ~90% while `active`, then snaps to 100% and fades out when
-// it settles, mimicking a native app's route load.
+// Reveal/settle timing shared by the top-of-viewport indicators
+// (RouteProgressBar, BackgroundPassTag). Each binds `active` to its own React
+// Query counter; this owns the anti-flash reveal delay and the settle delay
+// before hiding, and reports the transitions so a bar can drive its own fill.
 //
-// Render-loop / churn safety: the fill is a Motion value animated imperatively
-// (no per-frame setState); React state holds only the coarse visible flag,
-// flipped at most twice per cycle. Crucially the effect does NOT clear the
-// timers in a per-run cleanup — `active` flips on every query start/finish, so
-// a staggered burst of reads (this app's norm) would otherwise keep clearing
-// and rescheduling the show-timer and the bar would never appear. Instead each
-// timer is armed once per transition (guarded by its ref) and only cleared on
-// unmount, so the 120ms reveal survives count churn.
+// Churn safety: React state holds only the coarse visible flag, flipped at most
+// twice per cycle. Crucially the effect does NOT clear the timers in a per-run
+// cleanup — `active` flips on every query start/finish, so a staggered burst of
+// reads (this app's norm) would otherwise keep clearing and rescheduling the
+// show-timer and the bar would never appear. Instead each timer is armed once
+// per transition (guarded by its ref) and only cleared on unmount, so the 120ms
+// reveal survives count churn.
 const SHOW_DELAY_MS = 120
 const HIDE_DELAY_MS = 180
 
-export function useTrickleProgress(active: boolean): {
-  visible: boolean
-  progress: MotionValue<number>
-} {
+type RevealTransitions = {
+  // The bar just became visible.
+  onShow?: () => void
+  // `active` dropped while visible; the bar hides after the settle delay.
+  onSettle?: () => void
+  // The bar just hid.
+  onHide?: () => void
+}
+
+export function useRevealCycle(
+  active: boolean,
+  transitions: RevealTransitions = {},
+): boolean {
   const [visible, setVisible] = useState(false)
-  const progress = useMotionValue(0)
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // The running fill tween, held so unmount can stop its frame loop.
-  const anim = useRef<AnimationPlaybackControls | null>(null)
+  // Timers fire well after the render that armed them; read the latest
+  // callbacks through a ref so a bar can pass inline closures.
+  const on = useRef(transitions)
+  useEffect(() => {
+    on.current = transitions
+  })
 
   useEffect(() => {
     if (active) {
@@ -51,11 +60,8 @@ export function useTrickleProgress(active: boolean): {
       if (!visible && !showTimer.current) {
         showTimer.current = setTimeout(() => {
           showTimer.current = null
-          progress.set(0.08)
           setVisible(true)
-          // Trickle toward 90% — never reaches 100% until it settles, so a
-          // long request keeps advancing without ever "finishing" early.
-          anim.current = animate(progress, 0.9, { duration: 8, ease: EASE_OUT })
+          on.current.onShow?.()
         }, SHOW_DELAY_MS)
       }
       return
@@ -68,31 +74,36 @@ export function useTrickleProgress(active: boolean): {
     }
     // Complete + fade a shown bar, armed once via the hide-timer ref guard.
     if (visible && !hideTimer.current) {
-      anim.current = animate(progress, 1, { duration: 0.2, ease: EASE_OUT })
+      on.current.onSettle?.()
       hideTimer.current = setTimeout(() => {
         hideTimer.current = null
         setVisible(false)
-        progress.set(0)
+        on.current.onHide?.()
       }, HIDE_DELAY_MS)
     }
-  }, [active, visible, progress])
+  }, [active, visible])
 
-  // Clear timers and stop the fill tween only on unmount — never in a per-run
-  // cleanup (see above), which would defeat the churn-proof reveal.
+  // Clear timers only on unmount — never in a per-run cleanup (see above),
+  // which would defeat the churn-proof reveal.
   useEffect(
     () => () => {
       if (showTimer.current) clearTimeout(showTimer.current)
       if (hideTimer.current) clearTimeout(hideTimer.current)
-      anim.current?.stop()
     },
     [],
   )
 
-  return { visible, progress }
+  return visible
 }
 
-// `className` carries the color and stacking layer; both bars share the top
-// slot, so the caller decides which one paints over the other.
+// The top slot both indicators pin to: `className` carries the color and
+// stacking layer, and the caller decides which one paints over the other.
+export const topBarClass = (className: string) =>
+  cx("fixed inset-x-0 top-0", className)
+
+// A determinate-looking trickle: fills toward ~90% while `active`, then snaps
+// to 100% and fades, mimicking a native app's route load. The fill is a Motion
+// value animated imperatively (no per-frame setState).
 export function TopProgressBar({
   active,
   className,
@@ -100,12 +111,28 @@ export function TopProgressBar({
   active: boolean
   className: string
 }) {
-  const { visible, progress } = useTrickleProgress(active)
+  const progress = useMotionValue(0)
+  // The running fill tween, held so unmount can stop its frame loop.
+  const anim = useRef<AnimationPlaybackControls | null>(null)
+  const visible = useRevealCycle(active, {
+    onShow: () => {
+      progress.set(0.08)
+      // Trickle toward 90% — never reaches 100% until it settles, so a long
+      // request keeps advancing without ever "finishing" early.
+      anim.current = animate(progress, 0.9, { duration: 8, ease: EASE_OUT })
+    },
+    onSettle: () => {
+      anim.current = animate(progress, 1, { duration: 0.2, ease: EASE_OUT })
+    },
+    onHide: () => progress.set(0),
+  })
+  useEffect(() => () => anim.current?.stop(), [])
+
   return (
     <AnimatePresence>
       {visible && (
         <motion.div
-          className={cx("fixed inset-x-0 top-0 h-0.5 origin-left", className)}
+          className={topBarClass(cx("h-0.5 origin-left", className))}
           style={{ scaleX: progress }}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

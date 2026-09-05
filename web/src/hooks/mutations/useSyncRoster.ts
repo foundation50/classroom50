@@ -25,8 +25,9 @@ export function useSyncRoster(
   return useMutation({
     // Convergent and re-runnable, but a pass cut off between its GC deletes
     // and the roster commit still leaves a gap until the next open, so it adds
-    // the same close-tab friction as the other multi-write chains. The blue
-    // top bar is the only in-page signal (the auto-run has no button).
+    // the same close-tab friction as the other multi-write chains. The
+    // syncing tag at the top is the only in-page signal (the auto-run has no
+    // button).
     meta: { keepTabOpen: true, backgroundPass: true },
     mutationFn: () =>
       reconcileRoster(client, { org, classroom, excludeLogins }),
