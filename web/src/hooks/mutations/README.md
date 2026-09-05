@@ -46,13 +46,15 @@ signal. Closing mid-chain otherwise strands partial state: a repo with no marker
 commit, a team without its roster row, a renamed manifest with half the repos
 still on the old name.
 
+Convergent background passes (`useSyncRoster`, `useBestEffortOwnerReconcile`)
+are flagged too. They are safe to re-run, but a pass cut off mid-way still
+leaves a gap until the next open, so the close-tab friction applies; they just
+carry no in-page copy, since the viewer didn't start them by hand.
+
 Not flagged, on purpose:
 
 - One write. A single PATCH, or one git-data commit (tree and commit objects
   are dangling until the ref moves), either lands or doesn't.
-- Convergent background passes (`useSyncRoster`, the reconcile hooks). They run
-  on page open and are designed to be re-run; prompting would nag on every
-  early exit.
 - A fan-out orchestrated by a component over single-write hooks (the bulk
   modals) or domain functions (the roster bars). Those call
   `useBeforeUnloadGuard(running)` themselves; see that hook.
