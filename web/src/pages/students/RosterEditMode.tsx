@@ -77,7 +77,6 @@ export function RosterEditMode({
   const [linkQueries, setLinkQueries] = useState<Record<string, string>>({})
   const [openPickerKey, setOpenPickerKey] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
-  // applyRosterEdits commits the roster, then team-adds each linked login.
   useBeforeUnloadGuard(saving)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [confirmingDiscard, setConfirmingDiscard] = useState(false)

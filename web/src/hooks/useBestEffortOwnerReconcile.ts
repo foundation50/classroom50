@@ -56,10 +56,7 @@ export function useBestEffortOwnerReconcile<TResult>({
   const inFlight = useRef<Set<string>>(new Set())
 
   const reconcile = useMutation<TResult, Error, ReconcileVars>({
-    // Every reconcile behind this chains team, description, and roster writes;
-    // keepTabOpen adds close-tab friction while one runs, and backgroundPass
-    // shows the syncing tag at the top, the only in-page signal for a pass the
-    // viewer didn't start.
+    // Every reconcile behind this chains team, description, and roster writes.
     meta: { keepTabOpen: true, backgroundPass: true },
     mutationFn: run,
     onSuccess: (result, vars) => {

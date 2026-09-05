@@ -149,8 +149,6 @@ const RosterBulkActionsBar = ({
     total: 0,
     message: "",
   })
-  // Every action here fans out over the selected rows straight from the domain
-  // layer (no mutation hook), so the bar holds the tab itself.
   useBeforeUnloadGuard(phase === "working")
   const [result, setResult] = useState<BulkResultView | null>(null)
   const [error, setError] = useState<string | null>(null)

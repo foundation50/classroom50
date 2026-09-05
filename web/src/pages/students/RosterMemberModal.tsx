@@ -170,8 +170,6 @@ const RosterMemberModal = ({
     resolving ||
     changingRole ||
     linkWorking
-  // Most of these actions chain team, invitation, and roster writes directly
-  // (no mutation hook), so the modal holds the tab off the same composite.
   useBeforeUnloadGuard(busy)
 
   const handleClose = () => {

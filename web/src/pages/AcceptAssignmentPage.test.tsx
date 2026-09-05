@@ -196,9 +196,8 @@ const acceptedRepo: GitHubRepo = {
 
 const orgReposKey = ["github", "org-repos", "acme"] as const
 
-// The tab hold is app-level (main.tsx mounts KeepTabOpenGuard once), so the
-// leave-page test renders it beside the page to exercise the accept mutation's
-// keepTabOpen flag end to end.
+// The tab hold lives in KeepTabOpenGuard (mounted once in main.tsx), so the
+// leave-page test renders it beside the page.
 const renderPage = (client: QueryClient) =>
   render(
     <QueryClientProvider client={client}>

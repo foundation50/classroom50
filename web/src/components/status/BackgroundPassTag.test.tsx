@@ -8,10 +8,7 @@ import type {
   MutationState,
 } from "@tanstack/react-query"
 
-// Feed the tag a fake mutation cache: `useMutationState` applies the tag's own
-// predicate and selector to whatever `cache` holds, so the test checks the
-// binding (which mutations count, what renders, what announces) while
-// RouteProgressBar.test and TopProgressBar.test cover the shared timing.
+// A fake mutation cache the tag's own predicate and selector run against.
 type Fake = {
   mutationId: number
   meta?: Record<string, unknown>
@@ -97,7 +94,6 @@ describe("BackgroundPassTag", () => {
     expect(pill()?.textContent).toBe("backgroundPass.syncing")
     expect(pill()?.closest("[aria-hidden='true']")).not.toBeNull()
     expect(live().textContent).toBe("backgroundPass.syncing")
-    // Decorative spinner, and no second anti-flash delay on top of the tag's.
     const spinner = pill()?.querySelector(".loading-spinner")
     expect(spinner?.getAttribute("aria-hidden")).toBe("true")
     expect(spinner?.classList.contains("indicator-appear")).toBe(false)
@@ -107,7 +103,6 @@ describe("BackgroundPassTag", () => {
     act(() => vi.advanceTimersByTime(200))
     expect(pill()).toBeNull()
 
-    // The completion text clears so the next pass announces afresh.
     act(() => vi.advanceTimersByTime(5000))
     expect(live().textContent).toBe("")
   })
@@ -122,7 +117,6 @@ describe("BackgroundPassTag", () => {
 
   it("judges only the passes it showed, not stale settled ones", () => {
     mount()
-    // An older failed pass lingers in the cache while a fresh one runs clean.
     setCache([
       { mutationId: 1, meta: BG, status: "error" },
       { mutationId: 2, meta: BG, status: "pending" },

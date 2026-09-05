@@ -180,8 +180,6 @@ export function GroupCollaboratorsModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
-  // Remove-then-add is two writes; a tab closed between them leaves the group
-  // one member short.
   useBeforeUnloadGuard(isSaving)
 
   // Dropped from the draft but still a live collaborator: removed only on Save,

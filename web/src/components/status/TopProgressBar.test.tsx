@@ -11,9 +11,8 @@ vi.mock("motion/react", () => ({
 
 import { useRevealCycle } from "./TopProgressBar"
 
-// RouteProgressBar.test covers the visible flag's timing; this pins the
-// transition callbacks a bar hangs its fill on, since a dropped `onShow` would
-// leave the trickle at scaleX(0) with every visibility assertion still green.
+// Pins the transition callbacks: a dropped `onShow` would leave the trickle at
+// scaleX(0) while RouteProgressBar.test's visibility checks stay green.
 describe("useRevealCycle transitions", () => {
   const onShow = vi.fn()
   const onSettle = vi.fn()
@@ -92,7 +91,6 @@ describe("useRevealCycle transitions", () => {
       { initialProps: { active: false, cb: onShow } },
     )
     rerender({ active: true, cb: onShow })
-    // A re-render mid-delay swaps the closure; the timer must see the new one.
     rerender({ active: true, cb: late })
     act(() => vi.advanceTimersByTime(120))
     expect(onShow).not.toHaveBeenCalled()

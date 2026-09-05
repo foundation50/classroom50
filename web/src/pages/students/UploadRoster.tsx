@@ -112,9 +112,6 @@ const UploadRoster = ({
   const resolveUploadedEmails = useResolveEmailRows(client, org)
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
-  // The import is several sequential roster.csv commits plus the invite pass
-  // (see runRosterImport); an interrupted run leaves rows imported but
-  // uninvited.
   useBeforeUnloadGuard(phase === "importing")
   const [fileName, setFileName] = useState("")
   // The raw uploaded text, kept so switching the format re-parses without

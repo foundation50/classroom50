@@ -10,8 +10,7 @@ import {
 
 import { KeepTabOpenGuard } from "./KeepTabOpenGuard"
 
-// Fires one mutation on mount that settles only when the test resolves `run`,
-// flagged (or not) with the tab-hold meta the guard reads.
+// One mutation on mount, settled when the test resolves `run`.
 const Writer = ({ flagged, run }: { flagged: boolean; run: Promise<void> }) => {
   const { mutate } = useMutation({
     ...(flagged ? { meta: { keepTabOpen: true } } : {}),
@@ -72,8 +71,6 @@ describe("KeepTabOpenGuard", () => {
     const { client, finish, view } = mount(true)
     await waitFor(() => expect(fire()).toBe(true))
 
-    // In-app navigation unmounts the page, not the mutation: the chain is still
-    // running in the cache, so the hold must stay.
     view.rerender(
       <QueryClientProvider client={client}>
         <KeepTabOpenGuard />

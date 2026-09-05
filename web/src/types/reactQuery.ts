@@ -1,21 +1,15 @@
-// Per-mutation flags read app-wide off the mutation cache (not a component's
-// `isPending`, which dies with the component while the write keeps running).
+// Per-mutation flags read app-wide off the mutation cache. Rationale and the
+// list of what is (and isn't) flagged: hooks/mutations/README.md.
 export type MutationMeta =
   | {
-      // The mutationFn chains more than one GitHub write, or fans out over many
-      // repos or students, so closing the tab mid-run strands partial state.
-      // KeepTabOpenGuard asks the browser to confirm while one is pending. A
-      // single write needs no flag: one PATCH, or one git-data commit (tree and
-      // commit objects are invisible until the ref moves), either lands or
-      // doesn't.
+      // The mutationFn chains several GitHub writes, so closing the tab
+      // mid-run strands partial state. KeepTabOpenGuard holds the tab.
       keepTabOpen?: boolean
       backgroundPass?: never
     }
   | {
-      // The app started this write itself (a convergent reconcile on page
-      // entry), so no button or spinner reflects it. BackgroundPassTag shows the
-      // syncing tag while one is pending. Such a pass is by construction a
-      // multi-write chain, so the type requires the tab hold alongside it.
+      // A convergent pass the app started itself; BackgroundPassTag shows it.
+      // Always a multi-write chain, so the tab hold is required with it.
       keepTabOpen: true
       backgroundPass: true
     }
