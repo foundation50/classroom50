@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react"
+import { Fragment, useId, useMemo, useState } from "react"
 import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
@@ -27,6 +27,11 @@ import {
 
 type VpatFilter = ConformanceLevel | "all"
 type VpatSort = "criterion" | "status"
+type VpatTab = WcagPrinciple | "all"
+
+// "All" first so the full list is the default view; the per-principle tabs
+// narrow it.
+const TAB_ORDER: VpatTab[] = ["all", ...PRINCIPLE_ORDER]
 
 const STATUS_SORT_WEIGHT: Record<ConformanceLevel, number> = {
   supports: 0,
@@ -39,29 +44,35 @@ const STATUS_SORT_WEIGHT: Record<ConformanceLevel, number> = {
 function VpatConformanceTable({
   criteria,
   generated,
+  groupByPrinciple,
 }: {
   criteria: Criterion[]
   generated: string
+  /** Show principle heading rows in the All view (off when sorted by status). */
+  groupByPrinciple: boolean
 }) {
   const { t } = useTranslation()
-  const [activePrinciple, setActivePrinciple] =
-    useState<WcagPrinciple>("Perceivable")
+  const [activeTab, setActiveTab] = useState<VpatTab>("all")
   const tabsId = useId()
   const tabProps = useRovingTabList(
-    PRINCIPLE_ORDER.length,
-    PRINCIPLE_ORDER.indexOf(activePrinciple),
+    TAB_ORDER.length,
+    TAB_ORDER.indexOf(activeTab),
   )
 
-  // Counts per principle reflect the current search/filter so a tab shows how
-  // many rows it holds (and an emptied tab reads 0 rather than looking broken).
-  const countByPrinciple = useMemo(() => {
-    const counts = {} as Record<WcagPrinciple, number>
+  // Counts per tab reflect the current search/filter so a tab shows how many
+  // rows it holds (and an emptied tab reads 0 rather than looking broken).
+  const countByTab = useMemo(() => {
+    const counts = { all: criteria.length } as Record<VpatTab, number>
     for (const p of PRINCIPLE_ORDER)
       counts[p] = criteria.filter((c) => c.principle === p).length
     return counts
   }, [criteria])
 
-  const rows = criteria.filter((c) => c.principle === activePrinciple)
+  const rows =
+    activeTab === "all"
+      ? criteria
+      : criteria.filter((c) => c.principle === activeTab)
+  const showGroups = activeTab === "all" && groupByPrinciple
 
   return (
     <Card shadow={false}>
@@ -71,28 +82,28 @@ function VpatConformanceTable({
           aria-label={t("accessibility.vpat.principleTabsAria")}
           className="tabs-boxed tabs w-fit"
         >
-          {PRINCIPLE_ORDER.map((principle, index) => (
+          {TAB_ORDER.map((tab, index) => (
             <button
-              key={principle}
+              key={tab}
               type="button"
               role="tab"
-              id={`${tabsId}-tab-${principle}`}
-              aria-selected={principle === activePrinciple}
+              id={`${tabsId}-tab-${tab}`}
+              aria-selected={tab === activeTab}
               aria-controls={`${tabsId}-panel`}
-              className={tabClass(principle === activePrinciple)}
-              onClick={() => setActivePrinciple(principle)}
+              className={tabClass(tab === activeTab)}
+              onClick={() => setActiveTab(tab)}
               {...tabProps(index)}
             >
-              {principle}
+              {tab === "all" ? t("accessibility.vpat.tabAll") : tab}
               <span
                 className={cx(
                   "text-xs tabular-nums",
-                  principle === activePrinciple
+                  tab === activeTab
                     ? "text-primary-content/70"
                     : "text-base-content/50",
                 )}
               >
-                {countByPrinciple[principle]}
+                {countByTab[tab]}
               </span>
             </button>
           ))}
@@ -101,7 +112,7 @@ function VpatConformanceTable({
         <div
           role="tabpanel"
           id={`${tabsId}-panel`}
-          aria-labelledby={`${tabsId}-tab-${activePrinciple}`}
+          aria-labelledby={`${tabsId}-tab-${activeTab}`}
         >
           {rows.length === 0 ? (
             <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
@@ -134,36 +145,52 @@ function VpatConformanceTable({
                   </tr>
                 </thead>
                 <tbody>
-                  {rows.map((c) => (
-                    <tr key={c.id}>
-                      <td className="align-top">
-                        <span className="font-mono text-xs text-base-content/60">
-                          {c.id}
-                        </span>{" "}
-                        {c.name}
-                        {c.since && (
-                          <span className="ms-1 text-xs text-base-content/60">
-                            ({t(`accessibility.vpat.since.${c.since}`)})
-                          </span>
+                  {rows.map((c, i) => (
+                    <Fragment key={c.id}>
+                      {showGroups &&
+                        (i === 0 || rows[i - 1].principle !== c.principle) && (
+                          <tr className="bg-base-200/50">
+                            <th
+                              scope="colgroup"
+                              colSpan={5}
+                              className="text-xs font-semibold tracking-wide text-base-content/70 uppercase"
+                            >
+                              {c.principle}
+                            </th>
+                          </tr>
                         )}
-                      </td>
-                      <td className="align-top font-mono text-xs">{c.level}</td>
-                      <td className="align-top">
-                        <Badge tone={CONFORMANCE_TONE[c.status]}>
-                          {t(`accessibility.vpat.status.${c.status}`)}
-                        </Badge>
-                      </td>
-                      <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
-                        {c.assessed ?? generated}
-                      </td>
-                      <td className="align-top text-sm text-base-content/70">
-                        {hasGenericRemark(c) ? (
-                          <span className="text-base-content/40">—</span>
-                        ) : (
-                          c.remark
-                        )}
-                      </td>
-                    </tr>
+                      <tr>
+                        <td className="align-top">
+                          <span className="font-mono text-xs text-base-content/60">
+                            {c.id}
+                          </span>{" "}
+                          {c.name}
+                          {c.since && (
+                            <span className="ms-1 text-xs text-base-content/60">
+                              ({t(`accessibility.vpat.since.${c.since}`)})
+                            </span>
+                          )}
+                        </td>
+                        <td className="align-top font-mono text-xs">
+                          {c.level}
+                        </td>
+                        <td className="align-top">
+                          <Badge tone={CONFORMANCE_TONE[c.status]}>
+                            {t(`accessibility.vpat.status.${c.status}`)}
+                          </Badge>
+                        </td>
+                        <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
+                          {c.assessed ?? generated}
+                        </td>
+                        <td className="align-top text-sm text-base-content/70">
+                          {hasGenericRemark(c) ? (
+                            <span className="text-base-content/40">—</span>
+                          ) : (
+                            c.remark
+                          )}
+                        </td>
+                      </tr>
+                    </Fragment>
                   ))}
                 </tbody>
               </table>
@@ -336,6 +363,7 @@ export function VpatSection() {
           <VpatConformanceTable
             criteria={visibleCriteria}
             generated={vpat.generated}
+            groupByPrinciple={sort === "criterion"}
           />
 
           <p className="text-xs text-base-content/60">

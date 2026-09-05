@@ -98,6 +98,7 @@
       "loadError": "Couldn't load the conformance report.",
       "generated": "Report date {{generated}}",
       "principleTabsAria": "WCAG principle",
+      "tabAll": "All",
       "searchPlaceholder": "Search criteria",
       "searchAria": "Search conformance criteria",
       "filterAll": "All statuses",
