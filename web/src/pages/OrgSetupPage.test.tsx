@@ -84,6 +84,8 @@ vi.mock("@/components/skeletonOverwrite/skeletonOverwriteUi", () => ({
 }))
 
 import OrgSetupPage from "./OrgSetupPage"
+import { LiveAnnouncer } from "@/components/status/LiveAnnouncer"
+import { __resetLiveAnnouncerForTest } from "@/lib/liveAnnouncer"
 
 const retry = vi.fn()
 const owner = (over: Record<string, unknown>) =>
@@ -117,8 +119,11 @@ const renderPage = () => {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: 0 } },
   })
+  // The page's Spinner announces through the app-wide live region, so the
+  // "loading" assertions need it mounted beside the page.
   return render(
     <QueryClientProvider client={client}>
+      <LiveAnnouncer />
       <OrgSetupPage />
     </QueryClientProvider>,
   )
@@ -126,6 +131,7 @@ const renderPage = () => {
 
 afterEach(() => {
   cleanup()
+  __resetLiveAnnouncerForTest()
   ownerMock.mockReset()
   repoStatusMock.mockReset()
   tokenStatusMock.mockReset()
@@ -282,6 +288,7 @@ describe("OrgSetupPage wizard navigation", () => {
           new QueryClient({ defaultOptions: { queries: { retry: false } } })
         }
       >
+        <LiveAnnouncer />
         <OrgSetupPage />
       </QueryClientProvider>,
     )

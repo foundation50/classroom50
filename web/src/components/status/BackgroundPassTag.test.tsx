@@ -48,6 +48,11 @@ vi.mock("motion/react", () => ({
 }))
 
 import { BackgroundPassTag } from "./BackgroundPassTag"
+import { LiveAnnouncer } from "./LiveAnnouncer"
+import {
+  ANNOUNCE_LINGER_MS,
+  __resetLiveAnnouncerForTest,
+} from "@/lib/liveAnnouncer"
 
 const BG = { keepTabOpen: true, backgroundPass: true }
 const live = () => screen.getByRole("status")
@@ -55,20 +60,28 @@ const pill = () => document.querySelector(".bg-warning")
 
 let rerender: (ui: ReactNode) => void = () => {}
 
+// The tag announces through the app-wide LiveAnnouncer, so tests mount both.
+const tree = () => (
+  <>
+    <LiveAnnouncer />
+    <BackgroundPassTag />
+  </>
+)
 const mount = () => {
-  rerender = render(<BackgroundPassTag />).rerender
+  rerender = render(tree()).rerender
 }
 
 const setCache = (next: Fake[]) => {
   act(() => {
     cache = next
-    rerender(<BackgroundPassTag />)
+    rerender(tree())
   })
 }
 
 beforeEach(() => {
   vi.useFakeTimers()
   cache = []
+  __resetLiveAnnouncerForTest()
 })
 
 afterEach(() => {
@@ -78,7 +91,7 @@ afterEach(() => {
 })
 
 describe("BackgroundPassTag", () => {
-  it("always renders the live region, empty while idle", () => {
+  it("renders nothing into the live region while idle", () => {
     mount()
     expect(live().textContent).toBe("")
     expect(pill()).toBeNull()
@@ -104,7 +117,10 @@ describe("BackgroundPassTag", () => {
     act(() => vi.advanceTimersByTime(200))
     expect(pill()).toBeNull()
 
+    // The tag withdraws its text after its own linger; the announcer then
+    // clears the region after its own.
     act(() => vi.advanceTimersByTime(5000))
+    act(() => vi.advanceTimersByTime(ANNOUNCE_LINGER_MS))
     expect(live().textContent).toBe("")
   })
 
@@ -183,7 +199,10 @@ describe("BackgroundPassTag", () => {
       { mutationId: 2, meta: BG, status: "error" },
     ])
     expect(live().textContent).toBe("backgroundPass.failed")
+    // The tag withdraws its text after its own linger; the announcer then
+    // clears the region after its own.
     act(() => vi.advanceTimersByTime(5000))
+    act(() => vi.advanceTimersByTime(ANNOUNCE_LINGER_MS))
     expect(live().textContent).toBe("")
   })
 
