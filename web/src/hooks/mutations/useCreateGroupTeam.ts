@@ -18,6 +18,7 @@ export function useCreateGroupTeam(params: {
   const { org, classroom, assignment } = params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: {
       displayName?: string
       creatorLogin: string

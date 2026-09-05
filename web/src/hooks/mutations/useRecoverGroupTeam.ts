@@ -23,6 +23,7 @@ export function useRecoverGroupTeam(params: {
   const { org, classroom, assignment } = params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: {
       n: number
       displayName?: string

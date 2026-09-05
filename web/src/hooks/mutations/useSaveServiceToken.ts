@@ -47,6 +47,7 @@ export function useSaveServiceToken(org: string | undefined) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async ({
       serviceToken,
       expiresInDays,

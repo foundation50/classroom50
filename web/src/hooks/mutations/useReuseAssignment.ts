@@ -104,6 +104,7 @@ export function useReuseAssignment({
   const submittingRef = useRef(false)
 
   const reuse = useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: CopyAssignmentInput) =>
       copyAssignmentWithConflictRetry(client, input),
     onSuccess: (result) => {

@@ -25,6 +25,8 @@ export function useDownloadSubmission() {
   const client = useGitHubClient()
 
   return useMutation({
+    // One archive can be large; losing the download mid-fetch costs a re-run.
+    meta: { keepTabOpen: true },
     mutationFn: async ({
       org,
       classroom,

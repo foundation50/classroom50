@@ -15,6 +15,7 @@ import {
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useUnenrollStudent } from "@/hooks/mutations/useUnenrollStudent"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
@@ -169,6 +170,7 @@ const RosterMemberModal = ({
     resolving ||
     changingRole ||
     linkWorking
+  useBeforeUnloadGuard(busy)
 
   const handleClose = () => {
     if (busy) return

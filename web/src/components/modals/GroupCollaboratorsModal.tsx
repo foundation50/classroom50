@@ -25,6 +25,7 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
@@ -179,6 +180,7 @@ export function GroupCollaboratorsModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
+  useBeforeUnloadGuard(isSaving)
 
   // Dropped from the draft but still a live collaborator: removed only on Save,
   // restorable via undo until then.

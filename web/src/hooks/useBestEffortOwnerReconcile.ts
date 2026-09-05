@@ -56,6 +56,8 @@ export function useBestEffortOwnerReconcile<TResult>({
   const inFlight = useRef<Set<string>>(new Set())
 
   const reconcile = useMutation<TResult, Error, ReconcileVars>({
+    // Every reconcile behind this chains team, description, and roster writes.
+    meta: { keepTabOpen: true, backgroundPass: true },
     mutationFn: run,
     onSuccess: (result, vars) => {
       // Release the key for a non-latching success so a later render retries

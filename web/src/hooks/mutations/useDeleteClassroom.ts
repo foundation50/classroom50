@@ -26,6 +26,7 @@ export function useDeleteClassroom(org: string, classroom: string) {
   const listKey = githubKeys.jsonFile(org, CONFIG_REPO, "")
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: DeleteClassroomInput) => deleteClassroom(client, input),
     onSuccess: (result) => {
       if (result.deleted) {

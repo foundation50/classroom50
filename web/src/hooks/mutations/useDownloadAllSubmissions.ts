@@ -38,6 +38,7 @@ export function useDownloadAllSubmissions() {
     Error,
     DownloadAllSubmissionsInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: async ({ org, classroom, assignment, owners }) => {
       // Pick the directory first, inside the click's activation, before any
       // fetch. Null means cancelled.

@@ -24,6 +24,7 @@ import { getName } from "@/util/students"
 import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Student, SubmissionMode } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkSubmissionTriggerModalProps = {
   open: boolean
@@ -237,6 +238,7 @@ export function BulkSubmissionTriggerModal({
   }
 
   const busy = phase === "working"
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal

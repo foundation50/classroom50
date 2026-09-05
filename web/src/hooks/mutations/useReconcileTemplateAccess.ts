@@ -44,6 +44,7 @@ export function useReconcileTemplateAccess() {
     Error,
     ReconcileTemplateAccessInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: async ({ org, classroom, slug, template, locked }) => {
       // Refuse to re-grant a locked assignment: doing so would undo the lock's
       // whole point (student-team read removed on the private template). Return

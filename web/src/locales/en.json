@@ -136,6 +136,11 @@
       }
     }
   },
+  "backgroundPass": {
+    "syncing": "Syncing with GitHub…",
+    "synced": "Synced with GitHub.",
+    "failed": "Syncing with GitHub didn't finish. It runs again the next time you open the classroom."
+  },
   "actionsBanner": {
     "totalActions_one": "{{count}} action",
     "totalActions_other": "{{count}} actions",

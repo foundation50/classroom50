@@ -24,6 +24,7 @@ export function useApplyGroupsPlan(params: {
   const { org, classroom, assignment } = params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: {
       plan: readonly PlannedGroup[]
       formation: TeamFormation

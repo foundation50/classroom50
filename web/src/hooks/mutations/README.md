@@ -35,6 +35,37 @@ Hooks stay `t()`-free: a caller passes pre-translated strings via a `messages`
 bag. The boundary is a convention, not yet lint-enforced (P7 earmarks
 `eslint-plugin-boundaries`).
 
+## Hold the tab on long-running work
+
+A hook declares `meta: { keepTabOpen: true }` when losing the tab mid-run costs
+the teacher or student something:
+
+- Its `mutationFn` issues more than one GitHub write (or fans out over many
+  repos or students), so a closed tab strands partial state.
+- Its `mutationFn` is a long GitHub read the user would not want to lose, such
+  as downloading submission archives (`useDownloadSubmission`,
+  `useDownloadAllSubmissions`).
+
+`KeepTabOpenGuard` reads the flag off the mutation cache and asks the browser to
+confirm before the tab closes while one is pending, so the hold survives the
+page unmounting. A paused mutation (offline, or queued behind a `scope`
+sibling) has not started and does not hold the tab.
+
+Convergent background passes (`useSyncRoster`, `useBestEffortOwnerReconcile`)
+add `backgroundPass: true`. The app starts them on its own, so `BackgroundPassTag`
+shows "Syncing with GitHub…" while one runs (Primer loading pattern: 1s reveal,
+always-mounted live region, completion announced). The manual Sync roster
+button shares `useSyncRoster`, so it shows the same tag; the copy is true for
+both.
+
+Not flagged:
+
+- One write: a single PATCH, or one git-data commit (tree and commit objects
+  are dangling until the ref moves).
+- One short read, such as a workflow dispatch or a token probe.
+- Component-run fan-outs over single-write hooks or domain functions (bulk
+  modals, roster bars). Those call `useBeforeUnloadGuard(running)` themselves.
+
 ## Deliberate exceptions
 
 The boundary is **GitHub data writes** against the app's query cache. Two

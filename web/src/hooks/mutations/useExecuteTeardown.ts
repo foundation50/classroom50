@@ -39,6 +39,7 @@ export function useExecuteTeardown(plan: TeardownPlan | null) {
     void queryClient.invalidateQueries({ queryKey: ["orgs"] })
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async () => {
       if (!plan) return
       return executeTeardown(client, plan)

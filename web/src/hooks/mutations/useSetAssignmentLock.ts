@@ -30,6 +30,7 @@ export function useSetAssignmentLock(
     GitHubAPIError,
     SetAssignmentLockInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: (input) => setAssignmentLockWithConflictRetry(client, input),
     onSuccess: (result, input) => {
       void queryClient.invalidateQueries({

@@ -13,6 +13,7 @@ export function useBulkRemoveFromClassroom(org: string) {
   const client = useGitHubClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (input: {
       classroom: string
       rows: OrgMemberRow[]

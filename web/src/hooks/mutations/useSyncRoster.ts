@@ -23,6 +23,9 @@ export function useSyncRoster(
   const queryClient = useQueryClient()
 
   return useMutation({
+    // Re-runnable, but a pass cut off between its GC deletes and the roster
+    // commit leaves a gap until the next open.
+    meta: { keepTabOpen: true, backgroundPass: true },
     mutationFn: () =>
       reconcileRoster(client, { org, classroom, excludeLogins }),
     onSuccess: () => {

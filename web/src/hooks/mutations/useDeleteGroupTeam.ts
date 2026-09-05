@@ -25,6 +25,7 @@ export function useDeleteGroupTeam(params: {
   const { org, classroom, assignment } = params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async (input: { slug: string; id: number }) => {
       await deleteGroupTeam(client, org, {
         slug: input.slug,

@@ -15,6 +15,7 @@ export function usePurgeInviteTeams(org: string, classroom: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: () => purgeInviteTeams(client, { org, classroom }),
     onSuccess: () => {
       void queryClient.invalidateQueries({

@@ -47,18 +47,21 @@ export default Spinner
  * Decorative in-button/inline spinner: a bare `aria-hidden` span for busy
  * states that are already announced elsewhere (a labeled disabled button,
  * adjacent text). Use `<Spinner>` when the spinner is the only indicator.
- * Anti-flash guarded like `<Spinner>`.
+ * Anti-flash guarded like `<Spinner>`; pass `immediate` when the parent
+ * already delays its own reveal.
  */
 export function InlineSpinner({
   size = "xs",
   className,
+  immediate = false,
 }: {
   size?: SpinnerSize
   className?: string
+  immediate?: boolean
 }) {
   return (
     <span
-      className={`loading loading-spinner loading-${size} indicator-appear${className ? ` ${className}` : ""}`}
+      className={`loading loading-spinner loading-${size}${immediate ? "" : " indicator-appear"}${className ? ` ${className}` : ""}`}
       aria-hidden="true"
     />
   )

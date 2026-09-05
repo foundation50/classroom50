@@ -16,6 +16,7 @@ import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkRepoAccessModalProps = {
   open: boolean
@@ -167,6 +168,7 @@ export function BulkRepoAccessModal({
   }
 
   const busy = phase === "working"
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal
