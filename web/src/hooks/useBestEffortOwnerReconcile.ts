@@ -57,9 +57,10 @@ export function useBestEffortOwnerReconcile<TResult>({
 
   const reconcile = useMutation<TResult, Error, ReconcileVars>({
     // Every reconcile behind this chains team, description, and roster writes;
-    // the flag adds close-tab friction while one runs, with no in-page copy
-    // since the pass is background work the viewer didn't start.
-    meta: { keepTabOpen: true },
+    // keepTabOpen adds close-tab friction while one runs, and backgroundPass
+    // shows the blue top bar, the only in-page signal for a pass the viewer
+    // didn't start.
+    meta: { keepTabOpen: true, backgroundPass: true },
     mutationFn: run,
     onSuccess: (result, vars) => {
       // Release the key for a non-latching success so a later render retries

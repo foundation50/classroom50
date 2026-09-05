@@ -47,9 +47,10 @@ commit, a team without its roster row, a renamed manifest with half the repos
 still on the old name.
 
 Convergent background passes (`useSyncRoster`, `useBestEffortOwnerReconcile`)
-are flagged too. They are safe to re-run, but a pass cut off mid-way still
-leaves a gap until the next open, so the close-tab friction applies; they just
-carry no in-page copy, since the viewer didn't start them by hand.
+are flagged too, plus `backgroundPass: true`. They are safe to re-run, but a
+pass cut off mid-way still leaves a gap until the next open, so the close-tab
+friction applies; and since the viewer didn't start them, `BackgroundPassBar`
+shows a blue top bar while one runs so the prompt has a visible cause.
 
 Not flagged, on purpose:
 
