@@ -42,6 +42,15 @@ import {
 import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
 
+// A row the write under test never touches, so a test can assert the touched
+// row keeps its position instead of moving to the end of the array.
+const neighborRow = (slug: string): Assignment => ({
+  slug,
+  name: `Homework ${slug}`,
+  mode: "individual",
+  autograder: "default",
+})
+
 const fullSource: Assignment = {
   slug: "hw1",
   name: "Homework 1",
@@ -499,13 +508,16 @@ describe("editAssignment (preserved-entry integration)", () => {
   // on the template-less path: ref read, commit read, assignments.json contents
   // read, then tree/commit/ref writes. classroom.json is absent (404) so the
   // archive guard reads the classroom as active.
-  function makeClient(entry: Assignment = existingEntry): {
+  function makeClient(
+    entry: Assignment = existingEntry,
+    ...neighbors: Assignment[]
+  ): {
     client: GitHubClient
     committedContent: () => string
   } {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
-      assignments: [entry],
+      assignments: [entry, ...neighbors],
     }
     const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
@@ -633,6 +645,38 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(written.assignments).toHaveLength(1)
     expect(written.assignments[0].slug).toBe(SLUG)
     expect(written.assignments[0].name).toBe("Homework 1 (edited)")
+  })
+
+  it("edits the entry in place instead of moving it to the end", async () => {
+    const { client, committedContent } = makeClient(
+      existingEntry,
+      neighborRow("hw2"),
+    )
+
+    await editAssignment(client, editInput())
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect(written.assignments.map((a) => a.slug)).toEqual([SLUG, "hw2"])
+  })
+
+  it("rewrites only the first row when a manifest holds a duplicate slug", async () => {
+    // A hand-edited config repo can carry two rows for one slug. The edit is
+    // built from the first (`find`), so the second must be left alone rather
+    // than overwritten with a copy of its twin.
+    const duplicate: Assignment = { ...existingEntry, name: "Homework 1 (dup)" }
+    const { client, committedContent } = makeClient(existingEntry, duplicate)
+
+    await editAssignment(client, editInput())
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect(written.assignments.map((a) => a.name)).toEqual([
+      "Homework 1 (edited)",
+      "Homework 1 (dup)",
+    ])
   })
 
   it.each([
@@ -4623,6 +4667,7 @@ describe("setAssignmentLock", () => {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
       assignments: [
+        neighborRow("hw0"),
         {
           slug: SLUG,
           name: "Homework 1",
@@ -4631,6 +4676,7 @@ describe("setAssignmentLock", () => {
           ...(opts.locked ? { locked: true } : {}),
           ...(template ? { template } : {}),
         },
+        neighborRow("hw2"),
       ],
     }
     const classroomJson: Record<string, unknown> = {
@@ -4773,6 +4819,19 @@ describe("setAssignmentLock", () => {
     expect(grants()).toContain("classroom50-cs50")
   })
 
+  it("flips the flag in place instead of moving the row to the end", async () => {
+    const { client, committed } = makeLockClient({ locked: false })
+    await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+    // Matches the CLI's lock, which assigns back into the same index.
+    expect(written.assignments.map((a) => a.slug)).toEqual(["hw0", SLUG, "hw2"])
+  })
+
   it("makes a public template a UX-gate-only lock (no access change)", async () => {
     const { client, revokes } = makeLockClient({
       locked: false,
@@ -4841,6 +4900,7 @@ describe("setAssignmentClosed", () => {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
       assignments: [
+        neighborRow("hw0"),
         {
           slug: SLUG,
           name: "Homework 1",
@@ -4849,6 +4909,7 @@ describe("setAssignmentClosed", () => {
           template: { owner: ORG, repo: "tmpl", branch: "main" },
           ...(opts.closed ? { closed: true } : {}),
         },
+        neighborRow("hw2"),
       ],
     }
     const classroomJson: Record<string, unknown> = {
@@ -4928,6 +4989,18 @@ describe("setAssignmentClosed", () => {
     })
     expect(result.closed).toBe(false)
     expect(committed()).not.toContain(`"closed"`)
+  })
+
+  it("flips the flag in place instead of moving the row to the end", async () => {
+    const { client, committed } = makeClosedClient({ closed: false })
+    await setAssignmentClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      closed: true,
+    })
+    const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+    expect(written.assignments.map((a) => a.slug)).toEqual(["hw0", SLUG, "hw2"])
   })
 
   it("no-ops when already in the requested state (no commit)", async () => {
