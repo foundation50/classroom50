@@ -35,6 +35,7 @@
     "print": {
       "reportTitle": "{{vendor}} Accessibility Conformance Report",
       "reportProduct": "WCAG Edition (based on VPAT 2.5Rev). Name of product/version: {{product}}.",
+      "productWithVersion": "{{product}}, version {{version}}",
       "reportMeta": "Standard: {{standard}}, target Level {{target}}. Applicable standards: WCAG {{versions}}, Level A and AA. Report date: {{date}}.",
       "vpatSummary": "Summary ({{total}} criteria): {{supports}} Supports, {{partially}} Partially Supports, {{doesNotSupport}} Does Not Support, {{notApplicable}} Not Applicable, {{notEvaluated}} Not Evaluated.",
       "contrastTitle": "Color contrast audit",

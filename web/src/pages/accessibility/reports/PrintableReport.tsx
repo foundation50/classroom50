@@ -121,11 +121,18 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
 
   return (
     <section className="report-doc">
-      <h1>{t("accessibility.print.reportTitle", { vendor: vpat.vendor })}</h1>
+      <h1>
+        {t("accessibility.print.reportTitle", {
+          vendor: vpat.vendor ?? vpat.product,
+        })}
+      </h1>
       <p className="report-meta">
         {t("accessibility.print.reportProduct", {
           product: vpat.version
-            ? `${vpat.product}, ${vpat.version}`
+            ? t("accessibility.print.productWithVersion", {
+                product: vpat.product,
+                version: vpat.version,
+              })
             : vpat.product,
         })}
       </p>

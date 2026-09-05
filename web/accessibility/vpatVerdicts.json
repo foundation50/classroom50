@@ -39,7 +39,7 @@
     "status": "supports",
     "evidence": "manual",
     "assessed": "2026-09-05",
-    "remark": "Reviewed the organizations, classrooms, assignments, roster, members, submissions, and activity pages in grayscale (CSS filter) and via the DOM: every status/role/grade badge carries text ('Enrolled', 'Pending invite', 'Teacher', '10/10'); the active sidebar item has a left bar plus background, not color alone, and is exposed with aria-current=page; form errors are text. Prose links in the org-details panel are green with no underline at rest but gain an underline on hover/focus and sit at about 3.1:1 against body text (G183). No information conveyed by color alone found."
+    "remark": "Reviewed the organizations, classrooms, assignments, roster, members, submissions, and activity pages in grayscale (CSS filter) and via the DOM: every status/role/grade badge carries text ('Enrolled', 'Pending invite', 'Teacher', '10/10'); the active sidebar item has a left bar plus background, not color alone, and is exposed with aria-current=page; form errors are text. Prose links in the org-details panel are green with no underline at rest but gain an underline on hover/focus and measure 3.11:1 against the surrounding body text (rgb(26,127,55) on rgb(31,35,40)), meeting G183's 3:1 floor. No information conveyed by color alone found."
   },
   "1.4.13": {
     "status": "partially",
@@ -75,7 +75,7 @@
     "status": "supports",
     "evidence": "manual",
     "assessed": "2026-09-05",
-    "remark": "The only moving content is loading spinners and the skeleton shimmer (progress indicators, exempt as essential) plus sub-second transitions; the activity timeline auto-refreshes only while an operation is in flight (progress of a process the user started) and stops when idle. Verified in Chromium that the shimmer is disabled under prefers-reduced-motion. Note: the in-app 'Interface motion: Off' toggle (data-reduce-motion) does not yet stop the shimmer, only the OS setting does; a follow-up."
+    "remark": "The only moving content is loading spinners and the skeleton shimmer (progress indicators, exempt as essential) plus sub-second transitions; the activity timeline auto-refreshes only while an operation is in flight (progress of a process the user started) and stops when idle. Verified in Chromium that the shimmer is disabled under prefers-reduced-motion. The in-app 'Interface motion: Off' setting (data-reduce-motion) likewise collapses every animation to a single 0.01 ms iteration, verified in the stylesheet."
   },
   "2.4.1": {
     "status": "partially",

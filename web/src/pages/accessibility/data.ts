@@ -41,11 +41,11 @@ export type Vpat = Pick<
   | "criteria"
   | "standard"
   | "target"
-  | "vendor"
   | "version"
 > & {
   // Optional on the read side only: the JSON is an unhashed asset, so a cached
-  // copy from an older deploy may predate the field.
+  // copy from an older deploy may predate these fields.
+  vendor?: VpatReportJson["vendor"]
   wcagVersions?: VpatReportJson["wcagVersions"]
 }
 

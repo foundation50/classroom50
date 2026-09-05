@@ -1,20 +1,22 @@
 import { describe, expect, it } from "vitest"
 
 import { ASSESSMENT_GUIDANCE } from "./assessmentGuidance"
-import { CRITERIA } from "./vpatModel"
+import verdicts from "../../../accessibility/vpatVerdicts.json" with { type: "json" }
+import { CRITERIA, isManuallyOwned, type VerdictOverlay } from "./vpatModel"
 
-// Every criterion still awaiting a manual verdict must have assessor guidance,
-// otherwise the /assess tool shows it with no instructions and it silently
-// stays Not Evaluated.
+// Every criterion the manual assessment owns (awaiting a verdict or already
+// carrying one) must have assessor guidance, otherwise the /assess tool shows
+// it with no instructions and a re-assessment has nothing to follow.
 describe("assessmentGuidance", () => {
   const guided = new Set(ASSESSMENT_GUIDANCE.map((g) => g.id))
+  const overlay = verdicts as VerdictOverlay
 
-  it("covers every criterion the manual assessment still owns", () => {
-    const outstanding = CRITERIA.filter(
-      (c) => c.status === "notEvaluated" && c.evidence === undefined,
-    ).map((c) => c.id)
-    const missing = outstanding.filter((id) => !guided.has(id))
-    expect(missing).toEqual([])
+  it("covers every manually-owned criterion", () => {
+    const owned = CRITERIA.filter((c) => isManuallyOwned(c, overlay)).map(
+      (c) => c.id,
+    )
+    expect(owned.length).toBeGreaterThan(0)
+    expect(owned.filter((id) => !guided.has(id))).toEqual([])
   })
 
   it("only targets criteria that exist in the model", () => {

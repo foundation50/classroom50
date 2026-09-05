@@ -114,8 +114,10 @@ for Authors" mandate: the "[Company] Accessibility Conformance Report" title,
 template version, Name of Product/Version, Report Date, Product Description,
 Contact Information, Notes, Evaluation Methods Used, the Applicable
 Standards/Guidelines table (WCAG 2.0, 2.1, 2.2 at Level A and AA), and the ITI
-term definitions verbatim. The version comes from the build (`release.version`
-in `vite.config.ts`, `npm_package_version` for the local generator).
+term definitions verbatim. The version is the `web-v*` release tag when the
+build has one (`release.tagVersion` in `vite.config.ts`, `VITE_APP_VERSION` for
+the generator); an untagged build names no version rather than borrowing the
+last release's.
 
 The tables use columns **Criteria · Level · Conformance Level · Assessed ·
 Remarks and Explanations**, grouped by WCAG principle (the template allows

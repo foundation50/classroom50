@@ -152,7 +152,7 @@ export function renderContrastReport(now = new Date()): string {
   const { thresholds: t, margins: m, enhancedThresholds: e, summary } = audit
 
   const out: string[] = []
-  out.push("# WCAG 2.2 Contrast Audit — Classroom50 web app")
+  out.push("# WCAG 2.2 Contrast Audit — Classroom 50 web app")
   out.push("")
   out.push(
     "Derived from `contrast-audit.json` (built from `src/util/a11y/contrastModel.ts`). " +

@@ -17,6 +17,7 @@ import {
   CONFORMANCE_TONE,
   type Criterion,
   type EvidenceKind,
+  isManuallyOwned,
   type ManualVerdict,
 } from "@/util/a11y/vpatModel"
 import type { Guidance } from "@/util/a11y/assessmentGuidance"
@@ -50,11 +51,7 @@ const EVIDENCE_LABEL: Record<EvidenceKind, string> = {
   architectural: "Architectural (from the design)",
 }
 
-// A criterion is manually-owned when it is still notEvaluated with no evidence,
-// or already carries a recorded manual verdict.
-const isManual = (c: Criterion, verdicts: Record<string, ManualVerdict>) =>
-  (c.status === "notEvaluated" && c.evidence === undefined) ||
-  verdicts[c.id] !== undefined
+const isManual = isManuallyOwned
 
 export default function AssessmentPage() {
   useDocumentTitle("Assessment mode — WCAG 2.2 AA")

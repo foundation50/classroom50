@@ -21,12 +21,10 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 // scripts/a11y/ -> web/ (two levels up): outputs land at the web root.
 const dir = path.resolve(here, "..", "..")
 
-// Same precedence as vite.config.ts's release info: a `web-v*` release tag in
-// CI, else package.json (npm exposes it to scripts it runs).
+// Tag-derived only, matching vite.config.ts: package.json's version is the last
+// release, not necessarily what this working tree contains.
 const version =
-  (process.env.VITE_APP_VERSION || "").replace(/^web-v/, "") ||
-  process.env.npm_package_version ||
-  undefined
+  (process.env.VITE_APP_VERSION || "").replace(/^web-v/, "") || undefined
 const options = { version }
 
 const outputs: [string, string][] = [

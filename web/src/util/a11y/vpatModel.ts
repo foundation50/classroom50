@@ -71,6 +71,11 @@ export type Criterion = {
    * reviewer filing against 2.0 or 2.1 knows which rows to disregard.
    */
   since?: "2.1" | "2.2"
+  /**
+   * The last WCAG version that still contains the criterion, when it was later
+   * removed (4.1.1 Parsing, dropped in 2.2). Rendered as "(2.0 and 2.1 only)".
+   */
+  until?: "2.1"
   status: ConformanceLevel
   /** Required whenever status is `supports` (the overclaim guard enforces this). */
   evidence?: EvidenceKind
@@ -653,6 +658,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Parsing",
     level: "A",
     principle: "Robust",
+    until: "2.1",
     status: "supports",
     evidence: "architectural",
     remark:
@@ -708,6 +714,21 @@ export type ManualVerdict = {
 }
 
 export type VerdictOverlay = Record<string, ManualVerdict>
+
+/**
+ * Whether a criterion belongs to the manual assessment: still awaiting a verdict
+ * (notEvaluated with no evidence) or already carrying a recorded one. Shared by
+ * the dev-only /assess tool and the guidance-coverage test so they can't drift.
+ */
+export function isManuallyOwned(
+  c: Pick<Criterion, "id" | "status" | "evidence">,
+  overlay: VerdictOverlay,
+): boolean {
+  return (
+    (c.status === "notEvaluated" && c.evidence === undefined) ||
+    overlay[c.id] !== undefined
+  )
+}
 
 // True for a real calendar date in ISO YYYY-MM-DD form. A bare regex would
 // admit impossible dates (2026-13-40, 0000-00-00), so round-trip through Date:

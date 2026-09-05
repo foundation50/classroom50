@@ -48,7 +48,7 @@ export type VpatReportJson = {
 // The VPAT title format is "[Company Name] Accessibility Conformance Report";
 // the product name stands in for the company, as is usual for open source.
 const VENDOR = "Classroom 50"
-const PRODUCT = "Classroom50 web app"
+const PRODUCT = "Classroom 50 web app"
 const PRODUCT_DESCRIPTION =
   "Classroom 50 is a free, open-source web app for creating and grading " +
   "programming assignments on GitHub: teachers manage classrooms, rosters, " +
@@ -158,11 +158,11 @@ export function buildVpatReport(
   )
   const contrastIds = new Set<string>(CONTRAST_CRITERION_IDS)
 
-  const criteria: Criterion[] = CRITERIA.map((c) => {
+  const criteria: Criterion[] = CRITERIA.map((c): Criterion => {
     if (!contrastIds.has(c.id)) return { ...c }
     const d = c.id === ENHANCED_CRITERION_ID ? derivedEnhanced : derived
     return { ...c, status: d.status, evidence: "contrast", remark: d.remark }
-  })
+  }).sort(compareCriterionIds)
 
   const byStatus = criteria.reduce(
     (acc, c) => {
@@ -212,33 +212,64 @@ function criteriaFor(
 
 /**
  * The criterion cell as the VPAT WCAG template writes it: id, short title, and
- * for criteria newer than WCAG 2.0 the versions they belong to, so a reviewer
- * filing against 2.0 or 2.1 can see which rows to disregard.
+ * for criteria that exist only in some WCAG versions the versions they belong
+ * to, so a reviewer filing against one version can see which rows to disregard.
  */
-export function criterionLabel(c: Pick<Criterion, "id" | "name" | "since">) {
-  const since =
-    c.since === "2.1"
-      ? " (2.1 and 2.2)"
-      : c.since === "2.2"
-        ? " (2.2 only)"
-        : ""
-  return `${c.id} ${c.name}${since}`
+export function criterionLabel(
+  c: Pick<Criterion, "id" | "name" | "since" | "until">,
+) {
+  const versions =
+    c.until === "2.1"
+      ? " (2.0 and 2.1 only)"
+      : c.since === "2.1"
+        ? " (2.1 and 2.2)"
+        : c.since === "2.2"
+          ? " (2.2 only)"
+          : ""
+  return `${c.id} ${c.name}${versions}`
+}
+
+// WCAG ids sort numerically by segment (1.4.4 before 1.4.10), not as strings.
+export function compareCriterionIds(a: { id: string }, b: { id: string }) {
+  const pa = a.id.split(".").map(Number)
+  const pb = b.id.split(".").map(Number)
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i]
+  return 0
+}
+
+// Remarks are cell content in a Markdown table: a pipe would split the cell and
+// a raw tag like <video> would be swallowed as inline HTML by most renderers.
+function escapeCell(text: string): string {
+  return text.replace(/\|/g, "\\|").replace(/</g, "&lt;").replace(/>/g, "&gt;")
 }
 
 function criterionRow(c: Criterion, fallbackDate: string): string {
-  const remark = c.remark.replace(/\|/g, "\\|")
-  // Manual rows carry their own assessed date; the contrast rows are re-derived
-  // every build, so they take the report's generation date.
+  // Manual rows carry their own assessed date. Contrast and architectural rows
+  // are re-derived or re-guarded on every build (the contrast audit and
+  // vpatArchitectural.test.ts), so they take the report's generation date.
   const date = c.assessed ?? fallbackDate
-  return `| ${criterionLabel(c)} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${date} | ${remark} |`
+  return `| ${criterionLabel(c)} | ${c.level} | ${CONFORMANCE_LABEL[c.status]} | ${date} | ${escapeCell(c.remark)} |`
 }
 
 // Level A/AA rows still Not Evaluated. The ITI terms reserve Not Evaluated for
 // Level AAA, so using it on an A/AA row is a deviation the Notes section must
 // declare (the template requires that) until the manual assessment lands.
-function pendingAaRows(report: VpatReportJson): Criterion[] {
-  return report.criteria.filter(
+export function pendingAaRows(criteria: Criterion[]): Criterion[] {
+  return criteria.filter(
     (c) => c.level !== "AAA" && c.status === "notEvaluated",
+  )
+}
+
+/** The Notes bullet declaring the deviation, or null once nothing is pending. */
+export function deviationNote(criteria: Criterion[]): string | null {
+  const pending = pendingAaRows(criteria)
+  if (pending.length === 0) return null
+  return (
+    `- Deviation from the ITI terms: ${pending.length} Level A/AA criteria ` +
+    `(${pending.map((c) => c.id).join(", ")}) are marked Not Evaluated ` +
+    "because their manual keyboard and screen-reader assessment is still in " +
+    "progress. ITI reserves Not Evaluated for Level AAA. Those rows carry no " +
+    "conformance claim; they will be updated as the assessment completes."
   )
 }
 
@@ -248,7 +279,7 @@ function pendingAaRows(report: VpatReportJson): Criterion[] {
 // description, contact, notes, evaluation methods, applicable standards, and
 // the ITI term definitions.
 function preamble(report: VpatReportJson): string[] {
-  const pending = pendingAaRows(report)
+  const deviation = deviationNote(report.criteria)
   const productLine = report.version
     ? `${report.product}, version ${report.version}`
     : report.product
@@ -280,16 +311,7 @@ function preamble(report: VpatReportJson): string[] {
       "is no media) are marked Not Applicable with the reason. Per the ITI " +
       "note on WCAG conformance, such criteria may equally be read as " +
       "satisfied.",
-    ...(pending.length > 0
-      ? [
-          `- Deviation from the ITI terms: ${pending.length} Level A/AA ` +
-            `criteria (${pending.map((c) => c.id).join(", ")}) are marked Not ` +
-            "Evaluated because their manual keyboard and screen-reader " +
-            "assessment is still in progress. ITI reserves Not Evaluated for " +
-            "Level AAA. Those rows carry no conformance claim; they will be " +
-            "updated as the assessment completes.",
-        ]
-      : []),
+    ...(deviation ? [deviation] : []),
     "",
     "**Evaluation Methods Used:** Testing is performed by the product's " +
       "maintainers, who know its teacher and student flows. Automated checks " +
@@ -333,8 +355,8 @@ function preamble(report: VpatReportJson): string[] {
       "meet the criterion.",
     "- **Not Applicable:** The criterion is not relevant to the product.",
     "- **Not Evaluated:** The product has not been evaluated against the " +
-      "criterion. ITI limits this to Level AAA criteria; see Notes for this " +
-      "report's use of it.",
+      "criterion. This can only be used in WCAG Level AAA criteria." +
+      (deviation ? " See Notes for this report's use of it." : ""),
     "",
   ]
 }
