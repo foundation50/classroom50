@@ -13,6 +13,7 @@ type Fake = {
   mutationId: number
   meta?: Record<string, unknown>
   status: MutationState["status"]
+  isPaused?: boolean
 }
 type StateOptions = {
   filters?: MutationFilters
@@ -30,7 +31,7 @@ vi.mock("@tanstack/react-query", () => ({
       .map((m) =>
         options.select!({
           mutationId: m.mutationId,
-          state: { status: m.status },
+          state: { status: m.status, isPaused: m.isPaused ?? false },
         } as unknown as Mutation),
       ),
 }))
@@ -134,6 +135,61 @@ describe("BackgroundPassTag", () => {
     setCache([{ mutationId: 1, meta: BG, status: "pending" }])
     act(() => vi.advanceTimersByTime(500))
     setCache([{ mutationId: 1, meta: BG, status: "success" }])
+    act(() => vi.advanceTimersByTime(2000))
+    expect(pill()).toBeNull()
+    expect(live().textContent).toBe("")
+  })
+
+  it("ignores a pass that failed before the reveal when judging the next one", () => {
+    mount()
+    setCache([{ mutationId: 1, meta: BG, status: "pending" }])
+    act(() => vi.advanceTimersByTime(500))
+    // Settled passes stay in the mutation cache; this one was never shown.
+    setCache([
+      { mutationId: 1, meta: BG, status: "error" },
+      { mutationId: 2, meta: BG, status: "pending" },
+    ])
+    act(() => vi.advanceTimersByTime(1000))
+    expect(live().textContent).toBe("backgroundPass.syncing")
+
+    setCache([
+      { mutationId: 1, meta: BG, status: "error" },
+      { mutationId: 2, meta: BG, status: "success" },
+    ])
+    expect(live().textContent).toBe("backgroundPass.synced")
+  })
+
+  it("re-announces syncing for a pass that resumes inside the hide delay", () => {
+    mount()
+    setCache([{ mutationId: 1, meta: BG, status: "pending" }])
+    act(() => vi.advanceTimersByTime(1000))
+    setCache([{ mutationId: 1, meta: BG, status: "success" }])
+    expect(live().textContent).toBe("backgroundPass.synced")
+
+    // Inside the 180ms hide delay: the pill never left, so the live region
+    // must follow it back to "syncing" and the old linger must not clear it.
+    act(() => vi.advanceTimersByTime(100))
+    setCache([
+      { mutationId: 1, meta: BG, status: "success" },
+      { mutationId: 2, meta: BG, status: "pending" },
+    ])
+    expect(pill()).not.toBeNull()
+    expect(live().textContent).toBe("backgroundPass.syncing")
+    act(() => vi.advanceTimersByTime(5000))
+    expect(live().textContent).toBe("backgroundPass.syncing")
+
+    setCache([
+      { mutationId: 1, meta: BG, status: "success" },
+      { mutationId: 2, meta: BG, status: "error" },
+    ])
+    expect(live().textContent).toBe("backgroundPass.failed")
+    act(() => vi.advanceTimersByTime(5000))
+    expect(live().textContent).toBe("")
+  })
+
+  it("does not show a paused pass, which has not started", () => {
+    mount()
+    setCache([{ mutationId: 1, meta: BG, status: "pending", isPaused: true }])
     act(() => vi.advanceTimersByTime(2000))
     expect(pill()).toBeNull()
     expect(live().textContent).toBe("")

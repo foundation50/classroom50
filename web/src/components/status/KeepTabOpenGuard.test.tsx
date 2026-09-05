@@ -5,6 +5,7 @@ import { useEffect } from "react"
 import {
   QueryClient,
   QueryClientProvider,
+  onlineManager,
   useMutation,
 } from "@tanstack/react-query"
 
@@ -48,7 +49,10 @@ const mount = (flagged: boolean) => {
   return { client, finish, view }
 }
 
-afterEach(cleanup)
+afterEach(() => {
+  onlineManager.setOnline(true)
+  cleanup()
+})
 
 describe("KeepTabOpenGuard", () => {
   it("blocks beforeunload only while a keepTabOpen mutation is pending", async () => {
@@ -56,6 +60,18 @@ describe("KeepTabOpenGuard", () => {
     await waitFor(() => expect(client.isMutating()).toBe(1))
     expect(fire()).toBe(true)
 
+    act(finish)
+    await waitFor(() => expect(fire()).toBe(false))
+  })
+
+  it("does not hold for a paused mutation, which has not started", async () => {
+    onlineManager.setOnline(false)
+    const { client, finish } = mount(true)
+    await waitFor(() => expect(client.isMutating()).toBe(1))
+    expect(fire()).toBe(false)
+
+    act(() => onlineManager.setOnline(true))
+    await waitFor(() => expect(fire()).toBe(true))
     act(finish)
     await waitFor(() => expect(fire()).toBe(false))
   })

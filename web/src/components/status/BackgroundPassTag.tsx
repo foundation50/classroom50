@@ -31,45 +31,55 @@ export function BackgroundPassTag() {
     select: (mutation) => ({
       id: mutation.mutationId,
       status: mutation.state.status,
+      // Paused (offline, or queued behind a scope) means the pass has not
+      // started, so there is nothing to show or hold the tab for.
+      paused: mutation.state.isPaused,
     }),
   })
-  const pending = passes.filter((p) => p.status === "pending").length
+  const pending = passes.filter(
+    (p) => p.status === "pending" && !p.paused,
+  ).length
 
-  const [announcement, setAnnouncement] = useState<Announcement>("idle")
-  // Ids shown this cycle, so the verdict ignores older settled passes still in
-  // the cache. Declared before the reveal hook so its effect runs first.
+  // Settled passes stay in the mutation cache for gcTime, so the verdict must
+  // ignore ones from an earlier cycle, including a pass that failed before the
+  // reveal fired. Only ids seen pending while the tag is shown count.
   const shownIds = useRef(new Set<number>())
-  const clearTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  useEffect(() => {
-    for (const pass of passes) {
-      if (pass.status === "pending") shownIds.current.add(pass.id)
-    }
-  }, [passes])
+  const [verdict, setVerdict] = useState<"synced" | "failed" | null>(null)
+  const lingerTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const clearLinger = () => {
+    if (lingerTimer.current) clearTimeout(lingerTimer.current)
+    lingerTimer.current = null
+  }
 
   const visible = useRevealCycle(pending > 0, {
     showDelayMs: REVEAL_DELAY_MS,
-    onShow: () => {
-      if (clearTimer.current) clearTimeout(clearTimer.current)
-      setAnnouncement("syncing")
-    },
     onSettle: () => {
       const failed = passes.some(
         (p) => shownIds.current.has(p.id) && p.status === "error",
       )
       shownIds.current.clear()
-      setAnnouncement(failed ? "failed" : "synced")
-      clearTimer.current = setTimeout(() => {
-        clearTimer.current = null
-        setAnnouncement("idle")
+      clearLinger()
+      setVerdict(failed ? "failed" : "synced")
+      lingerTimer.current = setTimeout(() => {
+        lingerTimer.current = null
+        setVerdict(null)
       }, DONE_LINGER_MS)
     },
   })
-  useEffect(
-    () => () => {
-      if (clearTimer.current) clearTimeout(clearTimer.current)
-    },
-    [],
-  )
+  useEffect(() => {
+    if (!visible) return
+    for (const pass of passes) {
+      if (pass.status === "pending" && !pass.paused) {
+        shownIds.current.add(pass.id)
+      }
+    }
+  }, [visible, passes])
+  useEffect(() => clearLinger, [])
+
+  // "Syncing" follows the visible state, not the reveal callback, so a pass
+  // that resumes inside the hide delay announces again.
+  const announcement: Announcement =
+    visible && pending > 0 ? "syncing" : (verdict ?? "idle")
 
   const liveText: Record<Announcement, string> = {
     idle: "",
