@@ -69,6 +69,21 @@ describe("useRevealCycle transitions", () => {
     expect(onHide).not.toHaveBeenCalled()
   })
 
+  it("honors a longer showDelayMs", () => {
+    const { result, rerender } = renderHook(
+      ({ active }: { active: boolean }) =>
+        useRevealCycle(active, { showDelayMs: 1000, onShow }),
+      { initialProps: { active: false } },
+    )
+    rerender({ active: true })
+    act(() => vi.advanceTimersByTime(900))
+    expect(result.current).toBe(false)
+    expect(onShow).not.toHaveBeenCalled()
+    act(() => vi.advanceTimersByTime(100))
+    expect(result.current).toBe(true)
+    expect(onShow).toHaveBeenCalledTimes(1)
+  })
+
   it("reads the latest callbacks when a timer fires", () => {
     const late = vi.fn()
     const { rerender } = renderHook(

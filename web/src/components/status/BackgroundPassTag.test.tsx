@@ -2,18 +2,40 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { act, cleanup, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
-import type { Mutation, MutationFilters } from "@tanstack/react-query"
+import type {
+  Mutation,
+  MutationFilters,
+  MutationState,
+} from "@tanstack/react-query"
 
-// Feed the tag a fake mutation cache: `useIsMutating` applies the tag's own
-// predicate to whatever `metas` holds, so the test checks the binding (which
-// mutations count, what renders) while RouteProgressBar.test covers the shared
-// reveal/fade timing.
-let metas: Array<Record<string, unknown> | undefined> = []
+// Feed the tag a fake mutation cache: `useMutationState` applies the tag's own
+// predicate and selector to whatever `cache` holds, so the test checks the
+// binding (which mutations count, what renders, what announces) while
+// RouteProgressBar.test and TopProgressBar.test cover the shared timing.
+type Fake = {
+  mutationId: number
+  meta?: Record<string, unknown>
+  status: MutationState["status"]
+}
+type StateOptions = {
+  filters?: MutationFilters
+  select?: (mutation: Mutation) => unknown
+}
+let cache: Fake[] = []
 vi.mock("@tanstack/react-query", () => ({
-  useIsMutating: (filters: MutationFilters) =>
-    metas.filter((meta) =>
-      filters.predicate!({ options: { meta } } as unknown as Mutation),
-    ).length,
+  useMutationState: (options: StateOptions) =>
+    cache
+      .filter((m) =>
+        options.filters!.predicate!({
+          options: { meta: m.meta },
+        } as unknown as Mutation),
+      )
+      .map((m) =>
+        options.select!({
+          mutationId: m.mutationId,
+          state: { status: m.status },
+        } as unknown as Mutation),
+      ),
 }))
 
 vi.mock("react-i18next", () => ({
@@ -29,7 +51,9 @@ vi.mock("motion/react", () => ({
 
 import { BackgroundPassTag } from "./BackgroundPassTag"
 
-const tag = () => screen.queryByRole("status")
+const BG = { keepTabOpen: true, backgroundPass: true }
+const live = () => screen.getByRole("status")
+const pill = () => document.querySelector(".bg-warning")
 
 let rerender: (ui: ReactNode) => void = () => {}
 
@@ -37,16 +61,16 @@ const mount = () => {
   rerender = render(<BackgroundPassTag />).rerender
 }
 
-const setPending = (next: typeof metas) => {
+const setCache = (next: Fake[]) => {
   act(() => {
-    metas = next
+    cache = next
     rerender(<BackgroundPassTag />)
   })
 }
 
 beforeEach(() => {
   vi.useFakeTimers()
-  metas = []
+  cache = []
 })
 
 afterEach(() => {
@@ -56,27 +80,79 @@ afterEach(() => {
 })
 
 describe("BackgroundPassTag", () => {
-  it("shows a spinner and the syncing label while a backgroundPass mutation is pending", () => {
+  it("always renders the live region, empty while idle", () => {
     mount()
-    setPending([{ keepTabOpen: true, backgroundPass: true }])
-    act(() => vi.advanceTimersByTime(120))
-    expect(tag()?.textContent).toBe("backgroundPass.syncing")
-    expect(tag()?.classList.contains("bg-warning")).toBe(true)
-    // Spinner is decorative (the label announces) and skips the anti-flash
-    // delay the tag's own reveal already served.
-    const spinner = tag()?.querySelector(".loading-spinner")
+    expect(live().textContent).toBe("")
+    expect(pill()).toBeNull()
+  })
+
+  it("reveals after a full second, then announces syncing and synced", () => {
+    mount()
+    setCache([{ mutationId: 1, meta: BG, status: "pending" }])
+    act(() => vi.advanceTimersByTime(900))
+    expect(pill()).toBeNull()
+    expect(live().textContent).toBe("")
+
+    act(() => vi.advanceTimersByTime(100))
+    expect(pill()?.textContent).toBe("backgroundPass.syncing")
+    expect(pill()?.closest("[aria-hidden='true']")).not.toBeNull()
+    expect(live().textContent).toBe("backgroundPass.syncing")
+    // Decorative spinner, and no second anti-flash delay on top of the tag's.
+    const spinner = pill()?.querySelector(".loading-spinner")
     expect(spinner?.getAttribute("aria-hidden")).toBe("true")
     expect(spinner?.classList.contains("indicator-appear")).toBe(false)
 
-    setPending([])
+    setCache([{ mutationId: 1, meta: BG, status: "success" }])
+    expect(live().textContent).toBe("backgroundPass.synced")
     act(() => vi.advanceTimersByTime(200))
-    expect(tag()).toBeNull()
+    expect(pill()).toBeNull()
+
+    // The completion text clears so the next pass announces afresh.
+    act(() => vi.advanceTimersByTime(5000))
+    expect(live().textContent).toBe("")
+  })
+
+  it("announces a failed pass truthfully", () => {
+    mount()
+    setCache([{ mutationId: 1, meta: BG, status: "pending" }])
+    act(() => vi.advanceTimersByTime(1000))
+    setCache([{ mutationId: 1, meta: BG, status: "error" }])
+    expect(live().textContent).toBe("backgroundPass.failed")
+  })
+
+  it("judges only the passes it showed, not stale settled ones", () => {
+    mount()
+    // An older failed pass lingers in the cache while a fresh one runs clean.
+    setCache([
+      { mutationId: 1, meta: BG, status: "error" },
+      { mutationId: 2, meta: BG, status: "pending" },
+    ])
+    act(() => vi.advanceTimersByTime(1000))
+    setCache([
+      { mutationId: 1, meta: BG, status: "error" },
+      { mutationId: 2, meta: BG, status: "success" },
+    ])
+    expect(live().textContent).toBe("backgroundPass.synced")
+  })
+
+  it("stays silent for a pass that finishes inside the reveal delay", () => {
+    mount()
+    setCache([{ mutationId: 1, meta: BG, status: "pending" }])
+    act(() => vi.advanceTimersByTime(500))
+    setCache([{ mutationId: 1, meta: BG, status: "success" }])
+    act(() => vi.advanceTimersByTime(2000))
+    expect(pill()).toBeNull()
+    expect(live().textContent).toBe("")
   })
 
   it("ignores user-started writes, flagged or not", () => {
     mount()
-    setPending([{ keepTabOpen: true }, undefined])
-    act(() => vi.advanceTimersByTime(500))
-    expect(tag()).toBeNull()
+    setCache([
+      { mutationId: 1, meta: { keepTabOpen: true }, status: "pending" },
+      { mutationId: 2, status: "pending" },
+    ])
+    act(() => vi.advanceTimersByTime(2000))
+    expect(pill()).toBeNull()
+    expect(live().textContent).toBe("")
   })
 })

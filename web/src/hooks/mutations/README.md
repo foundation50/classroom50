@@ -51,7 +51,9 @@ are flagged too, plus `backgroundPass: true`. They are safe to re-run, but a
 pass cut off mid-way still leaves a gap until the next open, so the close-tab
 friction applies; and since the viewer didn't start them, `BackgroundPassTag`
 shows a small "Syncing with GitHub…" tag at the top while one runs so the
-prompt has a visible cause.
+prompt has a visible cause. The tag follows Primer's loading pattern: it waits
+a full second before appearing, its live region is always mounted, and it
+announces completion (or a best-effort pass that didn't finish).
 
 Not flagged, on purpose:
 

@@ -19,12 +19,18 @@ import { EASE_OUT } from "@/lib/motion"
 // cleanup — `active` flips on every query start/finish, so a staggered burst of
 // reads (this app's norm) would otherwise keep clearing and rescheduling the
 // show-timer and the bar would never appear. Instead each timer is armed once
-// per transition (guarded by its ref) and only cleared on unmount, so the 120ms
+// per transition (guarded by its ref) and only cleared on unmount, so the
 // reveal survives count churn.
+//
+// The default reveal delay is short because the route bar answers a click and
+// a page of staggered reads rarely settles in under a second anyway. An
+// indicator for a self-started process should pass a longer `showDelayMs`:
+// Primer's loading guidance is not to show anything for a sub-second wait.
 const SHOW_DELAY_MS = 120
 const HIDE_DELAY_MS = 180
 
-type RevealTransitions = {
+type RevealOptions = {
+  showDelayMs?: number
   // The bar just became visible.
   onShow?: () => void
   // `active` dropped while visible; the bar hides after the settle delay.
@@ -35,16 +41,17 @@ type RevealTransitions = {
 
 export function useRevealCycle(
   active: boolean,
-  transitions: RevealTransitions = {},
+  options: RevealOptions = {},
 ): boolean {
+  const { showDelayMs = SHOW_DELAY_MS } = options
   const [visible, setVisible] = useState(false)
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Timers fire well after the render that armed them; read the latest
   // callbacks through a ref so a bar can pass inline closures.
-  const on = useRef(transitions)
+  const on = useRef(options)
   useEffect(() => {
-    on.current = transitions
+    on.current = options
   })
 
   useEffect(() => {
@@ -55,14 +62,14 @@ export function useRevealCycle(
         hideTimer.current = null
       }
       // Arm the reveal once. The show-timer ref guard means later `active`
-      // re-runs during the same cycle don't reset the 120ms delay, so a churny
+      // re-runs during the same cycle don't reset the delay, so a churny
       // multi-fetch page still reveals the bar on schedule.
       if (!visible && !showTimer.current) {
         showTimer.current = setTimeout(() => {
           showTimer.current = null
           setVisible(true)
           on.current.onShow?.()
-        }, SHOW_DELAY_MS)
+        }, showDelayMs)
       }
       return
     }
@@ -81,7 +88,7 @@ export function useRevealCycle(
         on.current.onHide?.()
       }, HIDE_DELAY_MS)
     }
-  }, [active, visible])
+  }, [active, visible, showDelayMs])
 
   // Clear timers only on unmount — never in a per-run cleanup (see above),
   // which would defeat the churn-proof reveal.
