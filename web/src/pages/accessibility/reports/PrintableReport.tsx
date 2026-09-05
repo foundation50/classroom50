@@ -121,11 +121,26 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
 
   return (
     <section className="report-doc">
-      <h1>{t("accessibility.print.reportTitle", { product: vpat.product })}</h1>
+      <h1>
+        {t("accessibility.print.reportTitle", {
+          vendor: vpat.vendor ?? vpat.product,
+        })}
+      </h1>
+      <p className="report-meta">
+        {t("accessibility.print.reportProduct", {
+          product: vpat.version
+            ? t("accessibility.print.productWithVersion", {
+                product: vpat.product,
+                version: vpat.version,
+              })
+            : vpat.product,
+        })}
+      </p>
       <p className="report-meta">
         {t("accessibility.print.reportMeta", {
           standard: vpat.standard,
           target: vpat.target,
+          versions: (vpat.wcagVersions ?? []).join(", "),
           date: vpat.generated,
         })}
       </p>
@@ -142,7 +157,7 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
       {PRINCIPLE_ORDER.filter((p) => criteriaByPrinciple[p].length > 0).map(
         (principle) => (
           <div key={principle}>
-            <h2>{principle}</h2>
+            <h2>{t(`accessibility.vpat.principle.${principle}`)}</h2>
             <table>
               <thead>
                 <tr>
@@ -158,6 +173,12 @@ function PrintableVpat({ vpat }: { vpat: Vpat }) {
                   <tr key={c.id}>
                     <td>
                       <span className="mono report-sub">{c.id}</span> {c.name}
+                      {c.since && (
+                        <span className="report-sub">
+                          {" "}
+                          ({t(`accessibility.vpat.since.${c.since}`)})
+                        </span>
+                      )}
                     </td>
                     <td className="mono">{c.level}</td>
                     <td>{CONFORMANCE_LABEL[c.status]}</td>

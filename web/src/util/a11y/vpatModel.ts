@@ -1,9 +1,12 @@
 // The WCAG 2.2 conformance model the VPAT report renders from.
 //
 // A pure leaf (data + types only, no app imports, no fs) mirroring
-// contrastModel.ts. Each entry is one applicable WCAG 2.2 success criterion with
+// contrastModel.ts. Each entry is one WCAG 2.2 Level A/AA success criterion with
 // its conformance status, the KIND of evidence backing that status, and a
-// remark. The report renderer (vpatReport.ts) and the integrity guard
+// remark. Every A/AA criterion is listed, including the ones the product's
+// design rules out, so a reader can tell "Not Applicable" from "not yet
+// evaluated" (a university reviewer asked exactly that in discussion #493).
+// The report renderer (vpatReport.ts) and the integrity guard
 // (vpatGuard.test.ts) both consume this, so a single edit here flows to every
 // rendering.
 //
@@ -50,8 +53,9 @@ export const CONFORMANCE_TONE: Record<ConformanceLevel, BadgeTone> = {
 /**
  * What backs a status. `contrast` is computed from the contrast audit;
  * `automated` is a zero-violation tooling category; `manual` is a human
- * keyboard/screen-reader attestation; `architectural` justifies a `notApplicable`
- * from the 100%-client-side design (no server auth, sessions, or stored data).
+ * keyboard/screen-reader attestation; `architectural` is a verdict that follows
+ * from what the product is (no media, no server-side state, no single-key
+ * shortcuts), verifiable from the source rather than by testing a screen.
  */
 export type EvidenceKind = "contrast" | "automated" | "manual" | "architectural"
 
@@ -61,6 +65,17 @@ export type Criterion = {
   name: string
   level: WcagLevel
   principle: WcagPrinciple
+  /**
+   * The WCAG version that introduced the criterion, when later than 2.0. The
+   * VPAT WCAG edition marks these rows ("2.1 and 2.2" / "2.2 only") so a
+   * reviewer filing against 2.0 or 2.1 knows which rows to disregard.
+   */
+  since?: "2.1" | "2.2"
+  /**
+   * The last WCAG version that still contains the criterion, when it was later
+   * removed (4.1.1 Parsing, dropped in 2.2). Rendered as "(2.0 and 2.1 only)".
+   */
+  until?: "2.1"
   status: ConformanceLevel
   /** Required whenever status is `supports` (the overclaim guard enforces this). */
   evidence?: EvidenceKind
@@ -100,12 +115,20 @@ const NOT_EVALUATED_REMARK =
   "keyboard and screen-reader pass on the primary flows will set the final " +
   "conformance level."
 
-// The applicable WCAG 2.2 Level A/AA criteria for the app, plus 1.4.6 (AAA
-// contrast) reported for transparency beyond the AA target. Grouped by
-// principle. Contrast rows carry a placeholder status/evidence that
-// vpatReport.ts replaces from the live audit; client-side-only rows are
-// notApplicable with an architectural remark; the rest start notEvaluated until
-// the manual assessment sets them.
+// A time-based-media criterion the product can never trigger: the app renders
+// no <video>, <audio>, or embedded player anywhere. One remark, shared by all
+// five 1.2.x rows and 1.4.2, so the reason is stated once.
+const NO_MEDIA_REMARK =
+  "Not applicable: the app contains no audio or video content (no <video>, " +
+  "<audio>, or embedded media players). Verified against the source."
+
+// Every WCAG 2.2 Level A/AA criterion, plus 1.4.6 (AAA contrast) reported for
+// transparency beyond the AA target, plus 4.1.1 Parsing so the report also
+// answers WCAG 2.0/2.1 reviewers. Grouped by principle. Contrast rows carry a
+// placeholder status/evidence that vpatReport.ts replaces from the live audit;
+// criteria the product's design rules out are notApplicable with an
+// architectural remark; the rest start notEvaluated until the manual
+// assessment sets them.
 const BASE_CRITERIA: Criterion[] = [
   // ── Perceivable ────────────────────────────────────────────────────────────
   {
@@ -115,6 +138,51 @@ const BASE_CRITERIA: Criterion[] = [
     principle: "Perceivable",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "1.2.1",
+    name: "Audio-only and Video-only (Prerecorded)",
+    level: "A",
+    principle: "Perceivable",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark: NO_MEDIA_REMARK,
+  },
+  {
+    id: "1.2.2",
+    name: "Captions (Prerecorded)",
+    level: "A",
+    principle: "Perceivable",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark: NO_MEDIA_REMARK,
+  },
+  {
+    id: "1.2.3",
+    name: "Audio Description or Media Alternative (Prerecorded)",
+    level: "A",
+    principle: "Perceivable",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark: NO_MEDIA_REMARK,
+  },
+  {
+    id: "1.2.4",
+    name: "Captions (Live)",
+    level: "AA",
+    principle: "Perceivable",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark: NO_MEDIA_REMARK,
+  },
+  {
+    id: "1.2.5",
+    name: "Audio Description (Prerecorded)",
+    level: "AA",
+    principle: "Perceivable",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark: NO_MEDIA_REMARK,
   },
   {
     id: "1.3.1",
@@ -133,12 +201,47 @@ const BASE_CRITERIA: Criterion[] = [
     remark: NOT_EVALUATED_REMARK,
   },
   {
+    id: "1.3.3",
+    name: "Sensory Characteristics",
+    level: "A",
+    principle: "Perceivable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "1.3.4",
+    name: "Orientation",
+    level: "AA",
+    principle: "Perceivable",
+    since: "2.1",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
     id: "1.3.5",
     name: "Identify Input Purpose",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "1.4.1",
+    name: "Use of Color",
+    level: "A",
+    principle: "Perceivable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "1.4.2",
+    name: "Audio Control",
+    level: "A",
+    principle: "Perceivable",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark: NO_MEDIA_REMARK,
   },
   {
     id: "1.4.3",
@@ -166,6 +269,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Non-text Contrast",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "supports",
     evidence: "contrast",
     remark: "Resolved from the automated contrast audit.",
@@ -185,10 +289,19 @@ const BASE_CRITERIA: Criterion[] = [
       "a manual follow-up.",
   },
   {
+    id: "1.4.5",
+    name: "Images of Text",
+    level: "AA",
+    principle: "Perceivable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
     id: "1.4.10",
     name: "Reflow",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "supports",
     evidence: "automated",
     remark:
@@ -202,6 +315,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Text Spacing",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "supports",
     evidence: "automated",
     remark:
@@ -216,6 +330,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Content on Hover or Focus",
     level: "AA",
     principle: "Perceivable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -237,8 +352,58 @@ const BASE_CRITERIA: Criterion[] = [
     remark: NOT_EVALUATED_REMARK,
   },
   {
+    id: "2.1.4",
+    name: "Character Key Shortcuts",
+    level: "A",
+    principle: "Operable",
+    since: "2.1",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark:
+      "Not applicable: the app defines no single-character keyboard shortcuts. " +
+      "Its only key handling is Tab, Enter, Escape, and arrow keys inside the " +
+      "focused widget (menus, comboboxes, roving tab lists), which the " +
+      "criterion exempts. Verified against the source.",
+  },
+  {
+    id: "2.2.1",
+    name: "Timing Adjustable",
+    level: "A",
+    principle: "Operable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.2.2",
+    name: "Pause, Stop, Hide",
+    level: "A",
+    principle: "Operable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.3.1",
+    name: "Three Flashes or Below Threshold",
+    level: "A",
+    principle: "Operable",
+    status: "supports",
+    evidence: "architectural",
+    remark:
+      "Nothing in the app flashes: there is no video, canvas, or embedded " +
+      "content, and the only motion is CSS transitions, spinners, and a 1.5 s " +
+      "loading shimmer, none of which flash. Verified against the source.",
+  },
+  {
     id: "2.4.1",
     name: "Bypass Blocks",
+    level: "A",
+    principle: "Operable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.4.2",
+    name: "Page Titled",
     level: "A",
     principle: "Operable",
     status: "notEvaluated",
@@ -256,6 +421,14 @@ const BASE_CRITERIA: Criterion[] = [
     id: "2.4.4",
     name: "Link Purpose (In Context)",
     level: "A",
+    principle: "Operable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.4.5",
+    name: "Multiple Ways",
+    level: "AA",
     principle: "Operable",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
@@ -281,6 +454,25 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Focus Not Obscured (Minimum)",
     level: "AA",
     principle: "Operable",
+    since: "2.2",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.5.1",
+    name: "Pointer Gestures",
+    level: "A",
+    principle: "Operable",
+    since: "2.1",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.5.2",
+    name: "Pointer Cancellation",
+    level: "A",
+    principle: "Operable",
+    since: "2.1",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -289,6 +481,29 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Label in Name",
     level: "A",
     principle: "Operable",
+    since: "2.1",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "2.5.4",
+    name: "Motion Actuation",
+    level: "A",
+    principle: "Operable",
+    since: "2.1",
+    status: "notApplicable",
+    evidence: "architectural",
+    remark:
+      "Not applicable: no function is operated by device motion or user " +
+      "motion. The app never listens to devicemotion or deviceorientation " +
+      "events. Verified against the source.",
+  },
+  {
+    id: "2.5.7",
+    name: "Dragging Movements",
+    level: "AA",
+    principle: "Operable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -297,6 +512,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Target Size (Minimum)",
     level: "AA",
     principle: "Operable",
+    since: "2.2",
     status: "supports",
     evidence: "automated",
     remark:
@@ -320,6 +536,30 @@ const BASE_CRITERIA: Criterion[] = [
       "document.documentElement.lang in sync).",
   },
   {
+    id: "3.1.2",
+    name: "Language of Parts",
+    level: "AA",
+    principle: "Understandable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "3.2.1",
+    name: "On Focus",
+    level: "A",
+    principle: "Understandable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "3.2.2",
+    name: "On Input",
+    level: "A",
+    principle: "Understandable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
     id: "3.2.3",
     name: "Consistent Navigation",
     level: "AA",
@@ -332,6 +572,15 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Consistent Identification",
     level: "AA",
     principle: "Understandable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "3.2.6",
+    name: "Consistent Help",
+    level: "A",
+    principle: "Understandable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -363,10 +612,27 @@ const BASE_CRITERIA: Criterion[] = [
       "is a manual content check.",
   },
   {
+    id: "3.3.3",
+    name: "Error Suggestion",
+    level: "AA",
+    principle: "Understandable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
+    id: "3.3.4",
+    name: "Error Prevention (Legal, Financial, Data)",
+    level: "AA",
+    principle: "Understandable",
+    status: "notEvaluated",
+    remark: NOT_EVALUATED_REMARK,
+  },
+  {
     id: "3.3.7",
     name: "Redundant Entry",
     level: "A",
     principle: "Understandable",
+    since: "2.2",
     status: "notEvaluated",
     remark: NOT_EVALUATED_REMARK,
   },
@@ -375,6 +641,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Accessible Authentication (Minimum)",
     level: "AA",
     principle: "Understandable",
+    since: "2.2",
     status: "notEvaluated",
     remark:
       "Authentication is delegated entirely to GitHub's OAuth / device-code " +
@@ -383,6 +650,23 @@ const BASE_CRITERIA: Criterion[] = [
       "accessibly.",
   },
   // ── Robust ─────────────────────────────────────────────────────────────────
+  {
+    // Removed in WCAG 2.2, but the VPAT WCAG edition keeps the row and
+    // instructs authors to answer Supports for 2.0/2.1 (the 2023 errata make it
+    // always satisfied), so reviewers on those versions see a verdict.
+    id: "4.1.1",
+    name: "Parsing",
+    level: "A",
+    principle: "Robust",
+    until: "2.1",
+    status: "supports",
+    evidence: "architectural",
+    remark:
+      "For WCAG 2.0 and 2.1, the September 2023 errata state this criterion " +
+      "is always satisfied for HTML content, so it is answered Supports as the " +
+      "VPAT template instructs. WCAG 2.2 removed 4.1.1; the markup issues it " +
+      "once caught are reported under 1.3.1 and 4.1.2.",
+  },
   {
     id: "4.1.2",
     name: "Name, Role, Value",
@@ -396,6 +680,7 @@ const BASE_CRITERIA: Criterion[] = [
     name: "Status Messages",
     level: "AA",
     principle: "Robust",
+    since: "2.1",
     status: "supports",
     evidence: "automated",
     remark:
@@ -429,6 +714,21 @@ export type ManualVerdict = {
 }
 
 export type VerdictOverlay = Record<string, ManualVerdict>
+
+/**
+ * Whether a criterion belongs to the manual assessment: still awaiting a verdict
+ * (notEvaluated with no evidence) or already carrying a recorded one. Shared by
+ * the dev-only /assess tool and the guidance-coverage test so they can't drift.
+ */
+export function isManuallyOwned(
+  c: Pick<Criterion, "id" | "status" | "evidence">,
+  overlay: VerdictOverlay,
+): boolean {
+  return (
+    (c.status === "notEvaluated" && c.evidence === undefined) ||
+    overlay[c.id] !== undefined
+  )
+}
 
 // True for a real calendar date in ISO YYYY-MM-DD form. A bare regex would
 // admit impossible dates (2026-13-40, 0000-00-00), so round-trip through Date:

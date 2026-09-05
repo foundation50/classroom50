@@ -60,7 +60,9 @@ function resolveReleaseInfo() {
     process.env.VITE_APP_COMMIT || git("rev-parse --short=12 HEAD") || "unknown"
   const buildDate = process.env.VITE_APP_BUILD_DATE || new Date().toISOString()
 
-  return { version, commit, buildDate }
+  // Only a release tag names a published version; an untagged (main push /
+  // local) build carries none, so the ACR can't claim a release it isn't.
+  return { version, commit, buildDate, tagVersion: tagVersion || undefined }
 }
 
 const release = resolveReleaseInfo()
@@ -132,20 +134,25 @@ function contrastAuditPlugin(): Plugin {
 // vpatGuard.test.ts is the enforcement. Same dev + build wiring as the contrast
 // audit above.
 function vpatReportPlugin(): Plugin {
+  // The ACR names the release it describes (a VPAT "Name of Product/Version"
+  // requirement); the pure renderer can't read the build's version itself.
+  // Tag-derived only: an untagged build would otherwise be labelled with the
+  // last released version while containing unreleased changes.
+  const options = { version: release.tagVersion }
   const assets: { fileName: string; source: string; type: string }[] = [
     {
       fileName: "vpat-report.json",
-      source: renderVpatJson(),
+      source: renderVpatJson(undefined, options),
       type: "application/json",
     },
     {
       fileName: "VPAT.md",
-      source: renderVpatReport(),
+      source: renderVpatReport(undefined, options),
       type: "text/markdown; charset=utf-8",
     },
     {
       fileName: "ACCESSIBILITY-REPORT.md",
-      source: renderCombinedReport(),
+      source: renderCombinedReport(undefined, options),
       type: "text/markdown; charset=utf-8",
     },
   ]

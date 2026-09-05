@@ -41,7 +41,13 @@ export type Vpat = Pick<
   | "criteria"
   | "standard"
   | "target"
->
+  | "version"
+> & {
+  // Optional on the read side only: the JSON is an unhashed asset, so a cached
+  // copy from an older deploy may predate these fields.
+  vendor?: VpatReportJson["vendor"]
+  wcagVersions?: VpatReportJson["wcagVersions"]
+}
 
 // One shared fetch of the build-emitted vpat-report.json, so the conformance
 // table and the statement's "last reviewed" date read from a single request

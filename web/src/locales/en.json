@@ -2,7 +2,7 @@
   "accessibility": {
     "title": "Color contrast audit",
     "pageTitle": "Accessibility",
-    "pageSubtitle": "How the Classroom 50 web app conforms to WCAG 2.2 Level AA, checked automatically on every build.",
+    "pageSubtitle": "How the Classroom 50 web app conforms to WCAG 2.0, 2.1, and 2.2 at Level A and AA, with color contrast checked on every build.",
     "nav": {
       "contrast": "Color contrast",
       "vpat": "Conformance",
@@ -13,7 +13,7 @@
       "heading": "Accessibility statement",
       "intro": "We want everyone to be able to use Classroom 50, including people who use a keyboard, a screen reader, or other assistive technology.",
       "targetHeading": "How we measure up",
-      "target": "We aim to meet WCAG 2.2 Level AA. Color contrast is checked on every build; the rest is checked by hand with a keyboard and a screen reader. The conformance report lists where we stand on each criterion.",
+      "target": "We aim to meet WCAG 2.2 Level AA, which also covers the Level A and AA criteria of WCAG 2.0 and 2.1. Color contrast is checked on every build; the rest is checked by hand with a keyboard and a screen reader. The conformance report lists every Level A and AA criterion, including the ones that don't apply to this app and why.",
       "limitationsHeading": "Known limitations",
       "limitations": "A few criteria are marked \"Partially Supports\" in the conformance report, each with a note on what's left to do. We fix these as work lands.",
       "feedbackHeading": "Give us feedback",
@@ -26,16 +26,18 @@
       "markdownAction": "Markdown",
       "pdfAction": "PDF",
       "vpatWcagTitle": "VPAT: WCAG edition",
-      "vpatWcagDesc": "Accessibility Conformance Report against WCAG 2.2 (VPAT 2.5Rev).",
+      "vpatWcagDesc": "Accessibility Conformance Report against WCAG 2.0, 2.1, and 2.2, Level A and AA (VPAT 2.5Rev).",
       "contrastTitle": "Color contrast audit",
       "contrastDesc": "Per-pair contrast ratios for every audited color, both themes.",
       "fullTitle": "Full report",
       "fullDesc": "The VPAT and the color contrast audit in one document."
     },
     "print": {
-      "reportTitle": "Accessibility Conformance Report: {{product}}",
-      "reportMeta": "Standard: WCAG {{standard}}, target Level {{target}}. Report date: {{date}}.",
-      "vpatSummary": "Summary ({{total}} applicable criteria): {{supports}} Supports, {{partially}} Partially Supports, {{doesNotSupport}} Does Not Support, {{notApplicable}} Not Applicable, {{notEvaluated}} Not Evaluated.",
+      "reportTitle": "{{vendor}} Accessibility Conformance Report",
+      "reportProduct": "WCAG Edition (based on VPAT 2.5Rev). Name of product/version: {{product}}.",
+      "productWithVersion": "{{product}}, version {{version}}",
+      "reportMeta": "Standard: {{standard}}, target Level {{target}}. Applicable standards: WCAG {{versions}}, Level A and AA. Report date: {{date}}.",
+      "vpatSummary": "Summary ({{total}} criteria): {{supports}} Supports, {{partially}} Partially Supports, {{doesNotSupport}} Does Not Support, {{notApplicable}} Not Applicable, {{notEvaluated}} Not Evaluated.",
       "contrastTitle": "Color contrast audit",
       "contrastMeta": "Per-pair WCAG contrast ratios for every audited color, both themes. Generated {{date}}.",
       "colColors": "Colors (fg / bg)",
@@ -97,6 +99,7 @@
       "loadError": "Couldn't load the conformance report.",
       "generated": "Report date {{generated}}",
       "principleTabsAria": "WCAG principle",
+      "tabAll": "All",
       "searchPlaceholder": "Search criteria",
       "searchAria": "Search conformance criteria",
       "filterAll": "All statuses",
@@ -120,6 +123,16 @@
         "doesNotSupport": "Does Not Support",
         "notApplicable": "Not Applicable",
         "notEvaluated": "Not Evaluated"
+      },
+      "since": {
+        "2.1": "WCAG 2.1 and 2.2",
+        "2.2": "WCAG 2.2 only"
+      },
+      "principle": {
+        "Perceivable": "Perceivable",
+        "Operable": "Operable",
+        "Understandable": "Understandable",
+        "Robust": "Robust"
       }
     }
   },

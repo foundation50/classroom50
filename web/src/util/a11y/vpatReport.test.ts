@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest"
 import { CONTRAST_CRITERION_IDS, ENHANCED_CRITERION_ID } from "./vpatModel"
 import {
   buildVpatReport,
+  criterionLabel,
+  deviationNote,
   renderCombinedReport,
   renderVpatJson,
   renderVpatReport,
@@ -16,6 +18,7 @@ describe("buildVpatReport (JSON source of truth)", () => {
   it("carries schema, standard, editions, target, product, and date", () => {
     expect(report.schema).toBe("vpat-report/v1")
     expect(report.standard).toBe("WCAG 2.2")
+    expect(report.wcagVersions).toEqual(["2.0", "2.1", "2.2"])
     expect(report.editions).toEqual(["2.5Rev-wcag"])
     expect(report.target).toBe("AA")
     expect(report.product.length).toBeGreaterThan(0)
@@ -108,19 +111,121 @@ describe("buildVpatReport (JSON source of truth)", () => {
 })
 
 describe("renderVpatReport (WCAG edition)", () => {
-  const md = renderVpatReport(FIXED)
+  const md = renderVpatReport(FIXED, { version: "1.45.0" })
 
-  it("states the format, standard, and date", () => {
-    expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
-    expect(md).toContain("WCAG 2.2, target Level AA")
-    expect(md).toContain("Report date:** 2026-08-04")
+  it("carries every field the VPAT 2.5Rev essential requirements list", () => {
+    expect(md).toContain("# Classroom 50 Accessibility Conformance Report")
+    expect(md).toContain("**WCAG Edition** (Based on VPAT® Version 2.5Rev)")
+    expect(md).toContain(
+      "**Name of Product/Version:** Classroom 50 web app, version 1.45.0",
+    )
+    expect(md).toContain("**Report Date:** 2026-08-04")
+    expect(md).toContain("**Product Description:**")
+    expect(md).toContain("**Contact Information:**")
+    expect(md).toContain("**Notes:**")
+    expect(md).toContain("**Evaluation Methods Used:**")
+    expect(md).toContain("## Applicable Standards/Guidelines")
+    expect(md).toContain("## Terms")
   })
 
-  it("has one table per WCAG principle", () => {
-    expect(md).toContain("## Perceivable")
-    expect(md).toContain("## Operable")
-    expect(md).toContain("## Understandable")
-    expect(md).toContain("## Robust")
+  it("omits the version clause when the build has none", () => {
+    expect(renderVpatReport(FIXED)).toContain(
+      "**Name of Product/Version:** Classroom 50 web app\n",
+    )
+  })
+
+  it("lists WCAG 2.0, 2.1, and 2.2 at Level A and AA in the standards table", () => {
+    for (const v of ["2.0", "2.1", "2.2"]) {
+      expect(md).toContain(
+        `| Web Content Accessibility Guidelines ${v} | Level A (Yes), Level AA (Yes), Level AAA (No) |`,
+      )
+    }
+  })
+
+  it("uses the ITI term definitions verbatim", () => {
+    expect(md).toContain(
+      "**Supports:** The functionality of the product has at least one method that meets the criterion without known defects or meets with equivalent facilitation.",
+    )
+    expect(md).toContain(
+      "**Not Applicable:** The criterion is not relevant to the product.",
+    )
+  })
+
+  it("declares the Not Evaluated deviation in Notes only while A/AA rows are pending", () => {
+    const row = (
+      id: string,
+      level: "A" | "AAA",
+      status: "supports" | "notEvaluated",
+    ) =>
+      ({
+        id,
+        name: "x",
+        level,
+        principle: "Robust",
+        status,
+        remark: "r",
+      }) as const
+    expect(deviationNote([row("1.1.1", "A", "supports")])).toBeNull()
+    // AAA rows may legitimately be Not Evaluated; only A/AA trigger the note.
+    expect(deviationNote([row("1.4.6", "AAA", "notEvaluated")])).toBeNull()
+    const note = deviationNote([
+      row("2.2.1", "A", "notEvaluated"),
+      row("3.3.4", "A", "notEvaluated"),
+    ])
+    expect(note).toContain(
+      "Deviation from the ITI terms: 2 Level A/AA criteria (2.2.1, 3.3.4)",
+    )
+    // The shipped report reflects the live verdicts: the term definition points
+    // at Notes only when the bullet is actually present.
+    const live = deviationNote(buildVpatReport(FIXED).criteria)
+    expect(md.includes("Deviation from the ITI terms")).toBe(live !== null)
+    expect(md.includes("See Notes for this report's use of it")).toBe(
+      live !== null,
+    )
+  })
+
+  it("uses the ITI Not Evaluated definition verbatim", () => {
+    expect(md).toContain(
+      "**Not Evaluated:** The product has not been evaluated against the criterion. This can only be used in WCAG Level AAA criteria.",
+    )
+  })
+
+  it("marks criteria newer than WCAG 2.0, and 4.1.1, the way the template does", () => {
+    expect(md).toContain("| 2.1.4 Character Key Shortcuts (2.1 and 2.2) | A |")
+    expect(md).toContain("| 2.5.8 Target Size (Minimum) (2.2 only) | AA |")
+    expect(md).toContain("| 4.1.1 Parsing (2.0 and 2.1 only) | A | Supports |")
+    expect(md).toContain("| 1.1.1 Non-text Content | A |")
+  })
+
+  it("escapes angle brackets in remarks so Markdown does not swallow them as HTML", () => {
+    expect(md).toContain(
+      "no &lt;video&gt;, &lt;audio&gt;, or embedded media players",
+    )
+    expect(md).not.toMatch(/\| [^|\n]*<video>/)
+  })
+
+  it("lists criteria in numeric WCAG order within each principle", () => {
+    const ids = buildVpatReport(FIXED).criteria.map((c) => c.id)
+    const i = (id: string) => ids.indexOf(id)
+    expect(i("1.4.4")).toBeLessThan(i("1.4.5"))
+    expect(i("1.4.5")).toBeLessThan(i("1.4.6"))
+    expect(i("1.4.6")).toBeLessThan(i("1.4.10"))
+    expect(i("1.4.10")).toBeLessThan(i("1.4.11"))
+    expect(md.indexOf("| 1.4.4 ")).toBeLessThan(md.indexOf("| 1.4.10 "))
+  })
+
+  it("renders Not Applicable rows with their reason instead of omitting them", () => {
+    expect(md).toContain(
+      "| 1.2.2 Captions (Prerecorded) | A | Not Applicable |",
+    )
+  })
+
+  it("has one table per WCAG principle under the WCAG 2.x Report heading", () => {
+    expect(md).toContain("## WCAG 2.x Report")
+    expect(md).toContain("### Perceivable")
+    expect(md).toContain("### Operable")
+    expect(md).toContain("### Understandable")
+    expect(md).toContain("### Robust")
   })
 
   it("resolves the contrast criterion 1.4.3 to Supports from its single verdict", () => {
@@ -130,12 +235,12 @@ describe("renderVpatReport (WCAG edition)", () => {
   it("renders a row for every criterion in the report", () => {
     const report = buildVpatReport(FIXED)
     for (const c of report.criteria) {
-      expect(md, `row for ${c.id}`).toContain(`| ${c.id} ${c.name} |`)
+      expect(md, `row for ${c.id}`).toContain(`| ${criterionLabel(c)} |`)
     }
   })
 
   it("is deterministic for a fixed date", () => {
-    expect(renderVpatReport(FIXED)).toBe(md)
+    expect(renderVpatReport(FIXED, { version: "1.45.0" })).toBe(md)
   })
 })
 
@@ -144,6 +249,13 @@ describe("renderVpatJson", () => {
     const parsed = JSON.parse(renderVpatJson(FIXED))
     expect(parsed.summary).toEqual(buildVpatReport(FIXED).summary)
     expect(parsed.generated).toBe("2026-08-04")
+    expect(parsed.vendor).toBe("Classroom 50")
+    expect(parsed.version).toBeUndefined()
+  })
+
+  it("carries the release version when the build supplies one", () => {
+    const parsed = JSON.parse(renderVpatJson(FIXED, { version: "1.45.0" }))
+    expect(parsed.version).toBe("1.45.0")
   })
 })
 
@@ -151,8 +263,8 @@ describe("renderCombinedReport", () => {
   const md = renderCombinedReport(FIXED)
 
   it("bundles the VPAT and the contrast audit", () => {
-    expect(md).toContain("VPAT® 2.5Rev — WCAG Edition")
-    expect(md).toContain("# WCAG 2.2 Contrast Audit — Classroom50 web app")
+    expect(md).toContain("(Based on VPAT® Version 2.5Rev)")
+    expect(md).toContain("# WCAG 2.2 Contrast Audit — Classroom 50 web app")
   })
 
   it("does not include the dropped INT / 508 edition", () => {

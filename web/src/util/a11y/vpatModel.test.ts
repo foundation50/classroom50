@@ -30,42 +30,74 @@ const VALID_EVIDENCE = new Set<EvidenceKind>([
 ])
 const VALID_PRINCIPLE = new Set<WcagPrinciple>(PRINCIPLE_ORDER)
 
-// The applicable SC set the model must cover (from the plan's criteria list).
-// A dropped criterion — or a stray extra one — fails here loudly.
-const EXPECTED_IDS = [
+// Every WCAG 2.2 Level A/AA success criterion (55), plus 1.4.6 (AAA contrast,
+// reported for transparency) and 4.1.1 (removed in 2.2, kept for 2.0/2.1
+// reviewers). A dropped criterion, or a stray extra one, fails here loudly.
+const WCAG_22_A_AA_IDS = [
   "1.1.1",
+  "1.2.1",
+  "1.2.2",
+  "1.2.3",
+  "1.2.4",
+  "1.2.5",
   "1.3.1",
   "1.3.2",
+  "1.3.3",
+  "1.3.4",
   "1.3.5",
+  "1.4.1",
+  "1.4.2",
   "1.4.3",
-  "1.4.6",
-  "1.4.11",
   "1.4.4",
+  "1.4.5",
   "1.4.10",
+  "1.4.11",
   "1.4.12",
   "1.4.13",
   "2.1.1",
   "2.1.2",
+  "2.1.4",
+  "2.2.1",
+  "2.2.2",
+  "2.3.1",
   "2.4.1",
+  "2.4.2",
   "2.4.3",
   "2.4.4",
+  "2.4.5",
   "2.4.6",
   "2.4.7",
   "2.4.11",
+  "2.5.1",
+  "2.5.2",
   "2.5.3",
+  "2.5.4",
+  "2.5.7",
   "2.5.8",
   "3.1.1",
+  "3.1.2",
+  "3.2.1",
+  "3.2.2",
   "3.2.3",
   "3.2.4",
+  "3.2.6",
   "3.3.1",
   "3.3.2",
+  "3.3.3",
+  "3.3.4",
   "3.3.7",
   "3.3.8",
   "4.1.2",
   "4.1.3",
 ]
+const EXPECTED_IDS = [...WCAG_22_A_AA_IDS, "1.4.6", "4.1.1"]
 
 describe("vpatModel — criteria integrity", () => {
+  it("lists all 55 WCAG 2.2 Level A/AA criteria", () => {
+    expect(WCAG_22_A_AA_IDS).toHaveLength(55)
+    const aa = CRITERIA.filter((c) => c.level !== "AAA" && c.id !== "4.1.1")
+    expect(aa.map((c) => c.id).sort()).toEqual([...WCAG_22_A_AA_IDS].sort())
+  })
   it("has a unique id, valid enums, and a non-empty name/remark per criterion", () => {
     const seen = new Set<string>()
     for (const c of CRITERIA) {
@@ -93,11 +125,46 @@ describe("vpatModel — criteria integrity", () => {
     }
   })
 
-  it("tags every notApplicable criterion architecturally with a remark", () => {
+  it("tags every notApplicable criterion architecturally with a specific remark", () => {
     for (const c of CRITERIA.filter((x) => x.status === "notApplicable")) {
       expect(c.evidence, `${c.id} N/A evidence`).toBe("architectural")
-      expect(c.remark.length, `${c.id} N/A remark`).toBeGreaterThan(0)
+      expect(c.remark, `${c.id} N/A remark`).toMatch(/^Not applicable: /)
     }
+  })
+
+  it("marks 4.1.1 Parsing as Supports for WCAG 2.0/2.1, as the VPAT template instructs", () => {
+    const c = CRITERIA.find((x) => x.id === "4.1.1")
+    expect(c?.status).toBe("supports")
+    expect(c?.evidence).toBe("architectural")
+    expect(c?.remark).toContain("WCAG 2.2 removed 4.1.1")
+  })
+
+  // The VPAT WCAG edition flags criteria added after 2.0 as "2.1 and 2.2" or
+  // "2.2 only" so a reviewer on an older version knows which rows to skip.
+  it("tags exactly the WCAG 2.1 and 2.2 additions with `since`", () => {
+    const since = (v: "2.1" | "2.2") =>
+      CRITERIA.filter((c) => c.since === v)
+        .map((c) => c.id)
+        .sort()
+    expect(since("2.1")).toEqual(
+      [
+        "1.3.4",
+        "1.3.5",
+        "1.4.10",
+        "1.4.11",
+        "1.4.12",
+        "1.4.13",
+        "2.1.4",
+        "2.5.1",
+        "2.5.2",
+        "2.5.3",
+        "2.5.4",
+        "4.1.3",
+      ].sort(),
+    )
+    expect(since("2.2")).toEqual(
+      ["2.4.11", "2.5.7", "2.5.8", "3.2.6", "3.3.7", "3.3.8"].sort(),
+    )
   })
 
   it("covers exactly the applicable success-criteria set", () => {
