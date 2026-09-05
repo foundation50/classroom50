@@ -108,8 +108,8 @@ export default defineConfig([
       "jsx-a11y/role-supports-aria-props": "warn",
       "jsx-a11y/scope": "warn",
       "jsx-a11y/tabindex-no-positive": "warn",
-      // Nudge new loading UI toward the accessible <Spinner> (role=status +
-      // sr-only label) instead of a bare, silent daisyUI spinner span. In-button
+      // Nudge new loading UI toward the accessible <Spinner> (announced via the
+      // persistent live region) instead of a bare, silent daisyUI spinner span. In-button
       // spinners may stay inline when the button already carries an aria-label;
       // this only flags the literal utility class in JSX className literals.
       "no-restricted-syntax": [
@@ -118,7 +118,7 @@ export default defineConfig([
           selector:
             "JSXAttribute[name.name='className'] > Literal[value=/\\bloading-spinner\\b/]",
           message:
-            'Prefer the accessible <Spinner> component over a bare `loading loading-spinner` span (it adds role="status" + an sr-only label). In-button spinners may stay inline if the button already has an accessible name.',
+            "Prefer the accessible <Spinner> component over a bare `loading loading-spinner` span (it announces its label through the persistent live region). In-button spinners may stay inline if the button already has an accessible name.",
         },
         {
           // Warn when a <Button> sits in a form without an explicit `type`: a
