@@ -17,6 +17,20 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.46.0](https://github.com/foundation50/classroom50/compare/web-v1.45.0...web-v1.46.0) (2026-09-06)
+
+
+### Features
+
+* **web:** complete the WCAG A/AA conformance report (VPAT) ([#888](https://github.com/foundation50/classroom50/issues/888)) ([bd51677](https://github.com/foundation50/classroom50/commit/bd51677ec214fc7f42e5d2d3d6429307703f6911))
+* **web:** keep the tab open during long GitHub writes and reads ([#891](https://github.com/foundation50/classroom50/issues/891)) ([d1f3572](https://github.com/foundation50/classroom50/commit/d1f3572fba4c83c7c30694ada23f58c589f4f532))
+
+
+### Bug Fixes
+
+* **web:** announce spinners through one persistent live region ([#893](https://github.com/foundation50/classroom50/issues/893)) ([0cd418b](https://github.com/foundation50/classroom50/commit/0cd418b9ae3f9ba818ba4e2389074658db6cd15d))
+* **web:** unblock locale translation and stabilize a flaky invite test ([#894](https://github.com/foundation50/classroom50/issues/894)) ([b91904c](https://github.com/foundation50/classroom50/commit/b91904ca7ae45c41e21edba116e53eb0e6293b48))
+
 ## [1.45.0](https://github.com/foundation50/classroom50/compare/web-v1.44.0...web-v1.45.0) (2026-09-04)
 
 
