@@ -2,8 +2,9 @@
 // list of what is (and isn't) flagged: hooks/mutations/README.md.
 export type MutationMeta =
   | {
-      // The mutationFn chains several GitHub writes, so closing the tab
-      // mid-run strands partial state. KeepTabOpenGuard holds the tab.
+      // Losing the tab mid-run costs the user something: a chain of GitHub
+      // writes strands partial state, or a long read (an archive download)
+      // has to start over. KeepTabOpenGuard holds the tab.
       keepTabOpen?: boolean
       backgroundPass?: never
     }

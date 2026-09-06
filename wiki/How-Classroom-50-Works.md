@@ -95,6 +95,12 @@ about why a change did or did not take effect:
 1. **Interactive actions** run as you, with your signed-in GitHub token, at the
    time you take them (create a classroom, add a student, accept an assignment).
    They are limited by your GitHub permissions and require you to be present.
+   When one makes several GitHub writes in a row (accepting an assignment,
+   importing a roster, a bulk action) or a long download, the web app asks the
+   browser to confirm before you close the tab, so the run isn't cut off with
+   the work half done. Syncs the app starts on its own show a
+   **Syncing with GitHub…** tag at the top of the page when they take more
+   than a moment.
 2. **Asynchronous actions** run in **GitHub Actions workflows** in your
    `classroom50` repository (publishing to Pages, collecting scores,
    regrading). They run in the background, can take a minute or more, and

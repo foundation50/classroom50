@@ -108,8 +108,8 @@ export default defineConfig([
       "jsx-a11y/role-supports-aria-props": "warn",
       "jsx-a11y/scope": "warn",
       "jsx-a11y/tabindex-no-positive": "warn",
-      // Nudge new loading UI toward the accessible <Spinner> (announced via the
-      // persistent live region) instead of a bare, silent daisyUI spinner span. In-button
+      // Nudge new loading UI toward <Spinner> (announced through the persistent
+      // live region) instead of a bare, silent daisyUI spinner span. In-button
       // spinners may stay inline when the button already carries an aria-label;
       // this only flags the literal utility class in JSX className literals.
       "no-restricted-syntax": [
