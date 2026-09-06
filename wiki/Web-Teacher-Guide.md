@@ -729,8 +729,11 @@ skipped and reported rather than overwritten.
 anything new (members who joined or left, accepted invitations, role changes)
 and updates the roster to match; the same check runs when you open the page.
 It runs in the background (the roster stays fully usable) with the button
-reading **Refreshing roster…** while it works. The caption beside the button
-shows when the roster last changed and what the last refresh found.
+reading **Refreshing roster…** while it works, and a **Syncing with GitHub…**
+tag at the top of the page if it takes more than a moment. The browser asks
+before you close the tab mid-sync; if you close anyway, nothing is lost, and
+the sync runs again the next time you open the classroom. The caption beside
+the button shows when the roster last changed and what the last refresh found.
 
 ## Manage groups
 

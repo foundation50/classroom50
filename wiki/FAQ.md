@@ -431,6 +431,20 @@ with GitHub and on how much identifying data you put on GitHub. For the full
 picture, including practices that keep student data off GitHub, see
 [Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
 
+### Is Classroom 50 accessible? Is there a VPAT?
+
+Yes. The web app targets WCAG 2.2 Level A and AA and publishes an Accessibility
+Conformance Report (VPAT 2.5Rev, WCAG edition) at
+[classroom50.org/accessibility](https://classroom50.org/accessibility), no
+sign-in needed. The report lists every WCAG 2.0, 2.1, and 2.2 Level A and AA
+criterion with a verdict, the date it was assessed, and a remark, so a
+criterion that can't apply (the app has no audio or video) reads as **Not
+Applicable** with the reason rather than as unevaluated. The same page carries
+the accessibility statement, a color contrast audit of both themes that runs on
+every build, and each report as a Markdown download or a print-to-PDF view for
+procurement reviews. The reports are generated from the shipped build, so they
+describe the version you're using.
+
 ## Roadmap
 
 Some capabilities from GitHub Classroom aren't available today, including

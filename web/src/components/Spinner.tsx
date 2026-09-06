@@ -6,18 +6,15 @@ import { useAnnounce } from "@/hooks/useAnnounce"
 type SpinnerSize = "xs" | "sm" | "md" | "lg" | "xl"
 
 /**
- * Accessible loading spinner: daisyUI `loading-spinner` whose `label` is
- * announced through the app's persistent live region (`LiveAnnouncer`), so
- * the announcement does not depend on a `role="status"` appearing in the same
- * DOM mutation as its text. Several spinners on one page announce once. Use
- * when the spinner is the ONLY loading indicator; when the busy state is
- * already announced (adjacent text, an in-button spinner on a labeled disabled
- * button), use `InlineSpinner` — the resolution the `no-restricted-syntax`
- * lint nudge expects.
+ * Loading spinner whose `label` is announced through the app's persistent live
+ * region (`useAnnounce`), so several spinners on one page announce once. Use it
+ * when the spinner is the only loading indicator; when the busy state is
+ * already announced (adjacent text, a labeled disabled button), use
+ * `InlineSpinner`, which is what the `no-restricted-syntax` lint nudge expects.
  *
- * The visual is anti-flash guarded (`indicator-appear`): it stays invisible
- * for the first ~250ms so sub-second loads never flash an indicator (Primer
- * loading guidance). The announcement is not delayed.
+ * The visual is anti-flash guarded (`indicator-appear`): invisible for the
+ * first ~250ms so sub-second loads never flash (Primer loading guidance). The
+ * announcement is not delayed.
  */
 export function Spinner({
   size = "md",
