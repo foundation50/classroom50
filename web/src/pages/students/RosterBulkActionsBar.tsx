@@ -1,25 +1,18 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
-  TriangleDownIcon,
   PaperAirplaneIcon,
   SignOutIcon,
   TrashIcon,
   XCircleIcon,
-  XIcon,
 } from "@/components/ui/icons"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
+import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
 import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
-import {
-  Alert,
-  Button,
-  DropdownMenu,
-  Modal,
-  closeDropdownMenu,
-} from "@/components/ui"
+import { Alert, Button, DropdownMenu, Modal } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -471,113 +464,65 @@ const RosterBulkActionsBar = ({
           toolbar while the fieldset still freezes them during a sync. */}
       {hasSelection ? (
         <fieldset disabled={disabled} className="contents">
-          <span className="text-sm font-medium tabular-nums">
-            {t("students.bulk.selectedCount", { count: selectedRows.length })}
-          </span>
-          {/* dropdown-start: the cluster sits on the toolbar's left, so the
-              menu opens rightward instead of off the edge. */}
-          <div className="dropdown dropdown-start">
-            <Button variant="primary" size="sm">
-              {t("students.bulk.actions")}
-              <TriangleDownIcon aria-hidden="true" className="size-4" />
-            </Button>
-            <DropdownMenu className="w-64">
-              <li>
-                <button
-                  type="button"
-                  disabled={invitableSelected === 0}
-                  title={
-                    invitableSelected === 0
-                      ? t("students.bulk.inviteNoneInvitable")
-                      : t("students.bulk.inviteSelected", {
-                          count: invitableSelected,
-                        })
-                  }
-                  onClick={() => {
-                    closeDropdownMenu()
-                    if (invitableSelected === 0) return
-                    setConfirmingInvite(true)
-                  }}
-                >
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                  {t("students.bulk.invite")}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  disabled={cancellableSelected.length === 0}
-                  title={
-                    cancellableSelected.length === 0
-                      ? t("students.bulk.cancelNoneCancellable")
-                      : t("students.bulk.cancelSelected", {
-                          count: cancellableSelected.length,
-                        })
-                  }
-                  onClick={() => {
-                    closeDropdownMenu()
-                    if (cancellableSelected.length === 0) return
-                    setConfirmingCancel(true)
-                  }}
-                >
-                  <XCircleIcon aria-hidden="true" className="size-4" />
-                  {t("students.bulk.cancelInvite")}
-                </button>
-              </li>
-              {/* Unenroll — destructive, so last and in its own group. */}
-              <DropdownMenu.Separator />
-              <li>
-                <button
-                  type="button"
-                  className="text-error"
-                  disabled={unenrollableSelected.length === 0}
-                  title={t("students.bulk.unenrollSelected", {
-                    count: unenrollableSelected.length,
-                  })}
-                  onClick={() => {
-                    closeDropdownMenu()
-                    if (unenrollableSelected.length === 0) return
-                    setConfirmingUnenroll(true)
-                  }}
-                >
-                  <SignOutIcon aria-hidden="true" className="size-4" />
-                  {t("students.bulk.unenroll")}
-                </button>
-              </li>
-              {/* Remove unlinked rows — the roster-only delete for rows with
-                  no GitHub identity. Destructive; rendered only when the
-                  selection actually contains such rows, so the menu doesn't
-                  grow a dead entry for ordinary selections. */}
-              {unlinkedSelected.length > 0 ? (
-                <li>
-                  <button
-                    type="button"
-                    className="text-error"
-                    title={t("students.bulk.removeRowsSelected", {
-                      count: unlinkedSelected.length,
-                    })}
-                    onClick={() => {
-                      closeDropdownMenu()
-                      setConfirmingRemoveRows(true)
-                    }}
-                  >
-                    <TrashIcon aria-hidden="true" className="size-4" />
-                    {t("students.bulk.removeRows")}
-                  </button>
-                </li>
-              ) : null}
-            </DropdownMenu>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            shape="square"
-            aria-label={t("students.bulk.clearSelection")}
-            title={t("students.bulk.clearSelection")}
-            onClick={onClearSelection}
+          <BulkSelectionCluster
+            countLabel={t("students.bulk.selectedCount", {
+              count: selectedRows.length,
+            })}
+            onClearSelection={onClearSelection}
           >
-            <XIcon aria-hidden="true" className="size-4" />
-          </Button>
+            <DropdownMenu.Item
+              icon={PaperAirplaneIcon}
+              label={t("students.bulk.invite")}
+              disabled={invitableSelected === 0}
+              title={
+                invitableSelected === 0
+                  ? t("students.bulk.inviteNoneInvitable")
+                  : t("students.bulk.inviteSelected", {
+                      count: invitableSelected,
+                    })
+              }
+              onSelect={() => setConfirmingInvite(true)}
+            />
+            <DropdownMenu.Item
+              icon={XCircleIcon}
+              label={t("students.bulk.cancelInvite")}
+              disabled={cancellableSelected.length === 0}
+              title={
+                cancellableSelected.length === 0
+                  ? t("students.bulk.cancelNoneCancellable")
+                  : t("students.bulk.cancelSelected", {
+                      count: cancellableSelected.length,
+                    })
+              }
+              onSelect={() => setConfirmingCancel(true)}
+            />
+            {/* Unenroll — destructive, so last and in its own group. */}
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item
+              icon={SignOutIcon}
+              label={t("students.bulk.unenroll")}
+              destructive
+              disabled={unenrollableSelected.length === 0}
+              title={t("students.bulk.unenrollSelected", {
+                count: unenrollableSelected.length,
+              })}
+              onSelect={() => setConfirmingUnenroll(true)}
+            />
+            {/* Remove unlinked rows — the roster-only delete for rows with
+                no GitHub identity. Rendered only when the selection contains
+                such rows, so the menu doesn't grow a dead entry. */}
+            {unlinkedSelected.length > 0 ? (
+              <DropdownMenu.Item
+                icon={TrashIcon}
+                label={t("students.bulk.removeRows")}
+                destructive
+                title={t("students.bulk.removeRowsSelected", {
+                  count: unlinkedSelected.length,
+                })}
+                onSelect={() => setConfirmingRemoveRows(true)}
+              />
+            ) : null}
+          </BulkSelectionCluster>
         </fieldset>
       ) : null}
 

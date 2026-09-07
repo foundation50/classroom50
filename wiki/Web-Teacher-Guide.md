@@ -1125,9 +1125,9 @@ so a mistyped domain can't lock students out of a working site.
 
 ### Act on several assignments at once
 
-Tick the checkbox on any row of the **Assignments** page and the table's header
-turns into a bulk bar: the count on the left, the actions on the right, lined up
-over the per-row action icons.
+Tick the checkbox on any row of the **Assignments** page and the toolbar shows
+how many are selected, an **Actions** menu, and a **Clear selection** button,
+the same cluster the roster and organization members pages use.
 
 ![Bulk actions on the assignments list](images/web_assignments_bulk_bar.png)
 
@@ -1137,7 +1137,7 @@ filters show. A selection survives searching and filtering: a row the search is
 hiding stays selected and is still acted on, so the count tells you how many
 assignments the next action really covers. **Clear selection** (the X) empties it.
 
-The bar offers:
+The **Actions** menu offers:
 
 - **Lock** / **Unlock.** Lock every selected assignment so students can't
   access or accept it, or unlock them again. Where a private template is used,

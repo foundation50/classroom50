@@ -28,8 +28,7 @@ dist-ssr
 # Vitest browser-mode (Playwright) run output: attachments + failure/diff
 # screenshots. Regenerated per run, never committed.
 .vitest-attachments
-# Browser tests may live beside the component they measure.
-**/__screenshots__
+src/test/__screenshots__
 
 # Vitest blob reports (--reporter=blob, used for CI shard merging). Transient.
 .vitest-reports

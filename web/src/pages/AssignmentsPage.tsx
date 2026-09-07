@@ -255,21 +255,7 @@ export const TeacherAssignmentsView = ({
   // (Primer: the empty state owns its resolving action, and a view gets one
   // primary button — a toolbar copy would duplicate it).
   const showToolbar = !assignmentsLoading && hasAssignments
-  // With no selection the no-results panel replaces the table; with one it
-  // goes inside the table body so the head row keeps the count and Clear
-  // selection.
-  const noResults = hasAssignments && visible.length === 0
-  const noResultsPanel = (
-    <NoSearchResults
-      title={t("assignments.toolbar.noResultsTitle")}
-      body={t("assignments.toolbar.noResultsBody")}
-      clearLabel={t("assignments.toolbar.clear")}
-      onClear={() => {
-        setQuery("")
-        setFilters({ ...DEFAULT_FILTERS })
-      }}
-    />
-  )
+  const showNoResults = hasAssignments && visible.length === 0
 
   // Right-aligned toolbar action: the New assignment split button for an author,
   // or the archived badge; null for a read-only viewer (TA).
@@ -312,6 +298,22 @@ export const TeacherAssignmentsView = ({
     ) : (
       collectAction
     )
+  // The leading cluster yields its spot to the selection cluster while rows
+  // are selected (one left-side context at a time, as on the roster). The bar
+  // stays mounted either way: it owns the confirm dialogs.
+  const leading = (
+    <>
+      {selectedAssignments.length === 0 ? leadingActions : null}
+      {canBulk ? (
+        <AssignmentsBulkBar
+          org={org}
+          classroom={classroom}
+          selected={selectedAssignments}
+          onClearSelection={clearSelection}
+        />
+      ) : null}
+    </>
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -379,12 +381,20 @@ export const TeacherAssignmentsView = ({
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          leading={leadingActions}
+          leading={leading}
           trailing={primaryAction}
         />
       )}
-      {noResults && selectedAssignments.length === 0 ? (
-        noResultsPanel
+      {showNoResults ? (
+        <NoSearchResults
+          title={t("assignments.toolbar.noResultsTitle")}
+          body={t("assignments.toolbar.noResultsBody")}
+          clearLabel={t("assignments.toolbar.clear")}
+          onClear={() => {
+            setQuery("")
+            setFilters({ ...DEFAULT_FILTERS })
+          }}
+        />
       ) : (
         <AssignmentsTable
           org={org}
@@ -396,8 +406,6 @@ export const TeacherAssignmentsView = ({
           secretPending={classroomLoading || classroomError}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
-          // "No assignments created." would be false for a filtered-out view.
-          empty={noResults ? noResultsPanel : undefined}
           roster={roster}
           includeStaff={includeStaff}
           loading={assignmentsLoading}
@@ -423,16 +431,6 @@ export const TeacherAssignmentsView = ({
           onToggleRow={canBulk ? handleToggleRow : undefined}
           onRowCheckboxClick={canBulk ? handleRowCheckboxClick : undefined}
           onToggleSelectAll={canBulk ? toggleSelectAllRows : undefined}
-          bulkActions={
-            canBulk ? (
-              <AssignmentsBulkBar
-                org={org}
-                classroom={classroom}
-                selected={selectedAssignments}
-                onClearSelection={clearSelection}
-              />
-            ) : undefined
-          }
         />
       )}
     </div>

@@ -44,9 +44,11 @@ import {
 import {
   Badge,
   Button,
+  Checkbox,
   MetricCount,
   MetricBar,
   RouterButton,
+  SelectAllCheckbox,
   SkeletonRows,
   SortableTh,
   TableShell,
@@ -113,7 +115,6 @@ const AssignmentsTable = ({
   secretPending,
   assignments,
   allAssignments,
-  empty,
   roster,
   includeStaff = false,
   loading = false,
@@ -127,7 +128,6 @@ const AssignmentsTable = ({
   onToggleRow,
   onToggleSelectAll,
   onRowCheckboxClick,
-  bulkActions,
   sort,
   onSortChange,
   viewSignature = "",
@@ -153,10 +153,6 @@ const AssignmentsTable = ({
   // siblings from it would drop a hidden slug-extending sibling and
   // mis-attribute its repos. Falls back to `assignments` when omitted.
   allAssignments?: Assignment[]
-  // Replaces the "nothing created yet" empty row, e.g. with the no-results
-  // panel when a live selection keeps the table mounted over a filtered-to-zero
-  // view.
-  empty?: ReactNode
   // Who the funnel counts (from useFunnelRoster): `counted` is the denominator
   // and the numerators are joined to it. undefined while the roster resolves
   // or is unknowable, which renders the cells as a placeholder.
@@ -193,8 +189,6 @@ const AssignmentsTable = ({
     slug: string,
   ) => void
   onToggleSelectAll?: () => void
-  // Replaces the column titles in the head row once something is selected.
-  bulkActions?: ReactNode
   // Column-header sorting (Assignment toggles name asc/desc, Due date toggles
   // due asc/desc), sharing the toolbar select's sort state. Omitted, headers
   // render as static text.
@@ -271,20 +265,13 @@ const AssignmentsTable = ({
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
-  // `bulkActions` is required too: a selection hands the head row over to it,
-  // so checkboxes without it would trade the column titles for an empty cell.
-  const selectable = Boolean(
-    selectedSlugs && onToggleRow && onToggleSelectAll && bulkActions,
-  )
+  const selectable = Boolean(selectedSlugs && onToggleRow && onToggleSelectAll)
   // The header box describes the view: "is everything I can see ticked".
   const { allSelected, someSelected } = selectAllState(
     selectable ? (assignments ?? []) : [],
     selectedSlugs ?? new Set<string>(),
     (a) => a.slug,
   )
-  // The takeover follows the selection, not the view: a row hidden by the
-  // search is still selected and acted on.
-  const hasSelection = selectable && (selectedSlugs?.size ?? 0) > 0
   // The row whose assignment hub (ManageAssignmentModal) is open. Stored as a
   // slug and re-resolved against the live list on every render, so the hub
   // reflects a lock flip after assignments.json refetches and unmounts itself
@@ -314,66 +301,45 @@ const AssignmentsTable = ({
             {selectable && (
               // w-0 for the same reason as the actions column.
               <th scope="col" className="w-0">
-                <input
-                  type="checkbox"
-                  className="checkbox checkbox-sm align-middle"
-                  aria-label={t("assignments.bulk.selectAll")}
-                  // Nothing in view to select; a selection from outside the
-                  // filter is the bar's business.
+                <SelectAllCheckbox
+                  className="align-middle"
+                  ariaLabel={t("assignments.bulk.selectAll")}
                   disabled={!assignments?.length}
-                  checked={allSelected}
-                  ref={(el) => {
-                    if (el) el.indeterminate = someSelected && !allSelected
-                  }}
-                  onChange={onToggleSelectAll}
+                  allSelected={allSelected}
+                  someSelected={someSelected}
+                  onToggle={() => onToggleSelectAll?.()}
                 />
               </th>
             )}
-            {/* A selection takes over the rest of the head row; the checkbox
-                stays put so there is one select-all control either way.
-                normal-case/font-normal undo the head cell's title styling. */}
-            {hasSelection ? (
-              // A td, not a th: a toolbar must not become the column header
-              // for every cell below it.
-              <td
-                colSpan={DATA_COLUMNS}
-                className="py-2 font-normal normal-case"
-              >
-                {bulkActions}
-              </td>
-            ) : (
-              <>
-                <SortableTh
-                  label={t("assignments.table.colAssignment")}
-                  sort={sort}
-                  asc="name-asc"
-                  desc="name-desc"
-                  onSortChange={onSortChange}
-                  title={t("assignments.table.sortByName")}
-                />
-                <th scope="col">{t("assignments.table.colType")}</th>
-                <th scope="col">{t("assignments.table.colReleaseDate")}</th>
-                <SortableTh
-                  label={t("assignments.table.colDueDate")}
-                  sort={sort}
-                  asc="due-asc"
-                  desc="due-desc"
-                  onSortChange={onSortChange}
-                  title={t("assignments.table.sortByDue")}
-                />
-                <th scope="col">{t("assignments.table.colAccepted")}</th>
-                <th scope="col">{t("assignments.table.colSubmitted")}</th>
-                {/* w-0: auto table layout hands surplus width to every column,
-                    which stretched this fixed-width button strip. Zero width
-                    makes the browser fall back to min-content here and give
-                    the slack to the text columns instead. */}
-                <th scope="col" className="w-0">
-                  <span className="sr-only">
-                    {t("assignments.table.colActions")}
-                  </span>
-                </th>
-              </>
-            )}
+            <SortableTh
+              label={t("assignments.table.colAssignment")}
+              sort={sort}
+              asc="name-asc"
+              desc="name-desc"
+              onSortChange={onSortChange}
+              title={t("assignments.table.sortByName")}
+            />
+            <th scope="col">{t("assignments.table.colType")}</th>
+            <th scope="col">{t("assignments.table.colReleaseDate")}</th>
+            <SortableTh
+              label={t("assignments.table.colDueDate")}
+              sort={sort}
+              asc="due-asc"
+              desc="due-desc"
+              onSortChange={onSortChange}
+              title={t("assignments.table.sortByDue")}
+            />
+            <th scope="col">{t("assignments.table.colAccepted")}</th>
+            <th scope="col">{t("assignments.table.colSubmitted")}</th>
+            {/* w-0: auto table layout hands surplus width to every column,
+                which stretched this fixed-width button strip. Zero width
+                makes the browser fall back to min-content here and give
+                the slack to the text columns instead. */}
+            <th scope="col" className="w-0">
+              <span className="sr-only">
+                {t("assignments.table.colActions")}
+              </span>
+            </th>
           </tr>
         </thead>
         {/* Same recipe as the submissions table: the body enters as one block
@@ -410,28 +376,27 @@ const AssignmentsTable = ({
           {!loading && !loadError && !assignments?.length && (
             <tr>
               <td colSpan={selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS}>
-                {empty ??
-                  (emptyAction ? (
-                    // First-use blankslate (Primer): the resolving action lives
-                    // here, and the page hides its toolbar so the view carries
-                    // a single primary action.
-                    <EmptyState
-                      variant="bare"
-                      className="py-12"
-                      icon={PlusIcon}
-                      titleAs="h3"
-                      title={t("assignments.table.emptyTitle")}
-                      body={t("assignments.table.emptyBody")}
-                      action={emptyAction}
-                    />
-                  ) : (
-                    // Read-only viewers (TA, archived classroom) get the plain
-                    // statement — there is no action they could take.
-                    <EmptyState
-                      variant="bare"
-                      body={t("assignments.table.empty")}
-                    />
-                  ))}
+                {emptyAction ? (
+                  // First-use blankslate (Primer): the resolving action lives
+                  // here, and the page hides its toolbar so the view carries
+                  // a single primary action.
+                  <EmptyState
+                    variant="bare"
+                    className="py-12"
+                    icon={PlusIcon}
+                    titleAs="h3"
+                    title={t("assignments.table.emptyTitle")}
+                    body={t("assignments.table.emptyBody")}
+                    action={emptyAction}
+                  />
+                ) : (
+                  // Read-only viewers (TA, archived classroom) get the plain
+                  // statement — there is no action they could take.
+                  <EmptyState
+                    variant="bare"
+                    body={t("assignments.table.empty")}
+                  />
+                )}
               </td>
             </tr>
           )}
@@ -445,9 +410,8 @@ const AssignmentsTable = ({
                     // The row navigates on click; ticking a box must not.
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <input
-                      type="checkbox"
-                      className="checkbox checkbox-sm size-6 align-middle"
+                    <Checkbox
+                      className="size-6 align-middle"
                       aria-label={t("assignments.bulk.selectRow", {
                         assignment: name(assignment),
                       })}

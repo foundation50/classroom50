@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -53,6 +59,13 @@ const ALL = [
   assignment("hw4"),
 ]
 
+// The menu item and the confirm dialog's button share a label, so menu
+// lookups are scoped to the menu.
+const menuItem = (label: string) =>
+  within(screen.getByRole("menu")).getByText(label).closest("button")!
+const confirmButton = (label: string) =>
+  within(screen.getByRole("alertdialog")).getByText(label)
+
 const renderBar = (props: { selected: string[] }) =>
   render(
     <AssignmentsBulkBar
@@ -97,10 +110,8 @@ describe("AssignmentsBulkBar selection scope", () => {
   it("acts on the whole selection while a search narrows the table", async () => {
     renderBar({ selected: ["hw1", "hw3"] })
 
-    // The toolbar control is an icon button (label via aria-label); the
-    // confirm dialog's button carries the same string as visible text.
-    fireEvent.click(screen.getByLabelText("assignments.bulk.lock"))
-    fireEvent.click(screen.getByText("assignments.bulk.lock"))
+    fireEvent.click(menuItem("assignments.bulk.lock"))
+    fireEvent.click(confirmButton("assignments.bulk.lock"))
 
     await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
     expect(lockMutate.mock.calls[0][0]).toEqual({
@@ -113,10 +124,8 @@ describe("AssignmentsBulkBar selection scope", () => {
 // A selection can be mixed, so both verbs exist; one with nothing to do is
 // disabled.
 describe("AssignmentsBulkBar lock state", () => {
-  const lockButton = () =>
-    screen.getByLabelText("assignments.bulk.lock") as HTMLButtonElement
-  const unlockButton = () =>
-    screen.getByLabelText("assignments.bulk.unlock") as HTMLButtonElement
+  const lockButton = () => menuItem("assignments.bulk.lock")
+  const unlockButton = () => menuItem("assignments.bulk.unlock")
 
   it("offers both verbs on a mixed selection", () => {
     renderBar({ selected: ["hw1", "hw3"] })
@@ -150,8 +159,7 @@ describe("AssignmentsBulkBar lock state", () => {
 // selection keeps mounted, so clearing from inside one would destroy it
 // mid-close.
 describe("AssignmentsBulkBar selection lifetime", () => {
-  const openReuse = () =>
-    fireEvent.click(screen.getByLabelText("assignments.bulk.reuse"))
+  const openReuse = () => fireEvent.click(menuItem("assignments.bulk.reuse"))
 
   it("keeps the selection after a bulk lock lands", async () => {
     const onClearSelection = vi.fn()
@@ -164,8 +172,8 @@ describe("AssignmentsBulkBar selection lifetime", () => {
       />,
     )
 
-    fireEvent.click(screen.getByLabelText("assignments.bulk.lock"))
-    fireEvent.click(screen.getByText("assignments.bulk.lock"))
+    fireEvent.click(menuItem("assignments.bulk.lock"))
+    fireEvent.click(confirmButton("assignments.bulk.lock"))
 
     await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
     expect(onClearSelection).not.toHaveBeenCalled()
@@ -182,13 +190,13 @@ describe("AssignmentsBulkBar selection lifetime", () => {
       />,
     )
 
-    fireEvent.click(screen.getByLabelText("assignments.bulk.delete"))
+    fireEvent.click(menuItem("assignments.bulk.delete"))
     // Delete acknowledges first, then wants the word typed.
     fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "assignments.bulk.deleteConfirmWord" },
     })
-    fireEvent.click(screen.getByText("assignments.bulk.delete"))
+    fireEvent.click(confirmButton("assignments.bulk.delete"))
 
     await vi.waitFor(() => expect(deleteMutate).toHaveBeenCalled())
     expect(onClearSelection).not.toHaveBeenCalled()
@@ -205,8 +213,8 @@ describe("AssignmentsBulkBar selection lifetime", () => {
     })
     renderBar({ selected: ["hw1"] })
 
-    fireEvent.click(screen.getByLabelText("assignments.bulk.lock"))
-    fireEvent.click(screen.getByText("assignments.bulk.lock"))
+    fireEvent.click(menuItem("assignments.bulk.lock"))
+    fireEvent.click(confirmButton("assignments.bulk.lock"))
 
     await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
     const messages = notify.mock.calls.map((c) => c[0].message)

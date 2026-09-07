@@ -113,7 +113,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
   it("renders no cluster while no rows are selected", () => {
     renderBar([])
     // The (always-mounted) result modal is closed; the cluster itself is gone.
-    expect(screen.queryByText("students.bulk.actions")).toBeNull()
+    expect(screen.queryByText("common.actions")).toBeNull()
     expect(screen.queryByText(/students\.bulk\.selectedCount/)).toBeNull()
   })
 
@@ -121,8 +121,8 @@ describe("RosterBulkActionsBar — selection cluster", () => {
     const onClearSelection = vi.fn()
     renderBar([enrolled], { onClearSelection })
     expect(screen.getByText("students.bulk.selectedCount:1")).not.toBeNull()
-    expect(screen.getByText("students.bulk.actions")).not.toBeNull()
-    fireEvent.click(screen.getByLabelText("students.bulk.clearSelection"))
+    expect(screen.getByText("common.actions")).not.toBeNull()
+    fireEvent.click(screen.getByLabelText("common.clearSelection"))
     expect(onClearSelection).toHaveBeenCalled()
   })
 
@@ -157,7 +157,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
   it("freezes every control inside the fieldset while disabled", () => {
     renderBar([enrolled, pending], { disabled: true })
     const fieldset = screen
-      .getByText("students.bulk.actions")
+      .getByText("common.actions")
       .closest("fieldset") as HTMLFieldSetElement
     expect(fieldset.disabled).toBe(true)
   })

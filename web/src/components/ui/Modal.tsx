@@ -168,16 +168,7 @@ export function Modal({
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
     >
-      {/* A dialog inherits from where its trigger is mounted, and daisyUI sets
-          `.table :where(thead,tfoot){white-space:nowrap}`, so a modal opened
-          from a table header would clip every paragraph to one line. */}
-      <div
-        className={cx(
-          "modal-box break-words whitespace-normal",
-          SIZE_CLASS[size],
-          boxClassName,
-        )}
-      >
+      <div className={cx("modal-box", SIZE_CLASS[size], boxClassName)}>
         {!hideCloseButton && (
           <form method="dialog">
             <Button

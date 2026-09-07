@@ -1,12 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  TriangleDownIcon,
-  PlusIcon,
-  SignOutIcon,
-  XCircleIcon,
-  XIcon,
-} from "@/components/ui/icons"
+import { PlusIcon, SignOutIcon, XCircleIcon } from "@/components/ui/icons"
 
 import {
   Alert,
@@ -15,8 +9,8 @@ import {
   FormField,
   Modal,
   Select,
-  closeDropdownMenu,
 } from "@/components/ui"
+import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/domain/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
@@ -234,96 +228,57 @@ const BulkActionsBar = ({
           modals below stay mounted regardless, so a completing run's result
           dialog survives the selection clearing out from under it. */}
       {hasSelection ? (
-        <>
-          <span className="text-sm font-medium tabular-nums">
-            {t("orgMembers.bulk.selectedCount", {
-              count: selectedRows.length,
-            })}
-          </span>
-          {/* dropdown-start: the cluster sits on the toolbar's left, so the
-              menu opens rightward instead of off the edge. */}
-          <div className="dropdown dropdown-start">
-            <Button variant="primary" size="sm">
-              {t("orgMembers.bulk.actions")}
-              <TriangleDownIcon aria-hidden="true" className="size-4" />
-            </Button>
-            <DropdownMenu className="w-64">
-              <li>
-                <button
-                  type="button"
-                  disabled={classrooms.length === 0}
-                  title={
-                    classrooms.length === 0
-                      ? t("orgMembers.bulk.noClassrooms")
-                      : undefined
-                  }
-                  onClick={() => {
-                    closeDropdownMenu()
-                    if (classrooms.length === 0) return
-                    setTarget(classrooms[0].path)
-                    setConfirmingAdd(true)
-                  }}
-                >
-                  <PlusIcon aria-hidden="true" className="size-4" />
-                  {t("orgMembers.bulk.addToClassroomMenu")}
-                </button>
-              </li>
-              {/* Removals — destructive, so last and in their own group. */}
-              <DropdownMenu.Separator />
-              <li>
-                <button
-                  type="button"
-                  className="text-error"
-                  disabled={removableClassrooms.length === 0}
-                  title={
-                    removableClassrooms.length === 0
-                      ? t("orgMembers.bulk.removeNoneOnClassroom")
-                      : undefined
-                  }
-                  onClick={() => {
-                    closeDropdownMenu()
-                    if (removableClassrooms.length === 0) return
-                    setTarget(removableClassrooms[0].path)
-                    setRemoveScope("classroom")
-                    // Fresh decision each time: the escalation is opt-in per
-                    // run.
-                    setAlsoRemoveFromOrg(false)
-                    setConfirmingRemove(true)
-                  }}
-                >
-                  <SignOutIcon aria-hidden="true" className="size-4" />
-                  {t("orgMembers.bulk.removeFromClassroomMenu")}
-                </button>
-              </li>
-              <li>
-                <button
-                  type="button"
-                  className="text-error"
-                  onClick={() => {
-                    closeDropdownMenu()
-                    setRemoveScope("org")
-                    setAlsoRemoveFromOrg(false)
-                    setConfirmingRemove(true)
-                  }}
-                >
-                  <XCircleIcon aria-hidden="true" className="size-4" />
-                  {t("orgMembers.removeFromOrg")}
-                </button>
-              </li>
-            </DropdownMenu>
-          </div>
-
-          <Button
-            variant="ghost"
-            size="sm"
-            shape="square"
-            aria-label={t("orgMembers.bulk.clearSelection")}
-            title={t("orgMembers.bulk.clearSelection")}
-            onClick={onClearSelection}
-          >
-            <XIcon aria-hidden="true" className="size-4" />
-          </Button>
-        </>
+        <BulkSelectionCluster
+          countLabel={t("orgMembers.bulk.selectedCount", {
+            count: selectedRows.length,
+          })}
+          onClearSelection={onClearSelection}
+        >
+          <DropdownMenu.Item
+            icon={PlusIcon}
+            label={t("orgMembers.bulk.addToClassroomMenu")}
+            disabled={classrooms.length === 0}
+            title={
+              classrooms.length === 0
+                ? t("orgMembers.bulk.noClassrooms")
+                : undefined
+            }
+            onSelect={() => {
+              setTarget(classrooms[0].path)
+              setConfirmingAdd(true)
+            }}
+          />
+          {/* Removals — destructive, so last and in their own group. */}
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            icon={SignOutIcon}
+            label={t("orgMembers.bulk.removeFromClassroomMenu")}
+            destructive
+            disabled={removableClassrooms.length === 0}
+            title={
+              removableClassrooms.length === 0
+                ? t("orgMembers.bulk.removeNoneOnClassroom")
+                : undefined
+            }
+            onSelect={() => {
+              setTarget(removableClassrooms[0].path)
+              setRemoveScope("classroom")
+              // Fresh decision each time: the escalation is opt-in per run.
+              setAlsoRemoveFromOrg(false)
+              setConfirmingRemove(true)
+            }}
+          />
+          <DropdownMenu.Item
+            icon={XCircleIcon}
+            label={t("orgMembers.removeFromOrg")}
+            destructive
+            onSelect={() => {
+              setRemoveScope("org")
+              setAlsoRemoveFromOrg(false)
+              setConfirmingRemove(true)
+            }}
+          />
+        </BulkSelectionCluster>
       ) : null}
 
       <RemoveConfirmDialog

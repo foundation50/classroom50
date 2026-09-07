@@ -94,7 +94,6 @@ vi.mock("@/pages/assignments/AssignmentsTable", () => ({
     roster?: { counted: ReadonlySet<string> }
     includeStaff?: boolean
     onToggleRow?: (slug: string) => void
-    bulkActions?: ReactNode
   }) => (
     <>
       <div
@@ -104,7 +103,6 @@ vi.mock("@/pages/assignments/AssignmentsTable", () => ({
         }
         data-include-staff={String(Boolean(props.includeStaff))}
       />
-      {props.bulkActions}
       {(props.assignments ?? []).map((a, i) => (
         <button
           key={i}

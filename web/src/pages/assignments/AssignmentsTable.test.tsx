@@ -801,31 +801,15 @@ describe("AssignmentsTable copy accept link", () => {
   })
 })
 
-describe("AssignmentsTable selection head", () => {
+describe("AssignmentsTable selection column", () => {
   const rows = [assignment(), assignment({ slug: "hw2", name: "HW 2" })]
   const selectionProps = (selected: string[]) => ({
     selectedSlugs: new Set(selected),
     onToggleRow: () => {},
     onToggleSelectAll: () => {},
-    bulkActions: <span data-testid="bulk-actions">actions</span>,
   })
 
-  it("shows the column titles while nothing is selected", () => {
-    wrap(
-      <AssignmentsTable
-        org="acme"
-        classroom="cs50"
-        assignments={rows}
-        canAuthor
-        {...selectionProps([])}
-      />,
-    )
-
-    expect(screen.getByText("assignments.table.colType")).toBeTruthy()
-    expect(screen.queryByTestId("bulk-actions")).toBeNull()
-  })
-
-  it("hands the head row over to the bulk actions once a row is selected", () => {
+  it("renders a select-all box and one box per row when wired", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -836,13 +820,15 @@ describe("AssignmentsTable selection head", () => {
       />,
     )
 
-    expect(screen.getByTestId("bulk-actions")).toBeTruthy()
-    expect(screen.queryByText("assignments.table.colType")).toBeNull()
-    // The select-all box survives the takeover.
     expect(screen.getByLabelText("assignments.bulk.selectAll")).toBeTruthy()
+    const boxes = screen.getAllByRole("checkbox")
+    expect(boxes).toHaveLength(3)
+    // The column titles stay put; the selection cluster lives in the toolbar.
+    expect(screen.getByText("assignments.table.colType")).toBeTruthy()
   })
 
-  // A selection hidden by the search keeps the head row alive over zero rows.
+  // A selection hidden by the search still needs the column, but there is
+  // nothing in view for select-all to act on.
   it("disables select-all when the view holds no rows to select", () => {
     wrap(
       <AssignmentsTable
@@ -859,41 +845,6 @@ describe("AssignmentsTable selection head", () => {
       "disabled",
       true,
     )
-  })
-
-  it("renders the caller's empty state instead of the default", () => {
-    wrap(
-      <AssignmentsTable
-        org="acme"
-        classroom="cs50"
-        assignments={[]}
-        allAssignments={rows}
-        empty={<p>no matches</p>}
-        canAuthor
-        {...selectionProps(["hw1"])}
-      />,
-    )
-
-    expect(screen.getByText("no matches")).toBeTruthy()
-    expect(screen.queryByText("assignments.table.empty")).toBeNull()
-  })
-
-  // Without it, ticking a row would swap the column titles for a blank cell.
-  it("renders no checkbox column when the bulk actions are missing", () => {
-    wrap(
-      <AssignmentsTable
-        org="acme"
-        classroom="cs50"
-        assignments={rows}
-        canAuthor
-        selectedSlugs={new Set<string>()}
-        onToggleRow={() => {}}
-        onToggleSelectAll={() => {}}
-      />,
-    )
-
-    expect(screen.queryByLabelText("assignments.bulk.selectAll")).toBeNull()
-    expect(screen.getByText("assignments.table.colType")).toBeTruthy()
   })
 
   it("renders no checkbox column at all without selection wiring", () => {

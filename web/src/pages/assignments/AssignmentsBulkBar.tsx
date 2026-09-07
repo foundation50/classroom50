@@ -1,15 +1,15 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui"
+import { DropdownMenu } from "@/components/ui"
 import {
   DuplicateIcon,
   LockIcon,
   TrashIcon,
   UnlockIcon,
-  XIcon,
 } from "@/components/ui/icons"
 import { ConfirmModal } from "@/components/modals"
+import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import {
   useBulkDeleteAssignments,
@@ -18,9 +18,9 @@ import {
 import { BulkReuseAssignmentsModal } from "@/components/modals/BulkReuseAssignmentsModal"
 import type { Assignment } from "@/types/classroom"
 
-// The assignments table's selection actions, rendered inside the table head
-// so the row that carries the select-all checkbox also carries what can be
-// done with the selection.
+// The assignments toolbar's selection cluster (count + Actions menu + Clear),
+// shown only while rows are selected. Always mounted, like the roster's, so a
+// dialog's close animation survives the selection changing under it.
 //
 // Only the genuinely plural actions live here. Edit navigates to one page,
 // template access is a diagnostic, clone-submissions renders a CLI command,
@@ -97,9 +97,8 @@ export function AssignmentsBulkBar({
           locked: true,
         }
 
-  // Neither handler clears the selection: the dialogs live in the head cell
-  // that a selection keeps mounted, so clearing would destroy them mid-close.
-  // A bulk delete empties itself once assignments.json refetches. No try/catch
+  // Neither handler clears the selection (Clear is one click away, and a bulk
+  // delete empties itself once assignments.json refetches). No try/catch
   // either: ConfirmModal renders a rejection inline and stays open.
   const runLock = async (locked: boolean) => {
     const result = await lock.mutateAsync({ slugs, locked })
@@ -153,85 +152,45 @@ export function AssignmentsBulkBar({
     notifyMissing(result.missing)
   }
 
-  // `every` on an empty selection answers true to both lock predicates.
-  if (count === 0) return null
-
   return (
     <>
-      {/* Both ends are sticky: the table scrolls horizontally below roughly
-          1400px, and without the pins the actions ride off the right edge. */}
-      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
-        <span className="sticky start-0 text-sm font-medium tabular-nums">
-          {t("assignments.bulk.selectedCount", { count })}
-        </span>
-        <div className="sticky end-0 flex flex-wrap items-center gap-1">
-          <Button
-            size="sm"
-            variant="neutral"
-            shape="square"
+      {count > 0 ? (
+        <BulkSelectionCluster
+          countLabel={t("assignments.bulk.selectedCount", { count })}
+          onClearSelection={onClearSelection}
+        >
+          <DropdownMenu.Item
+            icon={LockIcon}
+            label={t("assignments.bulk.lock")}
             disabled={busy || allLocked}
-            title={
-              allLocked
-                ? t("assignments.bulk.lockAllLocked")
-                : t("assignments.bulk.lock")
-            }
-            aria-label={t("assignments.bulk.lock")}
-            onClick={() => setPending("lock")}
-          >
-            <LockIcon aria-hidden="true" className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="neutral"
-            shape="square"
+            title={allLocked ? t("assignments.bulk.lockAllLocked") : undefined}
+            onSelect={() => setPending("lock")}
+          />
+          <DropdownMenu.Item
+            icon={UnlockIcon}
+            label={t("assignments.bulk.unlock")}
             disabled={busy || noneLocked}
             title={
-              noneLocked
-                ? t("assignments.bulk.unlockNoneLocked")
-                : t("assignments.bulk.unlock")
+              noneLocked ? t("assignments.bulk.unlockNoneLocked") : undefined
             }
-            aria-label={t("assignments.bulk.unlock")}
-            onClick={() => setPending("unlock")}
-          >
-            <UnlockIcon aria-hidden="true" className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="neutral"
-            shape="square"
+            onSelect={() => setPending("unlock")}
+          />
+          <DropdownMenu.Item
+            icon={DuplicateIcon}
+            label={t("assignments.bulk.reuse")}
             disabled={busy}
-            title={t("assignments.bulk.reuse")}
-            aria-label={t("assignments.bulk.reuse")}
-            onClick={() => setReuseOpen(true)}
-          >
-            <DuplicateIcon aria-hidden="true" className="size-4" />
-          </Button>
-          {/* Red glyph, not a red button: the confirm dialog carries the
-              danger tone. */}
-          <Button
-            size="sm"
-            variant="neutral"
-            shape="square"
-            className="text-error"
+            onSelect={() => setReuseOpen(true)}
+          />
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            icon={TrashIcon}
+            label={t("assignments.bulk.delete")}
+            destructive
             disabled={busy}
-            title={t("assignments.bulk.delete")}
-            aria-label={t("assignments.bulk.delete")}
-            onClick={() => setPending("delete")}
-          >
-            <TrashIcon aria-hidden="true" className="size-4" />
-          </Button>
-          <Button
-            size="sm"
-            variant="ghost"
-            shape="square"
-            title={t("assignments.bulk.clearSelection")}
-            aria-label={t("assignments.bulk.clearSelection")}
-            onClick={onClearSelection}
-          >
-            <XIcon aria-hidden="true" className="size-4" />
-          </Button>
-        </div>
-      </div>
+            onSelect={() => setPending("delete")}
+          />
+        </BulkSelectionCluster>
+      ) : null}
 
       {/* Reversible both ways, so no type-to-confirm and no warning. */}
       <ConfirmModal

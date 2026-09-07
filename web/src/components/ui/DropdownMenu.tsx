@@ -1,4 +1,4 @@
-import type { ComponentPropsWithRef } from "react"
+import type { ComponentPropsWithRef, ComponentType, ReactNode } from "react"
 
 import { cx } from "./cx"
 
@@ -45,5 +45,50 @@ export function closeDropdownMenu(): void {
     document.activeElement.blur()
   }
 }
+
+export type DropdownMenuItemProps = {
+  icon?: ComponentType<{
+    className?: string
+    "aria-hidden"?: boolean | "true" | "false"
+  }>
+  label: ReactNode
+  // Native disabled plus a guard in onClick: daisyUI's menu items are plain
+  // buttons, and a disabled one still needs its title to explain why.
+  disabled?: boolean
+  title?: string
+  destructive?: boolean
+  onSelect: () => void
+}
+
+// The one menu-item recipe: closes the menu, then acts. Destructive items are
+// red text (the confirm dialog carries the danger tone).
+function DropdownMenuItem({
+  icon: Icon,
+  label,
+  disabled = false,
+  title,
+  destructive = false,
+  onSelect,
+}: DropdownMenuItemProps) {
+  return (
+    <li>
+      <button
+        type="button"
+        className={cx(destructive && "text-error")}
+        disabled={disabled}
+        title={title}
+        onClick={() => {
+          closeDropdownMenu()
+          if (disabled) return
+          onSelect()
+        }}
+      >
+        {Icon ? <Icon aria-hidden="true" className="size-4" /> : null}
+        {label}
+      </button>
+    </li>
+  )
+}
+DropdownMenu.Item = DropdownMenuItem
 
 export default DropdownMenu
