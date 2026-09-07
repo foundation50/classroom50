@@ -28,6 +28,11 @@ import {
 // Not on the @/domain/assignments barrel (the wrapper is internal scaffolding),
 // so reach the module directly rather than widening the public surface.
 import { withAcceptStep } from "./assignments/accessPrimitives"
+import {
+  assertSlugFreeInTarget,
+  reuseTemplateNeedsGrant,
+} from "./assignments/copyReuse"
+import { templateStillInUse } from "./assignments/createEdit"
 import { defaultAutograderWorkflow } from "./assignments/autograderYaml"
 import { extractAssignments } from "@/github-core/queries"
 import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
@@ -333,6 +338,130 @@ describe("buildReusedEntry", () => {
     const entry = buildReusedEntry(source, { slug: "c2", name: "Copy" })
     expect(entry.runtime).toEqual({ container: { image: "ubuntu:24.04" } })
     expect("apt" in (entry.runtime ?? {})).toBe(false)
+  })
+})
+
+// Shared by the single and the bulk copy, so pinned once here.
+describe("reuseTemplateNeedsGrant", () => {
+  const withTemplate = (owner: string): Assignment =>
+    ({
+      slug: "hw1",
+      name: "hw1",
+      template: { owner, repo: "tpl", branch: "main" },
+    }) as Assignment
+  const repo = (priv: boolean) =>
+    ({ private: priv }) as unknown as Parameters<
+      typeof reuseTemplateNeedsGrant
+    >[3]
+
+  it("needs no grant without a template or for a public one", () => {
+    expect(
+      reuseTemplateNeedsGrant(
+        "acme",
+        "cs101",
+        { slug: "hw1", name: "hw1" } as Assignment,
+        null,
+      ),
+    ).toBe(false)
+    expect(
+      reuseTemplateNeedsGrant(
+        "acme",
+        "cs101",
+        withTemplate("acme"),
+        repo(false),
+      ),
+    ).toBe(false)
+  })
+
+  it("needs a grant for a private in-org template", () => {
+    expect(
+      reuseTemplateNeedsGrant(
+        "acme",
+        "cs101",
+        withTemplate("ACME"),
+        repo(true),
+      ),
+    ).toBe(true)
+  })
+
+  it("refuses a private template outside the org", () => {
+    expect(() =>
+      reuseTemplateNeedsGrant(
+        "acme",
+        "cs101",
+        withTemplate("other-org"),
+        repo(true),
+      ),
+    ).toThrow(/private and outside acme/)
+  })
+
+  it("refuses a template the account cannot see", () => {
+    expect(() =>
+      reuseTemplateNeedsGrant("acme", "cs101", withTemplate("acme"), null),
+    ).toThrow(/not visible/)
+  })
+})
+
+describe("assertSlugFreeInTarget", () => {
+  const file = {
+    schema: "classroom50/assignments/v1",
+    assignments: [
+      { slug: "hw1", name: "hw1" },
+      { slug: "hw2", name: "hw2", renamed_from: "old-hw2" },
+    ],
+  } as unknown as Parameters<typeof assertSlugFreeInTarget>[1]
+
+  it("passes a free slug", () => {
+    expect(() => assertSlugFreeInTarget("hw3", file, "cs101")).not.toThrow()
+  })
+
+  it("rejects a taken slug regardless of case", () => {
+    expect(() => assertSlugFreeInTarget("HW1", file, "cs101")).toThrow(
+      /already exists/,
+    )
+  })
+
+  it("rejects a slug a renamed assignment still reserves", () => {
+    expect(() => assertSlugFreeInTarget("Old-HW2", file, "cs101")).toThrow(
+      /reserved/,
+    )
+  })
+})
+
+// The team read is per template: a lock must keep it while another unlocked
+// assignment still uses the same template.
+describe("templateStillInUse", () => {
+  const tpl = { owner: "acme", repo: "tpl", branch: "main" }
+  const other = { owner: "acme", repo: "other", branch: "main" }
+  const a = (slug: string, extra: Partial<Assignment> = {}) =>
+    ({ slug, name: slug, ...extra }) as Assignment
+
+  it("is true when an unlocked sibling uses the template", () => {
+    expect(
+      templateStillInUse(tpl, "hw1", [
+        a("hw1", { template: tpl }),
+        a("hw2", { template: tpl }),
+      ]),
+    ).toBe(true)
+  })
+
+  it("ignores the assignment itself, locked siblings, and other templates", () => {
+    expect(
+      templateStillInUse(tpl, "hw1", [
+        a("hw1", { template: tpl }),
+        a("hw2", { template: tpl, locked: true }),
+        a("hw3", { template: other }),
+        a("hw4"),
+      ]),
+    ).toBe(false)
+  })
+
+  it("matches the template owner and repo case-insensitively", () => {
+    expect(
+      templateStillInUse(tpl, "hw1", [
+        a("hw2", { template: { owner: "ACME", repo: "Tpl", branch: "main" } }),
+      ]),
+    ).toBe(true)
   })
 })
 
@@ -1716,6 +1845,8 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     templatePrivate?: boolean
     templateIsTemplate?: boolean
     storedLocked?: boolean
+    // A second, unlocked assignment on the same template.
+    siblingOnTemplate?: boolean
   }): {
     client: GitHubClient
     grants: () => string[]
@@ -1749,6 +1880,16 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
           template: { owner: ORG, repo: "tmpl", branch: "main" },
           ...(opts.storedLocked ? { locked: true } : {}),
         },
+        ...(opts.siblingOnTemplate
+          ? [
+              {
+                slug: "hw-sibling",
+                name: "Sibling",
+                mode: "individual",
+                template: { owner: ORG, repo: "tmpl", branch: "main" },
+              },
+            ]
+          : []),
       ],
     }
 
@@ -2115,6 +2256,42 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
       expect(committed()).toContain(`"locked": true`)
       expect(grants()).toEqual([])
       expect(revokes()).toEqual(["classroom50-cs50"])
+    })
+
+    // The read is a permission on the template, not on the assignment: with an
+    // unlocked sibling on the same template, its students still need it.
+    it("edit false-to-true keeps the read while an unlocked sibling shares the template", async () => {
+      const { client, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        siblingOnTemplate: true,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(committed()).toContain(`"locked": true`)
+      expect(revokes()).toEqual([])
+    })
+
+    it("row lock keeps the read for the same reason", async () => {
+      const { client, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        siblingOnTemplate: true,
+      })
+
+      await setAssignmentLock(client, {
+        org: ORG,
+        classroom: CLASSROOM,
+        slug: SLUG,
+        locked: true,
+      })
+
+      expect(committed()).toContain(`"locked": true`)
+      expect(revokes()).toEqual([])
     })
 
     it("edit true-to-false: drops the key and re-grants (student + staff)", async () => {

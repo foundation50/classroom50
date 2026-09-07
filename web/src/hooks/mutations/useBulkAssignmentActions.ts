@@ -39,7 +39,7 @@ export function useBulkSetAssignmentLock(org: string, classroom: string) {
     Error,
     { slugs: string[]; locked: boolean }
   >({
-    // One commit, then a template grant/revoke per selected assignment.
+    // One commit, then a grant or revoke per distinct template in the selection.
     meta: { keepTabOpen: true },
     mutationFn: ({ slugs, locked }) =>
       setAssignmentsLockWithConflictRetry(client, {
@@ -74,7 +74,7 @@ export function useBulkReuseAssignments(org: string) {
     Error,
     { items: BulkCopyItem[]; targetClassroom: string }
   >({
-    // One commit, then a template grant per copied assignment.
+    // One commit, then a grant per distinct template among the copies.
     meta: { keepTabOpen: true },
     mutationFn: ({ items, targetClassroom }) =>
       copyAssignmentsWithConflictRetry(client, {

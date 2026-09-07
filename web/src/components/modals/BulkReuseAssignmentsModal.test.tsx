@@ -42,7 +42,12 @@ vi.mock("@/hooks/useGetClassAssignments", () => {
 })
 
 // Mutable so a test can hand the modal a finished run's result.
-type Outcome = { slug: string; targetSlug?: string; error?: string }
+type Outcome = {
+  slug: string
+  targetSlug?: string
+  error?: string
+  templateAccessWarning?: string
+}
 const { mutate, reuseState } = vi.hoisted(() => ({
   mutate: vi.fn(),
   reuseState: {
@@ -134,7 +139,7 @@ describe("BulkReuseAssignmentsModal", () => {
     pickTarget()
     fireEvent.change(slugInputs()[1], { target: { value: "hw2-neu" } })
     fireEvent.click(submit())
-    expect(mutate).toHaveBeenCalledWith({
+    expect(mutate.mock.calls[0][0]).toEqual({
       items: [
         { source: sources[0], targetSlug: "hw1-2" },
         { source: sources[1], targetSlug: "hw2-neu" },
@@ -205,6 +210,38 @@ describe("BulkReuseAssignmentsModal", () => {
     fireEvent.change(slugInputs()[1], { target: { value: "Hausaufgabe Zwei" } })
     fireEvent.blur(slugInputs()[1])
     expect(slugInputs()[1].value).toBe("hausaufgabe-zwei")
+  })
+
+  // `isPending` reaches the button a render late, so the guard is a ref.
+  it("starts one batch on a double-click", () => {
+    const { pickTarget, submit } = setup()
+    pickTarget()
+    fireEvent.click(submit())
+    fireEvent.click(submit())
+    expect(mutate).toHaveBeenCalledTimes(1)
+  })
+
+  // One grant per template, so siblings share a warning: one row names them.
+  it("lists every copy a shared template warning covers in one row", () => {
+    finished([
+      {
+        slug: "hw1",
+        targetSlug: "hw1",
+        templateAccessWarning: "owner required",
+      },
+      {
+        slug: "hw2",
+        targetSlug: "hw2-2",
+        templateAccessWarning: "owner required",
+      },
+    ])
+    setup()
+
+    expect(
+      screen.getByText("assignments.bulk.reuseTemplateWarnTitle"),
+    ).toBeTruthy()
+    expect(screen.getByText("hw1, hw2-2")).toBeTruthy()
+    expect(screen.getAllByText("owner required")).toHaveLength(1)
   })
 
   // A run where everything landed is good news, not a warning.

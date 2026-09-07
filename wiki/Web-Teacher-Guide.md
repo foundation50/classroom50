@@ -1139,9 +1139,10 @@ The **Actions** menu offers:
 
 - **Lock** / **Unlock.** Lock every selected assignment so students can't
   access or accept it, or unlock them again. Where a private template is used,
-  locking removes the student team's read on it and unlocking restores it. If
-  that access change fails for some assignments, a warning names them; run the
-  same action on those again. Each verb is disabled when it has nothing to do,
+  locking removes the student team's read on it and unlocking restores it. The
+  read is kept while another unlocked assignment in the classroom uses the same
+  template, so that assignment keeps working. If the access change fails for
+  some assignments, a warning names them; run the same action on those again. Each verb is disabled when it has nothing to do,
   so a selection that is already fully locked offers only **Unlock**.
 - **Reuse.** Copy the selection into another classroom in the same
   organization, including back into its own.
@@ -1151,10 +1152,11 @@ The **Actions** menu offers:
 
 Every action writes the whole selection in a **single commit**: lock, unlock,
 and delete to the classroom's `assignments.json`, reuse to the target
-classroom's. The classroom's history gets one entry per action and a
-half-applied selection is impossible: either every selected assignment changes
-or none does. Deleting asks you to type `delete` first, since it is the one
-action here with no undo in the app.
+classroom's. The classroom's history gets one entry per action. For lock,
+unlock, and delete a half-applied selection is impossible: either every
+selected assignment changes or none does. Reuse can leave a copy out (see
+below), but the copies it makes all land together. Deleting asks you to type
+`delete` first, since it is the one action here with no undo in the app.
 
 An assignment that vanished between selecting it and confirming (deleted in
 another tab, say) is reported as skipped rather than failing the whole action.
@@ -1179,7 +1181,7 @@ All the copies land in one commit to the target classroom. A copy that can't
 be made (its template is no longer visible, or its slug was taken since the
 form loaded) is left out and reported; the others still land. Where a private
 template is used, the target classroom's student team is then granted read on
-it, one grant per copy; keep the tab open until the dialog reports the result.
+it; keep the tab open until the dialog reports the result.
 
 ### Updating an over-budget assignment slug
 

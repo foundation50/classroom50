@@ -36,6 +36,7 @@ const reconcileLockTemplateAccess =
       slug: string,
       template: unknown,
       locked: boolean,
+      assignments?: unknown,
     ) => Promise<string | undefined>
   >()
 const resolveTemplateGrant =
@@ -216,9 +217,10 @@ describe("setAssignmentsLock", () => {
     ])
   })
 
-  // hw3 (unselected, unlocked) shares hw1's template, so revoking would lock
-  // hw3's students out too. Unlock has no such hazard: a grant is idempotent.
-  it("keeps the read while an unselected unlocked assignment shares the template", async () => {
+  // The reconcile decides whether a shared template is still in use from the
+  // list it is handed, so it must see the selection's NEW state: hw3 is being
+  // locked in this same run and must not count as an open sibling.
+  it("hands the reconcile the assignments as written, with the new lock state", async () => {
     const template = { owner: ORG, repo: "tpl", branch: "main" }
     file.assignments = [
       { slug: "hw1", template },
@@ -229,13 +231,36 @@ describe("setAssignmentsLock", () => {
     await setAssignmentsLock(client, {
       org: ORG,
       classroom: CLASSROOM,
-      slugs: ["hw1", "hw2"],
+      slugs: ["hw1", "hw3"],
       locked: true,
     })
 
-    expect(writtenAssignments().assignments[0].locked).toBe(true)
-    expect(reconcileLockTemplateAccess).toHaveBeenCalledTimes(1)
-    expect(reconcileLockTemplateAccess.mock.calls[0][3]).toBe("hw2")
+    const [, , , , , lockedArg, assignments] =
+      reconcileLockTemplateAccess.mock.calls[0]
+    expect(lockedArg).toBe(true)
+    expect(
+      (assignments as { slug: string; locked?: boolean }[]).map((a) => [
+        a.slug,
+        a.locked ?? false,
+      ]),
+    ).toEqual([
+      ["hw1", true],
+      ["hw2", false],
+      ["hw3", true],
+    ])
+  })
+
+  it("passes the current list when nothing changed", async () => {
+    await setAssignmentsLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw2"],
+      locked: true,
+    })
+    const [, , , , , lockedArg, assignments] =
+      reconcileLockTemplateAccess.mock.calls[0]
+    expect(lockedArg).toBe(true)
+    expect(assignments).toBe(file.assignments)
   })
 
   it("surfaces a template warning against its own slug", async () => {

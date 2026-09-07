@@ -353,6 +353,7 @@ export async function editAssignment(
       input.slug,
       preservedEntry.template,
       true,
+      nextAssignments.assignments,
     )
   }
 
@@ -1461,6 +1462,7 @@ export async function setAssignmentLock(
     slug,
     target.template,
     locked,
+    currentAssignments.assignments,
   )
 
   return {
@@ -1479,6 +1481,10 @@ export async function setAssignmentLock(
 // student-team grant to change; public/absent/out-of-org is a UX-gate-only
 // lock. Never throws (the flag flip already committed): a probe or reconcile
 // failure downgrades to a non-fatal warning the caller surfaces.
+//
+// `assignments` is the classroom's list as it stands after the write. The
+// team read is per template, not per assignment, so a lock keeps it while
+// another unlocked assignment still uses the same template.
 export async function reconcileLockTemplateAccess(
   client: GitHubClient,
   org: string,
@@ -1486,10 +1492,17 @@ export async function reconcileLockTemplateAccess(
   slug: string,
   template: Assignment["template"],
   locked: boolean,
+  assignments: readonly Assignment[] = [],
 ): Promise<string | undefined> {
   if (!template) return undefined
   const inOrg = template.owner.toLowerCase() === org.toLowerCase()
   if (!inOrg) return undefined
+  if (locked && templateStillInUse(template, slug, assignments)) {
+    log.info("reconcileLockTemplateAccess: read kept, template shared", {
+      slug,
+    })
+    return undefined
+  }
 
   // getRepo returns null on 404 (since-deleted/invisible template → nothing to
   // reconcile) but rethrows a transient 5xx/429; catch it so a probe failure
@@ -1508,6 +1521,21 @@ export async function reconcileLockTemplateAccess(
   return locked
     ? revokeStudentTeamTemplateRead(client, org, classroom, slug, template)
     : tryGrantTeamTemplateRead(client, org, classroom, slug, template)
+}
+
+export function templateStillInUse(
+  template: NonNullable<Assignment["template"]>,
+  slug: string,
+  assignments: readonly Assignment[],
+): boolean {
+  const key = `${template.owner}/${template.repo}`.toLowerCase()
+  return assignments.some(
+    (a) =>
+      a.slug !== slug &&
+      !a.locked &&
+      a.template &&
+      `${a.template.owner}/${a.template.repo}`.toLowerCase() === key,
+  )
 }
 
 // Same concurrency story as editAssignment: the lock write hits classroom50's

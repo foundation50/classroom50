@@ -13,8 +13,12 @@ vi.mock("react-i18next", async (importOriginal) => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string, opts?: { count?: number }) =>
-        opts?.count === undefined ? key : `${key}:${opts.count}`,
+      // Exposes the interpolations the bar relies on, so a dropped option
+      // fails the assertion instead of vanishing.
+      t: (key: string, opts?: { count?: number; slugs?: string }) =>
+        [key, opts?.count, opts?.slugs]
+          .filter((v) => v !== undefined)
+          .join(":"),
     }),
   }
 })
@@ -322,7 +326,7 @@ describe("AssignmentsBulkBar outcome toasts", () => {
       .map((c) => c[0] as { message: string; tone?: string })
       .find((n) => n.message.startsWith("assignments.bulk.templateWarnings"))
     expect(warning?.tone).toBe("warning")
-    expect(warning?.message).toBe("assignments.bulk.templateWarnings:1")
+    expect(warning?.message).toBe("assignments.bulk.templateWarnings:1:hw1")
   })
 
   it("reports how many were deleted", async () => {

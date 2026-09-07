@@ -119,8 +119,6 @@ export function buildReusedEntry(
   return entry
 }
 
-// grant — the same write + grant as createAssignment, minus form resolution.
-// Cross-org reuse is out of scope for v1.
 // Whether a copy's template needs the target team granted read, re-checked
 // live against the fetched repo (mirrors create): public or absent means no
 // grant; private in-org means a grant; private out-of-org is refused, since
@@ -179,6 +177,8 @@ export function assertSlugFreeInTarget(
   }
 }
 
+// The same write + grant as createAssignment, minus form resolution.
+// Cross-org reuse is out of scope for v1.
 export async function copyAssignmentToClassroom(
   client: GitHubClient,
   input: CopyAssignmentInput,

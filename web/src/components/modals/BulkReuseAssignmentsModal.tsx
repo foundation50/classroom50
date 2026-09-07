@@ -55,6 +55,9 @@ export function BulkReuseAssignmentsModal({
   // as the target loads or a neighbouring row is retyped.
   const [slugEdits, setSlugEdits] = useState<Record<string, string>>({})
   const reuse = useBulkReuseAssignments(org)
+  // `isPending` reaches the button a render late; a double-click would start
+  // two batches, and the loser would report every copy as left out.
+  const submittingRef = useRef(false)
 
   const {
     data: targetData,
@@ -87,7 +90,17 @@ export function BulkReuseAssignmentsModal({
   const copied = outcomes.filter((o) => !o.error)
   const failed = outcomes.filter((o) => o.error)
   const renamed = copied.filter((o) => o.targetSlug !== o.slug)
-  const templateWarned = copied.filter((o) => o.templateAccessWarning)
+  // One grant per template, so siblings share one warning: one row per
+  // distinct warning, naming every copy it covers.
+  const templateWarned = [
+    ...copied
+      .filter((o) => o.templateAccessWarning)
+      .reduce((groups, o) => {
+        const key = o.templateAccessWarning!
+        groups.set(key, [...(groups.get(key) ?? []), o.targetSlug ?? o.slug])
+        return groups
+      }, new Map<string, string[]>()),
+  ]
 
   const summary = finished
     ? [
@@ -129,16 +142,27 @@ export function BulkReuseAssignmentsModal({
             : null
       }
       showSubmit={classesLoading || classes.length > 0}
-      canSubmit={!targetLoading && !targetError && plan.valid}
-      onSubmit={() =>
-        reuse.mutate({
-          items: plan.rows.map((r) => ({
-            source: r.source,
-            targetSlug: r.targetSlug,
-          })),
-          targetClassroom: target,
-        })
+      canSubmit={
+        !targetLoading && !targetError && plan.valid && !reuse.isPending
       }
+      onSubmit={() => {
+        if (submittingRef.current || reuse.isPending) return
+        submittingRef.current = true
+        reuse.mutate(
+          {
+            items: plan.rows.map((r) => ({
+              source: r.source,
+              targetSlug: r.targetSlug,
+            })),
+            targetClassroom: target,
+          },
+          {
+            onSettled: () => {
+              submittingRef.current = false
+            },
+          },
+        )
+      }}
       onClose={onClose}
     >
       {!classesLoading && classes.length === 0 ? (
@@ -256,10 +280,10 @@ export function BulkReuseAssignmentsModal({
           {templateWarned.length > 0 && (
             <BulkResultSection
               title={t("assignments.bulk.reuseTemplateWarnTitle")}
-              rows={templateWarned.map((o) => ({
-                key: `tpl-${o.slug}`,
-                label: o.targetSlug ?? o.slug,
-                detail: o.templateAccessWarning,
+              rows={templateWarned.map(([warning, slugs]) => ({
+                key: `tpl-${slugs.join(",")}`,
+                label: slugs.join(", "),
+                detail: warning,
               }))}
             />
           )}

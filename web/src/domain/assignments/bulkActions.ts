@@ -156,10 +156,13 @@ export async function setAssignmentsLock(
   )
 
   let newCommitSha: string | null = null
+  // As written, so the reconcile sees the selection's new state when it asks
+  // whether a template is still in use.
+  let nextAssignments = ctx.current
 
   if (changed.length > 0) {
     const changing = new Set(changed)
-    const nextAssignments = {
+    nextAssignments = {
       ...ctx.current,
       assignments: ctx.current.assignments.map((a) => {
         if (!changing.has(a.slug)) return a
@@ -182,23 +185,9 @@ export async function setAssignmentsLock(
   }
 
   // Reconcile every present assignment, not only the changed ones: a previous
-  // run may have committed the flag and then failed the grant/revoke. Once per
-  // distinct template: the grant is a team permission on the template repo, so
-  // twelve assignments on one template are one write, not twelve. A revoke is
-  // skipped while an unselected, still-unlocked assignment uses the same
-  // template: its students still need the read. Safe to run concurrently,
-  // since each targets a different repo and never touches the config repo's ref.
-  const stillOpen = new Set(
-    ctx.current.assignments
-      .filter((a) => a.template && !a.locked && !present.includes(a.slug))
-      .map((a) => templateKey(a.template!)),
-  )
-  const reconciling = present.filter((slug) => {
-    const template = bySlug.get(slug)?.template
-    return !(locked && template && stillOpen.has(templateKey(template)))
-  })
+  // run may have committed the flag and then failed the grant/revoke.
   const warnings = await reconcilePerTemplate(
-    reconciling.map((slug) => ({ slug, template: bySlug.get(slug)?.template })),
+    present.map((slug) => ({ slug, template: bySlug.get(slug)?.template })),
     (slug, template) =>
       reconcileLockTemplateAccess(
         client,
@@ -207,6 +196,7 @@ export async function setAssignmentsLock(
         slug,
         template,
         locked,
+        nextAssignments.assignments,
       ),
   )
   const outcomes = present.map((slug) => ({
@@ -220,9 +210,11 @@ export async function setAssignmentsLock(
 const templateKey = (template: NonNullable<Assignment["template"]>) =>
   `${template.owner}/${template.repo}`.toLowerCase()
 
-// Run one template-access write per distinct template and hand its warning to
-// every slug sharing that template. The warning text names the first slug; the
-// team and repo it points at are the same for all of them.
+// The team read is a permission on the template repo, so one write per
+// distinct template covers every assignment on it. The warning is handed to
+// each of those slugs; its text names the first one, and the team and repo it
+// points at are the same for all. Safe to run concurrently: each targets a
+// different repo and never touches the config repo's ref.
 async function reconcilePerTemplate(
   items: { slug: string; template: Assignment["template"] }[],
   reconcile: (
@@ -343,8 +335,7 @@ export type CopyAssignmentsInput = {
 // Batched counterpart of copyAssignmentToClassroom: every valid copy lands in
 // one commit to the target's assignments.json. A copy that fails its own
 // checks (template, slug) is reported and left out; it never blocks the
-// others. Grants follow the commit, once per template, like the lock's
-// reconcile.
+// others. Grants follow the commit.
 export async function copyAssignments(
   client: GitHubClient,
   input: CopyAssignmentsInput,
@@ -358,9 +349,8 @@ export async function copyAssignments(
 
   const ctx = await readAssignmentsForWrite(client, org, targetClassroom)
 
-  // Same live template re-check as the single copy, one probe per distinct
-  // template. A probe that fails (5xx, rate limit) fails only the copies on
-  // that template, not the batch.
+  // Same live template re-check as the single copy, once per template. A
+  // failed probe (5xx, rate limit) fails only that template's copies.
   const templates = new Map<string, NonNullable<Assignment["template"]>>()
   for (const { source } of items) {
     if (source.template)
@@ -429,7 +419,7 @@ export async function copyAssignments(
   )
 
   // A locked source copies as locked, so withhold the grant like create and
-  // the CLI's reuse do; unlocking the copy grants it. One grant per template.
+  // the CLI's reuse do; unlocking the copy grants it.
   const granting = entries.filter(
     ({ entry, needsGrant }) => needsGrant && entry.template && !entry.locked,
   )
