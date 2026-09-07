@@ -1129,8 +1129,6 @@ Tick the checkbox on any row of the **Assignments** page and the toolbar shows
 how many are selected, an **Actions** menu, and a **Clear selection** button,
 the same cluster the roster and organization members pages use.
 
-![Bulk actions on the assignments list](images/web_assignments_bulk_bar.png)
-
 Click one checkbox, then shift-click another to select everything in between.
 Selecting the box in the header selects every assignment the current search and
 filters show. A selection survives searching and filtering: a row the search is
