@@ -1187,6 +1187,67 @@ describe("SubmissionsTable team/repo mismatch indicators", () => {
   })
 })
 
+// A student maintainer can add members on GitHub directly, past the cap every
+// Classroom 50 client enforces (#896). The Members column flags the oversize
+// so the teacher sees it before grading.
+describe("SubmissionsTable over-capacity groups", () => {
+  const team: GroupTeamRef = {
+    slug: "classroom50-group-abc123-1",
+    id: 101,
+    n: 1,
+    name: "Rocket",
+  }
+  const overProps = {
+    ...baseProps,
+    isGroup: true,
+    isTeam: true,
+    teamsSettled: true,
+    teamsByOwner: new Map([["group-1", team]]),
+    scores: [scoreRow({ owner: "group-1", usernames: ["alice"] })],
+  }
+
+  it("flags a team row with more members than max_group_size", () => {
+    render(
+      <SubmissionsTable
+        {...overProps}
+        groupMemberLogins={
+          new Map([["group-1", ["alice", "bob", "carol", "dave"]]])
+        }
+        maxGroupSize={3}
+      />,
+    )
+    expect(screen.getByText("components.groupOverCapacity.badge")).toBeTruthy()
+    // The count click-through carries the explanation in its accessible name.
+    expect(
+      screen.getByRole("button", {
+        name: /components\.groupOverCapacity\.title/,
+      }),
+    ).toBeTruthy()
+  })
+
+  it("stays quiet for a group at or under the cap, or with no cap", () => {
+    const { unmount } = render(
+      <SubmissionsTable
+        {...overProps}
+        groupMemberLogins={new Map([["group-1", ["alice", "bob", "carol"]]])}
+        maxGroupSize={3}
+      />,
+    )
+    expect(screen.queryByText("components.groupOverCapacity.badge")).toBeNull()
+    unmount()
+
+    render(
+      <SubmissionsTable
+        {...overProps}
+        groupMemberLogins={
+          new Map([["group-1", ["alice", "bob", "carol", "dave"]]])
+        }
+      />,
+    )
+    expect(screen.queryByText("components.groupOverCapacity.badge")).toBeNull()
+  })
+})
+
 // Teaching staff who accepted an assignment (to test it) sit in the roster
 // spine beside students; their rows carry role chips so a teacher can tell a
 // staff test grade from a student's at a glance.

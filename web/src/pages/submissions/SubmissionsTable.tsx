@@ -715,6 +715,7 @@ const SubmissionsTable = ({
           <td onClick={(event) => event.stopPropagation()}>
             <TeamMembersCountCell
               count={teamMembers(rest.owner)?.length}
+              max={maxGroupSize}
               label={t("submissions.table.manageMembersLabel", {
                 name: groupLabel(rest.owner, repo),
               })}
@@ -1123,6 +1124,7 @@ const SubmissionsTable = ({
                     membersCell={
                       <TeamMembersCountCell
                         count={teamMembers(teamOwner)?.length}
+                        max={maxGroupSize}
                         label={t("submissions.table.manageMembersLabel", {
                           name: label,
                         })}
@@ -1167,6 +1169,7 @@ const SubmissionsTable = ({
                     isTeam ? (
                       <TeamMembersCountCell
                         count={teamMembers(owner)?.length}
+                        max={maxGroupSize}
                         label={t("submissions.table.manageMembersLabel", {
                           name: groupLabel(owner, repoName),
                         })}

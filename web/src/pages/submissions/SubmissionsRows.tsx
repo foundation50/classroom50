@@ -6,7 +6,12 @@ import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
-import { groupTeamUrl, type GroupTeamRef } from "@/domain/teams/groupTeams"
+import {
+  groupTeamUrl,
+  isGroupOverCapacity,
+  type GroupTeamRef,
+} from "@/domain/teams/groupTeams"
+import { GroupOverCapacityBadge } from "@/components/assignments/GroupOverCapacityBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -342,14 +347,18 @@ export const GroupMembers = ({
 // never resolve, so `missing` renders the error badge in this column instead
 // of that dash-forever — as a click-through to the recovery dialog when the
 // caller supplies `missingLabel` (the recover affordance's accessible name).
+// A count past `max` gains the over-capacity warning chip (#896).
 export const TeamMembersCountCell = ({
   count,
+  max,
   label,
   onClick,
   missing = false,
   missingLabel,
 }: {
   count?: number
+  // The assignment's max_group_size; absent, no over-capacity check.
+  max?: number
   // Accessible name carrying the group's display name.
   label: string
   onClick: () => void
@@ -360,6 +369,7 @@ export const TeamMembersCountCell = ({
   // the badge renders inert (a host without a recovery flow).
   missingLabel?: string
 }) => {
+  const { t } = useTranslation()
   if (missing) {
     if (!missingLabel) return <TeamMissingBadge />
     return (
@@ -378,17 +388,25 @@ export const TeamMembersCountCell = ({
   if (count === undefined) {
     return <span className="text-base-content/50">—</span>
   }
+  // The button's aria-label hides its children from the accessible name, so
+  // the over-capacity detail is folded into the label rather than left to the
+  // chip's sr-only text.
+  const overDetail = isGroupOverCapacity(count, max)
+    ? t("components.groupOverCapacity.title", { count, max })
+    : undefined
+  const fullLabel = overDetail ? `${label}. ${overDetail}` : label
   return (
     <Button
       variant="ghost"
       size="sm"
       className="gap-1.5 font-medium"
-      aria-label={label}
-      title={label}
+      aria-label={fullLabel}
+      title={fullLabel}
       onClick={onClick}
     >
       <PeopleIcon aria-hidden="true" className="size-4" />
       {count}
+      <GroupOverCapacityBadge count={count} max={max} plain />
     </Button>
   )
 }

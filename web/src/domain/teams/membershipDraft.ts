@@ -1,3 +1,5 @@
+import { isGroupOverCapacity } from "./groupTeams"
+
 // Pure draft math for the per-group manage dialog: membership edits are
 // staged (pending adds/removals) and applied only on Save, mirroring
 // GroupCollaboratorsModal's interaction model. Kept out of component state
@@ -13,6 +15,9 @@ export type MembershipDraftChanges = {
   hasChanges: boolean
   // Gate for further adds, on the DRAFT count (not the live one).
   atCapacity: boolean
+  // The draft still exceeds max_group_size (members added outside Classroom
+  // 50, #896): the dialog asks for removals instead of saying "full".
+  overCapacity: boolean
 }
 
 // Resolve a draft against the live member list. `removals` holds lowercased
@@ -50,5 +55,6 @@ export function resolveMembershipDraft(input: {
     resultingCount,
     hasChanges: toRemove.length > 0 || toAdd.length > 0,
     atCapacity: maxGroupSize !== undefined && resultingCount >= maxGroupSize,
+    overCapacity: isGroupOverCapacity(resultingCount, maxGroupSize),
   }
 }

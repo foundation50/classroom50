@@ -471,6 +471,17 @@ export function unassignedRosterStudents<T extends { username: string }>(
   })
 }
 
+// Whether a live group exceeds max_group_size. Every Classroom 50 client
+// refuses an add past the cap, but a student maintainer can still add members
+// on GitHub directly (#896), so surfaces flag an oversize group rather than
+// assume it can't happen.
+export function isGroupOverCapacity(
+  memberCount: number,
+  maxGroupSize?: number,
+): boolean {
+  return maxGroupSize !== undefined && memberCount > maxGroupSize
+}
+
 // Pure add-member gate: max_group_size (owner included) and the roster. Throws
 // localized errors so the view renders the remedy in the student's language.
 // `rosterLogins` undefined = no roster available to check (the caller decides

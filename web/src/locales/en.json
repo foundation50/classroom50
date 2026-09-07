@@ -1940,7 +1940,8 @@
       "pendingNote": "Counts include unsaved changes.",
       "membersError": "Some membership changes couldn't be saved: {{error}} The unsaved changes are still listed. Save again to retry them.",
       "dangerHeading": "Danger zone",
-      "dangerBody": "Deleting this group removes its GitHub team and the access it granted. The group's repository is not deleted."
+      "dangerBody": "Deleting this group removes its GitHub team and the access it granted. The group's repository is not deleted.",
+      "overCapacity": "This group has {{count}} members, but this assignment allows {{max}}. Someone added members directly on GitHub. Remove members until the group has {{max}} or fewer, then select Save changes."
     },
     "copy": {
       "button": "Copy groups",
@@ -3846,7 +3847,13 @@
       "leave": "Leave group",
       "leaveTitle": "Leave {{name}}?",
       "leaveBody": "You lose access to the group's repository and your work stays with the group. Rejoining takes extra steps: you must request to join again on GitHub and wait for the group or your teacher to approve it.",
-      "leaveConfirm": "Leave group"
+      "leaveConfirm": "Leave group",
+      "overCapacity": "This group has {{count}} members, but this assignment allows {{max}}. Your teacher can see this warning too. Ask the group's maintainer, or your teacher, to remove members until the group has {{max}} or fewer.",
+      "overCapacityManage": "This group has {{count}} members, but this assignment allows {{max}}. Your teacher can see this warning too. Remove members until the group has {{max}} or fewer."
+    },
+    "groupOverCapacity": {
+      "badge": "Over the limit",
+      "title": "This group has {{count}} members, but this assignment allows {{max}}. Someone added members directly on GitHub. Remove members from the group, or grade the group as it is."
     }
   },
   "formatDate": {

@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 
 import { Badge, Button } from "@/components/ui"
 import { LinkExternalIcon, RepoIcon } from "@/components/ui/icons"
+import { GroupOverCapacityBadge } from "@/components/assignments/GroupOverCapacityBadge"
 import type { GitHubUser } from "@/github-core/types"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 
@@ -55,6 +56,7 @@ export function GroupRow({
               {t("manageGroups.driftBadge")}
             </Badge>
           )}
+          <GroupOverCapacityBadge count={members.length} max={maxGroupSize} />
         </div>
 
         {members.length === 0 ? (

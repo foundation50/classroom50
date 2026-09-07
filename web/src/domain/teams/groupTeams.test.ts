@@ -7,6 +7,7 @@ import {
   createGroupTeam,
   deleteGroupTeam,
   findMyGroupTeam,
+  isGroupOverCapacity,
   leaveGroupTeam,
   listAssignmentGroupTeams,
   lowestFreeCounter,
@@ -101,6 +102,19 @@ describe("assertGroupMemberAddable", () => {
         rosterLogins: new Set(["alice"]),
       }),
     ).not.toThrow()
+  })
+})
+
+describe("isGroupOverCapacity", () => {
+  it("flags only a count strictly past the cap", () => {
+    expect(isGroupOverCapacity(4, 3)).toBe(true)
+    // At the cap is full, not over: the badge must not fire on a normal group.
+    expect(isGroupOverCapacity(3, 3)).toBe(false)
+    expect(isGroupOverCapacity(2, 3)).toBe(false)
+  })
+
+  it("never flags without a cap", () => {
+    expect(isGroupOverCapacity(50, undefined)).toBe(false)
   })
 })
 

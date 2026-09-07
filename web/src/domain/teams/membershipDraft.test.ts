@@ -18,6 +18,7 @@ describe("resolveMembershipDraft", () => {
       resultingCount: 3,
       hasChanges: false,
       atCapacity: false,
+      overCapacity: false,
     })
   })
 
@@ -81,5 +82,29 @@ describe("resolveMembershipDraft", () => {
       additions: ["dave", "erin"],
     })
     expect(draft.atCapacity).toBe(false)
+    expect(draft.overCapacity).toBe(false)
+  })
+
+  it("flags a live group past the cap until pending removals bring it back", () => {
+    // 4 live members against a cap of 3 (added on GitHub directly, #896).
+    const live = ["alice", "bob", "carol", "dave"]
+    const over = resolveMembershipDraft({
+      currentMembers: live,
+      removals: new Set(),
+      additions: [],
+      maxGroupSize: 3,
+    })
+    expect(over.overCapacity).toBe(true)
+    expect(over.atCapacity).toBe(true)
+
+    // One pending removal lands exactly on the cap: full, no longer over.
+    const fixed = resolveMembershipDraft({
+      currentMembers: live,
+      removals: new Set(["dave"]),
+      additions: [],
+      maxGroupSize: 3,
+    })
+    expect(fixed.overCapacity).toBe(false)
+    expect(fixed.atCapacity).toBe(true)
   })
 })

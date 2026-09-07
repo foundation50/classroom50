@@ -527,7 +527,16 @@ export function ManageGroupDialog({
               )}
             </ul>
 
-            {draft.atCapacity ? (
+            {draft.overCapacity ? (
+              // Over the cap (members added on GitHub directly, #896): "full"
+              // would understate it, so ask for removals until it fits.
+              <Alert tone="warning" className="text-sm">
+                {t("manageGroups.manage.overCapacity", {
+                  count: draft.resultingCount,
+                  max: maxGroupSize ?? 0,
+                })}
+              </Alert>
+            ) : draft.atCapacity ? (
               <p className="text-xs text-base-content/70">
                 {t("manageGroups.groupFull", { max: maxGroupSize ?? 0 })}
               </p>

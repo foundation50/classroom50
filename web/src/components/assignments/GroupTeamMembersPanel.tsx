@@ -10,7 +10,7 @@ import {
   SignOutIcon,
   TrashIcon,
 } from "@/components/ui/icons"
-import { Alert, Badge, Button, Input } from "@/components/ui"
+import { Alert, Badge, Button, Input, cx } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { Spinner } from "@/components/Spinner"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -18,7 +18,7 @@ import { teamMembersQuery } from "@/github-core/queries"
 import useAddGroupTeamMember from "@/hooks/mutations/useAddGroupTeamMember"
 import useRemoveGroupTeamMember from "@/hooks/mutations/useRemoveGroupTeamMember"
 import useLeaveGroupTeam from "@/hooks/mutations/useLeaveGroupTeam"
-import { groupTeamUrl } from "@/domain/teams/groupTeams"
+import { groupTeamUrl, isGroupOverCapacity } from "@/domain/teams/groupTeams"
 import { errorText } from "@/types/localizedMessage"
 import { normalizeUsername } from "@/components/modals/collaboratorHelpers"
 import type { TeamFormation } from "@/types/classroom"
@@ -78,6 +78,7 @@ export function GroupTeamMembersPanel({
     addMember.isPending || removeMember.isPending || leaveTeam.isPending
 
   const isFull = maxGroupSize !== undefined && members.length >= maxGroupSize
+  const overCapacity = isGroupOverCapacity(members.length, maxGroupSize)
   const viewerMember = viewerLogin
     ? members.find(
         (m) => normalizeUsername(m.login) === normalizeUsername(viewerLogin),
@@ -142,7 +143,12 @@ export function GroupTeamMembersPanel({
           <PeopleIcon aria-hidden="true" className="size-4" />
           {groupName}
         </span>
-        <span className="text-xs text-base-content/70">
+        <span
+          className={cx(
+            "text-xs",
+            overCapacity ? "font-medium text-warning" : "text-base-content/70",
+          )}
+        >
           {maxGroupSize !== undefined
             ? t("components.groupTeamMembers.memberCountOfMax", {
                 count: members.length,
@@ -153,6 +159,19 @@ export function GroupTeamMembersPanel({
               })}
         </span>
       </div>
+
+      {/* Members added on GitHub directly can push the group past the cap
+          (#896); the teacher sees the same flag, so tell the group first. */}
+      {overCapacity ? (
+        <Alert tone="warning" className="text-sm">
+          {t(
+            canManage
+              ? "components.groupTeamMembers.overCapacityManage"
+              : "components.groupTeamMembers.overCapacity",
+            { count: members.length, max: maxGroupSize ?? 0 },
+          )}
+        </Alert>
+      ) : null}
 
       {actionError ? (
         <Alert tone="error" className="text-sm">
@@ -234,7 +253,10 @@ export function GroupTeamMembersPanel({
         </ul>
       )}
 
+      {/* The over-capacity alert already asks for removals, so the "full"
+          note would only repeat it. */}
       {canManage &&
+        !overCapacity &&
         (isFull ? (
           <p className="text-xs text-base-content/70">
             {t("components.groupTeamMembers.groupFull", {
