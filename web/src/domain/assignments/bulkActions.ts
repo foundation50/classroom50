@@ -16,6 +16,7 @@ import { getAssignmentsFile } from "../queries/assignments"
 import { mapWithConcurrency } from "@/util/concurrency"
 
 import { getErrorMessage } from "@/github-core/errorMessage"
+import { GitHubAPIError } from "@/github-core/errors"
 
 import { assertClassroomNotArchived, withGitConflictRetry } from "../classrooms"
 import { copyAssignmentWithConflictRetry } from "./copyReuse"
@@ -269,6 +270,9 @@ export type BulkCopyOutcome = {
   slug: string
   targetSlug?: string
   error?: string
+  // Not attempted: an earlier copy hit GitHub's rate limit, or the run's owner
+  // went away. Rerunning the selection picks these up.
+  deferred?: boolean
   // Non-fatal: the copy landed, but students can't accept it until the target
   // team is granted read on the private template.
   templateAccessWarning?: string
@@ -281,17 +285,26 @@ export type BulkCopyAssignmentsInput = {
   canGrantTemplateAccess: boolean
   // Called after every item with the outcomes so far.
   onProgress?: (outcomes: BulkCopyOutcome[]) => void
+  // Polled before each copy; false defers the rest (the owning view unmounted).
+  shouldContinue?: () => boolean
 }
 
 // Sequential, unlike lock and delete: every copy is a read-modify-write of the
-// target's assignments.json on the same ref and may create a repo. One failed
-// copy doesn't abandon the rest; each source gets its own outcome.
+// target's assignments.json on the same ref. One failed copy doesn't abandon
+// the rest; each source gets its own outcome. A rate-limited copy does stop
+// the run, since every later write would only deepen the limit.
 export async function bulkCopyAssignments(
   client: GitHubClient,
   input: BulkCopyAssignmentsInput,
 ): Promise<BulkCopyOutcome[]> {
-  const { org, targetClassroom, items, canGrantTemplateAccess, onProgress } =
-    input
+  const {
+    org,
+    targetClassroom,
+    items,
+    canGrantTemplateAccess,
+    onProgress,
+    shouldContinue = () => true,
+  } = input
   log.info("bulk copy assignments: started", {
     org,
     targetClassroom,
@@ -299,7 +312,13 @@ export async function bulkCopyAssignments(
   })
 
   const outcomes: BulkCopyOutcome[] = []
+  let rateLimited = false
   for (const { source, targetSlug } of items) {
+    if (rateLimited || !shouldContinue()) {
+      outcomes.push({ slug: source.slug, deferred: true })
+      onProgress?.([...outcomes])
+      continue
+    }
     try {
       const result = await copyAssignmentWithConflictRetry(client, {
         org,
@@ -316,6 +335,7 @@ export async function bulkCopyAssignments(
           : {}),
       })
     } catch (err) {
+      if (err instanceof GitHubAPIError && err.isRateLimited) rateLimited = true
       outcomes.push({ slug: source.slug, error: getErrorMessage(err) })
     }
     onProgress?.([...outcomes])

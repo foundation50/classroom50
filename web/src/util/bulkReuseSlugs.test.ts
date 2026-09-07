@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { planBulkReuseSlugs } from "@/util/bulkReuseSlugs"
-import type { Assignment } from "@/types/classroom"
+import { renamedFromSlugs, type Assignment } from "@/types/classroom"
 
 const a = (slug: string, extra: Partial<Assignment> = {}): Assignment =>
   ({ slug, name: slug, ...extra }) as Assignment
@@ -11,7 +11,14 @@ const plan = (
   targetAssignments: Assignment[],
   edits: Record<string, string> = {},
   targetClassroom = "cs101",
-) => planBulkReuseSlugs({ sources, targetClassroom, targetAssignments, edits })
+) =>
+  planBulkReuseSlugs({
+    sources,
+    targetClassroom,
+    takenSlugs: targetAssignments.map((t) => t.slug),
+    reservedSlugs: renamedFromSlugs(targetAssignments),
+    edits,
+  })
 
 describe("planBulkReuseSlugs", () => {
   it("keeps the source slug when it is free in the target", () => {
@@ -71,6 +78,15 @@ describe("planBulkReuseSlugs", () => {
     const { rows } = plan([a("hw1")], [], { hw1: "Hausaufgabe Zwei!" })
     expect(rows[0].value).toBe("Hausaufgabe Zwei!")
     expect(rows[0].targetSlug).toBe("hausaufgabe-zwei")
+  })
+
+  // `in` would have found Object.prototype.constructor and handed a function
+  // to slugify.
+  it("treats a prototype-key slug as unedited until the teacher types", () => {
+    const { rows, valid } = plan([a("constructor")], [])
+    expect(rows[0].edited).toBe(false)
+    expect(rows[0].targetSlug).toBe("constructor")
+    expect(valid).toBe(true)
   })
 
   it("flags a typed slug over the target classroom's repo-name budget", () => {

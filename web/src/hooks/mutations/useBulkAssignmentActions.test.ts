@@ -8,14 +8,17 @@ import { createElement } from "react"
 // Held open so a second run() can be attempted while the first is in flight.
 // The loop itself is tested in domain/assignments/bulkActions.test.ts.
 let release: (() => void) | null = null
+type CopyInput = { shouldContinue?: () => boolean }
+let lastInput: CopyInput | null = null
 const bulkCopy = vi.fn(
-  () =>
+  (input: CopyInput) =>
     new Promise<[]>((resolve) => {
+      lastInput = input
       release = () => resolve([])
     }),
 )
 vi.mock("@/domain/assignments", () => ({
-  bulkCopyAssignments: () => bulkCopy(),
+  bulkCopyAssignments: (_client: unknown, input: CopyInput) => bulkCopy(input),
   deleteAssignmentsWithConflictRetry: vi.fn(),
   setAssignmentsLockWithConflictRetry: vi.fn(),
 }))
@@ -59,5 +62,35 @@ describe("useBulkReuseAssignments", () => {
     release?.()
     await third
     expect(bulkCopy).toHaveBeenCalledTimes(2)
+  })
+
+  // The bar owns the run; once it unmounts nothing can report the result, so
+  // the loop is told to defer what is left rather than finish headless.
+  it("tells the loop to stop once its owner unmounts", async () => {
+    const { result, unmount } = setup()
+
+    const run = result.current.run(items, "cs101")
+    expect(lastInput?.shouldContinue?.()).toBe(true)
+
+    unmount()
+    expect(lastInput?.shouldContinue?.()).toBe(false)
+
+    release?.()
+    await run
+  })
+
+  it("resets to idle only when no run is in flight", async () => {
+    const { result } = setup()
+
+    const run = result.current.run(items, "cs101")
+    await waitFor(() => expect(result.current.total).toBe(1))
+    result.current.reset()
+    expect(result.current.total).toBe(1)
+
+    release?.()
+    await run
+    await waitFor(() => expect(result.current.running).toBe(false))
+    result.current.reset()
+    await waitFor(() => expect(result.current.total).toBe(0))
   })
 })

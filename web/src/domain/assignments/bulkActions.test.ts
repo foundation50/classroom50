@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 
 vi.mock("@/github-core/configRepoReads", () => ({
   getConfigRepoBranch: vi.fn(async () => "main"),
@@ -314,5 +315,62 @@ describe("bulkCopyAssignments", () => {
     })
 
     expect(seen).toEqual([1, 2])
+  })
+
+  // Every later write would only deepen the limit; the rest is reported as
+  // not attempted so the teacher can rerun exactly those.
+  it("stops copying after a rate limit and defers the rest", async () => {
+    copyAssignment.mockRejectedValueOnce(
+      new GitHubAPIError({
+        status: 403,
+        url: "https://api.github.com/x",
+        message: "secondary rate limit",
+        body: null,
+        rateLimit: {
+          limit: 5000,
+          remaining: 0,
+          used: 5000,
+          reset: null,
+          resource: "core",
+          retryAfter: 60,
+        },
+      }),
+    )
+
+    const outcomes = await bulkCopyAssignments(client, {
+      org: ORG,
+      targetClassroom: CLASSROOM,
+      items: [item("hw1", "hw1"), item("hw2", "hw2"), item("hw3", "hw3")],
+      canGrantTemplateAccess: false,
+    })
+
+    expect(copyAssignment).toHaveBeenCalledTimes(1)
+    expect(outcomes.map((o) => o.error ?? (o.deferred && "deferred"))).toEqual([
+      "secondary rate limit",
+      "deferred",
+      "deferred",
+    ])
+  })
+
+  it("defers the remaining copies once the owner is gone", async () => {
+    let alive = true
+    copyAssignment.mockImplementation(async () => {
+      alive = false
+      return {}
+    })
+
+    const outcomes = await bulkCopyAssignments(client, {
+      org: ORG,
+      targetClassroom: CLASSROOM,
+      items: [item("hw1", "hw1"), item("hw2", "hw2")],
+      canGrantTemplateAccess: false,
+      shouldContinue: () => alive,
+    })
+
+    expect(copyAssignment).toHaveBeenCalledTimes(1)
+    expect(outcomes).toEqual([
+      { slug: "hw1", targetSlug: "hw1" },
+      { slug: "hw2", deferred: true },
+    ])
   })
 })

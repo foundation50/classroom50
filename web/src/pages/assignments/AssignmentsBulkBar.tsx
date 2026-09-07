@@ -11,8 +11,10 @@ import {
 import { ConfirmModal } from "@/components/modals"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   useBulkDeleteAssignments,
+  useBulkReuseAssignments,
   useBulkSetAssignmentLock,
 } from "@/hooks/mutations/useBulkAssignmentActions"
 import { BulkReuseAssignmentsModal } from "@/components/modals/BulkReuseAssignmentsModal"
@@ -20,7 +22,8 @@ import type { Assignment } from "@/types/classroom"
 
 // The assignments toolbar's selection cluster (count + Actions menu + Clear),
 // shown only while rows are selected. Always mounted, like the roster's, so a
-// dialog's close animation survives the selection changing under it.
+// dialog's close animation survives the selection changing under it, and so
+// the reuse run it owns outlives the reuse dialog.
 //
 // Only the genuinely plural actions live here. Edit navigates to one page,
 // template access is a diagnostic, clone-submissions renders a CLI command,
@@ -68,7 +71,15 @@ export function AssignmentsBulkBar({
   const noneLocked = selected.every((a) => !a.locked)
   const lock = useBulkSetAssignmentLock(org, classroom)
   const remove = useBulkDeleteAssignments(org, classroom)
-  const busy = lock.isPending || remove.isPending
+  const reuse = useBulkReuseAssignments(org)
+  // Component-run fan-out (see hooks/mutations/README.md): the copies are one
+  // GitHub write each, so a closed tab strands the rest.
+  useBeforeUnloadGuard(reuse.running)
+  const busy = lock.isPending || remove.isPending || reuse.running
+  const closeReuse = () => {
+    setReuseOpen(false)
+    reuse.reset()
+  }
 
   // A slug that vanished between render and submit isn't a failure, but isn't
   // part of "done" either.
@@ -120,6 +131,7 @@ export function AssignmentsBulkBar({
       })
     }
     notifyMissing(result.missing)
+    // Named per slug: the teacher has to know which ones to run again.
     const warned = result.outcomes.filter((o) => o.templateAccessWarning)
     if (warned.length > 0) {
       notify({
@@ -127,6 +139,7 @@ export function AssignmentsBulkBar({
         key: `assignments-bulk-template:${classroom}`,
         message: t("assignments.bulk.templateWarnings", {
           count: warned.length,
+          slugs: warned.map((o) => o.slug).join(", "),
         }),
       })
     }
@@ -217,11 +230,14 @@ export function AssignmentsBulkBar({
         onClose={() => setPending(null)}
       />
 
-      {reuseOpen && (
+      {/* Stays mounted while a run is in flight even if a close slips past the
+          shell's veto, so the run's owner and its report survive. */}
+      {(reuseOpen || reuse.running) && (
         <BulkReuseAssignmentsModal
           org={org}
           sources={selected}
-          onClose={() => setReuseOpen(false)}
+          reuse={reuse}
+          onClose={closeReuse}
         />
       )}
     </>

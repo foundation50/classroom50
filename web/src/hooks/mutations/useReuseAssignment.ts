@@ -7,11 +7,9 @@ import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import {
   copyAssignmentWithConflictRetry,
-  nextAvailableSlug,
   type CopyAssignmentInput,
 } from "@/domain/assignments"
-import { slugify } from "@/util/slug"
-import { assignmentSlugBudget } from "@/util/repoNameBudget"
+import { planBulkReuseSlugs } from "@/util/bulkReuseSlugs"
 import type { Assignment } from "@/types/classroom"
 
 type UseReuseAssignmentParams = {
@@ -57,47 +55,40 @@ export function useReuseAssignment({
   const [slugTouched, setSlugTouched] = useState(false)
   const [warning, setWarning] = useState<string | null>(null)
 
-  // The composed repo-name budget for the TARGET classroom (#691): bounds the
-  // auto-suffixed default and blocks an over-budget manual slug.
-  const slugBudget = assignmentSlugBudget(targetClassroom)
-
-  // Auto-suffixed default ("hw1" -> "hw1-2" if taken), trimmed to the target's
-  // budget and dodging reserved pre-rename slugs. Derived, not state, so it
-  // stays correct as the target's assignments load.
-  const autoSlug = useMemo(
+  // One source through the shared planner: the auto-suffixed default ("hw1" ->
+  // "hw1-2" if taken), trimmed to the target's repo-name budget (#691), dodging
+  // reserved pre-rename slugs, and the optimistic case-insensitive collision
+  // check on a manual slug. Derived, not state, so it stays correct as the
+  // target's assignments load. The write path re-checks authoritatively.
+  const plan = useMemo(
     () =>
-      source
-        ? nextAvailableSlug(
-            slugify(source.slug),
-            [...takenSlugs, ...reservedSlugs],
-            slugBudget,
-          )
-        : "",
-    [source, takenSlugs, reservedSlugs, slugBudget],
+      planBulkReuseSlugs({
+        sources: source ? [source] : [],
+        targetClassroom,
+        takenSlugs,
+        reservedSlugs,
+        edits: source && slugTouched ? { [source.slug]: slugInput } : {},
+      }),
+    [
+      source,
+      targetClassroom,
+      takenSlugs,
+      reservedSlugs,
+      slugTouched,
+      slugInput,
+    ],
   )
+  const row = plan.rows[0]
+  const slugBudget = plan.budget
 
   // Default until the teacher edits; `normalizedSlug` is what gets saved.
-  const displayedSlug = slugTouched ? slugInput : autoSlug
-  const normalizedSlug = slugify(displayedSlug)
-
-  // A manually entered slug can still exceed the target's budget; blocked here
-  // (and re-checked by the CLI-mirroring write path 422 handling).
-  const slugOverBudget = normalizedSlug.length > slugBudget
-
-  // Optimistic, case-insensitive check; the write path re-checks authoritatively.
-  const slugTaken = useMemo(() => {
-    if (!normalizedSlug) return false
-    const lower = normalizedSlug.toLowerCase()
-    return takenSlugs.some((s) => s.trim().toLowerCase() === lower)
-  }, [normalizedSlug, takenSlugs])
-
+  const displayedSlug = row?.value ?? ""
+  const normalizedSlug = row?.targetSlug ?? ""
+  const slugOverBudget = row?.issue === "overBudget"
+  const slugTaken = row?.issue === "taken"
   // A renamed assignment's old slug is reserved: a new assignment there would
   // sever GitHub's redirects for its renamed student repos.
-  const slugReserved = useMemo(() => {
-    if (!normalizedSlug) return false
-    const lower = normalizedSlug.toLowerCase()
-    return reservedSlugs.some((s) => s.trim().toLowerCase() === lower)
-  }, [normalizedSlug, reservedSlugs])
+  const slugReserved = row?.issue === "reserved"
 
   // Synchronous re-entrancy guard: reuse.isPending updates a tick late, so a
   // rapid double-click could start two overlapping copy commits.

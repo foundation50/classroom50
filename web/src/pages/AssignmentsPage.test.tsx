@@ -375,4 +375,38 @@ describe("TeacherAssignmentsView selection", () => {
 
     expect(barSelected.map((a) => a.slug)).toEqual(["hw1"])
   })
+
+  // The prune runs during render, not as a display filter: a slug that left
+  // the file leaves the selection, so recreating it does not bring it back
+  // pre-ticked.
+  it("drops a selected slug once it leaves the list and does not restore it", () => {
+    const withHw1 = {
+      data: {
+        assignments: [
+          { slug: "hw1", name: "Homework 1" },
+          { slug: "hw2", name: "Homework 2" },
+        ],
+      },
+      isLoading: false,
+    }
+    getAssignments.mockReturnValue(withHw1)
+    funnelRoster.mockReturnValue(resolvedRoster(["alice"]))
+    // A fresh element each time: React skips a rerender of the same instance.
+    const view = () => <TeacherAssignmentsView org="acme" classroom="cs101" />
+    const { rerender } = render(view())
+
+    fireEvent.click(screen.getByTestId("toggle-0"))
+    expect(barSelected.map((a) => a.slug)).toEqual(["hw1"])
+
+    getAssignments.mockReturnValue({
+      data: { assignments: [{ slug: "hw2", name: "Homework 2" }] },
+      isLoading: false,
+    })
+    rerender(view())
+    expect(barSelected).toEqual([])
+
+    getAssignments.mockReturnValue(withHw1)
+    rerender(view())
+    expect(barSelected).toEqual([])
+  })
 })

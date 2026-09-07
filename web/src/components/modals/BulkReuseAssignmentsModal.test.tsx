@@ -24,20 +24,22 @@ vi.mock("@/hooks/useGetClassAssignments", () => {
 })
 
 // Mutable so a test can hand the modal a finished run's outcomes.
-const { run, reuseState } = vi.hoisted(() => ({
-  run: vi.fn(),
-  reuseState: {
-    running: false,
-    processed: 0,
-    total: 0,
-    outcomes: [] as { slug: string; targetSlug?: string; error?: string }[],
-  },
-}))
-vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
-  useBulkReuseAssignments: () => ({ ...reuseState, run }),
-}))
+const run = vi.fn()
+const reset = vi.fn()
+const reuseState = {
+  running: false,
+  processed: 0,
+  total: 0,
+  outcomes: [] as {
+    slug: string
+    targetSlug?: string
+    error?: string
+    deferred?: boolean
+  }[],
+}
 
 import { BulkReuseAssignmentsModal } from "./BulkReuseAssignmentsModal"
+import type { BulkReuseRun } from "@/hooks/mutations/useBulkAssignmentActions"
 import type { Assignment } from "@/types/classroom"
 
 const sources = [
@@ -50,6 +52,7 @@ const setup = (onClose = vi.fn()) => {
     <BulkReuseAssignmentsModal
       org="acme"
       sources={sources}
+      reuse={{ ...reuseState, run, reset } as unknown as BulkReuseRun}
       onClose={onClose}
     />,
   )
@@ -161,5 +164,17 @@ describe("BulkReuseAssignmentsModal", () => {
     fireEvent.change(slugInputs()[1], { target: { value: "Hausaufgabe Zwei" } })
     fireEvent.blur(slugInputs()[1])
     expect(slugInputs()[1].value).toBe("hausaufgabe-zwei")
+  })
+
+  it("lists copies that were not attempted apart from the failures", () => {
+    reuseState.outcomes = [
+      { slug: "hw1", targetSlug: "hw1" },
+      { slug: "hw2", deferred: true },
+    ]
+    setup()
+
+    expect(screen.getByText("assignments.bulk.reuseDeferredTitle")).toBeTruthy()
+    expect(screen.getByText(/assignments\.bulk\.reuseDeferred$/)).toBeTruthy()
+    expect(screen.queryByText("assignments.bulk.reuseFailedTitle")).toBeNull()
   })
 })

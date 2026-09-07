@@ -133,4 +133,20 @@ describe("shift-click range selection (useRangeSelection wiring)", () => {
     await user.click(screen.getByLabelText("a"))
     expect(screen.getByTestId("selected").textContent).toBe("a")
   })
+
+  // The anchor row can leave the rendered order (a search hid it). The click
+  // must still toggle the endpoint and become the new anchor, not vanish.
+  it("toggles and re-anchors when the anchor was filtered out of view", async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(<Harness rows={rows} />)
+
+    await user.click(screen.getByLabelText("a"))
+    rerender(<Harness rows={rows.filter((r) => r.key !== "a")} />)
+
+    await shiftClick(user, "c")
+    expect(screen.getByTestId("selected").textContent).toBe("a,c")
+
+    await shiftClick(user, "d")
+    expect(screen.getByTestId("selected").textContent).toBe("a,c,d")
+  })
 })

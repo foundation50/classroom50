@@ -1,12 +1,12 @@
 import { nextAvailableSlug, slugify } from "@/util/slug"
 import { assignmentSlugBudget } from "@/util/repoNameBudget"
-import { renamedFromSlugs, type Assignment } from "@/types/classroom"
+import type { Assignment } from "@/types/classroom"
 
-// Slug planning for bulk reuse: one target slug per selected assignment,
-// resolved against the target classroom and against the other copies in the
-// same run. Same rule as useReuseAssignment's autoSlug (slugify, dodge the
-// reserved `renamed_from` slugs, respect the target's repo-name budget), with
-// the view owning the edit state and wording.
+// The one slug rule for reuse, single or bulk: slugify, auto-suffix past the
+// target's taken and reserved (`renamed_from`) slugs, respect the target's
+// repo-name budget. useReuseAssignment plans one source through it; the bulk
+// modal plans the selection, where rows also resolve against each other.
+// The view owns the edit state and wording.
 
 export type BulkReuseSlugIssue =
   | "empty"
@@ -37,27 +37,28 @@ export type BulkReuseSlugPlan = {
 export function planBulkReuseSlugs({
   sources,
   targetClassroom,
-  targetAssignments,
+  takenSlugs,
+  reservedSlugs,
   edits,
 }: {
   sources: Assignment[]
   targetClassroom: string
-  targetAssignments: Assignment[]
+  // Existing slugs in the target.
+  takenSlugs: readonly string[]
+  // Pre-rename slugs the target still reserves (renamedFromSlugs).
+  reservedSlugs: readonly string[]
   // Raw input text by source slug, for the rows the teacher has edited.
   edits: Readonly<Record<string, string>>
 }): BulkReuseSlugPlan {
   const budget = assignmentSlugBudget(targetClassroom)
-  const taken = new Set(
-    targetAssignments.map((a) => a.slug.trim().toLowerCase()),
-  )
-  const reserved = new Set(
-    renamedFromSlugs(targetAssignments).map((s) => s.trim().toLowerCase()),
-  )
+  const taken = new Set(takenSlugs.map((s) => s.trim().toLowerCase()))
+  const reserved = new Set(reservedSlugs.map((s) => s.trim().toLowerCase()))
   // Grows as rows resolve, so two copies in one run can't land on one slug.
   const unavailable = new Set([...taken, ...reserved])
 
   const rows = sources.map((source): BulkReuseSlugRow => {
-    const edited = source.slug in edits
+    // hasOwn, not `in`: a slug such as "constructor" is a prototype key.
+    const edited = Object.hasOwn(edits, source.slug)
     const value = edited
       ? edits[source.slug]
       : nextAvailableSlug(slugify(source.slug), unavailable, budget)

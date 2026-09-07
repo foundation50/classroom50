@@ -12,14 +12,13 @@ import {
 } from "@/components/modals/ReuseModalShell"
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
-import { useBulkReuseAssignments } from "@/hooks/mutations/useBulkAssignmentActions"
+import type { BulkReuseRun } from "@/hooks/mutations/useBulkAssignmentActions"
 import {
   planBulkReuseSlugs,
   type BulkReuseSlugPlan,
 } from "@/util/bulkReuseSlugs"
 import { slugify } from "@/util/slug"
-import type { Assignment } from "@/types/classroom"
+import { renamedFromSlugs, type Assignment } from "@/types/classroom"
 
 // The plural ReuseAssignmentModal, on the same shell so it reads as the same
 // operation. Picking the target reveals one editable slug field per selected
@@ -33,12 +32,13 @@ const EMPTY_PLAN: BulkReuseSlugPlan = { rows: [], budget: 0, valid: false }
 export function BulkReuseAssignmentsModal({
   org,
   sources,
+  reuse,
   onClose,
 }: {
   org: string
   sources: Assignment[]
-  // The caller must not clear the selection here: that would unmount this
-  // modal from the table head cell that hosts it.
+  // Owned by the bulk bar, so the run (and its tab guard) outlives this dialog.
+  reuse: BulkReuseRun
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -48,9 +48,6 @@ export function BulkReuseAssignmentsModal({
   // Raw input text by source slug for edited rows; the rest keep re-resolving
   // as the target loads or a neighbouring row is retyped.
   const [slugEdits, setSlugEdits] = useState<Record<string, string>>({})
-  const reuse = useBulkReuseAssignments(org)
-  // Component-run fan-out (see hooks/mutations/README.md).
-  useBeforeUnloadGuard(reuse.running)
 
   const {
     data: targetData,
@@ -70,7 +67,8 @@ export function BulkReuseAssignmentsModal({
         ? planBulkReuseSlugs({
             sources,
             targetClassroom: target,
-            targetAssignments,
+            takenSlugs: targetAssignments.map((a) => a.slug),
+            reservedSlugs: renamedFromSlugs(targetAssignments),
             edits: slugEdits,
           })
         : EMPTY_PLAN,
@@ -78,17 +76,24 @@ export function BulkReuseAssignmentsModal({
   )
 
   const finished = !reuse.running && reuse.outcomes.length > 0
-  const copied = reuse.outcomes.filter((o) => !o.error)
+  const copied = reuse.outcomes.filter((o) => !o.error && !o.deferred)
   const failed = reuse.outcomes.filter((o) => o.error)
+  const deferred = reuse.outcomes.filter((o) => o.deferred)
   const renamed = copied.filter((o) => o.targetSlug !== o.slug)
   const templateWarned = copied.filter((o) => o.templateAccessWarning)
 
   const summary = finished
-    ? `${t("assignments.bulk.reuseDone", { count: copied.length })}${
+    ? [
+        t("assignments.bulk.reuseDone", { count: copied.length }),
         failed.length > 0
-          ? ` ${t("assignments.bulk.reuseFailed", { count: failed.length })}`
-          : ""
-      }`
+          ? t("assignments.bulk.reuseFailed", { count: failed.length })
+          : null,
+        deferred.length > 0
+          ? t("assignments.bulk.reuseDeferred", { count: deferred.length })
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ")
     : null
 
   // A new target has its own collisions, so drop the edits.
@@ -265,6 +270,16 @@ export function BulkReuseAssignmentsModal({
                 key: o.slug,
                 label: o.slug,
                 detail: o.error,
+              }))}
+            />
+          )}
+          {deferred.length > 0 && (
+            <BulkResultSection
+              title={t("assignments.bulk.reuseDeferredTitle")}
+              rows={deferred.map((o) => ({
+                key: `deferred-${o.slug}`,
+                label: o.slug,
+                detail: t("assignments.bulk.reuseDeferredDetail"),
               }))}
             />
           )}

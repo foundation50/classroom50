@@ -5,9 +5,8 @@ import { Button, DropdownMenu } from "@/components/ui"
 import { TriangleDownIcon, XIcon } from "@/components/ui/icons"
 
 // The selection cluster every multi-select table shows while rows are ticked:
-// count, one "Actions" menu, Clear. Rendered as a fragment so the host owns
-// the layout (a toolbar's flex children, a table head cell). Menu items are
-// `DropdownMenu.Item`s passed as children.
+// count, one "Actions" menu, Clear. Rendered as a fragment so the host toolbar
+// owns the layout. Menu items are `DropdownMenu.Item`s passed as children.
 export function BulkSelectionCluster({
   countLabel,
   onClearSelection,

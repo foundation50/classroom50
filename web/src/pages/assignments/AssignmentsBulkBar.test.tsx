@@ -45,6 +45,14 @@ vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
     mutateAsync: deleteMutate,
     isPending: false,
   }),
+  useBulkReuseAssignments: () => ({
+    running: false,
+    processed: 0,
+    total: 0,
+    outcomes: [],
+    run: vi.fn(),
+    reset: vi.fn(),
+  }),
 }))
 
 import { AssignmentsBulkBar } from "./AssignmentsBulkBar"
@@ -155,9 +163,8 @@ describe("AssignmentsBulkBar lock state", () => {
   })
 })
 
-// No bulk action clears the selection: the dialogs live in the head cell a
-// selection keeps mounted, so clearing from inside one would destroy it
-// mid-close.
+// No bulk action clears the selection: Clear is one click away in the toolbar,
+// and a bulk delete empties itself once assignments.json refetches.
 describe("AssignmentsBulkBar selection lifetime", () => {
   const openReuse = () => fireEvent.click(menuItem("assignments.bulk.reuse"))
 
@@ -236,5 +243,116 @@ describe("AssignmentsBulkBar selection lifetime", () => {
     openReuse()
     fireEvent.click(screen.getByText("dismiss-reuse"))
     expect(onClearSelection).not.toHaveBeenCalled()
+  })
+})
+
+// One toast per outcome kind, so the teacher learns what actually happened.
+describe("AssignmentsBulkBar outcome toasts", () => {
+  const messages = () => notify.mock.calls.map((c) => c[0].message)
+  const confirmDelete = () => {
+    fireEvent.click(menuItem("assignments.bulk.delete"))
+    fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "assignments.bulk.deleteConfirmWord" },
+    })
+    fireEvent.click(confirmButton("assignments.bulk.delete"))
+  }
+
+  it("reports how many were locked", async () => {
+    lockMutate.mockResolvedValue({
+      changed: ["hw1", "hw2"],
+      missing: [],
+      outcomes: [{ slug: "hw1" }, { slug: "hw2" }],
+      newCommitSha: "sha",
+    })
+    renderBar({ selected: ["hw1", "hw2"] })
+
+    fireEvent.click(menuItem("assignments.bulk.lock"))
+    fireEvent.click(confirmButton("assignments.bulk.lock"))
+
+    await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
+    expect(messages()).toEqual(["assignments.bulk.lockDone:2"])
+  })
+
+  it("sends locked: false from Unlock and reports it as unlocked", async () => {
+    lockMutate.mockResolvedValue({
+      changed: ["hw3"],
+      missing: [],
+      outcomes: [{ slug: "hw3" }],
+      newCommitSha: "sha",
+    })
+    renderBar({ selected: ["hw3"] })
+
+    fireEvent.click(menuItem("assignments.bulk.unlock"))
+    fireEvent.click(confirmButton("assignments.bulk.unlock"))
+
+    await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
+    expect(lockMutate.mock.calls[0][0]).toEqual({
+      slugs: ["hw3"],
+      locked: false,
+    })
+    expect(messages()).toEqual(["assignments.bulk.unlockDone:1"])
+  })
+
+  it("says nothing changed when every selected row was already in state", async () => {
+    lockMutate.mockResolvedValue({
+      changed: [],
+      missing: [],
+      outcomes: [{ slug: "hw1" }],
+      newCommitSha: null,
+    })
+    renderBar({ selected: ["hw1"] })
+
+    fireEvent.click(menuItem("assignments.bulk.lock"))
+    fireEvent.click(confirmButton("assignments.bulk.lock"))
+
+    await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
+    expect(messages()).toEqual(["assignments.bulk.lockNoChange"])
+  })
+
+  it("names the slugs whose template access could not be updated", async () => {
+    lockMutate.mockResolvedValue({
+      changed: ["hw1", "hw2"],
+      missing: [],
+      outcomes: [
+        { slug: "hw1", templateAccessWarning: "could not revoke" },
+        { slug: "hw2" },
+      ],
+      newCommitSha: "sha",
+    })
+    renderBar({ selected: ["hw1", "hw2"] })
+
+    fireEvent.click(menuItem("assignments.bulk.lock"))
+    fireEvent.click(confirmButton("assignments.bulk.lock"))
+
+    await vi.waitFor(() => expect(lockMutate).toHaveBeenCalled())
+    const warning = notify.mock.calls
+      .map((c) => c[0] as { message: string; tone?: string })
+      .find((n) => n.message.startsWith("assignments.bulk.templateWarnings"))
+    expect(warning?.tone).toBe("warning")
+    expect(warning?.message).toBe("assignments.bulk.templateWarnings:1")
+  })
+
+  it("reports how many were deleted", async () => {
+    renderBar({ selected: ["hw1"] })
+
+    confirmDelete()
+
+    await vi.waitFor(() => expect(deleteMutate).toHaveBeenCalled())
+    expect(messages()).toEqual(["assignments.bulk.deleteDone:1"])
+  })
+
+  it("says nothing changed when a delete found nothing to remove", async () => {
+    deleteMutate.mockResolvedValue({
+      deleted: [],
+      missing: [],
+      newCommitSha: null,
+    })
+    renderBar({ selected: ["hw1"] })
+
+    confirmDelete()
+
+    await vi.waitFor(() => expect(deleteMutate).toHaveBeenCalled())
+    expect(messages()).toEqual(["assignments.bulk.deleteNoChange"])
   })
 })

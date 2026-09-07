@@ -1070,7 +1070,7 @@ spreadsheet or external tool. The column-by-column reference is in
   plus **Manage assignment**, a dialog gathering every per-assignment action in
   one place: the quick four, **Template access** (review which teams can read
   the template, and re-grant the classroom teams' read), **Reuse in another
-  classroom**, and **Delete assignment**. To lock, reuse or delete more than
+  classroom**, and **Delete assignment**. To lock, reuse, or delete more than
   one assignment in a single step, see
   [Act on several assignments at once](#act-on-several-assignments-at-once).
 - **Delete an assignment.** **Delete assignment** asks you to type the slug to
@@ -1148,7 +1148,7 @@ The **Actions** menu offers:
   repositories are **not** deleted; they stay in the organization and can still
   be reached by name.
 
-Lock, unlock and delete write the whole selection to the classroom's
+Lock, unlock, and delete write the whole selection to the classroom's
 `assignments.json` in a **single commit**, so the classroom's history gets one
 entry per action and a half-applied selection is impossible: either every
 selected assignment changes or none does. Deleting asks you to type `delete`
