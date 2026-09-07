@@ -1125,7 +1125,7 @@ so a mistyped domain can't lock students out of a working site.
 
 ### Act on several assignments at once
 
-Tick the checkbox on any row of the **Assignments** page and the toolbar shows
+Select the checkbox on any row of the **Assignments** page and the toolbar shows
 how many are selected, an **Actions** menu, and a **Clear selection** button,
 the same cluster the roster and organization members pages use.
 
@@ -1139,9 +1139,10 @@ The **Actions** menu offers:
 
 - **Lock** / **Unlock.** Lock every selected assignment so students can't
   access or accept it, or unlock them again. Where a private template is used,
-  locking removes the student team's read on it and unlocking restores it. Each
-  verb is disabled when it has nothing to do, so a selection that is already
-  fully locked offers only **Unlock**.
+  locking removes the student team's read on it and unlocking restores it. If
+  that access change fails for some assignments, a warning names them; run the
+  same action on those again. Each verb is disabled when it has nothing to do,
+  so a selection that is already fully locked offers only **Unlock**.
 - **Reuse.** Copy the selection into another classroom in the same
   organization, including back into its own.
 - **Delete.** Remove the selected assignments from the classroom. Student
@@ -1166,14 +1167,20 @@ used in the target, a numbered suffix is filled in: copying `hw1` into a
 classroom that already has one gives you `hw1-2`. You can overwrite any of them
 before starting.
 
-The field turns red if a slug is taken in the target, is reserved by a renamed
-assignment, exceeds the classroom's repository-name budget, or collides with
-another copy in the same run; the copy can't start until every slug is usable.
+The field turns red, and the copy can't start, while a slug:
+
+- is already used in the target classroom,
+- is reserved by a renamed assignment there,
+- exceeds the classroom's repository-name budget, or
+- collides with another copy in the same run.
 
 Unlike lock and delete, the copies are made one after another, because each
-writes the target classroom and may create a repository. The dialog reports
-progress and, at the end, which assignments landed and which failed. Keep the
-tab open until it finishes. A failed copy doesn't abandon the rest.
+one writes the target classroom's `assignments.json`. The dialog reports
+progress and, at the end, which assignments were copied, which failed, and
+which were not attempted. Keep the tab open until it finishes. A failed copy
+doesn't abandon the rest, but a copy that hits GitHub's rate limit does stop
+the run: the remaining assignments are listed as not attempted. Wait a few
+minutes, then select those and reuse them again.
 
 ### Updating an over-budget assignment slug
 

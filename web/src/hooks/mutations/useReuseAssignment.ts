@@ -55,11 +55,9 @@ export function useReuseAssignment({
   const [slugTouched, setSlugTouched] = useState(false)
   const [warning, setWarning] = useState<string | null>(null)
 
-  // One source through the shared planner: the auto-suffixed default ("hw1" ->
-  // "hw1-2" if taken), trimmed to the target's repo-name budget (#691), dodging
-  // reserved pre-rename slugs, and the optimistic case-insensitive collision
-  // check on a manual slug. Derived, not state, so it stays correct as the
-  // target's assignments load. The write path re-checks authoritatively.
+  // One source through the shared planner (util/bulkReuseSlugs). Derived, not
+  // state, so it stays correct as the target's assignments load; the write path
+  // re-checks authoritatively.
   const plan = useMemo(
     () =>
       planBulkReuseSlugs({

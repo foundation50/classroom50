@@ -231,7 +231,7 @@ export function AssignmentsBulkBar({
       />
 
       {/* Stays mounted while a run is in flight even if a close slips past the
-          shell's veto, so the run's owner and its report survive. */}
+          shell's veto, so the progress and the report stay on screen. */}
       {(reuseOpen || reuse.running) && (
         <BulkReuseAssignmentsModal
           org={org}

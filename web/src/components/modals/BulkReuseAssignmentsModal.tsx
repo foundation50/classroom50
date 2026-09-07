@@ -22,10 +22,10 @@ import { renamedFromSlugs, type Assignment } from "@/types/classroom"
 
 // The plural ReuseAssignmentModal, on the same shell so it reads as the same
 // operation. Picking the target reveals one editable slug field per selected
-// assignment, prefilled with the slug the copy would take (util/bulkReuseSlugs),
-// so a collision is a decision up front rather than a report afterwards.
-// Setting the shell's `warning` after the run flips the footer to a single
-// "Done" and keeps the per-assignment result on screen.
+// assignment, prefilled with the slug the copy would take, so a collision is a
+// decision up front rather than a report afterwards. Setting the shell's
+// `warning` after the run flips the footer to a single "Done" and keeps the
+// per-assignment result on screen.
 
 const EMPTY_PLAN: BulkReuseSlugPlan = { rows: [], budget: 0, valid: false }
 

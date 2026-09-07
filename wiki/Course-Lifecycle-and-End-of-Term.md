@@ -92,7 +92,10 @@ What that means in practice:
 Wrap up a finished course in this order:
 
 1. Close or lock the assignments. **Close submission** per assignment
-   freezes student work (read-only, no new accepts).
+   freezes student work (read-only, no new accepts). To lock every
+   assignment in one step, select them all on the **Assignments** page and
+   choose **Lock** from the **Actions** menu; see
+   [Act on several assignments at once](Web-Teacher-Guide#act-on-several-assignments-at-once).
 2. Collect and export. Run a final collection, then **Download scores
    (CSV)**. For the work itself, **Download all submissions** bundles the
    latest submissions into a zip, or `gh teacher download` clones every
