@@ -162,6 +162,12 @@ changes. In a student-formed group:
   confirm, because you lose access to the group's repository (your work stays
   with the group), and rejoining takes another request and approval.
 
+The group page also shows how many members the group has against the
+assignment's maximum group size. If the group has more members than allowed
+(members can be added directly on GitHub, outside Classroom 50), the page
+shows a warning that your teacher can see too. Remove members until the group
+is within the limit, or ask your teacher to.
+
 ### Legacy group assignments
 
 For an assignment shown as **Group (legacy)**, there is no group team:

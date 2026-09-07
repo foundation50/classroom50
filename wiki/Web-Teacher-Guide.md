@@ -741,7 +741,7 @@ For a group assignment, open the assignment and click **Manage groups** in the
 sidebar (the submissions page has a **Manage groups** button too). The page
 lists every group with its display name, its members (with full names from the
 roster), its member count against the max group size, its repository status,
-and its visibility. Two badges need explaining:
+and its visibility. Three badges need explaining:
 
 - **No repository yet.** The group's shared repository is created when a
   group member accepts the assignment (**Repository created** replaces it
@@ -749,6 +749,10 @@ and its visibility. Two badges need explaining:
 - **Members changed since the last refresh.** The group's live membership on
   GitHub no longer matches the recorded group info; refresh to update the
   record.
+- **Over the limit.** The group has more members than the assignment's max
+  group size. Classroom 50 refuses to add a member past the limit, but a
+  group's maintainer can add members directly on GitHub. Click **Manage** to
+  remove members, or grade the group as it is.
 
 Above the list:
 
@@ -914,7 +918,9 @@ and who submitted), see [Reading results](Autograding-Basics#reading-results).
 
 On a group assignment, rows are titled by group name, and a **Members** column
 shows each group's live member count; click it to open the group's manage
-dialog. A group that hasn't accepted yet shows a **No repository yet** warning
+dialog. The count carries an **Over the limit** error when the group has more
+members than the max group size (see [Manage groups](#manage-groups)). A
+group that hasn't accepted yet shows a **No repository yet** warning
 (the repository is created when a member accepts), and **Group team missing**
 flags a group whose GitHub team was deleted; click it to recreate the team
 (see [Recover a deleted group team](#recover-a-deleted-group-team)).

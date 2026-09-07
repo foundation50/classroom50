@@ -123,6 +123,10 @@ contains this instead of preventing it:
 
 - The teacher's group views flag the change as **Members changed since the
   last refresh**, against the recorded group info.
+- A group with more members than the maximum group size shows an
+  **Over the limit** error on the submissions page and the Manage groups
+  page, and the group's own members see a warning on their group page. The
+  teacher decides whether to remove members or grade the group as it is.
 - Grading credits only team members who are on the classroom roster, so an
   outside account is never credited.
 - The maximum group size is re-checked whenever a Classroom 50 client adds a
