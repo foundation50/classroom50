@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
-import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { NormalizedScores, SubmissionRow } from "@/hooks/useGetScores"
+import type { Assignment } from "@/types/classroom"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 import type { TeamRosterRow } from "@/util/teamRoster"
@@ -23,6 +24,7 @@ import {
   distinctSections,
   effectiveCollectedAt,
   existingGroupRepos,
+  existingTeamRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
@@ -42,12 +44,20 @@ import {
   rowPassState,
   scoreTone,
   selectActiveWorkflowAction,
+  showCheckingAccepted,
   showsNonSubmitters,
   snapshotIsStale,
   statusSelectValue,
   submissionRosterStudents,
+  staffRolesByLogin,
+  teamMissingForOwner,
+  teamsWithoutRepos,
+  assignmentRepoCandidateLogins,
+  assignmentFunnelCounts,
+  orgReposReadEnabled,
   type SubmissionFilters,
 } from "./dashboard"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 
 // Minimal row factory — only the fields the dashboard logic reads.
 const row = (over: Partial<SubmissionRow> = {}): SubmissionRow => ({
@@ -134,6 +144,22 @@ describe("rowOnRoster / rosterScopedRows", () => {
   it("ignores blank roster usernames (never matches an empty login)", () => {
     const rows = [row({ owner: "", usernames: [""] })]
     expect(rosterScopedRows(rows, [student({ username: "" })])).toEqual([])
+  })
+})
+
+describe("staffRolesByLogin", () => {
+  it("maps enrolled staff logins (lowercased) to their staff roles only", () => {
+    const map = staffRolesByLogin([
+      teamRow({ username: "Alice", roles: ["student"] }),
+      teamRow({ username: "Prof", roles: ["teacher"] }),
+      teamRow({ username: "dual", roles: ["ta", "student"] }),
+      teamRow({ username: "gone", roles: ["hta"], state: "pending" }),
+      teamRow({ username: "", email: "x@example.com", roles: ["ta"] }),
+    ])
+    expect([...map.entries()]).toEqual([
+      ["prof", ["teacher"]],
+      ["dual", ["ta"]],
+    ])
   })
 })
 
@@ -1174,6 +1200,74 @@ describe("nonSubmitterStatus", () => {
       }),
     ).toBe("not-accepted")
   })
+
+  it("is no-team for team assignments (wins over the group and acceptance axes)", () => {
+    expect(nonSubmitterStatus("alice", { isGroup: true, isTeam: true })).toBe(
+      "no-team",
+    )
+    expect(
+      nonSubmitterStatus("alice", {
+        isGroup: true,
+        isTeam: true,
+        acceptedUsernames: new Set(["alice"]),
+      }),
+    ).toBe("no-team")
+  })
+
+  // A non-owner's repo list holds only the repos they were granted, so a
+  // missing repo is "not accepted OR not yet visible": never assert either.
+  it("reports repo-not-visible instead of not-accepted when acceptance is incomplete", () => {
+    const visible = new Set(["alice"])
+    expect(
+      nonSubmitterStatus("bob", {
+        isGroup: false,
+        acceptedUsernames: visible,
+        acceptanceComplete: false,
+      }),
+    ).toBe("repo-not-visible")
+    // A repo the viewer CAN see is definitively accepted, complete or not.
+    expect(
+      nonSubmitterStatus("alice", {
+        isGroup: false,
+        acceptedUsernames: visible,
+        acceptanceComplete: false,
+      }),
+    ).toBe("accepted-not-submitted")
+    // Loading still wins: no data means the neutral fallback, not "not visible".
+    expect(
+      nonSubmitterStatus("bob", { isGroup: false, acceptanceComplete: false }),
+    ).toBe("not-submitted")
+  })
+})
+
+describe("existingTeamRepos", () => {
+  const repo = (name: string) => ({ name }) as GitHubRepo
+
+  it("keys team repos by their group-<n> owner segment", () => {
+    const repos = [
+      repo("cs101-hw1-group-1"),
+      repo("cs101-hw1-group-12"),
+      repo("cs101-hw1-alice"), // an individual-shaped name: not a counter
+      repo("cs101-hw1-group-0"), // counters start at 1
+      repo("cs101-hw1-group-02"), // no leading zeros
+      repo("cs101-hw2-group-1"), // another assignment
+    ]
+    expect(existingTeamRepos(repos, "cs101", "hw1")).toEqual([
+      { owner: "group-1", repoName: "cs101-hw1-group-1" },
+      { owner: "group-12", repoName: "cs101-hw1-group-12" },
+    ])
+  })
+
+  it("does not capture a slug-extending sibling's team repos", () => {
+    // parseGroupRepoCounter is shape-exact: `cs101-hw1-bonus-group-1` never
+    // matches assignment "hw1" (the segment after `hw1-` isn't `group-<n>`).
+    const repos = [repo("cs101-hw1-bonus-group-1")]
+    expect(existingTeamRepos(repos, "cs101", "hw1")).toEqual([])
+  })
+
+  it("is empty for a missing repo list", () => {
+    expect(existingTeamRepos(null, "cs101", "hw1")).toEqual([])
+  })
 })
 
 describe("statusSelectValue / applyStatusSelection", () => {
@@ -2154,6 +2248,88 @@ describe("displayPageOwners", () => {
     // Submitted rows first (cara), then the unsubmitted group repo (alice).
     expect(owners).toEqual(["cara", "alice"])
   })
+
+  it("groups: a repo-less team occupies a page slot but contributes no owner", () => {
+    // The teamNoRepo item paginates with the rest (so the fanned slice lines
+    // up with the rendered table), but it has no repo for the fan-out to read,
+    // so it must never emit its `group-<n>` segment as an owner.
+    const args = {
+      isGroup: true,
+      sort: "recent" as const,
+      students,
+      rows: [row({ owner: "group-1", usernames: ["cara"] })],
+      nonSubmitters: [],
+      groupRepos: [{ owner: "group-2", repoName: "cs-hw-group-2" }],
+      teamsWithoutRepos: [
+        { slug: "classroom50-group-abc123-3", id: 103, n: 3 },
+      ],
+      pageSize: 2,
+    }
+    expect(displayPageOwners({ ...args, page: 0 })).toEqual([
+      "group-1",
+      "group-2",
+    ])
+    // Page 1 holds only the repo-less team: a slot, but no owner to read.
+    expect(displayPageOwners({ ...args, page: 1 })).toEqual([])
+  })
+})
+
+describe("teamsWithoutRepos", () => {
+  const team = (n: number, over: Partial<GroupTeamRef> = {}): GroupTeamRef => ({
+    slug: `classroom50-group-abc123-${n}`,
+    id: 100 + n,
+    n,
+    ...over,
+  })
+
+  it("lists live teams with neither an existing repo nor a score row, sorted by counter", () => {
+    const out = teamsWithoutRepos([team(3), team(1)], new Set(), new Set())
+    expect(out.map((t) => t.n)).toEqual([1, 3])
+  })
+
+  it("excludes a team whose expected repo exists", () => {
+    const out = teamsWithoutRepos(
+      [team(1), team(2)],
+      new Set(["group-1"]),
+      new Set(),
+    )
+    expect(out.map((t) => t.n)).toEqual([2])
+  })
+
+  it("excludes a team credited by a score row even when its repo is gone", () => {
+    // A collected score row keeps the team visible as a submitter row, so it
+    // must not double-render as a repo-less team.
+    const out = teamsWithoutRepos([team(1)], new Set(), new Set(["group-1"]))
+    expect(out).toEqual([])
+  })
+
+  it("is empty for no teams", () => {
+    expect(teamsWithoutRepos([], new Set(), new Set())).toEqual([])
+  })
+})
+
+describe("teamMissingForOwner", () => {
+  const byOwner = new Map([["group-1", { slug: "t1" }]])
+
+  it("flags an owner with no live team once the teams query has settled", () => {
+    expect(teamMissingForOwner("group-2", byOwner, true)).toBe(true)
+  })
+
+  it("does not flag an owner whose team is live", () => {
+    expect(teamMissingForOwner("group-1", byOwner, true)).toBe(false)
+  })
+
+  it("never flags before the teams query settles (no flash while loading)", () => {
+    expect(teamMissingForOwner("group-2", byOwner, false)).toBe(false)
+  })
+
+  it("never flags without a team lookup (not a team assignment)", () => {
+    expect(teamMissingForOwner("group-2", undefined, true)).toBe(false)
+  })
+
+  it("matches the owner segment case-insensitively and trimmed", () => {
+    expect(teamMissingForOwner(" Group-1 ", byOwner, true)).toBe(false)
+  })
 })
 
 describe("pendingMayHide", () => {
@@ -2205,6 +2381,12 @@ describe("pagination helpers", () => {
   const groupRepo = (owner: string) => ({
     owner,
     repoName: `cs-hw-${owner}`,
+  })
+
+  const teamRef = (n: number): GroupTeamRef => ({
+    slug: `classroom50-group-abc123-${n}`,
+    id: 100 + n,
+    n,
   })
 
   describe("buildRosterDisplayItems", () => {
@@ -2259,6 +2441,24 @@ describe("pagination helpers", () => {
       expect(items.map((i) => i.kind)).toEqual(["row", "groupRepo"])
       expect(items.map(displayItemOwner)).toEqual(["team-a", "team-b"])
     })
+
+    it("appends repo-less teams after the unsubmitted group repos", () => {
+      const items = buildGroupDisplayItems(
+        [row({ owner: "group-1" })],
+        [groupRepo("group-2")],
+        [teamRef(3)],
+      )
+      expect(items.map((i) => i.kind)).toEqual([
+        "row",
+        "groupRepo",
+        "teamNoRepo",
+      ])
+      expect(items.map(displayItemOwner)).toEqual([
+        "group-1",
+        "group-2",
+        "group-3",
+      ])
+    })
   })
 
   describe("buildGroupRosterDisplayItems", () => {
@@ -2296,6 +2496,29 @@ describe("pagination helpers", () => {
         "last",
       )
       expect(items.map(displayItemOwner)).toEqual(["team-a", "team-b"])
+    })
+
+    it("interleaves a repo-less team with the other team rows by counter", () => {
+      // Team owners (`group-<n>`) miss the roster name map, so every team row
+      // keys on the owner segment with numeric collation — group-2 sorts
+      // between group-1 and group-10 regardless of which row kind carries it.
+      const items = buildGroupRosterDisplayItems(
+        [row({ owner: "group-10" })],
+        [groupRepo("group-1")],
+        [],
+        "first",
+        [teamRef(2)],
+      )
+      expect(items.map(displayItemOwner)).toEqual([
+        "group-1",
+        "group-2",
+        "group-10",
+      ])
+      expect(items.map((i) => i.kind)).toEqual([
+        "groupRepo",
+        "teamNoRepo",
+        "row",
+      ])
     })
   })
 
@@ -2389,5 +2612,293 @@ describe("pagination helpers", () => {
       // Near the start, no gap between first and the neighbor cluster.
       expect(paginationRange(1, 20)).toEqual([0, 1, 2, null, 19])
     })
+  })
+})
+
+describe("assignmentRepoCandidateLogins", () => {
+  it("names every enrolled row, students and staff alike", () => {
+    const rows = [
+      teamRow({ username: "alice" }),
+      teamRow({ username: "Prof", roles: ["teacher"] }),
+      teamRow({ username: "invited", state: "pending" }),
+      teamRow({ username: "csvonly", state: "unlinked" }),
+    ]
+    expect(assignmentRepoCandidateLogins(false, rows)).toEqual([
+      "alice",
+      "Prof",
+    ])
+  })
+
+  it("agrees with the gradee roster on who can be looked up", () => {
+    // Every student the table lists as a gradee must be a candidate, or the
+    // scoped read would report them as not accepted.
+    const rows = [
+      teamRow({ username: "alice" }),
+      teamRow({ username: "bob" }),
+      teamRow({ username: "Prof", roles: ["teacher"] }),
+      teamRow({ username: "invited", state: "pending" }),
+    ]
+    const candidates = new Set(
+      assignmentRepoCandidateLogins(false, rows)?.map((l) => l.toLowerCase()),
+    )
+    const students = submissionRosterStudents(rows, {
+      acceptedStaffLogins: new Set(["prof"]),
+      groupRepoMembers: new Set(),
+    })
+    expect(students).toHaveLength(3)
+    for (const student of students) {
+      expect(candidates.has(student.username.toLowerCase())).toBe(true)
+    }
+  })
+
+  it("is undefined for a shared-repo assignment", () => {
+    expect(assignmentRepoCandidateLogins(true, [teamRow()])).toBeUndefined()
+  })
+
+  it("is undefined when the roster is not known to this viewer", () => {
+    expect(
+      assignmentRepoCandidateLogins(false, [teamRow()], { rosterKnown: false }),
+    ).toBeUndefined()
+  })
+
+  it("is undefined when the roster read failed, even with staff rows loaded", () => {
+    // A members-read error leaves the staff rows in place. Scoping to those
+    // would make page one of the org the whole truth for acceptance and
+    // freshness, so the page falls back to the full listing instead.
+    const rows = [teamRow({ username: "Prof", roles: ["teacher"] })]
+    expect(
+      assignmentRepoCandidateLogins(false, rows, { rosterError: true }),
+    ).toBeUndefined()
+  })
+})
+
+describe("orgReposReadEnabled", () => {
+  it("waits for the assignment shape", () => {
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: true,
+        isGroupFlavor: false,
+        rosterLoading: false,
+      }),
+    ).toBe(false)
+  })
+
+  it("waits for the roster only when the read is roster-scoped", () => {
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: false,
+        isGroupFlavor: false,
+        rosterLoading: true,
+      }),
+    ).toBe(false)
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: false,
+        isGroupFlavor: true,
+        rosterLoading: true,
+      }),
+    ).toBe(true)
+    expect(
+      orgReposReadEnabled({
+        assignmentLoading: false,
+        isGroupFlavor: false,
+        rosterLoading: false,
+      }),
+    ).toBe(true)
+  })
+})
+
+describe("showCheckingAccepted", () => {
+  it("shows only while the read is pending and the bar is not up", () => {
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: false,
+        orgReposPending: true,
+        isEmptyRepoAssignment: false,
+      }),
+    ).toBe(true)
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: true,
+        orgReposPending: true,
+        isEmptyRepoAssignment: false,
+      }),
+    ).toBe(false)
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: false,
+        orgReposPending: false,
+        isEmptyRepoAssignment: false,
+      }),
+    ).toBe(false)
+  })
+
+  it("never shows for an empty_repo assignment", () => {
+    expect(
+      showCheckingAccepted({
+        showSubmissionProgress: false,
+        orgReposPending: true,
+        isEmptyRepoAssignment: true,
+      }),
+    ).toBe(false)
+  })
+})
+
+describe("assignmentFunnelCounts", () => {
+  const scores = (
+    over: Partial<Pick<NormalizedScores, "submissions" | "detected">>,
+  ): NormalizedScores => ({
+    schema: "classroom50/scores/v1",
+    submissions: {},
+    collectedAt: {},
+    detected: {},
+    ...over,
+  })
+  const assignment = (over: Partial<Assignment> = {}): Assignment =>
+    ({ slug: "hw1", name: "HW 1", mode: "individual", ...over }) as Assignment
+
+  it("counts graded and detected owners once each", () => {
+    // Alice was hand-graded AND detected; Bob only detected; Carol only graded.
+    const counts = assignmentFunnelCounts(
+      assignment(),
+      scores({
+        submissions: {
+          hw1: [row({ owner: "Alice" }), row({ owner: "carol" })],
+        },
+        detected: {
+          hw1: [
+            { owner: "alice", usernames: ["alice"], count: 2 },
+            { owner: "bob", usernames: ["bob"], count: 1 },
+          ],
+        },
+      }),
+      [repo("cs-hw1-alice"), repo("cs-hw1-bob"), repo("cs-hw2-alice")],
+      "cs",
+      ["hw1", "hw2"],
+    )
+    expect(counts).toEqual({
+      submitted: 3,
+      accepted: 2,
+      notCollected: false,
+      hiddenStaffRepos: 0,
+    })
+  })
+
+  it("leaves accepted undefined while the repo list loads", () => {
+    expect(
+      assignmentFunnelCounts(assignment(), undefined, undefined, "cs", []),
+    ).toEqual({
+      submitted: 0,
+      accepted: undefined,
+      notCollected: false,
+      hiddenStaffRepos: 0,
+    })
+  })
+
+  describe("with a roster", () => {
+    const roster = (counted: string[], excludedStaff: string[] = []) => ({
+      counted: new Set(counted),
+      excludedStaff: new Set(excludedStaff),
+    })
+    const data = scores({
+      submissions: { hw1: [row({ owner: "Alice" }), row({ owner: "prof" })] },
+      detected: {
+        hw1: [
+          { owner: "bob", usernames: ["bob"], count: 1 },
+          { owner: "ta1", usernames: ["ta1"], count: 1 },
+        ],
+      },
+    })
+    const repos = [
+      repo("cs-hw1-alice"),
+      repo("cs-hw1-bob"),
+      repo("cs-hw1-prof"),
+      repo("cs-hw1-ta1"),
+      repo("cs-hw1-ghost"), // a dropped student: on no team
+    ]
+
+    it("counts only owners in the roster, case-insensitively", () => {
+      const counts = assignmentFunnelCounts(
+        assignment(),
+        data,
+        repos,
+        "cs",
+        ["hw1"],
+        roster(["alice", "bob", "carol"], ["prof", "ta1"]),
+      )
+      expect(counts).toEqual({
+        submitted: 2,
+        accepted: 2,
+        notCollected: false,
+        hiddenStaffRepos: 2,
+      })
+    })
+
+    it("counts staff once they are in the roster (toggle on)", () => {
+      const counts = assignmentFunnelCounts(
+        assignment(),
+        data,
+        repos,
+        "cs",
+        ["hw1"],
+        roster(["alice", "bob", "carol", "prof", "ta1"]),
+      )
+      expect(counts).toEqual({
+        submitted: 4,
+        accepted: 4,
+        notCollected: false,
+        hiddenStaffRepos: 0,
+      })
+    })
+
+    it("still says not collected when the only graded rows were staff's", () => {
+      const counts = assignmentFunnelCounts(
+        assignment({ no_autograder: true }),
+        scores({ submissions: { hw1: [row({ owner: "prof" })] } }),
+        [],
+        "cs",
+        ["hw1"],
+        roster(["alice"], ["prof"]),
+      )
+      expect(counts.notCollected).toBe(true)
+    })
+
+    it("leaves shared-repo modes on raw counts (owners are groups, not logins)", () => {
+      const counts = assignmentFunnelCounts(
+        assignment({ mode: "team" }),
+        scores({ submissions: { hw1: [row({ owner: "group-1" })] } }),
+        [repo("cs-hw1-group-1"), repo("cs-hw1-group-2")],
+        "cs",
+        ["hw1"],
+        roster(["alice"], ["prof"]),
+      )
+      expect(counts).toEqual({
+        submitted: 1,
+        accepted: 2,
+        notCollected: false,
+        hiddenStaffRepos: 0,
+      })
+    })
+  })
+
+  it("flags a no_autograder bucket no collect has walked, but not an autograded one", () => {
+    const skipping = assignment({ no_autograder: true })
+    expect(
+      assignmentFunnelCounts(skipping, scores({}), [], "cs", []).notCollected,
+    ).toBe(true)
+    // A `detected: []` means a collect walked it and found nobody.
+    expect(
+      assignmentFunnelCounts(
+        skipping,
+        scores({ detected: { hw1: [] } }),
+        [],
+        "cs",
+        [],
+      ).notCollected,
+    ).toBe(false)
+    expect(
+      assignmentFunnelCounts(assignment(), scores({}), [], "cs", [])
+        .notCollected,
+    ).toBe(false)
   })
 })

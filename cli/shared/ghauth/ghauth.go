@@ -90,7 +90,7 @@ func RequireClient(out, errOut writer, opts Options) (*api.RESTClient, error) {
 	// `gh auth refresh`; env/PAT tokens must be fixed by the user.
 	if !isGhManagedToken(source) {
 		return nil, fmt.Errorf(
-			"your %s token (source: %s) is missing scopes %s needs (%s); it wasn't set by `gh auth login`, so re-run won't fix it — re-issue the token with those scopes, or unset it and run `%s login`",
+			"your %s token (source: %s) is missing scopes %s needs (%s); it wasn't set by `gh auth login`, so re-running won't fix it. Re-issue the token with those scopes, or unset it and run `%s login`",
 			host, source, opts.CommandName, strings.Join(opts.RequiredScopes, ", "), opts.CommandName)
 	}
 	if !IsInteractiveTTY() {
@@ -217,7 +217,7 @@ func confirmProceed(errOut writer, in io.Reader) bool {
 func printLoginDeclinedHelp(errOut writer, host string, requiredScopes []string) {
 	scopeCSV := strings.Join(requiredScopes, ",")
 	_, _ = fmt.Fprintf(errOut,
-		"Aborted — your existing %s authentication is unchanged. To get the scopes without replacing your token, either:\n"+
+		"Aborted: your existing %s authentication is unchanged. To get the scopes without replacing your token, either:\n"+
 			"  • widen your current login in place:  gh auth refresh -h %s -s %s\n"+
 			"  • or use your own token:               export GH_TOKEN=<a PAT with %s>\n",
 		host, host, scopeCSV, strings.Join(requiredScopes, ", "))

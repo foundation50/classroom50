@@ -22,21 +22,42 @@ export type ReconcileRosterResult = SyncRosterFromTeamResult & {
 //   1. collect: classify this classroom's invite teams (accepted -> recovered
 //      mappings, pending -> live emails) and GC the stale ones. No CSV writes.
 //   2. sync: one conflict-retried commit that folds the recovered mappings
-//      onto their rows, removes email-only rows no live invite team backs,
-//      appends missing team members, and reconciles roles/ids.
-//   3. finalize: delete the recovered mappings' teams only AFTER that commit
-//      landed, skipping any slug a fresh pending invitation now maps to (a
-//      same-email re-invite adopts the same deterministic slug).
+//      onto their rows (rows are never removed — unbacked email rows stay
+//      visible as unlinked), appends missing team members, and reconciles
+//      roles/ids.
+//   3. finalize: delete ONLY the mappings the roster provably records after
+//      the sync (sync.recordedRecoveries — the caller's recoveries plus any
+//      the sync's decision-time re-collect folded, gated on the landed rows;
+//      the web mirror of the CLI's recordsRecovery). An unrecorded mapping
+//      keeps its team as the sole record of the address and is re-recovered
+//      next pass. finalize itself still skips any slug a fresh pending
+//      invitation now maps to (a same-email re-invite adopts the same
+//      deterministic slug).
 // Throws what syncRosterFromTeam throws (archived classroom, malformed CSV,
 // transient write failures); the collect half is never-throw by contract.
 export async function reconcileRoster(
   client: GitHubClient,
-  input: { org: string; classroom: string },
+  input: {
+    org: string
+    classroom: string
+    // Threaded through to syncRosterFromTeam's append filter (see its doc):
+    // just-unenrolled logins the sync must not resurrect.
+    excludeLogins?: () => Set<string>
+  },
 ): Promise<ReconcileRosterResult> {
-  const { org, classroom } = input
+  const { org, classroom, excludeLogins } = input
   const invites = await collectInviteRecoveries(client, { org, classroom })
-  const sync = await syncRosterFromTeam(client, { org, classroom, invites })
-  await finalizeInviteRecoveries(client, { org, classroom }, invites.recovered)
+  const sync = await syncRosterFromTeam(client, {
+    org,
+    classroom,
+    invites,
+    excludeLogins,
+  })
+  await finalizeInviteRecoveries(
+    client,
+    { org, classroom },
+    sync.recordedRecoveries,
+  )
   return { ...sync, deletedStaleTeams: invites.deletedStale }
 }
 

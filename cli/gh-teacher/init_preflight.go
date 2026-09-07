@@ -106,7 +106,7 @@ func checkScopes(client githubapi.Client) (check preflightCheck, scopes, login s
 	resp, err := client.Request(http.MethodGet, "user", nil)
 	if err != nil {
 		c.Status = preflightWarn
-		c.Detail = fmt.Sprintf("couldn't verify OAuth scopes (%v); proceeding — operations needing the classroom scopes will fail with guidance if a scope is missing", err)
+		c.Detail = fmt.Sprintf("couldn't verify OAuth scopes (%v); proceeding, but operations needing the classroom scopes will fail with guidance if a scope is missing", err)
 		return c, "", ""
 	}
 	defer func() { _ = resp.Body.Close() }()
@@ -146,7 +146,7 @@ func checkOrgAccess(client githubapi.Client, org string) (preflightCheck, string
 	if err != nil {
 		c.Status = preflightFail
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			c.Detail = fmt.Sprintf("organization %q not found, or your token can't see it — check the name and that you're a member", org)
+			c.Detail = fmt.Sprintf("organization %q not found, or your token can't see it; check the name and that you're a member", org)
 		} else {
 			c.Detail = fmt.Sprintf("couldn't read organization %q (%v)", org, err)
 		}
@@ -194,7 +194,7 @@ func checkOwnership(client githubapi.Client, org, login string) preflightCheck {
 	}
 	if err := client.Get(path, &resp); err != nil {
 		c.Status = preflightWarn
-		c.Detail = fmt.Sprintf("couldn't read your org membership (%v); proceeding — owner-only steps will fail with guidance if you aren't an owner", err)
+		c.Detail = fmt.Sprintf("couldn't read your org membership (%v); proceeding, but owner-only steps will fail with guidance if you aren't an owner", err)
 		return c
 	}
 	if resp.Role != "admin" {
@@ -275,7 +275,7 @@ func preflightFailError(res preflightResult) error {
 			failed = append(failed, fmt.Sprintf("%s (%s)", c.Name, c.Detail))
 		}
 	}
-	return fmt.Errorf("setup checks failed — fix before re-running: %s", strings.Join(failed, "; "))
+	return fmt.Errorf("setup checks failed. Fix these before re-running: %s", strings.Join(failed, "; "))
 }
 
 // initStepLabels are init's phase labels in order — used by --dry-run and the
@@ -298,7 +298,7 @@ var initStepLabels = []string{
 
 // renderDryRunSteps prints the ordered steps init would perform, for --dry-run.
 func renderDryRunSteps(w io.Writer) {
-	_, _ = fmt.Fprintln(w, "Dry run — init would perform these steps (no changes made):")
+	_, _ = fmt.Fprintln(w, "Dry run: init would perform these steps (no changes made):")
 	for i, label := range initStepLabels {
 		_, _ = fmt.Fprintf(w, "  %d. %s\n", i+1, label)
 	}

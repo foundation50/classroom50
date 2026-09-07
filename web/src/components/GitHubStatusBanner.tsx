@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { AppBanner } from "@/components/AppBanner"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useGitHubHealth } from "@/lib/githubHealth"
+import { useBannerSlot } from "@/context/bannerStack/BannerStackProvider"
 
 // Global warning banner shown when the app suspects GitHub is having trouble
 // (repeated outage-shaped API failures), optionally enriched with the
@@ -23,10 +24,11 @@ export function GitHubStatusBanner() {
   if (!suspected && dismissed) setDismissed(false)
 
   const show = suspected && !dismissed
+  const granted = useBannerSlot("github-status", show)
 
   return (
     <AnimatePresence initial={false}>
-      {show ? (
+      {granted ? (
         <AppBanner
           key="github-status"
           tone="warning"

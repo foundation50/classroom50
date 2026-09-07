@@ -108,6 +108,7 @@ PLURAL_CATEGORIES = {
     "fr": ("one", "many", "other"),
     "it": ("one", "many", "other"),
     "es": ("one", "many", "other"),
+    "ca": ("one", "many", "other"),
     "pt-BR": ("one", "many", "other"),
     "ru": ("one", "few", "many", "other"),
     "pl": ("one", "few", "many", "other"),

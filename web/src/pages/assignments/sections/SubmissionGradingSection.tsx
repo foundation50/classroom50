@@ -25,6 +25,8 @@ export function SubmissionGradingSection({
   edit,
   onReset,
   org,
+  classroom,
+  slug,
   hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
@@ -33,6 +35,10 @@ export function SubmissionGradingSection({
   // Org slug for the autograder runner verification; threaded through to the
   // folded-in autograder config.
   org?: string
+  // With `org`, locates the assignment's bundle folder in the config repo for
+  // the tests pane's upload link. `slug` is edit-mode only.
+  classroom?: string
+  slug?: string
   // Edit mode: whether any student has already accepted. Gates the built-in
   // autograder change caveat inside the autograder config.
   hasAcceptedStudents?: boolean
@@ -74,6 +80,8 @@ export function SubmissionGradingSection({
                 <AutograderConfig
                   form={form}
                   org={org}
+                  classroom={classroom}
+                  slug={slug}
                   edit={edit}
                   hasAcceptedStudents={hasAcceptedStudents}
                 />

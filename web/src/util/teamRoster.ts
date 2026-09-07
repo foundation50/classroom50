@@ -2,6 +2,7 @@ import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { parseGitHubId, rosterClaimSet } from "@/util/identity"
+import { githubAvatarUrl } from "@/util/orgUrl"
 import {
   DEFAULT_STUDENT_SORT,
   NAME_COLLATION,
@@ -44,6 +45,11 @@ export {
 //    this classroom's teams — the teacher assigns them a team/role.
 //  - needs_attention_not_in_org: on roster.csv, NOT an org member and no pending
 //    invite — the teacher invites them to the org.
+//  - unlinked: a roster.csv row with NO GitHub identity at all (no username, no
+//    github_id) and nothing backing its email — a name-only row, or an email
+//    row whose invitation died or could never be sent. The sync never removes a
+//    row, so these wait for the teacher to link them to an org member or
+//    delete them — the manual-reconciliation state.
 //
 // The two needs-attention states require org membership to be known. When it
 // isn't (a non-owner who can't read members, or the read failed), those rows
@@ -56,6 +62,7 @@ export type TeamRosterRowState =
   | "pending"
   | "needs_attention_in_org"
   | "needs_attention_not_in_org"
+  | "unlinked"
 
 export type TeamRosterRow = {
   // Stable identity for React keys and joins: github_id || login || email.
@@ -167,6 +174,39 @@ export type BuildTeamRosterInput = {
   // invite, so the whole needs-attention pass is suppressed to avoid mislabeling
   // a pending person as needs_attention_not_in_org.
   pendingHidden?: boolean
+  // roster.csv rows standing in for a team the viewer could not read, keyed by
+  // the role that team backs. Every classroom team is `secret`, so GitHub 404s
+  // it to a non-owner who isn't on it; the CSV (readable with config-repo
+  // `pull`) is the only student list such a viewer has. Emitted as `enrolled`
+  // rows with that role. A person already emitted from a visible team gets the
+  // role unioned, never a second row. See csvRowsForHiddenTeams.
+  fallbackRows?: Partial<Record<ClassroomRole, Student[]>>
+}
+
+// Which roster.csv rows stand in for each team the viewer could not read. A
+// row's recorded `role` picks its team; a blank role is a legacy student row.
+// Rows for a role whose team WAS readable are dropped: the team is the truth
+// there, and a stale CSV role must not resurrect someone the team dropped.
+export function csvRowsForHiddenTeams(
+  students: Student[],
+  hiddenRoles: ReadonlySet<ClassroomRole>,
+): Partial<Record<ClassroomRole, Student[]>> {
+  const out: Partial<Record<ClassroomRole, Student[]>> = {}
+  for (const student of students) {
+    if (!student.github_id?.trim() && !student.username?.trim()) continue
+    const role = csvRole(student)
+    if (!role || !hiddenRoles.has(role)) continue
+    ;(out[role] ??= []).push(student)
+  }
+  return out
+}
+
+const csvRole = (student: Student): ClassroomRole | null => {
+  const raw = student.role?.trim().toLowerCase() ?? ""
+  if (raw === "" || raw === "student") return "student"
+  return (STAFF_ROLES as readonly string[]).includes(raw)
+    ? (raw as StaffRole)
+    : null
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
@@ -185,6 +225,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     orgMemberLogins,
     orgMembersKnown = false,
     pendingHidden = false,
+    fallbackRows = {},
   } = input
   const csv = indexCsv(students)
 
@@ -258,6 +299,45 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     rows.push(row)
   }
 
+  // Fallback rows for teams the viewer could not read (see fallbackRows). Run
+  // after the member loop so a visible team wins the identity and the CSV only
+  // unions a role onto it; run before the pending pass so a stale invite for a
+  // CSV-listed member is skipped the same way it is for a team member.
+  const enrolledByLogin = new Map<string, TeamRosterRow>()
+  for (const row of rows) {
+    if (row.username) enrolledByLogin.set(row.username.toLowerCase(), row)
+  }
+  for (const role of ["student", ...STAFF_ROLES] as const) {
+    for (const student of fallbackRows[role] ?? []) {
+      const id = student.github_id?.trim() ?? ""
+      const login = student.username?.trim() ?? ""
+      const loginKey = login.toLowerCase()
+      if (!id && !loginKey) continue
+      const existing =
+        (id ? enrolledById.get(id) : undefined) ??
+        (loginKey ? enrolledByLogin.get(loginKey) : undefined)
+      if (existing) {
+        addRole(existing, role)
+        continue
+      }
+      const email = student.email?.trim().toLowerCase()
+      const row: TeamRosterRow = {
+        key: id || login,
+        state: "enrolled",
+        roles: [role],
+        username: login,
+        github_id: id,
+        avatar_url: id ? githubAvatarUrl(id) : "",
+        ...metadataFrom(student, donorFor(email)),
+      }
+      if (id) enrolledById.set(id, row)
+      if (loginKey) {
+        enrolledByLogin.set(loginKey, row)
+        memberLogins.add(loginKey)
+      }
+      rows.push(row)
+    }
+  }
   // Pending, tagged by role. Staff-team invitations are AUTHORITATIVE for a
   // staff role and are processed FIRST: adding a not-yet-org-member to a staff
   // team lists them under BOTH that team's invitations (tagged ta/teacher) AND
@@ -378,6 +458,53 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     }
   }
 
+  // Unlinked pass: identity-less rows render as their own rows so the teacher
+  // can link or delete them — the sync never removes a row, so these are the
+  // rows only a teacher action can resolve. Two kinds:
+  //   - a name-only row (no email): nothing can ever back it, always emitted;
+  //   - an email row NO rendered row borrows (no pending invitation carries
+  //     the address, no enrolled row claims it) — the invitation died, or the
+  //     address could never be invited. Suppressed when pendingHidden: without
+  //     the invitation lists, "unbacked" is unknowable, and mislabeling a
+  //     pending student is worse than hiding a row from a non-owner.
+  {
+    const renderedEmails = new Set(
+      rows.map((row) => row.email.trim().toLowerCase()).filter(Boolean),
+    )
+    const seenKeys = new Set<string>()
+    for (const student of students) {
+      if (student.github_id?.trim() || student.username?.trim()) continue
+      const email = student.email?.trim().toLowerCase() ?? ""
+      if (email && (pendingHidden || renderedEmails.has(email))) continue
+      // Stable-ish key from the row's own cells; duplicates get an index
+      // suffix so React keys stay unique (actions on such twins fail closed
+      // on the ambiguous match — see unlinkedRowRef).
+      const base = `unlinked:${
+        email ||
+        [
+          student.first_name?.trim(),
+          student.last_name?.trim(),
+          student.section?.trim(),
+        ]
+          .map((part) => part ?? "")
+          .join("|")
+          .toLowerCase()
+      }`
+      let key = base
+      for (let n = 2; seenKeys.has(key); n++) key = `${base}#${n}`
+      seenKeys.add(key)
+      rows.push({
+        key,
+        state: "unlinked",
+        roles: ["student"],
+        username: "",
+        github_id: "",
+        avatar_url: "",
+        ...metadataFrom(student),
+      })
+    }
+  }
+
   return sortTeamRosterRows(rows)
 }
 
@@ -410,14 +537,8 @@ export function sortTeamRosterRows(
   rows: TeamRosterRow[],
   mode: StudentSortMode = DEFAULT_STUDENT_SORT,
 ): TeamRosterRow[] {
-  const order: Record<TeamRosterRowState, number> = {
-    enrolled: 0,
-    pending: 1,
-    needs_attention_in_org: 2,
-    needs_attention_not_in_org: 3,
-  }
   return rows.toSorted((a, b) => {
-    const byState = order[a.state] - order[b.state]
+    const byState = STATE_ORDER[a.state] - STATE_ORDER[b.state]
     if (byState !== 0) return byState
     return sortName(a, mode).localeCompare(
       sortName(b, mode),
@@ -425,6 +546,64 @@ export function sortTeamRosterRows(
       NAME_COLLATION,
     )
   })
+}
+
+// Enrollment-state precedence shared by the default sort above and the Status
+// column sort below: settled rows first, drift last.
+const STATE_ORDER: Record<TeamRosterRowState, number> = {
+  enrolled: 0,
+  pending: 1,
+  needs_attention_in_org: 2,
+  needs_attention_not_in_org: 3,
+  unlinked: 4,
+}
+
+// The roster table's header sorts — one comparator per sortable column:
+//   member   — display name (first-name collation, like the default sort);
+//   username — GitHub handle, blanks (pending email invites) pinned last;
+//   role     — highest-ranked role, asc = teacher first (the natural "by role"
+//              reading);
+//   section  — locale/numeric section compare, blank sections pinned last in
+//              either direction (a missing value is "no data", not "smallest");
+//   status   — enrollment-state precedence (enrolled -> pending -> drift).
+// `desc` flips only the column comparison; ties always fall back to ascending
+// display name so a reversed column stays internally scannable.
+export type RosterTableSortColumn =
+  "member" | "username" | "role" | "section" | "status"
+export function sortTeamRosterRowsBy(
+  rows: TeamRosterRow[],
+  column: RosterTableSortColumn,
+  direction: "asc" | "desc",
+): TeamRosterRow[] {
+  const flip = direction === "desc" ? -1 : 1
+  const topRank = (row: TeamRosterRow) =>
+    Math.max(0, ...row.roles.map((role) => ROLE_RANK[role]))
+  const byName = (a: TeamRosterRow, b: TeamRosterRow) =>
+    sortName(a).localeCompare(sortName(b), undefined, NAME_COLLATION)
+  // Blank-last compare regardless of direction: the inner flip cancels the
+  // outer one, so "no data" never leads a reversed column.
+  const blankLast = (va: string, vb: string): number => {
+    if (!va || !vb) return flip * (va === vb ? 0 : va ? -1 : 1)
+    return va.localeCompare(vb, undefined, { numeric: true })
+  }
+  const byColumn = (a: TeamRosterRow, b: TeamRosterRow): number => {
+    switch (column) {
+      case "member":
+        return byName(a, b)
+      case "username":
+        return blankLast(
+          a.username.trim().toLowerCase(),
+          b.username.trim().toLowerCase(),
+        )
+      case "role":
+        return topRank(b) - topRank(a)
+      case "section":
+        return blankLast(a.section.trim(), b.section.trim())
+      case "status":
+        return STATE_ORDER[a.state] - STATE_ORDER[b.state]
+    }
+  }
+  return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
 }
 
 // Project a roster row back to the display-metadata Student shape the grade
@@ -459,6 +638,7 @@ export function countByState(
       pending: 0,
       needs_attention_in_org: 0,
       needs_attention_not_in_org: 0,
+      unlinked: 0,
     } as Record<TeamRosterRowState, number>,
   )
 }
@@ -529,6 +709,8 @@ export function rowsNeedingBackfill(
     // Not on any team -> nothing for sync to backfill (a needs-attention row).
     if (!teamRole) return false
     // On a team but the id is blank or unusable, or the recorded role is stale.
-    return parseGitHubId(id ?? "") === null || s.role !== teamRole
+    // Compared through csvRole so " TA " and a blank (= student) read the same
+    // way the hidden-team pass reads them.
+    return parseGitHubId(id ?? "") === null || csvRole(s) !== teamRole
   })
 }

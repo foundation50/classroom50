@@ -1,8 +1,8 @@
-import { useEffect, useId, useRef } from "react"
+import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
-import { Badge, Button, Modal, Heading } from "@/components/ui"
+import { Badge, Button, Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 import { getName, getInitials, firstGrapheme } from "@/util/students"
 
@@ -25,7 +25,6 @@ export const StudentProfileModal = ({
   repoName?: string
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
   const { t } = useTranslation()
 
   // Mounted only while a profile is selected (caller gates + remounts via
@@ -75,24 +74,20 @@ export const StudentProfileModal = ({
       dialogRef={dialogRef}
       onClose={onClose}
       size="md"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-center gap-4">
+      title={<span className="block truncate">{name}</span>}
+      subtitle={
+        student.section?.trim() ? (
+          <Badge ghost>{student.section.trim()}</Badge>
+        ) : undefined
+      }
+      headerVisual={
         <div className="avatar avatar-placeholder">
           <div className="bg-base-200 text-primary rounded-full w-14">
             <span className="text-lg">{initials}</span>
           </div>
         </div>
-        <div className="min-w-0">
-          <Heading as="h3" className="truncate" id={titleId}>
-            {name}
-          </Heading>
-          {student.section?.trim() ? (
-            <Badge ghost>{student.section.trim()}</Badge>
-          ) : null}
-        </div>
-      </div>
-
+      }
+    >
       <dl className="mt-6 divide-y divide-base-200">
         {rows.map((row) => (
           <div

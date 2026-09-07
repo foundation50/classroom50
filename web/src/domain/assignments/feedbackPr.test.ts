@@ -467,6 +467,8 @@ function fakeRepairClient(opts: {
   repoMissing?: boolean
   defaultBranch?: string
   markerCommits?: string[] // oldest resolves to markerCommits[last]
+  // HTTP status the marker commit-history read fails with (a 5xx / rate limit).
+  markerReadError?: number
   existingPr?: { number: number; state: string }
 }) {
   const calls: Call[] = []
@@ -482,6 +484,9 @@ function fakeRepairClient(opts: {
         return { default_branch: opts.defaultBranch ?? "main" }
       }
       if (url.startsWith("/repos/o/r/commits?path=")) {
+        if (opts.markerReadError) {
+          throw apiError(opts.markerReadError, "Server Error")
+        }
         // getOldestCommitShaForPath returns newest-first; it takes the last.
         return (opts.markerCommits ?? []).map((sha) => ({ sha }))
       }
@@ -568,7 +573,7 @@ describe("repairFeedbackPullRequest", () => {
     expect(writeCalls(calls)).toHaveLength(0)
   })
 
-  it("reports unsupported when the repo has no baseline marker (e.g. empty_repo)", async () => {
+  it("reports unsupported (no-baseline) when the marker history is empty", async () => {
     const { client, calls } = fakeRepairClient({ markerCommits: [] })
     const result = await repairFeedbackPullRequest({
       client,
@@ -582,6 +587,21 @@ describe("repairFeedbackPullRequest", () => {
       unsupported: true,
     })
     // Never attempts any write when there's nothing to anchor the base on.
+    expect(writeCalls(calls)).toHaveLength(0)
+  })
+
+  // "no-baseline" sends the teacher to the student ("re-run setup"), so it
+  // must never be the verdict for a read that simply failed (issue #502 review).
+  it("reports a transient failure, not no-baseline, when the marker read fails", async () => {
+    const { client, calls } = fakeRepairClient({ markerReadError: 500 })
+    const result = await repairFeedbackPullRequest({
+      client,
+      org: "o",
+      repo: "r",
+      mode: "individual",
+    })
+    expect(result).toMatchObject({ ok: false, code: "transient" })
+    expect(result).not.toHaveProperty("unsupported")
     expect(writeCalls(calls)).toHaveLength(0)
   })
 
@@ -613,7 +633,9 @@ const repoOf = (url: string) => url.split("/")[3]
 // Behaviors keyed by repo name:
 //  - "created-*": has a marker + diff, no existing PR -> creates.
 //  - "existed-*": an existing PR short-circuits -> existed.
-//  - "nomarker-*": the marker commit history is empty -> unsupported.
+//  - "nomarker-*": the marker commit history is empty -> incomplete.
+//  - "readfail-*": the marker history read 500s -> failed (retryable), never
+//    incomplete.
 //  - "missing-*": GET /repos 404s -> unsupported (repo-not-found).
 //  - "blocked-*": the feedback ref already exists at a NON-baseline SHA (a
 //    student pre-created it) -> base-mismatch -> blocked (never retryable).
@@ -630,6 +652,7 @@ function fakeBatchClient() {
         return { default_branch: "main" }
       }
       if (url.startsWith(`${base}/commits?path=`)) {
+        if (repo.startsWith("readfail")) throw apiError(500, "Server Error")
         // Empty history for the no-marker repos; one baseline commit otherwise.
         return repo.startsWith("nomarker") ? [] : [{ sha: "accept-sha" }]
       }
@@ -674,6 +697,7 @@ describe("openAllFeedbackPullRequests", () => {
       "created-b",
       "existed-a",
       "nomarker-a",
+      "readfail-a",
       "missing-a",
       "blocked-a",
       "fail-a",
@@ -688,20 +712,25 @@ describe("openAllFeedbackPullRequests", () => {
       onProgress: (p) => progress.push(p.done),
     })
 
-    expect(summary.total).toBe(7)
+    expect(summary.total).toBe(8)
     expect(summary.created).toBe(2)
     expect(summary.existed).toBe(1)
-    expect(summary.unsupported.map((r) => r.repo).toSorted()).toEqual([
-      "missing-a",
-      "nomarker-a",
-    ])
+    // A missing marker is the student's problem to fix (re-run setup), so it
+    // gets its own bucket, apart from a repo that simply isn't there.
+    expect(summary.incomplete.map((r) => r.repo)).toEqual(["nomarker-a"])
+    expect(summary.unsupported.map((r) => r.repo)).toEqual(["missing-a"])
     // The never-retryable base-mismatch is a distinct bucket, NOT `failed`, so
     // the modal's "re-run to retry" copy can't cover it.
     expect(summary.blocked.map((r) => r.repo)).toEqual(["blocked-a"])
-    expect(summary.failed.map((r) => r.repo)).toEqual(["fail-a"])
+    // A failed marker READ is transient: it must never masquerade as a
+    // never-finished accept.
+    expect(summary.failed.map((r) => r.repo).toSorted()).toEqual([
+      "fail-a",
+      "readfail-a",
+    ])
     // Progress fires once per repo and reaches the total.
-    expect(progress).toHaveLength(7)
-    expect(Math.max(...progress)).toBe(7)
+    expect(progress).toHaveLength(8)
+    expect(Math.max(...progress)).toBe(8)
   })
 
   it("handles an empty repo list without any requests", async () => {

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert, FormField } from "@/components/ui"
+import { Alert, FormField, Radio } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
 
@@ -71,10 +71,9 @@ export function AutogradingStateField({
                       htmlFor={`${field.name}-${option}`}
                       className="flex cursor-pointer items-start justify-start gap-3"
                     >
-                      <input
+                      <Radio
                         id={`${field.name}-${option}`}
-                        type="radio"
-                        className="radio mt-1"
+                        className="mt-1"
                         name={field.name}
                         value={option}
                         checked={selected === option}

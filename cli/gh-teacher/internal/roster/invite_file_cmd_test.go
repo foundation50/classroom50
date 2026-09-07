@@ -478,7 +478,7 @@ func TestRunRosterInviteFile_CommitFailureWarnsRepair(t *testing.T) {
 	}
 	// The repair must be one that actually works: re-running records the row,
 	// and a sync heals it once the student accepts.
-	if !strings.Contains(errOut, "re-run this command") {
+	if !strings.Contains(errOut, "Re-run this command") {
 		t.Errorf("commit-failure warning must name re-running as the repair:\n%s", errOut)
 	}
 	if len(mock.invitedEmails) != 1 {

@@ -240,12 +240,12 @@ const OrgSteps = ({
 
 const NotAdminAlert = () => {
   const { t } = useTranslation()
-  return <Alert tone="error">{t("setup.notAdmin")}</Alert>
+  return <Alert tone="unavailable">{t("setup.notAdmin")}</Alert>
 }
 
 const NotTeamOrEnterpriseNotice = () => {
   const { t } = useTranslation()
-  return <Alert tone="error">{t("setup.notTeamOrEnterprise")}</Alert>
+  return <Alert tone="unavailable">{t("setup.notTeamOrEnterprise")}</Alert>
 }
 
 // Derive the wizard stage from what exists on GitHub (config repo + service

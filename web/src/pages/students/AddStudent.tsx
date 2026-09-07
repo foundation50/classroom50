@@ -1,16 +1,10 @@
-import {
-  MailIcon,
-  MarkGithubIcon,
-  PeopleIcon,
-  PersonIcon,
-} from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
-import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { StudentAlreadyEnrolledError } from "@/domain/students"
@@ -25,7 +19,6 @@ import {
   Input,
   Modal,
   Select,
-  Heading,
 } from "@/components/ui"
 
 // Roster "Add member" roles, in display order. Student (default) enrolls via the
@@ -43,7 +36,8 @@ type AddStudentProps = {
 }
 
 type AddStudentFormValues = {
-  name: string
+  first_name: string
+  last_name: string
   username: string
   email: string
   section: string
@@ -65,8 +59,8 @@ const AddStudent = ({
 }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const { t } = useTranslation()
-  const { notify } = useToast()
-  const titleId = useId()
+  // Ties the footer's submit button (outside the <form> element) to the form.
+  const formId = useId()
   const roleId = useId()
   const [warning, setWarning] = useState("")
   const [success, setSuccess] = useState("")
@@ -80,7 +74,8 @@ const AddStudent = ({
 
   const form = useForm({
     defaultValues: {
-      name: "",
+      first_name: "",
+      last_name: "",
       username: "",
       email: "",
       section: "",
@@ -158,8 +153,9 @@ const AddStudent = ({
   })
 
   // Staff branch: delegate to the staff-team backend (config-repo write). A
-  // successful add toasts and clears the username; failures stay in-modal as a
-  // warning so the teacher can correct and retry.
+  // successful add confirms in-modal (matching the student branch) and clears
+  // the form; failures stay in-modal as a warning so the teacher can correct
+  // and retry.
   const submitStaff = async (username: string, staffRole: StaffRole) => {
     await addStaffMutation
       .mutateAsync(
@@ -167,14 +163,12 @@ const AddStudent = ({
         {
           onSuccess: ({ trimmed, role: addedRole }) => {
             form.reset()
-            notify({
-              tone: "success",
-              durationMs: 5000,
-              message: t("toasts.staffAdded", {
+            setSuccess(
+              t("toasts.staffAdded", {
                 username: trimmed,
                 role: t(ROLE_LABEL_KEY[addedRole]),
               }),
-            })
+            )
           },
           onError: (err) => {
             setSuccess("")
@@ -191,8 +185,7 @@ const AddStudent = ({
 
   const submitting = form.state.isSubmitting || addStaffMutation.isPending
 
-  // Reset transient state whenever the modal opens (Modal owns the open/close
-  // sync now).
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
     if (!open) return
     setWarning("")
@@ -211,25 +204,49 @@ const AddStudent = ({
       open={open}
       onClose={closeDialog}
       closeDisabled={submitting}
-      size="lg"
-      aria-labelledby={titleId}
+      size="2xl"
+      title={t("students.addTitle")}
+      subtitle={
+        isStaffRole ? t("students.addStaffHint") : t("students.addHint")
+      }
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={submitting}
+            onClick={closeDialog}
+          >
+            {t("common.close")}
+          </Button>
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
+              <Button
+                type="submit"
+                form={formId}
+                // Enabled while invalid (Primer): submit runs the validators
+                // and surfaces errors. The team gate stays — the classroom
+                // team is still being ensured, a loading dependency for the
+                // student branch, not a validity check.
+                disabled={isSubmitting || (!isStaffRole && !team)}
+                variant="primary"
+              >
+                {!isSubmitting
+                  ? t("students.addButton")
+                  : t("students.submitting")}
+              </Button>
+            )}
+          </form.Subscribe>
+        </>
+      }
     >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <Heading as="h3" id={titleId}>
-            {t("students.addTitle")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {isStaffRole ? t("students.addStaffHint") : t("students.addHint")}
-          </p>
-        </div>
-      </div>
-
       <form
+        id={formId}
         onSubmit={(e) => {
           e.preventDefault()
           e.stopPropagation()
-          form.handleSubmit()
+          const formEl = e.currentTarget as HTMLFormElement
+          void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
         }}
       >
         <AnimatedAlert tone="warning" show={!!warning} className="mt-4 text-sm">
@@ -259,31 +276,53 @@ const AddStudent = ({
           </div>
 
           {!isStaffRole && (
-            <form.Field name="name">
-              {(field) => (
-                <FormField htmlFor={field.name} label={t("students.nameLabel")}>
-                  {({ id, describedById, invalid }) => (
-                    <Input
-                      leadingIcon={
-                        <PersonIcon
-                          className="size-4 text-base-content/50"
-                          aria-hidden="true"
-                        />
-                      }
-                      id={id}
-                      name={field.name}
-                      type="text"
-                      placeholder={t("students.namePlaceholder")}
-                      aria-describedby={describedById}
-                      invalid={invalid}
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
-                  )}
-                </FormField>
-              )}
-            </form.Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <form.Field name="first_name">
+                {(field) => (
+                  <FormField
+                    htmlFor={field.name}
+                    label={t("students.firstNameLabel")}
+                  >
+                    {({ id, describedById, invalid }) => (
+                      <Input
+                        id={id}
+                        name={field.name}
+                        type="text"
+                        placeholder={t("students.firstNamePlaceholder")}
+                        aria-describedby={describedById}
+                        invalid={invalid}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                    )}
+                  </FormField>
+                )}
+              </form.Field>
+
+              <form.Field name="last_name">
+                {(field) => (
+                  <FormField
+                    htmlFor={field.name}
+                    label={t("students.lastNameLabel")}
+                  >
+                    {({ id, describedById, invalid }) => (
+                      <Input
+                        id={id}
+                        name={field.name}
+                        type="text"
+                        placeholder={t("students.lastNamePlaceholder")}
+                        aria-describedby={describedById}
+                        invalid={invalid}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                    )}
+                  </FormField>
+                )}
+              </form.Field>
+            </div>
           )}
 
           <form.Field name="username">
@@ -299,12 +338,6 @@ const AddStudent = ({
               >
                 {({ id, describedById, invalid }) => (
                   <Input
-                    leadingIcon={
-                      <MarkGithubIcon
-                        className="size-4 opacity-40"
-                        aria-hidden="true"
-                      />
-                    }
                     id={id}
                     name={field.name}
                     type="text"
@@ -335,12 +368,6 @@ const AddStudent = ({
                 >
                   {({ id, describedById, invalid }) => (
                     <Input
-                      leadingIcon={
-                        <MailIcon
-                          className="size-4 text-base-content/50"
-                          aria-hidden="true"
-                        />
-                      }
                       id={id}
                       name={field.name}
                       type="email"
@@ -366,12 +393,6 @@ const AddStudent = ({
                 >
                   {({ id, describedById, invalid }) => (
                     <Input
-                      leadingIcon={
-                        <PeopleIcon
-                          className="size-4 text-base-content/50"
-                          aria-hidden="true"
-                        />
-                      }
                       id={id}
                       name={field.name}
                       type="text"
@@ -387,32 +408,6 @@ const AddStudent = ({
               )}
             </form.Field>
           )}
-        </div>
-
-        <div className="modal-action">
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={submitting}
-            onClick={closeDialog}
-          >
-            {t("common.close")}
-          </Button>
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => (
-              <Button
-                type="submit"
-                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
-                variant="primary"
-              >
-                {!isSubmitting
-                  ? t("students.addButton")
-                  : t("students.submitting")}
-              </Button>
-            )}
-          </form.Subscribe>
         </div>
       </form>
     </Modal>

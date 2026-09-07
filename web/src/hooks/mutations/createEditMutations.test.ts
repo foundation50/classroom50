@@ -13,7 +13,12 @@ const createClassroomFilesWithConflictRetry = vi.fn<
 >(() => Promise.resolve({ newCommitSha: "sha-c" }))
 const editClassroomWithConflictRetry = vi.fn<
   (...args: unknown[]) => Promise<unknown>
->(() => Promise.resolve({ newCommitSha: "sha-e" }))
+>(() =>
+  Promise.resolve({
+    newCommitSha: "sha-e",
+    teamDescription: { changed: false },
+  }),
+)
 const createAssignment = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({ newCommitSha: "sha-a" }),
 )
@@ -119,11 +124,44 @@ describe("useEditClassroom", () => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.jsonFile(ORG, CONFIG_REPO),
     })
+    // An unchanged team description leaves the student enumeration cache alone.
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: githubKeys.myTeams(),
+    })
     expect(editClassroomWithConflictRetry).toHaveBeenCalledWith(
       expect.anything(),
       { slug: CLASSROOM, org: ORG },
     )
-    expect(onWrite).toHaveBeenCalledWith({ newCommitSha: "sha-e" })
+    expect(onWrite).toHaveBeenCalledWith({
+      newCommitSha: "sha-e",
+      teamDescription: { changed: false },
+    })
+  })
+
+  it("invalidates my-teams when the edit rewrote the team description", async () => {
+    // A rename re-projects the classroom50/team/v1 record onto the student
+    // team; GET /user/teams must refresh so a teacher previewing as a student
+    // sees the new name.
+    editClassroomWithConflictRetry.mockResolvedValueOnce({
+      newCommitSha: "sha-e",
+      teamDescription: { changed: true, slug: "classroom50-cs101" },
+    })
+    const queryClient = freshClient()
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+    const { result } = renderHook(() => useEditClassroom(ORG, CLASSROOM), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    result.current.mutate({
+      slug: CLASSROOM,
+      org: ORG,
+      name: "Renamed",
+    } as never)
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: githubKeys.myTeams(),
+    })
   })
 })
 

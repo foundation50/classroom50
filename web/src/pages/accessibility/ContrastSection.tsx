@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import { InfoIcon } from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Modal } from "@/components/ui"
+import { useRovingTabList } from "@/hooks/useRovingTabList"
 
 import {
   STATUS_TONE,
@@ -87,13 +88,14 @@ function PairDetailModal({ row, onClose }: { row: Row; onClose: () => void }) {
   }, [])
 
   return (
-    <Modal dialogRef={dialogRef} onClose={onClose} size="lg">
-      <div className="flex flex-col gap-4">
-        <div>
-          <h3 className="font-mono text-sm font-semibold">{row.id}</h3>
-          <p className="text-sm text-base-content/70">{row.label}</p>
-        </div>
-
+    <Modal
+      dialogRef={dialogRef}
+      onClose={onClose}
+      size="lg"
+      title={<span className="font-mono">{row.id}</span>}
+      subtitle={row.label}
+    >
+      <div className="mt-4 flex flex-col gap-4">
         {/* The combined sample: real foreground on the real surface — the way
             WebAIM and other contrast tools preview a pair, because contrast is
             a property of the combination, not two isolated swatches. */}
@@ -161,6 +163,8 @@ function ThemeTable({
   return (
     <Card shadow={false}>
       <Card.Body className="gap-3 p-4">
+        {/* Deliberately not TableShell: the table already sits inside a Card,
+            and the shell's framed box would double-frame it. */}
         <div className="overflow-x-auto">
           <table className="table table-sm">
             <thead>
@@ -216,6 +220,11 @@ export function ContrastSection() {
 
   const activeTheme = pickedTheme ?? audit?.themes[0]?.theme ?? null
   const shownTheme = audit?.themes.find((th) => th.theme === activeTheme)
+  const tabsId = useId()
+  const tabProps = useRovingTabList(
+    audit?.themes.length ?? 0,
+    audit?.themes.findIndex((th) => th.theme === activeTheme) ?? 0,
+  )
   const marginCount = audit?.summary.marginMisses ?? 0
 
   return (
@@ -251,14 +260,17 @@ export function ContrastSection() {
 
           <div className="flex flex-wrap items-center gap-3">
             <div role="tablist" className="tabs-boxed tabs w-fit">
-              {audit.themes.map((th) => (
+              {audit.themes.map((th, index) => (
                 <button
                   key={th.theme}
                   type="button"
                   role="tab"
+                  id={`${tabsId}-tab-${th.theme}`}
                   aria-selected={th.theme === activeTheme}
+                  aria-controls={`${tabsId}-panel`}
                   className={tabClass(th.theme === activeTheme)}
                   onClick={() => setPickedTheme(th.theme)}
+                  {...tabProps(index)}
                 >
                   {th.label}
                 </button>
@@ -267,7 +279,13 @@ export function ContrastSection() {
           </div>
 
           {shownTheme && (
-            <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
+            <div
+              role="tabpanel"
+              id={`${tabsId}-panel`}
+              aria-labelledby={`${tabsId}-tab-${shownTheme.theme}`}
+            >
+              <ThemeTable theme={shownTheme} onOpenRow={setSelectedRow} />
+            </div>
           )}
 
           <details className="collapse-arrow collapse rounded-box border border-base-300 bg-base-100">

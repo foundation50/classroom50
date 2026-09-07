@@ -13,6 +13,18 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   return { ...actual, Link: ({ children }: { children?: unknown }) => children }
 })
 
+// RouterButton (createLink) needs a router context; stub just that primitive
+// to a plain anchor so the list renders without a RouterProvider.
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({ children }: { children?: React.ReactNode }) => (
+      <a href="/mock">{children}</a>
+    ),
+  }
+})
+
 // Drive the sort key; changeSort is captured so a test can flip it at runtime.
 let sortKey = "name-asc"
 const changeSort = vi.fn((k: string) => {

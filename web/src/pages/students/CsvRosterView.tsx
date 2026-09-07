@@ -2,7 +2,14 @@ import { useMemo, useState } from "react"
 import { EmptyState } from "@/components/list"
 import { useTranslation } from "react-i18next"
 
-import { Alert, SkeletonRows, Toolbar } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  SkeletonRows,
+  TableShell,
+  Toolbar,
+} from "@/components/ui"
+import { AlertIcon } from "@/components/ui/icons"
 import { RoleBadges } from "./RoleBadges"
 import { StudentSortSelect } from "./StudentSortSelect"
 import { coerceImportRole } from "./rosterImportParse"
@@ -29,12 +36,18 @@ function displayName(student: Student): string {
 const CsvRosterView = ({
   students,
   loading = false,
+  loadError = false,
+  onRetryLoad,
 }: {
   students: Student[]
   // Hold skeleton rows while roster.csv loads — the empty-while-loading array
   // is indistinguishable from a genuinely empty roster, so rendering on it
   // flashes the "empty roster" row.
   loading?: boolean
+  // A failed (non-404) roster read. Rendered as an error row with retry —
+  // never as the "empty roster" row, which reads as data loss.
+  loadError?: boolean
+  onRetryLoad?: () => void
 }) => {
   const { t } = useTranslation()
   const [sortMode, setSortMode] =
@@ -57,59 +70,72 @@ const CsvRosterView = ({
         </Toolbar>
       ) : null}
 
-      <div className="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-        <table className="table" aria-busy={loading || undefined}>
-          <caption className="sr-only">
-            {t("students.csvRoster.caption")}
-          </caption>
-          <thead>
+      <TableShell animate={false} ariaBusy={loading}>
+        <caption className="sr-only">{t("students.csvRoster.caption")}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t("students.csvRoster.colName")}</th>
+            <th scope="col">{t("students.csvRoster.colSection")}</th>
+            <th scope="col">{t("students.csvRoster.colRole")}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <SkeletonRows rows={3} bars={["w-40", "w-16", "w-20"]} />
+          ) : loadError ? (
             <tr>
-              <th scope="col">{t("students.csvRoster.colName")}</th>
-              <th scope="col">{t("students.csvRoster.colSection")}</th>
-              <th scope="col">{t("students.csvRoster.colRole")}</th>
+              <td colSpan={3} className="px-6 py-10 text-center">
+                <span
+                  role="alert"
+                  className="inline-flex items-center gap-2 text-sm text-error"
+                >
+                  <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
+                  {t("students.rosterLoadError")}
+                </span>
+                <div className="mt-3">
+                  <Button variant="ghost" size="sm" onClick={onRetryLoad}>
+                    {t("students.rosterRetry")}
+                  </Button>
+                </div>
+              </td>
             </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <SkeletonRows rows={3} bars={["w-40", "w-16", "w-20"]} />
-            ) : rows.length === 0 ? (
-              <tr>
-                <td colSpan={3}>
-                  <EmptyState
-                    variant="bare"
-                    body={t("students.csvRoster.empty")}
+          ) : rows.length === 0 ? (
+            <tr>
+              <td colSpan={3}>
+                <EmptyState
+                  variant="bare"
+                  body={t("students.csvRoster.empty")}
+                />
+              </td>
+            </tr>
+          ) : (
+            rows.map((student) => (
+              // studentKey falls back to the email, so two pending invites
+              // don't collide on an empty key.
+              <tr key={studentKey(student)}>
+                <td>
+                  <div className="font-bold">{displayName(student)}</div>
+                  {student.username ? (
+                    <div className="font-mono text-xs text-base-content/70">
+                      {student.username}
+                    </div>
+                  ) : student.email ? (
+                    <div className="text-xs text-base-content/70">
+                      {t("students.csvRoster.invitePending")}
+                    </div>
+                  ) : null}
+                </td>
+                <td>{student.section || "—"}</td>
+                <td>
+                  <RoleBadges
+                    roles={[coerceImportRole(student.role) ?? "student"]}
                   />
                 </td>
               </tr>
-            ) : (
-              rows.map((student) => (
-                // studentKey falls back to the email, so two pending invites
-                // don't collide on an empty key.
-                <tr key={studentKey(student)}>
-                  <td>
-                    <div className="font-bold">{displayName(student)}</div>
-                    {student.username ? (
-                      <div className="font-mono text-xs text-base-content/70">
-                        {student.username}
-                      </div>
-                    ) : student.email ? (
-                      <div className="text-xs text-base-content/70">
-                        {t("students.csvRoster.invitePending")}
-                      </div>
-                    ) : null}
-                  </td>
-                  <td>{student.section || "—"}</td>
-                  <td>
-                    <RoleBadges
-                      roles={[coerceImportRole(student.role) ?? "student"]}
-                    />
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+            ))
+          )}
+        </tbody>
+      </TableShell>
     </div>
   )
 }

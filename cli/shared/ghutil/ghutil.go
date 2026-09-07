@@ -216,7 +216,7 @@ func ResolveSettledDefaultBranch(client *api.RESTClient, owner, repo, fallback s
 
 // CurrentUser returns the authenticated user's login and immutable numeric ID
 // via GET /user. Callers needing only the login can ignore the id (e.g.
-// whoami); gh-student's identity.Fetch uses both to build the noreply email.
+// whoami); gh-student's identity.Resolve uses both to build the noreply email.
 func CurrentUser(client *api.RESTClient) (login string, id int64, err error) {
 	var user struct {
 		Login string `json:"login"`

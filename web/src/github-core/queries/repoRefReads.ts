@@ -9,8 +9,16 @@ import type {
 } from "../types"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { tolerateGitHubError } from "../errors"
-import { paginateAll } from "../paginate"
+import {
+  PAGE_FETCH_CONCURRENCY,
+  paginateAll,
+  paginateFirstPage,
+  paginateRemaining,
+  withTransientRetry,
+} from "../paginate"
+import { getRepo } from "../repoReads"
 import { githubKeys } from "./keys"
+import { withGithubReadSlot } from "./shared"
 
 export function getBranchRefRepo(
   client: GitHubClient,
@@ -102,19 +110,120 @@ export function repoQuery(client: GitHubClient, owner: string, repo: string) {
   })
 }
 
-export async function getOrgRepos(client: GitHubClient, owner: string) {
-  // Paginate to exhaustion: a single per_page=100 page silently under-counts
-  // orgs with >100 repos, making repo-list-derived signals (e.g., assignment
-  // acceptance on the submissions dashboard) miss students in large orgs. A
-  // first-page 404 surfaces as null.
+// The org listing walk: page 1 alone, then the rest concurrently. Oldest first,
+// so a repo created while pages are in flight lands after them instead of
+// shifting every page (the default is newest first). The longest walk in the
+// app, so one late page retries on its own rather than sending the query back
+// to page 1.
+function orgReposWalk(owner: string, signal: AbortSignal | undefined) {
+  return {
+    makePath: (page: number) =>
+      `/orgs/${owner}/repos?per_page=100&page=${page}&type=all&sort=created&direction=asc`,
+    options: { signal, retryPages: true, concurrency: PAGE_FETCH_CONCURRENCY },
+  }
+}
+
+// Every repo in the org. Paginate to exhaustion: a single per_page=100 page
+// silently under-counts orgs with >100 repos, making repo-list-derived signals
+// (e.g., assignment acceptance on the submissions dashboard) miss students in
+// large orgs. A first-page 404 surfaces as null.
+export async function getOrgRepos(
+  client: GitHubClient,
+  owner: string,
+  options: { signal?: AbortSignal } = {},
+) {
+  const { makePath, options: walk } = orgReposWalk(owner, options.signal)
   return tolerateGitHubError(
-    () =>
-      paginateAll<GitHubRepo>(
-        client,
-        (page) => `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`,
-      ),
+    () => paginateAll<GitHubRepo>(client, makePath, walk),
     null,
   )
+}
+
+export type AssignmentRepos = {
+  // null when the org itself 404s, like getOrgRepos.
+  repos: GitHubRepo[] | null
+  // Whether `repos` is the whole org listing (and so worth caching as one)
+  // rather than page 1 plus the candidates that exist.
+  complete: boolean
+}
+
+// The org repos a caller will look up by exact name. After page 1 reveals the
+// page count, when there are no more candidates left unresolved than pages
+// left, each candidate is read directly instead of walking the org: a
+// 30-student section in a 9,000-repo org is 30 small requests instead of 89
+// heavy pages. Either way the result is a superset of the candidates that
+// exist, which the name-filtering consumers read unchanged.
+export async function getAssignmentRepos(
+  client: GitHubClient,
+  owner: string,
+  candidateNames: readonly string[],
+  options: { signal?: AbortSignal } = {},
+): Promise<AssignmentRepos> {
+  const { signal } = options
+  const { makePath, options: walk } = orgReposWalk(owner, signal)
+  return tolerateGitHubError(
+    async () => {
+      const first = await paginateFirstPage<GitHubRepo>(client, makePath, walk)
+      if (first.lastPage !== null) {
+        const onFirstPage = new Set(
+          first.items.map((repo) => repo.name.toLowerCase()),
+        )
+        const unresolved = [
+          ...new Set(candidateNames.map((name) => name.toLowerCase())),
+        ].filter((name) => !onFirstPage.has(name))
+        // Same rule as the collect script: never more requests than the pages.
+        if (unresolved.length <= first.lastPage - 1) {
+          const probed = await probeRepos(client, owner, unresolved, signal)
+          return {
+            repos: first.items.concat(probed),
+            complete: false,
+          }
+        }
+      }
+      return {
+        repos: await paginateRemaining(client, makePath, first, walk),
+        complete: true,
+      }
+    },
+    { repos: null, complete: false },
+  )
+}
+
+// The candidate repos that exist, read by exact name. Mirrors paginateRemaining:
+// one probe failing definitively ends the fan-out and aborts its siblings, and
+// the retry waits outside the read slot so a throttled probe does not hold one
+// of the few slots while it sleeps. The slot is the only bound: it already caps
+// the aggregate wire concurrency, so the fan-out starts every probe and lets
+// them queue on it.
+async function probeRepos(
+  client: GitHubClient,
+  owner: string,
+  names: readonly string[],
+  signal: AbortSignal | undefined,
+): Promise<GitHubRepo[]> {
+  const fanOut = new AbortController()
+  const onCallerAbort = () => fanOut.abort(signal?.reason)
+  if (signal?.aborted) onCallerAbort()
+  signal?.addEventListener("abort", onCallerAbort, { once: true })
+  try {
+    const probed = await Promise.all(
+      names.map((name) =>
+        withTransientRetry(
+          () =>
+            withGithubReadSlot(() =>
+              getRepo(client, owner, name, fanOut.signal),
+            ),
+          fanOut.signal,
+        ),
+      ),
+    )
+    return probed.filter((repo): repo is GitHubRepo => repo !== null)
+  } catch (err) {
+    fanOut.abort(err)
+    throw err
+  } finally {
+    signal?.removeEventListener("abort", onCallerAbort)
+  }
 }
 
 // Open PRs on a student/group repo. The autograde workflow opens one Feedback

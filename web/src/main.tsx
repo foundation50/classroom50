@@ -17,6 +17,9 @@ import { NotificationProvider } from "./context/notifications/NotificationProvid
 import { HiddenOrgsProvider } from "./context/hiddenOrgs/HiddenOrgsProvider"
 import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
 import { ActionsBanner } from "./components/status/ActionsBanner"
+import { BackgroundPassTag } from "./components/status/BackgroundPassTag"
+import { KeepTabOpenGuard } from "./components/status/KeepTabOpenGuard"
+import { LiveAnnouncer } from "./components/status/LiveAnnouncer"
 import { RouteProgressBar } from "./components/status/RouteProgressBar"
 import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
 import App from "./App"
@@ -104,6 +107,9 @@ createRoot(document.getElementById("root")!).render(
               <NotificationProvider>
                 <HiddenOrgsProvider>
                   <RouteProgressBar />
+                  <LiveAnnouncer />
+                  <BackgroundPassTag />
+                  <KeepTabOpenGuard />
                   <App />
                   <ActionsBanner />
                   <LanguagePackUpdateToaster />

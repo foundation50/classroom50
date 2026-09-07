@@ -64,3 +64,55 @@ describe("NotificationProvider toast action", () => {
     expect(screen.queryByText("Undo")).toBeNull()
   })
 })
+
+describe("NotificationProvider announce", () => {
+  function FireAnnounce() {
+    const { announce } = useToast()
+    return <button onClick={() => announce("Classroom deleted.")}>fire</button>
+  }
+
+  it("renders an always-mounted sr-only polite region and fills it on announce", async () => {
+    const { container } = render(
+      <NotificationProvider>
+        <FireAnnounce />
+      </NotificationProvider>,
+    )
+    // The live region must exist BEFORE it changes to be announced.
+    const region = container.querySelector('div.sr-only[role="status"]')
+    expect(region).toBeTruthy()
+    expect(region?.getAttribute("aria-live")).toBe("polite")
+    expect(region?.textContent).toBe("")
+
+    await userEvent.click(screen.getByText("fire"))
+    // Content lands after the clear-then-set tick (re-announce support).
+    await waitFor(() => expect(region?.textContent).toBe("Classroom deleted."))
+    // No visible toast accompanies it.
+    expect(container.querySelector(".toast .alert")).toBeNull()
+  })
+
+  it("joins announcements fired inside one flush window instead of dropping", async () => {
+    function FireTwo() {
+      const { announce } = useToast()
+      return (
+        <button
+          onClick={() => {
+            announce("First done.")
+            announce("Second done.")
+          }}
+        >
+          fire
+        </button>
+      )
+    }
+    const { container } = render(
+      <NotificationProvider>
+        <FireTwo />
+      </NotificationProvider>,
+    )
+    const region = container.querySelector('div.sr-only[role="status"]')
+    await userEvent.click(screen.getByText("fire"))
+    await waitFor(() =>
+      expect(region?.textContent).toBe("First done. Second done."),
+    )
+  })
+})

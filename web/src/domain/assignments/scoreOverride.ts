@@ -21,7 +21,7 @@ import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
 type SubmissionRecord = {
   schema: string
   classroom: string
-  assignment_type: "individual" | "group"
+  assignment_type: "individual" | "group" | "team"
   owner: string
   submission: string
   commit: string
@@ -37,13 +37,15 @@ type SubmissionRecord = {
 type ScoreEntry = {
   owner: string
   member_usernames?: string[]
+  // Team-mode crediting: the group's GitHub Team slug (scores-v1 `team_slug`).
+  team_slug?: string
   submissions: SubmissionRecord[]
   override?: boolean
   [key: string]: unknown
 }
 
 type AssignmentBucket = {
-  type: "individual" | "group"
+  type: "individual" | "group" | "team"
   entries: ScoreEntry[]
   // e.g. the collector's `collected_at` — preserved verbatim on RMW.
   [key: string]: unknown
@@ -67,13 +69,18 @@ export type SetScoreOverrideInput = {
   org: string
   classroom: string
   assignment: string
-  // Repo owner login — the stable per-bucket key (individual student, or group
-  // founder). Case-insensitive on match; stored as given for a new entry.
+  // Repo owner login — the stable per-bucket key (individual student, group
+  // founder, or the team repo's `group-<n>` owner segment). Case-insensitive
+  // on match; stored as given for a new entry.
   owner: string
-  // Group crediting for a new entry (individual entries omit it and are
-  // credited to `owner`). Ignored when clearing.
+  // Group/team crediting for a new entry (individual entries omit it and are
+  // credited to `owner`). Team rows credit LIVE team members. Ignored when
+  // clearing.
   memberUsernames?: string[]
-  assignmentType: "individual" | "group"
+  assignmentType: "individual" | "group" | "team"
+  // Team-mode: the group team's slug, recorded on a new entry (scores-v1
+  // `team_slug`). Ignored for other modes and when clearing.
+  teamSlug?: string
   // The teacher-entered score and its max (max >= 1). Ignored when clearing.
   score?: number
   maxPoints?: number
@@ -259,11 +266,15 @@ export async function editScoreOverride(
           submissions: [record],
         }
         if (
-          input.assignmentType === "group" &&
+          (input.assignmentType === "group" ||
+            input.assignmentType === "team") &&
           input.memberUsernames &&
           input.memberUsernames.length > 0
         ) {
           entry.member_usernames = input.memberUsernames
+        }
+        if (input.assignmentType === "team" && input.teamSlug) {
+          entry.team_slug = input.teamSlug
         }
         bucket.entries.push(entry)
       }

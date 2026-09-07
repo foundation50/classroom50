@@ -16,6 +16,7 @@ import {
   useSkeletonOverwriteConfirm,
 } from "@/components/skeletonOverwrite/skeletonOverwriteUi"
 import { Button } from "@/components/ui"
+import { useBannerSlot } from "@/context/bannerStack/BannerStackProvider"
 
 export type DriftBannerView = "warning" | "success" | "hidden"
 
@@ -110,13 +111,15 @@ export function SkeletonDriftBanner() {
     isPending: pendingOrg === org,
     fixResolvedClean: fixedCleanOrg === org,
   })
+  const granted = useBannerSlot("skeleton-drift", view !== "hidden")
 
   const isSuccess = view === "success"
 
   return (
     <>
       <AnimatePresence initial={false}>
-        {view !== "hidden" ? (
+        {/* view !== "hidden" repeats the claim only for TS narrowing of `tone`. */}
+        {view !== "hidden" && granted ? (
           // key stays view-scoped so AnimatePresence animates the warning->success swap.
           <AppBanner
             key={isSuccess ? "skeleton-drift-success" : "skeleton-drift"}

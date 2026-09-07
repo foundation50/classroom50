@@ -68,7 +68,7 @@ export function SkeletonOverwriteModal({
   return (
     <ConfirmModal
       open={paths !== null}
-      dangerous={false}
+      tone="warning"
       needsConfirm={false}
       title={t("orgSettings.overwrite.title")}
       confirmLabel={t("orgSettings.overwrite.confirmLabel")}

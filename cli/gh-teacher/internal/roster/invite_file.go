@@ -113,7 +113,7 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 		return err
 	}
 	if len(entries) == 0 {
-		return errors.New("no email addresses to invite — the file has only blank or # comment lines")
+		return errors.New("no email addresses to invite: the file has only blank or # comment lines")
 	}
 
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
@@ -162,14 +162,14 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 			_, _ = fmt.Fprintf(out, "  invited %s (line %d)\n", entry.email, entry.line)
 		case outcomeSkippedAlready:
 			skipped = append(skipped, entry)
-			_, _ = fmt.Fprintf(out, "  skipped %s (line %d) — already a member of the org or already invited\n", entry.email, entry.line)
+			_, _ = fmt.Fprintf(out, "  skipped %s (line %d): already a member of the org or already invited\n", entry.email, entry.line)
 		case outcomePendingBlocked:
 			pendingBlocked = append(pendingBlocked, entry)
-			_, _ = fmt.Fprintf(out, "  skipped %s (line %d) — already a pending invitation on this roster\n", entry.email, entry.line)
+			_, _ = fmt.Fprintf(out, "  skipped %s (line %d): already a pending invitation on this roster\n", entry.email, entry.line)
 		case outcomeRateLimited:
 			rateLimitErr = sendErr
 			deferredList = append(deferredList, entry)
-			_, _ = fmt.Fprintf(out, "  deferred %s (line %d) — GitHub rate limit reached\n", entry.email, entry.line)
+			_, _ = fmt.Fprintf(out, "  deferred %s (line %d): GitHub rate limit reached\n", entry.email, entry.line)
 		default:
 			// outcomeFailed, plus any outcome a future change forgets to handle:
 			// both mean "not invited", which must never read as success.
@@ -196,11 +196,11 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 		len(invited), appended, len(skipped), len(pendingBlocked), len(failedErrs), len(deferredList))
 
 	for _, entry := range skipped {
-		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a member of the org or already invited — run `gh teacher roster sync %s %s` if they accepted an earlier invitation.\n",
+		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a member of the org or already invited. Run `gh teacher roster sync %s %s` if they accepted an earlier invitation.\n",
 			entry.email, entry.line, org, classroom)
 	}
 	for _, entry := range pendingBlocked {
-		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a pending invitation on the roster — run `gh teacher roster sync %s %s` if they accepted.\n",
+		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a pending invitation on the roster. Run `gh teacher roster sync %s %s` if they accepted.\n",
 			entry.email, entry.line, org, classroom)
 	}
 	for _, addr := range alreadyHeld {
@@ -221,7 +221,7 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 		// Never a rollback: the invitations are the source of truth and each
 		// metadata team retains its address, so a sync heals the rows once the
 		// students accept.
-		_, _ = fmt.Fprintf(errOut, "Warning: %d invitation(s) were sent, but recording them in %s failed; the invitations are unaffected — re-run this command to record them, or `gh teacher roster sync %s %s` once the students accept.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: %d invitation(s) were sent, but recording them in %s failed; the invitations are unaffected. Re-run this command to record them, or `gh teacher roster sync %s %s` once the students accept.\n",
 			len(invited), configrepo.RosterFilePath(classroom), org, classroom)
 		return fmt.Errorf("invitations sent, but the roster rows were not written: %w", commitErr)
 	}

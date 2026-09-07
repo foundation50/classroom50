@@ -201,3 +201,22 @@ describe("useLiveSubmissions", () => {
     await waitFor(() => expect(request).toHaveBeenCalledTimes(4))
   })
 })
+
+// `refetch` is listed as an effect dependency by the submissions page (it
+// re-runs the fan-out when a collect completes); a fresh closure per render
+// re-fired that effect every render, looping the reads until reload.
+describe("useLiveSubmissions — refetch identity", () => {
+  it("returns the same refetch function across renders", async () => {
+    request.mockResolvedValue([
+      submitRelease("submit/x", "2026-01-01T00:00:00Z"),
+    ])
+    const { result, rerender } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["a"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    const first = result.current.refetch
+    rerender()
+    expect(result.current.refetch).toBe(first)
+  })
+})

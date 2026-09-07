@@ -108,6 +108,37 @@ export function configCommitsQuery(
   })
 }
 
+// The most-recent commit touching one config-repo file — the "when was this
+// last updated" timestamp behind the roster's Refresh caption. A missing file
+// or repo degrades to null (no commit) rather than an error.
+export function latestConfigFileCommitQuery(
+  client: GitHubClient,
+  org: string | undefined,
+  path: string,
+) {
+  return queryOptions({
+    queryKey: githubKeys.configFileCommit(org ?? "", path),
+    queryFn: async ({ signal }): Promise<GitHubCommit | null> => {
+      const commits = await tolerateGitHubError(
+        () =>
+          client.request<GitHubCommit[]>(
+            `/repos/${encodeURIComponent(
+              org ?? "",
+            )}/${CONFIG_REPO}/commits?path=${encodeURIComponent(
+              path,
+            )}&per_page=1`,
+            { method: "GET", signal },
+          ),
+        [],
+      )
+      return commits[0] ?? null
+    },
+    enabled: Boolean(org && path),
+    staleTime: 60 * 1000,
+    retry: false,
+  })
+}
+
 export function csvFileQuery<T>(
   client: GitHubClient,
   owner: string,

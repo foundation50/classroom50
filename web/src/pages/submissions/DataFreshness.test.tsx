@@ -85,16 +85,32 @@ describe("DataFreshness", () => {
     expect(onRefresh).toHaveBeenCalledTimes(2)
   })
 
-  it("disables the button and shows 'Collecting…' while a collect is in flight", () => {
-    render(<DataFreshness {...base} stale collecting />)
-    const btn = screen.getByText("submissions.collect.active")
-    expect((btn.closest("button") as HTMLButtonElement).disabled).toBe(true)
+  it("becomes the progress indicator while a collect is in flight: inert, focusable, 'Collecting…'", async () => {
+    const onRefresh = vi.fn()
+    render(<DataFreshness {...base} stale collecting onRefresh={onRefresh} />)
+    const btn = screen.getByRole("button")
+    expect(btn.textContent).toContain("submissions.collect.active")
+    // Loading, not disabled: a disabled initiating button drops keyboard
+    // focus mid-action (see Button).
+    expect((btn as HTMLButtonElement).disabled).toBe(false)
+    expect(btn.getAttribute("aria-busy")).toBe("true")
+    expect(btn.getAttribute("aria-disabled")).toBe("true")
+    await userEvent.click(btn)
+    expect(onRefresh).not.toHaveBeenCalled()
+  })
+
+  it("returns to 'Collect now' once the collect settles", () => {
+    const { rerender } = render(<DataFreshness {...base} collecting />)
+    expect(screen.queryByText("submissions.collect.label")).toBeNull()
+    rerender(<DataFreshness {...base} collecting={false} />)
+    expect(screen.getByText("submissions.collect.label")).not.toBeNull()
+    expect(screen.queryAllByText("submissions.collect.active")).toHaveLength(0)
   })
 
   it("omits the button entirely when no onRefresh is provided", () => {
     render(<DataFreshness {...base} stale onRefresh={undefined} />)
     expect(screen.queryByText("submissions.collect.label")).toBeNull()
-    expect(screen.queryByText("submissions.collect.active")).toBeNull()
+    expect(screen.queryAllByText("submissions.collect.active")).toHaveLength(0)
   })
 
   it("shows a degraded-read warning when some repos couldn't be read", () => {
@@ -102,5 +118,65 @@ describe("DataFreshness", () => {
     expect(screen.queryByText(/submissions\.live\.incomplete/)).toBeNull()
     rerender(<DataFreshness {...base} errorCount={3} />)
     expect(screen.getByText(/submissions\.live\.incomplete/)).not.toBeNull()
+  })
+
+  // A TA has read-only config-repo access and can't dispatch the collect
+  // workflow: the same button re-reads instead, and the note says who can.
+  describe("canCollect={false} (a viewer who can't dispatch the workflow)", () => {
+    it("relabels the button to Refresh with its own tooltip", () => {
+      const onRefresh = vi.fn()
+      render(
+        <DataFreshness {...base} canCollect={false} onRefresh={onRefresh} />,
+      )
+      expect(screen.queryByText("submissions.collect.label")).toBeNull()
+      const btn = screen
+        .getByText("submissions.freshness.refreshLabel")
+        .closest("button") as HTMLButtonElement
+      expect(btn.title).toBe("submissions.freshness.refreshHelp")
+    })
+
+    it("still fires onRefresh on click", async () => {
+      const onRefresh = vi.fn()
+      render(
+        <DataFreshness {...base} canCollect={false} onRefresh={onRefresh} />,
+      )
+      await userEvent.click(
+        screen.getByText("submissions.freshness.refreshLabel"),
+      )
+      expect(onRefresh).toHaveBeenCalledTimes(1)
+    })
+
+    it("spins and reads 'Refreshing…' while its re-reads are in flight", async () => {
+      // No workflow phase changes for a TA, so the re-reads themselves drive
+      // the feedback; the click is swallowed meanwhile like a collect.
+      const onRefresh = vi.fn()
+      render(
+        <DataFreshness
+          {...base}
+          canCollect={false}
+          refreshing
+          onRefresh={onRefresh}
+        />,
+      )
+      const btn = screen.getByRole("button")
+      expect(btn.textContent).toContain("submissions.freshness.refreshing")
+      expect(btn.textContent).not.toContain("submissions.collect.active")
+      expect(btn.getAttribute("aria-busy")).toBe("true")
+      await userEvent.click(btn)
+      expect(onRefresh).not.toHaveBeenCalled()
+    })
+
+    it("explains who can collect, and only for that viewer", () => {
+      const { rerender } = render(
+        <DataFreshness {...base} canCollect={false} />,
+      )
+      expect(
+        screen.getByText("submissions.freshness.collectRestricted"),
+      ).not.toBeNull()
+      rerender(<DataFreshness {...base} canCollect />)
+      expect(
+        screen.queryByText("submissions.freshness.collectRestricted"),
+      ).toBeNull()
+    })
   })
 })

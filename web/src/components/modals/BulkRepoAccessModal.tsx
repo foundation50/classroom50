@@ -1,10 +1,11 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ShieldCheckIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Select, Heading } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
+import { Alert, Modal, ModalIcon, Select } from "@/components/ui"
 import {
+  BulkPhaseFooter,
+  BulkProgressBlock,
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
@@ -15,6 +16,7 @@ import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkRepoAccessModalProps = {
   open: boolean
@@ -40,7 +42,6 @@ export function BulkRepoAccessModal({
   owners,
   students = [],
 }: BulkRepoAccessModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const addCollaboratorMutation = useAddRepoCollaborator()
   const runningRef = useRef(false)
@@ -65,14 +66,14 @@ export function BulkRepoAccessModal({
   })
   const [result, setResult] = useState<BulkResultView | null>(null)
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      runningRef.current = false
-      setPermission("push")
-      setPhase("idle")
-      setResult(null)
-      setProgress({ processed: 0, total: 0, message: "" })
-    }
+    if (!open) return
+    runningRef.current = false
+    setPermission("push")
+    setPhase("idle")
+    setResult(null)
+    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length
@@ -167,13 +168,7 @@ export function BulkRepoAccessModal({
   }
 
   const busy = phase === "working"
-  const pct = useMemo(
-    () =>
-      progress.total > 0
-        ? Math.round((progress.processed / progress.total) * 100)
-        : 0,
-    [progress],
-  )
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal
@@ -181,22 +176,24 @@ export function BulkRepoAccessModal({
       onClose={onClose}
       closeDisabled={busy}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t("submissions.bulkAccess.title")}
+      subtitle={t("submissions.bulkAccess.subtitle", { count: total })}
+      headerVisual={
+        <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("submissions.bulkAccess.title")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("submissions.bulkAccess.subtitle", { count: total })}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        <BulkPhaseFooter
+          phase={phase}
+          busy={busy}
+          showApply={total > 0}
+          applyLabel={t("submissions.bulkAccess.apply")}
+          onApply={() => void run()}
+          onClose={onClose}
+        />
+      }
+    >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
           {total === 0 ? (
@@ -235,24 +232,19 @@ export function BulkRepoAccessModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("submissions.bulkAccess.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            // Indeterminate until the first repo completes, so a slow write
-            // animates instead of sitting at 0%.
-            {...(progress.processed > 0 ? { value: pct } : {})}
-            max={100}
-          />
-          <p className="text-sm text-base-content/70">
-            {progress.processed > 0
+        <BulkProgressBlock
+          workingLabel={t("submissions.bulkAccess.working")}
+          indeterminateUntilFirst
+          progress={progress}
+          caption={
+            progress.processed > 0
               ? t("submissions.bulkAccess.progress", {
                   processed: progress.processed,
                   total: progress.total,
                 })
-              : t("submissions.bulkAccess.working")}
-          </p>
-        </div>
+              : t("submissions.bulkAccess.working")
+          }
+        />
       )}
 
       {(phase === "complete" || phase === "error") && result && (
@@ -272,19 +264,6 @@ export function BulkRepoAccessModal({
           ))}
         </div>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {phase === "complete" || phase === "error"
-            ? t("common.close")
-            : t("common.cancel")}
-        </Button>
-        {phase === "idle" && total > 0 && (
-          <Button variant="primary" onClick={() => void run()}>
-            {t("submissions.bulkAccess.apply")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

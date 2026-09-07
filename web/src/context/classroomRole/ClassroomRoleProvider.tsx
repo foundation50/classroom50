@@ -29,6 +29,10 @@ export type ClassroomRoleContextValue = {
   // signal. NOT a permission verdict: gate access via can(), gate loading state
   // via this.
   roleResolved: boolean
+  // The on-entry classroom self-check (useClassroomReconcile) is running.
+  // Pages that render reconciled state (the roster) surface it as a "sync in
+  // progress" signal; false for non-teachers, where the check never fires.
+  reconcilePending: boolean
 }
 
 const ClassroomRoleContext = createContext<ClassroomRoleContextValue | null>(
@@ -55,7 +59,12 @@ function useClassroomRoleResolution(
   // triggers the idempotent heal. Passes the acting owner so the reconcile can
   // drop them off any non-teacher team its create POST auto-joined them to. See
   // reconcileClassroom for the resource set.
-  useClassroomReconcile(org, classroom, isTeacherRole(actualRole), user?.login)
+  const { isPending: reconcilePending } = useClassroomReconcile(
+    org,
+    classroom,
+    isTeacherRole(actualRole),
+    user?.login,
+  )
 
   const roleResolved = role !== "unresolved"
 
@@ -66,6 +75,7 @@ function useClassroomRoleResolution(
     isError,
     retry: refetch,
     roleResolved,
+    reconcilePending,
   }
 }
 
@@ -91,6 +101,7 @@ export function ClassroomRoleProvider({
       resolved.isError,
       resolved.retry,
       resolved.roleResolved,
+      resolved.reconcilePending,
     ],
   )
   return (

@@ -35,6 +35,7 @@ export function useCreateAssignment(
     GitHubAPIError,
     CreateAssignmentInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: (input) =>
       createAssignment(client, { ...input, canGrantTemplateAccess }),
     onSuccess: (result, input) => {

@@ -1,10 +1,10 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CalendarIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Heading } from "@/components/ui"
-import { Spinner } from "@/components/Spinner"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 import {
+  BulkProgressBlock,
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
@@ -15,6 +15,7 @@ import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
 import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type CloseSubmissionModalProps = {
   open: boolean
@@ -46,7 +47,6 @@ export function CloseSubmissionModal({
   owners,
   students = [],
 }: CloseSubmissionModalProps) {
-  const titleId = useId()
   const { t } = useTranslation()
   const closing = mode === "close"
   const permission: RepoPermission = closing ? "pull" : "push"
@@ -77,15 +77,15 @@ export function CloseSubmissionModal({
   // closing" affordance so a throttled close isn't stuck offering only Reopen.
   const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      runningRef.current = false
-      setPhase("idle")
-      setResult(null)
-      setFlagError(false)
-      setFanOutIncomplete(false)
-      setProgress({ processed: 0, total: 0, message: "" })
-    }
+    if (!open) return
+    runningRef.current = false
+    setPhase("idle")
+    setResult(null)
+    setFlagError(false)
+    setFanOutIncomplete(false)
+    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length
@@ -205,13 +205,7 @@ export function CloseSubmissionModal({
   }
 
   const busy = phase === "working"
-  const pct = useMemo(
-    () =>
-      progress.total > 0
-        ? Math.round((progress.processed / progress.total) * 100)
-        : 0,
-    [progress],
-  )
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal
@@ -219,28 +213,61 @@ export function CloseSubmissionModal({
       onClose={onClose}
       closeDisabled={busy}
       size="lg"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
+      title={
+        closing
+          ? t("submissions.closeSubmission.title")
+          : t("submissions.closeSubmission.reopenTitle")
+      }
+      subtitle={
+        closing
+          ? t("submissions.closeSubmission.subtitle", { count: total })
+          : t("submissions.closeSubmission.reopenSubtitle", {
+              count: total,
+            })
+      }
+      headerVisual={
+        <ModalIcon tone="warning">
           <CalendarIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {closing
-              ? t("submissions.closeSubmission.title")
-              : t("submissions.closeSubmission.reopenTitle")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {closing
-              ? t("submissions.closeSubmission.subtitle", { count: total })
-              : t("submissions.closeSubmission.reopenSubtitle", {
-                  count: total,
-                })}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        phase === "complete" || phase === "error" ? (
+          fanOutIncomplete ? (
+            <>
+              <Button variant="ghost" onClick={() => onClose()}>
+                {t("common.close")}
+              </Button>
+              <Button
+                variant="primary"
+                onClick={() => void run({ flipFlag: false })}
+              >
+                {t("submissions.closeSubmission.finishApply")}
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" onClick={() => onClose()}>
+              {t("common.done")}
+            </Button>
+          )
+        ) : (
+          <>
+            <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
+              {t("common.cancel")}
+            </Button>
+            {phase === "idle" && (
+              <Button
+                variant="primary"
+                onClick={() => void run({ flipFlag: true })}
+              >
+                {closing
+                  ? t("submissions.closeSubmission.apply")
+                  : t("submissions.closeSubmission.reopenApply")}
+              </Button>
+            )}
+          </>
+        )
+      }
+    >
       {phase === "idle" && (
         <div className="mt-4 flex flex-col gap-4">
           {total === 0 ? (
@@ -260,25 +287,19 @@ export function CloseSubmissionModal({
       )}
 
       {busy && (
-        <div className="mt-6 flex flex-col items-center gap-3 py-6">
-          <Spinner label={t("submissions.closeSubmission.working")} />
-          <progress
-            className="progress progress-primary w-full"
-            // Omit `value` until the first repo completes so the bar animates
-            // as an indeterminate track instead of sitting at 0% while a slow
-            // write is in flight; once something lands it reflects real pct.
-            {...(progress.processed > 0 ? { value: pct } : {})}
-            max={100}
-          />
-          <p className="text-sm text-base-content/70">
-            {progress.processed > 0
+        <BulkProgressBlock
+          workingLabel={t("submissions.closeSubmission.working")}
+          indeterminateUntilFirst
+          progress={progress}
+          caption={
+            progress.processed > 0
               ? t("submissions.closeSubmission.progress", {
                   processed: progress.processed,
                   total: progress.total,
                 })
-              : t("submissions.closeSubmission.working")}
-          </p>
-        </div>
+              : t("submissions.closeSubmission.working")
+          }
+        />
       )}
 
       {phase === "error" && flagError && (
@@ -311,32 +332,6 @@ export function CloseSubmissionModal({
           )}
         </div>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={busy} onClick={() => onClose()}>
-          {phase === "complete" || phase === "error"
-            ? t("common.close")
-            : t("common.cancel")}
-        </Button>
-        {phase === "idle" && (
-          <Button
-            variant="primary"
-            onClick={() => void run({ flipFlag: true })}
-          >
-            {closing
-              ? t("submissions.closeSubmission.apply")
-              : t("submissions.closeSubmission.reopenApply")}
-          </Button>
-        )}
-        {fanOutIncomplete && !busy && (
-          <Button
-            variant="primary"
-            onClick={() => void run({ flipFlag: false })}
-          >
-            {t("submissions.closeSubmission.finishApply")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

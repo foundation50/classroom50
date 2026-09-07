@@ -72,9 +72,46 @@ class TestSchemaAccepts:
         )
         assert _errors(_manifest(entry)) == []
 
+    def test_team_mode_accepted(self):
+        # mode: team requires BOTH max_group_size and team_formation.
+        for formation in ("teacher", "student"):
+            entry = _entry(
+                mode="team", max_group_size=4, team_formation=formation
+            )
+            assert _errors(_manifest(entry)) == []
+
     def test_run_test_with_exit_code(self):
         tests = [{"name": "t", "type": "run", "run": "x", "exit-code": 42, "points": 1}]
         assert _errors(_manifest(_entry(tests=tests))) == []
+
+    def test_reporting_options_accepted(self):
+        # Per-test failure-details / show-output plus the assignment-level
+        # test_defaults block (issues #612/#764/#765). An explicit
+        # show-output: false is legal — it overrides a true default.
+        tests = [
+            {"name": "a", "type": "run", "run": "x", "points": 1,
+             "failure-details": "actual-only", "show-output": True},
+            {"name": "b", "type": "run", "run": "x", "points": 1,
+             "failure-details": "none", "show-output": False},
+            {"name": "c", "type": "run", "run": "x", "points": 1,
+             "failure-details": "full"},
+        ]
+        entry = _entry(tests=tests)
+        entry["test_defaults"] = {"failure-details": "none", "show-output": True}
+        assert _errors(_manifest(entry)) == []
+
+    def test_bad_reporting_options_rejected(self):
+        tests = [{"name": "a", "type": "run", "run": "x", "points": 1,
+                  "failure-details": "loud"}]
+        assert _errors(_manifest(_entry(tests=tests))) != []
+        tests = [{"name": "a", "type": "run", "run": "x", "points": 1,
+                  "show-output": "yes"}]
+        assert _errors(_manifest(_entry(tests=tests))) != []
+        entry = _entry()
+        entry["test_defaults"] = {"failure-details": "loud"}
+        assert _errors(_manifest(entry)) != []
+        entry["test_defaults"] = {"unknown-key": True}
+        assert _errors(_manifest(entry)) != []
 
     def test_feedback_pr_flag_accepted(self):
         # feedback_pr is a CLI-written boolean (gh teacher assignment add
@@ -114,6 +151,13 @@ class TestSchemaAccepts:
         # must accept it. Absent is covered by test_minimal_manifest.
         assert _errors(_manifest(_entry(submission_mode="tag"))) == []
         assert _errors(_manifest(_entry(submission_mode="every-push"))) == []
+
+    def test_repo_visibility_accepted(self):
+        # Both enum values are legal: writers omit private (the wire
+        # default) but other clients may write it explicitly, and readers
+        # must accept it. Absent is covered by test_minimal_manifest.
+        assert _errors(_manifest(_entry(repo_visibility="public"))) == []
+        assert _errors(_manifest(_entry(repo_visibility="private"))) == []
 
     def test_submission_tags_accepted(self):
         # Milestone tag patterns: literal names and the supported glob
@@ -290,6 +334,29 @@ class TestSchemaRejects:
         # mode: individual must NOT carry max_group_size.
         assert _errors(_manifest(_entry(max_group_size=3))) != []
 
+    def test_team_mode_requires_size_and_formation(self):
+        # mode: team requires max_group_size AND team_formation.
+        assert _errors(_manifest(_entry(mode="team", max_group_size=4))) != []
+        assert _errors(_manifest(_entry(mode="team", team_formation="teacher"))) != []
+        assert _errors(_manifest(_entry(mode="team"))) != []
+
+    @pytest.mark.parametrize("formation", ["Teacher", "anyone", "", None, True])
+    def test_team_mode_bad_formation_rejected(self, formation):
+        entry = _entry(mode="team", max_group_size=4, team_formation=formation)
+        assert _errors(_manifest(entry)) != []
+
+    def test_non_team_modes_forbid_team_formation(self):
+        # team_formation is team-mode only.
+        assert _errors(_manifest(_entry(team_formation="teacher"))) != []
+        assert (
+            _errors(
+                _manifest(
+                    _entry(mode="group", max_group_size=3, team_formation="teacher")
+                )
+            )
+            != []
+        )
+
     def test_autograder_must_be_written_explicitly(self):
         # Same documented strictness: the CLI's parser normalizes a
         # missing/empty autograder to "default"; clients must write it.
@@ -385,6 +452,15 @@ class TestSchemaRejects:
         # nothing here (unlike autograder), so clients must write exact
         # values. Mirrors contract.SubmissionModes.
         assert _errors(_manifest(_entry(submission_mode=submission_mode))) != []
+
+    @pytest.mark.parametrize(
+        "repo_visibility", ["Public", "internal", "", None, True]
+    )
+    def test_bad_repo_visibility(self, repo_visibility):
+        # Only the two enum values are legal (no GitHub "internal" —
+        # student repos are private or public). Mirrors
+        # contract.RepoVisibilities.
+        assert _errors(_manifest(_entry(repo_visibility=repo_visibility))) != []
 
     @pytest.mark.parametrize(
         "submission_tags",

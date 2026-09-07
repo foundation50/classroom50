@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
 import {
@@ -7,7 +7,15 @@ import {
   ShieldCheckIcon,
 } from "@/components/ui/icons"
 
-import { Badge, Button, Modal, Spinner, Heading } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Modal,
+  ModalIcon,
+  OutcomeAlert,
+  InlineSpinner,
+} from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 import type { Assignment } from "@/types/classroom"
 import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -15,7 +23,6 @@ import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
 import { repoTeamsQuery } from "@/github-core/queries"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
-import { useToast } from "@/context/notifications/NotificationProvider"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 
@@ -43,9 +50,7 @@ export const TemplateAccessModal = ({
   onClose: () => void
 }) => {
   const { t } = useTranslation()
-  const titleId = useId()
   const client = useGitHubClient()
-  const { notify } = useToast()
   const { githubOrgRole } = useGitHubOrgRole()
   const isOwner = can("manageOrg", { githubOrgRole })
   const reconcile = useReconcileTemplateAccess()
@@ -55,6 +60,8 @@ export const TemplateAccessModal = ({
   // would re-enable and the list re-flash "no teams" right after the success
   // toast. Cleared when the refetch settles with the granted team present.
   const [granted, setGranted] = useState(false)
+  // Outcome of the last Fix run, rendered as an in-dialog banner.
+  const [fixOutcome, setFixOutcome] = useState<AlertOutcome | null>(null)
 
   const template = assignment.template
   const inOrg = !!template && template.owner.toLowerCase() === org.toLowerCase()
@@ -94,6 +101,7 @@ export const TemplateAccessModal = ({
 
   const handleFix = () => {
     setGranted(false)
+    setFixOutcome(null)
     reconcile.mutate(
       {
         org,
@@ -103,15 +111,18 @@ export const TemplateAccessModal = ({
         locked: assignment.locked,
       },
       {
+        // Outcome feedback stays inside the open dialog (Primer): success is
+        // only partially evident (the Fix button disables), and a failure
+        // needs to sit next to the action that caused it.
         onSuccess: (result) => {
           if (result.warning) {
-            notify({
+            setFixOutcome({
               tone: "error",
               message: `${t("assignments.template.reconcile.failed")} ${result.warning}`,
             })
           } else {
             setGranted(true)
-            notify({
+            setFixOutcome({
               tone: "success",
               message: t("assignments.template.reconcile.success"),
             })
@@ -122,27 +133,60 @@ export const TemplateAccessModal = ({
   }
 
   return (
-    <Modal open onClose={onClose} size="lg" aria-labelledby={titleId}>
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+    <Modal
+      open
+      onClose={onClose}
+      size="lg"
+      title={t("assignments.template.accessModal.title")}
+      subtitle={t("assignments.template.accessModal.description")}
+      headerVisual={
+        <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("assignments.template.accessModal.title")}
-          </Heading>
-          <p className="mt-1 text-sm text-base-content/70">
-            {t("assignments.template.accessModal.description")}
-          </p>
-        </div>
-      </div>
-
+        </ModalIcon>
+      }
+      footer={
+        <>
+          {inOrg && !isOwner && (
+            <p className="me-auto self-center text-xs text-base-content/60">
+              {t("assignments.template.accessModal.ownerOnlyNote")}
+            </p>
+          )}
+          <form method="dialog">
+            <Button
+              type="submit"
+              variant="ghost"
+              disabled={reconcile.isPending}
+            >
+              {t("assignments.template.accessModal.close")}
+            </Button>
+          </form>
+          {inOrg && isOwner && (
+            <Button
+              variant="primary"
+              loading={reconcile.isPending}
+              loadingLabel={t("assignments.template.reconcile.pending")}
+              disabled={reconcile.isPending || satisfied}
+              title={
+                satisfied
+                  ? t("assignments.template.accessModal.fixSatisfied")
+                  : t("assignments.template.accessModal.fixHint")
+              }
+              onClick={handleFix}
+            >
+              {t("assignments.template.accessModal.fixAction")}
+            </Button>
+          )}
+        </>
+      }
+    >
       <section className="mt-5">
+        <OutcomeAlert outcome={fixOutcome} className="mb-4 text-sm" />
         <div className="flex items-center justify-between gap-3">
           <h4 className="text-sm font-semibold text-base-content/80">
             {t("assignments.template.accessModal.templateHeading")}
           </h4>
-          <a
+          <Button
+            as="a"
             href={githubTemplateRepoUrl(
               template.owner,
               template.repo,
@@ -150,12 +194,14 @@ export const TemplateAccessModal = ({
             )}
             target="_blank"
             rel="noreferrer"
-            className="btn btn-xs btn-ghost shrink-0"
+            variant="ghost"
+            size="xs"
+            className="shrink-0"
           >
             <MarkGithubIcon aria-hidden="true" className="size-4" />
             {t("assignments.template.accessModal.openOnGitHub")}
             <LinkExternalIcon aria-hidden="true" className="size-4" />
-          </a>
+          </Button>
         </div>
         <div className="mt-2 rounded-box border border-base-content/10 bg-base-200/40 px-3 py-2">
           <div className="break-all font-mono text-sm">
@@ -190,35 +236,6 @@ export const TemplateAccessModal = ({
           }
         />
       </section>
-
-      <div className="modal-action mt-6 items-center">
-        {inOrg && !isOwner && (
-          <p className="me-auto text-xs text-base-content/60">
-            {t("assignments.template.accessModal.ownerOnlyNote")}
-          </p>
-        )}
-        <form method="dialog">
-          <Button type="submit" variant="ghost" disabled={reconcile.isPending}>
-            {t("assignments.template.accessModal.close")}
-          </Button>
-        </form>
-        {inOrg && isOwner && (
-          <Button
-            variant="primary"
-            loading={reconcile.isPending}
-            loadingLabel={t("assignments.template.reconcile.pending")}
-            disabled={reconcile.isPending || satisfied}
-            title={
-              satisfied
-                ? t("assignments.template.accessModal.fixSatisfied")
-                : t("assignments.template.accessModal.fixHint")
-            }
-            onClick={handleFix}
-          >
-            {t("assignments.template.accessModal.fixAction")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }
@@ -245,8 +262,11 @@ const TeamsList = ({
 
   if (loading) {
     return (
-      <p className="mt-2 flex items-center gap-2 text-sm text-base-content/60">
-        <Spinner size="xs" />
+      <p
+        role="status"
+        className="mt-2 flex items-center gap-2 text-sm text-base-content/60"
+      >
+        <InlineSpinner />
         {t("assignments.template.accessModal.teamsLoading")}
       </p>
     )

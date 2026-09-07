@@ -3,7 +3,8 @@ import { describe, expect, it, afterEach, vi, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 import { createRef } from "react"
 
-import { Modal } from "./Modal"
+import { Modal, ModalFooterPortal } from "./Modal"
+import { logger } from "@/lib/logger"
 
 // happy-dom doesn't implement <dialog> showModal/close; stub them so the
 // open-sync effect can run without throwing.
@@ -196,5 +197,134 @@ describe("Modal", () => {
     expect(dialog.open).toBe(true)
     dialog.close()
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("wires title to aria-labelledby and subtitle to aria-describedby automatically", () => {
+    const { container } = render(
+      <Modal open title="My dialog" subtitle="More context">
+        body
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+
+    const heading = screen.getByRole("heading", { name: "My dialog" })
+    expect(heading.tagName).toBe("H3")
+    expect(dialog.getAttribute("aria-labelledby")).toBe(heading.id)
+
+    const subtitle = screen.getByText("More context")
+    expect(dialog.getAttribute("aria-describedby")).toBe(subtitle.id)
+  })
+
+  it("lets an explicit aria-labelledby win over the title wiring", () => {
+    const { container } = render(
+      <Modal open title="My dialog" aria-labelledby="external-id">
+        body
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+    expect(dialog.getAttribute("aria-labelledby")).toBe("external-id")
+  })
+
+  it("renders the footer slot inside the canonical modal-action row", () => {
+    const { container } = render(
+      <Modal open title="t" footer={<button type="button">Save</button>}>
+        body
+      </Modal>,
+    )
+    const action = container.querySelector(".modal-action")
+    expect(action).not.toBeNull()
+    expect(action?.textContent).toContain("Save")
+  })
+
+  it("portals body-owned buttons into the same footer row", () => {
+    const { container } = render(
+      <Modal open title="t">
+        <p>step body</p>
+        <ModalFooterPortal>
+          <button type="button">Apply</button>
+        </ModalFooterPortal>
+      </Modal>,
+    )
+    const action = container.querySelector(".modal-action")
+    expect(action?.textContent).toContain("Apply")
+    // The portal moved the button out of the body flow into the footer row.
+    expect(screen.getByText("Apply").parentElement).toBe(action)
+  })
+
+  it("composes the footer prop with portal content in one row", () => {
+    const { container } = render(
+      <Modal open title="t" footer={<button type="button">Close</button>}>
+        <ModalFooterPortal>
+          <button type="button">Apply</button>
+        </ModalFooterPortal>
+      </Modal>,
+    )
+    const actions = container.querySelectorAll(".modal-action")
+    expect(actions).toHaveLength(1)
+    expect(actions[0].textContent).toContain("Close")
+    expect(actions[0].textContent).toContain("Apply")
+    // Portal content appends AFTER the footer prop: the rightmost (primary)
+    // slot belongs to the portal when a host combines both.
+    expect(actions[0].textContent).toBe("CloseApply")
+  })
+
+  it("renders nothing and warns when used outside a Modal", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {})
+    const { container } = render(
+      <ModalFooterPortal>
+        <button type="button">Orphan</button>
+      </ModalFooterPortal>,
+    )
+    expect(container.childNodes).toHaveLength(0)
+    expect(screen.queryByText("Orphan")).toBeNull()
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("outside a Modal"),
+    )
+    warn.mockRestore()
+  })
+
+  it("keeps the empty footer row hidden when neither prop nor portal fills it", () => {
+    const { container } = render(
+      <Modal open title="t">
+        body
+      </Modal>,
+    )
+    const action = container.querySelector(".modal-action") as HTMLElement
+    expect(action.childNodes).toHaveLength(0)
+    // empty:hidden removes the row (and its top margin) from layout.
+    expect(action.className).toContain("empty:hidden")
+  })
+
+  it("passes role through for confirmation dialogs", () => {
+    const { container } = render(
+      <Modal open title="t" role="alertdialog">
+        body
+      </Modal>,
+    )
+    expect(container.querySelector("dialog")?.getAttribute("role")).toBe(
+      "alertdialog",
+    )
+  })
+
+  it("tolerates block-level subtitle content (ConfirmModal descriptions)", () => {
+    render(
+      <Modal
+        open
+        title="t"
+        subtitle={
+          <div>
+            <ul>
+              <li>consequence</li>
+            </ul>
+          </div>
+        }
+      >
+        body
+      </Modal>,
+    )
+    // The subtitle wrapper is a <div>, so the block content stays inside the
+    // described-by element instead of being split out of an auto-closed <p>.
+    const item = screen.getByText("consequence")
+    expect(item.closest("[id]")?.textContent).toContain("consequence")
   })
 })

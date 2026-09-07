@@ -13,6 +13,7 @@ const noSuppression: SuppressedLogins = {
   remember: vi.fn(),
   forget: vi.fn(),
   has: () => false,
+  snapshot: () => new Set<string>(),
   clear: vi.fn(),
 }
 

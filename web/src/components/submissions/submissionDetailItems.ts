@@ -4,7 +4,10 @@ import {
   jumpableTagEntries,
   resolveSubmissionMode,
 } from "@/domain/assignments/submissionDetection"
-import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
+import type {
+  CommitAuthor,
+  DetectedSubmission,
+} from "@/domain/assignments/submissionDetection"
 import { repoTagsUrl } from "@/util/orgUrl"
 import { safeHttpUrl } from "@/util/url"
 import { formatSubmissionDateTime } from "@/util/formatDate"
@@ -19,12 +22,14 @@ type Translate = (key: string, opts?: Record<string, unknown>) => string
 // A normalized push (default-branch commit) submission, mode-agnostic across the
 // two views: the teacher maps its collected scores.json attempts to this shape,
 // the student maps its live default-branch commits. `commitHref`/`releaseHref`
-// are raw (possibly unsafe) URLs — the builder guards them.
+// are raw (possibly unsafe) URLs — the builder guards them. `author` is who made
+// the commit, when the source knows (live commits do; collected attempts don't).
 export type PushSubmission = {
   key: string
   commitHref?: string | null
   datetime?: string
   releaseHref?: string | null
+  author?: CommitAuthor
 }
 
 // A normalized tag submission collected in scores.json — the FALLBACK tag
@@ -94,12 +99,23 @@ export function collectedTagDetailItems(
   }))
 }
 
+// How a view labels a commit's author. `showAuthors` is on for a team's shared
+// repo, where the members' commits need telling apart, and off for an
+// individual repo, where the author is always the student. `authorName`
+// resolves a linked login to a roster name; only the teacher has a roster, so
+// the student view leaves it unset and sees logins.
+export type AuthorLabelOptions = {
+  showAuthors?: boolean
+  authorName?: (login: string) => string | undefined
+}
+
 // Map normalized push submissions to details-modal items, newest first (the
 // caller supplies them newest-first, matching both the collected history and
 // GitHub's default commit order). Numbered #N…#1 so the newest reads highest.
 export function commitDetailItems(
   commits: PushSubmission[],
   t: Translate,
+  { showAuthors = false, authorName }: AuthorLabelOptions = {},
 ): SubmissionDetailItem[] {
   return commits.map((commit, i) => ({
     key: commit.key,
@@ -110,8 +126,28 @@ export function commitDetailItems(
       : undefined,
     href: safeHttpUrl(commit.commitHref),
     releaseHref: safeHttpUrl(commit.releaseHref),
+    author: showAuthors
+      ? detailItemAuthor(commit.author, authorName)
+      : undefined,
     count: 1,
   }))
+}
+
+// The modal's author chip. A linked account shows its roster name when the
+// view can resolve one, else the login, with its avatar either way; an unlinked
+// commit shows the git author name; a commit with neither shows nothing.
+function detailItemAuthor(
+  author: CommitAuthor | undefined,
+  authorName: AuthorLabelOptions["authorName"],
+): SubmissionDetailItem["author"] {
+  if (author?.login) {
+    return {
+      label: authorName?.(author.login) || author.login,
+      avatarUrl: safeHttpUrl(author.avatarUrl),
+    }
+  }
+  if (!author?.name) return undefined
+  return { label: author.name, avatarUrl: undefined }
 }
 
 // The one type-aware item builder both views use: tag entries in tag mode, push
@@ -120,23 +156,27 @@ export function commitDetailItems(
 // unit), so the unused side is simply empty. In tag mode, when the detection
 // overlay is empty (a viewer without it) but collected tag submissions exist,
 // fall back to those so the modal never contradicts a positive count chip.
+// `showAuthors` (a team repo) labels each push with who made it, by roster
+// name when `authorName` resolves one.
 export function buildSubmissionDetailItems(
   {
     tags,
     commits,
     collectedTags = [],
+    showAuthors = false,
+    authorName,
   }: {
     tags: DetectedSubmission[]
     commits: PushSubmission[]
     collectedTags?: CollectedTagSubmission[]
-  },
+  } & AuthorLabelOptions,
   mode: SubmissionMode | undefined,
   org: string,
   repo: string,
   t: Translate,
 ): SubmissionDetailItem[] {
   if (resolveSubmissionMode(mode) !== "tag") {
-    return commitDetailItems(commits, t)
+    return commitDetailItems(commits, t, { showAuthors, authorName })
   }
   const detected = tagDetailItems(tags, org, repo, t)
   return detected.length > 0

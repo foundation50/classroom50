@@ -5,13 +5,13 @@ import {
   AlertIcon,
   CheckCircleIcon,
   CheckIcon,
-  ChevronDownIcon,
+  TriangleDownIcon,
   QuestionIcon,
   ServerIcon,
 } from "@/components/ui/icons"
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { Button, HelpTooltip, Input } from "@/components/ui"
+import { Button, DropdownMenu, HelpTooltip, Input } from "@/components/ui"
 import type { HelpTooltipPosition } from "@/components/ui"
 import {
   isKnownHostedRunnerLabel,
@@ -121,15 +121,11 @@ export const LanguageVersionField = ({
                     language: meta.label,
                   })}
                 >
-                  <ChevronDownIcon aria-hidden="true" className="size-4" />
+                  <TriangleDownIcon aria-hidden="true" className="size-4" />
                 </Button>
               </div>
               {!disabled && (
-                <ul
-                  tabIndex={0}
-                  role="menu"
-                  className="dropdown-content menu z-10 mt-1 w-full rounded-box border border-base-300 bg-base-100 p-1 shadow"
-                >
+                <DropdownMenu className="w-full">
                   {meta.versions.map((version) => (
                     <li key={version}>
                       <button
@@ -158,7 +154,7 @@ export const LanguageVersionField = ({
                       </button>
                     </li>
                   ))}
-                </ul>
+                </DropdownMenu>
               )}
             </div>
             {error ? (

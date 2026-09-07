@@ -1,0 +1,18 @@
+import { useIsMutating } from "@tanstack/react-query"
+import type { Mutation } from "@tanstack/react-query"
+
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
+
+// Paused means the write has not started (offline, or queued behind a scoped
+// sibling), so there is no partial state to protect yet.
+export const holdsTabOpen = (mutation: Mutation) =>
+  mutation.options.meta?.keepTabOpen === true && !mutation.state.isPaused
+
+// Holds the tab while any `keepTabOpen` mutation is pending. Reads the mutation
+// cache, not a page's `isPending`, so the hold outlives the page that started
+// the write. Mounted once in main.tsx.
+export function KeepTabOpenGuard() {
+  const pending = useIsMutating({ predicate: holdsTabOpen })
+  useBeforeUnloadGuard(pending > 0)
+  return null
+}

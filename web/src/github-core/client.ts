@@ -51,6 +51,9 @@ export type GitHubRequestOptions = {
   // Composed with `signal`; defaults to DEFAULT_REQUEST_TIMEOUT_MS. Pass a
   // larger value for a legitimately long call, or `0` to opt out.
   timeoutMs?: number
+  // Called with the response headers of a 2xx before the body is parsed, for
+  // callers that read pagination metadata (`Link`) alongside the body.
+  onHeaders?: (headers: Headers) => void
 }
 
 // Per-response signal about the token's live state, reported to the provider
@@ -173,6 +176,7 @@ export function createGitHubClient(args: {
     }
 
     log.debug("response", { method, path, status: res.status })
+    options.onHeaders?.(res.headers)
     return res
   }
 

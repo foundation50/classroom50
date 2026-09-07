@@ -54,6 +54,7 @@ export const STATE_BADGE_TONE: Record<TeamRosterRowState, BadgeTone> = {
   pending: "warning",
   needs_attention_in_org: "warning",
   needs_attention_not_in_org: "error",
+  unlinked: "neutral",
 }
 
 export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
@@ -61,6 +62,7 @@ export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
   pending: "students.statusPending",
   needs_attention_in_org: "students.statusNeedsAttentionInOrg",
   needs_attention_not_in_org: "students.statusNeedsAttentionNotInOrg",
+  unlinked: "students.statusUnlinked",
 }
 
 // i18n label key per updatable roster metadata field, used by the CSV import

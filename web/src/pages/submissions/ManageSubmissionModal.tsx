@@ -1,11 +1,13 @@
-import { useEffect, useId, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr, Heading } from "@/components/ui"
+import { Badge, Modal, MonoLtr, OutcomeAlert } from "@/components/ui"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
+import useAssignmentRepoSetup from "@/hooks/useAssignmentRepoSetup"
 import {
   CollaboratorIdentity,
   normalizeUsername,
@@ -13,7 +15,9 @@ import {
 } from "@/components/modals/collaboratorHelpers"
 import {
   SubmissionActionList,
+  SubmissionHubFeedbackContext,
   type SubmissionActionListProps,
+  type SubmissionHubFeedback,
 } from "@/pages/submissions/SubmissionsRowActions"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { formatSubmissionDateTime as formatDateTime } from "@/util/formatDate"
@@ -36,6 +40,7 @@ const SubmissionDetails = ({
   repoLoading,
   latestCommitHref,
   canPauseAutograding = false,
+  emptyRepoAssignment = false,
 }: {
   org: string
   repo: string
@@ -47,12 +52,19 @@ const SubmissionDetails = ({
   // Whether this assignment autogrades (owner + default-autograder). Gates the
   // read-only "Autograding" status row so it only shows where a shim exists.
   canPauseAutograding?: boolean
+  // An empty_repo assignment never writes the setup marker, so there is no
+  // incomplete-setup state to probe for.
+  emptyRepoAssignment?: boolean
 }) => {
   const { t } = useTranslation()
   const { data: collaborators, isLoading: collaboratorsLoading } =
     useGetRepoCollaborators(org, repo)
   const { data: autogradeState, isLoading: autogradeLoading } =
     useGetAutogradeState(org, repo, { enabled: canPauseAutograding })
+  // Distinguishes "accepted" (repo exists) from "set up" (marker landed).
+  const repoSetup = useAssignmentRepoSetup(org, repo, {
+    enabled: !emptyRepoAssignment,
+  })
 
   const ownerLogin = normalizeUsername(owner)
   const ownerAccess = useMemo(() => {
@@ -75,6 +87,16 @@ const SubmissionDetails = ({
     rows.push({
       label: t("submissions.manageModal.accepted"),
       value: formatDateTime(repoData.created_at),
+    })
+  }
+  if (repoSetup.state === "incomplete") {
+    rows.push({
+      label: t("submissions.manageModal.setup"),
+      value: (
+        <Badge tone="warning">
+          {t("submissions.manageModal.setupIncomplete")}
+        </Badge>
+      ),
     })
   }
   if (repoData?.pushed_at) {
@@ -105,6 +127,19 @@ const SubmissionDetails = ({
           {t(`assignments.form.studentPermission.levels.${ownerAccess}`)}
         </Badge>
       ),
+    })
+  }
+  // Visibility, from the repo read. Public gets the warning tone (the table
+  // badge's twin); private stays quiet — it is the norm.
+  if (repoData) {
+    rows.push({
+      label: t("submissions.manageModal.visibility"),
+      value:
+        repoData.private === false ? (
+          <Badge tone="warning">{t("submissions.publicRepo.badge")}</Badge>
+        ) : (
+          <Badge ghost>{t("submissions.manageModal.visibilityPrivate")}</Badge>
+        ),
     })
   }
   // Autograding workflow state — a read-only mirror of the Pause/Resume action,
@@ -206,6 +241,11 @@ const SubmissionDetails = ({
           </div>
         ) : null}
       </dl>
+      {repoSetup.state === "incomplete" ? (
+        <p className="mt-2 border-t border-base-content/10 pt-2 text-xs text-warning">
+          {t("submissions.manageModal.setupIncompleteHint")}
+        </p>
+      ) : null}
       {otherCollaborators.length > 0 ? (
         <div className="mt-2 border-t border-base-content/10 pt-2">
           <p className="mb-1 text-sm text-base-content/60">
@@ -271,8 +311,29 @@ export const ManageSubmissionModal = ({
   }
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
   const { t } = useTranslation()
+  const { notify } = useToast()
+  // Outcome of the last action row, rendered as a banner at the top of the
+  // hub (Primer: feedback for a dialog action stays in the dialog).
+  const [feedback, setFeedback] = useState<SubmissionHubFeedback | null>(null)
+  // Unmount-safe sink: a row action awaited past the hub's close would call
+  // setFeedback on an unmounted dialog (a silent no-op — e.g. a failed
+  // "make private" leaving the repo public with zero indication), so once
+  // this instance is gone the outcome falls back to a toast.
+  const mountedRef = useRef(true)
+  useEffect(
+    () => () => {
+      mountedRef.current = false
+    },
+    [],
+  )
+  const publishFeedback = useCallback(
+    (outcome: SubmissionHubFeedback) => {
+      if (mountedRef.current) setFeedback(outcome)
+      else notify(outcome)
+    },
+    [notify],
+  )
 
   // Lifted here (not in SubmissionDetails) so the repo's default-branch tip can
   // link both the "Last push" row and the "View latest commit" action. Only
@@ -313,16 +374,20 @@ export const ManageSubmissionModal = ({
       // the two modal boxes don't visibly layer. The editor renders its own
       // backdrop on top; dismissing it un-hides this box.
       boxClassName={subModalOpen ? "invisible" : undefined}
-      aria-labelledby={titleId}
+      title={<span className="block truncate">{title}</span>}
+      subtitle={
+        subtitle ? (
+          <span className="block truncate text-base-content/60">
+            {subtitle}
+          </span>
+        ) : undefined
+      }
     >
-      <Heading as="h3" className="truncate pe-8" id={titleId}>
-        {title}
-      </Heading>
-      {subtitle ? (
-        <p className="mt-0.5 truncate text-sm text-base-content/60">
-          {subtitle}
-        </p>
-      ) : null}
+      <OutcomeAlert
+        outcome={feedback}
+        className="mt-3 text-sm"
+        onDismiss={() => setFeedback(null)}
+      />
       {repoHref ? (
         <a
           className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"
@@ -351,25 +416,32 @@ export const ManageSubmissionModal = ({
           repoLoading={repoLoading}
           latestCommitHref={latestCommitHref}
           canPauseAutograding={action.canPauseAutograding}
+          emptyRepoAssignment={action.emptyRepoAssignment}
         />
       ) : null}
 
       <div className="mt-4 divide-y divide-base-200">
-        <SubmissionActionList
-          {...action}
-          latestCommitHref={latestCommitHref}
-          onManageAccess={
-            action.onManageAccess ? handleManageAccess : undefined
-          }
-        />
+        {/* Team mode opens the shared manage-group dialog; a legacy group
+            opens the collaborators editor. Leads the list: for a group row,
+            the group itself is the primary thing to manage. */}
         {isGroup && onManageMembers ? (
           <ActionListRow
             icon={PeopleIcon}
-            title={t("submissions.table.members")}
+            title={t("submissions.manageModal.manageGroup")}
             description={t("submissions.manageModal.membersDescription")}
             onClick={handleManageMembers}
           />
         ) : null}
+        <SubmissionHubFeedbackContext.Provider value={publishFeedback}>
+          <SubmissionActionList
+            {...action}
+            latestCommitHref={latestCommitHref}
+            repoPrivate={repoData?.private}
+            onManageAccess={
+              action.onManageAccess ? handleManageAccess : undefined
+            }
+          />
+        </SubmissionHubFeedbackContext.Provider>
       </div>
     </Modal>
   )

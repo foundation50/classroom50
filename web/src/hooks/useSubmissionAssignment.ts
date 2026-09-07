@@ -32,6 +32,15 @@ export function useSubmissionAssignment(
     // Capability-URL secret for a protected classroom's Pages path. Ignored for
     // the config source (the authenticated repo read needs no secret).
     secret?: string
+    // Custom Pages base URL for an org off the github.io default. Ignored for
+    // the config source, like `secret`.
+    pagesBaseUrl?: string
+    // Gate the PAGES read while its secret/base-URL sources are still being
+    // resolved: fetching early would hit the wrong host/path, 404 or
+    // CORS-fail, and flash an error the settled read then clears. Defaults
+    // true; the config source ignores it (an authenticated read needs no
+    // Pages coordinates).
+    enabled?: boolean
   },
 ): {
   assignment: Assignment | undefined
@@ -47,8 +56,9 @@ export function useSubmissionAssignment(
     enabled: useConfig,
   })
   const pagesQuery = usePagesAssignments(org, classroom, options.secret, {
-    enabled: !useConfig,
+    enabled: !useConfig && (options.enabled ?? true),
     assignmentSlug: assignment,
+    pagesBaseUrl: options.pagesBaseUrl,
   })
 
   const active = useConfig ? configQuery : pagesQuery

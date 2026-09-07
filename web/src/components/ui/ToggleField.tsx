@@ -1,4 +1,5 @@
 import { HelpTooltip } from "./FormField"
+import { Toggle } from "./Toggle"
 
 // A boolean toggle rendered as a DaisyUI switch with a bold label and an
 // optional `?` help affordance — the single source for the settings-toggle
@@ -24,10 +25,8 @@ export function ToggleField({
 }) {
   return (
     <label htmlFor={id} className="flex cursor-pointer items-center gap-3">
-      <input
+      <Toggle
         id={id}
-        type="checkbox"
-        className="toggle toggle-primary"
         checked={checked}
         onBlur={onBlur}
         onChange={(e) => onChange(e.target.checked)}

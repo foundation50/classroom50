@@ -3,12 +3,16 @@ import { InlineSpinner } from "@/components/Spinner"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
-import { Alert, Button, cx, FormField, Select } from "@/components/ui"
+import { Alert, Button, cx, FormField, Radio, Select } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { getRepo } from "@/github-core/repoReads"
-import { parseTemplateRef, repoContentsPathExists } from "@/domain/assignments"
-import { REPO_PERMISSIONS, defaultStudentPermission } from "@/types/classroom"
+import { repoContentsPathExists } from "@/domain/assignments"
+import {
+  REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
+  defaultStudentPermission,
+} from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
+import { parseTemplateRefSafe, useTemplateRepo } from "../useTemplateRepo"
 import { ToggleField } from "@/components/ui"
 import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
@@ -79,10 +83,9 @@ export function RepositorySetupSection({
                       htmlFor={`${field.name}-${option}`}
                       className="flex cursor-pointer items-start justify-start gap-3"
                     >
-                      <input
+                      <Radio
                         id={`${field.name}-${option}`}
-                        type="radio"
-                        className="radio mt-1"
+                        className="mt-1"
                         name={field.name}
                         value={option}
                         checked={field.state.value === option}
@@ -224,9 +227,10 @@ export function RepositorySetupSection({
 }
 
 // The Advanced settings body for Repository Setup: copy About/Topics from the
-// template, the template's PR template as the Feedback PR body, the student
-// repo-access override, and the repository features. Split out so the
-// disclosure's contents don't nest under the section's render-prop chain.
+// template, the template's PR template as the Feedback PR body, the repo
+// visibility, the student repo-access override, and the repository features.
+// Split out so the disclosure's contents don't nest under the section's
+// render-prop chain.
 function RepositoryAdvancedFields({
   form,
   edit,
@@ -289,6 +293,8 @@ function RepositoryAdvancedFields({
           )}
         </form.Subscribe>
       ) : null}
+
+      <RepoVisibilityField form={form} edit={edit} />
 
       <StudentPermissionField form={form} />
 
@@ -389,6 +395,63 @@ function StudentPermissionField({ form }: { form: AssignmentForm }) {
   )
 }
 
+// The accept-time repo visibility choice (private default / public for
+// showcase work). A public pick shows a persistent exposure warning, plus the
+// accept-time-only caveat on edit (existing repos are flipped from the
+// submissions page, not here).
+function RepoVisibilityField({
+  form,
+  edit,
+}: {
+  form: AssignmentForm
+  edit: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <form.Field name="repo_visibility">
+      {(field) => (
+        <FormField
+          htmlFor={field.name}
+          label={t("assignments.form.repoVisibility.label")}
+          help={t("assignments.form.repoVisibility.help")}
+        >
+          {({ id, describedById }) => (
+            <>
+              <Select
+                id={id}
+                name={field.name}
+                className="w-full sm:max-w-xs"
+                aria-describedby={describedById}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) =>
+                  field.handleChange(e.target.value as typeof field.state.value)
+                }
+              >
+                {REPO_VISIBILITIES.map((level) => (
+                  <option key={level} value={level}>
+                    {t(`assignments.form.repoVisibility.levels.${level}`)}
+                  </option>
+                ))}
+              </Select>
+              {field.state.value === "public" ? (
+                <Alert tone="warning" role="status" className="mt-2 text-sm">
+                  <span>
+                    {t("assignments.form.repoVisibility.publicWarning")}
+                    {edit ? (
+                      <> {t("assignments.form.repoVisibility.editHelp")}</>
+                    ) : null}
+                  </span>
+                </Alert>
+              ) : null}
+            </>
+          )}
+        </FormField>
+      )}
+    </form.Field>
+  )
+}
+
 // The repo-feature controls (Issues / Wiki / Projects / Pull requests), one
 // uniform tri-state Select each. The default choice is context-aware: "Inherit
 // from template" when a template is set (its help names the template's live
@@ -401,27 +464,6 @@ const REPO_FEATURE_KEYS = [
   { field: "repo_feature_projects", key: "projects" },
   { field: "repo_feature_pull_requests", key: "pull_requests" },
 ] as const
-
-// Resolve a template ref for the advisory feature read, accepting the same
-// inputs the Template field does: `owner/repo`, `owner/repo@branch`, and a bare
-// `repo` name (owner defaults to the org). Returns null on an empty/invalid ref
-// or an unresolved owner (a bare name with no org), so the read (and the
-// refresh button) stay gated on a resolvable template. Reuses the canonical
-// parseTemplateRef so a bare name like "my-template" enables the read instead
-// of silently disabling it.
-function parseTemplateRefSafe(
-  ref: string,
-  org: string | undefined,
-): { owner: string; repo: string } | null {
-  if (!ref.trim()) return null
-  try {
-    const { owner, repo } = parseTemplateRef(ref, org ?? "")
-    // A bare name with no org resolves to an empty owner — not usable.
-    return owner && repo ? { owner, repo } : null
-  } catch {
-    return null
-  }
-}
 
 // Native GitHub pull request template paths, probed in this order — mirrors the
 // accept clients and the runner. Detection auto-checks the toggle.
@@ -551,22 +593,17 @@ export const RepoFeatureControls = ({
   emptyRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const client = useOptionalGitHubClient()
-  const parsed = parseTemplateRefSafe(templateRepo, org)
 
   // Read the template's current feature flags so the "Inherit from template"
   // choice can name its resolved outcome (e.g. "matches template: on").
   // Advisory only: a failed/absent read falls back to a plain label. Skipped
   // for a bare empty_repo and when there's no full owner/repo ref yet — a
   // template-less assignment shows "Default" (no override) instead.
-  const enabled = Boolean(client && parsed && !emptyRepo)
-  const templateRepoQuery = useQuery({
-    queryKey: ["template-repo-features", parsed?.owner, parsed?.repo],
-    queryFn: () => getRepo(client!, parsed!.owner, parsed!.repo),
+  const {
+    parsed,
     enabled,
-    staleTime: 30_000,
-    retry: false,
-  })
+    query: templateRepoQuery,
+  } = useTemplateRepo(templateRepo, org, !emptyRepo)
   const template = enabled ? templateRepoQuery.data : null
   // While a (re)fetch is in flight for a real template, put the feature controls
   // in a loading state: disable them and show a loading label on the inherit

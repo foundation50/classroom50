@@ -2,7 +2,8 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { Badge, Spinner } from "@/components/ui"
+import { Badge, OutcomeAlert, InlineSpinner, Toggle } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -16,6 +17,7 @@ import useGetOrgActionsBudget from "@/hooks/useGetOrgActionsBudget"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
+import { errorText } from "@/types/localizedMessage"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
@@ -128,9 +130,13 @@ const OrgActionsSection = ({
   highlighted?: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const runToggle = useSafeSubmit()
   const [confirmPause, setConfirmPause] = useState(false)
+  // Partial/failed toggle outcome, rendered as a banner in this section
+  // (Primer: feedback next to the control). A clean flip is evident from the
+  // toggle itself and only announces to SR.
+  const [outcome, setOutcome] = useState<AlertOutcome | null>(null)
 
   const { data: mode, isLoading } = useGetOrgActionsMode(org)
   const mutation = useSetOrgActionsMode(org)
@@ -142,23 +148,26 @@ const OrgActionsSection = ({
   // when Actions are off org-wide (disabled) — neither is a pause we own.
   const toggleDisabled = mutation.isPending || unknown || disabled
 
-  const applyMode = (next: "paused" | "active") =>
-    mutation.mutateAsync(next, {
+  const applyMode = (next: "paused" | "active") => {
+    setOutcome(null)
+    return mutation.mutateAsync(next, {
       onSuccess: (result) => {
-        notify({
-          tone: result.status === "complete" ? "success" : "warning",
-          message: result.message,
-        })
+        if (result.status === "complete") {
+          announce(result.message)
+        } else {
+          setOutcome({ tone: "warning", message: result.message })
+        }
       },
       onError: (err) => {
-        notify({
+        setOutcome({
           tone: "error",
           message: t("orgSettings.actions.toggleFailed", {
-            message: err instanceof Error ? err.message : String(err),
+            message: errorText(t, err),
           }),
         })
       },
     })
+  }
 
   return (
     <SettingsSection
@@ -193,21 +202,29 @@ const OrgActionsSection = ({
       }
     >
       {isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-base-content/70">
-          <Spinner /> {t("orgSettings.actions.loading")}
+        <div
+          role="status"
+          className="flex items-center gap-2 text-sm text-base-content/70"
+        >
+          <InlineSpinner size="md" /> {t("orgSettings.actions.loading")}
         </div>
       ) : (
         <div className="space-y-4">
+          <OutcomeAlert
+            outcome={outcome}
+            className="text-sm"
+            onDismiss={() => setOutcome(null)}
+          />
           <ActionsUsagePanel org={org} />
 
           <label
             htmlFor="autograde-pause-toggle"
             className="flex items-start gap-3"
           >
-            <input
+            <Toggle
               id="autograde-pause-toggle"
-              type="checkbox"
-              className="toggle toggle-warning mt-0.5"
+              tone="warning"
+              className="mt-0.5"
               checked={paused}
               disabled={toggleDisabled}
               aria-label={t("orgSettings.actions.toggleLabel")}
@@ -232,8 +249,11 @@ const OrgActionsSection = ({
           </label>
 
           {mutation.isPending && (
-            <div className="flex items-center gap-2 text-sm text-base-content/70">
-              <Spinner /> {t("orgSettings.actions.applying")}
+            <div
+              role="status"
+              className="flex items-center gap-2 text-sm text-base-content/70"
+            >
+              <InlineSpinner size="md" /> {t("orgSettings.actions.applying")}
             </div>
           )}
 
@@ -259,13 +279,16 @@ const OrgActionsSection = ({
 
       <ConfirmModal
         open={confirmPause}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         title={t("orgSettings.actions.confirmTitle")}
         description={t("orgSettings.actions.confirmBody")}
         confirmLabel={t("orgSettings.actions.confirmButton")}
         cancelLabel={t("common.cancel")}
-        onConfirm={() => applyMode("paused").then(() => undefined)}
+        // Through runToggle like the unpause path: it swallows the rejection
+        // after applyMode's onError has set the section banner, so the
+        // failure renders exactly once (ConfirmModal must not also catch it).
+        onConfirm={() => runToggle(() => applyMode("paused"))}
         onClose={() => setConfirmPause(false)}
       />
     </SettingsSection>

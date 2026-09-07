@@ -183,4 +183,18 @@ describe("resolveEmptyRosterWarning", () => {
       resolveEmptyRosterWarning({ ...base, hasRosterRows: true }),
     ).toMatchObject({ show: true, hasRosterRows: true })
   })
+
+  it("never warns about an unknown roster (a non-owner who can't read the student team)", () => {
+    // Settled, not loading: the viewer simply can't tell, so no banner — and
+    // nothing the banner suppresses (Collect) is held back either.
+    expect(resolveEmptyRosterWarning({ ...base, rosterKnown: false })).toEqual({
+      show: false,
+      hasRosterRows: false,
+      isLoading: false,
+    })
+    // Explicit true matches the omitted default.
+    expect(
+      resolveEmptyRosterWarning({ ...base, rosterKnown: true }),
+    ).toMatchObject({ show: true })
+  })
 })

@@ -1,5 +1,3 @@
-import { localizedError } from "@/types/localizedMessage"
-
 // Classroom short-names and assignment slugs both flow into repo/team names.
 // Byte-mirror of the CLI's validate.ShortNamePattern (2-100 chars). The cap is
 // per-segment — a READ-side tolerance so pre-cap documents keep validating.
@@ -16,38 +14,10 @@ export function isCanonicalTeamShortName(shortName: string): boolean {
   return !shortName.endsWith("-") && !shortName.includes("--")
 }
 
-// Boolean well-shaped check (pattern + canonical-team form) for the create-form
-// validators, which can't consume assertValidShortName's thrown localized error.
+// Well-shaped check (pattern + canonical-team form) for the create-form
+// validators.
 export function isValidShortName(shortName: string): boolean {
   return (
     SHORT_NAME_PATTERN.test(shortName) && isCanonicalTeamShortName(shortName)
   )
-}
-
-// Validate a short-name (derived or user-supplied) for both the schema pattern
-// and the team-slug canonical form. Throws an actionable error otherwise.
-// `rawName`, when given, names the free-form source in the error (the migration
-// case that slugified it).
-export function assertValidShortName(
-  shortName: string,
-  rawName?: string,
-): void {
-  if (!SHORT_NAME_PATTERN.test(shortName)) {
-    throw localizedError({
-      key: rawName
-        ? "migration.error.shortNameInvalidFrom"
-        : "migration.error.shortNameInvalid",
-      params: {
-        shortName,
-        rawName: rawName ?? "",
-        description: SHORT_NAME_PATTERN_DESCRIPTION,
-      },
-    })
-  }
-  if (!isCanonicalTeamShortName(shortName)) {
-    throw localizedError({
-      key: "migration.error.shortNameNotCanonical",
-      params: { shortName },
-    })
-  }
 }

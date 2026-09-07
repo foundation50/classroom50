@@ -246,14 +246,25 @@ def test_team_members_403_fails(monkeypatch):
 # Scope checks — staff-team visibility (collect-time grant target) ------------
 
 
-def test_resolve_staff_team_slugs_present_and_absent():
-    meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1-ta"}, "teacher": {"id": 1, "slug": "classroom50-cs1-teacher"}}}
-    assert pt.resolve_staff_team_slugs(meta) == {
-        "ta": "classroom50-cs1-ta",
+def test_resolve_staff_team_slugs_recorded_and_derived():
+    meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1-ta-1"}, "teacher": {"id": 1, "slug": "classroom50-cs1-teacher"}}}
+    # Recorded slugs win verbatim; the unrecorded hta falls back to the derived
+    # slug, mirroring collect_scores.py so the probe reads what the grant targets.
+    assert pt.resolve_staff_team_slugs(meta, "cs1") == {
+        "ta": "classroom50-cs1-ta-1",
         "teacher": "classroom50-cs1-teacher",
+        "hta": "classroom50-cs1-hta",
     }
-    assert pt.resolve_staff_team_slugs({}) == {}
-    assert pt.resolve_staff_team_slugs({"teams": {"ta": {"id": 2}}}) == {}
+    assert pt.resolve_staff_team_slugs({}, "cs1") == {
+        role: f"classroom50-cs1-{role}" for role in pt.STAFF_ROLES
+    }
+    assert pt.resolve_staff_team_slugs({"teams": {"ta": {"id": 2}}}, "cs1")["ta"] == "classroom50-cs1-ta"
+
+
+def test_staff_roles_mirror_collect_scores():
+    from conftest import collect_scores as cs
+
+    assert pt.STAFF_ROLES == cs.STAFF_ROLES
 
 
 def test_staff_team_visible_ok(monkeypatch):

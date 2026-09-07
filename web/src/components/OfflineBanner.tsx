@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
 import { useOnlineStatus } from "@/hooks/useOnlineStatus"
+import { useBannerSlot } from "@/context/bannerStack/BannerStackProvider"
 
 // Global banner shown while the browser reports no network. Non-dismissible: it
 // reflects live connectivity, so it clears itself the moment the `online` event
@@ -11,10 +12,11 @@ import { useOnlineStatus } from "@/hooks/useOnlineStatus"
 export function OfflineBanner() {
   const isOnline = useOnlineStatus()
   const { t } = useTranslation()
+  const show = useBannerSlot("offline", !isOnline)
 
   return (
     <AnimatePresence initial={false}>
-      {!isOnline ? (
+      {show ? (
         <AppBanner
           key="offline"
           tone="warning"

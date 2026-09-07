@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { CopyableDetails, Modal, Heading } from "@/components/ui"
+import { CopyableDetails, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import {
@@ -79,8 +79,8 @@ function CopyableDiagnostics({
 // can point at precisely what shipped.
 export const AboutDialog = forwardRef<
   HTMLDialogElement,
-  { titleId: string; org?: string | null; planName?: string }
->(function AboutDialog({ titleId, org, planName }, ref) {
+  { org?: string | null; planName?: string }
+>(function AboutDialog({ org, planName }, ref) {
   const { t } = useTranslation()
   const release = releaseUrl()
 
@@ -89,16 +89,10 @@ export const AboutDialog = forwardRef<
       ref={ref}
       size="2xl"
       boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
-      aria-labelledby={titleId}
+      title={t("nav.aboutDialogTitle")}
+      subtitle={t("nav.aboutDialogDescription")}
     >
-      <Heading as="h3" id={titleId}>
-        {t("nav.aboutDialogTitle")}
-      </Heading>
-      <p className="mt-1 mb-4 text-sm text-base-content/70">
-        {t("nav.aboutDialogDescription")}
-      </p>
-
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+      <dl className="mt-4 grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
         <dt className="text-base-content/60">{t("nav.aboutVersion")}</dt>
         <dd className="font-mono tabular-nums">
           {release ? (

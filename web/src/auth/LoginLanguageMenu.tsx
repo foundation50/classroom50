@@ -1,9 +1,9 @@
 import { useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
-import { CheckIcon, GlobeIcon } from "@/components/ui/icons"
+import { CheckIcon, GlobeIcon, SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui"
+import { Button, DropdownMenu, cx } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
@@ -19,8 +19,11 @@ export function LoginLanguageMenu() {
   const {
     offered: more,
     loading: loadingRegistry,
+    refreshing,
+    refreshed,
     error: registryError,
     loadRegistry,
+    refresh,
     installAndActivate,
   } = useLanguageRegistry()
 
@@ -28,6 +31,13 @@ export function LoginLanguageMenu() {
   // Synchronous re-entry lock: `switchingCode` is async React state, so a fast
   // second click can fire before it re-renders. A ref flips immediately.
   const switchingRef = useRef(false)
+
+  // The menu is focus-driven (see closeMenu), so nothing in it may take the
+  // `disabled` attribute while busy: the browser drops focus from a disabled
+  // element, which would close the menu on the very click that started the
+  // work. Items go inert via aria-disabled + a click guard instead, with
+  // `menu-disabled` on the <li> for the muted look.
+  const inert = switchingCode !== null || refreshing
 
   const label = (code: string) =>
     code === BASE_LANG ? t("language.baseName") : languageLabel(code, code)
@@ -44,7 +54,7 @@ export function LoginLanguageMenu() {
   // both entry points; only the awaited work differs. `action` returns whether
   // to close the menu (true on a successful switch/install).
   const runSwitch = async (code: string, action: () => Promise<boolean>) => {
-    if (switchingRef.current) return
+    if (switchingRef.current || refreshing) return
     switchingRef.current = true
     setSwitchingCode(code)
     try {
@@ -87,21 +97,17 @@ export function LoginLanguageMenu() {
       >
         <GlobeIcon aria-hidden="true" className="size-4" />
       </Button>{" "}
-      <ul
-        tabIndex={0}
-        role="menu"
-        className="dropdown-content menu z-10 mt-1 max-h-80 w-60 flex-nowrap overflow-y-auto rounded-box border border-base-300 bg-base-100 p-1 shadow"
-      >
+      <DropdownMenu className="max-h-80 w-60 flex-nowrap overflow-y-auto">
         <li className="menu-title text-xs">
           {t("language.switcherInstalled")}
         </li>
         {availableLangs.map((code) => (
-          <li key={code}>
+          <li key={code} className={inert ? "menu-disabled" : undefined}>
             <button
               type="button"
               className="flex items-center justify-between"
               onClick={() => void switchInstalled(code)}
-              disabled={switchingCode !== null}
+              aria-disabled={inert || undefined}
             >
               <span className="truncate">{label(code)}</span>
               {code === lang ? (
@@ -135,12 +141,12 @@ export function LoginLanguageMenu() {
           <>
             <li className="menu-title text-xs">{t("language.switcherMore")}</li>
             {more.map((l) => (
-              <li key={l.code}>
+              <li key={l.code} className={inert ? "menu-disabled" : undefined}>
                 <button
                   type="button"
                   className="flex items-center justify-between"
                   onClick={() => void installAndSwitch(l.code)}
-                  disabled={switchingCode !== null}
+                  aria-disabled={inert || undefined}
                 >
                   <span className="truncate">{label(l.code)}</span>
                   {switchingCode === l.code && (
@@ -151,7 +157,44 @@ export function LoginLanguageMenu() {
             ))}
           </>
         )}
-      </ul>
+
+        {/* Refresh past the browser's cached manifest so a language published
+            since the last visit shows up without a hard reload. Hidden while
+            the first load is still in flight (nothing to refresh yet). */}
+        {!loadingRegistry && (
+          <li
+            className={cx(
+              "mt-1 border-t border-base-300 pt-1",
+              switchingCode !== null && "menu-disabled",
+            )}
+          >
+            <button
+              type="button"
+              className="flex items-center gap-2 text-xs text-base-content/70"
+              onClick={() => {
+                if (inert) return
+                void refresh()
+              }}
+              aria-disabled={inert || undefined}
+              aria-live="polite"
+            >
+              {refreshing ? (
+                <InlineSpinner className="shrink-0" />
+              ) : refreshed ? (
+                <CheckIcon
+                  className="size-4 shrink-0 text-success"
+                  aria-hidden="true"
+                />
+              ) : (
+                <SyncIcon className="size-4 shrink-0" aria-hidden="true" />
+              )}
+              {refreshed
+                ? t("language.refreshDone")
+                : t("language.refreshList")}
+            </button>
+          </li>
+        )}
+      </DropdownMenu>
     </div>
   )
 }

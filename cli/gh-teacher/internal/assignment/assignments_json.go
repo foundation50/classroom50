@@ -28,15 +28,17 @@ import (
 )
 
 // Assignment modes, single-sourced from the shared contract: `individual`
-// (one repo per student) and `group` (a shared repo, bounded by
-// max_group_size).
+// (one repo per student), `group` (the legacy shared repo backed by direct
+// collaborators, bounded by max_group_size), and `team` (a shared repo backed
+// by a per-assignment GitHub Team, formed per team_formation).
 const (
 	ModeIndividual = contract.ModeIndividual
 	ModeGroup      = contract.ModeGroup
+	ModeTeam       = contract.ModeTeam
 )
 
 // AssignmentModes is the allow-list, sorted so error messages stay stable.
-var AssignmentModes = []string{ModeGroup, ModeIndividual}
+var AssignmentModes = []string{ModeGroup, ModeIndividual, ModeTeam}
 
 func IsValidAssignmentMode(m string) bool {
 	for _, allowed := range AssignmentModes {
@@ -59,6 +61,16 @@ func ValidateStudentPermission(p string) error {
 	return nil
 }
 
+// ValidateTeamFormation checks a team assignment's team_formation against the
+// contract allow-list. Empty is invalid for team mode (the field is required
+// there); callers gate presence per mode via the mode/size/formation coupling.
+func ValidateTeamFormation(f string) error {
+	if !contract.IsValidTeamFormation(f) {
+		return fmt.Errorf("invalid team_formation %q: must be one of %v", f, contract.TeamFormations)
+	}
+	return nil
+}
+
 // ValidateSubmissionMode accepts "" (the wire default, every-push) or one of
 // contract.SubmissionModes. An explicit "every-push" is legal on read (other
 // writers may emit it) even though this CLI normalizes it to absent on write.
@@ -68,6 +80,19 @@ func ValidateSubmissionMode(m string) error {
 	}
 	if !contract.IsValidSubmissionMode(m) {
 		return fmt.Errorf("invalid submission_mode %q: must be one of %v", m, contract.SubmissionModes)
+	}
+	return nil
+}
+
+// ValidateRepoVisibility accepts "" (the wire default, private) or one of
+// contract.RepoVisibilities. An explicit "private" is legal on read (other
+// writers may emit it) even though this CLI normalizes it to absent on write.
+func ValidateRepoVisibility(v string) error {
+	if v == "" {
+		return nil
+	}
+	if !contract.IsValidRepoVisibility(v) {
+		return fmt.Errorf("invalid repo_visibility %q: must be one of %v", v, contract.RepoVisibilities)
 	}
 	return nil
 }
@@ -127,7 +152,9 @@ type AssignmentsJSON struct {
 // already accepted. Client gates are advisory (assignments.json is public); the
 // enforceable boundary is that locking a PRIVATE in-org template also removes
 // the STUDENT team's read on it (staff teams untouched), and unlocking
-// re-grants it. Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
+// re-grants it. Set at creation (`assignment add --locked` or the web form) the
+// grant is withheld until the first unlock. Mirrors FeedbackPR's wire shape:
+// omitempty, absent reads as false.
 //
 // Closed narrowly ends the submission WINDOW: unlike Locked it only refuses a
 // NEW accept (web + `gh student accept`); it does NOT hide the assignment or
@@ -151,6 +178,14 @@ type AssignmentsJSON struct {
 // assignment submission-mode`). Permitted on every repo shape, including
 // EmptyRepo / NoAutograder: with no shim it carries no trigger, but it still
 // defines what the submissions page counts as a submission.
+//
+// RepoVisibility is the visibility each student repo is CREATED with at accept
+// time: "" or contract.RepoVisibilityPrivate (the wire default — writers omit
+// it) keeps today's private repos; contract.RepoVisibilityPublic creates them
+// public. Accept-time only, not retrofitted: changing it affects only repos
+// created from then on. Best-effort fail-private on the accept side — org
+// policy can block a member's public create, in which case accept retries as
+// private and tells the student the teacher can flip it later.
 type AssignmentEntry struct {
 	Slug               string           `json:"slug"`
 	Name               string           `json:"name"`
@@ -163,8 +198,10 @@ type AssignmentEntry struct {
 	Mode               string           `json:"mode"`
 	Autograder         string           `json:"autograder"`
 	MaxGroupSize       int              `json:"max_group_size,omitempty"`
+	TeamFormation      string           `json:"team_formation,omitempty"`
 	Runtime            *RuntimeRef      `json:"runtime,omitempty"`
 	Tests              []TestSpec       `json:"tests,omitempty"`
+	TestDefaults       *TestDefaults    `json:"test_defaults,omitempty"`
 	FeedbackPR         bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo          bool             `json:"empty_repo,omitempty"`
 	NoAutograder       bool             `json:"no_autograder,omitempty"`
@@ -179,6 +216,7 @@ type AssignmentEntry struct {
 	StudentPermission  string           `json:"student_permission,omitempty"`
 	SubmissionMode     string           `json:"submission_mode,omitempty"`
 	SubmissionTags     []string         `json:"submission_tags,omitempty"`
+	RepoVisibility     string           `json:"repo_visibility,omitempty"`
 	RepoFeatures       *RepoFeatures    `json:"repo_features,omitempty"`
 	MigratedFrom       *MigratedFromRef `json:"migrated_from,omitempty"`
 
@@ -203,11 +241,14 @@ type AssignmentEntry struct {
 var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
-	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
-	"locked": {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
+	"team_formation": {},
+	"runtime":        {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
+	"test_defaults": {},
+	"locked":        {}, "closed": {}, "allowed_files": {}, "release_assets": {}, "pass_threshold": {},
 	"migrated_from": {}, "available_from": {}, "available_from_meta": {},
 	"renamed_from":       {},
 	"student_permission": {}, "submission_mode": {}, "submission_tags": {},
+	"repo_visibility":      {},
 	"no_autograder":        {},
 	"init_shim":            {},
 	"include_all_branches": {},
@@ -431,8 +472,8 @@ type DueMeta struct {
 }
 
 // due_meta.source values: the offset came from the input itself, was
-// auto-detected from the machine's local zone, or was carried in from
-// a migrated source deadline.
+// auto-detected from the machine's local zone, or was carried in from a
+// source deadline by the retired `classroom migrate` command.
 const (
 	DueSourceExplicit = "explicit-offset"
 	DueSourceAuto     = "auto-detected"
@@ -443,7 +484,7 @@ const (
 // kept in lockstep with the schema's pattern.
 var dueMetaOffsetRe = regexp.MustCompile(`^[+-]([01]\d|2[0-3]):[0-5]\d$`)
 
-// NewDueMeta builds the provenance block for the --due and migrate paths.
+// NewDueMeta builds the provenance block for the --due path.
 // Callers set Zone separately when the offset was auto-detected.
 func NewDueMeta(input string, t time.Time, source string) *DueMeta {
 	return &DueMeta{Input: input, Offset: t.Format("-07:00"), Source: source}
@@ -512,7 +553,7 @@ func validateRFC3339Field(field, value, example string) error {
 		return nil
 	}
 	if _, err := time.Parse(time.RFC3339, value); err != nil {
-		return fmt.Errorf("%s %q is not an RFC 3339 timestamp with timezone (e.g., %s)", field, value, example)
+		return fmt.Errorf("%s %q is not an RFC 3339 timestamp with timezone (for example %s)", field, value, example)
 	}
 	return nil
 }
@@ -531,10 +572,12 @@ func validateAvailableFromFields(entry AssignmentEntry) error {
 	return nil
 }
 
-// MigratedFromRef records where an assignment originated when imported by
-// `classroom migrate`. Hand-authored entries never carry it. OriginalSlug is
-// set only when it differs from Slug; StarterRepo is the legacy "owner/repo"
-// before re-templating; InviteLink is diagnostic.
+// MigratedFromRef records where an assignment originated when imported by the
+// retired `classroom migrate` command (GitHub Classroom shut down). Nothing
+// writes it anymore, but migrated entries carry it and every read-modify-write
+// must round-trip it. OriginalSlug is set only when it differs from Slug;
+// StarterRepo is the legacy "owner/repo" before re-templating; InviteLink is
+// diagnostic.
 type MigratedFromRef struct {
 	Source       string `json:"source"`
 	ClassroomID  int64  `json:"classroom_id"`
@@ -853,14 +896,14 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 		maxLen = slugMaxLen
 	}
 	if maxLen < 2 {
-		return "", fmt.Errorf("cannot derive a slug for %q: the target classroom leaves %d characters for a slug (student repo names are capped at %d by GitHub) — reuse into a classroom with a shorter short-name",
+		return "", fmt.Errorf("cannot derive a slug for %q: the target classroom leaves %d characters for a slug (student repo names are capped at %d by GitHub); reuse into a classroom with a shorter short-name",
 			slug, maxLen, slugMaxLen)
 	}
 	base := trimSlugTo(slug, maxLen)
 	if len(base) < 2 {
 		// A hyphen just inside the cut can trim the base below ShortName's
 		// 2-char minimum even when maxLen >= 2 (e.g. "a-..." at budget 2).
-		return "", fmt.Errorf("cannot derive a slug for %q within the %d-character budget (trimming leaves less than the 2-character minimum) — pass an explicit, shorter --slug",
+		return "", fmt.Errorf("cannot derive a slug for %q within the %d-character budget (trimming leaves less than the 2-character minimum); pass an explicit, shorter --slug",
 			slug, maxLen)
 	}
 	if !taken(base) {
@@ -880,7 +923,7 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string, maxLen int) (stri
 		suffix := fmt.Sprintf("-%d", n)
 		room := maxLen - len(suffix)
 		if room < 1 || len(trimSlugTo(stem, room)) < 1 {
-			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget — pass an explicit, shorter --slug", slug, maxLen)
+			return "", fmt.Errorf("cannot auto-suffix slug %q within the %d-character budget; pass an explicit, shorter --slug", slug, maxLen)
 		}
 		candidate := trimSlugTo(stem, room) + suffix
 		if !taken(candidate) {
@@ -959,15 +1002,29 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateMaxGroupSize(entry.MaxGroupSize); err != nil {
 		return err
 	}
-	// Group must carry a usable limit (>= 2); individual must carry none.
+	// Group and team must carry a usable limit (>= 2); individual must carry
+	// none. team_formation is required for team mode and forbidden otherwise.
 	switch entry.Mode {
 	case ModeGroup:
 		if entry.MaxGroupSize < 2 {
 			return fmt.Errorf("group assignment %q must set max_group_size >= 2 (got %d)", entry.Slug, entry.MaxGroupSize)
 		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("group assignment %q must not set team_formation (got %q; team_formation is team-mode only)", entry.Slug, entry.TeamFormation)
+		}
+	case ModeTeam:
+		if entry.MaxGroupSize < 2 {
+			return fmt.Errorf("team assignment %q must set max_group_size >= 2 (got %d)", entry.Slug, entry.MaxGroupSize)
+		}
+		if err := ValidateTeamFormation(entry.TeamFormation); err != nil {
+			return fmt.Errorf("team assignment %q: %w", entry.Slug, err)
+		}
 	case ModeIndividual:
 		if entry.MaxGroupSize != 0 {
 			return fmt.Errorf("individual assignment %q must not set max_group_size (got %d)", entry.Slug, entry.MaxGroupSize)
+		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("individual assignment %q must not set team_formation (got %q)", entry.Slug, entry.TeamFormation)
 		}
 	}
 	if entry.Runtime != nil {
@@ -977,6 +1034,11 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	}
 	if len(entry.Tests) > 0 {
 		if err := ValidateTests(entry.Tests); err != nil {
+			return err
+		}
+	}
+	if entry.TestDefaults != nil {
+		if err := ValidateTestDefaults(*entry.TestDefaults); err != nil {
 			return err
 		}
 	}
@@ -996,6 +1058,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 		return err
 	}
 	if err := ValidateSubmissionMode(entry.SubmissionMode); err != nil {
+		return err
+	}
+	if err := ValidateRepoVisibility(entry.RepoVisibility); err != nil {
 		return err
 	}
 	if err := ValidateSubmissionTags(entry.SubmissionTags); err != nil {
@@ -1064,7 +1129,7 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 // --no-autograder flag; the parse path wraps with the entry context.
 func validateNoAutograderExclusions(entry AssignmentEntry) error {
 	if entry.Template == nil {
-		return errors.New("no_autograder requires a template: it marks a TEMPLATED assignment as teacher-supplied CI (the template carries its own workflows); a template-less repo has no CI to run — use empty_repo for a bare repo instead")
+		return errors.New("no_autograder requires a template: it marks a templated assignment as teacher-supplied CI (the template carries its own workflows), and a template-less repo has no CI to run; use empty_repo for a bare repo instead")
 	}
 	if entry.EmptyRepo {
 		return errors.New("no_autograder is mutually exclusive with empty_repo: a bare repo already commits no shim")
@@ -1119,9 +1184,9 @@ func validateInitShimExclusions(entry AssignmentEntry) error {
 // mutually exclusive with the template-less states empty_repo and init_shim
 // (neither is ever generated). It is compatible with everything else, including
 // no_autograder and the grading-adjacent fields (branches do not affect
-// grading). Unlike empty_repo/no_autograder/init_shim it is NOT immutable —
-// changing it affects only repos generated from now on (no retrofit), so there
-// is no ValidateIncludeAllBranchesUnchanged.
+// grading). Like empty_repo/no_autograder/init_shim, changing it affects only
+// repos generated from now on (no retrofit), so there is no
+// ValidateIncludeAllBranchesUnchanged.
 func validateIncludeAllBranchesExclusions(entry AssignmentEntry) error {
 	if entry.Template == nil {
 		return errors.New("include_all_branches requires a template: it only affects the template generate call; a template-less repo is never generated")
@@ -1208,9 +1273,22 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		if entry.MaxGroupSize < 2 {
 			return fmt.Errorf("entry %q is group mode but max_group_size is %d (must be >= 2)", entry.Slug, entry.MaxGroupSize)
 		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("entry %q is group mode but sets team_formation %q (team-mode only)", entry.Slug, entry.TeamFormation)
+		}
+	case ModeTeam:
+		if entry.MaxGroupSize < 2 {
+			return fmt.Errorf("entry %q is team mode but max_group_size is %d (must be >= 2)", entry.Slug, entry.MaxGroupSize)
+		}
+		if err := ValidateTeamFormation(entry.TeamFormation); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
 	case ModeIndividual:
 		if entry.MaxGroupSize != 0 {
 			return fmt.Errorf("entry %q is individual mode but sets max_group_size %d", entry.Slug, entry.MaxGroupSize)
+		}
+		if entry.TeamFormation != "" {
+			return fmt.Errorf("entry %q is individual mode but sets team_formation %q", entry.Slug, entry.TeamFormation)
 		}
 	}
 	if entry.Runtime != nil {
@@ -1220,6 +1298,11 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 	}
 	if len(entry.Tests) > 0 {
 		if err := ValidateTests(entry.Tests); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
+	}
+	if entry.TestDefaults != nil {
+		if err := ValidateTestDefaults(*entry.TestDefaults); err != nil {
 			return fmt.Errorf("entry %q: %w", entry.Slug, err)
 		}
 	}
@@ -1239,6 +1322,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateSubmissionMode(entry.SubmissionMode); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateRepoVisibility(entry.RepoVisibility); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidateSubmissionTags(entry.SubmissionTags); err != nil {

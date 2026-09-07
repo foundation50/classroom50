@@ -6,11 +6,15 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError } from "../errors"
 import { classroomPagesSegment } from "@/util/secret"
 import { log } from "./shared"
-import { localizedError } from "@/types/localizedMessage"
+import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 
-export async function fetchJson<T>(url: string): Promise<T> {
+export async function fetchJson<T>(
+  url: string,
+  timeoutMs?: number,
+): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",
+    ...(timeoutMs ? { signal: AbortSignal.timeout(timeoutMs) } : {}),
   })
 
   if (response.status === 404) {
@@ -27,13 +31,23 @@ export async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
+// The github.io base every published resource lives under by default.
+// An org with a custom Pages domain overrides it per classroom via
+// classroom.json's `pages_base_url` (see fetchPagesAssignments).
+export function defaultPagesBaseUrl(org: string) {
+  return `https://${org}.github.io/${CONFIG_REPO}`
+}
+
 export function pagesAssignmentUrl(
   org: string,
   classroom: string,
   secret?: string,
+  // Normalized custom base (classroom.json / team-description
+  // `pages_base_url`); absent = the github.io default.
+  pagesBaseUrl?: string,
 ) {
   const segment = classroomPagesSegment(classroom, secret)
-  return `https://${org}.github.io/${CONFIG_REPO}/${segment}/assignments.json`
+  return `${pagesBaseUrl || defaultPagesBaseUrl(org)}/${segment}/assignments.json`
 }
 
 // Public, unauthenticated signal that an org is a real Classroom50 org: the
@@ -91,17 +105,111 @@ export function extractAssignments(json: AssignmentsJson): Assignment[] {
   return json.assignments
 }
 
+// One attempt against one host: fetch + shape-check. A bare fetch failure
+// (network, DNS, a CORS-blocked redirect, or the custom-host timeout — the
+// browser hides which) is named here so the view never renders a raw
+// "Failed to fetch". `networkErrorKey` lets the custom-host attempt carry
+// custom-domain-specific remediation copy.
+async function fetchAssignmentsManifest(
+  url: string,
+  opts?: { timeoutMs?: number; networkErrorKey?: string },
+): Promise<Assignment[]> {
+  let json: AssignmentsJson
+  try {
+    json = await fetchJson<AssignmentsJson>(url, opts?.timeoutMs)
+  } catch (err) {
+    if (localizedMessageOf(err)) throw err
+    throw localizedError({
+      key: opts?.networkErrorKey ?? "pagesErrors.classroomNetworkFailed",
+    })
+  }
+  return extractAssignments(json)
+}
+
+// Bound the custom-host attempt: a black-holing teacher-typed domain must not
+// stall every student read behind the browser's multi-minute default timeout.
+// Matches the 5s bound orgPublishesClassroom50Pages already uses; the
+// github.io attempt stays unbounded (a known-good host, and the last resort).
+export const CUSTOM_HOST_TIMEOUT_MS = 5000
+
+// The URL(s) a published-resource read attempts, in order: the custom base
+// first when one is set, then the github.io default — deduped when they
+// coincide. The single source for the fallback order AND every "tried to
+// load" error surface (the accept page renders this list), so the two can't
+// drift. `relPath` is the path below the Pages base (no leading slash).
+export function attemptedPagesUrls(
+  org: string,
+  relPath: string,
+  pagesBaseUrl?: string,
+): string[] {
+  const defaultUrl = `${defaultPagesBaseUrl(org)}/${relPath}`
+  const customUrl = pagesBaseUrl ? `${pagesBaseUrl}/${relPath}` : undefined
+  return customUrl && customUrl !== defaultUrl
+    ? [customUrl, defaultUrl]
+    : [defaultUrl]
+}
+
+export function attemptedPagesAssignmentUrls(
+  org: string,
+  classroom: string,
+  secret?: string,
+  pagesBaseUrl?: string,
+): string[] {
+  return attemptedPagesUrls(
+    org,
+    `${classroomPagesSegment(classroom, secret)}/assignments.json`,
+    pagesBaseUrl,
+  )
+}
+
 export async function fetchPagesAssignments(
   org: string,
   classroom: string,
   secret?: string,
+  pagesBaseUrl?: string,
 ): Promise<Assignment[]> {
-  const json = await fetchJson<AssignmentsJson>(
-    pagesAssignmentUrl(org, classroom, secret),
+  const urls = attemptedPagesAssignmentUrls(
+    org,
+    classroom,
+    secret,
+    pagesBaseUrl,
   )
-  const assignments = extractAssignments(json)
 
-  return assignments
+  if (urls.length === 1) {
+    return fetchAssignmentsManifest(urls[0])
+  }
+
+  // Custom Pages domain first — github.io answers such an org with a 301 the
+  // browser's CORS check rejects (issue #776). Fall back to the default host
+  // so a stale/wrong custom domain can't lock students out of a working
+  // github.io site. Both failing throws a combined error naming both URLs,
+  // with the CUSTOM host's failure as the detail: it is the org's intended
+  // source, so its error is the actionable one — the default host's failure is
+  // usually just the CORS-doomed 301 this feature exists to bypass.
+  const [customUrl, defaultUrl] = urls
+  let customErr: unknown
+  try {
+    return await fetchAssignmentsManifest(customUrl, {
+      timeoutMs: CUSTOM_HOST_TIMEOUT_MS,
+      networkErrorKey: "pagesErrors.customHostUnreachable",
+    })
+  } catch (err) {
+    customErr = err
+  }
+  try {
+    return await fetchAssignmentsManifest(defaultUrl)
+  } catch {
+    throw localizedError({
+      key: "pagesErrors.classroomUnreachableBothHosts",
+      params: {
+        customUrl,
+        defaultUrl,
+        detail: localizedMessageOf(customErr) ?? {
+          key: "pagesErrors.customHostUnreachable",
+        },
+      },
+    })
+  }
 }
 
 export type Classroom50OrgSummary = {

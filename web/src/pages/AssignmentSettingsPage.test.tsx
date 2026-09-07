@@ -65,11 +65,25 @@ vi.mock("@/auth/useGithubAuth", () => ({
 vi.mock("@/hooks/useGetAssignmentRepo", () => ({
   default: () => ({ data: null, isLoading: false }),
 }))
+// Team mode resolves the shared group repo through the viewer's team; these
+// tests exercise non-team assignments, so it stays settled-empty.
+vi.mock("@/hooks/useMyGroupTeam", () => ({
+  default: () => ({ data: null, isLoading: false, isError: false }),
+  useMyGroupTeam: () => ({ data: null, isLoading: false, isError: false }),
+}))
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: () => ({ data: null, isLoading: false, assignment: undefined }),
 }))
 vi.mock("@/hooks/useDotClassroom50", () => ({
   default: () => ({ data: null, isLoading: false }),
+}))
+vi.mock("@/hooks/useStudentClassrooms", () => ({
+  useClassroomSecret: () => ({
+    secret: undefined,
+    pagesBaseUrl: undefined,
+    isLoading: false,
+    isError: false,
+  }),
 }))
 vi.mock("@/hooks/useDocumentTitle", () => ({
   useDocumentTitle: () => undefined,

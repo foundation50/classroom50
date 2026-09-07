@@ -52,10 +52,12 @@ export function useBestEffortOwnerReconcile<TResult>({
   isPermanent = defaultIsPermanent,
   isTransientSuccess,
   logSkip,
-}: BestEffortOwnerReconcileConfig<TResult>): void {
+}: BestEffortOwnerReconcileConfig<TResult>): { isPending: boolean } {
   const inFlight = useRef<Set<string>>(new Set())
 
   const reconcile = useMutation<TResult, Error, ReconcileVars>({
+    // Every reconcile behind this chains team, description, and roster writes.
+    meta: { keepTabOpen: true, backgroundPass: true },
     mutationFn: run,
     onSuccess: (result, vars) => {
       // Release the key for a non-latching success so a later render retries
@@ -80,6 +82,10 @@ export function useBestEffortOwnerReconcile<TResult>({
     inFlight.current.add(key)
     mutate({ org, classroom })
   }, [enabled, org, classroom, mutate])
+
+  // The run's live in-flight signal, so a page can show "reconciling" state
+  // (the reconcile itself stays best-effort and toast-free).
+  return { isPending: reconcile.isPending }
 }
 
 export default useBestEffortOwnerReconcile

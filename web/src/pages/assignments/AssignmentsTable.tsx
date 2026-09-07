@@ -6,17 +6,22 @@ import {
   EyeIcon,
   LockIcon,
   PencilIcon,
+  PlusIcon,
   SlidersIcon,
 } from "@/components/ui/icons"
 
 import useGetScores from "@/hooks/useGetScores"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
-import { existingGroupRepos } from "@/pages/submissions/dashboard"
-import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
+import {
+  assignmentFunnelCounts,
+  type AssignmentFunnelCounts,
+  type FunnelRoster,
+} from "@/pages/submissions/dashboard"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"
-import { useState } from "react"
+import { useMemo, useState } from "react"
+import type { ReactNode } from "react"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
@@ -41,6 +46,7 @@ import {
   Button,
   MetricCount,
   MetricBar,
+  RouterButton,
   SkeletonRows,
   SortableTh,
   TableShell,
@@ -104,16 +110,25 @@ const AssignmentsTable = ({
   secretPending,
   assignments,
   allAssignments,
-  studentCount,
+  roster,
+  includeStaff = false,
   loading = false,
+  loadError = false,
+  onRetryLoad,
+  emptyAction,
   archived = false,
   canAuthor = false,
+  acceptanceComplete = true,
   sort,
   onSortChange,
   viewSignature = "",
 }: {
   org: string
   classroom: string
+  // Whether the org repo list covers every repo (an org owner). A non-owner
+  // sees only the repos their staff team was granted, so the Accepted cell is
+  // a lower bound and its tooltip says so instead of asserting acceptance.
+  acceptanceComplete?: boolean
   // The classroom's capability-URL secret (classroom.json `secret`), read off
   // the same classroom.json the page already loads for `archived`. Threaded in
   // so each row's copied accept link carries `?k=` for a protected classroom;
@@ -129,10 +144,24 @@ const AssignmentsTable = ({
   // siblings from it would drop a hidden slug-extending sibling and
   // mis-attribute its repos. Falls back to `assignments` when omitted.
   allAssignments?: Assignment[]
-  // Authoritative student-role count (from useStudentCount), the denominator for
-  // the submission ratio. undefined while the count is still resolving.
-  studentCount?: number
+  // Who the funnel counts (from useFunnelRoster): `counted` is the denominator
+  // and the numerators are joined to it. undefined while the roster resolves
+  // or is unknowable, which renders the cells as a placeholder.
+  roster?: FunnelRoster
+  // Whether `roster.counted` includes teaching staff; only changes the copy
+  // ("students" vs "students and staff") and the hidden-staff hint.
+  includeStaff?: boolean
   loading?: boolean
+  // A failed (non-404) assignments.json read. Rendered as an error row with
+  // retry — never as the "No assignments created" empty state, which would
+  // tell a teacher their assignments are gone.
+  loadError?: boolean
+  onRetryLoad?: () => void
+  // The "New assignment" affordance rendered inside the first-use empty
+  // state (Primer blankslate: the resolving action lives in the empty state;
+  // the page hides its toolbar so the view has one primary action). Omit for
+  // read-only viewers — the empty state then shows the plain statement.
+  emptyAction?: ReactNode
   // When archived, hide per-row mutating actions (edit/reuse/delete); viewing
   // stays available.
   archived?: boolean
@@ -154,45 +183,66 @@ const AssignmentsTable = ({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: scoresData } = useGetScores(org, classroom)
-  // Org repo list, for the group-row denominator (accepted groups = group
-  // repos that exist). Shared react-query cache with the submissions page.
+  // Org repo list, for every row's Accepted count (this assignment's repos that
+  // exist). Shared react-query cache with the submissions page.
   const { data: orgRepos } = useGetOrgRepos(org)
   // Sibling slugs guard group-repo attribution against a slug-extending
   // sibling ("hw1-bonus" under "hw1") — derived from the full list so a
   // filtered-out sibling still guards; see existingGroupRepos.
-  const siblingSlugs = (allAssignments ?? assignments)?.map((a) => a.slug) ?? []
-  // Raw funnel counts for one row, shared by the Accepted and Submitted cells.
-  //
-  // `submitted`: an assignment that skips grading records no autograded
-  // `entries`, so its count comes from the bucket's `detected` list —
-  // commits/tags collect_scores.py observed in the student repos. Only
-  // no_autograder is detected; a bare empty_repo has no submission definition,
-  // so it keeps the entries-based count rather than waiting for a `detected`
-  // list no writer produces. And a teacher can hand-grade a no_autograder
-  // assignment, which DOES write entries — so take whichever signal credits
-  // more owners instead of letting an empty detection hide real grades (#659).
-  //
-  // `notCollected`: a `detected` key that is absent (not `[]`) means no
-  // collect has walked the bucket yet, which is NOT "nobody submitted".
-  //
-  // `accepted`: this assignment's existing repos, reverse-parsed from the org
-  // repo list — individual student repos and group repos share the
-  // <classroom>-<slug>-<owner> name shape, so one parse serves both modes.
-  // undefined while the repo list is still loading.
-  const funnelCounts = (assignment: Assignment) => {
-    const graded = scoresData?.submissions?.[assignment.slug]?.length ?? 0
-    const detectedRows = isNoAutograderAssignment(assignment)
-      ? scoresData?.detected?.[assignment.slug]
-      : undefined
-    const notCollected =
-      isNoAutograderAssignment(assignment) && !detectedRows && graded === 0
-    const submitted = Math.max(graded, detectedRows?.length ?? 0)
-    const accepted = orgRepos
-      ? existingGroupRepos(orgRepos, classroom, assignment.slug, siblingSlugs)
-          .length
-      : undefined
-    return { submitted, accepted, notCollected }
-  }
+  const siblingSlugs = useMemo(
+    () => (allAssignments ?? assignments)?.map((a) => a.slug) ?? [],
+    [allAssignments, assignments],
+  )
+  // Per-row funnel (Accepted and Submitted cells), derived once per data change
+  // rather than per row per render: `existingGroupRepos` walks the whole org
+  // list for each assignment.
+  const funnel = useMemo(() => {
+    const byShown = new Map<string, AssignmentFunnelCounts>()
+    for (const assignment of assignments ?? []) {
+      byShown.set(
+        assignment.slug,
+        assignmentFunnelCounts(
+          assignment,
+          scoresData,
+          orgRepos,
+          classroom,
+          siblingSlugs,
+          roster,
+        ),
+      )
+    }
+    return byShown
+  }, [assignments, scoresData, orgRepos, classroom, siblingSlugs, roster])
+  const funnelCounts = (assignment: Assignment): AssignmentFunnelCounts =>
+    funnel.get(assignment.slug) ??
+    assignmentFunnelCounts(
+      assignment,
+      scoresData,
+      orgRepos,
+      classroom,
+      siblingSlugs,
+      roster,
+    )
+  const total = roster?.counted.size ?? 0
+  // Nobody to measure against: the roster resolved to zero counted people (a
+  // classroom before students join, or a staff-only test run with the toggle
+  // off). A "0 / 0" bar would read as "nobody accepted" when the real answer
+  // is "no students yet", so say that, and name the toggle when it hides
+  // repos (#860).
+  const emptyRosterCell = (hiddenStaffRepos: number) => (
+    <span
+      className="inline-block w-28 whitespace-nowrap text-center text-base-content/60"
+      title={
+        hiddenStaffRepos > 0 && !includeStaff
+          ? t("assignments.table.hiddenStaffReposTitle", {
+              count: hiddenStaffRepos,
+            })
+          : t("assignments.table.noStudentsYetTitle")
+      }
+    >
+      {t("assignments.table.noStudentsYet")}
+    </span>
+  )
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
@@ -263,17 +313,53 @@ const AssignmentsTable = ({
           animate="animate"
         >
           {loading && <SkeletonRows bars={SKELETON_BARS} />}
-          {!loading && !assignments?.length && (
+          {!loading && loadError && (
+            <tr>
+              <td colSpan={7} className="px-6 py-10 text-center">
+                <span
+                  role="alert"
+                  className="inline-flex items-center gap-2 text-sm text-error"
+                >
+                  <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
+                  {t("assignments.table.loadError")}
+                </span>
+                <div className="mt-3">
+                  <Button variant="ghost" size="sm" onClick={onRetryLoad}>
+                    {t("assignments.table.retry")}
+                  </Button>
+                </div>
+              </td>
+            </tr>
+          )}
+          {!loading && !loadError && !assignments?.length && (
             <tr>
               <td colSpan={7}>
-                <EmptyState
-                  variant="bare"
-                  body={t("assignments.table.empty")}
-                />
+                {emptyAction ? (
+                  // First-use blankslate (Primer): the resolving action lives
+                  // here, and the page hides its toolbar so the view carries
+                  // a single primary action.
+                  <EmptyState
+                    variant="bare"
+                    className="py-12"
+                    icon={PlusIcon}
+                    titleAs="h3"
+                    title={t("assignments.table.emptyTitle")}
+                    body={t("assignments.table.emptyBody")}
+                    action={emptyAction}
+                  />
+                ) : (
+                  // Read-only viewers (TA, archived classroom) get the plain
+                  // statement — there is no action they could take.
+                  <EmptyState
+                    variant="bare"
+                    body={t("assignments.table.empty")}
+                  />
+                )}
               </td>
             </tr>
           )}
           {!loading &&
+            !loadError &&
             assignments?.map((assignment) => (
               <ClickableTr key={assignment.slug} className="hover:bg-base-200">
                 <td
@@ -383,7 +469,8 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    const { submitted, accepted } = funnelCounts(assignment)
+                    const { accepted, submitted, hiddenStaffRepos } =
+                      funnelCounts(assignment)
                     if (accepted === undefined) {
                       // Org repo list still loading — no acceptance signal yet.
                       return <span className="text-base-content/60">—</span>
@@ -409,27 +496,38 @@ const AssignmentsTable = ({
                         <MetricCount
                           value={accepted}
                           tone="info"
-                          title={t("assignments.table.groupsAcceptedTitle")}
+                          title={
+                            acceptanceComplete
+                              ? t("assignments.table.groupsAcceptedTitle")
+                              : t("assignments.table.groupsVisibleTitle")
+                          }
                         />
                       )
                     }
-                    const total = studentCount ?? 0
-                    // Clamp (KTD4-style): a staff/extra repo could push the
-                    // count past the student-role total, and a recorded
-                    // submission implies its repo existed.
-                    const shown = Math.min(
-                      Math.max(accepted, Math.min(submitted, total)),
-                      total,
-                    )
+                    // Roster still resolving (or unknowable to this viewer):
+                    // no denominator, so no ratio.
+                    if (!roster) {
+                      return <span className="text-base-content/60">—</span>
+                    }
+                    if (total === 0) return emptyRosterCell(hiddenStaffRepos)
+                    // Both numerators are joined to the same roster as the
+                    // denominator (assignmentFunnelCounts), so no clamp. A
+                    // recorded submission implies its repo exists even when
+                    // a non-owner's repo list can't show it.
+                    const shown = Math.max(accepted, submitted)
+                    const titleKey = acceptanceComplete
+                      ? includeStaff
+                        ? "assignments.table.acceptedTitleWithStaff"
+                        : "assignments.table.acceptedTitle"
+                      : includeStaff
+                        ? "assignments.table.acceptedVisibleTitleWithStaff"
+                        : "assignments.table.acceptedVisibleTitle"
                     return (
                       <MetricBar
                         value={shown}
                         max={total}
                         tone="info"
-                        title={t("assignments.table.acceptedTitle", {
-                          accepted: shown,
-                          total,
-                        })}
+                        title={t(titleKey, { accepted: shown, total })}
                       />
                     )
                   })()}
@@ -444,8 +542,12 @@ const AssignmentsTable = ({
                   }
                 >
                   {(() => {
-                    const { submitted, accepted, notCollected } =
-                      funnelCounts(assignment)
+                    const {
+                      submitted,
+                      accepted,
+                      notCollected,
+                      hiddenStaffRepos,
+                    } = funnelCounts(assignment)
                     if (notCollected) {
                       return (
                         <span className="whitespace-nowrap text-base-content/60">
@@ -492,24 +594,25 @@ const AssignmentsTable = ({
                         />
                       )
                     }
-                    // Denominator is the authoritative student-role count, not
-                    // the roster row count (which includes staff). The
-                    // numerator is a repo-count from scores.json with no role
-                    // join, so a submission from a non-student repo could push
-                    // it past the denominator — clamp the displayed fraction
-                    // and the bar to 100% (KTD4). undefined count reads as 0
-                    // until it resolves.
-                    const total = studentCount ?? 0
-                    const shown = Math.min(submitted, total)
+                    // Roster still resolving (or unknowable to this viewer):
+                    // no denominator, so no ratio.
+                    if (!roster) {
+                      return <span className="text-base-content/60">—</span>
+                    }
+                    if (total === 0) return emptyRosterCell(hiddenStaffRepos)
+                    // The numerator is joined to the same roster as the
+                    // denominator (assignmentFunnelCounts), so no clamp.
                     return (
                       <MetricBar
-                        value={shown}
+                        value={submitted}
                         max={total}
                         tone="success"
-                        title={t("assignments.table.submittedTitle", {
-                          submitted: shown,
-                          total,
-                        })}
+                        title={t(
+                          includeStaff
+                            ? "assignments.table.submittedTitleWithStaff"
+                            : "assignments.table.submittedTitle",
+                          { submitted, total },
+                        )}
                       />
                     )
                   })()}
@@ -533,8 +636,10 @@ const AssignmentsTable = ({
                       classroom={classroom}
                       assignment={assignment}
                     />
-                    <Link
-                      className="btn btn-circle btn-sm btn-ghost"
+                    <RouterButton
+                      shape="circle"
+                      size="sm"
+                      variant="ghost"
                       to="/$org/$classroom/assignments/$assignment/settings"
                       params={{
                         org,
@@ -555,7 +660,7 @@ const AssignmentsTable = ({
                       ) : (
                         <EyeIcon aria-hidden="true" className="size-4" />
                       )}
-                    </Link>
+                    </RouterButton>
                     {canMutate && (
                       <LockAssignmentAction
                         org={org}

@@ -21,12 +21,13 @@ type File struct {
 // reads only a few well-known keys). CollectedAt is the optional per-bucket
 // freshness stamp written by collect_scores.py; empty when absent.
 //
-// Detected carries presence/count records for an assignment that SKIPS GRADING
-// (empty_repo or no_autograder): those repos publish no submit/* release, so
-// Entries stays empty and this is their only submission signal. It never carries
-// a score, so `download` (which reports grades) ignores it — the field exists so
-// this reader mirrors scores-v1 rather than silently dropping it. Decoded as
-// tolerant maps for the same reason Entries is.
+// Detected carries presence/count records for repos with submissions but no
+// graded entry: every submitter of a no_autograder assignment (no submit/*
+// release exists, so this is their only signal) and, for an autograded
+// assignment, repos with pushes the autograder has not turned into a release.
+// It never carries a score, so `download` (which reports grades) ignores it —
+// the field exists so this reader mirrors scores-v1 rather than silently
+// dropping it. Decoded as tolerant maps for the same reason Entries is.
 type AssignmentBucket struct {
 	Type        string           `json:"type"`
 	Entries     []map[string]any `json:"entries"`

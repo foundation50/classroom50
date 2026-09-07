@@ -47,12 +47,13 @@ export function useSaveServiceToken(org: string | undefined) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async ({
       serviceToken,
       expiresInDays,
       tokenName,
     }: SaveServiceTokenInput) => {
-      await validateServiceToken(serviceToken, org)
+      await validateServiceToken(serviceToken, org, client)
       await putRepoSecret(
         client,
         org,

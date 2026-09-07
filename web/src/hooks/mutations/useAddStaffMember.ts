@@ -51,6 +51,7 @@ export function useAddStaffMember(
   const { data: classroomJson } = useGetClassroom(org, classroom)
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async (input: { username: string; role: StaffRole }) => {
       if (!input.username.trim()) throw new Error(messages.enterUsername)
       const { username, role } = await addClassroomStaffMember(client, {

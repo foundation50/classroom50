@@ -1,4 +1,4 @@
-import { RepoIcon } from "@/components/ui/icons"
+import { GlobeIcon, PeopleIcon, RepoIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { getName, getDisplayName, getInitials } from "@/util/students"
@@ -6,6 +6,12 @@ import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
+import {
+  groupTeamUrl,
+  isGroupOverCapacity,
+  type GroupTeamRef,
+} from "@/domain/teams/groupTeams"
+import { GroupOverCapacityBadge } from "@/components/assignments/GroupOverCapacityBadge"
 import { ScoreCell } from "@/pages/submissions/ScoreCell"
 import type { ScoreOverrideCapability } from "@/pages/submissions/ScoreOverrideModal"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -13,6 +19,8 @@ import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
 import type { Student } from "@/types/classroom"
 import type { StudentSortMode } from "@/util/students"
+import type { ClassroomRole } from "@/util/teamRoster"
+import { RoleBadges } from "@/pages/students/RoleBadges"
 
 // Secondary avatar line: the GitHub login plus the section (e.g.
 // "octocat · Period 3"), dropping whichever piece is missing. The login is
@@ -85,20 +93,89 @@ export const ActionIconLink = ({
     </Button>
   )
 
+// Warning badge marking a repo that is currently PUBLIC (issue #766): the
+// student's work is visible to anyone on the internet. Rendered only when
+// public — private is the norm and stays unmarked to keep rows quiet.
+export const PublicRepoBadge = () => {
+  const { t } = useTranslation()
+  return (
+    <Badge
+      tone="warning"
+      size="sm"
+      className="whitespace-nowrap"
+      title={t("submissions.publicRepo.title")}
+    >
+      <GlobeIcon aria-hidden="true" className="size-3" />
+      {t("submissions.publicRepo.badge")}
+    </Badge>
+  )
+}
+
+// Role chips marking a teaching-staff row (a teacher/head TA/TA who accepted
+// the assignment to test it), so their rows read apart from students' at a
+// glance. Nothing for a plain student, which is the norm. The chips reuse the
+// roster's RoleBadges; the wrapper carries the "why is staff listed" hint.
+export const StaffRoleBadges = ({ roles }: { roles?: ClassroomRole[] }) => {
+  const { t } = useTranslation()
+  if (!roles || roles.length === 0) return null
+  return (
+    <span
+      className="inline-flex flex-wrap items-center gap-1"
+      title={t("submissions.table.staffRowTitle")}
+    >
+      <RoleBadges roles={roles} />
+    </span>
+  )
+}
+
+// Error badge for a team-mode row whose GitHub team no longer exists (state 2
+// of the team/repo mismatch pair): grading can't credit members until the
+// teacher recreates the group. Rendered only once the teams query has settled,
+// so it never flashes while the listing loads. `plain` drops the badge's own
+// title + sr-only detail when an interactive parent (the members-column
+// recover click-through) owns the accessible name.
+export const TeamMissingBadge = ({ plain = false }: { plain?: boolean }) => {
+  const { t } = useTranslation()
+  return (
+    <Badge
+      tone="error"
+      size="sm"
+      className="whitespace-nowrap"
+      title={plain ? undefined : t("submissions.table.teamMissingTitle")}
+    >
+      {t("submissions.table.teamMissing")}
+      {!plain && (
+        <span className="sr-only">
+          {t("submissions.table.teamMissingTitle")}
+        </span>
+      )}
+    </Badge>
+  )
+}
+
 // Per-row status chip for a roster student with no submission: distinguishes
 // accepted-but-not-submitted, never-accepted, and (group) no-group from a flat
 // "Not submitted", so a teacher can nudge accepters vs chase non-accepters.
 const NonSubmitterStatusBadge = ({
   username,
   isGroup,
+  isTeam,
   acceptedUsernames,
+  acceptanceComplete,
 }: {
   username: string
   isGroup: boolean
+  isTeam?: boolean
   acceptedUsernames?: Set<string>
+  acceptanceComplete?: boolean
 }) => {
   const { t } = useTranslation()
-  const status = nonSubmitterStatus(username, { isGroup, acceptedUsernames })
+  const status = nonSubmitterStatus(username, {
+    isGroup,
+    isTeam,
+    acceptedUsernames,
+    acceptanceComplete,
+  })
   switch (status) {
     case "accepted-not-submitted":
       return (
@@ -117,6 +194,29 @@ const NonSubmitterStatusBadge = ({
           <span className="sr-only">
             {t("submissions.table.notAcceptedTitle")}
           </span>
+        </Badge>
+      )
+    case "repo-not-visible":
+      return (
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.repoNotVisibleTitle")}
+        >
+          {t("submissions.table.repoNotVisible")}
+          <span className="sr-only">
+            {t("submissions.table.repoNotVisibleTitle")}
+          </span>
+        </Badge>
+      )
+    case "no-team":
+      return (
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.noTeamTitle")}
+        >
+          {t("submissions.table.noTeam")}
         </Badge>
       )
     case "no-group":
@@ -151,6 +251,8 @@ export const GroupMembers = ({
   students,
   repoHref,
   repoLabel,
+  memberLoginsOverride,
+  showAvatars = true,
 }: {
   org: string
   repoName: string
@@ -158,6 +260,12 @@ export const GroupMembers = ({
   students: Student[]
   repoHref: string
   repoLabel: string
+  // Team mode: live team membership (the authoritative link) replaces the
+  // collaborators-cache/snapshot fallback entirely.
+  memberLoginsOverride?: string[]
+  // Team mode: members moved to their own count column, so the cell renders
+  // just the linked group name.
+  showAvatars?: boolean
 }) => {
   const { t } = useTranslation()
   // enabled: false — reads the cache the Members modal populates, never fetches.
@@ -165,12 +273,20 @@ export const GroupMembers = ({
     enabled: false,
   })
   const memberLogins =
-    liveCollaborators && liveCollaborators.length > 0
+    memberLoginsOverride ??
+    (liveCollaborators && liveCollaborators.length > 0
       ? liveCollaborators.map((c) => c.login)
-      : usernames
+      : usernames)
 
   const visible = memberLogins.slice(0, MAX_VISIBLE_AVATARS)
   const overflow = memberLogins.length - visible.length
+
+  // Team rows link the group's DISPLAY name instead of the long
+  // `<classroom>-<assignment>-group-<n>` repo name; the repo name stays
+  // discoverable on hover. A repo-name label keeps the mono face and the repo
+  // icon; a display-name label reads as a group, so it carries the people icon.
+  const labelIsRepoName = repoLabel === repoName
+  const LabelIcon = labelIsRepoName ? RepoIcon : PeopleIcon
 
   return (
     <div className="flex flex-col gap-2">
@@ -179,43 +295,119 @@ export const GroupMembers = ({
         href={repoHref}
         target="_blank"
         rel="noreferrer"
-        title={t("submissions.table.openGroupRepo")}
+        title={
+          labelIsRepoName ? t("submissions.table.openGroupRepo") : repoName
+        }
       >
-        <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
-        <span className="font-mono text-sm">{repoLabel}</span>
+        <LabelIcon aria-hidden="true" className="size-4 shrink-0" />
+        <span className={labelIsRepoName ? "font-mono text-sm" : "text-sm"}>
+          {repoLabel}
+        </span>
       </a>
 
-      <div className="avatar-group -space-x-3">
-        {visible.map((username) => {
-          const name = getName(username, students)
-          return (
+      {showAvatars && (
+        <div className="avatar-group -space-x-3">
+          {visible.map((username) => {
+            const name = getName(username, students)
+            return (
+              <div
+                key={username}
+                className="avatar avatar-placeholder"
+                title={name ? `${name} (${username})` : username}
+              >
+                <div className="bg-base-200 text-primary rounded-full w-7 border-2 border-base-100">
+                  <span className="text-xs">
+                    {getInitials(username, students) ||
+                      username.at(0)?.toUpperCase()}
+                  </span>
+                </div>
+              </div>
+            )
+          })}
+
+          {overflow > 0 && (
             <div
-              key={username}
               className="avatar avatar-placeholder"
-              title={name ? `${name} (${username})` : username}
+              title={memberLogins.slice(MAX_VISIBLE_AVATARS).join(", ")}
             >
-              <div className="bg-base-200 text-primary rounded-full w-7 border-2 border-base-100">
-                <span className="text-xs">
-                  {getInitials(username, students) ||
-                    username.at(0)?.toUpperCase()}
-                </span>
+              <div className="bg-neutral text-neutral-content rounded-full w-7 border-2 border-base-100">
+                <span className="text-xs">+{overflow}</span>
               </div>
             </div>
-          )
-        })}
-
-        {overflow > 0 && (
-          <div
-            className="avatar avatar-placeholder"
-            title={memberLogins.slice(MAX_VISIBLE_AVATARS).join(", ")}
-          >
-            <div className="bg-neutral text-neutral-content rounded-full w-7 border-2 border-base-100">
-              <span className="text-xs">+{overflow}</span>
-            </div>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
     </div>
+  )
+}
+
+// Team mode's Members cell: the live member count as a click-through to the
+// group management modal (members + display name). Renders a muted em-dash
+// while membership is still resolving; a MISSING team (deleted on GitHub) can
+// never resolve, so `missing` renders the error badge in this column instead
+// of that dash-forever — as a click-through to the recovery dialog when the
+// caller supplies `missingLabel` (the recover affordance's accessible name).
+// A count past `max` gains the over-capacity warning chip (#896).
+export const TeamMembersCountCell = ({
+  count,
+  max,
+  label,
+  onClick,
+  missing = false,
+  missingLabel,
+}: {
+  count?: number
+  // The assignment's max_group_size; absent, no over-capacity check.
+  max?: number
+  // Accessible name carrying the group's display name.
+  label: string
+  onClick: () => void
+  // Set when the row's GitHub team no longer exists — the error badge
+  // replaces the count (there is no team left to count or manage).
+  missing?: boolean
+  // Accessible name for the missing state's recover click-through. Absent,
+  // the badge renders inert (a host without a recovery flow).
+  missingLabel?: string
+}) => {
+  const { t } = useTranslation()
+  if (missing) {
+    if (!missingLabel) return <TeamMissingBadge />
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        className="gap-1.5"
+        aria-label={missingLabel}
+        title={missingLabel}
+        onClick={onClick}
+      >
+        <TeamMissingBadge plain />
+      </Button>
+    )
+  }
+  if (count === undefined) {
+    return <span className="text-base-content/50">—</span>
+  }
+  // The button's aria-label hides its children from the accessible name, so
+  // the over-capacity detail is folded into the label rather than left to the
+  // chip's sr-only text.
+  const overDetail = isGroupOverCapacity(count, max)
+    ? t("components.groupOverCapacity.title", { count, max })
+    : undefined
+  const fullLabel = overDetail ? `${label}. ${overDetail}` : label
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="gap-1.5 font-medium"
+      aria-label={fullLabel}
+      title={fullLabel}
+      onClick={onClick}
+    >
+      <PeopleIcon aria-hidden="true" className="size-4" />
+      {count}
+      <GroupOverCapacityBadge count={count} max={max} plain />
+    </Button>
   )
 }
 
@@ -251,7 +443,9 @@ export const NonSubmitterRow = ({
   student,
   students,
   isGroup,
+  isTeam,
   acceptedUsernames,
+  acceptanceComplete = true,
   onProfile,
   actions,
   onManage,
@@ -259,11 +453,17 @@ export const NonSubmitterRow = ({
   onEditGrade,
   thresholdFraction = null,
   nameMode = "first",
+  publicRepo = false,
+  staffRoles,
 }: {
   student: Student
   students: Student[]
   isGroup: boolean
+  isTeam?: boolean
   acceptedUsernames?: Set<string>
+  // False for a non-owner, whose repo list holds only the repos they can read:
+  // an absence renders as "not visible to you" rather than "not accepted".
+  acceptanceComplete?: boolean
   onProfile: (username: string) => void
   actions?: React.ReactNode
   // Row-level click target: the manage-submission modal, same as the actions
@@ -283,6 +483,12 @@ export const NonSubmitterRow = ({
   // How to format the display name — "last" ("Last, First") when the table is
   // ordered by last name, matching the submitter rows.
   nameMode?: StudentSortMode
+  // Whether this student's (accepted) repo is currently public — renders the
+  // warning badge beside the status chip.
+  publicRepo?: boolean
+  // Staff roles this row holds (teacher/head TA/TA); renders the role chips
+  // beside the name. Absent for a plain student.
+  staffRoles?: ClassroomRole[]
 }) => {
   const canGrade =
     overrideGrade?.mode === "manual" &&
@@ -292,26 +498,36 @@ export const NonSubmitterRow = ({
   const cells = (
     <>
       <td>
-        <Avatar
-          name={getDisplayName(student.username, students, nameMode)}
-          initials={getInitials(student.username, students)}
-          github={student.username || student.email}
-          subtitle={identitySubtitle(
-            getName(student.username, students),
-            student.username,
-            student.section,
-          )}
-          onClick={
-            student.username ? () => onProfile(student.username) : undefined
-          }
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <Avatar
+            name={getDisplayName(student.username, students, nameMode)}
+            initials={getInitials(student.username, students)}
+            github={student.username || student.email}
+            subtitle={identitySubtitle(
+              getName(student.username, students),
+              student.username,
+              student.section,
+            )}
+            onClick={
+              student.username ? () => onProfile(student.username) : undefined
+            }
+          />
+          <StaffRoleBadges roles={staffRoles} />
+        </div>
       </td>
+      {/* Team mode's Members column: a student on no team has no count. */}
+      {isTeam && <td>—</td>}
       <td>
-        <NonSubmitterStatusBadge
-          username={student.username}
-          isGroup={isGroup}
-          acceptedUsernames={acceptedUsernames}
-        />
+        <div className="flex flex-wrap items-center gap-1.5">
+          <NonSubmitterStatusBadge
+            username={student.username}
+            isGroup={isGroup}
+            isTeam={isTeam}
+            acceptedUsernames={acceptedUsernames}
+            acceptanceComplete={acceptanceComplete}
+          />
+          {publicRepo ? <PublicRepoBadge /> : null}
+        </div>
       </td>
       <td>
         {canGrade ? (
@@ -367,6 +583,10 @@ export const GroupRepoRow = ({
   students,
   actions,
   onManage,
+  publicRepo = false,
+  memberLogins,
+  label,
+  membersCell,
 }: {
   org: string
   classroom: string
@@ -378,6 +598,15 @@ export const GroupRepoRow = ({
   // Row-level click target: the manage-submission modal, same as the actions
   // cluster's manage button.
   onManage?: () => void
+  // Whether this group repo is currently public — renders the warning badge
+  // beside the status chip.
+  publicRepo?: boolean
+  // Team mode: live team membership + the team's display name.
+  memberLogins?: string[]
+  label?: string
+  // Team mode: the Members-column cell (count click-through); its presence
+  // also moves the avatars out of the name cell.
+  membersCell?: React.ReactNode
 }) => {
   const { t } = useTranslation()
   const repoHref = studentRepoUrl(org, classroom, assignment, owner)
@@ -390,19 +619,99 @@ export const GroupRepoRow = ({
           usernames={[]}
           students={students}
           repoHref={repoHref}
-          repoLabel={repoName}
+          repoLabel={label ?? repoName}
+          memberLoginsOverride={memberLogins}
+          showAvatars={membersCell === undefined}
         />
       </td>
+      {membersCell !== undefined && (
+        <td onClick={(event) => event.stopPropagation()}>{membersCell}</td>
+      )}
       <td>
-        <Badge tone="warning" className="whitespace-nowrap">
-          {t("submissions.table.acceptedAwaiting")}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Badge tone="warning" className="whitespace-nowrap">
+            {t("submissions.table.acceptedAwaiting")}
+          </Badge>
+          {publicRepo ? <PublicRepoBadge /> : null}
+        </div>
       </td>
       <td>—</td>
       <td>—</td>
       {/* Quarantined from the row's manage click — see the submitter row. */}
       <td onClick={(event) => event.stopPropagation()}>
         <div className="flex items-center justify-end gap-1">{actions}</div>
+      </td>
+    </>
+  )
+  if (!onManage) return <tr className="hover:bg-base-200">{cells}</tr>
+  return (
+    <ClickableTr
+      className="hover:bg-base-200"
+      onClick={(event) => {
+        if (isInteractiveEventTarget(event)) return
+        onManage()
+      }}
+    >
+      {cells}
+    </ClickableTr>
+  )
+}
+
+// A live group team whose repository doesn't exist yet (team mode, state 1 of
+// the team/repo mismatch pair): the team formed but no member has accepted the
+// assignment, so it has no repo or score row to surface it. The name cell
+// links to the team's GitHub page (a repo link would 404); the Members cell is
+// the shared count click-through; the Submissions cell explains why there's
+// nothing to grade yet.
+export const TeamWithoutRepoRow = ({
+  org,
+  team,
+  label,
+  membersCell,
+  onManage,
+}: {
+  org: string
+  team: GroupTeamRef
+  // The team's display name ("Group <n>" fallback supplied by the caller).
+  label: string
+  // The Members-column count cell (same click-through as the other team rows).
+  membersCell: React.ReactNode
+  // Row-level click target: the shared manage-group dialog.
+  onManage?: () => void
+}) => {
+  const { t } = useTranslation()
+  const cells = (
+    <>
+      <td>
+        <a
+          className="flex items-center gap-1.5 link link-hover w-fit font-medium"
+          href={groupTeamUrl(org, team.slug)}
+          target="_blank"
+          rel="noreferrer"
+          title={t("submissions.table.openGroupTeam")}
+        >
+          <PeopleIcon aria-hidden="true" className="size-4 shrink-0" />
+          <span className="text-sm">{label}</span>
+        </a>
+      </td>
+      {/* Quarantined from the row's manage click like the other team rows. */}
+      <td onClick={(event) => event.stopPropagation()}>{membersCell}</td>
+      <td>
+        <Badge
+          tone="warning"
+          className="whitespace-nowrap"
+          title={t("submissions.table.teamNoRepoTitle")}
+        >
+          {t("submissions.table.teamNoRepo")}
+          <span className="sr-only">
+            {t("submissions.table.teamNoRepoTitle")}
+          </span>
+        </Badge>
+      </td>
+      <td>—</td>
+      <td>—</td>
+      <td>
+        <div className="text-end">—</div>
       </td>
     </>
   )

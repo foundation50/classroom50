@@ -1,8 +1,9 @@
-import { AlertIcon, SyncIcon } from "@/components/ui/icons"
-import { useEffect, useId, useMemo, useState } from "react"
+import { SyncIcon } from "@/components/ui/icons"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal, Heading } from "@/components/ui"
+import { Button } from "@/components/ui"
+import { ConfirmModal } from "@/components/modals"
 import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -17,6 +18,7 @@ import {
   latestCollectedAt,
 } from "@/pages/submissions/dashboard"
 import { formatRelativeToNow } from "@/util/formatDate"
+import { errorText } from "@/types/localizedMessage"
 
 // Classroom-wide "Collect all", presented as the assignments toolbar's
 // freshness widget — a passive "Submission data collected x ago" line, an
@@ -44,23 +46,29 @@ import { formatRelativeToNow } from "@/util/formatDate"
 export function ClassroomCollectButton({
   org,
   classroom,
+  classroomName,
   emptyRoster = false,
 }: {
   org: string
   classroom: string
+  // Display name for the banner tracker's label; falls back to the slug.
+  classroomName?: string
   // Nothing to collect until someone is enrolled. The dispatch would still
   // succeed, so this is a UX gate, not a correctness one.
   emptyRoster?: boolean
 }) {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const collect = useTriggerScoreCollection(org, { classroom })
-  const busy = collect.phase === "dispatching" || collect.phase === "running"
+  const collect = useTriggerScoreCollection(
+    org,
+    { classroom },
+    { classroom: classroomName },
+  )
+  const busy = collect.inFlight
   // A sweep is a heavier dispatch than the per-assignment collect (it walks
   // every assignment, and Actions minutes scale with the classroom), so the
   // click confirms before dispatching instead of firing straight away.
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const confirmTitleId = useId()
 
   // Classroom-level freshness: the newest per-bucket collected_at stamp — any
   // collect that walked this classroom moved at least one. scores.json is
@@ -181,13 +189,16 @@ export function ClassroomCollectButton({
 
   useEffect(() => {
     if (collect.phase !== "failed" || collect.failure !== "dispatch") return
+    // Kept as a toast: the dispatch is fire-and-forget and this button can
+    // unmount (route change) before the failure lands; the keyed toast is
+    // the one surface guaranteed to survive.
     notify({
       tone: "error",
       key: `collect-scores:${classroom}`,
       message:
         collect.error instanceof Error
           ? `${t("submissions.collect.statusFailedWithReason", {
-              reason: collect.error.message,
+              reason: errorText(t, collect.error),
             })} ${t("submissions.collect.statusFailedHint")}`
           : `${t("submissions.collect.statusFailed")} ${t(
               "submissions.collect.statusFailedHint",
@@ -208,7 +219,7 @@ export function ClassroomCollectButton({
           variant="ghost"
           size="sm"
           loading={busy}
-          loadingLabel={t("submissions.collect.active")}
+          busyLabel={t("submissions.collect.active")}
           disabled={emptyRoster}
           title={
             emptyRoster
@@ -217,54 +228,26 @@ export function ClassroomCollectButton({
           }
           onClick={() => setConfirmOpen(true)}
         >
-          {busy ? (
-            t("submissions.collect.active")
-          ) : (
-            <>
-              <SyncIcon aria-hidden="true" className="size-4" />
-              {t("assignments.collect.label")}
-            </>
-          )}
+          <SyncIcon aria-hidden="true" className="size-4" />
+          {t("assignments.collect.label")}
         </Button>
       </SubmissionFreshnessLine>
 
       {/* Sibling, not child: the strip is a role="status" live region, and a
           dialog nested inside it gets re-announced as a status update. */}
-      <Modal
+      <ConfirmModal
         open={confirmOpen}
+        title={t("assignments.collect.confirmTitle")}
+        description={t("assignments.collect.confirmBody")}
+        confirmLabel={t("assignments.collect.confirmAction")}
+        cancelLabel={t("common.cancel")}
+        tone="warning"
+        needsConfirm={false}
+        onConfirm={async () => {
+          collect.collect()
+        }}
         onClose={() => setConfirmOpen(false)}
-        size="lg"
-        aria-labelledby={confirmTitleId}
-      >
-        <div className="flex items-start gap-4">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-warning/10 text-warning">
-            <AlertIcon className="size-4" aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <Heading as="h3" id={confirmTitleId}>
-              {t("assignments.collect.confirmTitle")}
-            </Heading>
-            <p className="mt-3 text-sm text-base-content/80">
-              {t("assignments.collect.confirmBody")}
-            </p>
-          </div>
-        </div>
-
-        <div className="modal-action">
-          <Button variant="ghost" onClick={() => setConfirmOpen(false)}>
-            {t("common.cancel")}
-          </Button>
-          <Button
-            variant="primary"
-            onClick={() => {
-              setConfirmOpen(false)
-              collect.collect()
-            }}
-          >
-            {t("assignments.collect.confirmAction")}
-          </Button>
-        </div>
-      </Modal>
+      />
     </>
   )
 }

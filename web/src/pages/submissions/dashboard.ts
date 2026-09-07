@@ -2,14 +2,16 @@
 // over already-loaded scores/roster data — no fetches, no React, so the
 // classification is reusable and testable.
 
-import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { NormalizedScores, SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
+import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
-import type { Student } from "@/types/classroom"
+import type { Assignment, Student } from "@/types/classroom"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import type { BadgeTone } from "@/components/ui"
-import type { TeamRosterRow } from "@/util/teamRoster"
+import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import {
@@ -22,7 +24,11 @@ import {
   studentSortKeyFor,
   type StudentSortMode,
 } from "@/util/students"
-import { studentRepoName } from "@/util/studentRepo"
+import {
+  studentRepoName,
+  parseGroupRepoCounter,
+  GROUP_REPO_SEGMENT,
+} from "@/util/studentRepo"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 
 // Whether a row's grade still belongs to a current roster member. A row is
@@ -91,6 +97,23 @@ export function submissionRosterStudents(
     if (acceptedStaffLogins.has(login) || groupRepoMembers.has(login)) {
       out.push(rowToStudent(row))
     }
+  }
+  return out
+}
+
+// Lowercased login -> the staff roles an enrolled member holds, for the row
+// badge that marks a teacher/head TA/TA testing an assignment. Student-only
+// members are absent, so a lookup miss means "plain student, no badge".
+export function staffRolesByLogin(
+  teamRows: TeamRosterRow[],
+): Map<string, ClassroomRole[]> {
+  const out = new Map<string, ClassroomRole[]>()
+  for (const row of teamRows) {
+    if (row.state !== "enrolled") continue
+    const login = row.username.trim().toLowerCase()
+    if (!login) continue
+    const staff = row.roles.filter((role) => role !== "student")
+    if (staff.length > 0) out.set(login, staff)
   }
   return out
 }
@@ -329,6 +352,11 @@ function latestCommitDetectedAt(
 // match, sibling-slug guard) is shared with existingAssignmentRepos so the two
 // repo-list-derived signals can never disagree on which repos belong to an
 // assignment. Returns the winning repo's ISO `pushed_at`.
+//
+// For an individual assignment the page reads a roster-scoped slice of the
+// listing (useAssignmentRepos), so a push to a repo whose owner has since left
+// the classroom no longer counts: the gradebook does not list that person
+// either, so the heuristic and the table agree on whose work is "out of date".
 export function latestAssignmentPush(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
@@ -691,14 +719,27 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
 // lowercased to match the org repo list. Empty when the inputs aren't ready.
 export function assignmentRepoNames(params: {
   isGroup: boolean
+  isTeam?: boolean
   repos: GitHubRepo[] | null | undefined
   classroom: string
   assignment: string
   students: Student[]
   siblingSlugs?: string[]
 }): string[] {
-  const { isGroup, repos, classroom, assignment, students, siblingSlugs } =
-    params
+  const {
+    isGroup,
+    isTeam,
+    repos,
+    classroom,
+    assignment,
+    students,
+    siblingSlugs,
+  } = params
+  if (isTeam) {
+    return existingTeamRepos(repos, classroom, assignment).map(
+      (r) => r.repoName,
+    )
+  }
   if (isGroup) {
     return existingGroupRepos(repos, classroom, assignment, siblingSlugs).map(
       (r) => r.repoName,
@@ -728,7 +769,7 @@ export function existingGroupRepos(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
   assignment: string,
-  siblingSlugs: string[] = [],
+  siblingSlugs: readonly string[] = [],
 ): GroupRepo[] {
   if (!repos) return []
   const prefix = `${classroom}-${assignment}-`.toLowerCase()
@@ -749,6 +790,63 @@ export function existingGroupRepos(
     out.push({ owner, repoName: name })
   }
   return out
+}
+
+// Team-mode repos that exist for the assignment — the team analog of
+// existingGroupRepos, keyed by the `group-<n>` owner segment. MODE-GATED by
+// the caller: the parse is shape-exact (`<classroom>-<assignment>-group-<n>`,
+// counters start at 1), and only the assignment's mode decides that the
+// `group-<n>` segment is a counter rather than a login.
+export function existingTeamRepos(
+  repos: GitHubRepo[] | null | undefined,
+  classroom: string,
+  assignment: string,
+): GroupRepo[] {
+  if (!repos) return []
+  const out: GroupRepo[] = []
+  for (const repo of repos) {
+    const n = parseGroupRepoCounter(repo.name, classroom, assignment)
+    if (n === null) continue
+    out.push({
+      owner: `${GROUP_REPO_SEGMENT}${n}`,
+      repoName: repo.name.toLowerCase(),
+    })
+  }
+  return out
+}
+
+// Live group teams (team mode) with NO trace on the submissions view: their
+// expected repo doesn't exist in the org repo list AND no score row credits
+// their counter. Without a repo the team never surfaces as a group-repo or
+// submitter row, so these render as their own "no repository yet" rows.
+// `existingRepoOwners`/`scoreOwners` are lowercased `group-<n>` owner
+// segments. Sorted by counter for a stable row order. Callers must gate on a
+// SETTLED teams query and a loaded repo list, else every team (or none)
+// flashes as repo-less while either source resolves.
+export function teamsWithoutRepos(
+  teams: readonly GroupTeamRef[],
+  existingRepoOwners: ReadonlySet<string>,
+  scoreOwners: ReadonlySet<string>,
+): GroupTeamRef[] {
+  return teams
+    .filter((team) => {
+      const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+      return !existingRepoOwners.has(owner) && !scoreOwners.has(owner)
+    })
+    .toSorted((a, b) => a.n - b.n)
+}
+
+// Whether a team-mode row's owner segment has NO live group team behind it —
+// the team was (likely) deleted on GitHub, so grading can't credit members.
+// False until the teams query has SETTLED (`teamsSettled`), so the error state
+// can't flash on every row while the listing loads.
+export function teamMissingForOwner(
+  owner: string,
+  teamsByOwner: ReadonlyMap<string, unknown> | undefined,
+  teamsSettled: boolean,
+): boolean {
+  if (!teamsSettled || !teamsByOwner) return false
+  return !teamsByOwner.has(owner.trim().toLowerCase())
 }
 
 // Roster students with no submission, with group-repo members excluded (#245).
@@ -773,29 +871,50 @@ export function reconcileNonSubmitters(
 }
 
 // Per-row status for a roster student with no submission row. Distinguishes the
-// three states that would otherwise collapse into a flat "Not submitted":
-//   - no-group: group assignment — the student isn't credited on any submitting
-//     group's repo (group repos are named after the founder, so a never-joined
-//     student has nothing to reconcile against).
+// states that would otherwise collapse into a flat "Not submitted":
+//   - no-team: team assignment — the student is on no group team.
+//   - no-group: legacy group assignment — the student isn't credited on any
+//     submitting group's repo (group repos are named after the founder, so a
+//     never-joined student has nothing to reconcile against).
 //   - accepted-not-submitted: individual — a repo exists (accepted) but no push.
-//   - not-accepted: individual — never accepted, so no repo.
+//   - not-accepted: individual — never accepted, so no repo. Only an org owner
+//     can assert this: they see every org repo.
+//   - repo-not-visible: individual — no repo the VIEWER can see. For a
+//     non-owner (TA/HTA) a private repo they lack access to 404s exactly like a
+//     missing one, and collect only grants their team read as it runs, so this
+//     is "not accepted OR not yet granted", never asserted as either.
 //   - not-submitted: acceptance data unavailable (repos not loaded yet) — a
 //     neutral fallback so a transient empty repo list can't mislabel everyone.
 export type NonSubmitterStatus =
-  "no-group" | "accepted-not-submitted" | "not-accepted" | "not-submitted"
+  | "no-group"
+  | "no-team"
+  | "accepted-not-submitted"
+  | "not-accepted"
+  | "repo-not-visible"
+  | "not-submitted"
 
 export function nonSubmitterStatus(
   username: string,
   {
     isGroup,
+    isTeam,
     acceptedUsernames,
-  }: { isGroup: boolean; acceptedUsernames?: Set<string> },
+    acceptanceComplete = true,
+  }: {
+    isGroup: boolean
+    isTeam?: boolean
+    acceptedUsernames?: Set<string>
+    // Whether `acceptedUsernames` covers every repo (an org owner's view). A
+    // non-owner's set holds only the repos they can read, so an absence is
+    // reported as repo-not-visible rather than not-accepted.
+    acceptanceComplete?: boolean
+  },
 ): NonSubmitterStatus {
+  if (isTeam) return "no-team"
   if (isGroup) return "no-group"
   if (!acceptedUsernames) return "not-submitted"
-  return hasAccepted(username, acceptedUsernames)
-    ? "accepted-not-submitted"
-    : "not-accepted"
+  if (hasAccepted(username, acceptedUsernames)) return "accepted-not-submitted"
+  return acceptanceComplete ? "not-accepted" : "repo-not-visible"
 }
 
 // The combined "Status" toolbar select folds the submission axis and the
@@ -1209,6 +1328,7 @@ export type DisplayItem =
   | { kind: "row"; row: SubmissionRow }
   | { kind: "nonSubmitter"; student: Student }
   | { kind: "groupRepo"; repo: GroupRepo }
+  | { kind: "teamNoRepo"; team: GroupTeamRef }
 
 // The default and offered "Show N entries" page sizes (mirrors the reference
 // gradebook UI). Default is the first entry.
@@ -1262,22 +1382,29 @@ export function buildRosterDisplayItems(
 // to the founder's submitted row when one exists (owner match) else an
 // unsubmitted group-repo row. The group analog of buildRosterDisplayItems.
 // `rows` are the (filtered) submitted group rows; `groupRepos` the unsubmitted
-// group repos.
+// group repos. Team mode may add `teamsWithoutRepos` (live teams whose repo
+// doesn't exist yet); they key on the same `group-<n>` owner segment, so the
+// shared sort interleaves them with the other team rows by counter.
 export function buildGroupRosterDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
   students: Student[],
   mode: StudentSortMode = "first",
+  teamsWithoutRepos: GroupTeamRef[] = [],
 ): DisplayItem[] {
   const submitted = rows.map<DisplayItem>((row) => ({ kind: "row", row }))
   const unsubmitted = groupRepos.map<DisplayItem>((repo) => ({
     kind: "groupRepo",
     repo,
   }))
+  const repoless = teamsWithoutRepos.map<DisplayItem>((team) => ({
+    kind: "teamNoRepo",
+    team,
+  }))
   // Precompute the name map once so the comparator is O(1) per compare (getName
   // would re-scan the roster each call).
   const names = buildNameKeyLookup(students, mode)
-  return [...submitted, ...unsubmitted].sort((a, b) =>
+  return [...submitted, ...unsubmitted, ...repoless].sort((a, b) =>
     ownerSortKey(displayItemOwner(a), names).localeCompare(
       ownerSortKey(displayItemOwner(b), names),
       undefined,
@@ -1288,14 +1415,20 @@ export function buildGroupRosterDisplayItems(
 
 // Build the ordered display list for a GROUP assignment under a non-name sort:
 // submitted group rows first (in the caller's sort order), then unsubmitted
-// group repos.
+// group repos, then (team mode) teams whose repo doesn't exist yet — the
+// timeless rows trail the timed ones, mirroring buildSortedDisplayItems.
 export function buildGroupDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
+  teamsWithoutRepos: GroupTeamRef[] = [],
 ): DisplayItem[] {
   return [
     ...rows.map<DisplayItem>((row) => ({ kind: "row", row })),
     ...groupRepos.map<DisplayItem>((repo) => ({ kind: "groupRepo", repo })),
+    ...teamsWithoutRepos.map<DisplayItem>((team) => ({
+      kind: "teamNoRepo",
+      team,
+    })),
   ]
 }
 
@@ -1357,8 +1490,9 @@ export function paginateDisplayItems(
 }
 
 // The repo-owner login for a display item. Submitted rows and group repos are
-// keyed by `owner`; a non-submitter by its roster username. Empty string is
-// filtered by the caller.
+// keyed by `owner`; a non-submitter by its roster username; a repo-less team
+// by the `group-<n>` segment its repo WOULD have. Empty string is filtered by
+// the caller.
 export function displayItemOwner(item: DisplayItem): string {
   switch (item.kind) {
     case "row":
@@ -1367,6 +1501,8 @@ export function displayItemOwner(item: DisplayItem): string {
       return item.student.username
     case "groupRepo":
       return item.repo.owner
+    case "teamNoRepo":
+      return `${GROUP_REPO_SEGMENT}${item.team.n}`
   }
 }
 
@@ -1412,6 +1548,7 @@ export function displayPageOwners({
   rows,
   nonSubmitters,
   groupRepos,
+  teamsWithoutRepos = [],
   page,
   pageSize,
 }: {
@@ -1421,6 +1558,10 @@ export function displayPageOwners({
   rows: SubmissionRow[]
   nonSubmitters: Student[]
   groupRepos: GroupRepo[]
+  // Team mode: live teams whose repo doesn't exist yet. They occupy display
+  // slots (so the page slice matches the rendered table) but contribute no
+  // owner — there is no repo for the fan-out to read.
+  teamsWithoutRepos?: GroupTeamRef[]
   page: number
   pageSize: number
 }): string[] {
@@ -1431,14 +1572,16 @@ export function displayPageOwners({
           groupRepos,
           students,
           sortNameMode(sort),
+          teamsWithoutRepos,
         )
-      : buildGroupDisplayItems(rows, groupRepos)
+      : buildGroupDisplayItems(rows, groupRepos, teamsWithoutRepos)
     : isNameSort(sort)
       ? buildRosterDisplayItems(students, rows, nonSubmitters)
       : buildSortedDisplayItems(rows, nonSubmitters)
   const seen = new Set<string>()
   const owners: string[] = []
   for (const item of paginateDisplayItems(items, pageSize, page)) {
+    if (item.kind === "teamNoRepo") continue
     const owner = displayItemOwner(item).trim()
     if (!owner) continue
     const key = owner.toLowerCase()
@@ -1471,4 +1614,140 @@ export function paginationRange(
     prev = p
   }
   return out
+}
+
+// Logins whose `<classroom>-<assignment>-<login>` repo the submissions page
+// looks up, for the roster-scoped org repo read (useAssignmentRepos). Every
+// enrolled row counts, students and staff alike (a staff member who accepted is
+// a gradee too). `undefined` means the names are not derivable and the page
+// reads the whole listing instead:
+//   - a shared-repo assignment: a team repo's `group-<n>` segment comes from no
+//     login;
+//   - a roster this viewer cannot see (`rosterKnown` false);
+//   - a roster read that failed (`rosterError`): its rows are whatever staff
+//     loaded, and scoping to those would report page one of the org as truth.
+export function assignmentRepoCandidateLogins(
+  isGroupFlavor: boolean,
+  teamRows: readonly TeamRosterRow[],
+  roster: { rosterKnown?: boolean; rosterError?: boolean } = {},
+): string[] | undefined {
+  const { rosterKnown = true, rosterError = false } = roster
+  if (isGroupFlavor || !rosterKnown || rosterError) return undefined
+  return teamRows
+    .filter((row) => row.state === "enrolled")
+    .map((row) => row.username)
+}
+
+// Whether the org repo read may start. The assignment shape decides which read
+// runs (scoped or full), so it must be known first; the scoped read also needs
+// the roster, since its candidate names come from it. A shared-repo assignment
+// does not wait for the roster.
+export function orgReposReadEnabled(args: {
+  assignmentLoading: boolean
+  isGroupFlavor: boolean
+  rosterLoading: boolean
+}): boolean {
+  return !args.assignmentLoading && (args.isGroupFlavor || !args.rosterLoading)
+}
+
+// Whether to show "Checking who accepted..." in place of the submission
+// progress bar: the bar's denominator comes from the org repo read, so until
+// that resolves the wait is explained where the bar will appear. Never for an
+// empty_repo assignment, which has no repos to check.
+export function showCheckingAccepted(args: {
+  showSubmissionProgress: boolean
+  orgReposPending: boolean
+  isEmptyRepoAssignment: boolean
+}): boolean {
+  return (
+    !args.showSubmissionProgress &&
+    args.orgReposPending &&
+    !args.isEmptyRepoAssignment
+  )
+}
+
+// See assignmentFunnelCounts for what each count means.
+export type AssignmentFunnelCounts = {
+  submitted: number
+  accepted: number | undefined
+  notCollected: boolean
+  // Existing repos of excluded staff (see FunnelRoster). 0 without a roster.
+  hiddenStaffRepos: number
+}
+
+// Who the assignments table's funnel counts, keyed by lowercased login so the
+// numerators can be joined to the same people the denominator counts.
+export type FunnelRoster = {
+  // Denominator members: students, or students plus staff when the
+  // "Include teaching staff" toggle is on.
+  counted: ReadonlySet<string>
+  // Staff left out of `counted` (toggle off). Their repos are tallied
+  // separately so the cell can say what it hides and how to reveal it.
+  excludedStaff: ReadonlySet<string>
+}
+
+// The assignments table's per-row funnel, shared by its Accepted and Submitted
+// cells.
+//
+// `submitted`: graded `entries` plus the bucket's `detected` list, the
+// commits/tags collect_scores.py observed in repos with no graded entry (every
+// submitter of a no_autograder assignment; for an autograded one, pushes the
+// autograder hasn't published yet). Counting both is what keeps this cell in
+// step with the Submissions page, which shows those repos as "Pending". The
+// union is by owner: a teacher can hand-grade a no_autograder assignment, which
+// writes entries for owners detection also lists (#659).
+//
+// `notCollected`: a `detected` key that is absent (not `[]`) means no collect
+// has walked the bucket yet. Only claimed for no_autograder, whose entries are
+// never autogenerated; an autograded bucket written before detection existed
+// has entries but no key.
+//
+// `accepted`: this assignment's existing repos, reverse-parsed from the org repo
+// list. Individual student repos and group repos share the
+// <classroom>-<slug>-<owner> name shape, so one parse serves both modes.
+//
+// With a `roster`, an individual assignment's `accepted` and `submitted` count
+// only owners in `roster.counted`, so both stay within the denominator by
+// construction (a staff test repo, or a dropped student's, no longer inflates
+// them). Shared-repo modes are keyed by group owner, not login, and keep the
+// raw counts; so does every mode while the roster is unresolved.
+export function assignmentFunnelCounts(
+  assignment: Assignment,
+  scores: NormalizedScores | undefined,
+  orgRepos: GitHubRepo[] | null | undefined,
+  classroom: string,
+  siblingSlugs: readonly string[],
+  roster?: FunnelRoster,
+): AssignmentFunnelCounts {
+  const join = roster && assignment.mode === "individual" ? roster : undefined
+  const counts = (owner: unknown) =>
+    !join ||
+    (typeof owner === "string" && join.counted.has(owner.toLowerCase()))
+  const gradedRows = (scores?.submissions?.[assignment.slug] ?? []).filter(
+    (row) => counts(row.owner),
+  )
+  const detectedRows = scores?.detected?.[assignment.slug]
+  const gradedOwners = new Set(
+    gradedRows.flatMap((row) =>
+      typeof row.owner === "string" ? [row.owner.toLowerCase()] : [],
+    ),
+  )
+  const detectedOnly = (detectedRows ?? []).filter(
+    (row) => !gradedOwners.has(row.owner.toLowerCase()) && counts(row.owner),
+  ).length
+  const repos = orgRepos
+    ? existingGroupRepos(orgRepos, classroom, assignment.slug, siblingSlugs)
+    : undefined
+  return {
+    submitted: gradedRows.length + detectedOnly,
+    accepted: repos?.filter((repo) => counts(repo.owner)).length,
+    notCollected:
+      isNoAutograderAssignment(assignment) &&
+      !detectedRows &&
+      gradedRows.length === 0,
+    hiddenStaffRepos: join
+      ? (repos ?? []).filter((repo) => join.excludedStaff.has(repo.owner))
+          .length
+      : 0,
+  }
 }

@@ -6,6 +6,7 @@ import {
   ClassroomReconcilePermanentError,
   type ClassroomReconcileResult,
 } from "@/domain/reconcileClassroom"
+import { suppressedLoginsFor } from "@/hooks/useSuppressedLogins"
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -20,25 +21,37 @@ const log = logger.scope("useClassroomReconcile")
 // a classroom converges on any owner entry rather than only when a role/roster
 // op touches the missing resource. Owner-gated via `enabled` (a 403 for anyone
 // else); the fire-once guard, latch, and concurrency invariant live in
-// useBestEffortOwnerReconcile.
+// useBestEffortOwnerReconcile. Returns the pass's in-flight signal so pages
+// can reflect "sync in progress" (e.g. the roster's banner).
 export function useClassroomReconcile(
   org: string | undefined,
   classroom: string | undefined,
   enabled: boolean,
   creator?: string,
-): void {
+): { isPending: boolean } {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
-  useBestEffortOwnerReconcile<ClassroomReconcileResult>({
+  return useBestEffortOwnerReconcile<ClassroomReconcileResult>({
     enabled,
     org,
     classroom,
     run: ({ org, classroom }) =>
       withGitConflictRetry(() =>
-        reconcileClassroom(client, org, classroom, creator),
+        reconcileClassroom(
+          client,
+          org,
+          classroom,
+          creator,
+          // The pass runs while the roster stays interactive, so it must honor
+          // the same just-unenrolled suppression the roster page records —
+          // otherwise a mid-pass unenroll is resurrected from a stale team
+          // read (the manual sync threads the identical accessor).
+          () => suppressedLoginsFor(org, classroom).snapshot(),
+        ),
       ),
-    // An archived classroom no-ops (skipped); release its key so a same-mount
+    // An archived classroom skips the team/roster writes (though it still
+    // heals the description projection); release its key so a same-mount
     // un-archive re-reconciles rather than staying latched until remount.
     isTransientSuccess: (result) => result.skipped,
     // Invalidate only the slices that actually changed, keyed on the RUN's own

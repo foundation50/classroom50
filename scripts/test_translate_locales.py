@@ -28,6 +28,7 @@ import translate_locales
 from translate_locales import (
     build_nested_from_keys,
     check_key_parity,
+    chunk_keys,
     compute_diff,
     delete_nested,
     extract_text,
@@ -36,7 +37,9 @@ from translate_locales import (
     invoke_model,
     parse_model_json,
     plural_group_keys,
+    plural_stem,
     set_nested,
+    translate_full,
     translate_keys,
 )
 
@@ -196,6 +199,98 @@ class TestExtractText:
     def test_raises_when_content_missing(self):
         with pytest.raises(ValueError):
             extract_text({})
+
+    def test_raises_when_truncated_at_max_tokens(self):
+        # A cut-off response is unterminated JSON; name the cause instead of
+        # letting json.loads report an opaque "Unterminated string".
+        payload = {"stop_reason": "max_tokens", "content": [{"text": '{"a": "unterm'}]}
+        with pytest.raises(ValueError, match="max_tokens"):
+            extract_text(payload)
+
+    def test_accepts_end_turn_stop_reason(self):
+        payload = {"stop_reason": "end_turn", "content": [{"text": "ok"}]}
+        assert extract_text(payload) == "ok"
+
+
+def _base_of(n: int, prefix: str = "sec", plural_every: int = 0) -> dict:
+    """A flat section of `n` ~60-char leaves; every `plural_every`th is a plural pair."""
+    section: dict = {}
+    for i in range(n):
+        if plural_every and i % plural_every == 0:
+            section[f"k{i}_one"] = f"one {i} " + "x" * 40
+            section[f"k{i}_other"] = f"other {i} " + "x" * 40
+        else:
+            section[f"k{i}"] = f"value {i} " + "x" * 40
+    return {prefix: section}
+
+
+class TestPluralStem:
+    @pytest.mark.parametrize("suffix", translate_locales.PLURAL_SUFFIXES)
+    def test_strips_each_plural_suffix(self, suffix):
+        assert plural_stem(f"nav.count{suffix}") == "nav.count"
+
+    def test_leaves_non_plural_key_alone(self):
+        assert plural_stem("nav.title") == "nav.title"
+
+
+class TestChunkKeys:
+    def test_small_input_is_one_batch_in_order(self):
+        base = _base_of(5)
+        keys = list(flatten(base))
+        assert chunk_keys(base, keys, max_chars=100_000) == [keys]
+
+    def test_every_batch_fits_budget_and_covers_every_key_once(self):
+        base = _base_of(200)
+        keys = list(flatten(base))
+        budget = 2_000
+        batches = chunk_keys(base, keys, max_chars=budget)
+        assert len(batches) > 1
+        assert [k for b in batches for k in b] == keys
+        for batch in batches:
+            rendered = json.dumps(build_nested_from_keys(base, batch), ensure_ascii=False, indent=2)
+            assert len(rendered) <= budget
+
+    def test_plural_siblings_never_straddle_a_batch_boundary(self):
+        base = _base_of(120, plural_every=3)
+        keys = list(flatten(base))
+        batches = chunk_keys(base, keys, max_chars=1_500)
+        assert len(batches) > 1
+        for batch in batches:
+            stems = [plural_stem(k) for k in batch if k != plural_stem(k)]
+            for stem in set(stems):
+                assert f"{stem}_one" in batch and f"{stem}_other" in batch
+
+    def test_lone_group_over_budget_gets_its_own_batch(self):
+        # A single plural group that can't fit is still emitted whole rather
+        # than split or dropped.
+        base = {"s": {"a": "x", "big_one": "y" * 500, "big_other": "z" * 500, "b": "w"}}
+        batches = chunk_keys(base, list(flatten(base)), max_chars=200)
+        assert batches == [["s.a"], ["s.big_one", "s.big_other"], ["s.b"]]
+
+    def test_empty_keys_yield_no_batches(self):
+        assert chunk_keys({"s": {"a": "x"}}, [], max_chars=100) == []
+
+    def test_real_en_json_sections_all_fit_default_budget(self):
+        # The regression this guards: sections that outgrew one response got
+        # truncated. Every batch of the real file must fit the default budget
+        # and keep plural groups intact.
+        from pathlib import Path
+
+        base_path = Path(__file__).resolve().parent.parent / "web" / "src" / "locales" / "en.json"
+        base = json.loads(base_path.read_text(encoding="utf-8"))
+        budget = translate_locales.DEFAULT_MAX_CHUNK_CHARS
+        for section, value in base.items():
+            keys = list(flatten({section: value}))
+            batches = chunk_keys(base, keys, budget)
+            assert [k for b in batches for k in b] == keys
+            for batch in batches:
+                rendered = json.dumps(build_nested_from_keys(base, batch), ensure_ascii=False, indent=2)
+                # A lone oversized plural group may exceed; none exist in en.json.
+                assert len(rendered) <= budget, f"{section}: batch of {len(batch)} keys is {len(rendered)} chars"
+                stems = {plural_stem(k) for k in batch if k != plural_stem(k)}
+                for stem in stems:
+                    siblings = [k for k in keys if plural_stem(k) == stem]
+                    assert all(s in batch for s in siblings), f"{stem} split across batches"
 
 
 class TestFlatten:
@@ -362,6 +457,143 @@ class TestTranslateKeys:
         )
         result = translate_keys(None, "model", "prompt", "ja", base, base_raw, ["nav.a", "nav.b"])
         assert flatten(result) == {"nav.a": "翻訳a", "nav.b": "翻訳b"}
+
+    def test_batches_a_large_backlog_and_merges_every_batch(self, monkeypatch):
+        # The regression: 900+ changed keys in one call truncated at max_tokens.
+        base = _base_of(150)
+        keys = list(flatten(base))
+        monkeypatch.setattr(translate_locales, "DEFAULT_MAX_CHUNK_CHARS", 2_000)
+        calls: list[int] = []
+
+        def fake_invoke(_client, _model, _system, message):
+            requested = _requested_block(message)
+            calls.append(len(flatten(requested)))
+            return json.dumps(_echo_translate(requested))
+
+        monkeypatch.setattr(translate_locales, "invoke_model", fake_invoke)
+        result = translate_keys(None, "model", "prompt", "de", base, json.dumps(base), keys)
+        assert len(calls) > 1
+        assert sum(calls) == len(keys)
+        assert flatten(result) == {k: f"[de] {v}" for k, v in flatten(base).items()}
+
+    def test_fails_fast_on_the_first_bad_batch(self, monkeypatch):
+        base = _base_of(150)
+        keys = list(flatten(base))
+        monkeypatch.setattr(translate_locales, "DEFAULT_MAX_CHUNK_CHARS", 2_000)
+        calls = 0
+
+        def fake_invoke(_client, _model, _system, message):
+            nonlocal calls
+            calls += 1
+            return "{}"  # drops every requested key
+
+        monkeypatch.setattr(translate_locales, "invoke_model", fake_invoke)
+        assert translate_keys(None, "model", "prompt", "de", base, json.dumps(base), keys) is None
+        assert calls == 1
+
+
+def _requested_block(message: str) -> dict:
+    """The JSON the prompt asks to translate: the second fenced block (the first
+    is the full-file context)."""
+    blocks = message.split("```json\n")
+    return json.loads(blocks[2].split("\n```", 1)[0])
+
+
+def _echo_translate(obj: dict, code: str = "de") -> dict:
+    """Fake translation: prefix every leaf so tests can tell output from input."""
+    out: dict = {}
+    for key, value in flatten(obj).items():
+        set_nested(out, key, f"[{code}] {value}")
+    return out
+
+
+class TestTranslateFull:
+    @pytest.fixture(autouse=True)
+    def _small_budget(self, monkeypatch):
+        monkeypatch.setattr(translate_locales, "DEFAULT_MAX_CHUNK_CHARS", 2_000)
+
+    def _install_echo(self, monkeypatch, messages: list[str]):
+        def fake_invoke(_client, _model, _system, message):
+            messages.append(message)
+            return json.dumps(_echo_translate(_requested_block(message)))
+
+        monkeypatch.setattr(translate_locales, "invoke_model", fake_invoke)
+
+    def test_splits_a_large_section_into_parts_and_reassembles_it(self, monkeypatch):
+        base = {**_base_of(3, "small"), **_base_of(150, "big", plural_every=5)}
+        messages: list[str] = []
+        self._install_echo(monkeypatch, messages)
+
+        result = translate_full(None, "model", "prompt", "de", base, json.dumps(base), {})
+
+        assert flatten(result) == {k: f"[de] {v}" for k, v in flatten(base).items()}
+        assert list(result) == ["small", "big"]
+        # `small` fits one call with no part label; `big` is split and labelled.
+        small_msgs = [m for m in messages if '"small" subtree' in m]
+        big_msgs = [m for m in messages if '"big" subtree' in m]
+        assert len(small_msgs) == 1 and "part 1 of" not in small_msgs[0]
+        assert len(big_msgs) > 1
+        assert all(f"part {i} of {len(big_msgs)}" in m for i, m in enumerate(big_msgs, start=1))
+
+    def test_existing_translation_is_scoped_to_the_part_and_keeps_extra_plurals(self, monkeypatch):
+        base = _base_of(150, "big", plural_every=5)
+        current = _echo_translate(base, "pl")
+        # A community-added Polish form on one plural group; en.json has no _few.
+        set_nested(current, "big.k0_few", "[pl] few")
+        messages: list[str] = []
+        self._install_echo(monkeypatch, messages)
+
+        translate_full(None, "model", "prompt", "pl", base, json.dumps(base), current)
+
+        for message in messages:
+            requested = set(flatten(_requested_block(message)))
+            existing_block = message.split("```json\n")[3].split("\n```", 1)[0]
+            existing = set(flatten(json.loads(existing_block)))
+            # Every existing key shown is either requested or a plural sibling of one.
+            assert all(k in requested or plural_stem(k) in {plural_stem(r) for r in requested} for k in existing)
+            if "big.k0_one" in requested:
+                assert "big.k0_few" in existing
+            else:
+                assert "big.k0_few" not in existing
+
+    def test_first_time_generation_has_no_existing_block(self, monkeypatch):
+        base = _base_of(3)
+        messages: list[str] = []
+        self._install_echo(monkeypatch, messages)
+        translate_full(None, "model", "prompt", "de", base, json.dumps(base), {})
+        assert len(messages) == 1
+        assert "There is no existing translation" in messages[0]
+        assert messages[0].count("```json\n") == 2
+
+    def test_accepts_bare_section_object(self, monkeypatch):
+        base = {"nav": {"a": "x"}}
+        monkeypatch.setattr(translate_locales, "invoke_model", lambda *a, **k: '{"a": "übersetzt"}')
+        assert translate_full(None, "model", "prompt", "de", base, json.dumps(base), {}) == {
+            "nav": {"a": "übersetzt"}
+        }
+
+    def test_returns_none_when_a_part_drops_a_key(self, monkeypatch):
+        base = _base_of(150)
+
+        def fake_invoke(_client, _model, _system, message):
+            requested = _requested_block(message)
+            translated = _echo_translate(requested)
+            first = next(iter(translated["sec"]))
+            del translated["sec"][first]
+            return json.dumps(translated)
+
+        monkeypatch.setattr(translate_locales, "invoke_model", fake_invoke)
+        assert translate_full(None, "model", "prompt", "de", base, json.dumps(base), {}) is None
+
+    def test_returns_none_and_names_truncation(self, monkeypatch, capsys):
+        base = _base_of(3)
+        monkeypatch.setattr(
+            translate_locales,
+            "invoke_model",
+            lambda *a, **k: (_ for _ in ()).throw(ValueError("truncated at max_tokens=32000")),
+        )
+        assert translate_full(None, "model", "prompt", "de", base, json.dumps(base), {}) is None
+        assert "max_tokens" in capsys.readouterr().err
 
 
 class TestMainPatchMode:

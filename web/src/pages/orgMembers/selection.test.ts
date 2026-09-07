@@ -17,6 +17,7 @@ const row = (key: string, over: Partial<OrgMemberRow> = {}): OrgMemberRow => ({
   github_id: key,
   name: key,
   email: `${key}@x.edu`,
+  emails: [],
   isMember: true,
   classrooms: [],
   classification: "member-on-roster",

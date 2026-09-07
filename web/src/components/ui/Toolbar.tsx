@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { cx, hasUtility } from "./cx"
 import { Input, type InputSize } from "./Input"
 import { LabeledControl } from "./LabeledControl"
+import { SelectAllCheckbox } from "./SelectAllCheckbox"
 import { Select, type SelectSize } from "./Select"
 
 // The shared toolbar shell + slots that replace the per-page hand-rolled bars.
@@ -134,6 +135,9 @@ function ToolbarFilterSelect({
   // Match the prefix highlight on the select border/text so the whole control
   // reads as active.
   const activeSelectClass = active ? "border-warning text-warning" : undefined
+  // A caller min-width (for long option labels) overrides the default;
+  // without the guard cx would emit both and source order is unspecified.
+  const hasMinWidth = hasUtility("min-w-", className)
   if (!label && !icon) {
     return (
       <Select
@@ -149,7 +153,12 @@ function ToolbarFilterSelect({
     <LabeledControl label={label} icon={icon} active={active}>
       <Select
         selectSize={selectSize}
-        className={cx("join-item w-auto min-w-0", activeSelectClass, className)}
+        className={cx(
+          "join-item w-auto",
+          !hasMinWidth && "min-w-0",
+          activeSelectClass,
+          className,
+        )}
         {...props}
       >
         {children}
@@ -184,13 +193,8 @@ export type ToolbarSelectionProps = {
   onToggleSelectAll: () => void
   selectAllAriaLabel: string
   label: ReactNode
-  // Rendered between the count and the actions, regardless of selection (e.g., the
-  // roster group-by-section toggle).
-  aux?: ReactNode
   // The selection-revealed actions (shown when rows are selected).
   children?: ReactNode
-  // The no-selection trailing group (e.g., the roster Add/Upload/Invite group).
-  idleActions?: ReactNode
 }
 
 function ToolbarSelection({
@@ -199,33 +203,24 @@ function ToolbarSelection({
   onToggleSelectAll,
   selectAllAriaLabel,
   label,
-  aux,
   children,
-  idleActions,
 }: ToolbarSelectionProps) {
   return (
     <>
       <label className="flex cursor-pointer items-center gap-3">
-        <input
-          type="checkbox"
-          className="checkbox checkbox-sm"
-          aria-label={selectAllAriaLabel}
-          checked={allSelected}
-          ref={(el) => {
-            if (el) el.indeterminate = someSelected && !allSelected
-          }}
-          onChange={onToggleSelectAll}
+        <SelectAllCheckbox
+          ariaLabel={selectAllAriaLabel}
+          allSelected={allSelected}
+          someSelected={someSelected}
+          onToggle={onToggleSelectAll}
         />
         <span className="text-sm font-medium tabular-nums">{label}</span>
       </label>
-      {aux}
       {children ? (
         <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
           {children}
         </div>
-      ) : (
-        idleActions
-      )}
+      ) : null}
     </>
   )
 }

@@ -4,16 +4,18 @@ import {
   CheckIcon,
   ChevronRightIcon,
   CopyIcon,
+  SyncIcon,
   TrashIcon,
   UploadIcon,
   XIcon,
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { AnimatedAlert, Button, rtlFlip } from "@/components/ui"
+import { AnimatedAlert, Badge, Button, rtlFlip } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { errorText } from "@/types/localizedMessage"
 import {
   BASE_LANG,
   LanguagePackError,
@@ -48,11 +50,15 @@ export const LanguageSwitcher = ({
   const {
     offered,
     error: registryError,
+    refreshing,
+    refreshed,
+    refresh,
     installAndActivate,
   } = useLanguageRegistry()
 
   const [code, setCode] = useState("")
   const [url, setUrl] = useState("")
+  const uploadInputRef = useRef<HTMLInputElement>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
@@ -75,7 +81,7 @@ export const LanguageSwitcher = ({
       setNeedsCode(true)
       setError(t("language.errorCodeUndetectable"))
     } else if (err instanceof LanguagePackError) {
-      setError(err.message)
+      setError(errorText(t, err))
     } else {
       setError(t("language.errorGeneric"))
     }
@@ -215,17 +221,38 @@ export const LanguageSwitcher = ({
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
-        <label className="label py-0" htmlFor="lang-select">
-          <span className="label-text font-bold">
-            {t("language.activeLabel")}
-          </span>
-        </label>
+        <div className="flex items-center justify-between">
+          <label className="label py-0" htmlFor="lang-select">
+            <span className="label-text font-bold">
+              {t("language.activeLabel")}
+            </span>
+          </label>
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label={
+              refreshed ? t("language.refreshDone") : t("language.refreshList")
+            }
+            title={t("language.refreshList")}
+            onClick={() => void refresh()}
+            disabled={refreshing || installingSelected}
+          >
+            {refreshing ? (
+              <InlineSpinner />
+            ) : refreshed ? (
+              <CheckIcon className="size-4 text-success" aria-hidden="true" />
+            ) : (
+              <SyncIcon className="size-4" aria-hidden="true" />
+            )}
+            {refreshed ? t("language.refreshDone") : t("language.refresh")}
+          </Button>
+        </div>
         <select
           id="lang-select"
           className="select select-bordered w-full"
           value={lang}
           onChange={(e) => void handleSelectLang(e.target.value)}
-          disabled={installingSelected}
+          disabled={installingSelected || refreshing}
         >
           {langOptions.map(({ code: c, install }) => (
             <option key={c} value={c}>
@@ -348,21 +375,30 @@ export const LanguageSwitcher = ({
             </div>
           )}
 
-          <label className="btn btn-sm btn-outline w-full">
+          {/* Hidden input + Button (the UploadRoster pattern) instead of a
+              label wearing btn classes, so the picker is a real button. */}
+          <input
+            ref={uploadInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={(e) => void handleFile(e)}
+            disabled={busy}
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            disabled={busy}
+            onClick={() => uploadInputRef.current?.click()}
+          >
             {busy && !preview ? (
               <InlineSpinner />
             ) : (
               <UploadIcon className="size-4" aria-hidden="true" />
             )}
             {t("language.uploadFile")}
-            <input
-              type="file"
-              accept="application/json,.json"
-              className="hidden"
-              onChange={(e) => void handleFile(e)}
-              disabled={busy}
-            />
-          </label>
+          </Button>
 
           <div className="flex flex-row gap-2">
             <input
@@ -403,22 +439,21 @@ export const LanguageSwitcher = ({
                     <span className="flex items-center gap-2">
                       {languageLabel(c, lang)}
                       {source && (
-                        <span
-                          className={`badge badge-sm ${
-                            source === "registry"
-                              ? "badge-ghost"
-                              : "badge-outline"
-                          }`}
+                        // badge-outline is deliberately not a Badge feature;
+                        // it rides className for this one source chip.
+                        <Badge
+                          ghost={source === "registry"}
+                          className={
+                            source === "registry" ? undefined : "badge-outline"
+                          }
                         >
                           {source === "registry"
                             ? t("language.sourceRegistry")
                             : t("language.sourceUser")}
-                        </span>
+                        </Badge>
                       )}
                       {cov !== undefined && cov < 1 && (
-                        <span className="badge badge-ghost badge-sm">
-                          {Math.round(cov * 100)}%
-                        </span>
+                        <Badge ghost>{Math.round(cov * 100)}%</Badge>
                       )}
                     </span>
                     <Button
@@ -445,12 +480,12 @@ export const LanguageSwitcher = ({
                 code: languageLabel(preview.code, lang),
               })}
             </span>
-            <span className="badge badge-ghost badge-sm">
+            <Badge ghost>
               {t("language.previewCoverage", {
                 percent: Math.round(preview.coverage * 100),
                 keys: preview.keyCount,
               })}
-            </span>
+            </Badge>
           </div>
           {preview.sample.length > 0 && (
             <div className="flex flex-col gap-1">

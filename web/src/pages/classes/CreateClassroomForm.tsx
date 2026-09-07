@@ -3,6 +3,7 @@ import { useForm } from "@tanstack/react-form"
 import { useParams } from "@tanstack/react-router"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import {
   DEFAULT_SECRET_LENGTH,
   SECRET_PATTERN_DESCRIPTION,
@@ -18,7 +19,15 @@ import {
   CLASSROOM_SHORT_NAME_MAX_LEN,
   GITHUB_REPO_NAME_MAX_LEN,
 } from "@/util/repoNameBudget"
-import { Button, Card, FormField, Input, Heading } from "@/components/ui"
+import {
+  AnimatedAlert,
+  Button,
+  Card,
+  FormField,
+  Input,
+  Heading,
+  Toggle,
+} from "@/components/ui"
 
 export type CreateClassroomFormValues = {
   name: string
@@ -37,11 +46,15 @@ type CreateClassroomFormProps = {
   // Returns the submit's settling promise (or void) so the form can await the
   // real write and latch its loading state only on success.
   onSubmit: (values: CreateClassroomFormValues) => void | Promise<unknown>
+  // The host page's failed-create message, rendered inline above the actions
+  // (Primer: feedback for a page form belongs next to it, not a toast).
+  submitError?: string | null
 }
 
 const CreateClassroomForm = ({
   defaultValues,
   onSubmit,
+  submitError,
 }: CreateClassroomFormProps) => {
   const { t } = useTranslation()
   const { org = "" } = useParams({ strict: false })
@@ -125,12 +138,17 @@ const CreateClassroomForm = ({
   return (
     <Card
       as="form"
+      // noValidate: Primer forms guidance — browser-native validation UI is
+      // inaccessible and clashes with our submit-time validation; `required`
+      // stays on controls for AT parity.
+      noValidate
       bordered={false}
       className="w-full"
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        const formEl = e.currentTarget
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <Card.Body>
@@ -270,9 +288,8 @@ const CreateClassroomForm = ({
                   positive — the control IS associated. */}
               {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
               <label className="flex cursor-pointer items-start gap-3">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-primary mt-0.5"
+                <Toggle
+                  className="mt-0.5"
                   checked={field.state.value}
                   onChange={(e) => {
                     const on = e.target.checked
@@ -361,11 +378,18 @@ const CreateClassroomForm = ({
           )}
         </form.Field>
 
-        <Card.Actions className="justify-end p-2">
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => {
+        <AnimatedAlert
+          tone="error"
+          show={submitError != null}
+          className="text-sm"
+        >
+          {submitError}
+        </AnimatedAlert>
+        {/* Primer page-form convention: actions bottom-LEFT (right alignment
+              is for dialog footers). */}
+        <Card.Actions className="justify-start p-2">
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => {
               // Hold the loading state through post-create navigation so the
               // button never reverts to a bare disabled state.
               const busy = isSubmitting || submitted
@@ -375,7 +399,7 @@ const CreateClassroomForm = ({
                   variant="primary"
                   loading={busy}
                   loadingLabel={t("classes.form.creating")}
-                  disabled={!canSubmit || busy}
+                  disabled={busy}
                 >
                   {busy
                     ? t("classes.form.creating")

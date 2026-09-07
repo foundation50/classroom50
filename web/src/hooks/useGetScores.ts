@@ -16,7 +16,7 @@ const log = logger.scope(LOG_SCOPE_QUERIES)
 type SubmissionRecord = {
   schema: string
   classroom: string
-  assignment_type: "individual" | "group"
+  assignment_type: "individual" | "group" | "team"
   owner: string
   submission: string
   commit: string
@@ -41,25 +41,30 @@ type SubmissionRecord = {
 type ScoreEntry = {
   owner: string
   member_usernames?: string[]
+  // Team-mode crediting: the group's GitHub Team slug (scores-v1 `team_slug`).
+  // Type only — ingestion tolerates its absence (a pre-team collector).
+  team_slug?: string
   submissions: SubmissionRecord[]
   override?: boolean
 }
 
 type AssignmentBucket = {
-  type: "individual" | "group"
+  type: "individual" | "group" | "team"
   entries: ScoreEntry[]
   // Per-bucket freshness stamp written by collect_scores.py: the UTC instant
   // collection last walked THIS assignment (absent on files written before the
   // field existed).
   collected_at?: string
-  // Presence/count records for an assignment that SKIPS GRADING: those repos
-  // publish no submit/* release, so `entries` stays empty and this is the only
-  // submission signal. Never carries a score — see scores-v1's detectedRecord.
+  // Presence/count records for repos with submissions but no graded entry: every
+  // submitter of a no_autograder assignment (no submit/* release exists) and, for
+  // an autograded one, repos with pushes the autograder hasn't published yet. An
+  // owner is never in both lists. Never carries a score — see scores-v1's
+  // detectedRecord.
   detected?: DetectedRecord[]
 }
 
-// One repo's detected (ungraded) submissions, written by collect_scores.py for a
-// no_autograder assignment. Count/presence only, by construction.
+// One repo's detected (ungraded) submissions, written by collect_scores.py.
+// Count/presence only, by construction.
 type DetectedRecord = {
   owner: string
   count: number
@@ -80,6 +85,9 @@ type ScoresSchema = {
 export type SubmissionRow = {
   usernames: string[]
   owner: string
+  // Team-mode crediting: the group's GitHub Team slug when the collector
+  // recorded one (scores-v1 `team_slug`); absent otherwise.
+  teamSlug?: string
   datetime: string
   commit: string
   release: string
@@ -142,11 +150,12 @@ export type NormalizedScores = {
   // the org-wide workflow-run timestamp: a scoped collect refreshes only its
   // own bucket, so only that bucket's stamp moves.
   collectedAt: Record<string, string>
-  // Slug -> collected DETECTED submitters, for assignments that skip grading.
-  // Separate from `submissions` because these carry no score and must never be
-  // fed to a grade consumer (stats, CSV, ScoreBadge, passing filters). The key
-  // is absent until a collect has walked the bucket, which lets the UI tell
-  // "nobody submitted" apart from "never collected".
+  // Slug -> collected DETECTED submitters: repos with submissions but no graded
+  // entry (see AssignmentBucket.detected). Separate from `submissions` because
+  // these carry no score and must never be fed to a grade consumer (stats, CSV,
+  // ScoreBadge, passing filters). The key is absent until a collect has walked
+  // the bucket, which lets the UI tell "nobody submitted" apart from "never
+  // collected".
   detected: Record<string, DetectedSubmitter[]>
 }
 
@@ -213,6 +222,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
       return {
         usernames,
         owner: entry.owner,
+        ...(entry.team_slug ? { teamSlug: entry.team_slug } : {}),
         datetime: latest.datetime,
         commit: latest.commit,
         release: latest.release,

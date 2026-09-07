@@ -15,7 +15,9 @@ const defaults: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,
@@ -42,6 +44,7 @@ const defaults: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_visibility: "private",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "off",
@@ -51,6 +54,8 @@ const defaults: CreateAssignmentFormValues = {
   repo_feature_projects: "inherit",
   repo_feature_pull_requests: "inherit",
   tests: [],
+  test_failure_details: "",
+  test_show_output: false,
 }
 
 describe("sectionIsConfigured", () => {
@@ -106,6 +111,22 @@ describe("sectionIsConfigured", () => {
     expect(sectionIsConfigured("submission", manual, defaults)).toBe(true)
     const maxChanged = { ...defaults, grading_max_points: 42 }
     expect(sectionIsConfigured("submission", maxChanged, defaults)).toBe(true)
+  })
+
+  it("attributes the report defaults to the submission section", () => {
+    // The test_defaults controls live in the autograder pane, so changing only
+    // them must surface the submission section's Reset (and reset with it).
+    const details = { ...defaults, test_failure_details: "none" as const }
+    expect(sectionIsConfigured("submission", details, defaults)).toBe(true)
+    const output = { ...defaults, test_show_output: true }
+    expect(sectionIsConfigured("submission", output, defaults)).toBe(true)
+    expect(sectionIsConfigured("details", output, defaults)).toBe(false)
+  })
+
+  it("attributes the lock toggle to the schedule and access section", () => {
+    const locked = { ...defaults, locked: true }
+    expect(sectionIsConfigured("schedule", locked, defaults)).toBe(true)
+    expect(sectionIsConfigured("details", locked, defaults)).toBe(false)
   })
 })
 

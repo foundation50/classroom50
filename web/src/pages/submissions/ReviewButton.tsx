@@ -1,12 +1,13 @@
 import { CodeReviewIcon } from "@/components/ui/icons"
-import { useId, useState } from "react"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { Button, Modal, MonoLtr, Heading } from "@/components/ui"
+import { Button, Modal, MonoLtr } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
+import { errorText } from "@/types/localizedMessage"
 import type { AssignmentMode } from "@/types/classroom"
 
 // The Feedback-PR action: links to the open Feedback PR (opened at accept
@@ -39,7 +40,6 @@ export const FeedbackPrAction = ({
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const titleId = useId()
   const [resolving, setResolving] = useState(false)
   // The empty/error modal is mounted on demand (controlled `open`), not per
   // trigger: the table renders one action per row, and a hidden <dialog> per
@@ -58,7 +58,7 @@ export const FeedbackPrAction = ({
       // `error`; show it rather than the misleading "no PR yet" message.
       const { data: pr, error } = await refetch()
       if (error) {
-        setErrorMsg(error instanceof Error ? error.message : String(error))
+        setErrorMsg(errorText(t, error))
         setModalOpen(true)
       } else if (pr) {
         window.open(pr.html_url, "_blank", "noopener,noreferrer")
@@ -72,10 +72,11 @@ export const FeedbackPrAction = ({
   }
 
   // Map the domain's failure to friendly copy. Structural verdicts
-  // (`no-baseline` / `repo-not-found` — no Feedback PR is possible for this
-  // repo) and the blocked `base-mismatch` (only an org admin can fix it) are
-  // terminal messages shown in the modal, not retryable toasts. Everything else
-  // is a transient failure the teacher can retry.
+  // (`no-baseline` — the accept never wrote the marker, so the student must
+  // re-run setup — / `repo-not-found`) and the blocked `base-mismatch` (only
+  // an org admin can fix it) are terminal messages shown in the modal, not
+  // retryable toasts. Everything else is a transient failure the teacher can
+  // retry.
   const repairReasonMessage = (
     result: Extract<
       ReturnType<typeof useRepairFeedbackPr>["data"],
@@ -99,6 +100,8 @@ export const FeedbackPrAction = ({
       {
         onSuccess: async (result) => {
           if (result.ok) {
+            // Kept as a toast: the repaired PR opens in another tab and this
+            // dialog closes, so nothing on the page evidences the outcome.
             notify({
               tone: "success",
               durationMs: 5000,
@@ -115,7 +118,7 @@ export const FeedbackPrAction = ({
           setErrorMsg(repairReasonMessage(result))
         },
         onError: (err) => {
-          setErrorMsg(err instanceof Error ? err.message : String(err))
+          setErrorMsg(errorText(t, err))
         },
       },
     )
@@ -129,23 +132,51 @@ export const FeedbackPrAction = ({
           open
           onClose={() => setModalOpen(false)}
           size="md"
-          hideCloseButton
-          aria-labelledby={titleId}
+          title={
+            errorMsg
+              ? t("submissions.reviewModal.errorTitle")
+              : t("submissions.reviewModal.emptyTitle")
+          }
+          footer={
+            <>
+              <Button
+                as="a"
+                variant="ghost"
+                size="sm"
+                href={`https://github.com/${org}/${repo}/pulls`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("submissions.reviewModal.openRepoPrs")}
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={repair.isPending}
+                onClick={() => setModalOpen(false)}
+              >
+                {t("common.close")}
+              </Button>
+              {!errorMsg && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={repair.isPending}
+                  loadingLabel={t("submissions.repairPr.repairing")}
+                  onClick={handleRepair}
+                >
+                  {t("submissions.repairPr.repair")}
+                </Button>
+              )}
+            </>
+          }
         >
           {errorMsg ? (
-            <>
-              <Heading as="h3" id={titleId}>
-                {t("submissions.reviewModal.errorTitle")}
-              </Heading>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
-                {errorMsg}
-              </p>
-            </>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
+              {errorMsg}
+            </p>
           ) : (
             <>
-              <Heading as="h3" id={titleId}>
-                {t("submissions.reviewModal.emptyTitle")}
-              </Heading>
               <p className="mt-2 text-sm leading-6 text-base-content/70">
                 <Trans
                   i18nKey="submissions.reviewModal.emptyBody"
@@ -158,34 +189,6 @@ export const FeedbackPrAction = ({
               </p>
             </>
           )}
-          <div className="modal-action">
-            <a
-              className="btn btn-ghost btn-sm"
-              href={`https://github.com/${org}/${repo}/pulls`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("submissions.reviewModal.openRepoPrs")}
-            </a>
-            {!errorMsg && (
-              <Button
-                size="sm"
-                loading={repair.isPending}
-                loadingLabel={t("submissions.repairPr.repairing")}
-                onClick={handleRepair}
-              >
-                {t("submissions.repairPr.repair")}
-              </Button>
-            )}
-            <Button
-              variant={errorMsg ? undefined : "ghost"}
-              size="sm"
-              disabled={repair.isPending}
-              onClick={() => setModalOpen(false)}
-            >
-              {t("common.close")}
-            </Button>
-          </div>
         </Modal>
       )}
     </>

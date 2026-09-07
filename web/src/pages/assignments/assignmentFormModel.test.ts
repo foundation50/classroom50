@@ -6,6 +6,8 @@ import {
   validateAssignmentForm,
   toSubmitValues,
   formValuesToRepoFeatures,
+  formValuesToTestDefaults,
+  testFailureDetailsChoice,
   shouldSeedBuiltInAutograder,
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
@@ -31,6 +33,8 @@ const draft = (
   timeout: 30,
   exitCode: "",
   points: 10,
+  failureDetails: "",
+  showOutput: "",
   ...over,
 })
 
@@ -42,7 +46,9 @@ const base: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,
@@ -69,6 +75,7 @@ const base: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_visibility: "private",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "auto",
@@ -78,6 +85,8 @@ const base: CreateAssignmentFormValues = {
   repo_feature_projects: "inherit",
   repo_feature_pull_requests: "inherit",
   tests: [],
+  test_failure_details: "",
+  test_show_output: false,
 }
 
 describe("validateAssignmentForm — happy paths", () => {
@@ -197,6 +206,62 @@ describe("validateAssignmentForm — group size", () => {
       validateAssignmentForm({ ...base, mode: "group", max_group_size: 0 }, t)
         .max_group_size,
     ).toBe("assignments.form.validation.maxGroupSizeInvalid")
+  })
+
+  it("applies the same bounds to team mode", () => {
+    expect(
+      validateAssignmentForm({ ...base, mode: "team", max_group_size: 999 }, t)
+        .max_group_size,
+    ).toBe("validation.groupSizeRange")
+    expect(
+      validateAssignmentForm({ ...base, mode: "team", max_group_size: 4 }, t),
+    ).toEqual({})
+  })
+})
+
+describe("validateAssignmentForm — team formation", () => {
+  it("rejects a tampered formation value in team mode", () => {
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          mode: "team",
+          max_group_size: 3,
+          team_formation: "anarchy" as never,
+        },
+        t,
+      ).team_formation,
+    ).toBe("assignments.form.validation.teamFormationInvalid")
+  })
+
+  it("ignores the formation outside team mode", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, mode: "individual", team_formation: "anarchy" as never },
+        t,
+      ).team_formation,
+    ).toBeUndefined()
+  })
+})
+
+describe("toSubmitValues — team formation clearing", () => {
+  it("passes the formation through for team mode", () => {
+    const out = toSubmitValues({
+      ...base,
+      mode: "team",
+      max_group_size: 4,
+      team_formation: "student",
+    })
+    expect(out.team_formation).toBe("student")
+  })
+
+  it("resets a stale formation to the default outside team mode", () => {
+    const out = toSubmitValues({
+      ...base,
+      mode: "individual",
+      team_formation: "student",
+    })
+    expect(out.team_formation).toBe("teacher")
   })
 })
 
@@ -699,7 +764,7 @@ describe("toSubmitValues — runtime field clearing", () => {
     // The built-in-only field clearing keys off the built-in autograder toggle
     // (autograding_state), NOT the grading choice — so a built-in assignment
     // graded Manually must KEEP its advanced config on submit even though the
-    // (immutable) Manual choice hides the panes in the UI. Guards the invariant
+    // Manual choice hides the panes in the UI. Guards the invariant
     // deriveFormShape's showBuiltInConfig doc calls out.
     const out = toSubmitValues({
       ...base,
@@ -1070,6 +1135,29 @@ describe("available_from (release date)", () => {
   })
 })
 
+describe("locked (Lock assignment toggle)", () => {
+  it("reads an absent flag as unlocked and a stored true as locked", () => {
+    const stored = {
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual" as const,
+      autograder: "default" as const,
+    }
+    expect(assignmentToFormValues(stored).locked).toBe(false)
+    expect(assignmentToFormValues({ ...stored, locked: true }).locked).toBe(
+      true,
+    )
+  })
+
+  it("passes through on submit regardless of repo shape", () => {
+    expect(toSubmitValues({ ...base, locked: true }).locked).toBe(true)
+    expect(
+      toSubmitValues({ ...base, locked: true, empty_repo: true }).locked,
+    ).toBe(true)
+    expect(toSubmitValues(base).locked).toBe(false)
+  })
+})
+
 describe("repo_features tri-state round-trip", () => {
   it("reads absent object/key -> inherit, true -> on, false -> off", () => {
     const values = assignmentToFormValues({
@@ -1178,5 +1266,80 @@ describe("shouldSeedBuiltInAutograder", () => {
         autogradingState: "built-in",
       }),
     ).toBe(false)
+  })
+})
+
+describe("test_defaults form mapping (failure-details / show-output)", () => {
+  it("collapses the grader defaults to an omitted block", () => {
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "",
+        test_show_output: false,
+      }),
+    ).toBeUndefined()
+  })
+
+  it("writes only the non-default values", () => {
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "none",
+        test_show_output: false,
+      }),
+    ).toEqual({ "failure-details": "none" })
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "",
+        test_show_output: true,
+      }),
+    ).toEqual({ "show-output": true })
+    expect(
+      formValuesToTestDefaults({
+        test_failure_details: "actual-only",
+        test_show_output: true,
+      }),
+    ).toEqual({ "failure-details": "actual-only", "show-output": true })
+  })
+
+  it("reads a stored explicit 'full' as the default choice", () => {
+    // Round-trip normalization: an explicit assignment-level "full" equals
+    // the grader default, so re-saving drops the redundant key.
+    expect(testFailureDetailsChoice("full")).toBe("")
+    expect(testFailureDetailsChoice(undefined)).toBe("")
+    expect(testFailureDetailsChoice("none")).toBe("none")
+    expect(testFailureDetailsChoice("actual-only")).toBe("actual-only")
+  })
+
+  it("assignmentToFormValues seeds the defaults controls from the entry", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "HW1",
+      mode: "individual",
+      autograder: "default",
+      tests: [{ name: "t", type: "run", run: "true", points: 1 }],
+      test_defaults: { "failure-details": "none", "show-output": true },
+    })
+    expect(values.test_failure_details).toBe("none")
+    expect(values.test_show_output).toBe(true)
+  })
+
+  it("toSubmitValues clears the defaults without the built-in autograder", () => {
+    const submitted = toSubmitValues({
+      ...base,
+      autograding_state: "none",
+      test_failure_details: "none",
+      test_show_output: true,
+    })
+    expect(submitted.test_failure_details).toBe("")
+    expect(submitted.test_show_output).toBe(false)
+  })
+
+  it("toSubmitValues keeps the defaults with the built-in autograder", () => {
+    const submitted = toSubmitValues({
+      ...base,
+      test_failure_details: "actual-only",
+      test_show_output: true,
+    })
+    expect(submitted.test_failure_details).toBe("actual-only")
+    expect(submitted.test_show_output).toBe(true)
   })
 })

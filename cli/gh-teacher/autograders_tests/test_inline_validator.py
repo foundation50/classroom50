@@ -182,7 +182,8 @@ def _manifest(*, slug: str = "hello", runtime: dict | None = None,
               tests: list | None = None,
               release_assets: object = _MISSING,
               submission_mode: object = _MISSING,
-              submission_tags: object = _MISSING) -> dict:
+              submission_tags: object = _MISSING,
+              test_defaults: object = _MISSING) -> dict:
     """Minimum assignments.json with one entry, optional runtime/tests."""
     entry = {
         "slug": slug,
@@ -201,6 +202,8 @@ def _manifest(*, slug: str = "hello", runtime: dict | None = None,
         entry["submission_mode"] = submission_mode
     if submission_tags is not _MISSING:
         entry["submission_tags"] = submission_tags
+    if test_defaults is not _MISSING:
+        entry["test_defaults"] = test_defaults
     return {
         "schema": "classroom50/assignments/v1",
         "assignments": [entry],
@@ -527,6 +530,65 @@ class TestDeclarativeTestsValidation:
         )
         assert rc != 0
         assert "tests must be an array" in stderr
+
+    def test_reporting_options_accepted(self, inline_script, tmp_path):
+        # failure-details / show-output per test plus the assignment-level
+        # test_defaults block (issues #612/#764/#765) validate cleanly; an
+        # explicit show-output false is legal (overrides a true default).
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(
+                test_defaults={"failure-details": "none", "show-output": True},
+                tests=[
+                    {"name": "a", "type": "run", "run": "true", "points": 1,
+                     "failure-details": "actual-only", "show-output": False},
+                ],
+            ),
+        )
+        assert rc == 0, stderr
+
+    def test_bad_failure_details_rejected(self, inline_script, tmp_path):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(tests=[
+                {"name": "a", "type": "run", "run": "true", "points": 1,
+                 "failure-details": "loud"},
+            ]),
+        )
+        assert rc != 0
+        assert "failure-details" in stderr
+
+    def test_non_boolean_show_output_rejected(self, inline_script, tmp_path):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(tests=[
+                {"name": "a", "type": "run", "run": "true", "points": 1,
+                 "show-output": "yes"},
+            ]),
+        )
+        assert rc != 0
+        assert "show-output" in stderr
+
+    @pytest.mark.parametrize("bad_defaults", [
+        "none",
+        {"failure-details": "loud"},
+        {"show-output": "yes"},
+        {"unknown-key": True},
+    ])
+    def test_bad_test_defaults_rejected(self, inline_script, tmp_path, bad_defaults):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(
+                test_defaults=bad_defaults,
+                tests=[{"name": "a", "type": "run", "run": "true", "points": 1}],
+            ),
+        )
+        assert rc != 0
+        assert "test_defaults" in stderr
 
     def test_unknown_test_key_rejected(self, inline_script, tmp_path):
         # Mirrors Go's DisallowUnknownFields: a typo'd `compare` (it's

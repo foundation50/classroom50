@@ -1,8 +1,9 @@
-import { useId } from "react"
+import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitPullRequestIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Spinner, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
+import { BulkProgressInline } from "@/components/bulk/resultView"
 import useOpenAllFeedbackPrs from "@/hooks/mutations/useOpenAllFeedbackPrs"
 import type { OpenAllRepoResult } from "@/domain/assignments"
 import type { AssignmentMode } from "@/types/classroom"
@@ -61,7 +62,6 @@ export function OpenAllFeedbackPrsModal({
   repos: string[]
 }) {
   const { t } = useTranslation()
-  const titleId = useId()
   const {
     mutate,
     isPending,
@@ -73,11 +73,14 @@ export function OpenAllFeedbackPrsModal({
   const count = repos.length
   const running = isPending
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  useEffect(() => {
+    if (open) reset()
+  }, [open, reset])
+
   const handleClose = () => {
     if (running) return
     onClose()
-    // Clear the prior run so reopening starts at the confirm state.
-    reset()
   }
 
   const handleRun = () => {
@@ -90,108 +93,16 @@ export function OpenAllFeedbackPrsModal({
       onClose={handleClose}
       size="md"
       closeDisabled={running}
-      aria-labelledby={titleId}
-    >
-      <Heading as="h3" className="flex items-center gap-2" id={titleId}>
-        <GitPullRequestIcon aria-hidden="true" className="size-4" />
-        {t("submissions.openAllPrs.title")}
-      </Heading>
-
-      {/* Summary — the run finished. */}
-      {summary ? (
-        <div className="mt-3 space-y-3">
-          <p className="text-sm leading-6 text-base-content/70">
-            <Trans
-              i18nKey="submissions.openAllPrs.summaryLead"
-              values={{ total: summary.total }}
-              components={{ b: <span className="font-semibold" /> }}
-            />
-          </p>
-          <ul className="space-y-1 text-sm">
-            <li>
-              {t("submissions.openAllPrs.summaryOpened", {
-                count: summary.created,
-              })}
-            </li>
-            <li>
-              {t("submissions.openAllPrs.summaryExisted", {
-                count: summary.existed,
-              })}
-            </li>
-            {summary.unsupported.length > 0 && (
-              <li>
-                {t("submissions.openAllPrs.summaryUnsupported", {
-                  count: summary.unsupported.length,
-                })}
-              </li>
-            )}
-            {summary.blocked.length > 0 && (
-              <li className="text-warning">
-                {t("submissions.openAllPrs.summaryBlocked", {
-                  count: summary.blocked.length,
-                })}
-              </li>
-            )}
-            {summary.failed.length > 0 && (
-              <li className="text-error">
-                {t("submissions.openAllPrs.summaryFailed", {
-                  count: summary.failed.length,
-                })}
-              </li>
-            )}
-          </ul>
-          {summary.blocked.length > 0 && (
-            <RepoListAlert
-              repos={summary.blocked}
-              title={t("submissions.openAllPrs.blockedTitle")}
-              hint={t("submissions.openAllPrs.blockedHint")}
-            />
-          )}
-          {summary.failed.length > 0 && (
-            <RepoListAlert
-              repos={summary.failed}
-              title={t("submissions.openAllPrs.failedTitle")}
-              hint={t("submissions.openAllPrs.failedHint")}
-              showReason
-            />
-          )}
-        </div>
-      ) : running ? (
-        /* Running — live progress. */
-        <div className="mt-4 space-y-3">
-          <p className="flex items-center gap-2 text-sm text-base-content/70">
-            <Spinner size="xs" />
-            {t("submissions.openAllPrs.running", {
-              done: progress?.done ?? 0,
-              total: progress?.total ?? count,
-            })}
-          </p>
-          <progress
-            className="progress progress-primary w-full"
-            value={progress?.done ?? 0}
-            max={progress?.total ?? count}
-          />
-        </div>
-      ) : (
-        /* Confirm. */
-        <div className="mt-3 space-y-2 text-sm leading-6 text-base-content/70">
-          <p>
-            <Trans
-              i18nKey="submissions.openAllPrs.confirmBody"
-              values={{ count, name: assignmentName }}
-              components={{
-                b: <span className="font-semibold text-base-content" />,
-              }}
-            />
-          </p>
-          <p>{t("submissions.openAllPrs.confirmHint")}</p>
-        </div>
-      )}
-
-      <div className="modal-action">
-        {summary ? (
-          <Button size="sm" onClick={handleClose}>
-            {t("common.close")}
+      title={t("submissions.openAllPrs.title")}
+      headerVisual={
+        <ModalIcon>
+          <GitPullRequestIcon aria-hidden="true" className="size-4" />
+        </ModalIcon>
+      }
+      footer={
+        summary ? (
+          <Button variant="primary" size="sm" onClick={handleClose}>
+            {t("common.done")}
           </Button>
         ) : (
           <>
@@ -217,8 +128,109 @@ export function OpenAllFeedbackPrsModal({
               {t("submissions.openAllPrs.confirmLabel", { count })}
             </Button>
           </>
-        )}
-      </div>
+        )
+      }
+    >
+      {/* Summary — the run finished. */}
+      {summary ? (
+        <div className="mt-3 space-y-3">
+          <p className="text-sm leading-6 text-base-content/70">
+            <Trans
+              i18nKey="submissions.openAllPrs.summaryLead"
+              values={{ total: summary.total }}
+              components={{ b: <span className="font-semibold" /> }}
+            />
+          </p>
+          <ul className="space-y-1 text-sm">
+            <li>
+              {t("submissions.openAllPrs.summaryOpened", {
+                count: summary.created,
+              })}
+            </li>
+            <li>
+              {t("submissions.openAllPrs.summaryExisted", {
+                count: summary.existed,
+              })}
+            </li>
+            {summary.incomplete.length > 0 && (
+              <li className="text-warning">
+                {t("submissions.openAllPrs.summaryIncomplete", {
+                  count: summary.incomplete.length,
+                })}
+              </li>
+            )}
+            {summary.unsupported.length > 0 && (
+              <li>
+                {t("submissions.openAllPrs.summaryUnsupported", {
+                  count: summary.unsupported.length,
+                })}
+              </li>
+            )}
+            {summary.blocked.length > 0 && (
+              <li className="text-warning">
+                {t("submissions.openAllPrs.summaryBlocked", {
+                  count: summary.blocked.length,
+                })}
+              </li>
+            )}
+            {summary.failed.length > 0 && (
+              <li className="text-error">
+                {t("submissions.openAllPrs.summaryFailed", {
+                  count: summary.failed.length,
+                })}
+              </li>
+            )}
+          </ul>
+          {summary.incomplete.length > 0 && (
+            <RepoListAlert
+              repos={summary.incomplete}
+              title={t("submissions.openAllPrs.incompleteTitle")}
+              hint={t("submissions.openAllPrs.incompleteHint")}
+            />
+          )}
+          {summary.blocked.length > 0 && (
+            <RepoListAlert
+              repos={summary.blocked}
+              title={t("submissions.openAllPrs.blockedTitle")}
+              hint={t("submissions.openAllPrs.blockedHint")}
+            />
+          )}
+          {summary.failed.length > 0 && (
+            <RepoListAlert
+              repos={summary.failed}
+              title={t("submissions.openAllPrs.failedTitle")}
+              hint={t("submissions.openAllPrs.failedHint")}
+              showReason
+            />
+          )}
+        </div>
+      ) : running ? (
+        /* Running — live progress. */
+        <BulkProgressInline
+          label={t("submissions.openAllPrs.running", {
+            done: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          })}
+          progress={{
+            processed: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          }}
+        />
+      ) : (
+        /* Confirm. */
+        <div className="mt-3 space-y-2 text-sm leading-6 text-base-content/70">
+          <p>
+            <Trans
+              i18nKey="submissions.openAllPrs.confirmBody"
+              values={{ count, name: assignmentName }}
+              components={{
+                b: <span className="font-semibold text-base-content" />,
+              }}
+            />
+          </p>
+          <p>{t("submissions.openAllPrs.confirmHint")}</p>
+        </div>
+      )}
     </Modal>
   )
 }

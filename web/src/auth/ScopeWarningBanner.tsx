@@ -7,6 +7,7 @@ import { useGithubAuth } from "./useGithubAuth"
 import { AppBanner } from "@/components/AppBanner"
 import { useMissingScopes } from "@/context/github/GitHubProvider"
 import { Button } from "@/components/ui"
+import { useBannerSlot } from "@/context/bannerStack/BannerStackProvider"
 
 // Surfaces missing required scopes detected from live API responses:
 // best-effort, non-blocking, with a re-authorize action. A revoked/expired
@@ -19,11 +20,12 @@ export function ScopeWarningBanner() {
   const { t } = useTranslation()
 
   const show = missing.length > 0 && !dismissed
+  const granted = useBannerSlot("scope-warning", show)
   const scopeCount = missing.length
 
   return (
     <AnimatePresence initial={false}>
-      {show ? (
+      {granted ? (
         <AppBanner
           key="missing-scopes"
           tone="warning"

@@ -135,6 +135,26 @@ export async function setRepoFeatures(params: {
   )
 }
 
+// Set a repo's visibility via PATCH /repos/{org}/{repo} ({ private }). Used by
+// the gradebook's per-repo and bulk visibility actions (issue #766) — student
+// repos are private or public only, never GitHub's enterprise "internal".
+// Throws on failure so a bulk caller can record the per-repo outcome.
+export async function setRepoVisibility(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  visibility: "private" | "public"
+}): Promise<void> {
+  const { client, org, repo, visibility } = params
+  await client.request(
+    `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}`,
+    {
+      method: "PATCH",
+      body: { private: visibility === "private" },
+    },
+  )
+}
+
 // Replace a repo's Topics via PUT /repos/{org}/{repo}/topics (the modern
 // endpoint — no preview media type needed; the body is { names }). Used by
 // accept to copy the template's Topics onto a student repo (issue #569).

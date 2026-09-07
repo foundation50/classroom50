@@ -19,8 +19,9 @@ vi.mock("@/hooks/mutations/useUpdateOrgProfile", () => ({
 }))
 
 const notify = vi.fn()
+const announce = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify, dismiss: vi.fn() }),
+  useToast: () => ({ notify, announce, dismiss: vi.fn() }),
 }))
 
 // happy-dom lacks <dialog> showModal/close; stub them so <Modal> renders open.
@@ -130,9 +131,31 @@ describe("OrgDetailsModal", () => {
     expect(mutateAsync).toHaveBeenCalledWith(
       expect.objectContaining({ name: "New Name" }),
     )
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "success" }),
+    // Evident success (the modal flips back to view mode): no toast, just
+    // the SR announcement.
+    expect(notify).not.toHaveBeenCalled()
+    expect(announce).toHaveBeenCalledWith(
+      expect.stringContaining("orgs.detailsModal.saved"),
     )
+  })
+
+  it("renders a failed save as an in-dialog banner and stays in edit mode", async () => {
+    planDetails.mockReturnValue({
+      data: { name: "Old Name", description: "old" },
+    })
+    mutateAsync.mockRejectedValueOnce(new Error("boom"))
+    render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
+
+    await userEvent.click(screen.getByText("orgs.detailsModal.edit"))
+    await userEvent.click(screen.getByText("orgs.detailsModal.save"))
+
+    // The failure stays inside the dialog (no toast), edit mode is retained
+    // so the teacher can retry.
+    expect(
+      await screen.findByText(/orgs\.detailsModal\.saveError/),
+    ).toBeTruthy()
+    expect(notify).not.toHaveBeenCalled()
+    expect(screen.getByText("orgs.detailsModal.save")).toBeTruthy()
   })
 
   it("defaults a bare website host to https:// on save", async () => {

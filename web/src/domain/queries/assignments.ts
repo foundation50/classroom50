@@ -1,10 +1,5 @@
 import type { GitHubClient } from "@/github-core/client"
-import {
-  extractAssignments,
-  fetchJson,
-  pagesAssignmentUrl,
-  type AssignmentsJson,
-} from "@/github-core/queries"
+import { fetchPagesAssignments } from "@/github-core/queries"
 import type { Assignment } from "@/types/classroom"
 import { decodeBase64Utf8 } from "@/util/github"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -48,10 +43,22 @@ export async function getAssignmentsFile(
 export async function fetchTextWithFriendlyErrors(
   url: string,
   label: LocalizedMessage,
+  opts?: { timeoutMs?: number },
 ): Promise<string> {
-  const response = await fetch(url)
   const named = (key: string, params?: Record<string, string | number>) =>
     localizedError({ key, params: { ...params, label } })
+
+  let response: Response
+  try {
+    response = await fetch(
+      url,
+      opts?.timeoutMs ? { signal: AbortSignal.timeout(opts.timeoutMs) } : {},
+    )
+  } catch {
+    // Network failure, DNS, CORS-blocked redirect, or the custom-host timeout
+    // — named so the view never renders a raw "Failed to fetch".
+    throw named("pagesErrors.fetchNetworkFailed")
+  }
 
   if (response.status === 404) {
     throw named("pagesErrors.notPublished")
@@ -75,12 +82,16 @@ export async function fetchAssignmentFromPages(
   classroom: string,
   assignmentSlug: string,
   secret?: string,
+  pagesBaseUrl?: string,
 ): Promise<Assignment> {
-  const json = await fetchJson<AssignmentsJson>(
-    pagesAssignmentUrl(org, classroom, secret),
+  // Shares fetchPagesAssignments so the accept flow gets the same
+  // custom-domain-then-default fallback as the page-level reads.
+  const assignments = await fetchPagesAssignments(
+    org,
+    classroom,
+    secret,
+    pagesBaseUrl,
   )
-
-  const assignments = extractAssignments(json)
   const assignment = assignments.find((entry) => entry.slug === assignmentSlug)
 
   if (!assignment) {

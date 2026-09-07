@@ -20,6 +20,12 @@ type ClassroomJSON struct {
 	// publish-pages serves resources under `<classroom>/<secret>/...`; empty =
 	// plain path. Opt-in, so omitted on unprotected classrooms.
 	Secret string `json:"secret,omitempty"`
+	// PagesBaseURL is the optional base URL where the org's published Pages
+	// resources are actually served, for orgs with a custom Pages domain (the
+	// github.io 301 fails the browser's CORS check). Empty = the github.io
+	// default. Web-authored (Classroom Settings); the CLI round-trips it and
+	// projects it into the team description.
+	PagesBaseURL string `json:"pages_base_url,omitempty"`
 	// Team is the per-classroom team granting rostered students read on
 	// private org-owned templates. Omitted on pre-feature classrooms.
 	Team *TeamRef `json:"team,omitempty"`
@@ -41,7 +47,8 @@ type ClassroomJSON struct {
 // other key is diverted to Extra. Keep in lockstep with ClassroomJSON's tags.
 var knownClassroomKeys = map[string]struct{}{
 	"schema": {}, "name": {}, "short_name": {}, "term": {}, "org": {},
-	"secret": {}, "team": {}, "teams": {}, "active": {}, "migrated_from": {},
+	"secret": {}, "pages_base_url": {}, "team": {}, "teams": {}, "active": {},
+	"migrated_from": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then decodes
@@ -128,8 +135,10 @@ func (c *ClassroomJSON) IsArchived() bool {
 	return c != nil && c.Active != nil && !*c.Active
 }
 
-// MigratedFromRef records where a classroom originated when imported by
-// `classroom migrate`. Hand-authored classrooms never carry it.
+// MigratedFromRef records where a classroom originated when imported by the
+// retired `classroom migrate` command (GitHub Classroom shut down). Nothing
+// writes it anymore, but migrated classrooms carry it and every
+// read-modify-write must round-trip it.
 type MigratedFromRef struct {
 	Source           string `json:"source"`
 	ClassroomID      int64  `json:"classroom_id"`

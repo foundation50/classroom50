@@ -27,9 +27,9 @@ Contract (see the Advanced-Autograding wiki page for full details):
                       authoritatively, so an autograder MAY omit them; this
                       stub sets them for clarity. There is no `usernames`
                       field.
-    release-body.md   Markdown body for the GitHub Release (optional —
+    release-body.md   Markdown body for the GitHub Release (optional;
                       runner synthesizes from result.json if absent)
-  Appends to $GITHUB_OUTPUT (optional — runner derives from
+  Appends to $GITHUB_OUTPUT (optional; runner derives from
   result.json if absent):
     status=<success|failure|error>
     summary=<one-line description>
@@ -80,7 +80,7 @@ print(f"  cwd               = {pathlib.Path.cwd()}")
 print("===============================================")
 
 # Empty tests array → vacuous pass. The runner derives
-# status=success summary='submitted — no autograder configured for
+# status=success summary='submitted, no autograder configured for
 # <slug>'; collect-scores ingests as "submitted, 0/0".
 result = {
     "schema": "classroom50/result/v1",
@@ -99,7 +99,7 @@ result = {
 }
 pathlib.Path("result.json").write_text(json.dumps(result, indent=2) + "\n")
 
-summary = f"classroom50 autograde: submitted — no autograder configured for {assignment}"
+summary = f"classroom50 autograde: submitted, no autograder configured for {assignment}"
 pathlib.Path("release-body.md").write_text(
     f"### classroom50 autograde: 0/0\n\n_{summary}_\n"
 )

@@ -6,13 +6,13 @@ source of truth, rendered into several views.
 
 ## The single source
 
-| Piece                  | Where                                        | Role                                                                                                                                                              |
-| ---------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Manual verdicts**    | `accessibility/vpatVerdicts.json` (this dir) | The only hand-edited file: per-criterion human verdicts (`status`, `evidence: "manual"`, `assessed` date, `remark`).                                              |
-| **Base model**         | `src/util/a11y/vpatModel.ts`                 | The applicable WCAG 2.2 A/AA criteria + the overlay logic (`applyVerdicts`). Contrast rows are re-derived from the live audit; automated rows are set by tooling. |
-| **Assessor guidance**  | `src/util/a11y/assessmentGuidance.ts`        | The "how to test each SC" prose the `/assess` tool shows.                                                                                                         |
-| **Report renderer**    | `src/util/a11y/vpatReport.ts`                | Renders the ACR (VPAT 2.5Rev, WCAG edition) and the canonical JSON from the model.                                                                                |
-| **Automated bindings** | `src/util/a11y/vpatAutomated.ts`             | Ties each `automated` verdict to the hermetic check that establishes it.                                                                                          |
+| Piece                  | Where                                        | Role                                                                                                                                                                                                                                                                         |
+| ---------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Manual verdicts**    | `accessibility/vpatVerdicts.json` (this dir) | The only hand-edited file: per-criterion human verdicts (`status`, `evidence: "manual"`, `assessed` date, `remark`).                                                                                                                                                         |
+| **Base model**         | `src/util/a11y/vpatModel.ts`                 | Every WCAG 2.2 A/AA criterion (plus 1.4.6 and 4.1.1) + the overlay logic (`applyVerdicts`). Contrast rows are re-derived from the live audit; automated rows are set by tooling; criteria the product's design rules out are `notApplicable` with an `architectural` reason. |
+| **Assessor guidance**  | `src/util/a11y/assessmentGuidance.ts`        | The "how to test each SC" prose the `/assess` tool shows.                                                                                                                                                                                                                    |
+| **Report renderer**    | `src/util/a11y/vpatReport.ts`                | Renders the ACR (VPAT 2.5Rev, WCAG edition) and the canonical JSON from the model.                                                                                                                                                                                           |
+| **Automated bindings** | `src/util/a11y/vpatAutomated.ts`             | Ties each `automated` verdict to the hermetic check that establishes it.                                                                                                                                                                                                     |
 
 All the a11y model/report code lives under `src/util/a11y/` (a pure leaf layer —
 no app imports); the report generators live under `scripts/a11y/`. The guards
@@ -109,7 +109,32 @@ The live, no-auth report is always at `/accessibility` in the running app.
 ## Report format
 
 The ACR follows **VPAT® 2.5Rev** (the ITI industry-standard template), WCAG
-edition, kept concise: a short preamble (product, date, evaluation methods,
-conformance terms), a one-line summary, and per-principle tables with columns
-**Criterion · Level · Conformance Level · Assessed · Remarks**. The `Assessed`
-column carries each verdict's date so remarks stay focused on the finding.
+edition. The header carries every field the template's "Essential Requirements
+for Authors" mandate: the "[Company] Accessibility Conformance Report" title,
+template version, Name of Product/Version, Report Date, Product Description,
+Contact Information, Notes, Evaluation Methods Used, the Applicable
+Standards/Guidelines table (WCAG 2.0, 2.1, 2.2 at Level A and AA), and the ITI
+term definitions verbatim. The version is the `web-v*` release tag when the
+build has one (`release.tagVersion` in `vite.config.ts`, `VITE_APP_VERSION` for
+the generator); an untagged build names no version rather than borrowing the
+last release's.
+
+The tables use columns **Criteria · Level · Conformance Level · Assessed ·
+Remarks and Explanations**, grouped by WCAG principle (the template allows
+combining its per-level tables; numerical order is preserved within each). The
+`Assessed` column carries each verdict's date so remarks stay focused on the
+finding. Criteria added after WCAG 2.0 are marked "(2.1 and 2.2)" or "(2.2
+only)" as in the template, via `since` on the model.
+
+The report lists **every** WCAG 2.2 Level A and AA criterion (55), so a
+reviewer can file it against WCAG 2.0, 2.1, or 2.2. Nothing is omitted: a
+criterion the product cannot trigger (captions with no media, motion actuation
+with no sensors) is marked _Not Applicable_ with the reason in its remark, and
+4.1.1 Parsing is answered _Supports_ for 2.0/2.1 as the template instructs.
+`vpatGuard.test.ts` pins the count so the list cannot silently shrink.
+
+**Not Evaluated on A/AA rows is a declared deviation.** ITI reserves that term
+for Level AAA. Until the manual assessment covers every A/AA criterion, the
+renderer adds a Notes bullet listing the pending ids as a deviation from the
+ITI terms (the template requires deviations to be declared there). Recording
+the outstanding verdicts through `/assess` removes the bullet automatically.

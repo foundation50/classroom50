@@ -3,6 +3,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { logger } from "@/lib/logger"
 import type { ClassroomRole } from "@/util/teamRoster"
+import type { ImportRosterRow, ResolvedEmailLink } from "@/domain/students"
 import type { ParsedImportRow } from "@/pages/students/rosterImportParse"
 
 const log = logger.scope("students:rosterImportResolve")
@@ -247,4 +248,64 @@ export async function resolveImportIdentities(
   }
 
   return { rows: rowsOut, unusable }
+}
+
+// An email-identity row headed for the invite pass, carrying the role the
+// teacher assigned and any metadata the file supplied.
+export type EmailInviteInput = {
+  email: string
+  role: ClassroomRole
+  first_name?: string
+  last_name?: string
+  section?: string
+}
+
+// Resolve-before-invite: split the email rows on the confirmed links. A linked
+// row imports as an ACCOUNT row under the verified member's current login —
+// the account pipeline enrolls/team-adds it like any other row — and its
+// address leaves the invite list; the rest go to the email-invite pass.
+// File order is preserved within each bucket.
+export const splitEmailRowsByLink = (
+  emailRows: readonly EmailImportRow[],
+  emailLinks: readonly ResolvedEmailLink[],
+  roleFor: (identity: ImportIdentity) => ClassroomRole,
+): {
+  linkedRows: ImportRosterRow[]
+  linkedEmails: { email: string; login: string; classroom: string }[]
+  emailInvites: EmailInviteInput[]
+} => {
+  const linkByEmail = new Map(emailLinks.map((l) => [l.email, l]))
+  const linkedRows: ImportRosterRow[] = []
+  const linkedEmails: { email: string; login: string; classroom: string }[] = []
+  const emailInvites: EmailInviteInput[] = []
+  for (const r of emailRows) {
+    const link = linkByEmail.get(r.identity.email)
+    if (link) {
+      linkedRows.push({
+        username: link.login,
+        github_id: String(link.id),
+        first_name: r.first_name,
+        last_name: r.last_name,
+        // The raw metadata cell when the file had one (stored roster addresses
+        // keep their casing); else the normalized identity address.
+        email: r.email || r.identity.email,
+        section: r.section,
+        role: roleFor(r.identity),
+      })
+      linkedEmails.push({
+        email: link.email,
+        login: link.login,
+        classroom: link.classroom,
+      })
+    } else {
+      emailInvites.push({
+        email: r.identity.email,
+        role: roleFor(r.identity),
+        first_name: r.first_name,
+        last_name: r.last_name,
+        section: r.section,
+      })
+    }
+  }
+  return { linkedRows, linkedEmails, emailInvites }
 }

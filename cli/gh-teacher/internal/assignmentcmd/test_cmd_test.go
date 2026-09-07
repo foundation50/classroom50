@@ -973,6 +973,147 @@ func TestRunAssignmentAdd_ExplicitEmptyTestsClearsSilently(t *testing.T) {
 	}
 }
 
+func TestRunAssignmentAdd_EnvelopeDefaultsPersist(t *testing.T) {
+	server, fix := newTestCmdServer(t, helloAssignments(""), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout, stderr bytes.Buffer
+	p := helloAddParams()
+	p.Tests = []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}}
+	p.TestDefaults = &assignment.TestDefaults{FailureDetails: "none"}
+	if err := runAssignmentAdd(client, &stdout, &stderr, p); err != nil {
+		t.Fatalf("runAssignmentAdd: %v", err)
+	}
+	entry := decodeCommitted(t, fix).Assignments[0]
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "none" {
+		t.Errorf("test_defaults from the --tests envelope not persisted: %#v", entry.TestDefaults)
+	}
+}
+
+// helloAssignmentsWithDefaults is helloAssignments plus a test_defaults block,
+// for the `test set` keep-vs-replace checks.
+func helloAssignmentsWithDefaults(testsJSON string) string {
+	body := helloAssignments(testsJSON)
+	return strings.Replace(body, `"autograder": "default"`, `"autograder": "default",
+      "test_defaults": { "failure-details": "actual-only" }`, 1)
+}
+
+func TestRunAssignmentTestSet_ReplacesListKeepsEntry(t *testing.T) {
+	existing := `[{"name":"old","type":"run","run":"false","points":1}]`
+	server, fix := newTestCmdServer(t, helloAssignmentsWithDefaults(existing), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{Tests: []assignment.TestSpec{
+		{Name: "compiles", Type: "run", Run: "gcc -o hello hello.c", Points: 1},
+		{Name: "prints", Type: "io", Run: "./hello", Expected: "hi", Comparison: "included", Points: 2},
+	}}
+	if err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed); err != nil {
+		t.Fatalf("runAssignmentTestSet: %v", err)
+	}
+
+	entry := decodeCommitted(t, fix).Assignments[0]
+	if len(entry.Tests) != 2 || entry.Tests[0].Name != "compiles" || entry.Tests[1].Name != "prints" {
+		t.Errorf("committed tests = %#v, want the two new specs", entry.Tests)
+	}
+	// Unlike `assignment add`, the rest of the entry must survive untouched.
+	if entry.Template == nil || entry.Template.Repo != "hello-template" || entry.Name != "Hello" {
+		t.Errorf("test set must not touch other fields, got %#v", entry)
+	}
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "actual-only" {
+		t.Errorf("a bare array must keep test_defaults, got %#v", entry.TestDefaults)
+	}
+	if !strings.Contains(stdout.String(), "set 2 tests on hello") {
+		t.Errorf("stdout = %q, want set confirmation", stdout.String())
+	}
+}
+
+func TestRunAssignmentTestSet_EnvelopeReplacesDefaults(t *testing.T) {
+	existing := `[{"name":"old","type":"run","run":"false","points":1}]`
+	server, fix := newTestCmdServer(t, helloAssignmentsWithDefaults(existing), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{
+		Tests:    []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}},
+		Defaults: &assignment.TestDefaults{FailureDetails: "none"},
+		Envelope: true,
+	}
+	if err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed); err != nil {
+		t.Fatalf("runAssignmentTestSet: %v", err)
+	}
+	entry := decodeCommitted(t, fix).Assignments[0]
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "none" {
+		t.Errorf("envelope defaults should replace test_defaults, got %#v", entry.TestDefaults)
+	}
+
+	// An envelope without defaults clears them: it is the whole picture.
+	server2, fix2 := newTestCmdServer(t, helloAssignmentsWithDefaults(existing), false)
+	client2 := githubtest.NewTestClient(t, server2)
+	parsed.Defaults = nil
+	if err := runAssignmentTestSet(client2, &stdout, "o", "cs-principles", "hello", parsed); err != nil {
+		t.Fatalf("runAssignmentTestSet (no defaults): %v", err)
+	}
+	if got := decodeCommitted(t, fix2).Assignments[0].TestDefaults; got != nil {
+		t.Errorf("envelope without defaults should clear test_defaults, got %#v", got)
+	}
+}
+
+func TestRunAssignmentTestSet_EmptyArrayClears(t *testing.T) {
+	existing := `[{"name":"old","type":"run","run":"false","points":1}]`
+	server, fix := newTestCmdServer(t, helloAssignments(existing), true)
+	client := githubtest.NewTestClient(t, server)
+
+	// autograderExists=true: clearing must not trip the mutual-exclusion
+	// probe, since removing tests is exactly how a teacher moves to
+	// autograder.py.
+	var stdout bytes.Buffer
+	if err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", &assignment.TestsFile{Tests: []assignment.TestSpec{}}); err != nil {
+		t.Fatalf("runAssignmentTestSet: %v", err)
+	}
+	if got := decodeCommitted(t, fix).Assignments[0].Tests; len(got) != 0 {
+		t.Errorf("empty array should clear tests, got %#v", got)
+	}
+	if !strings.Contains(stdout.String(), "removed all tests from hello") {
+		t.Errorf("stdout = %q, want removed confirmation", stdout.String())
+	}
+}
+
+func TestRunAssignmentTestSet_RejectsExistingAutograder(t *testing.T) {
+	server, fix := newTestCmdServer(t, helloAssignments(""), true)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{Tests: []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}}}
+	err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed)
+	if err == nil || !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Fatalf("expected mutual-exclusion error, got %v", err)
+	}
+	fix.mu.Lock()
+	if fix.committed != nil || fix.refPatched {
+		t.Error("conflict must not land a commit")
+	}
+	fix.mu.Unlock()
+}
+
+func TestRunAssignmentTestSet_UnregisteredSlugFails(t *testing.T) {
+	empty := `{"schema":"classroom50/assignments/v1","assignments":[]}`
+	server, fix := newTestCmdServer(t, empty, false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout bytes.Buffer
+	parsed := &assignment.TestsFile{Tests: []assignment.TestSpec{{Name: "compiles", Type: "run", Run: "true", Points: 1}}}
+	err := runAssignmentTestSet(client, &stdout, "o", "cs-principles", "hello", parsed)
+	if err == nil || !strings.Contains(err.Error(), "not registered") {
+		t.Fatalf("expected unregistered-slug error, got %v", err)
+	}
+	fix.mu.Lock()
+	if fix.committed != nil {
+		t.Error("unregistered slug must not land a commit")
+	}
+	fix.mu.Unlock()
+}
+
 func TestRunAssignmentTestRemove_HappyPath(t *testing.T) {
 	existing := `[
     {"name":"compiles","type":"run","run":"gcc -o hello hello.c","points":1},
@@ -1090,31 +1231,50 @@ func TestRunAssignmentTestList_EmptyEmitsJSONArray(t *testing.T) {
 
 func TestValidateModeAndSizeFlags(t *testing.T) {
 	cases := []struct {
-		name         string
-		mode         string
-		maxGroupSize int
-		sizeProvided bool
-		wantMode     string
-		wantErrPart  string // "" = expect success
+		name              string
+		mode              string
+		maxGroupSize      int
+		sizeProvided      bool
+		formation         string
+		formationProvided bool
+		wantMode          string
+		wantFormation     string
+		wantErrPart       string // "" = expect success
 	}{
-		{"individual default, no size", "", 0, false, "individual", ""},
-		{"explicit individual, no size", "individual", 0, false, "individual", ""},
-		{"individual with size rejected", "individual", 3, true, "", "only valid with --mode group"},
-		{"group with valid size", "group", 3, true, "group", ""},
-		{"group without size rejected", "group", 0, false, "", "must be >= 2"},
-		{"group with size 1 rejected", "group", 1, true, "", "must be >= 2"},
-		{"group above cap rejected", "group", 101, true, "", "max_group_size"},
-		{"unknown mode rejected", "team", 0, false, "", "invalid --mode"},
+		{name: "individual default, no size", wantMode: "individual"},
+		{name: "explicit individual, no size", mode: "individual", wantMode: "individual"},
+		{name: "individual with size rejected", mode: "individual", maxGroupSize: 3, sizeProvided: true, wantErrPart: "only valid with --mode group or --mode team"},
+		{name: "group with valid size", mode: "group", maxGroupSize: 3, sizeProvided: true, wantMode: "group"},
+		{name: "group without size rejected", mode: "group", wantErrPart: "must be >= 2"},
+		{name: "group with size 1 rejected", mode: "group", maxGroupSize: 1, sizeProvided: true, wantErrPart: "must be >= 2"},
+		{name: "group above cap rejected", mode: "group", maxGroupSize: 101, sizeProvided: true, wantErrPart: "max_group_size"},
+		{name: "group with formation rejected", mode: "group", maxGroupSize: 3, sizeProvided: true, formation: "teacher", formationProvided: true, wantErrPart: "only valid with --mode team"},
+		{name: "individual with formation rejected", formation: "teacher", formationProvided: true, wantErrPart: "only valid with --mode team"},
+		{name: "team with size and teacher formation", mode: "team", maxGroupSize: 4, sizeProvided: true, formation: "teacher", formationProvided: true, wantMode: "team", wantFormation: "teacher"},
+		{name: "team with size and student formation", mode: "team", maxGroupSize: 4, sizeProvided: true, formation: "student", formationProvided: true, wantMode: "team", wantFormation: "student"},
+		{name: "team without size rejected", mode: "team", formation: "teacher", formationProvided: true, wantErrPart: "must be >= 2"},
+		{name: "team without formation rejected", mode: "team", maxGroupSize: 4, sizeProvided: true, wantErrPart: "--team-formation is required"},
+		{name: "team with invalid formation rejected", mode: "team", maxGroupSize: 4, sizeProvided: true, formation: "anyone", formationProvided: true, wantErrPart: "team_formation"},
+		{name: "unknown mode rejected", mode: "pair", wantErrPart: "invalid --mode"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			gotMode, err := validateModeAndSizeFlags(tc.mode, tc.maxGroupSize, tc.sizeProvided)
+			gotMode, gotFormation, err := validateModeAndSizeFlags(modeSizeFlagState{
+				Mode:              tc.mode,
+				MaxGroupSize:      tc.maxGroupSize,
+				SizeProvided:      tc.sizeProvided,
+				TeamFormation:     tc.formation,
+				FormationProvided: tc.formationProvided,
+			})
 			if tc.wantErrPart == "" {
 				if err != nil {
 					t.Fatalf("unexpected error: %v", err)
 				}
 				if gotMode != tc.wantMode {
 					t.Errorf("mode = %q, want %q", gotMode, tc.wantMode)
+				}
+				if gotFormation != tc.wantFormation {
+					t.Errorf("formation = %q, want %q", gotFormation, tc.wantFormation)
 				}
 				return
 			}

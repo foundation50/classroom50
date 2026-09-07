@@ -7,7 +7,6 @@
   - [Web Teacher Guide](Web-Teacher-Guide)
   - [CLI Teacher Guide](CLI-Teacher-Guide)
   - [Staff, TAs, and Multiple Teachers](Staff-TAs-and-Multiple-Teachers)
-  - [Migrating from GitHub Classroom](Migrating-from-GitHub-Classroom)
   - [Course Lifecycle and End of Term](Course-Lifecycle-and-End-of-Term)
 - **Autograding**
   - [Autograding Basics](Autograding-Basics)

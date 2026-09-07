@@ -32,6 +32,7 @@ vi.mock("@/lib/githubHealth/githubStatusApi", () => ({
 // payload — the page's onError/onSuccess wiring is what's under test.
 vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
   formValuesToRepoFeatures: () => undefined,
+  formValuesToTestDefaults: () => undefined,
   default: ({
     onSubmit,
   }: {
@@ -39,6 +40,7 @@ vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
       slug: string
       setup_timeout: number
       release_assets: string
+      locked: boolean
     }) => void
   }) => (
     <button
@@ -48,6 +50,7 @@ vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
           slug: "hw1",
           setup_timeout: 300,
           release_assets: "report.pdf",
+          locked: true,
         })
       }
     >
@@ -100,7 +103,7 @@ vi.mock("@/hooks/useTrackPublishDeploy", () => ({
   useTrackPublishDeploy: () => vi.fn(),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: vi.fn(), announce: vi.fn() }),
 }))
 
 const navigateMock = vi.fn()
@@ -166,6 +169,15 @@ it("passes grading form fields through the create boundary", () => {
       setup_timeout: 300,
       release_assets: "report.pdf",
     }),
+    expect.any(Object),
+  )
+})
+
+it("passes the lock toggle through the create boundary", () => {
+  render(<CreateAssignmentPage />)
+  submit()
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({ locked: true }),
     expect.any(Object),
   )
 })

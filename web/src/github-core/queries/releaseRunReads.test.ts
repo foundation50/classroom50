@@ -5,6 +5,7 @@ import {
   classifyServiceTokenExpiry,
   getCollectScoresRunAfterId,
   getLastCollectScoresRun,
+  getRunAnnotations,
   getServiceTokenStatus,
   latestSubmitReleaseAndCount,
   latestSubmitReleaseWithAssets,
@@ -327,5 +328,64 @@ describe("getLastCollectScoresRun", () => {
     expect(run?.id).toBe(5)
     const url = String(request.mock.calls[0][0])
     expect(url).toContain("status=success")
+  })
+})
+
+// A run's workflow-command annotations (`::error::` etc.) hang off each job's
+// check run, so the read is the jobs list followed by one annotations call per
+// job. The probe-token verdict is delivered this way.
+describe("getRunAnnotations", () => {
+  const clientWith = (
+    jobs: { id: number }[],
+    annotations: Record<
+      number,
+      { annotation_level: string; message: string | null }[]
+    >,
+  ) => {
+    const request = vi.fn((url: string) => {
+      if (url.includes("/actions/runs/77/jobs")) {
+        return Promise.resolve({ jobs })
+      }
+      const m = /check-runs\/(\d+)\/annotations/.exec(url)
+      if (m) return Promise.resolve(annotations[Number(m[1])] ?? [])
+      return Promise.reject(new Error(`unexpected ${url}`))
+    })
+    return { client: { request } as unknown as GitHubClient, request }
+  }
+
+  it("flattens every job's annotations in job order and normalizes the level", async () => {
+    const { client, request } = clientWith([{ id: 1 }, { id: 2 }], {
+      1: [{ annotation_level: "notice", message: "probe PASSED" }],
+      2: [
+        { annotation_level: "failure", message: "  probe FAILED: 2 checks  " },
+        { annotation_level: "warning", message: "slow" },
+        { annotation_level: "weird", message: "?" },
+      ],
+    })
+
+    const out = await getRunAnnotations(client, "acme", 77)
+
+    expect(out).toEqual([
+      { level: "notice", message: "probe PASSED" },
+      { level: "failure", message: "probe FAILED: 2 checks" },
+      { level: "warning", message: "slow" },
+      { level: "notice", message: "?" },
+    ])
+    expect(String(request.mock.calls[0][0])).toContain(
+      "/repos/acme/classroom50/actions/runs/77/jobs",
+    )
+  })
+
+  it("drops annotations with no message and returns [] for a silent run", async () => {
+    const { client } = clientWith([{ id: 1 }], {
+      1: [
+        { annotation_level: "failure", message: null },
+        { annotation_level: "failure", message: "   " },
+      ],
+    })
+    expect(await getRunAnnotations(client, "acme", 77)).toEqual([])
+
+    const { client: noJobs } = clientWith([], {})
+    expect(await getRunAnnotations(noJobs, "acme", 77)).toEqual([])
   })
 })

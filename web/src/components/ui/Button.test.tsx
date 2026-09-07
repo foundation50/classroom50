@@ -55,12 +55,44 @@ describe("Button", () => {
     expect(cls.endsWith("w-full join-item")).toBe(true)
   })
 
-  it("disables and marks aria-busy while loading", () => {
-    render(<Button loading>Save</Button>)
+  it("stays focusable but inert while loading (aria-disabled, click swallowed)", async () => {
+    const onClick = vi.fn()
+    render(
+      <Button loading onClick={onClick}>
+        Save
+      </Button>,
+    )
     const btn = screen.getByRole("button", { name: /Save/ })
-    expect(btn.hasAttribute("disabled")).toBe(true)
+    // Not semantically disabled — a native `disabled` would drop keyboard
+    // focus mid-action (Primer loading guidance).
+    expect(btn.hasAttribute("disabled")).toBe(false)
+    expect(btn.getAttribute("aria-disabled")).toBe("true")
     expect(btn.getAttribute("aria-busy")).toBe("true")
     expect(btn.querySelector(".loading")).not.toBeNull()
+    await userEvent.click(btn)
+    expect(onClick).not.toHaveBeenCalled()
+  })
+
+  it("swaps its content for busyLabel while loading, with a decorative spinner", () => {
+    const { rerender } = render(
+      <Button busyLabel="Collecting…">Collect</Button>,
+    )
+    expect(screen.getByRole("button", { name: "Collect" })).toBeTruthy()
+
+    rerender(
+      <Button loading busyLabel="Collecting…">
+        Collect
+      </Button>,
+    )
+    const btn = screen.getByRole("button", { name: "Collecting…" })
+    // The visible text is the announcement: no children, no second sr-only
+    // label for a screen reader to read the same word twice.
+    expect(btn.textContent).toBe("Collecting…")
+    expect(btn.querySelector(".loading")?.getAttribute("aria-hidden")).toBe(
+      "true",
+    )
+    expect(btn.querySelector("[role=status]")).toBeNull()
+    expect(btn.getAttribute("aria-busy")).toBe("true")
   })
 
   it("does not fire onClick when disabled", async () => {

@@ -1,14 +1,19 @@
 package assignment
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 func intPtr(n int) *int { return &n }
+
+func boolPtr(b bool) *bool { return &b }
 
 func TestValidateTestSpec(t *testing.T) {
 	cases := []struct {
@@ -157,6 +162,20 @@ func TestValidateTestSpec(t *testing.T) {
 			spec:    TestSpec{Name: "t", Type: "run", Run: "x", ExitCode: intPtr(256), Points: 1},
 			wantErr: "exit-code",
 		},
+		{
+			name: "valid failure-details and show-output",
+			spec: TestSpec{Name: "t", Type: "run", Run: "x", Points: 1,
+				FailureDetails: "actual-only", ShowOutput: boolPtr(true)},
+		},
+		{
+			name: "explicit show-output false accepted",
+			spec: TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, ShowOutput: boolPtr(false)},
+		},
+		{
+			name:    "invalid failure-details",
+			spec:    TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, FailureDetails: "loud"},
+			wantErr: "failure-details",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -252,12 +271,16 @@ func TestParseTestsFile_EmptyPathIsNoOp(t *testing.T) {
 
 func TestParseTestsFileFrom_Stdin(t *testing.T) {
 	body := `[{"name":"compiles","type":"run","run":"true","points":1}]`
-	got, err := parseTestsFileFrom("-", strings.NewReader(body))
+	parsed, err := parseTestsFileFrom("-", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("parseTestsFileFrom: %v", err)
 	}
+	got := parsed.Tests
 	if len(got) != 1 || got[0].Name != "compiles" || got[0].Type != "run" {
 		t.Errorf("stdin tests not parsed: %#v", got)
+	}
+	if parsed.Envelope || parsed.Defaults != nil {
+		t.Errorf("bare array must not report an envelope: %#v", parsed)
 	}
 }
 
@@ -271,12 +294,72 @@ func TestParseTestsFile_HappyPath(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	got, err := ParseTestsFile(path)
+	parsed, err := ParseTestsFile(path)
 	if err != nil {
 		t.Fatalf("ParseTestsFile: %v", err)
 	}
+	got := parsed.Tests
 	if len(got) != 2 || got[0].Name != "compiles" || got[1].Comparison != "included" {
 		t.Errorf("tests not parsed: %#v", got)
+	}
+}
+
+// TestParseTestsFile_EnvelopeAccepted pins discussion #805: the generated
+// bundle tests.json (schema + tests + defaults) is valid `--tests` input, so
+// a teacher who keeps that file in a course repo can pass it straight through.
+func TestParseTestsFile_EnvelopeAccepted(t *testing.T) {
+	body := `{
+  "schema": "classroom50/tests/v1",
+  "tests": [{"name":"compiles","type":"run","run":"true","points":1}],
+  "defaults": {"failure-details": "none", "show-output": true}
+}`
+	parsed, err := parseTestsFileFrom("-", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("parseTestsFileFrom: %v", err)
+	}
+	if !parsed.Envelope {
+		t.Error("envelope not reported")
+	}
+	if len(parsed.Tests) != 1 || parsed.Tests[0].Name != "compiles" {
+		t.Errorf("envelope tests not parsed: %#v", parsed.Tests)
+	}
+	if parsed.Defaults == nil || parsed.Defaults.FailureDetails != "none" || parsed.Defaults.ShowOutput == nil || !*parsed.Defaults.ShowOutput {
+		t.Errorf("envelope defaults not parsed: %#v", parsed.Defaults)
+	}
+}
+
+func TestParseTestsFile_EnvelopeWithoutDefaults(t *testing.T) {
+	body := `{"schema": "classroom50/tests/v1", "tests": []}`
+	parsed, err := parseTestsFileFrom("-", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("parseTestsFileFrom: %v", err)
+	}
+	if !parsed.Envelope || parsed.Defaults != nil || parsed.Tests == nil || len(parsed.Tests) != 0 {
+		t.Errorf("expected envelope with empty non-nil tests and nil defaults, got %#v", parsed)
+	}
+}
+
+func TestParseTestsFile_EnvelopeRejections(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "wrong schema", body: `{"schema": "classroom50/tests/v2", "tests": []}`, want: `"schema" is "classroom50/tests/v2"`},
+		{name: "missing tests", body: `{"schema": "classroom50/tests/v1"}`, want: `missing the "tests" array`},
+		{name: "bad defaults", body: `{"schema": "classroom50/tests/v1", "tests": [], "defaults": {"failure-details": "loud"}}`, want: "defaults: invalid failure-details"},
+		{name: "unknown envelope key", body: `{"schema": "classroom50/tests/v1", "tests": [], "extra": 1}`, want: `unknown field "extra"`},
+		// A single test object is neither shape; the error names both.
+		{name: "single test object", body: `{"name":"t","type":"run","run":"x","points":1}`, want: "expected a JSON array of tests"},
+		{name: "scalar", body: `"tests"`, want: "expected a JSON array of tests"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseTestsFileFrom("-", strings.NewReader(tc.body))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 
@@ -373,5 +456,116 @@ func TestRemoveTest(t *testing.T) {
 func TestPerAssignmentAutograderPath(t *testing.T) {
 	if got := PerAssignmentAutograderPath("cs-principles", "hello"); got != "cs-principles/autograders/hello/autograder.py" {
 		t.Errorf("unexpected path %q", got)
+	}
+}
+
+func TestValidateTestDefaults(t *testing.T) {
+	cases := []struct {
+		name     string
+		defaults TestDefaults
+		wantErr  string
+	}{
+		{name: "empty is valid", defaults: TestDefaults{}},
+		{name: "valid values", defaults: TestDefaults{FailureDetails: "none", ShowOutput: boolPtr(true)}},
+		{name: "explicit full", defaults: TestDefaults{FailureDetails: "full"}},
+		{
+			name:     "invalid failure-details",
+			defaults: TestDefaults{FailureDetails: "loud"},
+			wantErr:  "failure-details",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateTestDefaults(tc.defaults)
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("expected error containing %q, got %v", tc.wantErr, err)
+			}
+		})
+	}
+}
+
+// TestParseTestsFile_ShowOutputFalseRoundTrips pins the *bool contract: an
+// explicit show-output:false must survive a parse (it overrides a
+// test_defaults show-output:true), while an absent field stays nil.
+func TestParseTestsFile_ShowOutputFalseRoundTrips(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tests.json")
+	body := `[
+  {"name":"opts-out","type":"run","run":"x","points":1,"show-output":false,"failure-details":"actual-only"},
+  {"name":"inherits","type":"run","run":"x","points":1}
+]`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	parsed, err := ParseTestsFile(path)
+	if err != nil {
+		t.Fatalf("ParseTestsFile: %v", err)
+	}
+	got := parsed.Tests
+	if got[0].ShowOutput == nil || *got[0].ShowOutput {
+		t.Errorf("explicit show-output:false lost: %#v", got[0].ShowOutput)
+	}
+	if got[0].FailureDetails != "actual-only" {
+		t.Errorf("failure-details lost: %q", got[0].FailureDetails)
+	}
+	if got[1].ShowOutput != nil {
+		t.Errorf("absent show-output must stay nil, got %#v", got[1].ShowOutput)
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(raw), `"show-output":false`) {
+		t.Errorf("explicit false must re-emit on the wire, got %s", raw)
+	}
+	if strings.Count(string(raw), `"show-output"`) != 1 {
+		t.Errorf("absent show-output must stay omitted on the wire, got %s", raw)
+	}
+}
+
+// TestFailureDetailsEnumParity pins the failure-details allow-list against the
+// JSON schema enum (the declared source of truth); the web mirror
+// (TEST_FAILURE_DETAILS_LEVELS) is pinned against the same enum by a vitest.
+// Compared as sorted sets: the schema lists the default (`full`) first, while
+// the Go slice is sorted for stable error messages.
+func TestFailureDetailsEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Test struct {
+				Properties struct {
+					FailureDetails struct {
+						Enum []string `json:"enum"`
+					} `json:"failure-details"`
+				} `json:"properties"`
+			} `json:"test"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := append([]string(nil), schema.Defs.Test.Properties.FailureDetails.Enum...)
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema failure-details enum not found; did the $defs shape change?")
+	}
+	sort.Strings(schemaEnum)
+	goLevels := append([]string(nil), failureDetailsLevels...)
+	sort.Strings(goLevels)
+	if !reflect.DeepEqual(schemaEnum, goLevels) {
+		t.Errorf("failure-details drift: schema enum %v != failureDetailsLevels %v — update every mirror in lockstep (schema, tests.go, runner.py, web TEST_FAILURE_DETAILS_LEVELS)",
+			schemaEnum, goLevels)
 	}
 }

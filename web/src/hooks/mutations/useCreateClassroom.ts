@@ -31,6 +31,7 @@ export function useCreateClassroom(
     GitHubAPIError,
     CreateClassroomInput
   >({
+    meta: { keepTabOpen: true },
     mutationFn: (input) => createClassroomFilesWithConflictRetry(client, input),
     onSuccess: (result, input) => {
       void queryClient.invalidateQueries({

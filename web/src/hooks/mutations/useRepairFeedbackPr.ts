@@ -25,6 +25,7 @@ export function useRepairFeedbackPr() {
   const queryClient = useQueryClient()
 
   return useMutation<RepairFeedbackPrResult, Error, RepairFeedbackPrInput>({
+    meta: { keepTabOpen: true },
     mutationFn: ({ org, repo, mode }) =>
       repairFeedbackPullRequest({ client, org, repo, mode }),
     onSuccess: (result, { org, repo }) => {

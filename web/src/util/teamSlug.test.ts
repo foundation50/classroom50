@@ -108,6 +108,20 @@ describe("parseStudentClassroomSlug", () => {
     // real ml-ta student team collision would 404 the membership read).
     expect(parseStudentClassroomSlug("classroom50-ml-ta")).toBeNull()
   })
+
+  it("returns null for a per-assignment group team", () => {
+    // A student's group memberships share the classroom50- namespace; without
+    // this exclusion each group team rendered a phantom classroom named
+    // `group-<hash>-<n>` on the classrooms list.
+    expect(
+      parseStudentClassroomSlug("classroom50-group-6fc6f14a7ad10573-2"),
+    ).toBeNull()
+    // Full-shape gated: a real classroom short-name that merely starts with
+    // `group-` still parses.
+    expect(parseStudentClassroomSlug("classroom50-group-projects")).toEqual({
+      classroom: "group-projects",
+    })
+  })
 })
 
 describe("parseBareClassroomSlug", () => {
@@ -121,6 +135,17 @@ describe("parseBareClassroomSlug", () => {
     // classroom the staff parser would otherwise claim as `ml`.
     expect(parseBareClassroomSlug("classroom50-ml-ta")).toEqual({
       classroom: "ml-ta",
+    })
+  })
+
+  it("returns null for a per-assignment group team", () => {
+    // A group team is never a classroom; without this exclusion the ambiguous-
+    // slug resolution path could also surface phantom classrooms.
+    expect(
+      parseBareClassroomSlug("classroom50-group-6fc6f14a7ad10573-2"),
+    ).toBeNull()
+    expect(parseBareClassroomSlug("classroom50-group-projects")).toEqual({
+      classroom: "group-projects",
     })
   })
 

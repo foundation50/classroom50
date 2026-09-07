@@ -45,6 +45,8 @@ export type GitHubCommitRef = {
   tree: {
     sha: string
   }
+  // Empty for a root commit (e.g. GitHub's auto_init seed).
+  parents: { sha: string }[]
 }
 
 export type GitHubCreateTree = {
@@ -160,6 +162,9 @@ export type GitHubUser = {
   name: string | null
   email: string | null
   bio: string | null
+  // Present on team-member listings only (GET /orgs/{org}/teams/{slug}/members
+  // returns each member's team role); absent on every other user-shaped read.
+  role?: "member" | "maintainer"
   permissions: {
     admin: boolean
     pull: boolean
@@ -239,11 +244,12 @@ export type GitHubOrgDetails = {
     filled_seats: number
     seats: number
   }
-  // Member-privilege repo-creation booleans. Like `plan`, GitHub omits these for
-  // a non-admin reader, so absent is distinct from false — a consumer that acts
-  // on "off" must check for an explicit `false`.
+  // Member-privilege booleans. Like `plan`, GitHub omits these for a non-admin
+  // reader, so absent is distinct from false — a consumer that acts on "off"
+  // must check for an explicit `false`.
   members_can_create_repositories?: boolean
   members_can_create_private_repositories?: boolean
+  members_can_create_teams?: boolean
 }
 
 export type GitHubWorkflowRun = {
@@ -283,6 +289,28 @@ export type GitHubWorkflowRun = {
     login: string
     avatar_url?: string
   }
+}
+
+// The list-runs envelope (GET .../actions/workflows/{id}/runs and
+// .../actions/runs). Only `id` is read where the list is used as a baseline.
+export type GitHubWorkflowRunList<Run = GitHubWorkflowRun> = {
+  workflow_runs: Run[]
+}
+
+// One job of a workflow run (GET .../actions/runs/{id}/jobs). Each job is also
+// a check run, which is where its annotations live.
+export type GitHubWorkflowJob = {
+  id: number
+  name?: string
+}
+
+// One workflow-command annotation (`::error::`, `::warning::`, `::notice::`)
+// as attached to a job's check run (GET .../check-runs/{id}/annotations).
+export type GitHubCheckAnnotation = {
+  annotation_level: "notice" | "warning" | "failure" | string
+  message: string | null
+  path?: string
+  start_line?: number
 }
 
 // A commit from the REST list-commits endpoint

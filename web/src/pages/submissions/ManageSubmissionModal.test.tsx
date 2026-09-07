@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -39,6 +39,23 @@ vi.mock("@/hooks/useGetRepoCollaborators", () => ({
 vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => autogradeStateData(),
 }))
+// The setup-marker probe, configurable so a test can drive the issue #502
+// "Incomplete" badge. The spy records the hook's arguments for the
+// empty_repo gate assertion.
+const repoSetupData = vi.fn(
+  () =>
+    ({ state: "complete", isLoading: false }) as {
+      state: "unknown" | "complete" | "incomplete"
+      isLoading: boolean
+    },
+)
+const repoSetupSpy = vi.fn()
+vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
+  default: (...args: unknown[]) => {
+    repoSetupSpy(...args)
+    return repoSetupData()
+  },
+}))
 vi.mock("@/hooks/mutations/useSetAutogradeState", () => ({
   default: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
@@ -49,14 +66,19 @@ vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
   default: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: notifyMock, announce: vi.fn() }),
 }))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),
 }))
 vi.mock("@/hooks/mutations/useDownloadSubmission", () => ({
-  default: () => ({ mutate: vi.fn(), isPending: false }),
+  default: () => ({ mutate: downloadMutate, isPending: false }),
 }))
+
+const notifyMock = vi.fn()
+// Configurable so tests can drive the download row's onError into the hub
+// feedback channel.
+const downloadMutate = vi.fn()
 
 import { ManageSubmissionModal } from "./ManageSubmissionModal"
 
@@ -74,6 +96,8 @@ const individualAction = {
 
 afterEach(() => {
   cleanup()
+  notifyMock.mockClear()
+  downloadMutate.mockReset()
   repoData.mockReturnValue({ data: undefined })
   collaboratorsData.mockReturnValue({ data: undefined })
   autogradeStateData.mockReturnValue({
@@ -81,6 +105,8 @@ afterEach(() => {
     isLoading: false,
     isError: false,
   })
+  repoSetupData.mockReturnValue({ state: "complete", isLoading: false })
+  repoSetupSpy.mockReset()
 })
 
 describe("ManageSubmissionModal", () => {
@@ -134,6 +160,87 @@ describe("ManageSubmissionModal", () => {
       .getAllByRole("link")
       .filter((a) => a.getAttribute("href") === latest)
     expect(commitLinks.length).toBe(2)
+  })
+
+  // Issue #502: "Accepted" is only repo existence. When the marker probe says
+  // the setup commit never landed, the hub says so next to the timestamp and
+  // tells the teacher what the student must do.
+  it("flags an accepted repo whose setup never finished", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-07-22T21:42:00Z" },
+    })
+    repoSetupData.mockReturnValue({ state: "incomplete", isLoading: false })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={individualAction}
+      />,
+    )
+    expect(screen.getByText("submissions.manageModal.accepted")).toBeTruthy()
+    expect(screen.getByText("submissions.manageModal.setup")).toBeTruthy()
+    expect(
+      screen.getByText("submissions.manageModal.setupIncomplete"),
+    ).toBeTruthy()
+    expect(
+      screen.getByText("submissions.manageModal.setupIncompleteHint"),
+    ).toBeTruthy()
+  })
+
+  it("shows no setup row for a healthy repo", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={individualAction}
+      />,
+    )
+    expect(screen.queryByText("submissions.manageModal.setup")).toBeNull()
+    expect(
+      screen.queryByText("submissions.manageModal.setupIncompleteHint"),
+    ).toBeNull()
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+      expect.objectContaining({ enabled: true }),
+    )
+  })
+
+  it("does not probe the setup marker for an empty_repo assignment", () => {
+    repoData.mockReturnValue({
+      data: { created_at: "2026-06-01T09:00:00Z" },
+    })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{
+          ...individualAction,
+          skipsGrading: true,
+          emptyRepoAssignment: true,
+        }}
+      />,
+    )
+    expect(repoSetupSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+      expect.objectContaining({ enabled: false }),
+    )
   })
 
   it("shows the autograding status when the assignment autogrades", () => {
@@ -391,9 +498,15 @@ describe("ManageSubmissionModal", () => {
         name: "submissions.table.manageAccessAria",
       }),
     ).toBeNull()
-    await user.click(
-      screen.getByRole("button", { name: /submissions\.table\.members/ }),
-    )
+    const manageGroup = screen.getByRole("button", {
+      name: /submissions\.manageModal\.manageGroup/,
+    })
+    // The manage-group hand-off leads the hub's action list.
+    const actionButtons = screen
+      .getAllByRole("button")
+      .filter((b) => b.closest(".divide-y"))
+    expect(actionButtons[0]).toBe(manageGroup)
+    await user.click(manageGroup)
     expect(onManageMembers).toHaveBeenCalledOnce()
   })
 
@@ -422,5 +535,64 @@ describe("ManageSubmissionModal", () => {
         .getByRole("button", { name: "submissions.table.reviewAria" })
         .hasAttribute("disabled"),
     ).toBe(true)
+  })
+})
+
+// The hub feedback channel: an action row's outcome renders as a banner
+// inside the open hub; an outcome landing after the hub unmounts (closed
+// mid-action) falls back to a toast instead of vanishing.
+describe("ManageSubmissionModal — action feedback channel", () => {
+  const renderHub = () =>
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={individualAction}
+      />,
+    )
+
+  it("renders an action failure as an in-hub banner, not a toast", () => {
+    // The download row reports failures through its mutate onError callback.
+    downloadMutate.mockImplementation(
+      (_vars: unknown, opts?: { onError?: (err: Error) => void }) => {
+        opts?.onError?.(new Error("boom"))
+      },
+    )
+    renderHub()
+    fireEvent.click(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    )
+
+    expect(screen.getByText("submissions.rowDownload.error")).toBeTruthy()
+    expect(notifyMock).not.toHaveBeenCalled()
+  })
+
+  it("falls back to a toast when the outcome lands after the hub unmounted", () => {
+    // Capture the onError callback so it can fire post-unmount (a slow write
+    // settling after the teacher closed the hub).
+    let lateError: ((err: Error) => void) | undefined
+    downloadMutate.mockImplementation(
+      (_vars: unknown, opts?: { onError?: (err: Error) => void }) => {
+        lateError = opts?.onError
+      },
+    )
+    const view = renderHub()
+    fireEvent.click(
+      screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
+    )
+    view.unmount()
+
+    act(() => {
+      lateError?.(new Error("boom"))
+    })
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tone: "error",
+        message: "submissions.rowDownload.error",
+      }),
+    )
   })
 })

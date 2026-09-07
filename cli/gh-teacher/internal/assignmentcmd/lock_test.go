@@ -346,6 +346,270 @@ func TestRunAssignmentAdd_PreservesLockAndSkipsGrant(t *testing.T) {
 	}
 }
 
+// TestRunAssignmentAdd_LockedFlagOnFreshAddSkipsGrant: `--locked` on a NEW slug
+// writes the entry locked and never grants the student team read on the
+// private template (the point of staging a timed assessment), and revokes
+// nothing because nothing was ever granted.
+func TestRunAssignmentAdd_LockedFlagOnFreshAddSkipsGrant(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false), // only "hello" exists
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "exam",
+		Name:          "Exam",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+		Locked:        true,
+		LockedChanged: true,
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(--locked, fresh): %v", err)
+	}
+	file := decodeLock(t, fix)
+	idx, ok := assignment.FindAssignment(file.Assignments, "exam")
+	if !ok || !file.Assignments[idx].Locked {
+		t.Fatalf("expected the new entry to be written locked, got %+v", file.Assignments)
+	}
+	fix.mu.Lock()
+	granted, revoked := fix.grantedURL, fix.revokedURL
+	fix.mu.Unlock()
+	if granted != "" {
+		t.Errorf("a locked create must NOT grant the student team read, got PUT %q", granted)
+	}
+	if revoked != "" {
+		t.Errorf("a locked create has nothing to revoke, got DELETE %q", revoked)
+	}
+	if !strings.Contains(errOut.String(), "locked") {
+		t.Errorf("expected the locked note on stderr, got %q", errOut.String())
+	}
+	if !strings.Contains(out.String(), ", locked, ") {
+		t.Errorf("expected the summary line to say the entry is locked, got %q", out.String())
+	}
+}
+
+// TestRunAssignmentAdd_LockedFlagOnPublicTemplateIsConfirmed: with a PUBLIC
+// template there is no read to withhold, so the stderr note never fires; the
+// summary line is then the only confirmation that --locked took effect.
+func TestRunAssignmentAdd_LockedFlagOnPublicTemplateIsConfirmed(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: false,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "exam",
+		Name:          "Exam",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+		Locked:        true,
+		LockedChanged: true,
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(--locked, public template): %v", err)
+	}
+	file := decodeLock(t, fix)
+	idx, ok := assignment.FindAssignment(file.Assignments, "exam")
+	if !ok || !file.Assignments[idx].Locked {
+		t.Fatalf("expected the new entry to be written locked, got %+v", file.Assignments)
+	}
+	if !strings.Contains(out.String(), ", locked, ") {
+		t.Errorf("expected the summary line to say the entry is locked, got %q", out.String())
+	}
+	if strings.Contains(errOut.String(), "was not granted read") {
+		t.Errorf("a public template has no read to withhold; got the private-template note %q", errOut.String())
+	}
+}
+
+// TestRunAssignmentAdd_LockedFlagOnReAddRevokes: `--locked` on a same-slug
+// re-add of an UNLOCKED entry is the lock action in `add` clothing: the entry
+// flips to locked, the student team's read on the private template is revoked
+// (staff teams untouched), and no grant fires.
+func TestRunAssignmentAdd_LockedFlagOnReAddRevokes(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "hello",
+		Name:          "Hello",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+		Locked:        true,
+		LockedChanged: true,
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(--locked, re-add): %v", err)
+	}
+	if !decodeLock(t, fix).Assignments[0].Locked {
+		t.Errorf("re-adding with --locked must write locked: true")
+	}
+	fix.mu.Lock()
+	granted, revoked, staff := fix.grantedURL, fix.revokedURL, fix.touchedStaff
+	fix.mu.Unlock()
+	if granted != "" {
+		t.Errorf("locking via re-add must NOT grant the student team read, got PUT %q", granted)
+	}
+	if revoked != "/orgs/o/teams/classroom50-dst/repos/o/hello-template" {
+		t.Errorf("locking via re-add must revoke the student team read, got DELETE %q", revoked)
+	}
+	if len(staff) != 0 {
+		t.Errorf("staff teams must stay untouched on lock, got %v", staff)
+	}
+}
+
+// TestRunAssignmentAdd_LockedFalseOnReAddUnlocksAndRegrants: an explicit
+// `--locked=false` on a LOCKED entry is the unlock action: the key is dropped
+// and the student team read is re-granted through the ordinary grant path.
+func TestRunAssignmentAdd_LockedFalseOnReAddUnlocksAndRegrants(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(true),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "hello",
+		Name:          "Hello",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+		Locked:        false,
+		LockedChanged: true,
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(--locked=false, re-add): %v", err)
+	}
+	if decodeLock(t, fix).Assignments[0].Locked {
+		t.Errorf("re-adding with --locked=false must clear the lock")
+	}
+	fix.mu.Lock()
+	committed := string(fix.committed)
+	granted, revoked := fix.grantedURL, fix.revokedURL
+	fix.mu.Unlock()
+	if strings.Contains(committed, `"locked"`) {
+		t.Errorf("unlock must drop the key (omitempty), got %s", committed)
+	}
+	if granted != "/orgs/o/teams/classroom50-dst/repos/o/hello-template" {
+		t.Errorf("unlocking via re-add must re-grant the student team read, got PUT %q", granted)
+	}
+	if revoked != "" {
+		t.Errorf("unlocking must not revoke, got DELETE %q", revoked)
+	}
+}
+
+// TestRunAssignmentAdd_FutureReleaseUnlockedNotes: a future --available-from on
+// an UNLOCKED private in-org template still grants the student team read (the
+// release date is listing-only), so stderr must say the template is readable
+// now and point at the lock as the fix (issue #884).
+func TestRunAssignmentAdd_FutureReleaseUnlockedNotes(t *testing.T) {
+	server, fix := newLockServer(t, lockServerConfig{
+		assignments:     lockAssignmentsBody(false),
+		classroom:       lockClassroomBody(),
+		templatePrivate: true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+		Org:           "o",
+		Classroom:     "dst",
+		Slug:          "exam",
+		Name:          "Exam",
+		Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+		AvailableFrom: "2999-01-01T00:00:00Z",
+		Mode:          assignment.ModeIndividual,
+		Autograder:    "default",
+	})
+	if err != nil {
+		t.Fatalf("runAssignmentAdd(future release, unlocked): %v", err)
+	}
+	fix.mu.Lock()
+	granted := fix.grantedURL
+	fix.mu.Unlock()
+	if granted == "" {
+		t.Errorf("an unlocked add must still grant the student team read (the note explains the consequence), got no PUT")
+	}
+	if !strings.Contains(errOut.String(), "can read the private template o/hello-template now") {
+		t.Errorf("expected the readable-before-release note on stderr, got %q", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "gh teacher assignment lock o dst exam") {
+		t.Errorf("expected the note to name the lock command, got %q", errOut.String())
+	}
+}
+
+// TestRunAssignmentAdd_FutureReleaseNoteSilentWhenNotApplicable: the note is
+// specific to an open private in-org template with a release still ahead. A
+// past release date, a locked entry, or a public template each have nothing to
+// warn about.
+func TestRunAssignmentAdd_FutureReleaseNoteSilentWhenNotApplicable(t *testing.T) {
+	cases := []struct {
+		name            string
+		templatePrivate bool
+		availableFrom   string
+		locked          bool
+	}{
+		{name: "past release", templatePrivate: true, availableFrom: "2000-01-01T00:00:00Z"},
+		{name: "no release", templatePrivate: true},
+		{name: "locked", templatePrivate: true, availableFrom: "2999-01-01T00:00:00Z", locked: true},
+		{name: "public template", templatePrivate: false, availableFrom: "2999-01-01T00:00:00Z"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			server, _ := newLockServer(t, lockServerConfig{
+				assignments:     lockAssignmentsBody(false),
+				classroom:       lockClassroomBody(),
+				templatePrivate: tc.templatePrivate,
+			})
+			client := githubtest.NewTestClient(t, server)
+
+			var out, errOut bytes.Buffer
+			err := runAssignmentAdd(client, &out, &errOut, addAssignmentParams{
+				Org:           "o",
+				Classroom:     "dst",
+				Slug:          "exam",
+				Name:          "Exam",
+				Tmpl:          &templateArg{Owner: "o", Repo: "hello-template"},
+				AvailableFrom: tc.availableFrom,
+				Mode:          assignment.ModeIndividual,
+				Autograder:    "default",
+				Locked:        tc.locked,
+				LockedChanged: tc.locked,
+			})
+			if err != nil {
+				t.Fatalf("runAssignmentAdd: %v", err)
+			}
+			if strings.Contains(errOut.String(), "can read the private template") {
+				t.Errorf("readable-before-release note must not fire, got %q", errOut.String())
+			}
+		})
+	}
+}
+
 // TestRunAssignmentAdd_PreservesClosed guards that re-running `assignment add`
 // on a same-slug CLOSED entry keeps it closed. closed is owned by the web
 // "Close submission" action, not `add`; without the carry-forward a same-slug

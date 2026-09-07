@@ -17,6 +17,185 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.46.1](https://github.com/foundation50/classroom50/compare/web-v1.46.0...web-v1.46.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **web:** flag groups whose membership exceeds max_group_size ([#897](https://github.com/foundation50/classroom50/issues/897)) ([c1ff46f](https://github.com/foundation50/classroom50/commit/c1ff46f43416cf878e76e162d356f2d22a580e80))
+
+## [1.46.0](https://github.com/foundation50/classroom50/compare/web-v1.45.0...web-v1.46.0) (2026-09-06)
+
+
+### Features
+
+* **web:** complete the WCAG A/AA conformance report (VPAT) ([#888](https://github.com/foundation50/classroom50/issues/888)) ([bd51677](https://github.com/foundation50/classroom50/commit/bd51677ec214fc7f42e5d2d3d6429307703f6911))
+* **web:** keep the tab open during long GitHub writes and reads ([#891](https://github.com/foundation50/classroom50/issues/891)) ([d1f3572](https://github.com/foundation50/classroom50/commit/d1f3572fba4c83c7c30694ada23f58c589f4f532))
+
+
+### Bug Fixes
+
+* **web:** announce spinners through one persistent live region ([#893](https://github.com/foundation50/classroom50/issues/893)) ([0cd418b](https://github.com/foundation50/classroom50/commit/0cd418b9ae3f9ba818ba4e2389074658db6cd15d))
+* **web:** unblock locale translation and stabilize a flaky invite test ([#894](https://github.com/foundation50/classroom50/issues/894)) ([b91904c](https://github.com/foundation50/classroom50/commit/b91904ca7ae45c41e21edba116e53eb0e6293b48))
+
+## [1.45.0](https://github.com/foundation50/classroom50/compare/web-v1.44.0...web-v1.45.0) (2026-09-04)
+
+
+### Bug Fixes
+
+* surface and repair accept runs that stopped before the setup commit ([#885](https://github.com/foundation50/classroom50/issues/885)) ([cad2e01](https://github.com/foundation50/classroom50/commit/cad2e01738717fc666d368e47a67cade59a1ac59))
+* **web:** replace the generic undo warning in confirm dialogs with tailored copy ([#886](https://github.com/foundation50/classroom50/issues/886)) ([3905257](https://github.com/foundation50/classroom50/commit/39052570a75953ec472ee2b455ca72570338d593))
+* **web:** show roster names and fit long repo names in the submissions modal ([#880](https://github.com/foundation50/classroom50/issues/880)) ([9f23e2e](https://github.com/foundation50/classroom50/commit/9f23e2e7d413bc81e2e356a3bdc530d0ee756c63))
+* **web:** warn when a release date leaves a private template readable ([#887](https://github.com/foundation50/classroom50/issues/887)) ([669bdd7](https://github.com/foundation50/classroom50/commit/669bdd7fef4ac87231a998c6a4b0a69aaeba671d))
+
+## [1.44.0](https://github.com/foundation50/classroom50/compare/web-v1.43.0...web-v1.44.0) (2026-09-03)
+
+
+### Features
+
+* **web:** show who made each commit in a team's submissions ([#875](https://github.com/foundation50/classroom50/issues/875)) ([8a8daed](https://github.com/foundation50/classroom50/commit/8a8daed53d7a51c64c57f8ee504551677b01801b))
+* **web:** toggle to count teaching staff in the assignments funnel ([#871](https://github.com/foundation50/classroom50/issues/871)) ([dccef9e](https://github.com/foundation50/classroom50/commit/dccef9e7d56017f654c2ba2ef96c56eebae4a0d2))
+
+
+### Bug Fixes
+
+* **web:** add a refresh control to the language pickers ([ff47389](https://github.com/foundation50/classroom50/commit/ff473890fac438edf50d21950aaf2ccf43814e41))
+
+## [1.43.0](https://github.com/foundation50/classroom50/compare/web-v1.42.0...web-v1.43.0) (2026-09-03)
+
+
+### Features
+
+* **web:** add Catalan (ca) language pack ([#858](https://github.com/foundation50/classroom50/issues/858)) ([c2105e7](https://github.com/foundation50/classroom50/commit/c2105e76ac33f6b6139e9cdefca1c5dfd928ca5a)), closes [#857](https://github.com/foundation50/classroom50/issues/857)
+
+## [1.42.0](https://github.com/foundation50/classroom50/compare/web-v1.41.0...web-v1.42.0) (2026-09-02)
+
+
+### Features
+
+* expose the assignment bundle to declarative test commands ([#833](https://github.com/foundation50/classroom50/issues/833)) ([aeb154d](https://github.com/foundation50/classroom50/commit/aeb154dbed806b1a8311a2de66db72417ecaa47c))
+* label each collect by scope and make its button show progress ([#832](https://github.com/foundation50/classroom50/issues/832)) ([3765cf3](https://github.com/foundation50/classroom50/commit/3765cf3a363158d2c75dd37698c57cb0eedb2f91))
+* lock an assignment from the assignment form ([#839](https://github.com/foundation50/classroom50/issues/839)) ([7787456](https://github.com/foundation50/classroom50/commit/7787456251acb20ffd08687121e9fab0fa99264d))
+* **web:** add a Test token button to the service token settings ([#836](https://github.com/foundation50/classroom50/issues/836)) ([89bc87d](https://github.com/foundation50/classroom50/commit/89bc87d37ed9268cd627a1adc794ffcacb1a0aa3))
+
+
+### Bug Fixes
+
+* **cli:** name every required permission when the config repo read is refused ([#855](https://github.com/foundation50/classroom50/issues/855)) ([7acdcef](https://github.com/foundation50/classroom50/commit/7acdcefe5b7ad4513b99ce74d7b1cea4f967b18a))
+* count pushes without a graded release in the assignments list ([#838](https://github.com/foundation50/classroom50/issues/838)) ([b5853e7](https://github.com/foundation50/classroom50/commit/b5853e7931e2df3de4704ff3a8615e6e36000de0))
+* fetch the org repo listing in parallel and probe known repo names ([#829](https://github.com/foundation50/classroom50/issues/829)) ([45f95e4](https://github.com/foundation50/classroom50/commit/45f95e40e0754393e6b8889c9eb3e258def11f03))
+* make staff access grants visible and catch repo-scoped service tokens ([#835](https://github.com/foundation50/classroom50/issues/835)) ([f27b4dc](https://github.com/foundation50/classroom50/commit/f27b4dc20f509b568f82014e4c024768be196eb0))
+* **web:** free read slots during probe retries and stop retrying definitive pages ([5f6a902](https://github.com/foundation50/classroom50/commit/5f6a9024fa0dc60fdae8e01c5c2c7ba0ca59a1b9))
+* **web:** keep a concurrent lock when saving unrelated assignment edits ([a68f7f8](https://github.com/foundation50/classroom50/commit/a68f7f8bf1f0fc8f695ca6a0856dc1793352b16c))
+* **web:** list a student's repos newest first again ([a5dc835](https://github.com/foundation50/classroom50/commit/a5dc835ea6975f66ba196976b0473d55e173ba23))
+* **web:** read the full org listing on a roster error and re-read repos on Refresh ([4293f35](https://github.com/foundation50/classroom50/commit/4293f35e36cf703826c6fb9d45820707e666e6f5))
+* **web:** show collected submissions and live status to TAs and HTAs ([#831](https://github.com/foundation50/classroom50/issues/831)) ([6751b36](https://github.com/foundation50/classroom50/commit/6751b36cd5bf5a15fa223b5cd74a1ca68cf5a9b9))
+* **web:** small follow-ups on the submissions and settings pages ([6763aa6](https://github.com/foundation50/classroom50/commit/6763aa6525e20ccfc0461eccddabd3c5db7e57ea))
+
+## [1.41.0](https://github.com/foundation50/classroom50/compare/web-v1.40.0...web-v1.41.0) (2026-09-02)
+
+
+### Features
+
+* add team-based group assignments backed by GitHub Teams ([#827](https://github.com/foundation50/classroom50/issues/827)) ([63cb10f](https://github.com/foundation50/classroom50/commit/63cb10f6ab06ed76c7cbd69b366f61a65b3df5eb))
+
+
+### Bug Fixes
+
+* **web:** redesign published resources as a repo-style file browser ([#823](https://github.com/foundation50/classroom50/issues/823)) ([b681d37](https://github.com/foundation50/classroom50/commit/b681d37ba53c28a28bf5b9a9c28b4d5a0833ca1b))
+* **web:** remove duplicate navbar from the accept assignment page ([#828](https://github.com/foundation50/classroom50/issues/828)) ([6f1b779](https://github.com/foundation50/classroom50/commit/6f1b779400b22e60b85c6f555e8e52e72a2ce8c7))
+
+## [1.40.0](https://github.com/foundation50/classroom50/compare/web-v1.39.1...web-v1.40.0) (2026-08-31)
+
+
+### Features
+
+* **web:** let roster link pickers search all organization members ([#820](https://github.com/foundation50/classroom50/issues/820)) ([81109e7](https://github.com/foundation50/classroom50/commit/81109e7e4405d15e3b44876dbd1ef24f687f9be1))
+
+## [1.39.1](https://github.com/foundation50/classroom50/compare/web-v1.39.0...web-v1.39.1) (2026-08-31)
+
+
+### Miscellaneous Chores
+
+* **web:** Synchronize classroom50 versions
+
+## [1.39.0](https://github.com/foundation50/classroom50/compare/web-v1.38.0...web-v1.39.0) (2026-08-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811))
+
+### Features
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811)) ([319b7f6](https://github.com/foundation50/classroom50/commit/319b7f613db0f260ba619001eb4e93f345fdbc14))
+
+
+### Bug Fixes
+
+* **web:** a11y mechanics sweep — focus, announcements, and error copy ([#808](https://github.com/foundation50/classroom50/issues/808)) ([56cb0bc](https://github.com/foundation50/classroom50/commit/56cb0bcec9f16132197165a76e1d7f7b3b277ad4))
+* **web:** adopt Primer conventions — carets, save placement, banners, URL pagination ([#810](https://github.com/foundation50/classroom50/issues/810)) ([d0ae13f](https://github.com/foundation50/classroom50/commit/d0ae13f7ac21d8cc30d3fe18a5b01c9ed454deb0))
+* **web:** align user-facing copy with GitHub voice and Primer conventions ([#813](https://github.com/foundation50/classroom50/issues/813)) ([6f7216b](https://github.com/foundation50/classroom50/commit/6f7216b95f0533346c7d49a003b6bf0c12dacf18))
+
+
+### Miscellaneous Chores
+
+* pin next release to 1.39.0 ([640736b](https://github.com/foundation50/classroom50/commit/640736b70c3ee865aef7a99eb78a212833391eb4))
+
+## [1.38.0](https://github.com/foundation50/classroom50/compare/web-v1.37.0...web-v1.38.0) (2026-08-30)
+
+
+### Features
+
+* non-blocking roster sync, kept unlinked rows, and batch editing ([#806](https://github.com/foundation50/classroom50/issues/806)) ([5a5bb25](https://github.com/foundation50/classroom50/commit/5a5bb25554ed3f75b7abd5395467701c717f33e5))
+* **web:** add breadcrumb switchers, land new classroom on roster ([#807](https://github.com/foundation50/classroom50/issues/807)) ([e9dbca0](https://github.com/foundation50/classroom50/commit/e9dbca0c7b3de6ca07d1489ee01f21f578a266fd))
+
+
+### Bug Fixes
+
+* **web:** align form validation and saving with Primer guidance ([#803](https://github.com/foundation50/classroom50/issues/803)) ([2f3a3d4](https://github.com/foundation50/classroom50/commit/2f3a3d41f8665d3aebbf61a75c999a38ef381ab2))
+* **web:** show load errors instead of first-use empty states ([#801](https://github.com/foundation50/classroom50/issues/801)) ([babaf88](https://github.com/foundation50/classroom50/commit/babaf88994c48a94e92894546e403d9fbba76822))
+* **web:** standardize feedback notifications on Primer messaging patterns ([#804](https://github.com/foundation50/classroom50/issues/804)) ([02d36e8](https://github.com/foundation50/classroom50/commit/02d36e875d9d6b4d1550737de37ba0a129f776a3))
+
+## [1.37.0](https://github.com/foundation50/classroom50/compare/web-v1.36.0...web-v1.37.0) (2026-08-28)
+
+
+### Features
+
+* **web:** restyle sidebar highlight per Primer and animate collapse ([#796](https://github.com/foundation50/classroom50/issues/796)) ([b2344cb](https://github.com/foundation50/classroom50/commit/b2344cb7a357d473686e3f690f86c5b9fc9b84ce))
+* **web:** use assignment name in breadcrumb and add hover slug reveal ([#799](https://github.com/foundation50/classroom50/issues/799)) ([8d020da](https://github.com/foundation50/classroom50/commit/8d020da7a16c41edc05c26c31a444602a58645c9))
+
+## [1.36.0](https://github.com/foundation50/classroom50/compare/web-v1.35.0...web-v1.36.0) (2026-08-28)
+
+
+### Features
+
+* **web:** revamp the org members page and add bulk org removal ([#787](https://github.com/foundation50/classroom50/issues/787)) ([d35ffa1](https://github.com/foundation50/classroom50/commit/d35ffa135641f87f2244839e8e3d018ef114cc18))
+
+## [1.35.0](https://github.com/foundation50/classroom50/compare/web-v1.34.1...web-v1.35.0) (2026-08-28)
+
+
+### Features
+
+* add autograder failure-details and show-output options ([#767](https://github.com/foundation50/classroom50/issues/767)) ([d1713bd](https://github.com/foundation50/classroom50/commit/d1713bd63be070a5321622a6b7f3d855a4c7e74a))
+* add repo_visibility control for generated assignment repos ([#771](https://github.com/foundation50/classroom50/issues/771)) ([d6ff58e](https://github.com/foundation50/classroom50/commit/d6ff58e53221a8193a8ed14808f2240337da39b6))
+* **web:** add delete assignment to the submissions actions menu ([#760](https://github.com/foundation50/classroom50/issues/760)) ([efaf7da](https://github.com/foundation50/classroom50/commit/efaf7da5e3c8518620fe18d85118c6a1bc861d5c))
+* **web:** revamp the roster view and surface sync progress ([#779](https://github.com/foundation50/classroom50/issues/779)) ([19133b5](https://github.com/foundation50/classroom50/commit/19133b56c36f394dc0be9a27cc3236d1057659c3))
+* **web:** support a custom Pages domain for published classroom resources ([#782](https://github.com/foundation50/classroom50/issues/782)) ([807265c](https://github.com/foundation50/classroom50/commit/807265ce28de174f70f6fb51a197c209ca75c77f))
+
+
+### Bug Fixes
+
+* stop concurrent invite acceptance from corrupting roster.csv ([#773](https://github.com/foundation50/classroom50/issues/773)) ([14eae9c](https://github.com/foundation50/classroom50/commit/14eae9c8b12f8f76b9c44025f08855eeba4543b0))
+* **web:** stop showing stale classroom names to students after rename ([#781](https://github.com/foundation50/classroom50/issues/781)) ([f08010e](https://github.com/foundation50/classroom50/commit/f08010e7f71472d76d95d588c33d005afdf57d22))
+
+## [1.34.1](https://github.com/foundation50/classroom50/compare/web-v1.34.0...web-v1.34.1) (2026-08-26)
+
+
+### Bug Fixes
+
+* **web:** standardize modals on Primer dialog anatomy ([#752](https://github.com/foundation50/classroom50/issues/752)) ([cc85110](https://github.com/foundation50/classroom50/commit/cc851102b0f242146f4d6f3a6d6652097d3f7f8f))
+
 ## [1.34.0](https://github.com/foundation50/classroom50/compare/web-v1.33.0...web-v1.34.0) (2026-08-25)
 
 

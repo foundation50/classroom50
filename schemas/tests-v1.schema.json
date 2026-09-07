@@ -12,6 +12,15 @@
       "type": "array",
       "maxItems": 100,
       "items": { "$ref": "#/$defs/test" }
+    },
+    "defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "failure-details": { "enum": ["full", "actual-only", "none"] },
+        "show-output": { "type": "boolean" }
+      },
+      "description": "Assignment-level defaults for the per-test reporting options, copied verbatim from the assignment's `test_defaults` by materialize_tests.py. A test's own `failure-details` / `show-output` value overrides the default. Absent means the built-in defaults (failure-details `full`, show-output `false`)."
     }
   },
   "$defs": {
@@ -47,6 +56,14 @@
           "minimum": 0,
           "maximum": 1000,
           "description": "Defaults to 0 (informational test) when omitted; the CLI always writes it."
+        },
+        "failure-details": {
+          "enum": ["full", "actual-only", "none"],
+          "description": "How much failure detail students see for this test (release body, Actions log, run summary). `full` (the default when absent) = unified diff for exact comparisons, otherwise expected+actual blocks, plus stderr. `actual-only` = the student's own stdout/stderr only — no expected output and no diff (a diff would reveal it). `none` = only the failure kind (wrong output, wrong exit code, timeout, setup failed). Overrides the assignment's `test_defaults`."
+        },
+        "show-output": {
+          "type": "boolean",
+          "description": "Include the captured stdout/stderr of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
         }
       },
       "allOf": [

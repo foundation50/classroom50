@@ -11,25 +11,41 @@ import { GitHubLink } from "@/components/GitHubLink"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
+import { normalizePagesBaseUrl } from "@/util/pagesBaseUrl"
+import { CollapsibleAdvanced } from "@/pages/assignments/sections/CollapsibleAdvanced"
 import {
+  AnimatedAlert,
   Button,
   Card,
   EmphasisLtr,
   FormField,
   Input,
   Heading,
+  OutcomeAlert,
 } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
 
 export type EditClassroomFormValues = {
   name: string
   term: string
+  // Raw "custom Pages domain" input: a bare domain or a full https base URL;
+  // "" = no custom domain. Normalized at submit (see normalizePagesBaseUrl).
+  customDomain: string
 }
 
 type EditClassroomFormProps = {
   defaultValues?: Partial<EditClassroomFormValues>
+  // Receives the values with customDomain already NORMALIZED ("" = clear).
   onSubmit: (values: EditClassroomFormValues) => void | Promise<void>
   cl?: Classroom
+  // The host page's save outcome, rendered inline above the actions (Primer:
+  // post-submit feedback near the save button, not a corner toast).
+  saveOutcome?: AlertOutcome | null
+  // Fires on any edit so the host can clear a stale saveOutcome.
+  onEdit?: () => void
 }
 
 export const DeleteClassroomButton = ({
@@ -78,7 +94,8 @@ export const DeleteClassroomButton = ({
         confirmText={`${org}/${classroom}`}
         confirmLabel={t("classes.deleteClassroomConfirm")}
         cancelLabel={t("classes.deleteClassroomCancel")}
-        dangerous
+        tone="error"
+        warning={t("classes.deleteClassroomWarning")}
         onConfirm={async () => {
           const result = await deleteClassroomMutation.mutateAsync({
             org,
@@ -115,7 +132,7 @@ const ArchiveClassroomButton = ({
   archived: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const [open, setOpen] = useState(false)
 
   // A pure archive/unarchive write: editClassroom preserves name/term when
@@ -160,36 +177,29 @@ const ArchiveClassroomButton = ({
         cancelLabel={t("common.cancel")}
         confirmText=""
         needsConfirm={false}
-        dangerous={false}
+        tone="warning"
         onConfirm={async () => {
           try {
             await archiveMutation.mutateAsync(archived)
-            notify({
-              tone: "success",
-              durationMs: 5000,
-              message: archived
+            // The page state flips in place — SR announcement only.
+            announce(
+              archived
                 ? t("classes.unarchivedToast", { classroom })
                 : t("classes.archivedToast", { classroom }),
-            })
+            )
           } catch (err) {
-            notify({
-              tone: "error",
-              message: archived
-                ? t("classes.unarchiveFailed", {
-                    classroom,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  })
-                : t("classes.archiveFailed", {
-                    classroom,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  }),
-            })
+            // Rethrow with localized copy so the failure surfaces inside the
+            // confirm dialog (Primer: dialog errors stay in the dialog).
+            throw new Error(
+              t(
+                archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
+                {
+                  classroom,
+                  error: errorText(t, err),
+                },
+              ),
+              { cause: err },
+            )
           }
         }}
         onClose={() => setOpen(false)}
@@ -246,10 +256,12 @@ const CleanupInviteDataButton = ({
         cancelLabel={t("common.cancel")}
         confirmText=""
         needsConfirm={false}
-        dangerous={false}
+        tone="warning"
         onConfirm={async () => {
           try {
             const result = await purgeMutation.mutateAsync()
+            // Kept as a toast: the recovered/purged counts aren't evident
+            // anywhere in the UI once the dialog closes.
             notify({
               tone: "success",
               durationMs: 6000,
@@ -259,15 +271,13 @@ const CleanupInviteDataButton = ({
               }),
             })
           } catch (err) {
-            notify({
-              tone: "error",
-              message: t("classes.inviteCleanup.failed", {
-                error:
-                  err instanceof Error
-                    ? err.message
-                    : t("classes.somethingWentWrong"),
+            // Surfaces inside the confirm dialog rather than a corner toast.
+            throw new Error(
+              t("classes.inviteCleanup.failed", {
+                error: errorText(t, err),
               }),
-            })
+              { cause: err },
+            )
           }
         }}
         onClose={() => setOpen(false)}
@@ -276,11 +286,19 @@ const CleanupInviteDataButton = ({
   )
 }
 
-const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
+const EditClassroomForm = ({
+  onSubmit,
+  cl,
+  saveOutcome,
+  onEdit,
+}: EditClassroomFormProps) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
   const [submitted, setSubmitted] = useState(false)
+  // Feedback for an unchanged submit (the button stays enabled per Primer;
+  // the submit itself no-ops). Rendered only while still pristine.
+  const [noChangesNotice, setNoChangesNotice] = useState(false)
   // Archived = read-only: disable settings fields + Save (Archive/Delete header
   // actions stay live). editClassroom enforces this server-side.
   const archived = isClassroomArchived(cl ?? {})
@@ -289,6 +307,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
     defaultValues: {
       name: cl?.name || cl?.short_name || "",
       term: cl?.term || "",
+      customDomain: cl?.pages_base_url || "",
     } satisfies EditClassroomFormValues,
     validators: {
       onSubmit: ({ value }) => {
@@ -296,6 +315,9 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           {}
         if (!value.name.trim()) {
           errors.name = t("validation.classroomNameRequired")
+        }
+        if (normalizePagesBaseUrl(value.customDomain) === null) {
+          errors.customDomain = t("validation.customDomainInvalid")
         }
 
         return Object.keys(errors).length > 0
@@ -309,6 +331,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       await onSubmit({
         name: value.name.trim(),
         term: value.term.trim(),
+        // The validator already rejected a null normalization.
+        customDomain: normalizePagesBaseUrl(value.customDomain) ?? "",
       })
       setSubmitted(true)
     },
@@ -319,12 +343,35 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   return (
     <Card
       as="form"
+      // noValidate: Primer forms guidance — browser-native validation UI is
+      // inaccessible and clashes with our submit-time validation; `required`
+      // stays on controls for AT parity.
+      noValidate
       bordered={false}
       className="w-full"
+      // Any edit clears the unchanged-submit notice — hooked on the DOM
+      // events rather than the form model, so controls that sync through
+      // local state still clear it.
+      onInput={() => {
+        setNoChangesNotice(false)
+        onEdit?.()
+      }}
+      onChange={() => {
+        setNoChangesNotice(false)
+        onEdit?.()
+      }}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        // Unchanged submit: a no-op with feedback — saving identical values
+        // would still land a pointless config-repo commit in the audit trail.
+        if (form.state.isDefaultValue) {
+          setNoChangesNotice(true)
+          return
+        }
+        setNoChangesNotice(false)
+        const formEl = e.currentTarget
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <Card.Body>
@@ -437,28 +484,65 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             )}
           </form.Field>
 
-          <Card.Actions className="justify-end p-2">
-            <form.Subscribe
-              selector={(state) => [
-                state.canSubmit,
-                state.isSubmitting,
-                state.isDefaultValue,
-              ]}
-            >
-              {([canSubmit, isSubmitting, isDefaultValue]) => (
+          {/* Rare, org-level concern (custom Pages domain) — tucked behind the
+              shared Advanced disclosure so the common name/term path stays
+              uncluttered. */}
+          <div className="mb-4">
+            <CollapsibleAdvanced>
+              <form.Field name="customDomain">
+                {(field) => (
+                  <FormField
+                    label={t("classes.form.customDomain")}
+                    htmlFor={field.name}
+                    hint={t("classes.form.customDomainHint")}
+                    error={
+                      field.state.meta.errors.length > 0
+                        ? field.state.meta.errors[0]
+                        : undefined
+                    }
+                    className="mb-4"
+                  >
+                    {({ id, describedById, invalid }) => (
+                      <Input
+                        id={id}
+                        name={field.name}
+                        dir="ltr"
+                        aria-describedby={describedById}
+                        invalid={invalid}
+                        placeholder={t("classes.form.customDomainPlaceholder")}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                      />
+                    )}
+                  </FormField>
+                )}
+              </form.Field>
+            </CollapsibleAdvanced>
+          </div>
+
+          {/* Unchanged-submit feedback: a banner directly above the actions,
+              cleared by any edit via the form-level onInput/onChange. */}
+          <AnimatedAlert tone="info" show={noChangesNotice} className="text-sm">
+            {t("classes.form.noChangesToSave")}
+          </AnimatedAlert>
+          {/* Save outcome from the host page, in the same near-actions slot. */}
+          <OutcomeAlert outcome={saveOutcome} className="text-sm" />
+          {/* Primer page-form convention: actions bottom-LEFT (right alignment
+              is for dialog footers). */}
+          <Card.Actions className="justify-start p-2">
+            <form.Subscribe selector={(state) => [state.isSubmitting]}>
+              {([isSubmitting]) => (
                 <Button
                   type="submit"
                   variant="primary"
                   loading={isSubmitting}
                   loadingLabel={t("classes.form.saving")}
-                  disabled={
-                    !canSubmit || isSubmitting || submitted || isDefaultValue
-                  }
-                  title={
-                    isDefaultValue
-                      ? t("classes.form.noChangesToSave")
-                      : undefined
-                  }
+                  // Kept enabled while unchanged or invalid (Primer saving
+                  // guidance) — the old disabled-with-tooltip explanation was
+                  // unreachable by keyboard. `submitted` still latches after
+                  // the save lands (completed state, not a validity gate).
+                  disabled={isSubmitting || submitted}
                 >
                   {isSubmitting
                     ? t("classes.form.saving")

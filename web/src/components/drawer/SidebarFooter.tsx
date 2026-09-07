@@ -10,6 +10,7 @@ import {
   SignOutIcon,
   SunIcon,
 } from "@/components/ui/icons"
+import { Badge } from "@/components/ui"
 import {
   useParams,
   useMatchRoute,
@@ -19,7 +20,7 @@ import {
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
-import { type MouseEvent, useId, useRef, useState } from "react"
+import { type MouseEvent, useRef, useState } from "react"
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import duck from "@/assets/duck.png"
@@ -136,7 +137,7 @@ function SidebarInfoControls({
           )}
           {!collapsed && (
             <>
-              <span className="flex-1 text-start">
+              <span className="sidebar-fade-in flex-1 text-start">
                 {isDark ? t("nav.darkMode") : t("nav.lightMode")}
               </span>
               <ThemeToggleTrack on={isDark} />
@@ -152,7 +153,9 @@ function SidebarInfoControls({
         >
           <GlobeIcon aria-hidden="true" className="size-4" />
           {!collapsed && (
-            <span className="flex-1 text-start">{t("nav.language")}</span>
+            <span className="sidebar-fade-in flex-1 text-start">
+              {t("nav.language")}
+            </span>
           )}
         </button>
       </li>
@@ -161,7 +164,7 @@ function SidebarInfoControls({
           <Link to="/accessibility" onClick={activate(() => {})}>
             <AccessibilityIcon aria-hidden="true" className="size-4" />
             {!collapsed && (
-              <span className="flex-1 text-start">
+              <span className="sidebar-fade-in flex-1 text-start">
                 {t("nav.accessibility")}
               </span>
             )}
@@ -178,7 +181,9 @@ function SidebarInfoControls({
         >
           <BookIcon aria-hidden="true" className="size-4" />
           {!collapsed && (
-            <span className="flex-1 text-start">{t("nav.docs")}</span>
+            <span className="sidebar-fade-in flex-1 text-start">
+              {t("nav.docs")}
+            </span>
           )}
         </a>
       </li>
@@ -190,7 +195,9 @@ function SidebarInfoControls({
         >
           <InfoIcon aria-hidden="true" className="size-4" />
           {!collapsed && (
-            <span className="flex-1 text-start">{t("nav.about")}</span>
+            <span className="sidebar-fade-in flex-1 text-start">
+              {t("nav.about")}
+            </span>
           )}
         </button>
       </li>
@@ -205,9 +212,7 @@ function PublicSidebarFooter() {
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
   const langDialogRef = useRef<HTMLDialogElement | null>(null)
-  const langDialogTitleId = useId()
   const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
-  const aboutDialogTitleId = useId()
 
   return (
     <div className="mt-auto border-t border-neutral-content/20 py-2">
@@ -223,8 +228,8 @@ function PublicSidebarFooter() {
 
       {createPortal(
         <>
-          <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />
-          <AboutDialog ref={aboutDialogRef} titleId={aboutDialogTitleId} />
+          <LanguageDialog ref={langDialogRef} />
+          <AboutDialog ref={aboutDialogRef} />
         </>,
         document.body,
       )}
@@ -331,9 +336,7 @@ const AuthedSidebarFooter = () => {
   const [menuOpen, setMenuOpen] = useState(false)
   const footerRef = useRef<HTMLDivElement | null>(null)
   const langDialogRef = useRef<HTMLDialogElement | null>(null)
-  const langDialogTitleId = useId()
   const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
-  const aboutDialogTitleId = useId()
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
@@ -352,17 +355,17 @@ const AuthedSidebarFooter = () => {
           {collapsed ? (
             <MarkGithubIcon
               aria-hidden="true"
-              className="size-4 shrink-0 opacity-80"
+              className="sidebar-fade-in size-4 shrink-0 opacity-80"
             />
           ) : (
-            <>
+            <span className="sidebar-fade-in block">
               <span className="block text-[0.625rem] font-medium uppercase tracking-wide text-neutral-content/50">
                 {t("classes.githubOrganization")}
               </span>
               <span className="block break-words font-mono text-xs font-semibold text-neutral-content">
                 {org}
               </span>
-            </>
+            </span>
           )}
         </a>
       ) : null}
@@ -482,14 +485,14 @@ const AuthedSidebarFooter = () => {
             <img
               src={avatar_img}
               alt={t("nav.avatarAlt", { name })}
-              className={`rounded-full ${collapsed ? "w-7" : "w-8"}`}
+              className={`rounded-full transition-[width] duration-200 ease-out ${collapsed ? "w-7" : "w-8"}`}
             />
           </div>
 
           {collapsed && <DeployEnvBadge />}
 
           {!collapsed && (
-            <div className="min-w-0 flex-1">
+            <div className="sidebar-fade-in min-w-0 flex-1">
               <div className="truncate text-sm font-medium text-neutral-content">
                 {name}
               </div>
@@ -507,13 +510,16 @@ const AuthedSidebarFooter = () => {
                     )}
                   </span>
                   {viewAs && canPreviewRoles ? (
-                    <span
-                      className="badge badge-warning badge-xs gap-1"
+                    <Badge
+                      tone="warning"
+                      size="xs"
+                      soft={false}
+                      className="gap-1"
                       title={t("nav.rolePreviewTooltip")}
                     >
                       <EyeIcon aria-hidden="true" className="size-3" />
                       {t("nav.preview")}
-                    </span>
+                    </Badge>
                   ) : null}
                   <DeployEnvBadge />
                 </div>
@@ -528,15 +534,11 @@ const AuthedSidebarFooter = () => {
         </button>
       </div>
 
-      {createPortal(
-        <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />,
-        document.body,
-      )}
+      {createPortal(<LanguageDialog ref={langDialogRef} />, document.body)}
 
       {createPortal(
         <AboutDialog
           ref={aboutDialogRef}
-          titleId={aboutDialogTitleId}
           org={org}
           planName={orgPlanDetails?.plan?.name}
         />,

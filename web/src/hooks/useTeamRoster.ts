@@ -16,6 +16,7 @@ import { resolveClassroomRoleSlug } from "@/util/teamSlug"
 import {
   buildTeamRoster,
   countByState,
+  csvRowsForHiddenTeams,
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
   type TeamRosterRow,
@@ -88,6 +89,17 @@ export type UseTeamRosterResult = {
   // "needs attention" filter option (no such rows exist when membership is
   // unknown — those rows are suppressed).
   orgMembersKnown: boolean
+  // Where the enrolled rows came from. "team" is the live truth. "csv" means at
+  // least one classroom team was unreadable to this viewer (a `secret` team
+  // 404s to a non-owner off it) and roster.csv stood in for it, so the rows are
+  // as fresh as the last sync and any write that assumes a full team picture
+  // (auto-sync, role clears) must stay off.
+  rosterSource: "team" | "csv"
+  // False when the student list is genuinely unknown: the student team was
+  // unreadable AND roster.csv had no student rows. Distinct from a resolved
+  // empty roster, which an owner sees for a brand-new classroom. Consumers
+  // must not scope against or warn about an unknown roster.
+  studentRosterKnown: boolean
   // Re-run the team-member fetch so an error surface can offer a retry without a
   // full page reload.
   refetch: () => void
@@ -103,7 +115,7 @@ export function useTeamRoster(
   students: Student[],
 ): UseTeamRosterResult {
   const client = useGitHubClient()
-  const { githubOrgRole } = useGitHubOrgRole()
+  const { githubOrgRole, isError: orgRoleError } = useGitHubOrgRole()
   // Team invitations are owner-only (like org invitations). Gate the reads on
   // the manageOrg capability so a non-owner doesn't fire a guaranteed 403. This
   // gate stays IN the hook: a non-owner staffer (TA) legitimately uses the hook
@@ -126,6 +138,7 @@ export function useTeamRoster(
   const {
     data: members,
     isLoading: membersLoading,
+    isSuccess: membersSuccess,
     isError: membersError,
     refetch: refetchMembers,
   } = useQuery({
@@ -144,6 +157,46 @@ export function useTeamRoster(
   const teacherMembers = teacherMembersQuery.data
   const taMembers = taMembersQuery.data
   const htaMembers = htaMembersQuery.data
+
+  // Teams this viewer could not read. listTeamMembers folds a 404 into [], and
+  // for a non-owner that 404 is ambiguous: every classroom team is `secret`, so
+  // GitHub hides one they aren't on exactly like a team that doesn't exist. An
+  // owner sees every team, so their [] is the truth and never falls back. The
+  // decision waits for the org role to resolve (see isLoading) so an owner
+  // never flashes the CSV before their role is known.
+  const orgRoleResolved = githubOrgRole !== "unresolved"
+  const definiteNonOwner = orgRoleResolved && !isOwner
+  const roleReads: Record<
+    ClassroomRole,
+    { isSuccess: boolean; data: unknown[] | undefined }
+  > = {
+    student: { isSuccess: membersSuccess, data: members },
+    teacher: teacherMembersQuery,
+    hta: htaMembersQuery,
+    ta: taMembersQuery,
+  }
+  const hiddenKey = (Object.keys(roleReads) as ClassroomRole[])
+    .filter((role) => {
+      const read = roleReads[role]
+      return (
+        definiteNonOwner && read.isSuccess && (read.data ?? []).length === 0
+      )
+    })
+    .join(",")
+  const hiddenRoles = useMemo(
+    () =>
+      new Set<ClassroomRole>(
+        hiddenKey ? (hiddenKey.split(",") as ClassroomRole[]) : [],
+      ),
+    [hiddenKey],
+  )
+  const fallbackRows = useMemo(
+    () => csvRowsForHiddenTeams(students, hiddenRoles),
+    [students, hiddenRoles],
+  )
+  const rosterSource: "team" | "csv" = hiddenRoles.size > 0 ? "csv" : "team"
+  const studentRosterKnown =
+    !hiddenRoles.has("student") || (fallbackRows.student?.length ?? 0) > 0
 
   // Student pending invitations, TEAM-SCOPED (owner-only, like the staff teams).
   // GitHub lists a pending invite under a team only when that team was on the
@@ -240,6 +293,7 @@ export function useTeamRoster(
         orgMemberLogins,
         orgMembersKnown,
         pendingHidden,
+        fallbackRows,
       }),
     [
       members,
@@ -255,6 +309,7 @@ export function useTeamRoster(
       orgMemberIds,
       orgMemberLogins,
       orgMembersKnown,
+      fallbackRows,
     ],
   )
 
@@ -339,13 +394,16 @@ export function useTeamRoster(
   // atomically rather than flashing empty then popping staff in. The invite
   // fetch is only awaited when readable (non-owners skip it). Staff member
   // fetches 404 fast for an uncreated team, so this doesn't stall a class with
-  // no staff teams.
+  // no staff teams. The org role is awaited too: whether an empty team read
+  // means "nobody" or "hidden from me" (and so whether roster.csv stands in)
+  // depends on it, and consumers key reads off the enrolled rows.
   const isLoading =
     membersLoading ||
     teacherMembersQuery.isLoading ||
     htaMembersQuery.isLoading ||
     taMembersQuery.isLoading ||
-    (!pendingHidden && studentInvitesQuery.isLoading)
+    (!pendingHidden && studentInvitesQuery.isLoading) ||
+    (!orgRoleResolved && !orgRoleError)
 
   return {
     rows,
@@ -369,6 +427,8 @@ export function useTeamRoster(
     backfillNeededCount,
     backfillNeededLogins,
     orgMembersKnown,
+    rosterSource,
+    studentRosterKnown,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + teacher + hta + ta), not just the
     // student one — otherwise a staff-team failure stays stuck in error. Also

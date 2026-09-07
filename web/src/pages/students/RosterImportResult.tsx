@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert, TableShell } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type {
   BulkImportResult,
@@ -73,20 +73,22 @@ const ImportResultSection = ({
     <div>
       <h4 className="font-bold mb-2">{title}</h4>
 
-      <div className="max-h-48 overflow-auto rounded-box border border-base-300">
-        <table className="table table-sm">
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <td>
-                  <code>{row.key}</code>
-                </td>
-                <td className="opacity-70">{row.detail}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <TableShell
+        animate={false}
+        size="sm"
+        frameClassName="max-h-48 overflow-auto"
+      >
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.key}>
+              <td>
+                <code>{row.key}</code>
+              </td>
+              <td className="opacity-70">{row.detail}</td>
+            </tr>
+          ))}
+        </tbody>
+      </TableShell>
     </div>
   )
 }
@@ -104,7 +106,8 @@ export const RosterImportResult = ({
   roleChangeOutcome,
   emailResult = null,
   emailError = null,
-  onDone,
+  unlinkedKept = 0,
+  linked = [],
 }: {
   result: BulkImportResult
   inviteError: string | null
@@ -112,7 +115,12 @@ export const RosterImportResult = ({
   roleChangeOutcome: RoleChangeOutcome | null
   emailResult?: BulkInviteByEmailResult | null
   emailError?: string | null
-  onDone: () => void
+  // Rows kept on the roster as UNLINKED (name-only rows, plus email rows whose
+  // invitation couldn't be sent) — reconciled later from the roster page.
+  unlinkedKept?: number
+  // Addresses linked to a verified member of a previous classroom and enrolled
+  // directly instead of invited.
+  linked?: { email: string; login: string; classroom: string }[]
 }) => {
   const { t } = useTranslation()
   const emailInvitedCount = emailResult?.invited.length ?? 0
@@ -239,6 +247,17 @@ export const RosterImportResult = ({
         />
       )}
 
+      {linked.length > 0 && (
+        <ImportResultSection
+          title={t("students.resultEmailLinked")}
+          rows={linked.map((l) => ({
+            key: l.email,
+            label: l.email,
+            detail: `@${l.login} · ${l.classroom}`,
+          }))}
+        />
+      )}
+
       {/* The email pass's buckets, under titles distinct from the account ones so
           "invited" by address never reads as "invited" by handle. */}
       {emailResult
@@ -252,11 +271,13 @@ export const RosterImportResult = ({
           ))
         : null}
 
-      <div className="modal-action">
-        <Button variant="primary" onClick={onDone}>
-          {t("students.done")}
-        </Button>
-      </div>
+      {unlinkedKept > 0 && (
+        <Alert tone="info">
+          <span>
+            {t("students.unlinkedKeptNotice", { count: unlinkedKept })}
+          </span>
+        </Alert>
+      )}
     </div>
   )
 }

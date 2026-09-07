@@ -219,6 +219,47 @@ def test_f1_group_result_accepted_by_runner_and_collect():
     )
 
 
+def test_team_result_accepted_by_runner_and_collect():
+    # Team mode is a first-class assignment_type: the schema accepts it and
+    # both code validators accept a team-typed result when expecting team —
+    # and reject it when expecting group/individual (mode-flip guard).
+    team_doc = {**_RESULT_BASE, "assignment_type": "team"}
+    assert _schema_ok(team_doc)
+    assert runner.validate_result(
+        team_doc, classroom=_PARITY_CLASSROOM, assignment=_PARITY_ASSIGNMENT,
+        expected_type="team", owner=_PARITY_USERNAME,
+    ) is None
+    cs.validate_result(
+        team_doc, _PARITY_CLASSROOM, _PARITY_ASSIGNMENT, _PARITY_USERNAME,
+        expected_type="team",
+    )
+    assert runner.validate_result(
+        team_doc, classroom=_PARITY_CLASSROOM, assignment=_PARITY_ASSIGNMENT,
+        is_group=True, owner=_PARITY_USERNAME,
+    ) is not None
+    with pytest.raises(ValueError):
+        cs.validate_result(
+            team_doc, _PARITY_CLASSROOM, _PARITY_ASSIGNMENT, _PARITY_USERNAME,
+            expected_type="individual",
+        )
+
+
+@pytest.mark.parametrize("mode, want", [
+    ("group", "group"),
+    ("TEAM", "team"),
+    (" team ", "team"),
+    ("individual", "individual"),
+    ("", "individual"),
+    (None, "individual"),
+    ("teamwork", "individual"),
+])
+def test_assignment_type_for_mode_env_derivation(mode, want):
+    # The MODE env -> assignment_type wiring must fail closed: only an exact
+    # 'group'/'team' (case/space-insensitive) selects that type; everything
+    # else stays individual (strict).
+    assert runner.assignment_type_for_mode(mode) == want
+
+
 @pytest.mark.parametrize("mode, want", [
     ("group", True),
     ("GROUP", True),

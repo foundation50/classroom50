@@ -99,13 +99,18 @@ export const CopyAcceptLinkAction = ({
       variant="ghost"
       size="sm"
       shape="circle"
-      disabled={secretPending}
+      // aria-disabled + click guard instead of `disabled`: the button stays
+      // focusable so the title/aria-label reason ("secret still loading" /
+      // "load failed") is reachable by keyboard and screen readers.
+      aria-disabled={secretPending || undefined}
+      className={secretPending ? "opacity-50" : undefined}
       title={state ?? t("assignments.table.copyLinkTitle")}
       aria-label={t("assignments.table.copyLinkAria", {
         name: assignmentName(assignment),
       })}
       onClick={(e) => {
         e.stopPropagation()
+        if (secretPending) return
         void copy()
       }}
     >
@@ -287,7 +292,7 @@ export const LockAssignmentAction = ({
   variant?: ActionVariant
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const [open, setOpen] = useState(false)
   const locked = Boolean(assignment.locked)
   const label = assignmentName(assignment)
@@ -312,15 +317,16 @@ export const LockAssignmentAction = ({
       }
   const setLock = useSetAssignmentLock(org, classroom, (result) => {
     if (result.templateAccessWarning) {
+      // Kept as a toast: a non-fatal partial outcome with no page anchor.
       notify({ tone: "warning", message: result.templateAccessWarning })
       return
     }
-    notify({
-      tone: "success",
-      message: result.locked
+    // The row's lock icon flips in place — SR announcement only.
+    announce(
+      result.locked
         ? t("assignments.table.lockSuccess", { name: label })
         : t("assignments.table.unlockSuccess", { name: label }),
-    })
+    )
   })
 
   return (
@@ -368,7 +374,7 @@ export const LockAssignmentAction = ({
         }
         confirmLabel={copy.confirm}
         cancelLabel={t("assignments.table.lockCancel")}
-        dangerous={!locked}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           await setLock.mutateAsync({
@@ -433,7 +439,8 @@ export const DeleteAssignmentAction = ({
         confirmText={assignment.slug}
         confirmLabel={t("assignments.table.deleteConfirm")}
         cancelLabel={t("assignments.table.deleteCancel")}
-        dangerous
+        tone="error"
+        warning={t("assignments.table.deleteWarning")}
         onConfirm={async () => {
           await deleteAssignmentMutation.mutateAsync({
             org,

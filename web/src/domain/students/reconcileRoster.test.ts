@@ -43,7 +43,7 @@ beforeEach(() => {
   syncRosterFromTeam.mockResolvedValue({
     addedUsernames: [],
     recoveredEmails: ["alice@example.com"],
-    removedEmails: [],
+    recordedRecoveries: [RECOVERED],
     noop: false,
   })
   finalizeInviteRecoveries.mockResolvedValue(undefined)
@@ -67,7 +67,7 @@ describe("reconcileRoster", () => {
       return {
         addedUsernames: ["alice"],
         recoveredEmails: ["alice@example.com"],
-        removedEmails: ["dead@x"],
+        recordedRecoveries: [RECOVERED],
         noop: false,
       }
     })
@@ -86,7 +86,7 @@ describe("reconcileRoster", () => {
         invites: expect.objectContaining({ trusted: true }),
       }),
     )
-    // ...and the recovered teams are deleted only after it.
+    // ...and only the mappings the sync reports RECORDED are deleted, after it.
     expect(finalizeInviteRecoveries).toHaveBeenCalledWith(
       client,
       { org: "org", classroom: "cs101" },
@@ -95,10 +95,34 @@ describe("reconcileRoster", () => {
     expect(result).toEqual({
       addedUsernames: ["alice"],
       recoveredEmails: ["alice@example.com"],
-      removedEmails: ["dead@x"],
+      recordedRecoveries: [RECOVERED],
       noop: false,
       deletedStaleTeams: 1,
     })
+  })
+
+  it("finalizes exactly what the sync recorded — an unrecorded mapping keeps its team", async () => {
+    // The sync recorded only bob's mapping (alice's fold never landed): alice's
+    // team must survive as the sole record of her address, re-recovered next
+    // pass; bob's is torn down now that the commit carrying it landed.
+    const LATE = {
+      email: "bob@example.com",
+      invitee: { id: 3, login: "bob" },
+      slug: "invite-bbbbbbbbbbbbbbbb",
+    }
+    syncRosterFromTeam.mockResolvedValue({
+      addedUsernames: [],
+      recoveredEmails: ["bob@example.com"],
+      recordedRecoveries: [LATE],
+      noop: false,
+    })
+
+    await reconcileRoster(client, INPUT)
+    expect(finalizeInviteRecoveries).toHaveBeenCalledWith(
+      client,
+      { org: "org", classroom: "cs101" },
+      [LATE],
+    )
   })
 
   it("does NOT delete recovered teams when the sync throws (re-recovered next pass)", async () => {

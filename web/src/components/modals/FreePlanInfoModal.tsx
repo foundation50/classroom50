@@ -1,8 +1,7 @@
 import { LinkExternalIcon } from "@/components/ui/icons"
-import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Modal, Heading } from "@/components/ui"
+import { Button, Modal } from "@/components/ui"
 
 // Explains why a Free-plan org can't be set up and points the teacher at the
 // GitHub Education benefit that upgrades an org to Team for free. Opened from a
@@ -18,19 +17,22 @@ function FreePlanInfoModal({
   onClose: () => void
 }) {
   const { t } = useTranslation()
-  const titleId = useId()
 
   return (
-    <Modal open={open} onClose={onClose} size="md" aria-labelledby={titleId}>
-      <Heading as="h3" id={titleId}>
-        {t("orgs.newOrg.freePlanInfo.title")}
-      </Heading>
-      {orgLogin && (
-        <p className="mt-1 font-mono text-sm text-base-content/60">
-          {orgLogin}
-        </p>
-      )}
-
+    <Modal
+      open={open}
+      onClose={onClose}
+      size="md"
+      title={t("orgs.newOrg.freePlanInfo.title")}
+      subtitle={
+        orgLogin ? <span className="font-mono">{orgLogin}</span> : undefined
+      }
+      footer={
+        <Button variant="ghost" size="sm" onClick={onClose}>
+          {t("orgs.newOrg.freePlanInfo.dismiss")}
+        </Button>
+      }
+    >
       <p className="mt-4 text-sm leading-6 text-base-content/80">
         {t("orgs.newOrg.freePlanInfo.body")}
       </p>
@@ -53,12 +55,6 @@ function FreePlanInfoModal({
         >
           {t("orgs.newOrg.freePlanInfo.educationCta")}
           <LinkExternalIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </div>
-
-      <div className="modal-action">
-        <Button variant="ghost" size="sm" onClick={onClose}>
-          {t("orgs.newOrg.freePlanInfo.dismiss")}
         </Button>
       </div>
     </Modal>

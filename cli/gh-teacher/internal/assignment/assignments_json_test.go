@@ -89,6 +89,44 @@ func TestSubmissionModeEnumParity(t *testing.T) {
 	}
 }
 
+// TestRepoVisibilityEnumParity pins the repo_visibility allow-list across its
+// hand-mirrored sources: the JSON schema enum (declared source of truth) and
+// the Go contract.RepoVisibilities (what ValidateRepoVisibility enforces). The
+// web mirror (REPO_VISIBILITIES) is pinned against the same schema enum by a
+// vitest.
+func TestRepoVisibilityEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					RepoVisibility struct {
+						Enum []string `json:"enum"`
+					} `json:"repo_visibility"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.RepoVisibility.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema repo_visibility.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.RepoVisibilities) {
+		t.Errorf("repo_visibility drift: schema enum %v != contract.RepoVisibilities %v — update every mirror in lockstep (schema, Go contract, web REPO_VISIBILITIES)",
+			schemaEnum, contract.RepoVisibilities)
+	}
+}
+
 // TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
 // wire default; never gate on the field being present) across its three
 // hand-synced copies — the schema submission_mode.description, contract.go, and
@@ -633,6 +671,80 @@ func TestParseAssignments_TestsRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(again.Assignments[0].Tests, tests) {
 		t.Errorf("tests not stable across round-trip:\n got: %#v\nwant: %#v", again.Assignments[0].Tests, tests)
+	}
+}
+
+func TestParseAssignments_TestDefaultsRoundTrip(t *testing.T) {
+	// The assignment-level test_defaults block parses (including an explicit
+	// per-test show-output:false override), validates its enum, and survives
+	// a re-encode/re-parse.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "hello",
+      "name": "Hello",
+      "mode": "individual",
+      "autograder": "default",
+      "test_defaults": { "failure-details": "none", "show-output": true },
+      "tests": [
+        { "name": "a", "type": "run", "run": "true", "points": 1 },
+        { "name": "b", "type": "run", "run": "true", "points": 1, "failure-details": "full", "show-output": false }
+      ]
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	entry := file.Assignments[0]
+	if entry.TestDefaults == nil || entry.TestDefaults.FailureDetails != "none" {
+		t.Fatalf("test_defaults not parsed: %#v", entry.TestDefaults)
+	}
+	if entry.TestDefaults.ShowOutput == nil || !*entry.TestDefaults.ShowOutput {
+		t.Errorf("test_defaults.show-output not parsed: %#v", entry.TestDefaults.ShowOutput)
+	}
+	if entry.Tests[1].FailureDetails != "full" {
+		t.Errorf("per-test failure-details not parsed: %#v", entry.Tests[1])
+	}
+	if entry.Tests[1].ShowOutput == nil || *entry.Tests[1].ShowOutput {
+		t.Errorf("explicit per-test show-output:false lost: %#v", entry.Tests[1].ShowOutput)
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !reflect.DeepEqual(again.Assignments[0].TestDefaults, entry.TestDefaults) {
+		t.Errorf("test_defaults not stable across round-trip: %#v", again.Assignments[0].TestDefaults)
+	}
+	if !reflect.DeepEqual(again.Assignments[0].Tests, entry.Tests) {
+		t.Errorf("tests not stable across round-trip: %#v", again.Assignments[0].Tests)
+	}
+}
+
+func TestParseAssignments_RejectsBadTestDefaults(t *testing.T) {
+	// An invalid enum value and an unknown sub-key (the closed-sub-object
+	// rule, mirroring runtime) must both be hard errors.
+	for name, block := range map[string]string{
+		"bad enum":        `{ "failure-details": "loud" }`,
+		"unknown sub-key": `{ "verbosity": "high" }`,
+	} {
+		in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    { "slug": "hello", "name": "Hello", "mode": "individual", "autograder": "default",
+      "test_defaults": ` + block + ` }
+  ]
+}`)
+		if _, err := ParseAssignments(in); err == nil {
+			t.Errorf("%s: expected error, got nil", name)
+		}
 	}
 }
 
@@ -1337,11 +1449,31 @@ func TestParseAssignments_Rejects(t *testing.T) {
 			wantErrPart: "empty name",
 		},
 		{
-			// `group` is now schema-legal; only arbitrary
+			// `group` and `team` are now schema-legal; only arbitrary
 			// strings trip the validator.
 			name:        "entry with unsupported mode",
-			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","autograder":"default"}]}`,
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"pair","autograder":"default"}]}`,
 			wantErrPart: "invalid mode",
+		},
+		{
+			name:        "team entry missing max_group_size",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","team_formation":"teacher","autograder":"default"}]}`,
+			wantErrPart: "max_group_size",
+		},
+		{
+			name:        "team entry missing team_formation",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","max_group_size":3,"autograder":"default"}]}`,
+			wantErrPart: "team_formation",
+		},
+		{
+			name:        "team entry with invalid team_formation",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","max_group_size":3,"team_formation":"anyone","autograder":"default"}]}`,
+			wantErrPart: "team_formation",
+		},
+		{
+			name:        "group entry with team_formation",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"group","max_group_size":3,"team_formation":"teacher","autograder":"default"}]}`,
+			wantErrPart: "team_formation",
 		},
 		{
 			name:        "entry with slug-pattern violation",
@@ -1708,7 +1840,8 @@ func TestValidateAssignmentEntry_Rejects(t *testing.T) {
 		{"slug pattern violation", func(e *AssignmentEntry) { e.Slug = "Hello" }, "slug"},
 		{"empty name", func(e *AssignmentEntry) { e.Name = "" }, "--name"},
 		{"empty mode", func(e *AssignmentEntry) { e.Mode = "" }, "mode"},
-		{"unsupported mode", func(e *AssignmentEntry) { e.Mode = "team" }, "invalid mode"},
+		{"unsupported mode", func(e *AssignmentEntry) { e.Mode = "pair" }, "invalid mode"},
+		{"team mode without size or formation", func(e *AssignmentEntry) { e.Mode = "team" }, "max_group_size"},
 		{"empty template owner", func(e *AssignmentEntry) { e.Template.Owner = "" }, "template"},
 		{"empty template repo", func(e *AssignmentEntry) { e.Template.Repo = "" }, "template"},
 		{"empty template branch", func(e *AssignmentEntry) { e.Template.Branch = "" }, "branch"},

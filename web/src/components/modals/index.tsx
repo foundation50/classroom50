@@ -6,9 +6,10 @@ import {
   Button,
   AnimatedAlert,
   Input,
+  Modal,
+  ModalIcon,
   MonoLtr,
   type ButtonVariant,
-  Heading,
 } from "@/components/ui"
 
 type ConfirmModalProps = {
@@ -19,12 +20,31 @@ type ConfirmModalProps = {
   confirmText?: string
   confirmLabel?: string
   cancelLabel?: string
-  dangerous?: boolean
+  // Required on purpose: severity is a per-action judgment, so no default.
+  // "error" is for actions that destroy something; "warning" for everything
+  // else that still deserves a confirm.
+  tone: "error" | "warning"
+  // One tailored sentence about what confirming can't take back, shown in a
+  // boxed callout under the description. Omit it when the action is
+  // reversible or the description already states the loss.
+  warning?: React.ReactNode
   needsConfirm?: boolean
+  // Blocks confirming (e.g. the caller's preview shows a no-op) while still
+  // letting the user adjust the dialog's inputs or cancel.
+  confirmDisabled?: boolean
   onConfirm: () => Promise<void>
   onClose: () => void
+  // Extra body content rendered above the acknowledge prompt (e.g. an option
+  // checkbox that adjusts what confirming will do).
+  children?: React.ReactNode
 }
 
+// Primer-style ConfirmationDialog built on the shared Modal primitive
+// (role="alertdialog", exactly two footer buttons: ghost Cancel left,
+// error/warning/primary confirm right). `tone` sets the severity styling;
+// `warning` is the caller's own irreversibility sentence, never a generic one.
+// `onClose` must be idempotent: a successful confirm and the dialog's native
+// close event both fire it.
 export function ConfirmModal({
   open,
   title,
@@ -32,12 +52,14 @@ export function ConfirmModal({
   confirmText = "",
   confirmLabel,
   cancelLabel,
-  dangerous = true,
+  tone,
+  warning,
   needsConfirm = true,
+  confirmDisabled = false,
   onConfirm,
   onClose,
+  children,
 }: ConfirmModalProps) {
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
   const confirmInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
   const resolvedConfirmLabel =
@@ -58,21 +80,7 @@ export function ConfirmModal({
 
   const matches = typedText === confirmText
   const canSubmit = !needsConfirm || matches
-  const titleId = useId()
   const confirmHintId = useId()
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-
-    if (open && !dialog.open) {
-      dialog.showModal()
-    }
-
-    if (!open && dialog.open) {
-      dialog.close()
-    }
-  }, [open])
 
   // The acknowledge → confirm step swaps content in the same open dialog, so the
   // input's `autoFocus` won't re-fire. Focus it explicitly so a keyboard/SR user
@@ -81,14 +89,14 @@ export function ConfirmModal({
     if (hasAcknowledged) confirmInputRef.current?.focus()
   }, [hasAcknowledged])
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      setHasAcknowledged(false)
-      setTypedText("")
-      setIsSubmitting(false)
-      submittingRef.current = false
-      setError(null)
-    }
+    if (!open) return
+    setHasAcknowledged(false)
+    setTypedText("")
+    setIsSubmitting(false)
+    submittingRef.current = false
+    setError(null)
   }, [open])
 
   const handleClose = (event?: React.SyntheticEvent | Event) => {
@@ -100,7 +108,7 @@ export function ConfirmModal({
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit || submittingRef.current) return
+    if (!canSubmit || confirmDisabled || submittingRef.current) return
     submittingRef.current = true
 
     setIsSubmitting(true)
@@ -121,163 +129,132 @@ export function ConfirmModal({
     }
   }
 
-  const confirmButtonVariant: ButtonVariant = dangerous ? "error" : "primary"
+  const confirmButtonVariant: ButtonVariant =
+    tone === "error" ? "error" : "primary"
 
-  const acknowledgeButtonVariant: ButtonVariant = dangerous
-    ? "error"
-    : "warning"
+  const acknowledgeButtonVariant: ButtonVariant =
+    tone === "error" ? "error" : "warning"
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="modal"
-      aria-labelledby={titleId}
-      onClose={(event) => handleClose(event)}
-      onCancel={(event) => {
-        if (isSubmitting) {
-          event.preventDefault()
-          return
-        }
-
-        handleClose(event)
-      }}
-    >
-      <div className="modal-box max-w-lg">
-        <div className="flex items-start gap-4">
-          <div
-            className={[
-              "flex size-11 shrink-0 items-center justify-center rounded-box",
-              dangerous
-                ? "bg-error/10 text-error"
-                : "bg-warning/10 text-warning",
-            ].join(" ")}
-          >
-            <AlertIcon className="size-4" aria-hidden="true" />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <Heading as="h3" id={titleId}>
-              {title}
-            </Heading>
-
-            {description ? (
-              <div className="mt-2 text-sm leading-6 text-base-content/70">
-                {description}
-              </div>
-            ) : null}
-          </div>
-        </div>
-
-        {!hasAcknowledged ? (
+    <Modal
+      open={open}
+      onClose={handleClose}
+      role="alertdialog"
+      closeDisabled={isSubmitting}
+      title={title}
+      subtitle={description}
+      headerVisual={
+        <ModalIcon tone={tone}>
+          <AlertIcon className="size-4" aria-hidden="true" />
+        </ModalIcon>
+      }
+      footer={
+        !hasAcknowledged ? (
           <>
-            {dangerous ? (
-              <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-                {t("components.confirmModal.dangerousPrompt")}
-              </div>
-            ) : null}
+            <Button
+              variant="ghost"
+              disabled={isSubmitting}
+              onClick={handleClose}
+            >
+              {acknowledgeCancelLabel}
+            </Button>
 
-            <AnimatedAlert tone="error" show={!!error} className="mt-4 text-sm">
-              {error}
-            </AnimatedAlert>
+            <Button
+              variant={acknowledgeButtonVariant}
+              disabled={isSubmitting || confirmDisabled}
+              loading={isSubmitting && !needsConfirm}
+              loadingLabel={t("common.working")}
+              onClick={(event) => {
+                event.stopPropagation()
 
-            <div className="modal-action">
-              <Button
-                variant="ghost"
-                disabled={isSubmitting}
-                onClick={handleClose}
-              >
-                {acknowledgeCancelLabel}
-              </Button>
+                if (needsConfirm) {
+                  setHasAcknowledged(true)
+                  return
+                }
 
-              <Button
-                variant={acknowledgeButtonVariant}
-                disabled={isSubmitting}
-                loading={isSubmitting && !needsConfirm}
-                loadingLabel={t("common.working")}
-                onClick={(event) => {
-                  event.stopPropagation()
-
-                  if (needsConfirm) {
-                    setHasAcknowledged(true)
-                    return
-                  }
-
-                  void handleSubmit()
-                }}
-              >
-                {isSubmitting && !needsConfirm
-                  ? t("common.working")
-                  : needsConfirm
-                    ? t("components.confirmModal.yesContinue")
-                    : resolvedConfirmLabel}
-              </Button>
-            </div>
+                void handleSubmit()
+              }}
+            >
+              {isSubmitting && !needsConfirm
+                ? t("common.working")
+                : needsConfirm
+                  ? t("components.confirmModal.yesContinue")
+                  : resolvedConfirmLabel}
+            </Button>
           </>
         ) : (
           <>
-            <div className="mt-6 space-y-3">
-              <p id={confirmHintId} className="text-sm text-base-content/70">
-                <Trans
-                  i18nKey="components.confirmModal.typeToConfirm"
-                  values={{ text: confirmText }}
-                  components={{
-                    text: (
-                      <MonoLtr className="font-semibold text-base-content" />
-                    ),
-                  }}
-                />
-              </p>
+            <Button
+              variant="ghost"
+              disabled={isSubmitting}
+              onClick={handleClose}
+            >
+              {resolvedCancelLabel}
+            </Button>
 
-              <Input
-                ref={confirmInputRef}
-                type="text"
-                className="font-mono"
-                value={typedText}
-                disabled={isSubmitting}
-                autoFocus
-                aria-label={t("components.confirmModal.typeAriaLabel", {
-                  text: confirmText,
-                })}
-                aria-describedby={confirmHintId}
-                onChange={(event) => setTypedText(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && matches) {
-                    void handleSubmit()
-                  }
-                }}
-              />
-
-              <AnimatedAlert tone="error" show={!!error} className="text-sm">
-                {error}
-              </AnimatedAlert>
-            </div>
-
-            <div className="modal-action">
-              <Button
-                variant="ghost"
-                disabled={isSubmitting}
-                onClick={handleClose}
-              >
-                {resolvedCancelLabel}
-              </Button>
-
-              <Button
-                variant={confirmButtonVariant}
-                disabled={!canSubmit || isSubmitting}
-                loading={isSubmitting}
-                loadingLabel={t("common.working")}
-                onClick={() => void handleSubmit()}
-              >
-                {isSubmitting ? t("common.working") : resolvedConfirmLabel}
-              </Button>
-            </div>
+            <Button
+              variant={confirmButtonVariant}
+              disabled={!canSubmit || isSubmitting || confirmDisabled}
+              loading={isSubmitting}
+              loadingLabel={t("common.working")}
+              onClick={() => void handleSubmit()}
+            >
+              {isSubmitting ? t("common.working") : resolvedConfirmLabel}
+            </Button>
           </>
-        )}
-      </div>
+        )
+      }
+    >
+      {!hasAcknowledged ? (
+        <>
+          {children}
 
-      <form method="dialog" className="modal-backdrop">
-        <button disabled={isSubmitting}>{t("common.close")}</button>
-      </form>
-    </dialog>
+          {warning ? (
+            <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
+              {warning}
+            </div>
+          ) : null}
+
+          <AnimatedAlert tone="error" show={!!error} className="mt-4 text-sm">
+            {error}
+          </AnimatedAlert>
+        </>
+      ) : (
+        <div className="mt-6 space-y-3">
+          <p id={confirmHintId} className="text-sm text-base-content/70">
+            <Trans
+              i18nKey="components.confirmModal.typeToConfirm"
+              values={{ text: confirmText }}
+              components={{
+                text: <MonoLtr className="font-semibold text-base-content" />,
+              }}
+            />
+          </p>
+
+          <Input
+            ref={confirmInputRef}
+            type="text"
+            className="font-mono"
+            value={typedText}
+            disabled={isSubmitting}
+            autoFocus
+            aria-label={t("components.confirmModal.typeAriaLabel", {
+              text: confirmText,
+            })}
+            aria-describedby={confirmHintId}
+            onChange={(event) => setTypedText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && matches) {
+                void handleSubmit()
+              }
+            }}
+          />
+
+          <AnimatedAlert tone="error" show={!!error} className="text-sm">
+            {error}
+          </AnimatedAlert>
+        </div>
+      )}
+    </Modal>
   )
 }

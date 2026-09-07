@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -161,6 +161,11 @@ export function useLiveSubmissions({
   })
 
   const empty = useMemo(() => [] as LiveSubmission[], [])
+  // Stable identity so an effect may list it as a dependency without re-firing
+  // every render (react-query's own refetch is stable; keep the wrapper so).
+  const refetchStable = useCallback(() => {
+    void refetch()
+  }, [refetch])
 
   return {
     submissions: data?.submissions ?? empty,
@@ -170,9 +175,7 @@ export function useLiveSubmissions({
     // it is never pending; otherwise it's pending until the first result lands.
     isPending: active && isLoading,
     // Fire-and-forget; narrow react-query's promise to void.
-    refetch: () => {
-      void refetch()
-    },
+    refetch: refetchStable,
   }
 }
 

@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { SECRET_PATTERN, isValidSecret } from "./secret"
+import { isValidPagesBaseUrl } from "./pagesBaseUrl"
 import { escapeForGoJsonParity } from "./goJsonEscape"
 
 // Schema sentinel for the classroom50/team/v1 bootstrap record stored in a
@@ -24,6 +25,13 @@ const TeamDescriptionSchema = z.object({
   // pattern-checked and degrades to "no secret" rather than failing the parse
   // (mirrors the .classroom50.yaml secret handling).
   secret: z.string().regex(SECRET_PATTERN).optional().catch(undefined),
+  // Custom Pages base URL for orgs off the github.io default; degrades to
+  // undefined (= use the default) like `secret` rather than failing the parse.
+  pages_base_url: z
+    .string()
+    .refine(isValidPagesBaseUrl)
+    .optional()
+    .catch(undefined),
 })
 
 export type TeamDescription = z.infer<typeof TeamDescriptionSchema>
@@ -51,19 +59,24 @@ export function parseTeamDescription(
 // byte-for-byte mirror of the Go MarshalTeamDescription
 // (cli/gh-teacher/internal/configrepo/teamdescription.go). Compact JSON, empty
 // name/term omitted, `secret` included only when valid ([a-z0-9]{4,64}; a
-// malformed value is dropped, not persisted into a URL segment), and `active`
-// omitted when true (readers default absent -> active) to save bytes. Kept small
-// (well under ~250 chars): per-assignment data lives on Pages, never here.
+// malformed value is dropped, not persisted into a URL segment),
+// `pages_base_url` included only when valid (a malformed value degrades to the
+// github.io default), and `active` omitted when true (readers default absent ->
+// active) to save bytes. Kept small (well under ~250 chars): per-assignment
+// data lives on Pages, never here.
 export function marshalTeamDescription(input: {
   name?: string
   term?: string
   secret?: string
+  pagesBaseUrl?: string
   active: boolean
 }): string {
   const record: Record<string, unknown> = { schema: TEAM_DESCRIPTION_SCHEMA }
   if (input.name) record.name = input.name
   if (input.term) record.term = input.term
   if (input.secret && isValidSecret(input.secret)) record.secret = input.secret
+  if (input.pagesBaseUrl && isValidPagesBaseUrl(input.pagesBaseUrl))
+    record.pages_base_url = input.pagesBaseUrl
   if (!input.active) record.active = false
   return escapeForGoJsonParity(JSON.stringify(record))
 }

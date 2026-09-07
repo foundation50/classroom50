@@ -50,8 +50,7 @@ type syncMock struct {
 	pending       []map[string]any
 	pendingStatus int
 	// pendingFailAfterScan fails the invitation read only AFTER the scan's, so
-	// the degrade happens inside the write closure — on a copy of the scan
-	// struct, which is exactly why it must be reported back.
+	// the teardown's delete-time liveness re-check is the read that degrades.
 	pendingFailAfterScan bool
 	pendingReads         int
 	// pendingAfterWrite replaces pending once the roster tree POST lands, so a
@@ -69,6 +68,12 @@ type syncMock struct {
 	// staffMembers is each recorded staff team's membership, keyed by slug —
 	// the source of an appended row's team-derived role.
 	staffMembers map[string][]map[string]any
+	// membershipStates answers the decision-time enrollment point reads
+	// (GET .../teams/{slug}/memberships/{login}) by login; a login absent here
+	// 404s, GitHub's "not on this team". membershipStatus overrides every such
+	// read with an error status (a degraded re-check).
+	membershipStates map[string]string
+	membershipStatus int
 	// classroomJSONStatus fails the classroom.json read, the degraded case that
 	// must make the whole pass read-mostly.
 	classroomJSONStatus int
@@ -99,6 +104,22 @@ func (m *syncMock) handler(t *testing.T) http.Handler {
 
 	base.HandleFunc("/orgs/o/teams/", func(w http.ResponseWriter, r *http.Request) {
 		rest := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
+		if _, login, ok := strings.Cut(rest, "/memberships/"); ok {
+			if m.membershipStatus != 0 {
+				if m.membershipStatus == http.StatusTooManyRequests {
+					// A real secondary limit carries the header IsRateLimited keys on.
+					w.Header().Set("Retry-After", "30")
+				}
+				w.WriteHeader(m.membershipStatus)
+				return
+			}
+			if state, ok := m.membershipStates[login]; ok {
+				_ = json.NewEncoder(w).Encode(map[string]any{"state": state})
+				return
+			}
+			http.NotFound(w, r)
+			return
+		}
 		slug, members := rest, false
 		if trimmed, ok := strings.CutSuffix(rest, "/members"); ok {
 			slug, members = trimmed, true
@@ -322,10 +343,9 @@ func TestRunRosterSync_AcceptedInviteRecoveredThenClean(t *testing.T) {
 	}
 }
 
-// The invitation read is the liveness signal every removal is confirmed
-// against, so losing it must degrade the whole pass: nothing reaped, nothing
-// deleted, exit 1.
-func TestRunRosterSync_DegradedInvitationReadReapsNothing(t *testing.T) {
+// The invitation read is the liveness signal every team delete is confirmed
+// against, so losing it must degrade the whole pass: nothing deleted, exit 1.
+func TestRunRosterSync_DegradedInvitationReadDeletesNothing(t *testing.T) {
 	for _, status := range []int{http.StatusForbidden, http.StatusInternalServerError} {
 		mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,,student\n")
 		mock.pendingStatus = status
@@ -345,8 +365,14 @@ func TestRunRosterSync_DegradedInvitationReadReapsNothing(t *testing.T) {
 		if len(mock.deletedTeams) != 0 {
 			t.Errorf("status %d: deleted %v on a degraded read", status, mock.deletedTeams)
 		}
-		if !strings.Contains(errOut, "Warning") {
-			t.Errorf("status %d: stderr must warn about the degraded read:\n%s", status, errOut)
+		if !strings.Contains(errOut, "no metadata team will be deleted") {
+			t.Errorf("status %d: stderr must promise no team is deleted this pass:\n%s", status, errOut)
+		}
+		// With no invitation list there is no liveness shortcut: the pass must
+		// fall back to reading every team the long way, not skip them all.
+		teamReads := countCalls(mock.calls, http.MethodGet, "/orgs/o/teams/"+mock.teams[0].slug)
+		if teamReads == 0 {
+			t.Errorf("status %d: the team was never read — a failed invitation read must fall back to the full walk", status)
 		}
 	}
 }
@@ -378,7 +404,8 @@ func TestRunRosterSync_TamperedRecordIsKeptAndWarned(t *testing.T) {
 }
 
 // Accepted, then removed from the classroom: the lifecycle is over, so the team
-// goes but no identity is resurrected onto a row.
+// goes but no identity is resurrected onto a row — and the pending row itself
+// simply stays (the sync never removes a row), so nothing is committed.
 func TestRunRosterSync_SoleMemberOnNoClassroomTeamDeletesWithoutFolding(t *testing.T) {
 	mock := newSyncMock(t, storedRosterHeader+",,,"+inviteTestEmail+",,,student\n")
 	mock.teams = []syncTeam{acceptedInviteTeam(t)}
@@ -387,14 +414,125 @@ func TestRunRosterSync_SoleMemberOnNoClassroomTeamDeletesWithoutFolding(t *testi
 	if _, _, err := runSync(t, mock, true); err != nil {
 		t.Fatalf("runRosterSync: %v", err)
 	}
-	for _, row := range committedRosterRows(t, mock) {
-		if row.Username == syncTestAcceptedLogin || row.GitHubID == syncTestAcceptedID {
-			t.Errorf("folded an unenrolled account onto a row: %#v", row)
-		}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s); an unenrolled account must not be folded and no row removed: %#v", len(mock.blobs), mock.blobs)
 	}
 	want := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
 	if len(mock.deletedTeams) != 1 || mock.deletedTeams[0] != want {
 		t.Errorf("deleted teams = %v, want just %s", mock.deletedTeams, want)
+	}
+}
+
+// The #756 race: a student accepts WHILE the pass runs, so they sit on their
+// invite team while absent from the enrollment snapshot taken earlier. The
+// stale snapshot must never authorize the irreversible team delete — the
+// decision-time membership re-check proves they enrolled mid-pass, so the pass
+// folds them like any other recovery and only RETIRES the team post-commit.
+func TestRunRosterSync_MidPassAcceptorIsRecoveredNotDeleted(t *testing.T) {
+	mock := newSyncMock(t, storedRosterHeader+",Ada,Lovelace,"+inviteTestEmail+",section-1,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	// The snapshot predates the acceptance: the invitee is not in the list...
+	mock.classroomMembers = []map[string]any{{"login": "someone-else", "id": 999}}
+	// ...but the point read shows them on the classroom team NOW.
+	mock.membershipStates = map[string]string{syncTestAcceptedLogin: "active"}
+
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 1 {
+		t.Fatalf("committed %d row(s), want the one folded row: %#v", len(rows), rows)
+	}
+	row := rows[0]
+	if row.Username != syncTestAcceptedLogin || row.GitHubID != syncTestAcceptedID {
+		t.Errorf("row did not gain the recovered identity: %#v", row)
+	}
+	if row.FirstName != "Ada" || row.LastName != "Lovelace" || row.Section != "section-1" {
+		t.Errorf("fold lost teacher-owned metadata: %#v", row)
+	}
+	want := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+	if len(mock.deletedTeams) != 1 || mock.deletedTeams[0] != want {
+		t.Errorf("deleted teams = %v, want the retired %s (post-commit), never a stale delete", mock.deletedTeams, want)
+	}
+}
+
+// A failed enrollment re-check proves nothing about the one team it guards, so
+// the pass keeps it, warns, and degrades (exit 1) rather than guessing.
+func TestRunRosterSync_EnrollmentRecheckFailureKeepsTeam(t *testing.T) {
+	mock := newSyncMock(t, storedRosterHeader+",Ada,Lovelace,"+inviteTestEmail+",,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	mock.classroomMembers = []map[string]any{{"login": "someone-else", "id": 999}}
+	mock.membershipStatus = http.StatusInternalServerError
+
+	_, errOut, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 1 {
+		t.Fatalf("exit code = %d (err %v), want 1 for a degraded re-check", got, err)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v; an unproven unenrollment must keep the team", mock.deletedTeams)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s); an unproven identity must not be folded", len(mock.blobs))
+	}
+	if !strings.Contains(errOut, "Warning") {
+		t.Errorf("stderr must warn about the failed re-check:\n%s", errOut)
+	}
+}
+
+// A PENDING membership record still means the invite lifecycle is not provably
+// over: the re-check must recover, not delete. A refactor to `state == "active"`
+// fails this test.
+func TestRunRosterSync_PendingMembershipRecheckRecovers(t *testing.T) {
+	mock := newSyncMock(t, storedRosterHeader+",Ada,Lovelace,"+inviteTestEmail+",,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t)}
+	mock.classroomMembers = []map[string]any{{"login": "someone-else", "id": 999}}
+	mock.membershipStates = map[string]string{syncTestAcceptedLogin: "pending"}
+
+	if _, _, err := runSync(t, mock, true); err != nil {
+		t.Fatalf("runRosterSync: %v", err)
+	}
+	rows := committedRosterRows(t, mock)
+	if len(rows) != 1 || rows[0].Username != syncTestAcceptedLogin {
+		t.Fatalf("expected the fold onto the pending row, got %#v", rows)
+	}
+	want := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+	if len(mock.deletedTeams) != 1 || mock.deletedTeams[0] != want {
+		t.Errorf("deleted teams = %v, want only the post-commit retire of %s", mock.deletedTeams, want)
+	}
+}
+
+// A rate-limited re-check must stop the whole invite pass early (like every
+// other rate-limited read), not burn one doomed request per remaining team.
+func TestRunRosterSync_RateLimitedRecheckStopsPassEarly(t *testing.T) {
+	second := syncTeam{
+		slug:      configrepo.InviteTeamName(inviteTestClassroom, "second@uni.edu"),
+		desc:      syncInviteRecord(t, "second@uni.edu"),
+		createdAt: time.Now().Add(-time.Hour),
+		members:   []map[string]any{{"login": "bea", "id": 202}},
+	}
+	mock := newSyncMock(t, storedRosterHeader+",Ada,Lovelace,"+inviteTestEmail+",,,student\n")
+	mock.teams = []syncTeam{acceptedInviteTeam(t), second}
+	mock.classroomMembers = []map[string]any{{"login": "someone-else", "id": 999}}
+	mock.membershipStatus = http.StatusTooManyRequests
+
+	_, errOut, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 1 {
+		t.Fatalf("exit code = %d (err %v), want 1 for a rate-limited pass", got, err)
+	}
+	if len(mock.deletedTeams) != 0 || len(mock.blobs) != 0 {
+		t.Errorf("deleted %v / committed %d blob(s) on a rate-limited pass", mock.deletedTeams, len(mock.blobs))
+	}
+	if !strings.Contains(errOut, "rate-limited") {
+		t.Errorf("stderr must name the rate limit:\n%s", errOut)
+	}
+	pointReads := 0
+	for _, c := range mock.calls {
+		if strings.Contains(c.Path, "/memberships/") {
+			pointReads++
+		}
+	}
+	if pointReads != 1 {
+		t.Errorf("membership point reads = %d, want 1 — the first rate limit must stop the pass", pointReads)
 	}
 }
 
@@ -514,11 +652,49 @@ func TestRunRosterSync_MemberlessTeamGCGuard(t *testing.T) {
 	}
 }
 
-// A pending row nothing backs is dead — but only when the pass can prove it.
-func TestRunRosterSync_DeadPendingRowReapedOnlyWhenTrusted(t *testing.T) {
+// #800: a still-pending invitation proves nobody accepted, so its team holds
+// nothing to recover — the pass must classify it as live from the invitation
+// list alone, without the two per-team reads that dominated large classrooms.
+func TestRunRosterSync_PendingInviteTeamIsSkippedWithoutReads(t *testing.T) {
+	slug := configrepo.InviteTeamName(inviteTestClassroom, inviteTestEmail)
+
+	mock := newSyncMock(t, storedRosterHeader+",,,"+inviteTestEmail+",,,student\n")
+	mock.teams = []syncTeam{{
+		slug:      slug,
+		desc:      syncInviteRecord(t, inviteTestEmail),
+		createdAt: time.Now().Add(-2 * contract.InviteTeamGCMinAge),
+	}}
+	mock.pending = []map[string]any{{"id": 7, "email": inviteTestEmail, "role": "direct_member"}}
+
+	out, _, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("exit code = %d (err %v), want 0: a live invite is nothing to do", got, err)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("wrote the roster for a live invitation: %#v", mock.blobs)
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v; the invitation is still pending", mock.deletedTeams)
+	}
+	if !strings.Contains(out, "up to date") {
+		t.Errorf("nothing is pending, so the pass should say so:\n%s", out)
+	}
+	for _, c := range mock.calls {
+		if strings.HasPrefix(c.Path, "/orgs/o/teams/"+slug) {
+			t.Errorf("read a team the pending invitation already proves live: %s %s", c.Method, c.Path)
+		}
+	}
+}
+
+// The sync NEVER removes a roster row: an email-only row nothing backs stays
+// on the roster for the teacher to link or delete by hand (the web renders it
+// as "unlinked"). When other work commits, the row must still be in the blob.
+func TestRunRosterSync_NeverRemovesRows(t *testing.T) {
+	// bob's github_id is backfillable, so the pass has something to commit —
+	// proving the row survives an actual write, not just a no-op.
 	roster := storedRosterHeader +
 		",,,gone@uni.edu,,,student\n" +
-		"bob,Bob,B,bob@uni.edu,s1,202,student\n"
+		"bob,Bob,B,bob@uni.edu,s1,,student\n"
 
 	mock := newSyncMock(t, roster)
 	mock.classroomMembers = []map[string]any{{"login": "bob", "id": 202}}
@@ -526,18 +702,41 @@ func TestRunRosterSync_DeadPendingRowReapedOnlyWhenTrusted(t *testing.T) {
 		t.Fatalf("runRosterSync: %v", err)
 	}
 	rows := committedRosterRows(t, mock)
-	if len(rows) != 1 || rows[0].Username != "bob" {
-		t.Fatalf("committed rows = %#v, want only bob (the dead pending row reaped)", rows)
+	if len(rows) != 2 {
+		t.Fatalf("committed rows = %#v, want gone@ kept alongside bob", rows)
 	}
+	var keptSeen bool
+	for _, row := range rows {
+		if configrepo.NormalizeInviteEmail(row.Email) == "gone@uni.edu" {
+			keptSeen = true
+		}
+		if row.Username == "bob" && row.GitHubID != 202 {
+			t.Errorf("bob's github_id was not backfilled: %#v", row)
+		}
+	}
+	if !keptSeen {
+		t.Error("the email-only row was removed — the sync never removes a row")
+	}
+}
 
-	degraded := newSyncMock(t, roster)
-	degraded.classroomMembers = []map[string]any{{"login": "bob", "id": 202}}
-	degraded.pendingStatus = http.StatusForbidden
-	if _, _, err := runSync(t, degraded, true); exitCode(err) != 1 {
-		t.Fatalf("exit code = %d (err %v), want 1", exitCode(err), err)
+// A pending row nothing backs is KEPT: with nothing else to change, the pass
+// commits nothing at all and reports up to date.
+func TestRunRosterSync_DeadPendingRowsAreKept(t *testing.T) {
+	roster := storedRosterHeader +
+		",,,gone@uni.edu,,,student\n" +
+		"bob,Bob,B,bob@uni.edu,s1,202,student\n"
+
+	mock := newSyncMock(t, roster)
+	mock.classroomMembers = []map[string]any{{"login": "bob", "id": 202}}
+	out, _, err := runSync(t, mock, true)
+	if got := exitCode(err); got != 0 {
+		t.Fatalf("exit code = %d (err %v), want 0", got, err)
 	}
-	if len(degraded.blobs) != 0 {
-		t.Errorf("reaped a pending row on a degraded read: %#v", degraded.blobs)
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s); keeping the row needs no write: %#v", len(mock.blobs), mock.blobs)
+	}
+	if !strings.Contains(out, "up to date (no invites to record, no ids to fill)") {
+		t.Errorf("nothing is pending, so the pass should say so:\n%s", out)
 	}
 }
 
@@ -620,8 +819,8 @@ func TestRunRosterSync_NeverTouchesAForeignTeam(t *testing.T) {
 	}
 }
 
-// A failed team enumeration can't prove any row is dead, so the pass degrades
-// rather than reaping on a blind guess.
+// A failed team enumeration proves nothing, so the pass degrades rather than
+// deleting on a blind guess.
 func TestRunRosterSync_DegradedTeamListingDegradesThePass(t *testing.T) {
 	mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,,student\n")
 	mock.teamListStatus = http.StatusInternalServerError
@@ -831,9 +1030,8 @@ func TestRunRosterSync_DegradedPassRetiresNoRecoveredTeam(t *testing.T) {
 	}
 }
 
-// A degraded PER-TEAM read is the same fail-closed rule at team granularity: the
-// unreadable team can't prove the row it might back is dead, so no row is reaped
-// and no other team is swept.
+// A degraded PER-TEAM read is the same fail-closed rule at team granularity:
+// the unreadable team proves nothing, so no other team is swept either.
 func TestRunRosterSync_DegradedInviteTeamReadSuppressesRemovals(t *testing.T) {
 	roster := storedRosterHeader + ",,,gone@uni.edu,,,student\n"
 
@@ -852,7 +1050,7 @@ func TestRunRosterSync_DegradedInviteTeamReadSuppressesRemovals(t *testing.T) {
 		t.Fatalf("exit code = %d (err %v), want 1 for a degraded per-team read", got, err)
 	}
 	if len(mock.blobs) != 0 {
-		t.Errorf("reaped a pending row with a team unread: %#v", mock.blobs)
+		t.Errorf("committed %d blob(s) with a team unread: %#v", len(mock.blobs), mock.blobs)
 	}
 	if len(mock.deletedTeams) != 0 {
 		t.Errorf("deleted %v with a team unread", mock.deletedTeams)
@@ -862,9 +1060,9 @@ func TestRunRosterSync_DegradedInviteTeamReadSuppressesRemovals(t *testing.T) {
 	}
 }
 
-// #20: the accepted invitee owns their own team's description, so blanking it
-// must not become a way to delete themselves from roster.csv. A record-less team
-// is an anomaly like a hash mismatch — reported, and the row it might back kept.
+// #20: the accepted invitee owns their own team's description. A record-less
+// team is an anomaly like a hash mismatch — reported and left standing, with
+// nothing written on its word.
 func TestRunRosterSync_UnreadableRecordCannotReapItsOwnRow(t *testing.T) {
 	roster := storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n"
 	blanked := acceptedInviteTeam(t)
@@ -876,13 +1074,13 @@ func TestRunRosterSync_UnreadableRecordCannotReapItsOwnRow(t *testing.T) {
 
 	out, errOut, err := runSync(t, mock, true)
 	if len(mock.blobs) != 0 {
-		t.Errorf("dropped a row on the word of a team whose record the invitee blanked: %#v", mock.blobs)
+		t.Errorf("wrote the roster on the word of a team whose record the invitee blanked: %#v", mock.blobs)
 	}
 	if len(mock.deletedTeams) != 0 {
 		t.Errorf("deleted %v; a record-less team is an anomaly to inspect, not to reap", mock.deletedTeams)
 	}
 	if got := exitCode(err); got != 1 {
-		t.Errorf("exit code = %d (err %v), want 1: the pass could not prove the row dead", got, err)
+		t.Errorf("exit code = %d (err %v), want 1: the pass could not read the record", got, err)
 	}
 	if !strings.Contains(out+errOut, blanked.slug) {
 		t.Errorf("the anomaly must name the team:\n%s%s", out, errOut)
@@ -928,28 +1126,27 @@ func TestRunRosterSync_FailedTeamDeleteExitsNonZero(t *testing.T) {
 	}
 }
 
-// #23 (other half): a degrade discovered INSIDE the write closure lives on a
-// struct copy, so only a returned flag can reach the exit code. The invitation
-// re-read fails here after the scan succeeded.
-func TestRunRosterSync_DegradeInsideTheWriteClosureExitsNonZero(t *testing.T) {
-	mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,,student\n"+
-		",Ada,L,"+inviteTestEmail+",s1,,student\n")
+// #23 (other half): the teardown re-checks the pending invitations right
+// before deleting. A failed re-check must fail closed — no team deleted, exit 1
+// — while the roster commit that already landed stands.
+func TestRunRosterSync_FailedTeardownRecheckKeepsTeamsAndExitsNonZero(t *testing.T) {
+	mock := newSyncMock(t, storedRosterHeader+",Ada,L,"+inviteTestEmail+",s1,,student\n")
 	mock.teams = []syncTeam{acceptedInviteTeam(t)}
 	mock.pendingFailAfterScan = true
 
 	_, errOut, err := runSync(t, mock, true)
 	if got := exitCode(err); got != 1 {
-		t.Fatalf("exit code = %d (err %v), want 1: the pre-write re-check failed", got, err)
+		t.Fatalf("exit code = %d (err %v), want 1: the teardown could not prove liveness", got, err)
+	}
+	if len(mock.blobs) != 1 {
+		t.Errorf("the fold should still have committed, got %d blob(s)", len(mock.blobs))
+	}
+	if len(mock.deletedTeams) != 0 {
+		t.Errorf("deleted %v on a failed liveness re-check", mock.deletedTeams)
 	}
 	if !strings.Contains(errOut, "re-checking the pending invitations") {
 		t.Errorf("stderr must name the failed re-check:\n%s", errOut)
 	}
-	for _, row := range committedRosterRows(t, mock) {
-		if configrepo.NormalizeInviteEmail(row.Email) == "gone@uni.edu" {
-			return // kept, as fail-closed requires
-		}
-	}
-	t.Error("the dead pending row was dropped even though the confirmation read failed")
 }
 
 // A rebase retry re-runs the whole build closure, so the teardown's premise —
@@ -1136,8 +1333,8 @@ func TestRunRosterSync_AppendedRowPrefersTheStaffRole(t *testing.T) {
 }
 
 // F4: a degraded classroom read must clear the trusted flag its own warning
-// promises — otherwise the pass reaps rows and deletes teams while telling the
-// teacher nothing was removed.
+// promises — otherwise the pass deletes teams while telling the teacher
+// nothing was removed.
 func TestRunRosterSync_DegradedClassroomReadSuppressesRemovals(t *testing.T) {
 	roster := storedRosterHeader + ",,,gone@uni.edu,,,student\n"
 	staleTeam := syncTeam{
@@ -1160,7 +1357,7 @@ func TestRunRosterSync_DegradedClassroomReadSuppressesRemovals(t *testing.T) {
 				t.Fatalf("exit code = %d (err %v), want 1 for a degraded read", got, err)
 			}
 			if len(mock.blobs) != 0 {
-				t.Errorf("reaped a pending row on a degraded read: %#v", mock.blobs)
+				t.Errorf("committed %d blob(s) on a degraded read: %#v", len(mock.blobs), mock.blobs)
 			}
 			if len(mock.deletedTeams) != 0 {
 				t.Errorf("deleted %v on a degraded read", mock.deletedTeams)
@@ -1221,7 +1418,7 @@ func TestRunRosterSync_RowWithAnUnusableGitHubIDFoldsLikeTheWeb(t *testing.T) {
 	if got := exitCode(err); got != 2 {
 		t.Fatalf("dry-run exit code = %d (err %v), want 2 for a fold pending", got, err)
 	}
-	if !strings.Contains(out, "accepted — record as") {
+	if !strings.Contains(out, "accepted: record as") {
 		t.Errorf("dry run must report the fold:\n%s", out)
 	}
 	if writes := writeCalls(dry.calls); len(writes) != 0 {
@@ -1247,10 +1444,10 @@ func TestRunRosterSync_RowWithAnUnusableGitHubIDFoldsLikeTheWeb(t *testing.T) {
 	}
 }
 
-// Same rule on the reap side: with no invitation and no metadata team backing
-// the address, a row carrying an unusable github_id cell is a dead pending row
-// like any other — the web removes it, so this must too.
-func TestRunRosterSync_UnresolvedGitHubIDRowIsReaped(t *testing.T) {
+// The keep-rule holds for a row carrying an unusable github_id cell too: it
+// reads as a pending email row, and the sync keeps it like any other — nothing
+// else changed, so no commit at all.
+func TestRunRosterSync_UnresolvedGitHubIDRowIsKept(t *testing.T) {
 	// Above 2^53: readable, but past what the web app can address exactly, so
 	// neither reader treats it as identity.
 	mock := newSyncMock(t, storedRosterHeader+",,,gone@uni.edu,,9007199254740992,student\n")
@@ -1259,12 +1456,11 @@ func TestRunRosterSync_UnresolvedGitHubIDRowIsReaped(t *testing.T) {
 	if got := exitCode(err); got != 0 {
 		t.Fatalf("exit code = %d (err %v), want 0", got, err)
 	}
-	if !strings.Contains(out, "drop the pending row") {
-		t.Errorf("the dead row must be reported as dropped:\n%s", out)
+	if len(mock.blobs) != 0 {
+		t.Errorf("committed %d blob(s); keeping the row needs no write: %#v", len(mock.blobs), mock.blobs)
 	}
-	rows := committedRosterRows(t, mock)
-	if len(rows) != 0 {
-		t.Errorf("committed rows = %#v, want the dead pending row dropped", rows)
+	if !strings.Contains(out, "up to date") {
+		t.Errorf("nothing is pending, so the pass should say so:\n%s", out)
 	}
 }
 

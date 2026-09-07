@@ -8,6 +8,7 @@ export {
   githubKeys,
   invalidateInviteQueries,
   invalidateClassroomTeam,
+  invalidateGroupTeams,
   invalidateViewerOrgs,
 } from "./queries/keys"
 export {
@@ -47,6 +48,7 @@ export {
   commitQuery,
   repoQuery,
   getOrgRepos,
+  getAssignmentRepos,
   getOpenPullRequests,
   listPullRequestsByBaseHead,
 } from "./queries/repoRefReads"
@@ -68,6 +70,7 @@ export {
   rawFileQuery,
   jsonFileQuery,
   configCommitsQuery,
+  latestConfigFileCommitQuery,
   csvFileQuery,
   rosterRawFileQuery,
   getRawFile,
@@ -80,6 +83,7 @@ export {
   ensureTeam,
   listTeamMembers,
   teamMembersQuery,
+  getTeamMembershipState,
   listOrgTeams,
   orgTeamsQuery,
   listRepoTeams,
@@ -104,6 +108,10 @@ export {
 export {
   fetchJson,
   pagesAssignmentUrl,
+  defaultPagesBaseUrl,
+  attemptedPagesUrls,
+  attemptedPagesAssignmentUrls,
+  CUSTOM_HOST_TIMEOUT_MS,
   classroomsIndexUrl,
   orgPublishesClassroom50Pages,
   extractAssignments,
@@ -120,6 +128,8 @@ export {
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,
+  getProbeTokenRunAfterId,
+  getRunAnnotations,
   getLastCollectScoresRun,
   SERVICE_TOKEN_SECRET_NAME,
   SERVICE_TOKEN_EXPIRES_AT_VAR,
@@ -128,4 +138,5 @@ export {
   classifyServiceTokenExpiry,
   type ServiceTokenStatus,
   type ServiceTokenExpiry,
+  type RunAnnotation,
 } from "./queries/releaseRunReads"

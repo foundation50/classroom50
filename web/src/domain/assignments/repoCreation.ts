@@ -1,10 +1,13 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
 import type {
+  AssignmentTestDefaults,
   RepoPermission,
   RepoFeatures,
+  RepoVisibility,
   SubmissionMode,
   Grading,
+  TeamFormation,
 } from "@/types/classroom"
 import {
   GitHubAPIError,
@@ -18,6 +21,7 @@ import {
   forkParentRestrictedError,
   inOrgTemplateError,
   isOrgRepoCreationDenied,
+  isPublicRepoCreationDenied,
   orgRepoCreationDeniedError,
   outOfOrgTemplateError,
   repoNameTooLongError,
@@ -94,7 +98,46 @@ export async function createAssignmentRepo(params: {
   // Templated only: copy ALL of the template's branches (not just the default)
   // on POST /generate. Ignored for the bare/template-less paths (no generate).
   includeAllBranches?: boolean
+  // repo_visibility "public": create the student repo public instead of
+  // private. Best-effort/fail-private — org policy can forbid a member's
+  // public create, in which case the create is retried private and the result
+  // carries visibilityFellBackToPrivate so the caller can tell the student.
+  publicVisibility?: boolean
 }): Promise<AcceptRepoCreationResult> {
+  const wantPublic = params.publicVisibility === true
+  try {
+    return await createAssignmentRepoWithVisibility(params, wantPublic)
+  } catch (err) {
+    if (
+      wantPublic &&
+      err instanceof GitHubAPIError &&
+      isPublicRepoCreationDenied(err)
+    ) {
+      log.warn("accept: public repo create denied, falling back to private", {
+        org: params.owner,
+        repo: params.name,
+        githubMessage: err.message,
+      })
+      const result = await createAssignmentRepoWithVisibility(params, false)
+      return { ...result, visibilityFellBackToPrivate: true }
+    }
+    throw err
+  }
+}
+
+async function createAssignmentRepoWithVisibility(
+  params: {
+    client: GitHubClient
+    templateOwner?: string
+    templateRepo?: string
+    owner: string
+    name: string
+    fallbackBranch: string
+    bare?: boolean
+    includeAllBranches?: boolean
+  },
+  isPublic: boolean,
+): Promise<AcceptRepoCreationResult> {
   const {
     client,
     templateOwner,
@@ -119,7 +162,7 @@ export async function createAssignmentRepo(params: {
           body: {
             owner,
             name,
-            private: true,
+            private: !isPublic,
             include_all_branches: includeAllBranches,
           },
         },
@@ -153,6 +196,13 @@ export async function createAssignmentRepo(params: {
       // template content and can't be regenerated. A rate-limit also surfaces
       // as 403, so rethrow it before treating 403/404 as a template problem.
       if (err.isRateLimited) {
+        throw err
+      }
+      // A refusal specifically of the PUBLIC create must reach the caller
+      // unclassified: createAssignmentRepo retries it as a private create.
+      // Classifying it below would blame the template or the org's
+      // member-repo-creation policy — both wrong and both terminal.
+      if (isPublic && isPublicRepoCreationDenied(err)) {
         throw err
       }
       // The destination org refusing the create is independent of where the
@@ -235,10 +285,15 @@ export async function createAssignmentRepo(params: {
     name,
     branch: fallbackBranch,
     autoInit: !bare,
+    isPublic,
   })
 }
 
-type AcceptRepoCreationResult =
+type AcceptRepoCreationResult = {
+  // Set when a public create was refused by org policy and the repo was
+  // created private instead (see createAssignmentRepo).
+  visibilityFellBackToPrivate?: boolean
+} & (
   | {
       kind: "generated"
       repo: GitHubRepo
@@ -258,6 +313,7 @@ type AcceptRepoCreationResult =
       kind: "bare"
       repo: GitHubRepo
     }
+)
 async function createEmptyAssignmentRepo(params: {
   client: GitHubClient
   owner: string
@@ -266,8 +322,9 @@ async function createEmptyAssignmentRepo(params: {
   // false = empty_repo assignment: no initial commit at all. The repo stays
   // commitless until the student's first push.
   autoInit?: boolean
+  isPublic?: boolean
 }): Promise<AcceptRepoCreationResult> {
-  const { client, owner, name, branch, autoInit = true } = params
+  const { client, owner, name, branch, autoInit = true, isPublic } = params
   let repo: GitHubRepo
 
   try {
@@ -280,7 +337,7 @@ async function createEmptyAssignmentRepo(params: {
       method: "POST",
       body: {
         name,
-        private: true,
+        private: !isPublic,
         auto_init: autoInit,
       },
     })
@@ -306,7 +363,9 @@ async function createEmptyAssignmentRepo(params: {
       if (isOrgRepoCreationDenied(err)) {
         throw orgRepoCreationDeniedError(owner, err.status, err.message)
       }
-      if (err.isForbidden) {
+      // A public-visibility refusal rethrows raw for createAssignmentRepo's
+      // private retry; skip the tripwire so the log stays a real signal.
+      if (err.isForbidden && !(isPublic && isPublicRepoCreationDenied(err))) {
         // Same tripwire as the templated path above.
         log.warn("accept: repo create 403 fell through unclassified", {
           org: owner,
@@ -345,29 +404,41 @@ export type CreateAssignmentInput = {
   due_date: string
   // Release date (datetime-local wall-clock or ""); normalized like due_date.
   available_from_date: string
+  // Lock the assignment against every student surface (mirrors the wire
+  // `locked` and the CLI's --locked). Create: written as-is and the private
+  // in-org template read grant is skipped. Edit: a false-to-true transition
+  // revokes the student team's template read, exactly like the lock action;
+  // undefined leaves the stored value untouched.
+  locked?: boolean
   mode: string
   slug: string
   classroom: string
   org: string
   max_group_size: number
+  // Who forms the groups of a team assignment. Written only for mode: team
+  // (buildAssignmentEntry omits it otherwise, matching the CLI's omitempty).
+  team_formation?: TeamFormation
   feedback_pr?: boolean
   // Use the template repo's pull_request_template.md as the Feedback PR body.
   // Requires a template and feedback_pr; mirrors the wire feedback_pr_template.
   feedback_pr_template?: boolean
   // Truly bare student repos (no auto-init, no control files, autograding and
   // Feedback PR off). Mutually exclusive with template/tests/feedback_pr/
-  // allowed_files/release_assets/pass_threshold; immutable after creation
-  // (edit rejects a change). Mirrors the CLI's --empty-repo.
+  // allowed_files/release_assets/pass_threshold. Editable, but never
+  // retrofitted: a change applies only to repos accepted from then on, so the
+  // edit form confirms once students have accepted. Mirrors the CLI's --empty-repo.
   empty_repo?: boolean
   // Teacher-supplied CI on a templated assignment: accept commits no autograde
   // shim. Mutually exclusive with empty_repo, a non-default autograder, and the
-  // grading-adjacent fields; permits a template and the Feedback PR. Immutable
-  // after creation. Mirrors the CLI's no_autograder field.
+  // grading-adjacent fields; permits a template and the Feedback PR. Editable
+  // with the same accept-time-only caveat as empty_repo. Mirrors the CLI's
+  // no_autograder field.
   no_autograder?: boolean
   // Built-in autograder on an otherwise-empty, template-less repo: accept
   // initializes the repo with only the marker + default shim (no README) and it
   // autogrades. Mutually exclusive with empty_repo, a template, and
-  // no_autograder. Immutable after creation. Mirrors the CLI's init_shim field.
+  // no_autograder. Editable with the same accept-time-only caveat as
+  // empty_repo. Mirrors the CLI's init_shim field.
   init_shim?: boolean
   // Copy all template branches at generate (POST /generate include_all_branches).
   // Requires a template; mutually exclusive with empty_repo/init_shim. Mutable.
@@ -399,6 +470,11 @@ export type CreateAssignmentInput = {
   // the mode default (push individual / admin group). buildAssignmentEntry
   // omits it when it equals the default and clamps group up to admin.
   student_permission?: RepoPermission
+  // The visibility each student repo is created with at accept time.
+  // Undefined or "private" = the wire default (buildAssignmentEntry omits
+  // it); "public" = repos are created public, with an upfront student
+  // warning. Mirrors the CLI's --repo-visibility.
+  repo_visibility?: RepoVisibility
   // When the autograder fires. Undefined or "every-push" = the wire default
   // (buildAssignmentEntry omits it); "tag" = the shim grades only submit/* tag
   // pushes. Mirrors the CLI's --submission-mode.
@@ -411,14 +487,19 @@ export type CreateAssignmentInput = {
   // The teacher's grading intent (off/auto/manual) with a manual max_points.
   // Undefined reads as "auto" (today's behavior). Orthogonal to the autograding
   // tri-state; buildAssignmentEntry omits the block when it resolves to plain
-  // auto with no max. The mode is immutable after creation (edit rejects a
-  // change). Mirrors the CLI's grading object.
+  // auto with no max. Editable after creation; the edit form confirms the
+  // change once students have accepted. Mirrors the CLI's grading object.
   grading?: Grading
   // Per-assignment repo feature overrides (tri-state per key: undefined =
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.
   repo_features?: RepoFeatures
   tests: AssignmentTestDraft[]
+  // Assignment-level defaults for the per-test reporting options
+  // (failure-details / show-output); per-test values override.
+  // buildAssignmentEntry omits the block when undefined or when the
+  // assignment carries no tests. Mirrors the CLI's test_defaults object.
+  test_defaults?: AssignmentTestDefaults
   // Whether the write path may attempt the owner-only template read-grant
   // (addRepositoryToTeam). Set from useCanAttemptTemplateGrant at the call site
   // (true unless the org role is a confirmed non-owner). When false the save

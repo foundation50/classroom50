@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
+import { ViewRepositoryLink } from "@/components/modals/ViewRepositoryLink"
 import {
   Alert,
   AnimatedAlert,
@@ -16,14 +17,15 @@ import {
   Button,
   Input,
   Modal,
+  ModalIcon,
   Select,
-  Heading,
 } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
@@ -112,8 +114,6 @@ export function RepoAccessModal({
   assignmentName,
   students = [],
 }: RepoAccessModalProps) {
-  const titleId = useId()
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
   const { user } = useGithubAuth()
   const { t } = useTranslation()
@@ -182,22 +182,15 @@ export function RepoAccessModal({
     setDraft(initialEntries)
   }, [open, repoName, loadingCollaborators, initialEntries])
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      setNewCollaborator("")
-      setNewPermission("push")
-      setSubmitError(null)
-      setSaved(false)
-      setInvalidLogins(new Set())
-    }
+    if (!open) return
+    setNewCollaborator("")
+    setNewPermission("push")
+    setSubmitError(null)
+    setSaved(false)
+    setInvalidLogins(new Set())
   }, [open])
-
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    },
-    [],
-  )
 
   const clearInvalid = (login: string) => {
     const normalized = normalizeUsername(login)
@@ -264,6 +257,7 @@ export function RepoAccessModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
+  useBeforeUnloadGuard(isSaving)
 
   // A change is: a new/restored collaborator, a struck-through server row, or a
   // permission level that differs from the server's.
@@ -377,9 +371,9 @@ export function RepoAccessModal({
       }
 
       await refetchCollaborators()
+      // Persists until the next edit or save attempt (Primer: don't
+      // auto-dismiss status messages on a timer).
       setSaved(true)
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
     } finally {
       savingRef.current = false
     }
@@ -394,34 +388,51 @@ export function RepoAccessModal({
       onClose={onClose}
       closeDisabled={isSaving}
       size="xl"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={t("components.modals.repoAccess.title")}
+      headerVisual={
+        <ModalIcon>
           <ShieldCheckIcon className="size-4" aria-hidden="true" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {t("components.modals.repoAccess.title")}
-          </Heading>
-          {repoName && (
-            <a
-              className="link mt-1 inline-flex items-center gap-1.5 text-sm"
-              href={repoUrl || `https://github.com/${org}/${repoName}`}
-              target="_blank"
-              rel="noreferrer"
+        </ModalIcon>
+      }
+      footer={
+        <>
+          <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
+            {t("common.cancel")}
+          </Button>
+          {canManage && hasChanges && (
+            <Button
+              variant="ghost"
+              disabled={isSaving}
+              onClick={discardChanges}
             >
-              <MarkGithubIcon aria-hidden="true" className="size-4" />
-              {assignmentName
-                ? t("components.modals.repoAccess.viewRepoNamed", {
-                    name: assignmentName,
-                  })
-                : t("components.modals.groupCollaborators.viewRepository")}
-            </a>
+              {t("components.modals.groupCollaborators.discardChanges")}
+            </Button>
           )}
-        </div>
-      </div>
-
+          {canManage && (
+            <Button
+              variant="primary"
+              disabled={loadingCollaborators || isSaving || !hasChanges}
+              loading={isSaving}
+              loadingLabel={t("components.modals.repoAccess.save")}
+              onClick={() => void handleSave()}
+            >
+              {t("components.modals.repoAccess.save")}
+            </Button>
+          )}
+        </>
+      }
+    >
+      {repoName && (
+        <ViewRepositoryLink
+          href={repoUrl || `https://github.com/${org}/${repoName}`}
+        >
+          {assignmentName
+            ? t("components.modals.repoAccess.viewRepoNamed", {
+                name: assignmentName,
+              })
+            : t("components.modals.groupCollaborators.viewRepository")}
+        </ViewRepositoryLink>
+      )}
       {loadingCollaborators ? (
         <div className="flex py-10">
           <Spinner
@@ -595,28 +606,6 @@ export function RepoAccessModal({
           )}
         </>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
-          {t("common.cancel")}
-        </Button>
-        {canManage && hasChanges && (
-          <Button variant="ghost" disabled={isSaving} onClick={discardChanges}>
-            {t("components.modals.groupCollaborators.discardChanges")}
-          </Button>
-        )}
-        {canManage && (
-          <Button
-            variant="primary"
-            disabled={loadingCollaborators || isSaving || !hasChanges}
-            loading={isSaving}
-            loadingLabel={t("components.modals.repoAccess.save")}
-            onClick={() => void handleSave()}
-          >
-            {t("components.modals.repoAccess.save")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

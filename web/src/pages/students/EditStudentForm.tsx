@@ -1,12 +1,8 @@
-import {
-  MailIcon,
-  MarkGithubIcon,
-  PeopleIcon,
-  PersonIcon,
-} from "@/components/ui/icons"
+import { MarkGithubIcon } from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useId, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import { useUpdateStudent } from "@/hooks/mutations/useUpdateStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -19,6 +15,7 @@ import {
   AnimatedAlert,
   Button,
   Input,
+  ModalFooterPortal,
   MonoLtr,
 } from "@/components/ui"
 
@@ -65,6 +62,8 @@ const EditStudentForm = ({
   lockEmail?: boolean
 }) => {
   const runSave = useSafeSubmit()
+  // Ties the portaled footer submit button to this form element.
+  const formId = useId()
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
@@ -156,10 +155,12 @@ const EditStudentForm = ({
 
   return (
     <form
+      id={formId}
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        const formEl = e.currentTarget as HTMLFormElement
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <div className="mt-4 flex flex-col gap-3">
@@ -170,22 +171,16 @@ const EditStudentForm = ({
               label={t("students.firstNameLabel")}
             >
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <PersonIcon
-                    className="me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    placeholder={t("students.firstNamePlaceholder")}
-                    aria-describedby={describedById}
-                    invalid={invalid}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  placeholder={t("students.firstNamePlaceholder")}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -195,22 +190,16 @@ const EditStudentForm = ({
           {(field) => (
             <FormField htmlFor={field.name} label={t("students.lastNameLabel")}>
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <PersonIcon
-                    className="me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    placeholder={t("students.lastNamePlaceholder")}
-                    aria-describedby={describedById}
-                    invalid={invalid}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  placeholder={t("students.lastNamePlaceholder")}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -229,28 +218,22 @@ const EditStudentForm = ({
               hint={lockEmail ? t("students.inviteEmailLocked") : undefined}
             >
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <MailIcon
-                    className="size-6 me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    type="email"
-                    placeholder={t("students.editEmailPlaceholder")}
-                    readOnly={lockEmail}
-                    disabled={lockEmail}
-                    title={
-                      lockEmail ? t("students.inviteEmailLocked") : undefined
-                    }
-                    invalid={invalid}
-                    aria-describedby={describedById}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  type="email"
+                  placeholder={t("students.editEmailPlaceholder")}
+                  readOnly={lockEmail}
+                  disabled={lockEmail}
+                  title={
+                    lockEmail ? t("students.inviteEmailLocked") : undefined
+                  }
+                  invalid={invalid}
+                  aria-describedby={describedById}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -260,22 +243,16 @@ const EditStudentForm = ({
           {(field) => (
             <FormField htmlFor={field.name} label={t("students.sectionLabel")}>
               {({ id, describedById, invalid }) => (
-                <div className="flex items-center">
-                  <PeopleIcon
-                    className="me-2 text-base-content/70"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    id={id}
-                    name={field.name}
-                    placeholder={t("students.editSectionPlaceholder")}
-                    aria-describedby={describedById}
-                    invalid={invalid}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <Input
+                  id={id}
+                  name={field.name}
+                  placeholder={t("students.editSectionPlaceholder")}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
             </FormField>
           )}
@@ -303,7 +280,9 @@ const EditStudentForm = ({
         {error}
       </AnimatedAlert>
 
-      <div className="modal-action">
+      {/* The buttons render in the host modal's footer row; `form={formId}`
+          keeps the portaled submit wired to this form element. */}
+      <ModalFooterPortal>
         <Button
           type="button"
           variant="ghost"
@@ -312,22 +291,21 @@ const EditStudentForm = ({
         >
           {t("common.cancel")}
         </Button>
-        <form.Subscribe
-          selector={(state) => [state.canSubmit, state.isSubmitting]}
-        >
-          {([canSubmit, isSubmitting]) => (
+        <form.Subscribe selector={(state) => [state.isSubmitting]}>
+          {([isSubmitting]) => (
             <Button
               type="submit"
+              form={formId}
               variant="primary"
               loading={isSubmitting}
               loadingLabel={t("students.saving")}
-              disabled={!canSubmit || isSubmitting}
+              disabled={isSubmitting}
             >
               {isSubmitting ? t("students.saving") : t("students.saveChanges")}
             </Button>
           )}
         </form.Subscribe>
-      </div>
+      </ModalFooterPortal>
     </form>
   )
 }

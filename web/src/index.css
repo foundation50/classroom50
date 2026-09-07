@@ -119,17 +119,19 @@
 }
 
 /* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (deep neutral
-   gray); the logo mark and the active-row border keep to the neutral family —
-   a soft white derived from the rail's own text color (decorative, non-text) —
-   and the active/hover surface is a lifted neutral sheet. Dark uses the same
-   soft-white accent over a translucent sheet. Consumed via arbitrary values in
-   components/drawer. */
+   gray); the logo mark keeps to the neutral family — a soft white derived from
+   the rail's own text color (decorative, non-text) — and the active/hover
+   surface is a lifted neutral sheet (Dark uses a translucent sheet). The
+   active-row bar follows Primer's NavList current-item indicator
+   (fgColor-accent); the rail is a dark surface in BOTH themes, so both take
+   Primer's dark value. Consumed via arbitrary values in components/drawer. */
 [data-theme="sumi"] {
   --sidebar-accent: color-mix(
     in oklab,
     var(--color-neutral-content) 88%,
     transparent
   );
+  --sidebar-active-accent: #4493f8; /* fgColor-accent (dark) */
   --sidebar-surface: #3d444d;
 }
 [data-theme="sumi-dark"] {
@@ -138,6 +140,7 @@
     var(--color-neutral-content) 88%,
     transparent
   );
+  --sidebar-active-accent: #4493f8; /* fgColor-accent (dark) */
   --sidebar-surface: color-mix(
     in oklch,
     var(--color-neutral-content) 10%,
@@ -145,25 +148,8 @@
   );
 }
 
-/* Drawer rest-dim. The rail sits a notch darker than `neutral` while the
-   pointer is elsewhere, so the chrome recedes and page content is the focus;
-   hovering (or keyboard focus landing inside) lifts it back to full. Dimming
-   the SURFACE darker — never the text — is the AA-safe rendition: light rail
-   text on a darker ground gains contrast, so the guarded resting pairs only
-   improve (contrastModel.ts audits the dimmed rail too). Scoped to
-   hover-capable pointers so touch devices always get the full-brightness rail. */
 .sidebar-rail {
   background-color: var(--color-neutral);
-}
-@media (hover: hover) {
-  .sidebar-rail {
-    background-color: color-mix(in oklab, var(--color-neutral) 90%, black);
-    transition: background-color var(--duration-slow) var(--ease-out-soft);
-  }
-  .sidebar-rail:hover,
-  .sidebar-rail:focus-within {
-    background-color: var(--color-neutral);
-  }
 }
 
 /* Design tokens: typography (Primer primitives) and motion. Motion timing is
@@ -282,6 +268,21 @@ body {
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* Sidebar collapse/expand content fade. The rail's width tweens via
+   transition-[width] (DrawerChrome), but the labels and per-state variants
+   that MOUNT on a toggle would otherwise pop in at t=0 — this short mount
+   fade eases them in alongside the width. The global reduced-motion guard
+   below zeroes it. */
+@utility sidebar-fade-in {
+  animation: sidebar-fade-in var(--duration-slow) var(--ease-out-soft) both;
+}
+
+@keyframes sidebar-fade-in {
+  from {
+    opacity: 0;
   }
 }
 

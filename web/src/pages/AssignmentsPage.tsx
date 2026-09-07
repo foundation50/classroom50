@@ -1,10 +1,11 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { ChevronDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
+import { TriangleDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
+import { GitHubAPIError } from "@/github-core/errors"
 import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
   DEFAULT_FILTERS,
@@ -13,7 +14,13 @@ import {
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-import { Badge, Button, EmphasisLtr } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  EmphasisLtr,
+  RouterButton,
+} from "@/components/ui"
 import {
   NoSearchResults,
   SkeletonRegion,
@@ -29,10 +36,14 @@ import { ClaimTeacherNotice } from "./classes/ClaimTeacherNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useStudentCount from "@/hooks/useStudentCount"
+import useFunnelRoster, { unionLogins } from "@/hooks/useFunnelRoster"
+import { IncludeStaffToggle } from "@/pages/assignments/IncludeStaffToggle"
+import { persistIncludeStaff, readIncludeStaff } from "@/lib/includeStaffPref"
+import type { FunnelRoster } from "@/pages/submissions/dashboard"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
 import { roleLabelKey, can } from "@/authz"
 import { isClassroomArchived } from "@/types/classroom"
 import StudentAssignmentList from "@/components/org/StudentAssignmentList"
@@ -52,14 +63,16 @@ const NewAssignmentButton = ({
   return (
     <>
       <div className="join">
-        <Link
+        <RouterButton
           to="/$org/$classroom/assignments/new"
           params={{ org, classroom }}
-          className="btn btn-primary btn-sm join-item"
+          variant="primary"
+          size="sm"
+          className="join-item"
         >
           <PlusIcon aria-hidden="true" className="size-4" />{" "}
           {t("assignments.newButton.assignment")}
-        </Link>
+        </RouterButton>
         {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
         <div className="dropdown dropdown-end -ms-px">
           <Button
@@ -69,13 +82,9 @@ const NewAssignmentButton = ({
             className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
           >
-            <ChevronDownIcon aria-hidden="true" className="size-4" />
+            <TriangleDownIcon aria-hidden="true" className="size-4" />
           </Button>
-          <ul
-            tabIndex={0}
-            role="menu"
-            className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-300 bg-base-100 p-1 shadow"
-          >
+          <DropdownMenu className="w-max">
             <li>
               <button
                 type="button"
@@ -90,7 +99,7 @@ const NewAssignmentButton = ({
                 {t("assignments.newButton.reuse")}
               </button>
             </li>
-          </ul>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -113,16 +122,57 @@ export const TeacherAssignmentsView = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { data: classData, isLoading: assignmentsLoading } =
-    useGetClassroomAssignments(org, classroom)
-  // Authoritative student-role count for the header and the table denominator,
-  // so neither counts teachers/TAs. The count comes from team membership
-  // (one source); roster.csv identity is fetched by useStudentCount internally.
   const {
-    studentCount,
+    data: classData,
+    isLoading: assignmentsLoading,
+    error: assignmentsErrorObj,
+    refetch: refetchAssignments,
+  } = useGetClassroomAssignments(org, classroom)
+  // A missing assignments.json 404s — the legitimate zero for a brand-new
+  // classroom (same split as ClassroomCard). Only a non-404 failure must be
+  // surfaced as an error instead of the empty state.
+  const assignmentsNotFound =
+    assignmentsErrorObj instanceof GitHubAPIError &&
+    assignmentsErrorObj.status === 404
+  const assignmentsError = Boolean(assignmentsErrorObj) && !assignmentsNotFound
+  // Who the header and the table's funnel count. Team membership is the one
+  // source (roster.csv identity is fetched inside useFunnelRoster); the toggle
+  // widens the counted set from students to students plus teaching staff so a
+  // staff test run registers (#860).
+  const {
+    studentLogins,
+    staffLogins,
     isLoading: studentsLoading,
     isError: studentCountError,
-  } = useStudentCount(org, classroom)
+    isUnknown: studentCountUnknown,
+  } = useFunnelRoster(org, classroom)
+  const [includeStaff, setIncludeStaff] = useState(readIncludeStaff)
+  const toggleIncludeStaff = (on: boolean) => {
+    setIncludeStaff(on)
+    persistIncludeStaff(on)
+  }
+  // Staff who are not also students, so a TA on the student team is never
+  // counted twice (in the header or the union).
+  const staffOnly = useMemo(
+    () =>
+      staffLogins && studentLogins
+        ? new Set([...staffLogins].filter((l) => !studentLogins.has(l)))
+        : undefined,
+    [staffLogins, studentLogins],
+  )
+  const roster = useMemo<FunnelRoster | undefined>(() => {
+    if (!studentLogins || !staffOnly) return undefined
+    return includeStaff
+      ? {
+          counted: unionLogins(studentLogins, staffOnly),
+          excludedStaff: new Set(),
+        }
+      : { counted: studentLogins, excludedStaff: staffOnly }
+  }, [studentLogins, staffOnly, includeStaff])
+  const studentCount = studentLogins?.size
+  const staffOnlyCount = staffOnly?.size ?? 0
+  const countKnown =
+    !studentsLoading && !studentCountError && !studentCountUnknown
   const {
     data: classroomData,
     isLoading: classroomLoading,
@@ -135,6 +185,9 @@ export const TeacherAssignmentsView = ({
   // Author tier (teacher|hta) gates the mutating affordances; a TA sees the
   // list read-only. GitHub is the real enforcer (config-repo write), this is UX.
   const canAuthor = can("authorAssignments", { classroomRole: myRole })
+  // Only an org owner's repo list covers every repo; a non-owner sees the
+  // repos their staff team was granted, so the Accepted column is a lower bound.
+  const { acceptanceComplete } = useStaffCapabilities()
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
   const [query, setQuery] = useState("")
@@ -153,11 +206,11 @@ export const TeacherAssignmentsView = ({
   )
 
   const hasAssignments = (sourceAssignments?.length ?? 0) > 0
-  // The toolbar owns the primary action now (New assignment / archived badge),
-  // so it renders whenever the list has loaded — with only the trailing action
-  // when there are no assignments yet (actionsOnly), and the full search/filter/
-  // sort bar once there are.
-  const showToolbar = !assignmentsLoading
+  // The toolbar renders only once assignments exist: on a first-use empty
+  // list the table's blankslate carries the New-assignment action instead
+  // (Primer: the empty state owns its resolving action, and a view gets one
+  // primary button — a toolbar copy would duplicate it).
+  const showToolbar = !assignmentsLoading && hasAssignments
   const showNoResults = hasAssignments && visible.length === 0
 
   // Right-aligned toolbar action: the New assignment split button for an author,
@@ -172,18 +225,35 @@ export const TeacherAssignmentsView = ({
 
   // Classroom-wide collect, left-aligned in the toolbar (the `leading` slot),
   // mirroring the submissions toolbar where the DataFreshness/Sync widget
-  // leads and search + filters sit on the right. Open to any staff viewer (a
-  // TA may collect, as on the submissions page — only authoring is
-  // author-gated). Hidden on an archived classroom and while the list is
-  // empty: there is no assignment to collect for.
+  // leads and search + filters sit on the right. Dispatching the collect
+  // workflow needs config-repo write, the same tier as authoring (teacher and
+  // head TA), so a pull-only TA sees no button rather than a 403. Hidden on an
+  // archived classroom and while the list is empty: there is no assignment to
+  // collect for.
   const collectAction =
-    !archived && hasAssignments ? (
+    canAuthor && !archived && hasAssignments ? (
       <ClassroomCollectButton
         org={org}
         classroom={classroom}
+        classroomName={classroomData?.name || classroomData?.short_name}
         emptyRoster={emptyRoster.show}
       />
     ) : null
+  // Beside Collect all: the two together are "what the counts measure".
+  // Available to every staff viewer (a TA testing an assignment is the case),
+  // but pointless on an archived classroom.
+  const leadingActions =
+    hasAssignments && !archived ? (
+      <>
+        {collectAction}
+        <IncludeStaffToggle
+          checked={includeStaff}
+          onChange={toggleIncludeStaff}
+        />
+      </>
+    ) : (
+      collectAction
+    )
 
   return (
     <div className="flex flex-col gap-6">
@@ -202,9 +272,18 @@ export const TeacherAssignmentsView = ({
         subtitle={
           <>
             {classroomData?.term ? `${classroomData?.term} • ` : ""}
-            {studentsLoading || studentCountError
+            {studentsLoading
               ? "…"
-              : t("assignments.studentCount", { count: studentCount ?? 0 })}
+              : // A failed or unknowable count is hidden entirely (never a
+                // wrong number); the perpetual "…" read as still-loading.
+                studentCountError || studentCountUnknown
+                ? null
+                : t("assignments.studentCount", { count: studentCount ?? 0 })}
+            {/* With staff counted, say how many so the table's denominator
+                adds up against the header. */}
+            {countKnown && includeStaff
+              ? ` • ${t("assignments.staffCount", { count: staffOnlyCount })}`
+              : null}
           </>
         }
       />
@@ -242,8 +321,7 @@ export const TeacherAssignmentsView = ({
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          actionsOnly={!hasAssignments}
-          leading={collectAction}
+          leading={leadingActions}
           trailing={primaryAction}
         />
       )}
@@ -268,15 +346,27 @@ export const TeacherAssignmentsView = ({
           secretPending={classroomLoading || classroomError}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
-          studentCount={studentCount}
+          roster={roster}
+          includeStaff={includeStaff}
           loading={assignmentsLoading}
+          loadError={assignmentsError}
+          onRetryLoad={() => void refetchAssignments()}
+          // The first-use blankslate's action — the same split button
+          // (create + reuse) the toolbar shows once assignments exist. A TA
+          // or an archived classroom gets no action (plain empty statement).
+          emptyAction={
+            canAuthor && !archived ? (
+              <NewAssignmentButton org={org} classroom={classroom} />
+            ) : undefined
+          }
           archived={archived}
           canAuthor={canAuthor}
+          acceptanceComplete={acceptanceComplete}
           sort={sort}
           onSortChange={setSort}
-          // Replay the row entrance on filter/sort changes; search is excluded
-          // so typing doesn't remount the rows on every keystroke.
-          viewSignature={`${JSON.stringify(filters)}|${sort}`}
+          // Replay the row entrance on filter/sort/toggle changes; search is
+          // excluded so typing doesn't remount the rows on every keystroke.
+          viewSignature={`${JSON.stringify(filters)}|${sort}|${includeStaff}`}
         />
       )}
     </div>
@@ -318,7 +408,7 @@ const AssignmentsPage = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("nav.assignments")} />
+      <Breadcrumb switcher="classroom" />
       {org && classroom && (
         <ClaimTeacherNotice org={org} classroom={classroom} />
       )}

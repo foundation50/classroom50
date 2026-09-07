@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest"
 
 import {
+  commitAuthor,
   detectBranchSubmissions,
   detectTagSubmissions,
   detectedSubmissionCount,
@@ -49,6 +50,50 @@ describe("detectBranchSubmissions", () => {
     const detected = detectBranchSubmissions([commit("baseline")], "baseline")
     expect(detected).toEqual([])
     expect(detectedSubmissionCount(detected)).toBe(0)
+  })
+
+  it("carries who made each commit so a group's members can be told apart", () => {
+    const linked: GitHubCommit = {
+      ...commit("c2"),
+      author: { login: "alice", avatar_url: "https://avatars/alice" },
+    }
+    const detected = detectBranchSubmissions([linked, commit("c1")], "base")
+    expect(detected[0].author).toEqual({
+      login: "alice",
+      name: undefined,
+      avatarUrl: "https://avatars/alice",
+    })
+    expect(detected[1].author).toBeUndefined()
+  })
+})
+
+describe("commitAuthor", () => {
+  it("prefers the linked GitHub account, with its avatar", () => {
+    expect(
+      commitAuthor({
+        ...commit("c"),
+        commit: { message: "c", author: { name: "Alice Git" } },
+        author: { login: "alice", avatar_url: "https://avatars/alice" },
+      }),
+    ).toEqual({
+      login: "alice",
+      name: "Alice Git",
+      avatarUrl: "https://avatars/alice",
+    })
+  })
+
+  it("falls back to the git author name for an unlinked commit", () => {
+    expect(
+      commitAuthor({
+        ...commit("c"),
+        commit: { message: "c", author: { name: "Alice Git" } },
+        author: null,
+      }),
+    ).toEqual({ login: undefined, name: "Alice Git", avatarUrl: undefined })
+  })
+
+  it("is absent when the commit names nobody", () => {
+    expect(commitAuthor(commit("c"))).toBeUndefined()
   })
 
   // Regression: on a TEMPLATED assignment the accept commit (the baseline) sits

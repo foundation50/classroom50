@@ -28,18 +28,31 @@ import (
 //
 // Points has no omitempty so a 0-point informational test reads explicitly.
 type TestSpec struct {
-	Name         string `json:"name"`
-	Type         string `json:"type"`
-	Setup        string `json:"setup,omitempty"`
-	Run          string `json:"run"`
-	Input        string `json:"input,omitempty"`
-	InputFile    string `json:"input-file,omitempty"`
-	Expected     string `json:"expected,omitempty"`
-	ExpectedFile string `json:"expected-file,omitempty"`
-	Comparison   string `json:"comparison,omitempty"`
-	Timeout      int    `json:"timeout,omitempty"`
-	ExitCode     *int   `json:"exit-code,omitempty"`
-	Points       int    `json:"points"`
+	Name           string `json:"name"`
+	Type           string `json:"type"`
+	Setup          string `json:"setup,omitempty"`
+	Run            string `json:"run"`
+	Input          string `json:"input,omitempty"`
+	InputFile      string `json:"input-file,omitempty"`
+	Expected       string `json:"expected,omitempty"`
+	ExpectedFile   string `json:"expected-file,omitempty"`
+	Comparison     string `json:"comparison,omitempty"`
+	Timeout        int    `json:"timeout,omitempty"`
+	ExitCode       *int   `json:"exit-code,omitempty"`
+	Points         int    `json:"points"`
+	FailureDetails string `json:"failure-details,omitempty"`
+	// *bool, not bool: an explicit false must survive the wire so a single
+	// test can opt out of a test_defaults show-output=true.
+	ShowOutput *bool `json:"show-output,omitempty"`
+}
+
+// TestDefaults is an assignment's `test_defaults` block: assignment-level
+// values for the per-test reporting options, applied by the grader to any
+// test that doesn't set its own. A CLOSED sub-object like RuntimeRef — a new
+// key must ship in lockstep across the schema, this struct, and the web type.
+type TestDefaults struct {
+	FailureDetails string `json:"failure-details,omitempty"`
+	ShowOutput     *bool  `json:"show-output,omitempty"`
 }
 
 const (
@@ -62,6 +75,19 @@ const (
 
 // comparisonModes is the allow-list, sorted.
 var comparisonModes = []string{comparisonExact, comparisonIncluded, comparisonRegex}
+
+// Failure-detail levels: how much of a failing test's captured output the
+// grader shows students (full = diff/expected+actual, actual-only = the
+// student's own output, none = just the failure kind). Empty means the
+// grader default (full).
+const (
+	failureDetailsFull       = "full"
+	failureDetailsActualOnly = "actual-only"
+	failureDetailsNone       = "none"
+)
+
+// failureDetailsLevels is the allow-list, sorted.
+var failureDetailsLevels = []string{failureDetailsActualOnly, failureDetailsFull, failureDetailsNone}
 
 // Bounds: generous for real assignments, tight enough that a hand-edited
 // assignments.json can't wedge the gradebook or blow the contents-API ceiling.
@@ -91,6 +117,23 @@ func isValidComparison(s string) bool {
 		}
 	}
 	return false
+}
+
+func isValidFailureDetails(s string) bool {
+	for _, l := range failureDetailsLevels {
+		if s == l {
+			return true
+		}
+	}
+	return false
+}
+
+// ValidateTestDefaults checks an assignment's test_defaults block.
+func ValidateTestDefaults(d TestDefaults) error {
+	if d.FailureDetails != "" && !isValidFailureDetails(d.FailureDetails) {
+		return fmt.Errorf("invalid failure-details %q: must be one of %v", d.FailureDetails, failureDetailsLevels)
+	}
+	return nil
 }
 
 // ValidateTests checks an assignment's test list on both paths: count cap,
@@ -137,6 +180,9 @@ func ValidateTestSpec(t TestSpec) error {
 	}
 	if t.Points < 0 || t.Points > maxTestPoints {
 		return fmt.Errorf("points %d must be between 0 and %d", t.Points, maxTestPoints)
+	}
+	if t.FailureDetails != "" && !isValidFailureDetails(t.FailureDetails) {
+		return fmt.Errorf("invalid failure-details %q: must be one of %v", t.FailureDetails, failureDetailsLevels)
 	}
 
 	if t.Type == testTypeIO {
@@ -207,15 +253,38 @@ func validateNoControlChars(s, label string) error {
 	return nil
 }
 
-// ParseTestsFile loads and validates `--tests <path>` (`-` = stdin): a bare
-// JSON array of test specs. Empty path → (nil, nil). DisallowUnknownFields so a
-// typo'd key fails loudly.
-func ParseTestsFile(path string) ([]TestSpec, error) {
+// TestsSchemaV1 is the `schema` value of the tests.json envelope that
+// publish-pages generates and runner.py reads (schemas/tests-v1.schema.json).
+const TestsSchemaV1 = "classroom50/tests/v1"
+
+// TestsFile is the parsed content of a `--tests` file. Defaults is nil for a
+// bare array and for an envelope without `defaults`; the caller decides what
+// nil means (keep vs clear the assignment's test_defaults).
+type TestsFile struct {
+	Tests    []TestSpec
+	Defaults *TestDefaults
+	// Envelope reports which of the two accepted shapes the file used.
+	Envelope bool
+}
+
+// testsEnvelope mirrors schemas/tests-v1.schema.json, the shape of the
+// generated bundle file. Accepted on input so a teacher can round-trip that
+// file (or keep one in a course repo) instead of learning a second format.
+type testsEnvelope struct {
+	Schema   string        `json:"schema"`
+	Tests    []TestSpec    `json:"tests"`
+	Defaults *TestDefaults `json:"defaults,omitempty"`
+}
+
+// ParseTestsFile loads and validates `--tests <path>` (`-` = stdin): either a
+// bare JSON array of test specs or the generated tests.json envelope. Empty
+// path → (nil, nil). DisallowUnknownFields so a typo'd key fails loudly.
+func ParseTestsFile(path string) (*TestsFile, error) {
 	return parseTestsFileFrom(path, os.Stdin)
 }
 
 // parseTestsFileFrom is the testable seam for ParseTestsFile.
-func parseTestsFileFrom(path string, stdin io.Reader) ([]TestSpec, error) {
+func parseTestsFileFrom(path string, stdin io.Reader) (*TestsFile, error) {
 	if path == "" {
 		return nil, nil
 	}
@@ -234,22 +303,45 @@ func parseTestsFileFrom(path string, stdin io.Reader) ([]TestSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read --tests %s: %w", label, err)
 	}
-	if len(bytes.TrimSpace(data)) == 0 {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 0 {
 		return nil, fmt.Errorf("--tests %s is empty", label)
 	}
-	var tests []TestSpec
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
-	if err := dec.Decode(&tests); err != nil {
-		return nil, fmt.Errorf("parse --tests %s: %w", label, err)
+	parsed := &TestsFile{}
+	switch trimmed[0] {
+	case '[':
+		if err := dec.Decode(&parsed.Tests); err != nil {
+			return nil, fmt.Errorf("parse --tests %s: %w", label, err)
+		}
+	case '{':
+		var env testsEnvelope
+		if err := dec.Decode(&env); err != nil {
+			return nil, fmt.Errorf("parse --tests %s: %w (expected a JSON array of tests, or the generated tests.json envelope with \"schema\": %q)", label, err, TestsSchemaV1)
+		}
+		if env.Schema != TestsSchemaV1 {
+			return nil, fmt.Errorf("--tests %s: \"schema\" is %q, want %q", label, env.Schema, TestsSchemaV1)
+		}
+		if env.Tests == nil {
+			return nil, fmt.Errorf("--tests %s: envelope is missing the \"tests\" array", label)
+		}
+		if env.Defaults != nil {
+			if err := ValidateTestDefaults(*env.Defaults); err != nil {
+				return nil, fmt.Errorf("--tests %s: defaults: %w", label, err)
+			}
+		}
+		parsed.Tests, parsed.Defaults, parsed.Envelope = env.Tests, env.Defaults, true
+	default:
+		return nil, fmt.Errorf("--tests %s: expected a JSON array of tests, or the generated tests.json envelope, got %q", label, string(trimmed[0]))
 	}
 	if err := expectEOF(dec); err != nil {
 		return nil, fmt.Errorf("parse --tests %s: %w", label, err)
 	}
-	if err := ValidateTests(tests); err != nil {
+	if err := ValidateTests(parsed.Tests); err != nil {
 		return nil, fmt.Errorf("--tests %s: %w", label, err)
 	}
-	return tests, nil
+	return parsed, nil
 }
 
 // UpsertTest replaces a test by Name (position-preserving) or appends it.

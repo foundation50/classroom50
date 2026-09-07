@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import {
@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
+import { ViewRepositoryLink } from "@/components/modals/ViewRepositoryLink"
 import {
   Alert,
   AnimatedAlert,
@@ -16,14 +17,15 @@ import {
   Button,
   Input,
   Modal,
+  ModalIcon,
   MonoLtr,
-  Heading,
 } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
@@ -73,8 +75,6 @@ export function GroupCollaboratorsModal({
   maxGroupSize,
   students = [],
 }: GroupCollaboratorsModalProps) {
-  const titleId = useId()
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Synchronous re-entrancy guard: isSaving (mutation.isPending) updates a tick
   // late, so a rapid double-click could start two overlapping saves.
   const savingRef = useRef(false)
@@ -139,21 +139,14 @@ export function GroupCollaboratorsModal({
     setDraftCollaborators(initialCollaborators)
   }, [open, repoName, loadingCollaborators, initialCollaborators])
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
   useEffect(() => {
-    if (!open) {
-      setNewCollaborator("")
-      setSubmitError(null)
-      setSaved(false)
-      setInvalidCollaborators(new Set())
-    }
+    if (!open) return
+    setNewCollaborator("")
+    setSubmitError(null)
+    setSaved(false)
+    setInvalidCollaborators(new Set())
   }, [open])
-
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    },
-    [],
-  )
 
   const clearInvalidCollaborator = (username: string) => {
     const normalized = normalizeUsername(username)
@@ -187,6 +180,7 @@ export function GroupCollaboratorsModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
+  useBeforeUnloadGuard(isSaving)
 
   // Dropped from the draft but still a live collaborator: removed only on Save,
   // restorable via undo until then.
@@ -336,9 +330,9 @@ export function GroupCollaboratorsModal({
       }
 
       await refetchCollaborators()
+      // Persists until the next edit or save attempt (Primer: don't
+      // auto-dismiss status messages on a timer).
       setSaved(true)
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
     } finally {
       savingRef.current = false
     }
@@ -358,31 +352,55 @@ export function GroupCollaboratorsModal({
       onClose={onClose}
       closeDisabled={isSaving}
       size="xl"
-      aria-labelledby={titleId}
-    >
-      <div className="flex items-start gap-4">
-        <div className="flex size-11 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+      title={assignmentName || t("components.modals.groupCollaborators.title")}
+      headerVisual={
+        <ModalIcon>
           <PeopleIcon className="size-4" aria-hidden="true" />
-        </div>
-
-        <div className="min-w-0 flex-1">
-          <Heading as="h3" id={titleId}>
-            {assignmentName || t("components.modals.groupCollaborators.title")}
-          </Heading>
-          {repoName && (
-            <a
-              className="link mt-1 inline-flex items-center gap-1.5 text-sm"
-              href={repoUrl || `https://github.com/${org}/${repoName}`}
-              target="_blank"
-              rel="noreferrer"
+        </ModalIcon>
+      }
+      footer={
+        <>
+          <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
+            {t("common.cancel")}
+          </Button>
+          {canManage && hasChanges && (
+            <Button
+              variant="ghost"
+              disabled={isSaving}
+              onClick={discardChanges}
             >
-              <MarkGithubIcon aria-hidden="true" className="size-4" />
-              {t("components.modals.groupCollaborators.viewRepository")}
-            </a>
+              {t("components.modals.groupCollaborators.discardChanges")}
+            </Button>
           )}
-        </div>
-      </div>
-
+          {canManage && (
+            <Button
+              variant="primary"
+              disabled={
+                loadingCollaborators ||
+                isSaving ||
+                tooMany ||
+                hasDuplicates ||
+                !hasChanges
+              }
+              loading={isSaving}
+              loadingLabel={t(
+                "components.modals.groupCollaborators.saveCollaborators",
+              )}
+              onClick={() => void handleSave()}
+            >
+              {t("components.modals.groupCollaborators.saveCollaborators")}
+            </Button>
+          )}
+        </>
+      }
+    >
+      {repoName && (
+        <ViewRepositoryLink
+          href={repoUrl || `https://github.com/${org}/${repoName}`}
+        >
+          {t("components.modals.groupCollaborators.viewRepository")}
+        </ViewRepositoryLink>
+      )}
       {loadingCollaborators ? (
         <div className="flex py-10">
           <Spinner
@@ -595,36 +613,6 @@ export function GroupCollaboratorsModal({
           </div>
         </>
       )}
-
-      <div className="modal-action">
-        <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
-          {t("common.cancel")}
-        </Button>
-        {canManage && hasChanges && (
-          <Button variant="ghost" disabled={isSaving} onClick={discardChanges}>
-            {t("components.modals.groupCollaborators.discardChanges")}
-          </Button>
-        )}
-        {canManage && (
-          <Button
-            variant="primary"
-            disabled={
-              loadingCollaborators ||
-              isSaving ||
-              tooMany ||
-              hasDuplicates ||
-              !hasChanges
-            }
-            loading={isSaving}
-            loadingLabel={t(
-              "components.modals.groupCollaborators.saveCollaborators",
-            )}
-            onClick={() => void handleSave()}
-          >
-            {t("components.modals.groupCollaborators.saveCollaborators")}
-          </Button>
-        )}
-      </div>
     </Modal>
   )
 }

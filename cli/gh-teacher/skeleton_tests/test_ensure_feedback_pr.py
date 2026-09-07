@@ -377,6 +377,8 @@ def test_main_missing_env_exits_nonzero(monkeypatch):
 
 @pytest.mark.parametrize("mode, want_label", [
     ("group", "Group Assignment"),
+    ("team", "Group Assignment"),
+    ("TEAM", "Group Assignment"),
     ("individual", "Individual Assignment"),
     ("", "Individual Assignment"),
     ("GROUP", "Group Assignment"),

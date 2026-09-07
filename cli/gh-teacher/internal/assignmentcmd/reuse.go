@@ -41,28 +41,32 @@ func assignmentReuseCmd() *cobra.Command {
 		Use:   "reuse <org> <source-slug> --from <source-classroom> --to <target-classroom>",
 		Short: "Copy an assignment from one classroom into another (same org)",
 		Long: "Duplicate an existing assignment record from one classroom's\n" +
-			"assignments.json into another classroom's, within the same org —\n" +
-			"the scriptable counterpart to the web's assignment reuse, ideal\n" +
-			"for rebuilding last term's assignments in a new classroom.\n\n" +
-			"The source record is copied verbatim (template, due/due_meta,\n" +
-			"mode, autograder, max_group_size, feedback_pr, runtime,\n" +
-			"allowed_files, release_assets, pass_threshold, student_permission,\n" +
-			"submission_mode, submission_tags, tests, description); only the\n" +
-			"slug and name change. By default the source slug/name are reused;\n" +
-			"pass --slug and/or --name to override.\n\n" +
+			"assignments.json into another classroom's, within the same\n" +
+			"organization: the scriptable counterpart to the web's assignment\n" +
+			"reuse, ideal for rebuilding last term's assignments in a new\n" +
+			"classroom.\n\n" +
+			"  - The source record is copied verbatim (template, due/due_meta,\n" +
+			"    mode, autograder, max_group_size, feedback_pr, runtime,\n" +
+			"    allowed_files, release_assets, pass_threshold,\n" +
+			"    student_permission, submission_mode, submission_tags, tests,\n" +
+			"    description); only the slug and name change.\n" +
+			"  - By default the source slug and name are reused; pass --slug\n" +
+			"    and/or --name to override.\n" +
+			"  - Slug collisions are refused case-insensitively (slugs become\n" +
+			"    GitHub repo path segments). Pass --slug to choose a free name,\n" +
+			"    or omit it to auto-suffix `-2`, `-3`, and so on off a\n" +
+			"    colliding slug.\n" +
+			"  - Refuses to write into an archived (active:false) target\n" +
+			"    classroom, mirroring `assignment add`.\n\n" +
 			"In-org only (v1): a private template can only be shared with the\n" +
-			"target classroom's team inside its own org, so cross-org reuse of\n" +
-			"a private template is out of scope. When the copied assignment\n" +
-			"references a private, org-owned template, the target classroom's\n" +
-			"team is re-granted read on it (the same grant `assignment add`\n" +
-			"performs) so rostered students can generate from it.\n\n" +
-			"Slug collisions are refused case-insensitively (slugs become\n" +
-			"GitHub repo path segments). Pass --slug to choose a free name, or\n" +
-			"omit it to auto-suffix `-2`, `-3`, … off a colliding slug.\n\n" +
-			"Refuses to write into an archived (active:false) target classroom,\n" +
-			"mirroring `assignment add`.\n\n" +
+			"target classroom's team inside its own organization, so cross-org\n" +
+			"reuse of a private template is out of scope. When the copied\n" +
+			"assignment references a private, org-owned template, the target\n" +
+			"classroom's team is re-granted read on it (the same grant\n" +
+			"`assignment add` performs) so rostered students can generate\n" +
+			"from it.\n\n" +
 			"Pass --json to emit the resolved copy ({org, classroom, slug,\n" +
-			"source_slug, auto_suffixed, template}) on stdout — scripts and\n" +
+			"source_slug, auto_suffixed, template}) on stdout. Scripts and\n" +
 			"agents should read the chosen slug from there rather than parsing\n" +
 			"the human summary, since an auto-suffixed slug isn't known until\n" +
 			"the write resolves the collision.",
@@ -101,7 +105,7 @@ func assignmentReuseCmd() *cobra.Command {
 				}
 			}
 			if fromClassroom == toClassroom && slugOverride == "" {
-				return errors.New("source and target classroom are the same — pass --slug to give the copy a distinct slug (an in-place reuse must rename)")
+				return errors.New("source and target classroom are the same: pass --slug to give the copy a distinct slug (an in-place reuse must rename)")
 			}
 			client, err := githubapi.RequireAuthClient(cmd)
 			if err != nil {
@@ -122,7 +126,7 @@ func assignmentReuseCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&from, "from", "", "Source classroom short-name to copy the assignment from (required)")
 	cmd.Flags().StringVar(&to, "to", "", "Target classroom short-name to copy the assignment into, same org (required)")
-	cmd.Flags().StringVar(&newSlug, "slug", "", "Slug for the copy in the target classroom (default: the source slug, auto-suffixed -2/-3/… on a case-insensitive collision)")
+	cmd.Flags().StringVar(&newSlug, "slug", "", "Slug for the copy in the target classroom (default: the source slug, auto-suffixed -2/-3/... on a case-insensitive collision)")
 	cmd.Flags().StringVar(&newName, "name", "", "Display name for the copy (default: the source name)")
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Emit the resolved copy as JSON ({org, classroom, slug, source_slug, auto_suffixed, template}) on stdout instead of the human summary")
 	return cmd
@@ -183,7 +187,7 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		}
 		idx, ok := assignment.FindAssignment(srcFile.Assignments, p.SourceSlug)
 		if !ok {
-			return nil, fmt.Errorf("assignment %q not found in source classroom %q (%s/%s/%s) — run `gh teacher assignment list %s %s` to see available slugs",
+			return nil, fmt.Errorf("assignment %q not found in source classroom %q (%s/%s/%s): run `gh teacher assignment list %s %s` to see available slugs",
 				p.SourceSlug, p.Org, configrepo.ConfigRepoName, p.From, assignmentsFilePath(p.From), p.Org, p.From)
 		}
 		// Copy verbatim through the typed entry; only slug/name are overridable.
@@ -211,13 +215,13 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		autoSuffixed = false
 		if p.SlugWasSet {
 			if assignment.SlugExistsFold(dstFile.Assignments, p.SlugOverride) {
-				return nil, fmt.Errorf("slug %q already exists in target classroom %q (case-insensitive) — choose a different --slug",
+				return nil, fmt.Errorf("slug %q already exists in target classroom %q (case-insensitive): choose a different --slug",
 					p.SlugOverride, p.To)
 			}
 			// A renamed assignment's old slug is reserved (see SlugReservedFold):
 			// reusing it would sever GitHub's redirects for renamed student repos.
 			if current, reserved := assignment.SlugReservedFold(dstFile.Assignments, p.SlugOverride); reserved {
-				return nil, fmt.Errorf("slug %q is reserved in target classroom %q: it is the pre-rename slug of assignment %q — choose a different --slug",
+				return nil, fmt.Errorf("slug %q is reserved in target classroom %q: it is the pre-rename slug of assignment %q. Choose a different --slug",
 					p.SlugOverride, p.To, current)
 			}
 			finalSlug = p.SlugOverride
@@ -305,7 +309,7 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		// A locked copy has no student-team grant and can't be accepted yet, so
 		// skip the grant and point the teacher at unlock instead of the usual
 		// "students can now accept" hint.
-		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the target classroom student team was NOT granted read on its private template.\n", finalSlug)
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the target classroom student team was not granted read on its private template.\n", finalSlug)
 		_, _ = fmt.Fprintf(errOut, "Unlock it first: gh teacher assignment lock %s %s %s --unlock\n", p.Org, p.To, finalSlug)
 	} else {
 		if err := grantReusedTemplateAccess(client, grantOut, errOut, p.Org, p.To, branch, finalSlug, copied.Template); err != nil {
@@ -337,7 +341,7 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 		return nil // public template needs no grant
 	}
 	if !templateInOrg(tmpl.Owner, org) {
-		_, _ = fmt.Fprintf(errOut, "Warning: reused %q references the private out-of-org template %s/%s — it can't be team-granted to classroom %q (reuse is in-org only for private templates). Students won't be able to accept; copy the template into %s and re-add.\n",
+		_, _ = fmt.Fprintf(errOut, "Warning: reused %q references the private out-of-org template %s/%s, which can't be team-granted to classroom %q (reuse is in-org only for private templates). Students won't be able to accept; copy the template into %s and re-add.\n",
 			slug, tmpl.Owner, tmpl.Repo, classroom, org)
 		return nil
 	}
@@ -373,7 +377,7 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 		return fmt.Errorf("assignment %s, but reading the %s team failed: %w", ctx.verb, ctx.classroomNoun, err)
 	}
 	if !ok {
-		return fmt.Errorf("assignment %q %s, but %s %q has no team to grant read on the private template %s/%s — run `gh teacher classroom add %s %s` to create the team%s (students can't accept until the team can read the template)",
+		return fmt.Errorf("assignment %q %s, but %s %q has no team to grant read on the private template %s/%s. Run `gh teacher classroom add %s %s` to create the team%s (students can't accept until the team can read the template)",
 			slug, ctx.verb, ctx.classroomNoun, classroom, tmplOwner, tmplRepo, org, classroom, ctx.rerunHint)
 	}
 	granted, err := configrepo.GrantTeamRepoRead(client, org, team.Slug, tmplOwner, tmplRepo)
@@ -384,7 +388,7 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 		// denial — keep it fatal so a throttle stays a loud, non-zero-exit failure
 		// rather than misleading owner guidance. Only a non-rate-limited 403 is benign.
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) && !cliutil.IsRateLimited(err) {
-			_, _ = fmt.Fprintf(errOut, "Warning: assignment %s, but granting the %s team read on the private template %s/%s needs an organization owner (a non-owner can't grant repo access at GitHub). Students can't `gh student accept` until an owner grants it — re-run this command as an owner%s, open the classroom in the web app (which grants it automatically), or grant the %s team read on %s/%s directly in GitHub (Settings -> Collaborators and teams).\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: assignment %s, but granting the %s team read on the private template %s/%s needs an organization owner (a non-owner can't grant repo access at GitHub). Students can't `gh student accept` until an owner grants it: re-run this command as an owner%s, open the classroom in the web app (which grants it automatically), or grant the %s team read on %s/%s directly in GitHub (Settings -> Collaborators and teams).\n",
 				ctx.verb, ctx.classroomNoun, tmplOwner, tmplRepo, ctx.rerunHint, team.Slug, tmplOwner, tmplRepo)
 			return nil
 		}

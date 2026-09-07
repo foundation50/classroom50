@@ -1,8 +1,9 @@
-import { useEffect, useId } from "react"
+import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { FileZipIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, Spinner, Heading } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
+import { BulkProgressInline } from "@/components/bulk/resultView"
 import useDownloadAllSubmissions from "@/hooks/mutations/useDownloadAllSubmissions"
 import {
   BULK_DOWNLOAD_WARN_THRESHOLD,
@@ -62,7 +63,6 @@ export function DownloadAllSubmissionsModal({
   owners: string[]
 }) {
   const { t } = useTranslation()
-  const titleId = useId()
   const {
     mutate,
     isPending,
@@ -82,6 +82,11 @@ export function DownloadAllSubmissionsModal({
   // anything else is an unexpected batch error.
   const assemblyError = error instanceof ZipAssemblyError
 
+  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  useEffect(() => {
+    if (open) reset()
+  }, [open, reset])
+
   // Picker dismissed before anything ran — close quietly, no empty summary.
   useEffect(() => {
     if (outcome?.status === "cancelled") {
@@ -94,7 +99,6 @@ export function DownloadAllSubmissionsModal({
     // Closing mid-run cancels the in-flight batch rather than trapping the user.
     if (running) cancel()
     onClose()
-    reset()
   }
 
   const handleRun = () => {
@@ -106,13 +110,38 @@ export function DownloadAllSubmissionsModal({
       open={open}
       onClose={handleClose}
       size="md"
-      aria-labelledby={titleId}
+      title={t("submissions.downloadAll.title")}
+      headerVisual={
+        <ModalIcon>
+          <FileZipIcon aria-hidden="true" className="size-4" />
+        </ModalIcon>
+      }
+      footer={
+        summary || error ? (
+          <Button variant="primary" size="sm" onClick={handleClose}>
+            {t("common.done")}
+          </Button>
+        ) : running ? (
+          <Button variant="ghost" size="sm" onClick={handleClose}>
+            {t("common.cancel")}
+          </Button>
+        ) : (
+          <>
+            <Button variant="ghost" size="sm" onClick={handleClose}>
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={count === 0}
+              onClick={handleRun}
+            >
+              {t("submissions.downloadAll.confirmLabel", { count })}
+            </Button>
+          </>
+        )
+      }
     >
-      <Heading as="h3" className="flex items-center gap-2" id={titleId}>
-        <FileZipIcon aria-hidden="true" className="size-4" />
-        {t("submissions.downloadAll.title")}
-      </Heading>
-
       {error ? (
         <div className="mt-3 space-y-3">
           <Alert tone="error">
@@ -176,20 +205,16 @@ export function DownloadAllSubmissionsModal({
           )}
         </div>
       ) : running ? (
-        <div className="mt-4 space-y-3">
-          <p className="flex items-center gap-2 text-sm text-base-content/70">
-            <Spinner size="xs" />
-            {t("submissions.downloadAll.running", {
-              done: progress?.done ?? 0,
-              total: progress?.total ?? count,
-            })}
-          </p>
-          <progress
-            className="progress progress-primary w-full"
-            value={progress?.done ?? 0}
-            max={progress?.total ?? count}
-          />
-        </div>
+        <BulkProgressInline
+          label={t("submissions.downloadAll.running", {
+            done: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          })}
+          progress={{
+            processed: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          }}
+        />
       ) : (
         <div className="mt-3 space-y-2 text-sm leading-6 text-base-content/70">
           <p>
@@ -209,32 +234,6 @@ export function DownloadAllSubmissionsModal({
           )}
         </div>
       )}
-
-      <div className="modal-action">
-        {summary || error ? (
-          <Button size="sm" onClick={handleClose}>
-            {t("common.close")}
-          </Button>
-        ) : running ? (
-          <Button variant="ghost" size="sm" onClick={handleClose}>
-            {t("common.cancel")}
-          </Button>
-        ) : (
-          <>
-            <Button variant="ghost" size="sm" onClick={handleClose}>
-              {t("common.cancel")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={count === 0}
-              onClick={handleRun}
-            >
-              {t("submissions.downloadAll.confirmLabel", { count })}
-            </Button>
-          </>
-        )}
-      </div>
     </Modal>
   )
 }

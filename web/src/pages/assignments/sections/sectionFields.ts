@@ -54,8 +54,10 @@ export const SECTION_FIELDS: Record<
     "pass_threshold_enabled",
     "pass_threshold",
     "tests",
+    "test_failure_details",
+    "test_show_output",
   ],
-  schedule: ["available_from_date", "due_date"],
+  schedule: ["available_from_date", "due_date", "locked"],
 }
 
 // Whether the section holds any non-default value, compared against the form's

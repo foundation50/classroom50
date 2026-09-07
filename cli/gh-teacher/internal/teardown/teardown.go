@@ -31,15 +31,15 @@ func NewCmd() *cobra.Command {
 		Use:   "teardown <org>",
 		Short: "Delete every repo in a Classroom 50 org (development reset)",
 		Long: "Delete every repository in <org> after confirming the org is a\n" +
-			"Classroom 50 setup (i.e., <org>/classroom50 exists). Intended for\n" +
-			"resetting a development org between iterations — production\n" +
+			"Classroom 50 setup (<org>/classroom50 exists). Intended for\n" +
+			"resetting a development org between iterations; production\n" +
 			"teachers should use the GitHub web UI for selective deletion.\n\n" +
-			"Before any deletion, the command lists every repo it would\n" +
+			"Before any deletion, the command lists every repository it would\n" +
 			"remove and requires you to type the org name to confirm.\n" +
 			"Pass --yes to skip the prompt (scripted runs only).\n\n" +
 			"<org>/classroom50 is deleted last so a mid-run failure leaves\n" +
-			"the marker repo behind — re-running teardown stays safe.\n\n" +
-			"Requires the `delete_repo` OAuth scope, which is NOT part of\n" +
+			"the marker repository behind and re-running teardown stays safe.\n\n" +
+			"Requires the `delete_repo` OAuth scope, which is not part of\n" +
 			"the default `gh teacher login` scope set. Opt in once with\n" +
 			"`gh teacher login -s delete_repo` before running teardown.\n" +
 			"This is intentional: teachers who haven't explicitly opted in\n" +
@@ -91,7 +91,8 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	// Snapshot the classroom team refs (students + staff) BEFORE the repo
 	// deletions remove the classroom50 repository that records them, so we can sweep the
 	// teams afterward. Best-effort: a read failure shouldn't block teardown.
-	teams := collectClassroomTeams(client, org, errOut)
+	// The classroom short-names ride along for the group-team sweep below.
+	teams, classrooms := collectClassroomTeams(client, org, errOut)
 
 	_, _ = fmt.Fprintf(out, "Found %d repo(s) in %s:\n", len(repos), org)
 	for _, r := range repos {
@@ -188,8 +189,15 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	// each description. Best-effort, like the classroom sweep.
 	sweepInviteTeams(client, org, out, errOut)
 
+	// Sweep each classroom's group teams (the `classroom50-group-<hash>-<n>`
+	// teams behind team-mode assignments). Attribution comes from each team's
+	// classroom50/group/v1 description record — not the config repo, which is
+	// gone by now — so the sweep only needs the classroom short-names
+	// snapshotted above. Best-effort, like the invite sweep.
+	sweepGroupTeams(client, org, classrooms, out, errOut)
+
 	if failed > 0 {
-		return fmt.Errorf("%d repo(s) failed to delete — see stderr for per-repo errors", failed)
+		return fmt.Errorf("%d repo(s) failed to delete; see stderr for per-repo errors", failed)
 	}
 	return nil
 }
@@ -214,19 +222,42 @@ func sweepInviteTeams(client githubapi.Client, org string, out, errOut io.Writer
 	}
 }
 
+// sweepGroupTeams deletes every group team attributable to one of the
+// snapshotted classrooms. A list failure is warned and skipped (the teardown
+// itself succeeded); each delete is fenced by configrepo.DeleteGroupTeam's
+// full-shape + id + verified-record guards and is idempotent.
+func sweepGroupTeams(client githubapi.Client, org string, classrooms []string, out, errOut io.Writer) {
+	for _, classroom := range classrooms {
+		deleted, failures, err := configrepo.SweepClassroomGroupTeams(client, org, classroom)
+		if err != nil {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not list group teams to sweep for %s (%v); delete any lingering %s* teams by hand at https://github.com/orgs/%s/teams.\n",
+				org, classroom, err, contract.GroupTeamPrefix, org)
+			return // the listing is org-wide; retrying per classroom would fail the same way
+		}
+		for _, slug := range deleted {
+			_, _ = fmt.Fprintf(out, "%s: deleted group team %s\n", org, slug)
+		}
+		for _, failure := range failures {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not delete group team (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",
+				org, failure, org)
+		}
+	}
+}
+
 // collectClassroomTeams reads every classroom.json and returns the team refs to
-// sweep on teardown (each classroom's student team plus staff teams).
+// sweep on teardown (each classroom's student team plus staff teams) together
+// with the classroom short-names (the group-team sweep's scope).
 // Best-effort — a read failure is warned and skipped. Deduped by slug.
-func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer) []configrepo.TeamRef {
+func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer) (teams []configrepo.TeamRef, classrooms []string) {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: could not resolve the classroom50 repository branch to sweep classroom teams (%v); delete any lingering classroom50-* teams by hand.\n", org, err)
-		return nil
+		return nil, nil
 	}
 	entries, _, err := configrepo.ListDirContents(client, org, configrepo.ConfigRepoName, "", branch)
 	if err != nil {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: could not list classrooms to sweep their teams (%v); delete any lingering classroom50-* teams by hand.\n", org, err)
-		return nil
+		return nil, nil
 	}
 	bySlug := map[string]configrepo.TeamRef{}
 	add := func(t *configrepo.TeamRef) {
@@ -245,6 +276,7 @@ func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer
 		if err != nil || !ok {
 			continue
 		}
+		classrooms = append(classrooms, e.Name)
 		add(c.Team)
 		if c.Teams != nil {
 			add(c.Teams.Teacher)
@@ -252,11 +284,11 @@ func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer
 			add(c.Teams.TA)
 		}
 	}
-	teams := make([]configrepo.TeamRef, 0, len(bySlug))
+	teams = make([]configrepo.TeamRef, 0, len(bySlug))
 	for _, t := range bySlug {
 		teams = append(teams, t)
 	}
-	return teams
+	return teams, classrooms
 }
 
 // requireConfigRepo confirms <org>/classroom50 exists. 404 is the "not a
@@ -265,7 +297,7 @@ func requireConfigRepo(client githubapi.Client, org string) error {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), configrepo.ConfigRepoName)
 	if err := client.Get(path, nil); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return fmt.Errorf("%s/%s not found — refusing teardown on an org without the Classroom 50 marker repo. Run `gh teacher init %s` first if this is intended, or delete repos manually via the web UI",
+			return fmt.Errorf("%s/%s not found: refusing teardown on an org without the Classroom 50 marker repository. Run `gh teacher init %s` first if this is intended, or delete repos manually via the web UI",
 				org, configrepo.ConfigRepoName, org)
 		}
 		return fmt.Errorf("GET %s: %w", path, err)
@@ -299,7 +331,7 @@ func deleteRepo(client githubapi.Client, owner, repo string) error {
 	resp, err := client.Request(http.MethodDelete, path, nil)
 	if err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
-			return fmt.Errorf("403 Forbidden — typically your token lacks the `delete_repo` OAuth scope (opt in with `gh teacher login -s delete_repo`); 403 can also mean your account doesn't have delete permission on this repo")
+			return fmt.Errorf("403 Forbidden: typically your token lacks the `delete_repo` OAuth scope (opt in with `gh teacher login -s delete_repo`); 403 can also mean your account doesn't have delete permission on this repo")
 		}
 		return fmt.Errorf("DELETE %s: %w", path, err)
 	}
@@ -321,7 +353,7 @@ func confirmTeardown(in io.Reader, out io.Writer, org string) error {
 		return fmt.Errorf("read confirmation: %w", err)
 	}
 	if strings.TrimSpace(line) != org {
-		return errors.New("confirmation did not match org name — aborted without deleting anything")
+		return errors.New("confirmation did not match the org name: aborted without deleting anything")
 	}
 	return nil
 }

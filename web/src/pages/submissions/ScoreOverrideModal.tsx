@@ -1,15 +1,7 @@
 import { useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import {
-  Alert,
-  Button,
-  FormField,
-  Input,
-  Modal,
-  Spinner,
-  Heading,
-} from "@/components/ui"
+import { Alert, Button, FormField, Input, Modal } from "@/components/ui"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { useSetScoreOverride } from "@/hooks/mutations/useSetScoreOverride"
 
@@ -19,15 +11,18 @@ export type ScoreOverrideContext = {
   org: string
   classroom: string
   assignment: string
-  assignmentType: "individual" | "group"
+  assignmentType: "individual" | "group" | "team"
   // The max points for the score input. Manual assignments pass the configured
   // grading.max_points; a graded autograded row passes its own max-score. Absent
   // when the max isn't known yet (a pending autograded row with no collected
   // score) — the teacher then enters both the score and the max in the modal.
   maxPoints?: number
-  // Group crediting for a NEW entry (the credited members of the group repo).
-  // Individual entries omit it and are credited to `owner`.
+  // Group/team crediting for a NEW entry (the credited members of the shared
+  // repo; live team members for a team row). Individual entries omit it and
+  // are credited to `owner`.
   memberUsernames?: string[]
+  // Team mode: the group team's slug, recorded on a new entry.
+  teamSlug?: string
   // Distinguishes the copy/behavior: a manual-mode assignment vs. overriding an
   // autograded result (which preserves and can revert to the autograded score).
   mode: "manual" | "auto"
@@ -42,7 +37,7 @@ export type ScoreOverrideCapability = {
   org: string
   classroom: string
   assignment: string
-  assignmentType: "individual" | "group"
+  assignmentType: "individual" | "group" | "team"
   mode: "manual" | "auto"
   // Manual mode only: the configured total points. Absent for autograded
   // assignments (per-row max-score is used instead).
@@ -147,6 +142,7 @@ export function ScoreOverrideModal({
         owner,
         assignmentType: ctx.assignmentType,
         memberUsernames: ctx.memberUsernames,
+        teamSlug: ctx.teamSlug,
         score: parsed,
         maxPoints: effectiveMax,
       },
@@ -180,7 +176,6 @@ export function ScoreOverrideModal({
     )
   }
 
-  const titleId = `score-override-title-${owner}`
   const title = overridden
     ? t("submissions.scoreOverride.titleOverride")
     : hasGrade
@@ -207,16 +202,51 @@ export function ScoreOverrideModal({
       onClose={onClose}
       closeDisabled={saving}
       size="md"
-      aria-labelledby={titleId}
+      title={title}
+      subtitle={description}
+      footer={
+        <>
+          {/* Destructive Clear sits apart on the start side; Cancel/Save keep
+              the standard end-aligned order. */}
+          <div className="me-auto">
+            {overridden ? (
+              <Button
+                type="button"
+                variant="error"
+                size="sm"
+                disabled={saving}
+                aria-label={t("submissions.scoreOverride.clearLabel", { name })}
+                onClick={clear}
+              >
+                {t("submissions.scoreOverride.clear")}
+              </Button>
+            ) : null}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            disabled={saving}
+            onClick={onClose}
+          >
+            {t("common.cancel")}
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            // Enabled while invalid (Primer): the validation errors already
+            // render live below the inputs; save() guards re-entry. `loading`
+            // keeps it focusable-but-inert and announces busy.
+            loading={saving}
+            onClick={save}
+          >
+            {t("submissions.scoreOverride.save")}
+          </Button>
+        </>
+      }
     >
-      <div className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <Heading as="h3" id={titleId}>
-            {title}
-          </Heading>
-          <p className="text-sm text-base-content/70">{description}</p>
-        </div>
-
+      <div className="mt-4 flex flex-col gap-4">
         {showAutograded ? (
           <div className="flex items-center gap-2 text-sm">
             <span className="text-base-content/60">
@@ -304,44 +334,6 @@ export function ScoreOverrideModal({
               : t("submissions.scoreOverride.saveError")}
           </Alert>
         ) : null}
-
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            {overridden ? (
-              <Button
-                type="button"
-                variant="error"
-                size="sm"
-                disabled={saving}
-                aria-label={t("submissions.scoreOverride.clearLabel", { name })}
-                onClick={clear}
-              >
-                {t("submissions.scoreOverride.clear")}
-              </Button>
-            ) : null}
-          </div>
-          <div className="flex items-center gap-2">
-            {saving ? <Spinner size="xs" /> : null}
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              disabled={saving}
-              onClick={onClose}
-            >
-              {t("common.cancel")}
-            </Button>
-            <Button
-              type="button"
-              variant="primary"
-              size="sm"
-              disabled={saving || saveBlocked}
-              onClick={save}
-            >
-              {t("submissions.scoreOverride.save")}
-            </Button>
-          </div>
-        </div>
       </div>
     </Modal>
   )

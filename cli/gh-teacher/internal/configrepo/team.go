@@ -64,9 +64,9 @@ const (
 // StaffTeamRepoPermissions maps a staff role to the repo permission a staff
 // team gets on each student assignment repo and on private in-org templates.
 // The head-TA/TA-team template read is applied at TWO points: eagerly at
-// assignment add/reuse and classroom migrate (see grantStaffTeamTemplateRead /
-// migrate.go), and again as an idempotent re-affirm at collect-scores. The eager
-// sites use this map only as a presence gate and hardcode read
+// assignment add/reuse (see grantStaffTeamTemplateRead), and again as an
+// idempotent re-affirm at collect-scores. The eager sites use this map only
+// as a presence gate and hardcode read
 // (GrantTeamRepoRead); collect-scores reads the value. Source of truth for the
 // collector's hand-mirrored STAFF_TEAM_PERMISSIONS (collect_scores.py) — keep in
 // lockstep.
@@ -84,9 +84,9 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 
 // TemplateReadStaffRoles is the ordered set of non-owner staff roles that get an
 // eager read grant on a private in-org template (head-TA, then TA; teacher
-// omitted per StaffTeamRepoPermissions above). Single-sources the loops in
-// grantStaffTeamTemplateRead (reuse.go) and migrate.go so a future non-owner
-// staff role is one line here. Still presence-gated against
+// omitted per StaffTeamRepoPermissions above). Single-sources the loop in
+// grantStaffTeamTemplateRead (reuse.go) so a future non-owner staff role is
+// one line here. Still presence-gated against
 // StaffTeamRepoPermissions at each call site.
 var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 
@@ -204,13 +204,13 @@ func CanonicalTeamSlugShortName(shortName string) bool {
 // access. Safe because the team is `secret` (members + owners only). Pass ""
 // to leave the description unset.
 //
-// `members_can_create_teams: false` (init's lockdown) doesn't block this — the
+// The org's `members_can_create_teams` setting is irrelevant here — the
 // teacher authenticates as an org owner.
 func EnsureClassroomTeam(client githubapi.Client, org, shortName, description string) (TeamRef, error) {
 	// Guard the slug==name invariant (see CanonicalTeamSlugShortName):
 	// ShortNamePattern alone permits hyphens GitHub would slugify away.
 	if !CanonicalTeamSlugShortName(shortName) {
-		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
+		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
 	}
 	return ensureSecretTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled)
 }
@@ -222,7 +222,7 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 // (#335).
 func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole) (TeamRef, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
-		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
+		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
@@ -304,7 +304,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 		return false, nil
 	}
 
-	desired, err := MarshalTeamDescription(c.Name, c.Term, c.Secret, !c.IsArchived())
+	desired, err := MarshalTeamDescription(c.Name, c.Term, c.Secret, c.PagesBaseURL, !c.IsArchived())
 	if err != nil {
 		return false, err
 	}
@@ -358,7 +358,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 // `description` is written on create AND reconciled on adopt so a rotated
 // secret / renamed classroom propagates to the student-facing record.
 //
-// `members_can_create_teams: false` (init's lockdown) doesn't block this — the
+// The org's `members_can_create_teams` setting is irrelevant here — the
 // teacher authenticates as an org owner.
 func ensureSecretTeamByName(client githubapi.Client, org, name, description, notificationSetting string) (TeamRef, error) {
 	teamBody := map[string]any{
@@ -471,13 +471,13 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 	}
 	// Namespace guard: only ever delete a `classroom50-`-prefixed team.
 	if !strings.HasPrefix(team.Slug, "classroom50-") {
-		return fmt.Errorf("refusing to delete team %q at %s — not a classroom50-namespaced team; remove it by hand if intended", team.Slug, org)
+		return fmt.Errorf("refusing to delete team %q at %s: not a classroom50-namespaced team; remove it by hand if intended", team.Slug, org)
 	}
 	// Fail closed on a non-positive id: without a recorded id we can't confirm
 	// the live team at this slug is the one this classroom created. (The
 	// load-bearing half of the web's guard an earlier port dropped.)
 	if team.ID <= 0 {
-		return fmt.Errorf("refusing to delete team %q at %s — no recorded id to verify it against; remove it by hand if intended", team.Slug, org)
+		return fmt.Errorf("refusing to delete team %q at %s: no recorded id to verify it against; remove it by hand if intended", team.Slug, org)
 	}
 	// Defense-in-depth: confirm the team at this slug is the one we recorded
 	// (same id) before deleting.
@@ -492,7 +492,7 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 		return fmt.Errorf("GET %s (verify team before delete): %w", getPath, err)
 	}
 	if live.ID != team.ID {
-		return fmt.Errorf("team %q at %s now has id %d, not the recorded %d — refusing to delete a team that isn't the one this classroom created; remove it by hand if intended",
+		return fmt.Errorf("team %q at %s now has id %d, not the recorded %d: refusing to delete a team that isn't the one this classroom created; remove it by hand if intended",
 			team.Slug, org, live.ID, team.ID)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(team.Slug))
@@ -573,7 +573,7 @@ func DeleteInviteTeam(client githubapi.Client, org, slug string) error {
 		return nil
 	}
 	if !IsInviteTeamSlug(slug) {
-		return fmt.Errorf("refusing to delete team %q at %s — not a %s<hash> invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
+		return fmt.Errorf("refusing to delete team %q at %s: not a %s<hash> invite team; remove it by hand if intended", slug, org, contract.InviteTeamPrefix)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	resp, err := client.Request(http.MethodDelete, path, nil)
@@ -640,6 +640,25 @@ func RemoveTeamMembership(client githubapi.Client, org, slug, username string) e
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
+}
+
+// GetTeamMembershipState reads one user's membership on one team ("active" or
+// "pending"). found=false on 404 — GitHub's authoritative "not on this team" (a
+// missing team 404s the same way). Any other error propagates so a transient
+// blip is never read as "not a member".
+func GetTeamMembershipState(client githubapi.Client, org, slug, username string) (state string, found bool, err error) {
+	path := fmt.Sprintf("orgs/%s/teams/%s/memberships/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(username))
+	var resp struct {
+		State string `json:"state"`
+	}
+	if err := client.Get(path, &resp); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return "", false, nil
+		}
+		return "", false, fmt.Errorf("GET %s: %w", path, err)
+	}
+	return resp.State, true, nil
 }
 
 // teamHasRepoAccess reports whether the team addressed by `slug` already has

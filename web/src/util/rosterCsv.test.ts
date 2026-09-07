@@ -199,8 +199,8 @@ describe("parseRosterCsv", () => {
     expect(rows[1]).toMatchObject({ username: "", github_id: "583231" })
   })
 
-  // Deliberate: the benign "trailing role/github_id omitted" case, so a sync
-  // must not abort on it.
+  // Deliberate: the benign "trailing role omitted" case, so a sync must not
+  // abort on it.
   it("tolerates a row short by exactly one column (dropped trailing field)", () => {
     const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231\n`
     const { rows, problems } = parseRosterCsv(csv)
@@ -233,7 +233,7 @@ describe("parseRosterCsv", () => {
   })
 
   it("reports a row with too many fields", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,EXTRA\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,,EXTRA\n`
     const { problems } = parseRosterCsv(csv)
     expect(problems).toHaveLength(1)
     expect(problems[0]).toMatchObject({ line: 2 })
@@ -285,7 +285,7 @@ describe("parseStudentsCsv", () => {
   })
 
   it("throws with the formatted problems when the file is malformed", () => {
-    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,EXTRA\n`
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,,EXTRA\n`
     expect(() => parseStudentsCsv(csv)).toThrow(/Could not parse roster\.csv/)
     expect(() => parseStudentsCsv(csv)).toThrow(/line 2:/)
   })
@@ -313,14 +313,25 @@ describe("stringifyStudentsCsv", () => {
     expect(stringifyStudentsCsv([])).toBe(`${HEADER}\n`)
   })
 
-  it("drops rows with no identity column", () => {
+  // The write-side keep-rule matches the parse side (shared vectors:
+  // cli/shared/testdata/roster_row_cases.json): a row is kept when it
+  // identifies a student (username/github_id/email) OR describes one (a
+  // name); only section/role noise or a fully blank row is dropped.
+  it("keeps identity-less rows that describe a student, drops pure noise", () => {
     const csv = stringifyStudentsCsv([
       row({ username: "keep" }),
-      normalizeStudentRow({ first_name: "no identity" }),
+      // name-only row: kept (describes a student).
+      normalizeStudentRow({ first_name: "Name", last_name: "Only" }),
+      // section/role noise only: dropped.
+      normalizeStudentRow({ section: "noise-section", role: "student" }),
+      // fully blank: dropped.
+      normalizeStudentRow({}),
     ])
-    expect(csv.trim().split("\n")).toHaveLength(2)
+    // header + keep + name-only
+    expect(csv.trim().split("\n")).toHaveLength(3)
     expect(csv).toContain("keep")
-    expect(csv).not.toContain("no identity")
+    expect(csv).toContain("Name,Only")
+    expect(csv).not.toContain("noise-section")
   })
 
   it("round-trips rows through parse without changing them", () => {

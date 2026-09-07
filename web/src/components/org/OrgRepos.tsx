@@ -14,24 +14,45 @@ import {
 } from "@/components/ui/icons"
 
 import { EmptyState } from "@/components/list"
-import { Button, Card, Markdown, Modal, Heading } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  Markdown,
+  Modal,
+  Heading,
+  RouterButton,
+} from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
 import { assignmentDescription } from "@/types/classroom"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { EnterDiv } from "@/lib/motionComponents"
+import { sortReposNewestFirst } from "@/util/repoOrder"
 
 const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   const { t } = useTranslation()
   const [descriptionOpen, setDescriptionOpen] = useState(false)
   const cl50Yaml = useDotClassroom50(org, repo.name)
   const { classroom, assignment, secret } = cl50Yaml
+  // Custom Pages base URL from the student's team-description record; the
+  // read waits for it so a custom-domain org never fires a doomed github.io
+  // fetch. One shared GET /user/teams query backs every card.
+  const { pagesBaseUrl, isLoading: loadingBootstrap } = useClassroomSecret(
+    org,
+    classroom || undefined,
+  )
   const { assignment: assignmentData } = usePagesAssignments(
     org,
     classroom,
     secret,
-    { assignmentSlug: assignment },
+    {
+      assignmentSlug: assignment,
+      pagesBaseUrl,
+      enabled: !loadingBootstrap,
+    },
   )
 
   const description = assignmentDescription(assignmentData)
@@ -39,10 +60,11 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   // (`<classroom>-<assignment>-<user>`) when assignment data hasn't resolved.
   const title = assignmentData?.name || assignment || repo.name
 
-  // Only group assignments have something a student can manage (collaborators);
-  // for individual assignments the edit page is a dead-end, so no pencil.
+  // Only shared-repo assignments have something a student can manage (their
+  // group); for individual assignments the edit page is a dead-end, so no pencil.
   const canManageGroup =
-    Boolean(classroom && assignment) && assignmentData?.mode === "group"
+    Boolean(classroom && assignment) &&
+    (assignmentData?.mode === "group" || assignmentData?.mode === "team")
 
   return (
     <Card
@@ -52,15 +74,18 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
       className="relative col-span-12 border border-base-200 md:col-span-6 xl:col-span-4"
     >
       {canManageGroup && classroom && assignment && (
-        <Link
+        <RouterButton
           to="/$org/$classroom/assignments/$assignment/settings"
           params={{ org, classroom, assignment }}
-          className="btn btn-ghost btn-sm btn-circle absolute end-3 top-3 z-10 text-base-content/70 hover:text-primary"
+          variant="ghost"
+          size="sm"
+          shape="circle"
+          className="absolute end-3 top-3 z-10 text-base-content/70 hover:text-primary"
           aria-label={t("classes.repo.manageGroupAria", { assignment })}
           title={t("classes.repo.manageGroupTitle")}
         >
           <PencilIcon aria-hidden="true" className="size-4" />
-        </Link>
+        </RouterButton>
       )}
 
       <Card.Body className="gap-4">
@@ -129,16 +154,22 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         <Card.Actions className="items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-2">
             {assignmentData?.mode === "individual" && (
-              <div className="badge badge-ghost badge-sm py-3">
+              <Badge ghost className="py-3">
                 <PersonIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.individual")}
-              </div>
+              </Badge>
             )}
-            {assignmentData?.mode === "group" && (
-              <div className="badge badge-ghost badge-sm py-3">
+            {assignmentData?.mode === "team" && (
+              <Badge ghost className="py-3">
                 <PeopleIcon aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.group")}
-              </div>
+              </Badge>
+            )}
+            {assignmentData?.mode === "group" && (
+              <Badge ghost className="py-3">
+                <PeopleIcon aria-hidden="true" className="size-4" />{" "}
+                {t("classes.repo.groupLegacy")}
+              </Badge>
             )}
           </div>
 
@@ -174,18 +205,13 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         open={descriptionOpen && Boolean(description)}
         onClose={() => setDescriptionOpen(false)}
         size="2xl"
-        aria-label={t("classes.repo.descriptionModalTitle")}
+        title={title}
+        subtitle={t("classes.repo.descriptionModalTitle")}
       >
-        <div className="mb-4 pe-8">
-          <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-            {t("classes.repo.descriptionModalTitle")}
-          </p>
-          <Heading as="h3">{title}</Heading>
-        </div>
         {description ? (
           <Markdown
             content={description}
-            className="max-h-[70vh] overflow-y-auto pe-1"
+            className="mt-4 max-h-[70vh] overflow-y-auto pe-1"
           />
         ) : null}
       </Modal>
@@ -209,7 +235,11 @@ export const OrgRepos = ({
 
   if (!repos) return <></>
 
-  let writableRepos = repos.filter((repo) => repo.permissions?.push)
+  // The listing arrives oldest first (see sortReposNewestFirst); a student
+  // expects their latest assignment at the top.
+  let writableRepos = sortReposNewestFirst(repos).filter(
+    (repo) => repo.permissions?.push,
+  )
   if (classroom) {
     // Classroom repos are `<classroom>-<assignment>-<user>`, so require the
     // trailing "-" to avoid matching a sibling classroom whose name extends

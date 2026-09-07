@@ -11,7 +11,9 @@ const base: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,
@@ -38,6 +40,7 @@ const base: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_visibility: "private",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "auto",
@@ -47,6 +50,8 @@ const base: CreateAssignmentFormValues = {
   repo_feature_projects: "inherit",
   repo_feature_pull_requests: "inherit",
   tests: [],
+  test_failure_details: "",
+  test_show_output: false,
 }
 
 describe("deriveFormShape — repository source", () => {

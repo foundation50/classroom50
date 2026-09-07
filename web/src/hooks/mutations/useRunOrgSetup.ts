@@ -32,6 +32,7 @@ export function useRunOrgSetup(params: {
     params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: () => {
       // Resolve undefined when org is absent (callers branch on the result);
       // matches the pre-refactor early return.

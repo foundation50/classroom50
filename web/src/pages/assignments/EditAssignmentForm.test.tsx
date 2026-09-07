@@ -19,11 +19,11 @@ vi.mock("@/hooks/useTrackPublishDeploy", () => ({
 // repos gates the provisioning-change confirmation. `acceptedRepoNames` lets a
 // test set that count without wiring GitHub reads.
 let acceptedRepoNames: string[] = []
-vi.mock("@/hooks/useGetMyOrgRepos", () => ({
-  default: () => ({ data: [] }),
+vi.mock("@/hooks/useAssignmentRepos", () => ({
+  useAssignmentRepos: () => ({ data: [] }),
 }))
 vi.mock("@/hooks/useGetStudents", () => ({
-  default: () => ({ students: [] }),
+  default: () => ({ students: [], isLoading: false }),
 }))
 vi.mock("@/pages/submissions/dashboard", () => ({
   assignmentRepoNames: () => acceptedRepoNames,
@@ -38,6 +38,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 vi.mock("./CreateAssignmentForm", () => ({
   assignmentToFormValues: (value: unknown) => value,
   formValuesToRepoFeatures: () => undefined,
+  formValuesToTestDefaults: () => undefined,
   default: ({
     onSubmit,
   }: {
@@ -79,6 +80,9 @@ vi.mock("./CreateAssignmentForm", () => ({
             pass_threshold_enabled: false,
             pass_threshold: 0,
             tests: [],
+            // Per-test overrides for the access/visibility fields the confirm
+            // inspects; the defaults express "no change" for a fresh entry.
+            ...submittedOverrides,
           }),
         ).catch(() => {})
       }}
@@ -88,11 +92,15 @@ vi.mock("./CreateAssignmentForm", () => ({
   ),
 }))
 
+// Fields a test merges into the submitted values (e.g. `locked: true`).
+let submittedOverrides: Record<string, unknown> = {}
+
 import EditAssignmentForm from "./EditAssignmentForm"
 
 beforeEach(() => {
   mutateAsync.mockClear()
   acceptedRepoNames = []
+  submittedOverrides = {}
 })
 afterEach(cleanup)
 
@@ -171,7 +179,7 @@ it("confirms before saving a provisioning change when students have accepted", a
   expect(document.querySelector("dialog[open]")).not.toBeNull()
   fireEvent.click(
     screen.getByRole("button", {
-      name: "assignmentSettings.provisioningConfirm.confirm",
+      name: "assignmentSettings.editConfirm.confirm",
     }),
   )
   await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
@@ -198,7 +206,7 @@ it("does not write when the provisioning-change confirmation is cancelled", () =
   expect(document.querySelector("dialog[open]")).not.toBeNull()
   fireEvent.click(
     screen.getByRole("button", {
-      name: "assignmentSettings.provisioningConfirm.cancel",
+      name: "assignmentSettings.editConfirm.cancel",
     }),
   )
   expect(mutateAsync).not.toHaveBeenCalled()
@@ -226,4 +234,172 @@ it("saves directly (no confirm) when accepted but no provisioning setting change
   expect(mutateAsync).toHaveBeenCalledTimes(1)
   // No provisioning-class change, so the dialog was never opened.
   expect(document.querySelector("dialog[open]")).toBeNull()
+})
+
+it("sends locked as undefined when the toggle was not flipped", () => {
+  // The form was seeded when it opened; a lock applied since (row action,
+  // CLI, co-teacher) must survive a save that never touched the toggle, so an
+  // unchanged toggle asks editAssignment to carry the STORED state forward.
+  submittedOverrides = { locked: false }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).toHaveBeenCalledTimes(1)
+  const [input] = mutateAsync.mock.calls[0]
+  expect(input).toHaveProperty("locked", undefined)
+})
+
+it("confirms a lock even when no students have accepted, listing the lock item", async () => {
+  // Locking hits every student surface and withholds the template read, so it
+  // is confirmed regardless of the acceptance count.
+  acceptedRepoNames = []
+  submittedOverrides = { locked: true }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).not.toHaveBeenCalled()
+  expect(
+    screen.getByText("assignmentSettings.editConfirm.access.lock"),
+  ).toBeTruthy()
+  expect(
+    screen.queryByText("assignmentSettings.editConfirm.provisioningIntro"),
+  ).toBeNull()
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "assignmentSettings.editConfirm.confirm",
+    }),
+  )
+  await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1))
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({ locked: true }),
+    expect.any(Object),
+  )
+})
+
+it("confirms an unlock with the unlock item", () => {
+  submittedOverrides = { locked: false }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+        locked: true,
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).not.toHaveBeenCalled()
+  expect(
+    screen.getByText("assignmentSettings.editConfirm.access.unlock"),
+  ).toBeTruthy()
+})
+
+it("saves a locked assignment that stays locked without a prompt", () => {
+  submittedOverrides = { locked: true }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+        locked: true,
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).toHaveBeenCalledTimes(1)
+  expect(document.querySelector("dialog[open]")).toBeNull()
+  const [input] = mutateAsync.mock.calls[0]
+  expect(input).toHaveProperty("locked", undefined)
+})
+
+it("confirms a visibility or permission change only once students accepted", () => {
+  submittedOverrides = {
+    repo_visibility: "public",
+    student_permission: "admin",
+  }
+  const defaultData = {
+    slug: "hw1",
+    name: "Homework",
+    mode: "individual" as const,
+    autograder: "default" as const,
+  }
+  // Nobody accepted: the change only affects future repos, so it saves silently.
+  acceptedRepoNames = []
+  const first = render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={defaultData}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).toHaveBeenCalledTimes(1)
+  expect(document.querySelector("dialog[open]")).toBeNull()
+  first.unmount()
+  mutateAsync.mockClear()
+
+  // With existing repos, both settings are listed as future-accepts-only.
+  acceptedRepoNames = ["cs101-hw1-alice"]
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={defaultData}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).not.toHaveBeenCalled()
+  expect(
+    screen.getByText("assignmentSettings.editConfirm.provisioningIntro"),
+  ).toBeTruthy()
+  expect(
+    screen.getByText(
+      "assignmentSettings.editConfirm.provisioning.student_permission",
+    ),
+  ).toBeTruthy()
+  expect(
+    screen.getByText(
+      "assignmentSettings.editConfirm.provisioning.repo_visibility",
+    ),
+  ).toBeTruthy()
 })

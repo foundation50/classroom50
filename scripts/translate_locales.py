@@ -14,9 +14,10 @@ survive across runs, and it's cheap. Diff keys come from the caller (see
 locale_diff.py). With no diff (or no current pack to patch), it falls back to a
 full section-by-section translation so new languages still work.
 
-Chunking (a section per call, or the changed subset in one call) keeps each
-response small enough to avoid truncation and never splits a fragment/plural
-sibling group; the full English file rides along as terminology context.
+Every call translates a batch of keys sized to fit the model's output budget
+(see BEDROCK_MAX_CHUNK_CHARS): a small section or changed subset goes in one
+call, a large one is split into several. A plural sibling group is never split
+across batches; the full English file rides along as terminology context.
 
 Usage (patch mode — CI): --changed-keys / --removed-keys are JSON lists of
 dotted keys added/modified / removed in en.json.
@@ -60,9 +61,15 @@ from botocore.exceptions import (
 # schema. Overridable via BEDROCK_ANTHROPIC_VERSION.
 ANTHROPIC_VERSION = os.environ.get("BEDROCK_ANTHROPIC_VERSION", "bedrock-2023-05-31")
 
-# Bounds one response. We translate a single section per call, so this only
-# needs to fit the largest section; kept generous. Overridable.
-DEFAULT_MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "20000"))
+# Bounds one response. Overridable.
+DEFAULT_MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "32000"))
+
+# Upper bound on the English JSON (chars) translated per call. A translation can
+# run ~20% longer than its English, and dense scripts (CJK, Arabic, Hebrew) cost
+# ~1.5 chars per output token, so this keeps every response far under
+# DEFAULT_MAX_TOKENS; a response that still hits the cap is caught by
+# extract_text rather than surfacing as a truncated-JSON parse error.
+DEFAULT_MAX_CHUNK_CHARS = int(os.environ.get("BEDROCK_MAX_CHUNK_CHARS", "16000"))
 
 MAX_ATTEMPTS = 5
 BASE_BACKOFF_SECONDS = 2.0
@@ -205,6 +212,40 @@ def build_nested_from_keys(base: dict, keys: list[str]) -> dict:
     return out
 
 
+def plural_stem(key: str) -> str:
+    """Strip an i18next plural suffix so every form of one message shares a stem."""
+    for suffix in PLURAL_SUFFIXES:
+        if key.endswith(suffix):
+            return key[: -len(suffix)]
+    return key
+
+
+def chunk_keys(base: dict, keys: list[str], max_chars: int) -> list[list[str]]:
+    """Split dotted `keys`, in order, into batches whose English JSON fits `max_chars`.
+
+    Plural siblings (`x_one`, `x_other`, ...) always share a batch: the prompt
+    asks the model to add the forms a language needs, which it can only do when
+    it sees the whole group. A lone group over budget gets a batch of its own.
+    """
+    groups: dict[str, list[str]] = {}
+    for key in keys:
+        groups.setdefault(plural_stem(key), []).append(key)
+
+    def rendered_size(subset: list[str]) -> int:
+        return len(json.dumps(build_nested_from_keys(base, subset), ensure_ascii=False, indent=2))
+
+    batches: list[list[str]] = []
+    batch: list[str] = []
+    for group in groups.values():
+        if batch and rendered_size(batch + group) > max_chars:
+            batches.append(batch)
+            batch = []
+        batch.extend(group)
+    if batch:
+        batches.append(batch)
+    return batches
+
+
 def build_keys_message(
     code: str,
     base_full_raw: str,
@@ -247,13 +288,20 @@ def build_section_message(
     base_full_raw: str,
     section_base_raw: str,
     section_current_raw: str | None,
+    part: tuple[int, int] | None = None,
 ) -> str:
-    """Build the user turn for translating one top-level section.
+    """Build the user turn for translating one top-level section, or one part of it.
 
     The full English file rides along as read-only context for terminology
-    consistency, but only the current section is translated and returned.
-    Chunking by top-level section never splits a fragment/plural sibling group.
+    consistency, but only the keys shown are translated and returned. `part` is
+    (index, total) when the section was split to fit the per-call budget.
     """
+    scope = f'the "{section}" subtree of the file above'
+    if part is not None:
+        scope = (
+            f'part {part[0]} of {part[1]} of the "{section}" subtree of the file '
+            "above (only the keys shown here)"
+        )
     parts = [
         f"Target locale code: {code}",
         "",
@@ -263,8 +311,7 @@ def build_section_message(
         base_full_raw.strip(),
         "```",
         "",
-        f'SECTION TO TRANSLATE — the "{section}" subtree of the file above. '
-        "Translate its VALUES into the target locale:",
+        f"SECTION TO TRANSLATE — {scope}. Translate its VALUES into the target locale:",
         "```json",
         section_base_raw.strip(),
         "```",
@@ -272,7 +319,7 @@ def build_section_message(
     if section_current_raw is not None:
         parts += [
             "",
-            f'EXISTING TRANSLATION of the "{section}" section — may contain human '
+            "EXISTING TRANSLATION of the keys shown above — may contain human "
             "corrections. Preserve values that are still correct for the current "
             "English; only change values whose English source changed, and add any "
             "keys missing here:",
@@ -283,14 +330,14 @@ def build_section_message(
     else:
         parts += [
             "",
-            f'There is no existing translation for the "{section}" section — '
-            "produce a complete first translation of every value in it.",
+            "There is no existing translation for the keys shown above — "
+            "produce a complete first translation of every value.",
         ]
     parts += [
         "",
         f'Return ONLY the translated "{section}" object as a single JSON object '
         f'whose top-level key is "{section}", with exactly the same keys and '
-        "nesting as the section shown. Return only the JSON — no markdown fences, "
+        "nesting as shown. Return only the JSON — no markdown fences, "
         "no commentary.",
     ]
     return "\n".join(parts)
@@ -345,7 +392,17 @@ def invoke_model(client, model_id: str, system_prompt: str, user_message: str) -
 
 
 def extract_text(payload: dict) -> str:
-    """Pull the assistant text out of an Anthropic Messages response payload."""
+    """Pull the assistant text out of an Anthropic Messages response payload.
+
+    A response cut off at max_tokens is unusable (its JSON is unterminated), so
+    reject it here with a message that names the real cause; otherwise it would
+    surface downstream as an opaque JSON parse error.
+    """
+    if payload.get("stop_reason") == "max_tokens":
+        raise ValueError(
+            f"Bedrock response was truncated at max_tokens={DEFAULT_MAX_TOKENS}; "
+            "lower BEDROCK_MAX_CHUNK_CHARS or raise BEDROCK_MAX_TOKENS"
+        )
     content = payload.get("content")
     if isinstance(content, list):
         chunks = [c.get("text", "") for c in content if isinstance(c, dict)]
@@ -389,49 +446,63 @@ def translate_full(
 ) -> dict | None:
     """Translate the whole file, one top-level section per call.
 
+    A section over the per-call budget is split into parts (see chunk_keys).
     Preserves good existing values, retranslates changed English, fills missing
     keys. Used for first-time generation and recovery. Returns the translated
-    dict, or None if any section failed (caller turns that into a non-zero exit).
+    dict, or None if any part failed (caller turns that into a non-zero exit).
     """
     translated: dict = {}
+    current_flat = flatten(current)
     for section, section_value in base.items():
-        section_base_obj: dict = {section: section_value}
-        section_base_raw = json.dumps(section_base_obj, ensure_ascii=False, indent=2)
-        section_current_raw: str | None = None
-        if section in current:
-            section_current_raw = json.dumps(
-                {section: current[section]}, ensure_ascii=False, indent=2
+        batches = chunk_keys(base, list(flatten({section: section_value})), DEFAULT_MAX_CHUNK_CHARS)
+        for index, batch in enumerate(batches, start=1):
+            part = (index, len(batches)) if len(batches) > 1 else None
+            label = f"section '{section}'" + (f" part {index}/{len(batches)}" if part else "")
+            batch_base_raw = json.dumps(
+                build_nested_from_keys(base, batch), ensure_ascii=False, indent=2
             )
 
-        message = build_section_message(
-            code, section, base_raw, section_base_raw, section_current_raw
-        )
+            # Show the pack's existing values for these keys, including extra
+            # plural forms alongside them (community-added, to be preserved).
+            batch_current_raw: str | None = None
+            stems = {plural_stem(key) for key in batch}
+            existing = [key for key in current_flat if plural_stem(key) in stems]
+            if existing:
+                batch_current_raw = json.dumps(
+                    build_nested_from_keys(current, existing), ensure_ascii=False, indent=2
+                )
 
-        eprint(f"[{code}] invoking {model_id} for section '{section}' ...")
-        try:
-            text = invoke_model(client, model_id, system_prompt, message)
-            section_result = parse_model_json(text)
-        except json.JSONDecodeError as err:
-            eprint(f"[{code}] section '{section}' returned invalid JSON: {err}")
-            return None
-        except Exception as err:  # noqa: BLE001 - surface any Bedrock failure per-language
-            eprint(f"[{code}] section '{section}' failed: {err}")
-            return None
-
-        # Accept either { "<section>": {...} } or the bare section object.
-        if list(section_result.keys()) == [section]:
-            section_result = section_result[section]
-
-        # Fail on the offending section rather than after the whole file.
-        section_missing = check_key_parity(section_base_obj, {section: section_result})
-        if section_missing:
-            eprint(
-                f"[{code}] section '{section}' is missing "
-                f"{len(section_missing)} key(s); first few: {section_missing[:5]}"
+            message = build_section_message(
+                code, section, base_raw, batch_base_raw, batch_current_raw, part
             )
-            return None
 
-        translated[section] = section_result
+            eprint(f"[{code}] invoking {model_id} for {label} ...")
+            try:
+                text = invoke_model(client, model_id, system_prompt, message)
+                result = parse_model_json(text)
+            except json.JSONDecodeError as err:
+                eprint(f"[{code}] {label} returned invalid JSON: {err}")
+                return None
+            except Exception as err:  # noqa: BLE001 - surface any Bedrock failure per-language
+                eprint(f"[{code}] {label} failed: {err}")
+                return None
+
+            # Accept either { "<section>": {...} } or the bare section object.
+            if list(result.keys()) != [section]:
+                result = {section: result}
+
+            # Fail on the offending part rather than after the whole file.
+            result_flat = flatten(result)
+            missing = sorted(set(batch) - set(result_flat))
+            if missing:
+                eprint(
+                    f"[{code}] {label} is missing {len(missing)} key(s); "
+                    f"first few: {missing[:5]}"
+                )
+                return None
+
+            for key, value in result_flat.items():
+                set_nested(translated, key, value)
 
     return translated
 
@@ -447,33 +518,44 @@ def translate_keys(
 ) -> dict | None:
     """Translate only `changed_keys` (dotted) and return them as a nested dict.
 
-    One call for the whole subset — it's just the changed English, which stays
-    well under the token budget. Returns None on failure or if the model dropped
-    any requested key (caller turns that into a non-zero exit).
+    Batched to the per-call budget: a long-unpublished language can have a
+    backlog of changed English far larger than one response holds. Returns None
+    on failure or if the model dropped any requested key (caller turns that into
+    a non-zero exit).
     """
-    subset = build_nested_from_keys(base, changed_keys)
-    subset_raw = json.dumps(subset, ensure_ascii=False, indent=2)
-    message = build_keys_message(code, base_raw, subset_raw)
+    batches = chunk_keys(base, changed_keys, DEFAULT_MAX_CHUNK_CHARS)
+    eprint(
+        f"[{code}] invoking {model_id} for {len(changed_keys)} changed key(s) "
+        f"in {len(batches)} batch(es) ..."
+    )
+    result: dict = {}
+    for index, batch in enumerate(batches, start=1):
+        label = f"changed-keys batch {index}/{len(batches)} ({len(batch)} key(s))"
+        subset_raw = json.dumps(build_nested_from_keys(base, batch), ensure_ascii=False, indent=2)
+        message = build_keys_message(code, base_raw, subset_raw)
 
-    eprint(f"[{code}] invoking {model_id} for {len(changed_keys)} changed key(s) ...")
-    try:
-        text = invoke_model(client, model_id, system_prompt, message)
-        result = parse_model_json(text)
-    except json.JSONDecodeError as err:
-        eprint(f"[{code}] changed-keys response was invalid JSON: {err}")
-        return None
-    except Exception as err:  # noqa: BLE001 - surface any Bedrock failure per-language
-        eprint(f"[{code}] changed-keys translation failed: {err}")
-        return None
+        if len(batches) > 1:
+            eprint(f"[{code}] {label} ...")
+        try:
+            text = invoke_model(client, model_id, system_prompt, message)
+            batch_result = parse_model_json(text)
+        except json.JSONDecodeError as err:
+            eprint(f"[{code}] {label} response was invalid JSON: {err}")
+            return None
+        except Exception as err:  # noqa: BLE001 - surface any Bedrock failure per-language
+            eprint(f"[{code}] {label} translation failed: {err}")
+            return None
 
-    result_flat = flatten(result)
-    dropped = sorted(set(changed_keys) - set(result_flat))
-    if dropped:
-        eprint(
-            f"[{code}] changed-keys response dropped {len(dropped)} key(s); "
-            f"first few: {dropped[:5]}"
-        )
-        return None
+        batch_flat = flatten(batch_result)
+        dropped = sorted(set(batch) - set(batch_flat))
+        if dropped:
+            eprint(
+                f"[{code}] {label} response dropped {len(dropped)} key(s); "
+                f"first few: {dropped[:5]}"
+            )
+            return None
+        for key in batch:
+            set_nested(result, key, batch_flat[key])
     return result
 
 

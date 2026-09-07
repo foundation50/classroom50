@@ -42,12 +42,6 @@ export type Kind = "text" | "nonText"
 export const MODELED_BASE_CONTENT_TIERS = [30, 40, 50, 60, 70, 80, 90] as const
 export const MODELED_NEUTRAL_CONTENT_TIERS = [50, 60, 70] as const
 
-// Rest-dim factor for the sidebar rail (index.css .sidebar-rail): the rail
-// background sits at this % of `neutral` mixed toward black until hovered or
-// focused. The drift guard in contrastSource.test.ts asserts the CSS recipe
-// uses the same factor, so the audited pair can't silently diverge.
-export const SIDEBAR_REST_DIM = 90
-
 // Semantic text tokens modeled as body text on a base surface (the `text-<name>`
 // pairs built in buildTheme). The coverage guard (contrastSource.test.ts) scans
 // src/** for `text-<name>` utilities and fails if a used one is absent here, so
@@ -340,19 +334,6 @@ function buildTheme(theme: Theme): Pair[] {
     "body",
   )
 
-  // Rest-dimmed rail (index.css .sidebar-rail): on hover-capable pointers the
-  // rail background darkens to SIDEBAR_REST_DIM% of `neutral` toward black
-  // until hovered or focused. Text stays at the resting 72% tier, so audit
-  // that text over the dimmed surface — the darkest ground rail text ever
-  // sits on.
-  add(
-    "sidebar-rest-dim",
-    `neutral-content resting tiers (rendered ${T.sidebarMuted}%) on rest-dimmed rail`,
-    tierFg(T.neutralContent, T.sidebarMuted),
-    mixColor("oklab", T.neutral, SIDEBAR_REST_DIM, "black"),
-    "body",
-  )
-
   // Placeholder renders inside the input's own base-100 field; .label sits on
   // the surrounding surface, so it takes the per-polarity worst-case ground
   // (base-200 cards in light). Both render at the muted-70 floor (index.css).
@@ -384,6 +365,29 @@ function buildTheme(theme: Theme): Pair[] {
     "nonText",
     true,
   )
+
+  // Progress fill vs its own track (MetricBar funnel bars, the bulk progress
+  // bars): daisyUI's track is currentColor at 20% over the surface, so the
+  // filled-vs-unfilled distinction is a 1.4.11 non-text pair on base-100.
+  const progressTrack = (token: string) =>
+    flattenOver(
+      mixColor("oklab", token, 20, "transparent"),
+      parseColor(T.base100),
+    )
+  for (const [name, token] of [
+    ["primary", T.primary],
+    ["info", T.info],
+    ["success", T.success],
+  ] as const) {
+    add(
+      `progress-${name}`,
+      `progress ${name} fill vs its own track on base-100`,
+      opaque(token),
+      progressTrack(token),
+      "body",
+      "nonText",
+    )
+  }
 
   return pairs
 }
