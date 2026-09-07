@@ -45,14 +45,6 @@ vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
     mutateAsync: deleteMutate,
     isPending: false,
   }),
-  useBulkReuseAssignments: () => ({
-    running: false,
-    processed: 0,
-    total: 0,
-    outcomes: [],
-    run: vi.fn(),
-    reset: vi.fn(),
-  }),
 }))
 
 import { AssignmentsBulkBar } from "./AssignmentsBulkBar"

@@ -117,6 +117,64 @@ export function buildReusedEntry(
 
 // grant — the same write + grant as createAssignment, minus form resolution.
 // Cross-org reuse is out of scope for v1.
+// Whether a copy's template needs the target team granted read, re-checked
+// live against the fetched repo (mirrors create): public or absent means no
+// grant; private in-org means a grant; private out-of-org is refused, since
+// students in the target could never be granted access. Throws before any
+// write, so a copy never lands pointing at a template students can't use.
+export function reuseTemplateNeedsGrant(
+  org: string,
+  targetClassroom: string,
+  entry: Assignment,
+  repo: Awaited<ReturnType<typeof getRepo>>,
+): boolean {
+  if (!entry.template) return false
+  // getRepo returns null on 404 (deleted/renamed/invisible) — fail closed
+  // before any write, like resolveTemplate.
+  if (!repo) {
+    throw new Error(
+      `Template "${entry.template.owner}/${entry.template.repo}" is not visible to your account — it may have been deleted, renamed, or made private outside ${org}. Restore or update the source assignment's template, then reuse.`,
+    )
+  }
+  if (!repo.private) return false
+  const inOrg = entry.template.owner.toLowerCase() === org.toLowerCase()
+  if (!inOrg) {
+    throw new Error(
+      `Template "${entry.template.owner}/${entry.template.repo}" is private and outside ${org} — students in "${targetClassroom}" couldn't be granted access. Copy the template into ${org} and reference the copy, or make it public, then reuse.`,
+    )
+  }
+  // A cross-org private fork is allowed here too (mirrors resolveTemplate):
+  // generate copies the fork's own objects without needing the private
+  // upstream, so reuse must not reject what create/edit now accepts. The
+  // parent org's OAuth-App restriction is the only real risk, surfaced at
+  // accept with a parent-org-named error, not blocked here.
+  return true
+}
+
+// The authoritative counterpart to the modals' optimistic slug check, run
+// against the target file as read for the write. Case-insensitive: slugs are
+// GitHub repo path segments. A renamed assignment's old slug stays reserved,
+// even when the modal's cached assignments predate a CLI-side rename.
+export function assertSlugFreeInTarget(
+  slug: string,
+  current: AssignmentsFile,
+  targetClassroom: string,
+): void {
+  const lower = slug.toLowerCase()
+  if (current.assignments.some((a) => a.slug.toLowerCase() === lower)) {
+    throw new Error(
+      `Assignment "${slug}" already exists in classroom "${targetClassroom}" — choose a different slug.`,
+    )
+  }
+  if (
+    current.assignments.some((a) => a.renamed_from?.toLowerCase() === lower)
+  ) {
+    throw new Error(
+      `Slug "${slug}" is reserved in classroom "${targetClassroom}": it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on — choose a different slug.`,
+    )
+  }
+}
+
 export async function copyAssignmentToClassroom(
   client: GitHubClient,
   input: CopyAssignmentInput,
@@ -147,33 +205,12 @@ export async function copyAssignmentToClassroom(
   ])
   const ref = await getBranchRef(client, org, configBranch)
 
-  // Re-check the template live (mirrors create): public/missing -> no grant;
-  // private in-org -> needs grant; private out-of-org -> refuse.
-  let needsTeamGrant = false
-  if (entry.template) {
-    // getRepo returns null on 404 (deleted/renamed/invisible) — fail closed
-    // before any write, like resolveTemplate, so we never commit a record
-    // pointing at a template students can't generate from.
-    if (!repo) {
-      throw new Error(
-        `Template "${entry.template.owner}/${entry.template.repo}" is not visible to your account — it may have been deleted, renamed, or made private outside ${org}. Restore or update the source assignment's template, then reuse.`,
-      )
-    }
-    if (repo.private) {
-      const inOrg = entry.template.owner.toLowerCase() === org.toLowerCase()
-      if (!inOrg) {
-        throw new Error(
-          `Template "${entry.template.owner}/${entry.template.repo}" is private and outside ${org} — students in "${targetClassroom}" couldn't be granted access. Copy the template into ${org} and reference the copy, or make it public, then reuse.`,
-        )
-      }
-      needsTeamGrant = true
-    }
-    // A cross-org private fork is allowed here too (mirrors resolveTemplate):
-    // generate copies the fork's own objects without needing the private
-    // upstream, so reuse must not reject what create/edit now accepts. The
-    // parent org's OAuth-App restriction is the only real risk, surfaced at
-    // accept with a parent-org-named error, not blocked here.
-  }
+  const needsTeamGrant = reuseTemplateNeedsGrant(
+    org,
+    targetClassroom,
+    entry,
+    repo,
+  )
 
   const commit = await getCommit(client, org, ref.object.sha)
 
@@ -184,30 +221,7 @@ export async function copyAssignmentToClassroom(
     ref: ref.object.sha,
   })
 
-  // Case-insensitive — slugs are GitHub repo path segments, matching the
-  // modals' optimistic check, so a mixed-case programmatic slug can't slip past.
-  const entrySlugLower = entry.slug.toLowerCase()
-  if (
-    currentAssignments.assignments.some(
-      (a) => a.slug.toLowerCase() === entrySlugLower,
-    )
-  ) {
-    throw new Error(
-      `Assignment "${entry.slug}" already exists in classroom "${targetClassroom}" — choose a different slug.`,
-    )
-  }
-  // The authoritative reservation counterpart to the modals' optimistic
-  // check: a renamed assignment's old slug must never be reused, even when
-  // the modal's cached assignments predate a CLI-side rename.
-  if (
-    currentAssignments.assignments.some(
-      (a) => a.renamed_from?.toLowerCase() === entrySlugLower,
-    )
-  ) {
-    throw new Error(
-      `Slug "${entry.slug}" is reserved in classroom "${targetClassroom}": it is the previous slug of a renamed assignment, and reusing it would break the redirects its renamed student repositories rely on — choose a different slug.`,
-    )
-  }
+  assertSlugFreeInTarget(entry.slug, currentAssignments, targetClassroom)
 
   const nextAssignments: AssignmentsFile = {
     ...currentAssignments,

@@ -41,23 +41,23 @@ vi.mock("@/hooks/useGetClassAssignments", () => {
   return { default: query, useGetClassroomAssignments: query }
 })
 
-// Mutable so a test can hand the modal a finished run's outcomes.
-const run = vi.fn()
-const reset = vi.fn()
-const reuseState = {
-  running: false,
-  processed: 0,
-  total: 0,
-  outcomes: [] as {
-    slug: string
-    targetSlug?: string
-    error?: string
-    deferred?: boolean
-  }[],
-}
+// Mutable so a test can hand the modal a finished run's result.
+type Outcome = { slug: string; targetSlug?: string; error?: string }
+const { mutate, reuseState } = vi.hoisted(() => ({
+  mutate: vi.fn(),
+  reuseState: {
+    isPending: false,
+    isSuccess: false,
+    isError: false,
+    error: null as Error | null,
+    data: undefined as { outcomes: Outcome[] } | undefined,
+  },
+}))
+vi.mock("@/hooks/mutations/useBulkAssignmentActions", () => ({
+  useBulkReuseAssignments: () => ({ ...reuseState, mutate }),
+}))
 
 import { BulkReuseAssignmentsModal } from "./BulkReuseAssignmentsModal"
-import type { BulkReuseRun } from "@/hooks/mutations/useBulkAssignmentActions"
 import type { Assignment } from "@/types/classroom"
 
 const sources = [
@@ -70,7 +70,6 @@ const setup = (onClose = vi.fn()) => {
     <BulkReuseAssignmentsModal
       org="acme"
       sources={sources}
-      reuse={{ ...reuseState, run, reset } as unknown as BulkReuseRun}
       onClose={onClose}
     />,
   )
@@ -93,12 +92,18 @@ const setup = (onClose = vi.fn()) => {
 
 afterEach(() => {
   cleanup()
-  run.mockReset()
-  reuseState.outcomes = []
-  reuseState.running = false
-  reuseState.processed = 0
-  reuseState.total = 0
+  mutate.mockReset()
+  reuseState.isPending = false
+  reuseState.isSuccess = false
+  reuseState.isError = false
+  reuseState.error = null
+  reuseState.data = undefined
 })
+
+const finished = (outcomes: Outcome[]) => {
+  reuseState.isSuccess = true
+  reuseState.data = { outcomes }
+}
 
 describe("BulkReuseAssignmentsModal", () => {
   it("lists targets by display name, slug only where there is none", () => {
@@ -129,13 +134,13 @@ describe("BulkReuseAssignmentsModal", () => {
     pickTarget()
     fireEvent.change(slugInputs()[1], { target: { value: "hw2-neu" } })
     fireEvent.click(submit())
-    expect(run).toHaveBeenCalledWith(
-      [
+    expect(mutate).toHaveBeenCalledWith({
+      items: [
         { source: sources[0], targetSlug: "hw1-2" },
         { source: sources[1], targetSlug: "hw2-neu" },
       ],
-      "cs101",
-    )
+      targetClassroom: "cs101",
+    })
   })
 
   it("blocks the run while a slug collides with the target", () => {
@@ -168,21 +173,30 @@ describe("BulkReuseAssignmentsModal", () => {
   })
 
   it("reports dismissal without asking the caller to clear anything", () => {
-    reuseState.outcomes = [{ slug: "hw1", targetSlug: "hw1-2" }]
+    finished([{ slug: "hw1", targetSlug: "hw1-2" }])
     const { dismiss, onClose } = setup()
     fireEvent.click(dismiss())
     expect(onClose).toHaveBeenCalledWith()
   })
 
-  it("shows the shared progress block while copying", () => {
-    reuseState.running = true
-    reuseState.processed = 1
-    reuseState.total = 3
-    const { pickTarget } = setup()
+  it("freezes the form while the commit is in flight", () => {
+    reuseState.isPending = true
+    const { pickTarget, slugInputs } = setup()
     pickTarget()
 
-    expect(screen.getByRole("progressbar")).toBeTruthy()
-    expect(screen.getByText(/assignments\.bulk\.reuseProgress/)).toBeTruthy()
+    expect(screen.getByRole("combobox")).toHaveProperty("disabled", true)
+    expect(slugInputs().every((i) => i.disabled)).toBe(true)
+  })
+
+  // A rejected commit is a form error, not a result: nothing landed.
+  it("shows a failed commit inline and keeps the form", () => {
+    reuseState.isError = true
+    reuseState.error = new Error("ref moved")
+    const { pickTarget, slugInputs } = setup()
+    pickTarget()
+
+    expect(screen.getByText("ref moved")).toBeTruthy()
+    expect(slugInputs()).toHaveLength(2)
   })
 
   it("normalizes a typed slug on blur", () => {
@@ -193,15 +207,18 @@ describe("BulkReuseAssignmentsModal", () => {
     expect(slugInputs()[1].value).toBe("hausaufgabe-zwei")
   })
 
-  it("lists copies that were not attempted apart from the failures", () => {
-    reuseState.outcomes = [
-      { slug: "hw1", targetSlug: "hw1" },
-      { slug: "hw2", deferred: true },
-    ]
-    setup()
+  // Copies the commit left out (slug taken by write time, template gone) are
+  // reported beside the renamed ones; the form is gone.
+  it("reports renamed and left-out copies once the commit lands", () => {
+    finished([
+      { slug: "hw1", targetSlug: "hw1-2" },
+      { slug: "hw2", error: "Template not visible" },
+    ])
+    const { slugInputs } = setup()
 
-    expect(screen.getByText("assignments.bulk.reuseDeferredTitle")).toBeTruthy()
-    expect(screen.getByText(/assignments\.bulk\.reuseDeferred$/)).toBeTruthy()
-    expect(screen.queryByText("assignments.bulk.reuseFailedTitle")).toBeNull()
+    expect(screen.getByText("assignments.bulk.reuseRenamedTitle")).toBeTruthy()
+    expect(screen.getByText("assignments.bulk.reuseFailedTitle")).toBeTruthy()
+    expect(screen.getByText("Template not visible")).toBeTruthy()
+    expect(slugInputs()).toHaveLength(0)
   })
 })

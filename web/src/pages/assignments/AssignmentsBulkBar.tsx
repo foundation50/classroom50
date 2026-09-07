@@ -11,10 +11,8 @@ import {
 import { ConfirmModal } from "@/components/modals"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   useBulkDeleteAssignments,
-  useBulkReuseAssignments,
   useBulkSetAssignmentLock,
 } from "@/hooks/mutations/useBulkAssignmentActions"
 import { BulkReuseAssignmentsModal } from "@/components/modals/BulkReuseAssignmentsModal"
@@ -22,8 +20,7 @@ import type { Assignment } from "@/types/classroom"
 
 // The assignments toolbar's selection cluster (count + Actions menu + Clear),
 // shown only while rows are selected. Always mounted, like the roster's, so a
-// dialog's close animation survives the selection changing under it, and so
-// the reuse run it owns outlives the reuse dialog.
+// dialog's close animation survives the selection changing under it.
 //
 // Only the genuinely plural actions live here. Edit navigates to one page,
 // template access is a diagnostic, clone-submissions renders a CLI command,
@@ -71,15 +68,7 @@ export function AssignmentsBulkBar({
   const noneLocked = selected.every((a) => !a.locked)
   const lock = useBulkSetAssignmentLock(org, classroom)
   const remove = useBulkDeleteAssignments(org, classroom)
-  const reuse = useBulkReuseAssignments(org)
-  // Component-run fan-out (see hooks/mutations/README.md): the copies are one
-  // GitHub write each, so a closed tab strands the rest.
-  useBeforeUnloadGuard(reuse.running)
-  const busy = lock.isPending || remove.isPending || reuse.running
-  const closeReuse = () => {
-    setReuseOpen(false)
-    reuse.reset()
-  }
+  const busy = lock.isPending || remove.isPending
 
   // A slug that vanished between render and submit isn't a failure, but isn't
   // part of "done" either.
@@ -230,14 +219,11 @@ export function AssignmentsBulkBar({
         onClose={() => setPending(null)}
       />
 
-      {/* Stays mounted while a run is in flight even if a close slips past the
-          shell's veto, so the progress and the report stay on screen. */}
-      {(reuseOpen || reuse.running) && (
+      {reuseOpen && (
         <BulkReuseAssignmentsModal
           org={org}
           sources={selected}
-          reuse={reuse}
-          onClose={closeReuse}
+          onClose={() => setReuseOpen(false)}
         />
       )}
     </>

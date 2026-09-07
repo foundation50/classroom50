@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { GitHubClient } from "@/github-core/client"
-import { GitHubAPIError } from "@/github-core/errors"
 
 vi.mock("@/github-core/configRepoReads", () => ({
   getConfigRepoBranch: vi.fn(async () => "main"),
@@ -39,23 +38,25 @@ const reconcileLockTemplateAccess =
       locked: boolean,
     ) => Promise<string | undefined>
   >()
+const resolveTemplateGrant =
+  vi.fn<(...args: unknown[]) => Promise<string | undefined>>()
 vi.mock("./createEdit", () => ({
   reconcileLockTemplateAccess: (...args: unknown[]) =>
     reconcileLockTemplateAccess(
       ...(args as Parameters<typeof reconcileLockTemplateAccess>),
     ),
+  resolveTemplateGrant: (...args: unknown[]) => resolveTemplateGrant(...args),
 }))
 
-const copyAssignment =
-  vi.fn<
-    (
-      client: unknown,
-      input: { targetSlug: string },
-    ) => Promise<{ templateGrantWarning?: string }>
-  >()
-vi.mock("./copyReuse", () => ({
-  copyAssignmentWithConflictRetry: (...args: unknown[]) =>
-    copyAssignment(...(args as Parameters<typeof copyAssignment>)),
+// The target's view of each template repo; null is a 404.
+const repos = new Map<string, { private: boolean } | null>()
+const getRepo = vi.fn(
+  async (_client: unknown, owner: string, repo: string) =>
+    repos.get(`${owner}/${repo}`) ?? null,
+)
+vi.mock("@/github-core/repoReads", () => ({
+  getRepo: (...args: unknown[]) =>
+    getRepo(...(args as Parameters<typeof getRepo>)),
 }))
 
 let file: { schema: string; assignments: { slug: string; locked?: boolean }[] }
@@ -64,7 +65,7 @@ vi.mock("../queries/assignments", () => ({
 }))
 
 import {
-  bulkCopyAssignments,
+  copyAssignments,
   deleteAssignments,
   setAssignmentsLock,
 } from "./bulkActions"
@@ -239,138 +240,125 @@ describe("deleteAssignments", () => {
   })
 })
 
-describe("bulkCopyAssignments", () => {
-  const item = (slug: string, targetSlug: string) => ({
-    source: { slug } as Assignment,
+describe("copyAssignments", () => {
+  const item = (
+    slug: string,
+    targetSlug: string,
+    extra: Partial<Assignment> = {},
+  ) => ({
+    source: { slug, name: slug, ...extra } as Assignment,
     targetSlug,
   })
+  const copy = (items: ReturnType<typeof item>[], canGrant = false) =>
+    copyAssignments(client, {
+      org: ORG,
+      targetClassroom: CLASSROOM,
+      items,
+      canGrantTemplateAccess: canGrant,
+    })
 
   beforeEach(() => {
-    copyAssignment.mockReset().mockResolvedValue({})
+    resolveTemplateGrant.mockReset().mockResolvedValue(undefined)
+    getRepo.mockClear()
+    repos.clear()
   })
 
-  it("copies each source under the slug it was handed", async () => {
-    const outcomes = await bulkCopyAssignments(client, {
-      org: ORG,
-      targetClassroom: CLASSROOM,
-      items: [item("hw1", "hw1-2"), item("hw2", "hw2")],
-      canGrantTemplateAccess: false,
-    })
+  // N copies, one commit: the whole point of batching.
+  it("appends every copy to the target in one commit", async () => {
+    const result = await copy([item("a1", "a1"), item("a2", "a2")])
 
-    expect(copyAssignment.mock.calls.map((c) => c[1].targetSlug)).toEqual([
-      "hw1-2",
+    expect(createGitTree).toHaveBeenCalledTimes(1)
+    expect(createGitCommit).toHaveBeenCalledTimes(1)
+    expect(updateRef).toHaveBeenCalledTimes(1)
+    expect(writtenAssignments().assignments.map((a) => a.slug)).toEqual([
+      "hw1",
       "hw2",
+      "hw3",
+      "a1",
+      "a2",
     ])
-    expect(outcomes).toEqual([
-      { slug: "hw1", targetSlug: "hw1-2" },
-      { slug: "hw2", targetSlug: "hw2" },
+    expect(result.newCommitSha).toBe("NEWCOMMIT")
+    expect(result.outcomes).toEqual([
+      { slug: "a1", targetSlug: "a1" },
+      { slug: "a2", targetSlug: "a2" },
     ])
   })
 
-  it("keeps going after a failed copy and reports which one failed", async () => {
-    copyAssignment.mockRejectedValueOnce(new Error("repo already exists"))
-
-    const outcomes = await bulkCopyAssignments(client, {
-      org: ORG,
-      targetClassroom: CLASSROOM,
-      items: [item("hw1", "hw1"), item("hw2", "hw2")],
-      canGrantTemplateAccess: false,
-    })
-
-    expect(copyAssignment).toHaveBeenCalledTimes(2)
-    expect(outcomes[0]).toEqual({
-      slug: "hw1",
-      error: "repo already exists",
-    })
-    expect(outcomes[1]).toEqual({ slug: "hw2", targetSlug: "hw2" })
+  it("writes each copy under the slug it was handed", async () => {
+    await copy([item("hw1", "hw1-2")])
+    const written = writtenAssignments().assignments
+    expect(written.map((a) => a.slug)).toContain("hw1-2")
   })
 
-  it("carries a template-grant warning through to the outcome", async () => {
-    copyAssignment.mockResolvedValueOnce({
-      templateGrantWarning: "could not grant read",
-    })
+  // The planner is optimistic; the file as read for the write is the truth.
+  it("leaves a copy whose slug is taken out of the commit and keeps the rest", async () => {
+    const result = await copy([item("hw1", "hw1"), item("a2", "a2")])
 
-    const outcomes = await bulkCopyAssignments(client, {
-      org: ORG,
-      targetClassroom: CLASSROOM,
-      items: [item("hw1", "hw1")],
-      canGrantTemplateAccess: true,
-    })
+    expect(createGitCommit).toHaveBeenCalledTimes(1)
+    expect(writtenAssignments().assignments.map((a) => a.slug)).toEqual([
+      "hw1",
+      "hw2",
+      "hw3",
+      "a2",
+    ])
+    expect(result.outcomes[0].slug).toBe("hw1")
+    expect(result.outcomes[0].error).toMatch(/already exists/)
+    expect(result.outcomes[1]).toEqual({ slug: "a2", targetSlug: "a2" })
+  })
 
-    expect(outcomes[0]).toEqual({
-      slug: "hw1",
-      targetSlug: "hw1",
+  it("keeps two copies in one run from claiming one slug", async () => {
+    const result = await copy([item("a1", "same"), item("a2", "same")])
+
+    expect(result.outcomes[0]).toEqual({ slug: "a1", targetSlug: "same" })
+    expect(result.outcomes[1].error).toMatch(/already exists/)
+  })
+
+  it("commits nothing when no copy is valid", async () => {
+    const result = await copy([item("hw1", "hw1")])
+
+    expect(createGitTree).not.toHaveBeenCalled()
+    expect(result.newCommitSha).toBeNull()
+  })
+
+  it("refuses a copy whose template is gone, before any write", async () => {
+    const template = { owner: ORG, repo: "gone", branch: "main" }
+    const result = await copy([item("a1", "a1", { template })])
+
+    expect(createGitTree).not.toHaveBeenCalled()
+    expect(result.outcomes[0].error).toMatch(/not visible/)
+  })
+
+  it("grants the team read on a private template after the commit", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    repos.set(`${ORG}/tpl`, { private: true })
+    resolveTemplateGrant.mockResolvedValue("could not grant read")
+
+    const result = await copy([item("a1", "a1", { template })], true)
+
+    expect(resolveTemplateGrant).toHaveBeenCalledTimes(1)
+    expect(result.outcomes[0]).toEqual({
+      slug: "a1",
+      targetSlug: "a1",
       templateAccessWarning: "could not grant read",
     })
   })
 
-  it("reports progress after every item", async () => {
-    const seen: number[] = []
-    await bulkCopyAssignments(client, {
-      org: ORG,
-      targetClassroom: CLASSROOM,
-      items: [item("hw1", "hw1"), item("hw2", "hw2")],
-      canGrantTemplateAccess: false,
-      onProgress: (outcomes) => seen.push(outcomes.length),
-    })
+  // A locked source copies as locked; the grant waits for the unlock.
+  it("withholds the grant for a locked copy", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    repos.set(`${ORG}/tpl`, { private: true })
 
-    expect(seen).toEqual([1, 2])
+    await copy([item("a1", "a1", { template, locked: true })], true)
+
+    expect(resolveTemplateGrant).not.toHaveBeenCalled()
   })
 
-  // Every later write would only deepen the limit; the rest is reported as
-  // not attempted so the teacher can rerun exactly those.
-  it("stops copying after a rate limit and defers the rest", async () => {
-    copyAssignment.mockRejectedValueOnce(
-      new GitHubAPIError({
-        status: 403,
-        url: "https://api.github.com/x",
-        message: "secondary rate limit",
-        body: null,
-        rateLimit: {
-          limit: 5000,
-          remaining: 0,
-          used: 5000,
-          reset: null,
-          resource: "core",
-          retryAfter: 60,
-        },
-      }),
-    )
+  it("probes a template shared by several copies once", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    repos.set(`${ORG}/tpl`, { private: false })
 
-    const outcomes = await bulkCopyAssignments(client, {
-      org: ORG,
-      targetClassroom: CLASSROOM,
-      items: [item("hw1", "hw1"), item("hw2", "hw2"), item("hw3", "hw3")],
-      canGrantTemplateAccess: false,
-    })
+    await copy([item("a1", "a1", { template }), item("a2", "a2", { template })])
 
-    expect(copyAssignment).toHaveBeenCalledTimes(1)
-    expect(outcomes.map((o) => o.error ?? (o.deferred && "deferred"))).toEqual([
-      "secondary rate limit",
-      "deferred",
-      "deferred",
-    ])
-  })
-
-  it("defers the remaining copies once the owner is gone", async () => {
-    let alive = true
-    copyAssignment.mockImplementation(async () => {
-      alive = false
-      return {}
-    })
-
-    const outcomes = await bulkCopyAssignments(client, {
-      org: ORG,
-      targetClassroom: CLASSROOM,
-      items: [item("hw1", "hw1"), item("hw2", "hw2")],
-      canGrantTemplateAccess: false,
-      shouldContinue: () => alive,
-    })
-
-    expect(copyAssignment).toHaveBeenCalledTimes(1)
-    expect(outcomes).toEqual([
-      { slug: "hw1", targetSlug: "hw1" },
-      { slug: "hw2", deferred: true },
-    ])
+    expect(getRepo).toHaveBeenCalledTimes(1)
   })
 })

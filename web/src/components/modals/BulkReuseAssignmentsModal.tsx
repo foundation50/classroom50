@@ -2,10 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { FormField, Input, Select } from "@/components/ui"
-import {
-  BulkProgressBlock,
-  BulkResultSection,
-} from "@/components/bulk/resultView"
+import { BulkResultSection } from "@/components/bulk/resultView"
 import {
   ReuseModalShell,
   reuseSlugStatus,
@@ -15,12 +12,13 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useClassroomSummaries, {
   classroomOptionLabels,
 } from "@/hooks/useClassroomSummaries"
-import type { BulkReuseRun } from "@/hooks/mutations/useBulkAssignmentActions"
+import { useBulkReuseAssignments } from "@/hooks/mutations/useBulkAssignmentActions"
 import {
   planBulkReuseSlugs,
   type BulkReuseSlugPlan,
 } from "@/util/bulkReuseSlugs"
 import { slugify } from "@/util/slug"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import { renamedFromSlugs, type Assignment } from "@/types/classroom"
 
 // The plural ReuseAssignmentModal, on the same shell so it reads as the same
@@ -28,20 +26,18 @@ import { renamedFromSlugs, type Assignment } from "@/types/classroom"
 // assignment, prefilled with the slug the copy would take, so a collision is a
 // decision up front rather than a report afterwards. Setting the shell's
 // `warning` after the run flips the footer to a single "Done" and keeps the
-// per-assignment result on screen.
+// per-assignment result on screen. Every copy lands in one commit, so there
+// is no progress to show: the dialog is pending, then done.
 
 const EMPTY_PLAN: BulkReuseSlugPlan = { rows: [], budget: 0, valid: false }
 
 export function BulkReuseAssignmentsModal({
   org,
   sources,
-  reuse,
   onClose,
 }: {
   org: string
   sources: Assignment[]
-  // Owned by the bulk bar, so the run (and its tab guard) outlives this dialog.
-  reuse: BulkReuseRun
   onClose: () => void
 }) {
   const { t } = useTranslation()
@@ -54,6 +50,7 @@ export function BulkReuseAssignmentsModal({
   // Raw input text by source slug for edited rows; the rest keep re-resolving
   // as the target loads or a neighbouring row is retyped.
   const [slugEdits, setSlugEdits] = useState<Record<string, string>>({})
+  const reuse = useBulkReuseAssignments(org)
 
   const {
     data: targetData,
@@ -81,10 +78,10 @@ export function BulkReuseAssignmentsModal({
     [sources, target, targetAssignments, slugEdits],
   )
 
-  const finished = !reuse.running && reuse.outcomes.length > 0
-  const copied = reuse.outcomes.filter((o) => !o.error && !o.deferred)
-  const failed = reuse.outcomes.filter((o) => o.error)
-  const deferred = reuse.outcomes.filter((o) => o.deferred)
+  const outcomes = reuse.data?.outcomes ?? []
+  const finished = reuse.isSuccess
+  const copied = outcomes.filter((o) => !o.error)
+  const failed = outcomes.filter((o) => o.error)
   const renamed = copied.filter((o) => o.targetSlug !== o.slug)
   const templateWarned = copied.filter((o) => o.templateAccessWarning)
 
@@ -93,9 +90,6 @@ export function BulkReuseAssignmentsModal({
         t("assignments.bulk.reuseDone", { count: copied.length }),
         failed.length > 0
           ? t("assignments.bulk.reuseFailed", { count: failed.length })
-          : null,
-        deferred.length > 0
-          ? t("assignments.bulk.reuseDeferred", { count: deferred.length })
           : null,
       ]
         .filter(Boolean)
@@ -108,28 +102,35 @@ export function BulkReuseAssignmentsModal({
     setSlugEdits({})
   }
 
-  const formDisabled = reuse.running || finished
+  const formDisabled = reuse.isPending || finished
 
   return (
     <ReuseModalShell
       dialogRef={dialogRef}
       title={t("assignments.bulk.reuseTitle", { count: sources.length })}
       description={t("assignments.bulk.reuseBody")}
-      isPending={reuse.running}
+      isPending={reuse.isPending}
       warning={summary}
       // Without the target's assignments the taken-slug set is empty, so a
-      // collision would only surface server-side. Block the run instead.
-      errorMessage={targetError ? t("assignments.bulk.reuseTargetError") : null}
+      // collision would only surface server-side. Block the run instead. A
+      // rejected commit renders inline the same way and leaves the form open.
+      errorMessage={
+        targetError
+          ? t("assignments.bulk.reuseTargetError")
+          : reuse.isError
+            ? getErrorMessage(reuse.error)
+            : null
+      }
       showSubmit={classesLoading || classes.length > 0}
       canSubmit={!targetLoading && !targetError && plan.valid}
       onSubmit={() =>
-        void reuse.run(
-          plan.rows.map((r) => ({
+        reuse.mutate({
+          items: plan.rows.map((r) => ({
             source: r.source,
             targetSlug: r.targetSlug,
           })),
-          target,
-        )
+          targetClassroom: target,
+        })
       }
       onClose={onClose}
     >
@@ -233,20 +234,6 @@ export function BulkReuseAssignmentsModal({
         </div>
       )}
 
-      {reuse.running && (
-        // Indeterminate until the first copy lands: the first write is the
-        // slow one, and a bar pinned at 0% looks stuck.
-        <BulkProgressBlock
-          workingLabel={t("assignments.bulk.reuseWorking")}
-          progress={{ processed: reuse.processed, total: reuse.total }}
-          indeterminateUntilFirst
-          caption={`${t("assignments.bulk.reuseProgress", {
-            processed: reuse.processed,
-            total: reuse.total,
-          })} ${t("assignments.bulk.reuseKeepOpen")}`}
-        />
-      )}
-
       {finished && (
         <div className="mt-4 flex flex-col gap-3">
           {renamed.length > 0 && (
@@ -276,16 +263,6 @@ export function BulkReuseAssignmentsModal({
                 key: o.slug,
                 label: o.slug,
                 detail: o.error,
-              }))}
-            />
-          )}
-          {deferred.length > 0 && (
-            <BulkResultSection
-              title={t("assignments.bulk.reuseDeferredTitle")}
-              rows={deferred.map((o) => ({
-                key: `deferred-${o.slug}`,
-                label: o.slug,
-                detail: t("assignments.bulk.reuseDeferredDetail"),
               }))}
             />
           )}

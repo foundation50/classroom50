@@ -11,17 +11,23 @@ import {
 } from "@/github-core/mutations"
 import { prefixCommit } from "@/util/commit"
 import type { Assignment } from "@/types/classroom"
-
-import { getAssignmentsFile } from "../queries/assignments"
+import { getErrorMessage } from "@/github-core/errorMessage"
+import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import { getRepo } from "@/github-core/repoReads"
 import { mapWithConcurrency } from "@/util/concurrency"
 
-import { getErrorMessage } from "@/github-core/errorMessage"
-import { GitHubAPIError } from "@/github-core/errors"
-
+import {
+  getAssignmentsFile,
+  type AssignmentsFile,
+} from "../queries/assignments"
 import { assertClassroomNotArchived, withGitConflictRetry } from "../classrooms"
-import { copyAssignmentWithConflictRetry } from "./copyReuse"
 import { log } from "./accessPrimitives"
-import { reconcileLockTemplateAccess } from "./createEdit"
+import {
+  assertSlugFreeInTarget,
+  buildReusedEntry,
+  reuseTemplateNeedsGrant,
+} from "./copyReuse"
+import { reconcileLockTemplateAccess, resolveTemplateGrant } from "./createEdit"
 
 // Batched counterparts of setAssignmentLock and deleteAssignment. Looping the
 // single-assignment writers over a selection would be N commits to one file,
@@ -52,7 +58,7 @@ export type BulkLockResult = {
 // and GitHub's secondary rate limits bite on concurrent writes.
 const RECONCILE_CONCURRENCY = 4
 
-// The read half of the config-repo write, shared so the two batched writers
+// The read half of the config-repo write, shared so the batched writers
 // cannot drift in what they read.
 type AssignmentsWriteContext = {
   configBranch: string
@@ -269,76 +275,138 @@ export type BulkCopyItem = { source: Assignment; targetSlug: string }
 export type BulkCopyOutcome = {
   slug: string
   targetSlug?: string
+  // The copy was left out of the commit: its template is unusable from the
+  // target, or its slug was taken by the time the file was read.
   error?: string
-  // Not attempted: an earlier copy hit GitHub's rate limit, or the run's owner
-  // went away. Rerunning the selection picks these up.
-  deferred?: boolean
   // Non-fatal: the copy landed, but students can't accept it until the target
   // team is granted read on the private template.
   templateAccessWarning?: string
 }
 
-export type BulkCopyAssignmentsInput = {
+export type BulkCopyResult = {
+  outcomes: BulkCopyOutcome[]
+  newCommitSha: string | null
+}
+
+export type CopyAssignmentsInput = {
   org: string
   targetClassroom: string
   items: BulkCopyItem[]
   canGrantTemplateAccess: boolean
-  // Called after every item with the outcomes so far.
-  onProgress?: (outcomes: BulkCopyOutcome[]) => void
-  // Polled before each copy; false defers the rest (the owning view unmounted).
-  shouldContinue?: () => boolean
 }
 
-// Sequential, unlike lock and delete: every copy is a read-modify-write of the
-// target's assignments.json on the same ref. One failed copy doesn't abandon
-// the rest; each source gets its own outcome. A rate-limited copy does stop
-// the run, since every later write would only deepen the limit.
-export async function bulkCopyAssignments(
+// Batched counterpart of copyAssignmentToClassroom: every valid copy lands in
+// one commit to the target's assignments.json. A copy that fails its own
+// checks (template, slug) is reported and left out; it never blocks the
+// others. Grants follow the commit, per copy, like the lock's reconcile.
+export async function copyAssignments(
   client: GitHubClient,
-  input: BulkCopyAssignmentsInput,
-): Promise<BulkCopyOutcome[]> {
-  const {
-    org,
-    targetClassroom,
-    items,
-    canGrantTemplateAccess,
-    onProgress,
-    shouldContinue = () => true,
-  } = input
+  input: CopyAssignmentsInput,
+): Promise<BulkCopyResult> {
+  const { org, targetClassroom, items, canGrantTemplateAccess } = input
   log.info("bulk copy assignments: started", {
     org,
     targetClassroom,
     count: items.length,
   })
 
-  const outcomes: BulkCopyOutcome[] = []
-  let rateLimited = false
-  for (const { source, targetSlug } of items) {
-    if (rateLimited || !shouldContinue()) {
-      outcomes.push({ slug: source.slug, deferred: true })
-      onProgress?.([...outcomes])
-      continue
+  const ctx = await readAssignmentsForWrite(client, org, targetClassroom)
+
+  // Same live template re-check as the single copy, one probe per distinct
+  // template so twelve assignments on one template cost one read.
+  const templateKeys = new Map<string, NonNullable<Assignment["template"]>>()
+  for (const { source } of items) {
+    if (source.template) {
+      templateKeys.set(
+        `${source.template.owner}/${source.template.repo}`.toLowerCase(),
+        source.template,
+      )
     }
+  }
+  const repos = new Map(
+    await mapWithConcurrency(
+      [...templateKeys],
+      REPO_READ_CONCURRENCY,
+      async ([key, template]) =>
+        [key, await getRepo(client, template.owner, template.repo)] as const,
+    ),
+  )
+
+  const outcomes: BulkCopyOutcome[] = []
+  const entries: { entry: Assignment; needsGrant: boolean }[] = []
+  // Grows as entries are accepted, so two copies can't claim one slug even if
+  // the planner was bypassed.
+  const claimed: AssignmentsFile = {
+    ...ctx.current,
+    assignments: [...ctx.current.assignments],
+  }
+  for (const { source, targetSlug } of items) {
     try {
-      const result = await copyAssignmentWithConflictRetry(client, {
+      const entry = buildReusedEntry(source, {
+        slug: targetSlug,
+        name: source.name,
+      })
+      const repo = entry.template
+        ? (repos.get(
+            `${entry.template.owner}/${entry.template.repo}`.toLowerCase(),
+          ) ?? null)
+        : null
+      const needsGrant = reuseTemplateNeedsGrant(
         org,
-        source,
         targetClassroom,
-        targetSlug,
-        canGrantTemplateAccess,
-      })
-      outcomes.push({
-        slug: source.slug,
-        targetSlug,
-        ...(result.templateGrantWarning
-          ? { templateAccessWarning: result.templateGrantWarning }
-          : {}),
-      })
+        entry,
+        repo,
+      )
+      assertSlugFreeInTarget(entry.slug, claimed, targetClassroom)
+      claimed.assignments.push(entry)
+      entries.push({ entry, needsGrant })
+      outcomes.push({ slug: source.slug, targetSlug: entry.slug })
     } catch (err) {
-      if (err instanceof GitHubAPIError && err.isRateLimited) rateLimited = true
       outcomes.push({ slug: source.slug, error: getErrorMessage(err) })
     }
-    onProgress?.([...outcomes])
   }
-  return outcomes
+
+  if (entries.length === 0) return { outcomes, newCommitSha: null }
+
+  const newCommitSha = await commitAssignments(
+    client,
+    org,
+    ctx,
+    claimed,
+    `Reuse ${assignmentCount(entries.length)} into ${targetClassroom}`,
+  )
+
+  // A locked source copies as locked, so withhold the grant like create and
+  // the CLI's reuse do; unlocking the copy grants it.
+  const warnings = await mapWithConcurrency(
+    entries,
+    RECONCILE_CONCURRENCY,
+    async ({ entry, needsGrant }) =>
+      needsGrant && entry.template && !entry.locked
+        ? resolveTemplateGrant(
+            client,
+            org,
+            targetClassroom,
+            entry.slug,
+            entry.template,
+            canGrantTemplateAccess,
+          )
+        : undefined,
+  )
+  entries.forEach(({ entry }, i) => {
+    if (!warnings[i]) return
+    const outcome = outcomes.find(
+      (o) => o.targetSlug === entry.slug && !o.error,
+    )
+    if (outcome) outcome.templateAccessWarning = warnings[i]
+  })
+
+  return { outcomes, newCommitSha }
+}
+
+export function copyAssignmentsWithConflictRetry(
+  client: GitHubClient,
+  input: CopyAssignmentsInput,
+) {
+  return withGitConflictRetry(() => copyAssignments(client, input))
 }

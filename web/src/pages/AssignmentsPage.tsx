@@ -300,7 +300,7 @@ export const TeacherAssignmentsView = ({
     )
   // The leading cluster yields its spot to the selection cluster while rows
   // are selected (one left-side context at a time, as on the roster). The bar
-  // stays mounted either way: it owns the confirm dialogs and the reuse run.
+  // stays mounted either way: it owns the confirm dialogs.
   const leading = (
     <>
       {selectedAssignments.length === 0 ? leadingActions : null}

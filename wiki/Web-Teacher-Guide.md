@@ -1149,11 +1149,12 @@ The **Actions** menu offers:
   repositories are **not** deleted; they stay in the organization and can still
   be reached by name.
 
-Lock, unlock, and delete write the whole selection to the classroom's
-`assignments.json` in a **single commit**, so the classroom's history gets one
-entry per action and a half-applied selection is impossible: either every
-selected assignment changes or none does. Deleting asks you to type `delete`
-first, since it is the one action here with no undo in the app.
+Every action writes the whole selection in a **single commit**: lock, unlock,
+and delete to the classroom's `assignments.json`, reuse to the target
+classroom's. The classroom's history gets one entry per action and a
+half-applied selection is impossible: either every selected assignment changes
+or none does. Deleting asks you to type `delete` first, since it is the one
+action here with no undo in the app.
 
 An assignment that vanished between selecting it and confirming (deleted in
 another tab, say) is reported as skipped rather than failing the whole action.
@@ -1174,13 +1175,11 @@ The field turns red, and the copy can't start, while a slug:
 - exceeds the classroom's repository-name budget, or
 - collides with another copy in the same run.
 
-Unlike lock and delete, the copies are made one after another, because each
-one writes the target classroom's `assignments.json`. The dialog reports
-progress and, at the end, which assignments were copied, which failed, and
-which were not attempted. Keep the tab open until it finishes. A failed copy
-doesn't abandon the rest, but a copy that hits GitHub's rate limit does stop
-the run: the remaining assignments are listed as not attempted. Wait a few
-minutes, then select those and reuse them again.
+All the copies land in one commit to the target classroom. A copy that can't
+be made (its template is no longer visible, or its slug was taken since the
+form loaded) is left out and reported; the others still land. Where a private
+template is used, the target classroom's student team is then granted read on
+it, one grant per copy; keep the tab open until the dialog reports the result.
 
 ### Updating an over-budget assignment slug
 

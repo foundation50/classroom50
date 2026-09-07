@@ -5,20 +5,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
-// Held open so a second run() can be attempted while the first is in flight.
-// The loop itself is tested in domain/assignments/bulkActions.test.ts.
-let release: (() => void) | null = null
-type CopyInput = { shouldContinue?: () => boolean }
-let lastInput: CopyInput | null = null
-const bulkCopy = vi.fn(
-  (input: CopyInput) =>
-    new Promise<[]>((resolve) => {
-      lastInput = input
-      release = () => resolve([])
-    }),
-)
+import { githubKeys } from "@/github-core/queries"
+import { CONFIG_REPO } from "@/util/configRepo"
+
+const copyAssignments = vi.fn(async (_input: unknown) => ({
+  outcomes: [],
+  newCommitSha: "c",
+}))
 vi.mock("@/domain/assignments", () => ({
-  bulkCopyAssignments: (_client: unknown, input: CopyInput) => bulkCopy(input),
+  copyAssignmentsWithConflictRetry: (_client: unknown, input: unknown) =>
+    copyAssignments(input),
   deleteAssignmentsWithConflictRetry: vi.fn(),
   setAssignmentsLockWithConflictRetry: vi.fn(),
 }))
@@ -39,58 +35,41 @@ function setup() {
   const queryClient = new QueryClient()
   const wrapper = ({ children }: PropsWithChildren) =>
     createElement(QueryClientProvider, { client: queryClient }, children)
-  return renderHook(() => useBulkReuseAssignments("acme"), { wrapper })
+  return {
+    queryClient,
+    ...renderHook(() => useBulkReuseAssignments("acme"), { wrapper }),
+  }
 }
 
 describe("useBulkReuseAssignments", () => {
-  it("ignores a second run while one is in flight", async () => {
-    const { result } = setup()
+  // The write is one commit to the TARGET classroom, so that is the file whose
+  // cache goes stale, not the source's.
+  it("invalidates the target classroom's assignments after the commit", async () => {
+    const { result, queryClient } = setup()
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
 
-    // Both calls land before `running` can reach a re-render, like a
-    // double-click.
-    const first = result.current.run(items, "cs101")
-    const second = result.current.run(items, "cs101")
+    result.current.mutate({ items, targetClassroom: "cs101" })
 
-    await second
-    expect(bulkCopy).toHaveBeenCalledTimes(1)
-
-    release?.()
-    await first
-    await waitFor(() => expect(result.current.running).toBe(false))
-
-    const third = result.current.run(items, "cs101")
-    release?.()
-    await third
-    expect(bulkCopy).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    expect(copyAssignments).toHaveBeenCalledWith(
+      expect.objectContaining({ targetClassroom: "cs101", items }),
+    )
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: githubKeys.jsonFile(
+        "acme",
+        CONFIG_REPO,
+        "cs101/assignments.json",
+      ),
+    })
   })
 
-  // The bar owns the run; once it unmounts nothing can report the result, so
-  // the loop is told to defer what is left rather than finish headless.
-  it("tells the loop to stop once its owner unmounts", async () => {
-    const { result, unmount } = setup()
-
-    const run = result.current.run(items, "cs101")
-    expect(lastInput?.shouldContinue?.()).toBe(true)
-
-    unmount()
-    expect(lastInput?.shouldContinue?.()).toBe(false)
-
-    release?.()
-    await run
-  })
-
-  it("resets to idle only when no run is in flight", async () => {
-    const { result } = setup()
-
-    const run = result.current.run(items, "cs101")
-    await waitFor(() => expect(result.current.total).toBe(1))
-    result.current.reset()
-    expect(result.current.total).toBe(1)
-
-    release?.()
-    await run
-    await waitFor(() => expect(result.current.running).toBe(false))
-    result.current.reset()
-    await waitFor(() => expect(result.current.total).toBe(0))
+  // KeepTabOpenGuard reads the flag off the mutation cache: one commit plus a
+  // grant per copy is a multi-write the teacher should not lose mid-run.
+  it("declares keepTabOpen on the mutation", async () => {
+    const { result, queryClient } = setup()
+    result.current.mutate({ items, targetClassroom: "cs101" })
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+    const [mutation] = queryClient.getMutationCache().getAll()
+    expect(mutation.options.meta).toEqual({ keepTabOpen: true })
   })
 })

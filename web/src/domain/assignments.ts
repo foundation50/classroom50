@@ -103,9 +103,10 @@ export {
 export {
   setAssignmentsLockWithConflictRetry,
   deleteAssignmentsWithConflictRetry,
-  bulkCopyAssignments,
+  copyAssignmentsWithConflictRetry,
   type BulkLockResult,
   type BulkDeleteResult,
   type BulkCopyItem,
   type BulkCopyOutcome,
+  type BulkCopyResult,
 } from "./assignments/bulkActions"
