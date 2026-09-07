@@ -171,17 +171,14 @@ const EDIT_MANAGED_ASSIGNMENT_KEYS = new Set<string>(
     .map(([key]) => key),
 )
 
-// Replace an existing entry by slug, keeping it at its position in the array.
-// The CLI's UpsertAssignment does the same ("Position preserved on replace"),
-// and `gh teacher assignment list` prints entries in file order — so a writer
-// that dropped the row and re-appended it would reorder the teacher's listing
-// and turn every one-field edit into a whole-row diff in the config repo.
+// Replace an entry in place so the row keeps its position, matching the CLI's
+// UpsertAssignment ("Position preserved on replace"). Drop-and-append would
+// reorder `gh teacher assignment list` and turn a one-field edit into a
+// whole-row diff in the config repo.
 //
-// First match only, like UpsertAssignment: a hand-edited manifest can hold two
-// rows with one slug, and every caller built `entry` from the first of them
-// (`find`), so replacing both would overwrite the second row's own content.
-// Callers look the slug up and throw before calling this, so a miss returns the
-// array untouched rather than inventing a row.
+// First match only, also like UpsertAssignment: callers build `entry` from
+// `find`, so replacing every duplicate-slug row would clobber the second one.
+// Callers throw on a missing slug before reaching this, so a miss is a no-op.
 function replaceAssignmentEntry(
   entries: Assignment[],
   slug: string,

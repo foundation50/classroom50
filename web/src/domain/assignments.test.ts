@@ -42,8 +42,7 @@ import {
 import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
 
-// A row the write under test never touches, so a test can assert the touched
-// row keeps its position instead of moving to the end of the array.
+// An untouched row, so a test can assert the edited row keeps its position.
 const neighborRow = (slug: string): Assignment => ({
   slug,
   name: `Homework ${slug}`,
@@ -662,9 +661,8 @@ describe("editAssignment (preserved-entry integration)", () => {
   })
 
   it("rewrites only the first row when a manifest holds a duplicate slug", async () => {
-    // A hand-edited config repo can carry two rows for one slug. The edit is
-    // built from the first (`find`), so the second must be left alone rather
-    // than overwritten with a copy of its twin.
+    // A hand-edited manifest can hold two rows for one slug. The edit is built
+    // from the first (`find`), so the second must survive untouched.
     const duplicate: Assignment = { ...existingEntry, name: "Homework 1 (dup)" }
     const { client, committedContent } = makeClient(existingEntry, duplicate)
 
