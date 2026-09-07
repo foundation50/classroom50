@@ -90,8 +90,8 @@ export function BulkReuseAssignmentsModal({
   const copied = outcomes.filter((o) => !o.error)
   const failed = outcomes.filter((o) => o.error)
   const renamed = copied.filter((o) => o.targetSlug !== o.slug)
-  // One grant per template, so siblings share one warning: one row per
-  // distinct warning, naming every copy it covers.
+  // Copies on one template share one warning: one row each, naming every
+  // copy it covers.
   const templateWarned = [
     ...copied
       .filter((o) => o.templateAccessWarning)

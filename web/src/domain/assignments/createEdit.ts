@@ -1482,9 +1482,9 @@ export async function setAssignmentLock(
 // lock. Never throws (the flag flip already committed): a probe or reconcile
 // failure downgrades to a non-fatal warning the caller surfaces.
 //
-// `assignments` is the classroom's list as it stands after the write. The
-// team read is per template, not per assignment, so a lock keeps it while
-// another unlocked assignment still uses the same template.
+// `assignments` is the classroom's list (the entry for `slug` is ignored) as
+// it stands after the write. The team read is per template, so a lock keeps
+// it while another unlocked assignment still uses the same template.
 export async function reconcileLockTemplateAccess(
   client: GitHubClient,
   org: string,

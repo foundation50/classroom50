@@ -156,8 +156,7 @@ export async function setAssignmentsLock(
   )
 
   let newCommitSha: string | null = null
-  // As written, so the reconcile sees the selection's new state when it asks
-  // whether a template is still in use.
+  // The list as written: the reconcile checks it for templates still in use.
   let nextAssignments = ctx.current
 
   if (changed.length > 0) {
@@ -210,11 +209,10 @@ export async function setAssignmentsLock(
 const templateKey = (template: NonNullable<Assignment["template"]>) =>
   `${template.owner}/${template.repo}`.toLowerCase()
 
-// The team read is a permission on the template repo, so one write per
-// distinct template covers every assignment on it. The warning is handed to
-// each of those slugs; its text names the first one, and the team and repo it
-// points at are the same for all. Safe to run concurrently: each targets a
-// different repo and never touches the config repo's ref.
+// One write per distinct template covers every assignment on it. Each of
+// those slugs gets the warning; its text names the first, but the team and
+// repo it points at are the same for all. Concurrent is safe: each write
+// targets a different repo, never the config repo's ref.
 async function reconcilePerTemplate(
   items: { slug: string; template: Assignment["template"] }[],
   reconcile: (
