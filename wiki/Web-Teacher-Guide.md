@@ -1154,8 +1154,6 @@ entry per action and a half-applied selection is impossible: either every
 selected assignment changes or none does. Deleting asks you to type `delete`
 first, since it is the one action here with no undo in the app.
 
-![Confirming a bulk lock](images/web_assignments_bulk_lock.png)
-
 An assignment that vanished between selecting it and confirming (deleted in
 another tab, say) is reported as skipped rather than failing the whole action.
 
@@ -1167,8 +1165,6 @@ each copy, pre-filled with the slug it would take. Where that slug is already
 used in the target, a numbered suffix is filled in: copying `hw1` into a
 classroom that already has one gives you `hw1-2`. You can overwrite any of them
 before starting.
-
-![Choosing a target and slugs for a bulk reuse](images/web_assignments_bulk_reuse.png)
 
 The field turns red if a slug is taken in the target, is reserved by a renamed
 assignment, exceeds the classroom's repository-name budget, or collides with
