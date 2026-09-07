@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.46.1](https://github.com/foundation50/classroom50/compare/web-v1.46.0...web-v1.46.1) (2026-09-07)
+
+
+### Bug Fixes
+
+* **web:** flag groups whose membership exceeds max_group_size ([#897](https://github.com/foundation50/classroom50/issues/897)) ([c1ff46f](https://github.com/foundation50/classroom50/commit/c1ff46f43416cf878e76e162d356f2d22a580e80))
+
 ## [1.46.0](https://github.com/foundation50/classroom50/compare/web-v1.45.0...web-v1.46.0) (2026-09-06)
 
 
