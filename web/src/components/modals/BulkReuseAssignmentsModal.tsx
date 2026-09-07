@@ -115,6 +115,9 @@ export function BulkReuseAssignmentsModal({
       description={t("assignments.bulk.reuseBody")}
       isPending={reuse.isPending}
       warning={summary}
+      warningTone={
+        failed.length > 0 || templateWarned.length > 0 ? "warning" : "success"
+      }
       // Without the target's assignments the taken-slug set is empty, so a
       // collision would only surface server-side. Block the run instead. A
       // rejected commit renders inline the same way and leaves the form open.

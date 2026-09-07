@@ -207,6 +207,23 @@ describe("BulkReuseAssignmentsModal", () => {
     expect(slugInputs()[1].value).toBe("hausaufgabe-zwei")
   })
 
+  // A run where everything landed is good news, not a warning.
+  it("reports a clean run as success and a partial one as a warning", () => {
+    finished([{ slug: "hw1", targetSlug: "hw1" }])
+    setup()
+    const clean = screen.getByText(/assignments\.bulk\.reuseDone/)
+    expect(clean.closest(".alert")?.className).toContain("alert-success")
+    cleanup()
+
+    finished([
+      { slug: "hw1", targetSlug: "hw1" },
+      { slug: "hw2", error: "taken" },
+    ])
+    setup()
+    const partial = screen.getByText(/assignments\.bulk\.reuseDone/)
+    expect(partial.closest(".alert")?.className).toContain("alert-warning")
+  })
+
   // Copies the commit left out (slug taken by write time, template gone) are
   // reported beside the renamed ones; the form is gone.
   it("reports renamed and left-out copies once the commit lands", () => {

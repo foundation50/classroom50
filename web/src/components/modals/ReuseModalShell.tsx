@@ -3,7 +3,13 @@ import { useEffect, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
-import { AnimatedAlert, Button, Modal, ModalIcon } from "@/components/ui"
+import {
+  AnimatedAlert,
+  Button,
+  Modal,
+  ModalIcon,
+  type AlertTone,
+} from "@/components/ui"
 
 // Shared chrome for the two reuse modals — close button, header, error/warning
 // alerts, Cancel/Reuse footer — so each supplies only its title, description,
@@ -15,6 +21,7 @@ export const ReuseModalShell = ({
   description,
   isPending,
   warning,
+  warningTone = "warning",
   errorMessage,
   canSubmit,
   showSubmit,
@@ -26,7 +33,10 @@ export const ReuseModalShell = ({
   title: string
   description: ReactNode
   isPending: boolean
+  // The post-run message. Its presence turns the footer into "Done"; the tone
+  // says whether the run was clean (a bulk copy that all landed) or not.
   warning: string | null
+  warningTone?: AlertTone
   errorMessage: string | null
   canSubmit: boolean
   // Hide the Reuse button when there's nothing to submit into/from, or after a
@@ -97,7 +107,7 @@ export const ReuseModalShell = ({
       </AnimatedAlert>
 
       <AnimatedAlert
-        tone="warning"
+        tone={warningTone}
         show={!!warning}
         className="mt-4 items-start text-sm"
       >
