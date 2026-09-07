@@ -2,6 +2,9 @@ import { useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import useGetClasses from "@/hooks/useGetClasses"
+import useClassroomSummaries, {
+  classroomOptionLabels,
+} from "@/hooks/useClassroomSummaries"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import type { Assignment } from "@/types/classroom"
 import { renamedFromSlugs } from "@/types/classroom"
@@ -30,6 +33,9 @@ export const ReuseAssignmentModal = ({
   onClose: () => void
 }) => {
   const { classes } = useGetClasses(org)
+  const optionLabels = classroomOptionLabels(
+    useClassroomSummaries(org, classes),
+  )
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
 
@@ -120,10 +126,10 @@ export const ReuseAssignmentModal = ({
                       ? t(
                           "components.modals.reuseAssignment.thisClassroomOption",
                           {
-                            classroom: c.name,
+                            classroom: optionLabels.get(c.path) ?? c.name,
                           },
                         )
-                      : c.name}
+                      : (optionLabels.get(c.path) ?? c.name)}
                   </option>
                 ))}
               </Select>
@@ -144,7 +150,8 @@ export const ReuseAssignmentModal = ({
                   slugTouched: reuse.slugTouched,
                   normalizedSlug: reuse.normalizedSlug,
                   displayedSlug: reuse.displayedSlug,
-                  classroomLabel: targetClassroom,
+                  classroomLabel:
+                    optionLabels.get(targetClassroom) ?? targetClassroom,
                   uniqueHint: t("components.modals.reuseAssignment.uniqueHint"),
                 })
             return (

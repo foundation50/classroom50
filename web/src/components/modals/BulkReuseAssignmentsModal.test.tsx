@@ -8,9 +8,27 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 vi.mock("@/hooks/useGetClasses", () => {
-  const classes = [{ name: "cs101" }, { name: "cs102" }]
+  const classes = [
+    { name: "cs101", path: "cs101" },
+    { name: "cs102", path: "cs102" },
+  ]
   const hook = () => ({ classes, isLoading: false })
   return { default: hook, useGetClasses: hook }
+})
+
+// classroom.json names for the picker; cs102 has none, so its slug shows.
+vi.mock("@/hooks/useClassroomSummaries", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useClassroomSummaries")>()
+  const names: Record<string, string> = { cs101: "Intro to CS" }
+  const hook = (_org: string, dirs: { path: string }[]) =>
+    dirs.map((d) => ({
+      path: d.path,
+      name: names[d.path],
+      archived: false,
+      loading: false,
+    }))
+  return { ...actual, default: hook, useClassroomSummaries: hook }
 })
 
 vi.mock("@/hooks/useGetClassAssignments", () => {
@@ -83,6 +101,15 @@ afterEach(() => {
 })
 
 describe("BulkReuseAssignmentsModal", () => {
+  it("lists targets by display name, slug only where there is none", () => {
+    setup()
+    const labels = screen
+      .getAllByRole("option")
+      .map((o) => o.textContent)
+      .filter((l) => l !== "components.modals.reuseAssignment.chooseClassroom")
+    expect(labels).toEqual(["Intro to CS", "cs102"])
+  })
+
   it("shows no slug fields until a target is chosen", () => {
     const { slugInputs, pickTarget } = setup()
     expect(slugInputs()).toHaveLength(0)

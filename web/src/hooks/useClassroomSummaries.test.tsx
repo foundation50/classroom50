@@ -15,7 +15,10 @@ vi.mock("@/github-core/queries", () => ({
   jsonFileQuery: () => ({}),
 }))
 
-import useClassroomSummaries from "./useClassroomSummaries"
+import useClassroomSummaries, {
+  classroomOptionLabels,
+  type ClassroomSummary,
+} from "./useClassroomSummaries"
 
 const dir = (path: string): GitHubFileListing =>
   ({ path, type: "dir", name: path }) as GitHubFileListing
@@ -53,5 +56,40 @@ describe("useClassroomSummaries", () => {
     )
     expect(result.current[0].path).toBe("cs404")
     expect(result.current[0].name).toBeUndefined()
+  })
+})
+
+describe("classroomOptionLabels", () => {
+  const summary = (path: string, name?: string): ClassroomSummary => ({
+    path,
+    name,
+    archived: false,
+    loading: false,
+  })
+
+  it("labels by display name and falls back to the slug", () => {
+    const labels = classroomOptionLabels([
+      summary("cs101-f26", "CS 101"),
+      summary("cs102"),
+    ])
+    expect(labels.get("cs101-f26")).toBe("CS 101")
+    expect(labels.get("cs102")).toBe("cs102")
+  })
+
+  // Two terms of one course share a name; only then is the slug worth the room.
+  it("appends the slug only where a display name is shared", () => {
+    const labels = classroomOptionLabels([
+      summary("cs101-f25", "CS 101"),
+      summary("cs101-f26", "CS 101"),
+      summary("cs102", "CS 102"),
+    ])
+    expect(labels.get("cs101-f25")).toBe("CS 101 (cs101-f25)")
+    expect(labels.get("cs101-f26")).toBe("CS 101 (cs101-f26)")
+    expect(labels.get("cs102")).toBe("CS 102")
+  })
+
+  it("does not repeat a slug that already is the label", () => {
+    const labels = classroomOptionLabels([summary("cs101"), summary("cs101")])
+    expect(labels.get("cs101")).toBe("cs101")
   })
 })

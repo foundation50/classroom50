@@ -70,3 +70,23 @@ export const classroomDisplayName = (
   summary: ClassroomSummary,
   fallback = "",
 ) => summary.name || summary.short_name || summary.path || fallback
+
+// Option labels for a classroom picker: the display name, with the slug in
+// parentheses only where two classrooms share a display name, since the name
+// alone would not tell them apart. Keyed by path.
+export const classroomOptionLabels = (
+  summaries: ClassroomSummary[],
+): Map<string, string> => {
+  const seen = new Map<string, number>()
+  for (const s of summaries) {
+    const name = classroomDisplayName(s)
+    seen.set(name, (seen.get(name) ?? 0) + 1)
+  }
+  return new Map(
+    summaries.map((s) => {
+      const name = classroomDisplayName(s)
+      const ambiguous = (seen.get(name) ?? 0) > 1 && name !== s.path
+      return [s.path, ambiguous ? `${name} (${s.path})` : name]
+    }),
+  )
+}

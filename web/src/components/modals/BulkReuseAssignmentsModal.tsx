@@ -12,6 +12,9 @@ import {
 } from "@/components/modals/ReuseModalShell"
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
+import useClassroomSummaries, {
+  classroomOptionLabels,
+} from "@/hooks/useClassroomSummaries"
 import type { BulkReuseRun } from "@/hooks/mutations/useBulkAssignmentActions"
 import {
   planBulkReuseSlugs,
@@ -44,6 +47,9 @@ export function BulkReuseAssignmentsModal({
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { classes, isLoading: classesLoading } = useGetClasses(org)
+  const optionLabels = classroomOptionLabels(
+    useClassroomSummaries(org, classes),
+  )
   const [target, setTarget] = useState("")
   // Raw input text by source slug for edited rows; the rest keep re-resolving
   // as the target loads or a neighbouring row is retyped.
@@ -148,7 +154,7 @@ export function BulkReuseAssignmentsModal({
               </option>
               {classes.map((c) => (
                 <option key={c.name} value={c.name}>
-                  {c.name}
+                  {optionLabels.get(c.path) ?? c.name}
                 </option>
               ))}
             </Select>
@@ -175,7 +181,7 @@ export function BulkReuseAssignmentsModal({
                       slugTouched: row.edited,
                       normalizedSlug: row.targetSlug,
                       displayedSlug: row.value,
-                      classroomLabel: target,
+                      classroomLabel: optionLabels.get(target) ?? target,
                       uniqueHint: t(
                         "components.modals.reuseAssignment.uniqueHint",
                       ),
