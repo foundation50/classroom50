@@ -1,9 +1,9 @@
 // Package download implements the `gh teacher download` command: cloning every
 // student submission repo for an assignment under <org>/classroom50
-// (team-driven or --by-pattern), refreshing each repo's
-// result.json/results.json from its submit-tag releases, and writing a
-// scores.csv summary. Read-only consumer of the classroom50 repository; only NewCmd is
-// exported.
+// (team-driven or --by-pattern), fast-forwarding clones already on disk under
+// --pull, refreshing each repo's result.json/results.json from its submit-tag
+// releases, and writing a scores.csv summary. Read-only consumer of the
+// classroom50 repository; only NewCmd is exported.
 package download
 
 import (
@@ -86,11 +86,19 @@ var scoresCSVHeader = []string{
 	"override",
 }
 
+// options carries the per-run flags shared by both download modes.
+type options struct {
+	quiet   bool
+	verbose bool
+	pull    bool // fast-forward clones already on disk instead of skipping them
+}
+
 func NewCmd() *cobra.Command {
 	var (
 		dir       string
 		quiet     bool
 		byPattern bool
+		pull      bool
 	)
 
 	cmd := &cobra.Command{
@@ -125,9 +133,15 @@ func NewCmd() *cobra.Command {
 			"override (value used literally, no timestamp). Existing clones on\n" +
 			"disk are skipped on the clone step, but result.json is still\n" +
 			"refreshed so a re-run after the next collect run picks up the\n" +
-			"newest scores.",
+			"newest scores.\n\n" +
+			"Pass --pull to bring existing clones up to date instead of skipping\n" +
+			"them: each one gets `git pull --ff-only`, so a clone whose history\n" +
+			"has diverged from the student's repo (a force-push, or local commits\n" +
+			"of your own) is reported as failed and left untouched. Fix it in the\n" +
+			"clone with git, or delete the folder and run again to clone it fresh.",
 		Example: "  gh teacher download cs50-fall-2026 cs-principles hello\n" +
 			"  gh teacher download -d submissions cs50-fall-2026 cs-principles hello\n" +
+			"  gh teacher download --pull -d submissions cs50-fall-2026 cs-principles hello\n" +
 			"  gh teacher download --by-pattern cs50-fall-2026 cs-principles hello",
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -161,17 +175,19 @@ func NewCmd() *cobra.Command {
 			// it here and thread it down rather than reaching for a package
 			// global, so this package has no dependency on package main.
 			verbose, _ := cmd.Flags().GetBool("verbose")
+			opts := options{quiet: quiet, verbose: verbose, pull: pull}
 
 			if byPattern {
-				return downloadByPattern(client, out, errOut, org, classroom, assignment, dir, quiet, verbose)
+				return downloadByPattern(client, out, errOut, org, classroom, assignment, dir, opts)
 			}
-			return downloadByRoster(client, out, errOut, org, classroom, assignment, dir, quiet, verbose)
+			return downloadByRoster(client, out, errOut, org, classroom, assignment, dir, opts)
 		},
 	}
 
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Directory to clone repos into (default: <classroom>-<assignment>_submissions_<timestamp>)")
-	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress informational output and pass --quiet to git clone (errors still go to stderr)")
+	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress informational output and pass --quiet to git clone and git pull (errors still go to stderr)")
 	cmd.Flags().BoolVar(&byPattern, "by-pattern", false, "Skip the team lookup and clone every <org> repo matching <classroom>-<assignment>-* (no scores.csv, no result.json fetch)")
+	cmd.Flags().BoolVar(&pull, "pull", false, "Update clones already on disk with git pull --ff-only instead of skipping them")
 	return cmd
 }
 
@@ -181,7 +197,9 @@ func NewCmd() *cobra.Command {
 // scores.csv summary at the dir root. Team members without a repo are
 // reported as missing — not a hard failure. roster.csv is joined in only as
 // optional display metadata (name/section/email).
-func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
+func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, opts options) error {
+	quiet, verbose := opts.quiet, opts.verbose
+
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
@@ -244,14 +262,32 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	apiBase := apiBaseURL(host)
 
 	var (
-		clonedNew       []string
-		skippedExisting []string
-		missing         []string // enrolled but no repo on the org yet
-		failed          []string
-		assetErrs       int
+		clonedNew []string
+		existing  []string // already on disk: pulled under --pull, otherwise skipped
+		missing   []string // enrolled but no repo on the org yet
+		failed    []string
+		assetErrs int
 	)
 
-	// cloneOne clones (or skips) one repo into dir and refreshes its
+	// syncExisting handles a clone already on disk: fast-forwards it under
+	// --pull, otherwise leaves it as-is. Either way the repo stays eligible
+	// for the result.json refresh, which reads releases, not the working tree.
+	syncExisting := func(repoName, target string) {
+		if !opts.pull {
+			if !quiet {
+				_, _ = fmt.Fprintf(out, "Skipped %s (already exists)\n", repoName)
+			}
+			existing = append(existing, repoName)
+			return
+		}
+		if err := pullWithProgress(out, errOut, repoName, target, quiet, verbose); err != nil {
+			failed = append(failed, repoName)
+			return
+		}
+		existing = append(existing, repoName)
+	}
+
+	// cloneOne clones (or syncs) one repo into dir and refreshes its
 	// result.json history, recording the outcome in the tallies above.
 	cloneOne := func(repoName string) {
 		target := filepath.Join(dir, repoName)
@@ -261,10 +297,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 			failed = append(failed, repoName)
 			return
 		case existsOnDisk:
-			if !quiet {
-				_, _ = fmt.Fprintf(out, "Skipped %s (already exists)\n", repoName)
-			}
-			skippedExisting = append(skippedExisting, repoName)
+			syncExisting(repoName, target)
 		default:
 			if err := cloneWithProgress(out, errOut, org, repoName, target, quiet, verbose); err != nil {
 				failed = append(failed, repoName)
@@ -322,10 +355,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 			failed = append(failed, repoName)
 			continue
 		case existsOnDisk:
-			if !quiet {
-				_, _ = fmt.Fprintf(out, "Skipped %s (already exists)\n", repoName)
-			}
-			skippedExisting = append(skippedExisting, repoName)
+			syncExisting(repoName, target)
 			if err := refreshResultJSON(client, token, apiBase, org, repoName, target); err != nil {
 				_, _ = fmt.Fprintf(errOut, "%s: result.json: %v\n", repoName, err)
 				assetErrs++
@@ -387,8 +417,8 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	}
 
 	if !quiet {
-		_, _ = fmt.Fprintf(out, "%s: %d cloned, %d already on disk, %d missing, %d failed (of %d team member(s))\n",
-			org, len(clonedNew), len(skippedExisting), len(missing), len(failed), len(teamLogins))
+		_, _ = fmt.Fprintf(out, "%s: %d cloned, %d %s, %d missing, %d failed (of %d team member(s))\n",
+			org, len(clonedNew), len(existing), existingLabel(opts.pull), len(missing), len(failed), len(teamLogins))
 		if assetErrs > 0 {
 			_, _ = fmt.Fprintf(errOut, "Warning: %d result.json fetches failed; see stderr above.\n", assetErrs)
 		}
@@ -396,14 +426,32 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 
 	switch {
 	case len(failed) > 0 && csvErr != nil:
-		return fmt.Errorf("%d of %d repo(s) failed to clone (%s); scores.csv write also failed: %w",
-			len(failed), len(teamLogins), strings.Join(failed, ", "), csvErr)
+		return fmt.Errorf("%d of %d repo(s) failed to %s (%s); scores.csv write also failed: %w",
+			len(failed), len(teamLogins), failVerb(opts.pull), strings.Join(failed, ", "), csvErr)
 	case len(failed) > 0:
-		return fmt.Errorf("%d of %d repo(s) failed to clone: %s", len(failed), len(teamLogins), strings.Join(failed, ", "))
+		return fmt.Errorf("%d of %d repo(s) failed to %s: %s", len(failed), len(teamLogins), failVerb(opts.pull), strings.Join(failed, ", "))
 	case csvErr != nil:
 		return fmt.Errorf("scores.csv: %w", csvErr)
 	}
 	return nil
+}
+
+// existingLabel names the tally of clones that were already on disk: under
+// --pull they were brought up to date, otherwise left as found.
+func existingLabel(pull bool) string {
+	if pull {
+		return "updated"
+	}
+	return "already on disk"
+}
+
+// failVerb names what a failed repo failed at; under --pull a failure can be
+// either the clone or the fast-forward.
+func failVerb(pull bool) string {
+	if pull {
+		return "clone or update"
+	}
+	return "clone"
 }
 
 // RosterMeta is the optional display metadata joined into scores.csv from
@@ -452,7 +500,8 @@ func matchesAssignmentPrefix(name, classroom, assignment string) bool {
 // downloadByPattern: page through <org>'s repos and clone every one whose
 // name starts with <classroom>-<assignment>-. Skips the team lookup,
 // result.json refresh, and scores.csv summary (all depend on the classroom50 repository).
-func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
+func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, opts options) error {
+	quiet, verbose := opts.quiet, opts.verbose
 	prefix := contract.AssignmentRepoPrefix(classroom, assignment)
 
 	repos, err := orgrepos.ListNames(client, org)
@@ -478,34 +527,46 @@ func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, clas
 		return fmt.Errorf("create %s: %w", dir, err)
 	}
 
-	var failed []string
+	var (
+		cloned   int
+		existing int // already on disk: pulled under --pull, otherwise skipped
+		failed   []string
+	)
 	for _, name := range matched {
 		target := filepath.Join(dir, name)
 
-		// "Skipped" only — no preceding "Cloning..." since we didn't start one.
-		if _, err := os.Stat(target); err == nil {
+		switch existsOnDisk, statErr := targetExists(target); {
+		case statErr != nil:
+			_, _ = fmt.Fprintf(errOut, "%s: stat %s: %v\n", name, target, statErr)
+			failed = append(failed, name)
+		case existsOnDisk && !opts.pull:
+			// "Skipped" only — no preceding "Cloning..." since we didn't start one.
 			if !quiet {
 				_, _ = fmt.Fprintf(out, "Skipped %s (already exists)\n", name)
 			}
-			continue
-		} else if !os.IsNotExist(err) {
-			_, _ = fmt.Fprintf(errOut, "%s: stat %s: %v\n", name, target, err)
-			failed = append(failed, name)
-			continue
-		}
-
-		if err := cloneWithProgress(out, errOut, org, name, target, quiet, verbose); err != nil {
-			failed = append(failed, name)
-			continue
+			existing++
+		case existsOnDisk:
+			if err := pullWithProgress(out, errOut, name, target, quiet, verbose); err != nil {
+				failed = append(failed, name)
+				continue
+			}
+			existing++
+		default:
+			if err := cloneWithProgress(out, errOut, org, name, target, quiet, verbose); err != nil {
+				failed = append(failed, name)
+				continue
+			}
+			cloned++
 		}
 	}
 
 	if !quiet {
-		_, _ = fmt.Fprintf(out, "%s: %d/%d cloned\n", org, len(matched)-len(failed), len(matched))
+		_, _ = fmt.Fprintf(out, "%s: %d cloned, %d %s, %d failed (of %d repo(s))\n",
+			org, cloned, existing, existingLabel(opts.pull), len(failed), len(matched))
 	}
 
 	if len(failed) > 0 {
-		return fmt.Errorf("%d of %d repo(s) failed to clone: %s", len(failed), len(matched), strings.Join(failed, ", "))
+		return fmt.Errorf("%d of %d repo(s) failed to %s: %s", len(failed), len(matched), failVerb(opts.pull), strings.Join(failed, ", "))
 	}
 	return nil
 }
@@ -1145,33 +1206,60 @@ func downloadAssetBytes(token, assetURL string) ([]byte, error) {
 // stderrTailCap bounds non-verbose stderr capture; the error lives at the tail.
 const stderrTailCap = 8 * 1024
 
+// stepLabels names one per-repo git step for the progress renderer: the
+// in-progress verb, the past-tense outcome, and the lowercase failure noun.
+type stepLabels struct {
+	doing, done, failed string
+}
+
+var (
+	cloneStep = stepLabels{doing: "Cloning", done: "Cloned", failed: "clone failed"}
+	pullStep  = stepLabels{doing: "Updating", done: "Updated", failed: "update failed"}
+)
+
 // cloneWithProgress clones one repo, rendering progress on the human channel.
-// Interactive: a spinner. Non-TTY / --quiet: stable stdout lines ("Cloning
-// X... Done") for piped/CI readers. Verbose: streams git's output. Returns the
-// clone error so the caller records the failure and continues.
+// Returns the clone error so the caller records the failure and continues.
 func cloneWithProgress(out, errOut io.Writer, org, repo, target string, quiet, verbose bool) error {
-	sp := ghui.NewSpinner(errOut, "Cloning "+repo)
+	return runWithProgress(out, errOut, repo, cloneStep, quiet, verbose, func() error {
+		return cloneOrgRepo(out, errOut, org, repo, target, quiet, verbose)
+	})
+}
+
+// pullWithProgress fast-forwards one existing clone, rendering progress on
+// the human channel. Returns the pull error so the caller records the failure
+// and continues.
+func pullWithProgress(out, errOut io.Writer, repo, target string, quiet, verbose bool) error {
+	return runWithProgress(out, errOut, repo, pullStep, quiet, verbose, func() error {
+		return pullRepo(out, errOut, target, quiet, verbose)
+	})
+}
+
+// runWithProgress runs one per-repo git step, rendering progress on the human
+// channel. Interactive: a spinner. Non-TTY / --quiet: stable stdout lines
+// ("Cloning X... Done") for piped/CI readers. Verbose: streams git's output.
+func runWithProgress(out, errOut io.Writer, repo string, step stepLabels, quiet, verbose bool, run func() error) error {
+	sp := ghui.NewSpinner(errOut, step.doing+" "+repo)
 	interactive := sp.Active() && !quiet && !verbose
 
 	// Skip the stdout lines when animating — the spinner shows the same on
 	// stderr, and both would duplicate on a shared terminal.
 	if !quiet && !interactive {
 		if verbose {
-			_, _ = fmt.Fprintf(out, "Cloning %s\n", repo)
+			_, _ = fmt.Fprintf(out, "%s %s\n", step.doing, repo)
 		} else {
-			_, _ = fmt.Fprintf(out, "Cloning %s... ", repo)
+			_, _ = fmt.Fprintf(out, "%s %s... ", step.doing, repo)
 		}
 	}
 	if interactive {
 		sp.Start()
 	}
 
-	err := cloneOrgRepo(out, errOut, org, repo, target, quiet, verbose)
+	err := run()
 	if err != nil {
 		if interactive {
-			sp.Fail("Cloning " + repo)
+			sp.Fail(step.doing + " " + repo)
 		} else if quiet {
-			_, _ = fmt.Fprintf(errOut, "%s: clone failed: %v\n", repo, err)
+			_, _ = fmt.Fprintf(errOut, "%s: %s: %v\n", repo, step.failed, err)
 		} else if verbose {
 			_, _ = fmt.Fprintf(out, "%s: failed: %v\n", repo, err)
 		} else {
@@ -1180,7 +1268,7 @@ func cloneWithProgress(out, errOut io.Writer, org, repo, target string, quiet, v
 		return err
 	}
 	if interactive {
-		sp.Stop("Cloned " + repo)
+		sp.Stop(step.done + " " + repo)
 	} else if !quiet {
 		if verbose {
 			_, _ = fmt.Fprintf(out, "%s: done\n", repo)
@@ -1191,16 +1279,46 @@ func cloneWithProgress(out, errOut io.Writer, org, repo, target string, quiet, v
 	return nil
 }
 
-// cloneOrgRepo shells out to `gh repo clone`. Verbose streams git's output;
-// otherwise stdout is discarded and the stderr tail is captured so failures
-// carry git's diagnostic, not just "exit status 1".
+// cloneOrgRepo shells out to `gh repo clone`, so auth flows through the gh
+// session.
 func cloneOrgRepo(out, errOut io.Writer, org, repo, target string, quiet, verbose bool) error {
 	args := []string{"repo", "clone", fmt.Sprintf("%s/%s", org, repo), target}
 	if quiet {
 		args = append(args, "--", "--quiet")
 	}
-	cmd := exec.Command("gh", args...)
+	return runGitStep(exec.Command("gh", args...), out, errOut, verbose)
+}
 
+// pullRepo fast-forwards the clone at target with `git pull --ff-only`.
+// Fast-forward only: a teacher may have local commits (feedback, notes) and a
+// student may have force-pushed, and silently merging or resetting either
+// would be worse than a reported failure. Auth is routed through gh's
+// credential helper (the same injection `gh repo clone` uses), so a clone made
+// without `gh auth setup-git` still pulls over HTTPS; the extra config is
+// inert for an SSH remote. GIT_TERMINAL_PROMPT=0 keeps a missing credential
+// from hanging the batch on a password prompt.
+func pullRepo(out, errOut io.Writer, target string, quiet, verbose bool) error {
+	args := []string{
+		"-C", target,
+		"-c", "credential.helper=",
+		"-c", "credential.helper=!gh auth git-credential",
+		"pull", "--ff-only",
+	}
+	if quiet {
+		args = append(args, "--quiet")
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
+	if err := runGitStep(cmd, out, errOut, verbose); err != nil {
+		return fmt.Errorf("%w (fix the clone with git, or delete %s and run again to clone it fresh)", err, target)
+	}
+	return nil
+}
+
+// runGitStep runs a git-backed command. Verbose streams its output; otherwise
+// stdout is discarded and the stderr tail is captured so failures carry git's
+// diagnostic, not just "exit status 1".
+func runGitStep(cmd *exec.Cmd, out, errOut io.Writer, verbose bool) error {
 	var stderrTail *tailWriter
 	if verbose {
 		cmd.Stdout = out

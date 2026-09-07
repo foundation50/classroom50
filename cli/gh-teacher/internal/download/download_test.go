@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -1353,4 +1354,220 @@ func TestLoadRosterMetadata_IndexesByLogin(t *testing.T) {
 	if got != want {
 		t.Errorf("meta[alice] = %+v, want %+v", got, want)
 	}
+}
+
+// git runs one git command in dir against a hermetic config (no user/system
+// gitconfig, fixed identity) and returns its trimmed stdout. Skips the test
+// when git isn't installed.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skipf("git not installed: %v", err)
+	}
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_CONFIG_GLOBAL="+os.DevNull,
+		"GIT_CONFIG_NOSYSTEM=1",
+		"GIT_AUTHOR_NAME=test", "GIT_AUTHOR_EMAIL=test@example.com",
+		"GIT_COMMITTER_NAME=test", "GIT_COMMITTER_EMAIL=test@example.com",
+		"GIT_TERMINAL_PROMPT=0",
+	)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// commitFile adds one commit touching name in the working tree at dir.
+func commitFile(t *testing.T, dir, name string) {
+	t.Helper()
+	mustWrite(t, filepath.Join(dir, name), name+"\n")
+	git(t, dir, "add", name)
+	git(t, dir, "commit", "-q", "-m", "add "+name)
+}
+
+// studentRepo stands in for one student's GitHub repo: a bare origin plus a
+// "student" working clone that pushes to it. Returns both paths.
+func studentRepo(t *testing.T) (origin, student string) {
+	t.Helper()
+	root := t.TempDir()
+	origin = filepath.Join(root, "origin.git")
+	student = filepath.Join(root, "student")
+	git(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	git(t, root, "clone", "-q", origin, student)
+	git(t, student, "checkout", "-q", "-b", "main")
+	commitFile(t, student, "hello.py")
+	git(t, student, "push", "-q", "-u", "origin", "main")
+	return origin, student
+}
+
+// teacherClone clones origin into <dir>/<name>, as a prior `gh teacher
+// download` run would have.
+func teacherClone(t *testing.T, dir, name, origin string) string {
+	t.Helper()
+	target := filepath.Join(dir, name)
+	git(t, dir, "clone", "-q", origin, target)
+	return target
+}
+
+// TestPullRepo pins the --pull contract on real git repos: a clone behind its
+// origin fast-forwards; an up-to-date clone is a no-op; a clone whose history
+// has diverged is left untouched and the error tells the teacher what to do.
+func TestPullRepo(t *testing.T) {
+	t.Run("fast-forwards a clone behind origin", func(t *testing.T) {
+		origin, student := studentRepo(t)
+		target := teacherClone(t, t.TempDir(), "clone", origin)
+		commitFile(t, student, "more.py")
+		git(t, student, "push", "-q")
+		want := git(t, student, "rev-parse", "HEAD")
+
+		if err := pullRepo(io.Discard, io.Discard, target, false, false); err != nil {
+			t.Fatalf("pullRepo: %v", err)
+		}
+		if got := git(t, target, "rev-parse", "HEAD"); got != want {
+			t.Errorf("HEAD after pull = %s, want origin's %s", got, want)
+		}
+		if _, err := os.Stat(filepath.Join(target, "more.py")); err != nil {
+			t.Errorf("pulled file missing from the working tree: %v", err)
+		}
+	})
+
+	t.Run("up-to-date clone is a no-op", func(t *testing.T) {
+		origin, _ := studentRepo(t)
+		target := teacherClone(t, t.TempDir(), "clone", origin)
+		before := git(t, target, "rev-parse", "HEAD")
+
+		if err := pullRepo(io.Discard, io.Discard, target, true, false); err != nil {
+			t.Fatalf("pullRepo: %v", err)
+		}
+		if got := git(t, target, "rev-parse", "HEAD"); got != before {
+			t.Errorf("HEAD moved on an up-to-date pull: %s -> %s", before, got)
+		}
+	})
+
+	t.Run("diverged clone is left untouched with an actionable error", func(t *testing.T) {
+		origin, student := studentRepo(t)
+		target := teacherClone(t, t.TempDir(), "clone", origin)
+		// Teacher commits locally (feedback notes) while the student pushes:
+		// neither side is an ancestor of the other, so --ff-only must refuse.
+		commitFile(t, target, "NOTES.md")
+		local := git(t, target, "rev-parse", "HEAD")
+		commitFile(t, student, "more.py")
+		git(t, student, "push", "-q")
+
+		err := pullRepo(io.Discard, io.Discard, target, false, false)
+		if err == nil {
+			t.Fatal("expected pullRepo to refuse a non-fast-forward")
+		}
+		if !strings.Contains(err.Error(), "clone it fresh") {
+			t.Errorf("err = %q, want the delete-and-rerun hint", err)
+		}
+		if got := git(t, target, "rev-parse", "HEAD"); got != local {
+			t.Errorf("diverged clone was modified: HEAD %s -> %s", local, got)
+		}
+		if _, err := os.Stat(filepath.Join(target, "NOTES.md")); err != nil {
+			t.Errorf("local work lost: %v", err)
+		}
+	})
+}
+
+// TestDownloadByPattern_ExistingClones drives the pattern mode over clones that
+// already exist on disk (so no `gh repo clone` is ever spawned) and pins the
+// two behaviors for them: skipped by default, fast-forwarded under --pull.
+func TestDownloadByPattern_ExistingClones(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/orgs/o/repos", func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Query().Get("page") != "1" {
+			_ = json.NewEncoder(w).Encode([]map[string]string{})
+			return
+		}
+		_ = json.NewEncoder(w).Encode([]map[string]string{
+			{"name": "cs-hello-alice"},
+			{"name": "cs-hello-bob"},
+			{"name": "classroom50"},
+		})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	// setup lays down both students' clones one push behind their origins and
+	// returns the dir plus, per repo, the origin HEAD each clone should reach.
+	setup := func(t *testing.T) (dir string, wantHead map[string]string) {
+		t.Helper()
+		dir = t.TempDir()
+		wantHead = map[string]string{}
+		for _, name := range []string{"cs-hello-alice", "cs-hello-bob"} {
+			origin, student := studentRepo(t)
+			teacherClone(t, dir, name, origin)
+			commitFile(t, student, "more.py")
+			git(t, student, "push", "-q")
+			wantHead[name] = git(t, student, "rev-parse", "HEAD")
+		}
+		return dir, wantHead
+	}
+
+	t.Run("default skips existing clones", func(t *testing.T) {
+		dir, wantHead := setup(t)
+		var out bytes.Buffer
+		if err := downloadByPattern(client, &out, io.Discard, "o", "cs", "hello", dir, options{}); err != nil {
+			t.Fatalf("downloadByPattern: %v", err)
+		}
+		for _, want := range []string{
+			"Skipped cs-hello-alice (already exists)",
+			"Skipped cs-hello-bob (already exists)",
+			"o: 0 cloned, 2 already on disk, 0 failed (of 2 repo(s))",
+		} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("output missing %q:\n%s", want, out.String())
+			}
+		}
+		for name, head := range wantHead {
+			if got := git(t, filepath.Join(dir, name), "rev-parse", "HEAD"); got == head {
+				t.Errorf("%s was updated without --pull", name)
+			}
+		}
+	})
+
+	t.Run("--pull fast-forwards existing clones", func(t *testing.T) {
+		dir, wantHead := setup(t)
+		var out bytes.Buffer
+		if err := downloadByPattern(client, &out, io.Discard, "o", "cs", "hello", dir, options{pull: true}); err != nil {
+			t.Fatalf("downloadByPattern: %v", err)
+		}
+		for _, want := range []string{
+			"Updating cs-hello-alice... Done",
+			"Updating cs-hello-bob... Done",
+			"o: 0 cloned, 2 updated, 0 failed (of 2 repo(s))",
+		} {
+			if !strings.Contains(out.String(), want) {
+				t.Errorf("output missing %q:\n%s", want, out.String())
+			}
+		}
+		for name, head := range wantHead {
+			if got := git(t, filepath.Join(dir, name), "rev-parse", "HEAD"); got != head {
+				t.Errorf("%s HEAD = %s, want origin's %s", name, got, head)
+			}
+		}
+	})
+
+	t.Run("--pull reports a diverged clone as failed and keeps going", func(t *testing.T) {
+		dir, wantHead := setup(t)
+		commitFile(t, filepath.Join(dir, "cs-hello-alice"), "NOTES.md")
+
+		var out, errOut bytes.Buffer
+		err := downloadByPattern(client, &out, &errOut, "o", "cs", "hello", dir, options{pull: true})
+		if err == nil || !strings.Contains(err.Error(), "1 of 2 repo(s) failed to clone or update: cs-hello-alice") {
+			t.Fatalf("err = %v, want the single-failure summary", err)
+		}
+		if !strings.Contains(out.String(), "o: 0 cloned, 1 updated, 1 failed (of 2 repo(s))") {
+			t.Errorf("summary missing from output:\n%s", out.String())
+		}
+		// bob still gets updated after alice's failure.
+		if got := git(t, filepath.Join(dir, "cs-hello-bob"), "rev-parse", "HEAD"); got != wantHead["cs-hello-bob"] {
+			t.Errorf("bob HEAD = %s, want origin's %s", got, wantHead["cs-hello-bob"])
+		}
+	})
 }

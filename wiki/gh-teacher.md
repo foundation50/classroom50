@@ -1062,6 +1062,7 @@ join it against `roster.csv`'s `github_id`.
 gh teacher download <org> <classroom> <assignment>              # team-driven (default)
 gh teacher download --by-pattern <org> <classroom> <assignment> # clone by name prefix
 gh teacher download -d <dir> <org> <classroom> <assignment>     # literal dir
+gh teacher download --pull -d <dir> <org> <classroom> <assignment> # update existing clones
 ```
 
 **Team-driven (default):** lists the classroom team's members and, for each,
@@ -1074,10 +1075,18 @@ contributes several lines), plus a blank-score line for each non-submitter.
 Each run creates a fresh timestamped folder unless you pass `-d`. Existing target
 dirs are skipped on clone but still get `result.json` refreshed.
 
+**`--pull`** brings existing clones up to date instead of skipping them. Each one
+gets `git pull --ff-only`, so a clone whose history has diverged from the
+student's repository (a force-push, or local commits of your own) is reported as
+failed and left untouched. Fix it in the clone with git, or delete the folder and
+run again to clone it fresh. Pair it with `-d` to keep one folder current while
+students work.
+
 **`--by-pattern`** pages through the org's repos and clones every one whose name
 starts with `<classroom>-<assignment>-`, skipping the team lookup, the
 `result.json` refresh, and the `scores.csv` summary. Use it when the `classroom50` repository
 isn't bootstrapped, or to grab every matching repo regardless of the roster.
+`--pull` works here too.
 
 ## `teardown`
 

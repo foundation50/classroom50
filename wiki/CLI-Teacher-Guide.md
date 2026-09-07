@@ -849,6 +849,19 @@ Each run creates a fresh timestamped folder. Override the destination with `-d`:
 gh teacher download -d <dir> <org> <classroom> <assignment>
 ```
 
+Re-running into the same folder skips the repositories already there (their
+`result.json` is still refreshed). To check on students' progress before the
+deadline, add `--pull` and the existing clones are fast-forwarded to each
+student's latest push instead:
+
+```sh
+gh teacher download --pull -d <dir> <org> <classroom> <assignment>
+```
+
+A clone you have committed to locally, or whose student force-pushed, can't
+fast-forward: it's reported as failed and left untouched. Fix it in the clone
+with git, or delete that folder and run again to clone it fresh.
+
 > [!NOTE]
 > **Unconfigured classrooms.** If the `classroom50` repository isn't bootstrapped, or you
 > want every matching repo regardless of the roster, pass `--by-pattern`. It
