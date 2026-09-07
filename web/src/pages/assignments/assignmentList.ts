@@ -8,7 +8,7 @@ import { dueDeadlineInstant } from "@/util/formatDate"
 export type AssignmentSort =
   "name-asc" | "name-desc" | "due-asc" | "due-desc" | "type"
 
-export type TypeFilter = "all" | "individual" | "group"
+export type TypeFilter = "all" | "individual" | "group" | "team"
 export type DueFilter = "all" | "has-due" | "no-due" | "overdue"
 
 export type AssignmentFilters = {
@@ -64,6 +64,13 @@ const matchesFilters = (
   return true
 }
 
+// The "type" sort orders by DISPLAYED type, not the wire mode string: both
+// group flavors ("Group" = team, "Group (legacy)" = group) sort adjacent
+// instead of being split by "Individual" (alphabetically group < individual
+// < team would interleave them).
+const MODE_SORT_RANK: Record<string, number> = { team: 0, group: 1 }
+const modeRank = (mode: string): number => MODE_SORT_RANK[mode] ?? 2
+
 // Sort a copy; never mutate the input. Missing/unparseable due dates sort last
 // in both directions (a stable, documented tie-break).
 const sortAssignments = (
@@ -92,7 +99,9 @@ const sortAssignments = (
     case "due-desc":
       return list.sort((a, b) => byDue(a, b, -1))
     case "type":
-      return list.sort((a, b) => a.mode.localeCompare(b.mode) || byName(a, b))
+      return list.sort(
+        (a, b) => modeRank(a.mode) - modeRank(b.mode) || byName(a, b),
+      )
   }
 }
 

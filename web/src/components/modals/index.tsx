@@ -20,15 +20,29 @@ type ConfirmModalProps = {
   confirmText?: string
   confirmLabel?: string
   cancelLabel?: string
-  dangerous?: boolean
+  // Required on purpose: severity is a per-action judgment, so no default.
+  // "error" is for actions that destroy something; "warning" for everything
+  // else that still deserves a confirm.
+  tone: "error" | "warning"
+  // One tailored sentence about what confirming can't take back, shown in a
+  // boxed callout under the description. Omit it when the action is
+  // reversible or the description already states the loss.
+  warning?: React.ReactNode
   needsConfirm?: boolean
+  // Blocks confirming (e.g. the caller's preview shows a no-op) while still
+  // letting the user adjust the dialog's inputs or cancel.
+  confirmDisabled?: boolean
   onConfirm: () => Promise<void>
   onClose: () => void
+  // Extra body content rendered above the acknowledge prompt (e.g. an option
+  // checkbox that adjusts what confirming will do).
+  children?: React.ReactNode
 }
 
 // Primer-style ConfirmationDialog built on the shared Modal primitive
 // (role="alertdialog", exactly two footer buttons: ghost Cancel left,
-// error/warning/primary confirm right).
+// error/warning/primary confirm right). `tone` sets the severity styling;
+// `warning` is the caller's own irreversibility sentence, never a generic one.
 // `onClose` must be idempotent: a successful confirm and the dialog's native
 // close event both fire it.
 export function ConfirmModal({
@@ -38,10 +52,13 @@ export function ConfirmModal({
   confirmText = "",
   confirmLabel,
   cancelLabel,
-  dangerous = true,
+  tone,
+  warning,
   needsConfirm = true,
+  confirmDisabled = false,
   onConfirm,
   onClose,
+  children,
 }: ConfirmModalProps) {
   const confirmInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
@@ -91,7 +108,7 @@ export function ConfirmModal({
   }
 
   const handleSubmit = async () => {
-    if (!canSubmit || submittingRef.current) return
+    if (!canSubmit || confirmDisabled || submittingRef.current) return
     submittingRef.current = true
 
     setIsSubmitting(true)
@@ -112,11 +129,11 @@ export function ConfirmModal({
     }
   }
 
-  const confirmButtonVariant: ButtonVariant = dangerous ? "error" : "primary"
+  const confirmButtonVariant: ButtonVariant =
+    tone === "error" ? "error" : "primary"
 
-  const acknowledgeButtonVariant: ButtonVariant = dangerous
-    ? "error"
-    : "warning"
+  const acknowledgeButtonVariant: ButtonVariant =
+    tone === "error" ? "error" : "warning"
 
   return (
     <Modal
@@ -127,7 +144,7 @@ export function ConfirmModal({
       title={title}
       subtitle={description}
       headerVisual={
-        <ModalIcon tone={dangerous ? "error" : "warning"}>
+        <ModalIcon tone={tone}>
           <AlertIcon className="size-4" aria-hidden="true" />
         </ModalIcon>
       }
@@ -144,7 +161,7 @@ export function ConfirmModal({
 
             <Button
               variant={acknowledgeButtonVariant}
-              disabled={isSubmitting}
+              disabled={isSubmitting || confirmDisabled}
               loading={isSubmitting && !needsConfirm}
               loadingLabel={t("common.working")}
               onClick={(event) => {
@@ -177,7 +194,7 @@ export function ConfirmModal({
 
             <Button
               variant={confirmButtonVariant}
-              disabled={!canSubmit || isSubmitting}
+              disabled={!canSubmit || isSubmitting || confirmDisabled}
               loading={isSubmitting}
               loadingLabel={t("common.working")}
               onClick={() => void handleSubmit()}
@@ -190,9 +207,11 @@ export function ConfirmModal({
     >
       {!hasAcknowledged ? (
         <>
-          {dangerous ? (
+          {children}
+
+          {warning ? (
             <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              {t("components.confirmModal.dangerousPrompt")}
+              {warning}
             </div>
           ) : null}
 

@@ -39,6 +39,36 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
   }
 })
 
+// RouterButton (createLink) needs a router context; stub it to the same
+// data-attribute-carrying anchor as the Link mock above so the accept-link
+// search assertion keeps working without a RouterProvider.
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({
+      children,
+      to,
+      params,
+      search,
+    }: {
+      children?: React.ReactNode
+      to?: string
+      params?: Record<string, string>
+      search?: Record<string, string>
+    }) => (
+      <a
+        href="https://example.test/link"
+        data-to={to}
+        data-params={JSON.stringify(params ?? {})}
+        data-search={JSON.stringify(search ?? {})}
+      >
+        {children}
+      </a>
+    ),
+  }
+})
+
 const pagesAssignments = vi.fn()
 const orgRepos = vi.fn()
 const studentClassrooms = vi.fn()
@@ -197,6 +227,40 @@ describe("StudentAssignmentList", () => {
 
     expect(screen.getByText("HW1")).toBeTruthy()
     expect(screen.getByText("assignments.discover.viewSubmission")).toBeTruthy()
+  })
+
+  it("shows the group-phrased CTA plus a View group action for an accepted team assignment", () => {
+    // Team mode: acceptance derives from push access to the shared
+    // `<classroom>-<slug>-group-<n>` repo, and the row's copy speaks for the
+    // group, with the read-only members action alongside.
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { mode: "team" })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-group-1")] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    expect(
+      screen.getByText("assignments.discover.viewSubmissionTeam"),
+    ).toBeTruthy()
+    expect(screen.getByText("assignments.discover.viewGroup")).toBeTruthy()
+    expect(screen.queryByText("assignments.discover.viewSubmission")).toBeNull()
+  })
+
+  it("keeps the individual CTA and offers no View group action before a team accept", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { mode: "team" })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    expect(screen.getByText("assignments.discover.accept")).toBeTruthy()
+    expect(screen.queryByText("assignments.discover.viewGroup")).toBeNull()
   })
 
   it("renders the toolbar and orders assignments due-soonest-first by default", () => {

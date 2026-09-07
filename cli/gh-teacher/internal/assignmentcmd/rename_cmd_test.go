@@ -416,7 +416,7 @@ func TestRunAssignmentRename_FailureKeepsLock(t *testing.T) {
 	if !strings.Contains(fix.assignments, `"locked": true`) {
 		t.Errorf("assignment must stay locked with a failed repo, final assignments.json:\n%s", fix.assignments)
 	}
-	if !strings.Contains(errOut.String(), "stays LOCKED") {
+	if !strings.Contains(errOut.String(), "stays locked") {
 		t.Errorf("errOut = %q, want the stays-locked note", errOut.String())
 	}
 }

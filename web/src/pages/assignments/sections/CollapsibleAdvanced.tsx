@@ -5,9 +5,10 @@ import { Collapse, cx } from "@/components/ui"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 
 // The collapsible "Advanced settings" disclosure shared by the Repository Setup
-// and autograder panes. One recipe, one source — both render through this so the
-// chevron/heading treatment can't drift. Deliberately compact and info-colored
-// rather than heading-sized: it's a secondary affordance the common path skips.
+// and autograder panes (and Classroom Settings' custom-domain field). One
+// recipe, one source — all render through this so the chevron/heading
+// treatment can't drift. Deliberately compact and info-colored rather than
+// heading-sized: it's a secondary affordance the common path skips.
 //
 // A button + AnimatePresence rather than native <details>/<summary>: the browser
 // display-toggles a <details> body, so its height can't be animated. This shares

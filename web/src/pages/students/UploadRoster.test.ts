@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  ROSTER_TEMPLATE_CSV,
   coerceImportRole,
   detectImportHeaderIssue,
   parseRosterImportFile,
@@ -197,7 +198,7 @@ describe("parseRosterImportFile", () => {
     // line would blame the header and every data row for not being a username,
     // burying the one message that helps — which detectImportHeaderIssue provides.
     const csv = "first_name,last_name\nAda,Lovelace\nGrace,Hopper\n"
-    expect(parse(csv)).toEqual({ rows: [], dropped: [] })
+    expect(parse(csv)).toEqual({ rows: [], dropped: [], unlinked: [] })
     expect(detectImportHeaderIssue(csv)?.kind).toBe("missing-identity-header")
   })
 
@@ -228,12 +229,19 @@ describe("parseRosterImportFile", () => {
     expect(parsed.dropped.map((d) => d.line)).toEqual([1, 2])
   })
 
-  it("reports a metadata-only row as incomplete, not as bad content", () => {
-    // No identity cell at all: a student who hasn't supplied a handle yet. This
-    // is the ONE non-blocking case — there is nothing for the teacher to correct.
-    const parsed = parse("username,email,first_name,section\n,,Nobody,Sec A\n")
+  it("keeps a name-only row as UNLINKED and reports a nameless one as incomplete", () => {
+    // A named row without any identity cell is a student who hasn't supplied a
+    // handle yet — kept on the roster as an unlinked row for manual linking. A
+    // row with neither identity nor name (section-only noise) stays a
+    // non-blocking "incomplete" report.
+    const parsed = parse(
+      "username,email,first_name,section\n,,Nobody,Sec A\n,,,Sec B\n",
+    )
     expect(parsed.rows).toHaveLength(0)
-    expect(parsed.dropped).toEqual([{ line: 2, reason: "incomplete" }])
+    expect(parsed.unlinked).toEqual([
+      { line: 2, first_name: "Nobody", last_name: "", section: "Sec A" },
+    ])
+    expect(parsed.dropped).toEqual([{ line: 3, reason: "incomplete" }])
   })
 
   it("reports BOTH unusable cells rather than blaming just one", () => {
@@ -499,7 +507,39 @@ describe("parseRosterImportFile: email-list override", () => {
   })
 
   it("returns nothing for empty or whitespace-only input", () => {
-    expect(parse("", "email-list")).toEqual({ rows: [], dropped: [] })
-    expect(parse("  \n \n", "email-list")).toEqual({ rows: [], dropped: [] })
+    expect(parse("", "email-list")).toEqual({
+      rows: [],
+      dropped: [],
+      unlinked: [],
+    })
+    expect(parse("  \n \n", "email-list")).toEqual({
+      rows: [],
+      dropped: [],
+      unlinked: [],
+    })
+  })
+})
+
+describe("ROSTER_TEMPLATE_CSV", () => {
+  it("parses cleanly under the default format, covering every identity shape", () => {
+    const result = parse(ROSTER_TEMPLATE_CSV)
+    expect(result.dropped).toEqual([])
+    expect(result.unlinked).toEqual([])
+    const identities = result.rows.map((r) => r.identity)
+    expect(identities).toEqual([
+      { username: "student1", email: "student1@example.com" },
+      { username: "student2" },
+      { email: "student3@example.net" },
+      { username: "student4" },
+      { username: "student5", email: "student5@example.edu" },
+    ])
+    // Reserved example domains only — a template address must never be
+    // deliverable.
+    for (const row of result.rows) {
+      if (row.email) expect(row.email).toMatch(/@example\.(com|net|edu)$/)
+    }
+    // At least one row leaves section blank, so the template itself shows the
+    // column is optional.
+    expect(result.rows.some((r) => r.section === "")).toBe(true)
   })
 })

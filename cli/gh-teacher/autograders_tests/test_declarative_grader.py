@@ -11,6 +11,7 @@ pytest's tmp_path so the subprocess behavior is covered, not mocked.
 from __future__ import annotations
 
 import json
+import os
 import re
 import shlex
 import sys
@@ -201,6 +202,97 @@ class TestExecuteIO:
 
 
 # ---------------------------------------------------------------------------
+# execute_test -- $CLASSROOM50_BUNDLE_DIR (teacher-only scripts)
+# ---------------------------------------------------------------------------
+
+
+def _hidden_script_layout(tmp_path):
+    """The wiki's "hidden test files" example: the student checkout holds
+    only their code; the grading script lives in the bundle, never the
+    template."""
+    student = tmp_path / "student"
+    bundle = tmp_path / "bundle"
+    student.mkdir()
+    bundle.mkdir()
+    (bundle / "check.sh").write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'test "$(python3 add.py 2 3)" = "5"\n'
+        'test "$(python3 add.py -1 1)" = "0"\n'
+    )
+    return student, bundle
+
+
+class TestBundleDirEnv:
+    def test_run_command_can_invoke_a_bundled_script(self, tmp_path):
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text(
+            "import sys\nprint(int(sys.argv[1]) + int(sys.argv[2]))\n")
+        spec = {"name": "adds", "type": "run",
+                "run": 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"', "points": 2}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert o["passed"] and o["score"] == 2
+
+    def test_bundled_script_fails_wrong_student_code(self, tmp_path):
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text("print(5)\n")
+        spec = {"name": "adds", "type": "run",
+                "run": 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"', "points": 2}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert not o["passed"] and o["failure-kind"] == "exit"
+
+    def test_student_edit_of_a_same_named_file_is_ignored(self, tmp_path):
+        # The whole point: a `check.sh` the student drops into their repo
+        # (say, one that exits 0) is not the one the test runs.
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text("print(5)\n")
+        (student / "check.sh").write_text("exit 0\n")
+        spec = {"name": "adds", "type": "run",
+                "run": 'bash "$CLASSROOM50_BUNDLE_DIR/check.sh"', "points": 2}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert not o["passed"]
+
+    def test_setup_and_cwd_semantics(self, tmp_path):
+        # setup sees the variable too, and cwd stays the student checkout
+        # (relative paths resolve to student code, not the bundle).
+        student, bundle = _hidden_script_layout(tmp_path)
+        (bundle / "prep.sh").write_text("echo prepared > marker.txt\n")
+        spec = {"name": "t", "type": "run",
+                "setup": 'bash "$CLASSROOM50_BUNDLE_DIR/prep.sh"',
+                "run": "test -f marker.txt && test ! -f \"$CLASSROOM50_BUNDLE_DIR/marker.txt\"",
+                "points": 1}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert o["passed"], o["detail"]
+        assert (student / "marker.txt").is_file()
+
+    def test_python_type_can_target_bundled_tests(self, tmp_path):
+        student, bundle = _hidden_script_layout(tmp_path)
+        (student / "add.py").write_text("def add(a, b):\n    return a + b\n")
+        (bundle / "test_hidden.py").write_text(
+            "import sys, os\n"
+            "sys.path.insert(0, os.getcwd())\n"
+            "from add import add\n"
+            "def test_a():\n    assert add(2, 3) == 5\n"
+            "def test_b():\n    assert add(-1, 1) == 0\n"
+        )
+        spec = {"name": "hidden suite", "type": "python",
+                "run": f'{shlex.quote(sys.executable)} -m pytest -q "$CLASSROOM50_BUNDLE_DIR"',
+                "timeout": 60, "points": 4}
+        o = ag.execute_test(spec, cwd=student, fixtures_dir=bundle)
+        assert o["passed"] and o["score"] == 4, o["detail"]
+
+    def test_env_is_absolute_and_process_env_untouched(self, tmp_path, monkeypatch):
+        monkeypatch.delenv("CLASSROOM50_BUNDLE_DIR", raising=False)
+        bundle = tmp_path / "bundle"
+        bundle.mkdir()
+        spec = {"name": "t", "type": "io", "run": 'printf "%s" "$CLASSROOM50_BUNDLE_DIR"',
+                "expected": str(bundle.resolve()), "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=bundle)
+        assert o["passed"], o["detail"]
+        assert "CLASSROOM50_BUNDLE_DIR" not in os.environ
+
+
+# ---------------------------------------------------------------------------
 # execute_test -- python type
 # ---------------------------------------------------------------------------
 
@@ -296,7 +388,26 @@ class TestLoadTests:
 
     def test_bad_schema(self, tmp_path):
         p = self._write(tmp_path, '{"schema": "nope", "tests": []}')
-        with pytest.raises(ag.TestsConfigError):
+        with pytest.raises(ag.TestsConfigError, match="gh teacher assignment test add"):
+            ag.load_tests(p)
+
+    def test_bare_array_names_the_mistake(self, tmp_path):
+        # Discussion #805: a teacher pasted the `--tests` file (a bare array)
+        # into CLASSROOM/autograders/ASSIGNMENT/tests.json. The error must say
+        # which format they used and how to author tests instead.
+        p = self._write(tmp_path, [{"name": "a", "type": "run", "run": "true", "points": 1}])
+        with pytest.raises(ag.TestsConfigError) as excinfo:
+            ag.load_tests(p)
+        msg = str(excinfo.value)
+        assert "bare test array" in msg
+        assert "--tests" in msg
+        assert "Remove the tests.json" in msg
+        assert "gh teacher assignment test add" in msg
+        assert "gh teacher assignment test set --tests" in msg
+
+    def test_non_object_scalar_points_to_authoring_path(self, tmp_path):
+        p = self._write(tmp_path, '"hello"')
+        with pytest.raises(ag.TestsConfigError, match="not a JSON object.*Remove the tests.json"):
             ag.load_tests(p)
 
     def test_empty_tests_list(self, tmp_path):
@@ -813,7 +924,7 @@ class TestRunDeclarative:
         assert result["score"] == 5 and result["max-score"] == 5
         assert "status=success" in gho.read_text()
 
-    def test_malformed_tests_json_routes_to_error_result(self, tmp_path):
+    def test_malformed_tests_json_routes_to_error_result(self, tmp_path, capsys):
         fin, gho = _finalizer(tmp_path)
         p = tmp_path / "tests.json"
         p.write_text('{"schema": "wrong", "tests": []}')
@@ -822,6 +933,20 @@ class TestRunDeclarative:
         result = json.loads((tmp_path / "result.json").read_text())
         assert result["tests"] == [] and result["score"] == 0
         assert "status=error" in gho.read_text()
+        # The annotation names the file once, not "tests.json: tests.json ...".
+        err = capsys.readouterr().err
+        assert "::error::tests.json schema is 'wrong'" in err
+        assert "tests.json: tests.json" not in err
+
+    def test_bare_array_tests_json_routes_to_error_result(self, tmp_path, capsys):
+        fin, gho = _finalizer(tmp_path)
+        p = tmp_path / "tests.json"
+        p.write_text('[{"name": "a", "type": "run", "run": "true", "points": 1}]')
+        rc = ag.run_declarative(p, fin, tmp_path)
+        assert rc == 0
+        assert "status=error" in gho.read_text()
+        err = capsys.readouterr().err
+        assert "bare test array" in err and "gh teacher assignment test add" in err
 
     def test_unexpected_grader_crash_routes_to_error(self, tmp_path, monkeypatch):
         # Backstop: if execute_test raises something unexpected (future

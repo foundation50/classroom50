@@ -39,22 +39,21 @@ var diagnosticStub []byte
 func autograderCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "autograder",
-		Short: "Manage the classroom default autograder.py",
-		Long: "Manage the default autograder for a classroom. The default\n" +
-			"runs for every assignment in the classroom that has no\n" +
-			"per-assignment override at\n" +
-			"<classroom>/autograders/<slug>/autograder.py — replacing it\n" +
-			"lets you grade every assignment in the classroom with one\n" +
-			"script (e.g., a slug-driven dispatcher to a third-party\n" +
-			"grader).\n\n" +
-			"  set-default  install/replace <classroom>/autograder.py\n" +
+		Short: "Manage the classroom default autograder",
+		Long: "Manage the default autograder for a classroom. The default runs\n" +
+			"for every assignment in the classroom that has no per-assignment\n" +
+			"override at <classroom>/autograders/<slug>/autograder.py, so\n" +
+			"replacing it lets you grade every assignment with one script\n" +
+			"(for example, a slug-driven dispatcher to a third-party grader).\n\n" +
+			"Subcommands:\n" +
+			"  set-default  install or replace <classroom>/autograder.py\n" +
 			"  show         print it (or report none); --json for metadata\n" +
 			"  remove       delete it (distinct from the stub overwrite)\n" +
-			"  list         list named shims + per-assignment overrides\n\n" +
+			"  list         list named shims and per-assignment overrides\n\n" +
 			"Named shims (<classroom>/autograders/<name>.yaml) and\n" +
 			"per-assignment overrides (<classroom>/autograders/<slug>/\n" +
-			"autograder.py) are read-only from the CLI — `list` shows what\n" +
-			"is present; author or delete them via ordinary git operations\n" +
+			"autograder.py) are read-only from the CLI: `list` shows what is\n" +
+			"present; author or delete them via ordinary git operations\n" +
 			"against the classroom50 repository.",
 	}
 	cmd.AddCommand(autograderSetDefaultCmd())
@@ -71,20 +70,21 @@ func autograderSetDefaultCmd() *cobra.Command {
 	var fromPath string
 	cmd := &cobra.Command{
 		Use:   "set-default <org> <classroom>",
-		Short: "Replace <classroom>/autograder.py with --from (or the diagnostic stub when omitted)",
-		Long: "Replace `<classroom>/autograder.py` in <org>/classroom50\n" +
-			"with the contents of --from <path>. Pass `--from -` to\n" +
-			"read from stdin (one-shot agent flows). Lands as a single\n" +
-			"Tree commit on the classroom50 repository's default branch and is\n" +
-			"picked up by every subsequent submission once the next\n" +
-			"`publish-pages.yaml` run deploys (~30s).\n\n" +
-			"When --from is omitted, writes the diagnostic stub shipped\n" +
-			"with this CLI — it echoes every env var the runner exposed\n" +
-			"and emits a vacuous-pass result.json, so teachers can verify\n" +
-			"the runner pipeline before authoring real grading logic.\n\n" +
-			"Re-running with the same content is a no-op — the commit\n" +
-			"is skipped if the proposed body matches the file already\n" +
-			"in the repo.",
+		Short: "Replace the classroom's default autograder",
+		Long: "Replace `<classroom>/autograder.py` in <org>/classroom50 with the\n" +
+			"contents of --from <path>.\n\n" +
+			"  - Pass `--from -` to read from stdin (one-shot agent flows).\n" +
+			"  - Omit --from to install the diagnostic stub shipped with this\n" +
+			"    CLI: it echoes every env var the runner exposed and emits a\n" +
+			"    vacuous-pass result.json, so you can verify the runner\n" +
+			"    pipeline before authoring real grading logic.\n" +
+			"  - The change lands as a single commit on the classroom50\n" +
+			"    repository's default branch and applies to every subsequent\n" +
+			"    submission once the next `publish-pages.yaml` run deploys\n" +
+			"    (about 30 seconds).\n" +
+			"  - Re-running with the same content is a no-op: the commit is\n" +
+			"    skipped when the proposed body matches the file already in\n" +
+			"    the repository.",
 		Example: "  gh teacher autograder set-default cs50-fall-2026 cs-principles --from ./autograder.py\n" +
 			"  cat my-autograder.py | gh teacher autograder set-default cs50-fall-2026 cs-principles --from -\n" +
 			"  gh teacher autograder set-default cs50-fall-2026 cs-principles\n" +
@@ -110,7 +110,7 @@ func autograderSetDefaultCmd() *cobra.Command {
 			return setClassroomDefaultAutograder(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, label, content)
 		},
 	}
-	cmd.Flags().StringVar(&fromPath, "from", "", "Path to the autograder.py to upload, or `-` to read from stdin. Omit to install the shipped diagnostic stub.")
+	cmd.Flags().StringVar(&fromPath, "from", "", "Path to the autograder.py to upload, or `-` to read from stdin; omit to install the shipped diagnostic stub")
 	return cmd
 }
 
@@ -172,13 +172,13 @@ func setClassroomDefaultAutograder(client githubapi.Client, out, errOut io.Write
 		return err
 	}
 	if commitSHA == "" {
-		_, _ = fmt.Fprintf(out, "%s/%s: %s already matches —\u00a0no commit\n", org, configrepo.ConfigRepoName, repoPath)
+		_, _ = fmt.Fprintf(out, "%s/%s: %s already matches, no commit\n", org, configrepo.ConfigRepoName, repoPath)
 		return nil
 	}
 
 	_, _ = fmt.Fprintf(out, "%s/%s: updated %s (commit %s)\n", org, configrepo.ConfigRepoName, repoPath, commitSHA[:8])
 	_, _ = fmt.Fprintf(errOut, "View at https://github.com/%s/%s/blob/%s/%s\n", org, configrepo.ConfigRepoName, branch, repoPath)
-	_, _ = fmt.Fprintf(errOut, "Next: wait ~30s for publish-pages.yaml to redeploy, then push a submission to test\n")
+	_, _ = fmt.Fprintf(errOut, "Next: wait about 30 seconds for publish-pages.yaml to redeploy, then push a submission to test\n")
 	return nil
 }
 

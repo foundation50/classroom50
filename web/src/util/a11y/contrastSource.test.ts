@@ -9,7 +9,6 @@ import {
   MODELED_BASE_CONTENT_TIERS,
   MODELED_NEUTRAL_CONTENT_TIERS,
   MODELED_TEXT_SEMANTICS,
-  SIDEBAR_REST_DIM,
   SUMI,
 } from "./contrastModel"
 
@@ -105,15 +104,6 @@ describe("model tokens stay in sync with index.css (drift guard)", () => {
         expect(parseInt(css as string, 10)).toBe(map[pct])
       }
     }
-  })
-
-  it("sidebar rest-dim factor matches the .sidebar-rail recipe", () => {
-    // The model audits the dimmed rail at SIDEBAR_REST_DIM% of `neutral`
-    // toward black; the CSS recipe must mix by the same factor or the
-    // audited pair diverges from what the browser renders.
-    expect(cssText).toContain(
-      `color-mix(in oklab, var(--color-neutral) ${SIDEBAR_REST_DIM}%, black)`,
-    )
   })
 })
 

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { aggregateOrgMembers, type ClassroomRoster } from "./orgMembers"
+import {
+  aggregateOrgMembers,
+  filterOrgMemberRows,
+  sortOrgMemberRowsBy,
+  type ClassroomRoster,
+  type OrgMemberRow,
+} from "./orgMembers"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/github-core/types"
 
@@ -153,6 +159,33 @@ describe("aggregateOrgMembers", () => {
     expect(rows[0].github_id).toBe("42")
   })
 
+  it("aggregates and dedupes every distinct email across rosters", () => {
+    // Same person (github_id 42) with a different address per roster, one of
+    // them a case-variant duplicate. `email` stays first-seen (identity
+    // fallback); `emails` collects the distinct set in first-seen order.
+    const rows = aggregateOrgMembers(
+      [member(42, "alice")],
+      [
+        roster("cs101", [
+          student({ username: "alice", github_id: "42", email: "a@x.edu" }),
+        ]),
+        roster("cs201", [
+          student({ username: "alice", github_id: "42", email: "A@X.edu" }),
+        ]),
+        roster("cs301", [
+          student({
+            username: "alice",
+            github_id: "42",
+            email: "alice@uni.edu",
+          }),
+        ]),
+      ],
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0].email).toBe("a@x.edu")
+    expect(rows[0].emails).toEqual(["a@x.edu", "alice@uni.edu"])
+  })
+
   it("sorts discrepancies before members", () => {
     const rows = aggregateOrgMembers(
       [member(42, "alice")],
@@ -268,5 +301,156 @@ describe("aggregateOrgMembers — team-verified membership / unprovisioned", () 
       "member-on-roster",
       "invitation-pending",
     ])
+  })
+})
+
+describe("sortOrgMemberRowsBy", () => {
+  const orgRow = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
+    key: over.username ?? "k",
+    username: "",
+    github_id: "",
+    name: "",
+    email: "",
+    emails: [],
+    isMember: true,
+    classrooms: [],
+    classification: "member-on-roster",
+    unprovisionedClassrooms: [],
+    ...over,
+  })
+  const access = (classroom: string) => ({
+    classroom,
+    archived: false,
+    section: "",
+    state: "enrolled" as const,
+  })
+
+  it("sorts by display identity, falling back name -> email", () => {
+    const rows = [
+      orgRow({ username: "zed" }),
+      orgRow({ key: "e", email: "ada@uni.edu" }),
+      orgRow({ username: "bob" }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "name", "asc").map(
+        (r) => r.username || r.email,
+      ),
+    ).toEqual(["ada@uni.edu", "bob", "zed"])
+    expect(
+      sortOrgMemberRowsBy(rows, "name", "desc").map(
+        (r) => r.username || r.email,
+      ),
+    ).toEqual(["zed", "bob", "ada@uni.edu"])
+  })
+
+  it("sorts by username with blanks last in either direction", () => {
+    const rows = [
+      orgRow({ username: "zed" }),
+      orgRow({ key: "e", email: "ada@uni.edu", name: "Ada" }),
+      orgRow({ username: "bob" }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "username", "asc").map(
+        (r) => r.username || r.email,
+      ),
+    ).toEqual(["bob", "zed", "ada@uni.edu"])
+    expect(
+      sortOrgMemberRowsBy(rows, "username", "desc").map(
+        (r) => r.username || r.email,
+      ),
+    ).toEqual(["zed", "bob", "ada@uni.edu"])
+  })
+
+  it("sorts by org role (owner -> member -> not a member) with a name tiebreak", () => {
+    const rows = [
+      orgRow({ username: "left", isMember: false }),
+      orgRow({ username: "plain" }),
+      orgRow({ username: "boss" }),
+    ]
+    const isOwner = (row: OrgMemberRow) => row.username === "boss"
+    expect(
+      sortOrgMemberRowsBy(rows, "role", "asc", isOwner).map((r) => r.username),
+    ).toEqual(["boss", "plain", "left"])
+    expect(
+      sortOrgMemberRowsBy(rows, "role", "desc", isOwner).map((r) => r.username),
+    ).toEqual(["left", "plain", "boss"])
+  })
+
+  it("sorts by classroom count with a name tiebreak", () => {
+    const rows = [
+      orgRow({ username: "two", classrooms: [access("a"), access("b")] }),
+      orgRow({ username: "none" }),
+      orgRow({ username: "one", classrooms: [access("a")] }),
+      orgRow({ username: "also-one", classrooms: [access("b")] }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "classrooms", "asc").map((r) => r.username),
+    ).toEqual(["none", "also-one", "one", "two"])
+    expect(
+      sortOrgMemberRowsBy(rows, "classrooms", "desc").map((r) => r.username),
+    ).toEqual(["two", "also-one", "one", "none"])
+  })
+
+  it("sorts by status precedence (actionable first) with a name tiebreak", () => {
+    const rows = [
+      orgRow({ username: "staff", classification: "member-no-roster" }),
+      orgRow({ username: "left", classification: "on-roster-not-member" }),
+      orgRow({ username: "ok", classification: "member-on-roster" }),
+      orgRow({ username: "invited", classification: "invitation-pending" }),
+    ]
+    expect(
+      sortOrgMemberRowsBy(rows, "status", "asc").map((r) => r.username),
+    ).toEqual(["left", "ok", "invited", "staff"])
+  })
+
+  it("keeps the tiebreak ascending on a reversed column and doesn't mutate", () => {
+    const rows = [
+      orgRow({ username: "b", classrooms: [access("a")] }),
+      orgRow({ username: "a", classrooms: [access("a")] }),
+    ]
+    const sorted = sortOrgMemberRowsBy(rows, "classrooms", "desc")
+    expect(sorted.map((r) => r.username)).toEqual(["a", "b"])
+    expect(rows.map((r) => r.username)).toEqual(["b", "a"])
+  })
+
+  describe("filterOrgMemberRows", () => {
+    const rows = [
+      orgRow({ username: "boss" }),
+      orgRow({ username: "plain" }),
+      orgRow({
+        username: "left",
+        isMember: false,
+        classification: "on-roster-not-member",
+      }),
+      orgRow({
+        key: "invited",
+        email: "ada@uni.edu",
+        isMember: false,
+        classification: "invitation-pending",
+      }),
+      orgRow({ username: "drifted", unprovisionedClassrooms: ["cs101"] }),
+    ]
+    const isOwner = (row: OrgMemberRow) => row.username === "boss"
+    const names = (filtered: OrgMemberRow[]) =>
+      filtered.map((r) => r.username || r.email)
+    const filter = (
+      statusFilter: Parameters<typeof filterOrgMemberRows>[1]["statusFilter"],
+      roleFilter: Parameters<typeof filterOrgMemberRows>[1]["roleFilter"],
+    ) => names(filterOrgMemberRows(rows, { statusFilter, roleFilter, isOwner }))
+
+    it("passes everything through on the default facets", () => {
+      expect(filter("all", "all")).toHaveLength(rows.length)
+    })
+
+    it("filters each status facet to its rows", () => {
+      expect(filter("not-in-org", "all")).toEqual(["left"])
+      expect(filter("invitation-pending", "all")).toEqual(["ada@uni.edu"])
+      expect(filter("not-enrolled", "all")).toEqual(["drifted"])
+    })
+
+    it("filters by org role, with non-members matching neither role", () => {
+      expect(filter("all", "owner")).toEqual(["boss"])
+      expect(filter("all", "member")).toEqual(["plain", "drifted"])
+    })
   })
 })

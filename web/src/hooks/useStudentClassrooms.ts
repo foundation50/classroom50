@@ -23,6 +23,10 @@ export type StudentClassroom = {
   // assignments even before the student accepts anything. Absent when listed or
   // when the team predates the schema.
   secret?: string
+  // Custom Pages base URL for orgs off the github.io default; readers fetch
+  // published resources from it first, falling back to github.io. Absent when
+  // the org uses the default host.
+  pagesBaseUrl?: string
 }
 
 export type UseStudentClassroomsResult = {
@@ -91,6 +95,7 @@ export function useStudentClassrooms(
           term: desc.term,
           active: desc.active,
           secret: desc.secret,
+          pagesBaseUrl: desc.pages_base_url,
         })
       } else if (!existing) {
         // Staff-only membership (no student team seen yet): record the classroom
@@ -118,20 +123,35 @@ export function useStudentClassrooms(
 
 export default useStudentClassrooms
 
-// A student's capability secret for a classroom, from the team-description
-// bootstrap record (config-free). `enabled: false` skips the GET /user/teams
-// read for callers that already hold the secret (e.g., an accept link's ?k=).
-// `isLoading` tracks that read; false when disabled (nothing to wait on).
+// A student's bootstrap record for a classroom, from the team-description
+// record (config-free): the capability secret for an unlisted classroom and
+// the custom Pages base URL for an org off the github.io default. `enabled:
+// false` skips the GET /user/teams read for callers that need neither (e.g.,
+// a teacher-side reader that already holds classroom.json). `isLoading` tracks
+// that read; false when disabled (nothing to wait on).
 export function useClassroomSecret(
   org: string | undefined,
   classroom: string | undefined,
   enabled = true,
-): { secret: string | undefined; isLoading: boolean } {
-  const { classrooms, isLoading } = useStudentClassrooms(
+): {
+  secret: string | undefined
+  pagesBaseUrl: string | undefined
+  isLoading: boolean
+  // Settled failure of the underlying teams read: the bootstrap record —
+  // including any custom Pages base URL — could NOT be checked. Callers stay
+  // fail-open but can stop claiming "no custom domain" as fact.
+  isError: boolean
+} {
+  const { classrooms, isLoading, isError } = useStudentClassrooms(
     enabled ? org : undefined,
   )
-  const secret = classroom
-    ? classrooms.find((c) => c.classroom === classroom)?.secret
+  const record = classroom
+    ? classrooms.find((c) => c.classroom === classroom)
     : undefined
-  return { secret, isLoading: enabled ? isLoading : false }
+  return {
+    secret: record?.secret,
+    pagesBaseUrl: record?.pagesBaseUrl,
+    isLoading: enabled ? isLoading : false,
+    isError: enabled ? isError : false,
+  }
 }

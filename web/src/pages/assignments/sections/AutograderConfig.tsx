@@ -14,11 +14,15 @@ import { AutogradingStateField } from "./AutogradingStateField"
 export function AutograderConfig({
   form,
   org,
+  classroom,
+  slug,
   edit = false,
   hasAcceptedStudents = false,
 }: {
   form: AssignmentForm
   org?: string
+  classroom?: string
+  slug?: string
   // Threaded to AutogradingStateField's edit caveat.
   edit?: boolean
   hasAcceptedStudents?: boolean
@@ -36,7 +40,12 @@ export function AutograderConfig({
           />
           {showBuiltInConfig ? (
             <>
-              <AutogradingTestsPane form={form} />
+              <AutogradingTestsPane
+                form={form}
+                org={org}
+                classroom={classroom}
+                slug={slug}
+              />
               <AdvancedSection form={form} org={org} />
             </>
           ) : null}

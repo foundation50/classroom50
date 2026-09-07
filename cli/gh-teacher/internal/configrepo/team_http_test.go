@@ -35,7 +35,7 @@ func TestEnsureClassroomTeam_WritesDescription(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	desc, err := MarshalTeamDescription("Intro CS", "Fall 2026", "a1b2c3d4", true)
+	desc, err := MarshalTeamDescription("Intro CS", "Fall 2026", "a1b2c3d4", "", true)
 	if err != nil {
 		t.Fatalf("MarshalTeamDescription: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestEnsureClassroomTeam_WritesDescription(t *testing.T) {
 // rotated secret / renamed classroom propagates to the student-facing record.
 func TestEnsureClassroomTeam_AdoptReconcilesDescription(t *testing.T) {
 	var patched map[string]any
-	newDesc, err := MarshalTeamDescription("Intro CS", "Fall 2026", "newsecret", true)
+	newDesc, err := MarshalTeamDescription("Intro CS", "Fall 2026", "newsecret", "", true)
 	if err != nil {
 		t.Fatalf("MarshalTeamDescription: %v", err)
 	}
@@ -110,7 +110,7 @@ func TestEnsureClassroomTeam_AdoptReconcilesDescription(t *testing.T) {
 // secret team whose description already equals the desired record issues no
 // PATCH (idempotent reconcile).
 func TestEnsureClassroomTeam_AdoptSkipsPatchWhenDescriptionMatches(t *testing.T) {
-	desc, err := MarshalTeamDescription("Intro CS", "", "", true)
+	desc, err := MarshalTeamDescription("Intro CS", "", "", "", true)
 	if err != nil {
 		t.Fatalf("MarshalTeamDescription: %v", err)
 	}

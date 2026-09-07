@@ -89,6 +89,44 @@ func TestSubmissionModeEnumParity(t *testing.T) {
 	}
 }
 
+// TestRepoVisibilityEnumParity pins the repo_visibility allow-list across its
+// hand-mirrored sources: the JSON schema enum (declared source of truth) and
+// the Go contract.RepoVisibilities (what ValidateRepoVisibility enforces). The
+// web mirror (REPO_VISIBILITIES) is pinned against the same schema enum by a
+// vitest.
+func TestRepoVisibilityEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					RepoVisibility struct {
+						Enum []string `json:"enum"`
+					} `json:"repo_visibility"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	schemaEnum := schema.Defs.Assignment.Properties.RepoVisibility.Enum
+	if len(schemaEnum) == 0 {
+		t.Fatalf("schema repo_visibility.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(schemaEnum, contract.RepoVisibilities) {
+		t.Errorf("repo_visibility drift: schema enum %v != contract.RepoVisibilities %v — update every mirror in lockstep (schema, Go contract, web REPO_VISIBILITIES)",
+			schemaEnum, contract.RepoVisibilities)
+	}
+}
+
 // TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
 // wire default; never gate on the field being present) across its three
 // hand-synced copies — the schema submission_mode.description, contract.go, and
@@ -1411,11 +1449,31 @@ func TestParseAssignments_Rejects(t *testing.T) {
 			wantErrPart: "empty name",
 		},
 		{
-			// `group` is now schema-legal; only arbitrary
+			// `group` and `team` are now schema-legal; only arbitrary
 			// strings trip the validator.
 			name:        "entry with unsupported mode",
-			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","autograder":"default"}]}`,
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"pair","autograder":"default"}]}`,
 			wantErrPart: "invalid mode",
+		},
+		{
+			name:        "team entry missing max_group_size",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","team_formation":"teacher","autograder":"default"}]}`,
+			wantErrPart: "max_group_size",
+		},
+		{
+			name:        "team entry missing team_formation",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","max_group_size":3,"autograder":"default"}]}`,
+			wantErrPart: "team_formation",
+		},
+		{
+			name:        "team entry with invalid team_formation",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"team","max_group_size":3,"team_formation":"anyone","autograder":"default"}]}`,
+			wantErrPart: "team_formation",
+		},
+		{
+			name:        "group entry with team_formation",
+			in:          `{"schema":"classroom50/assignments/v1","assignments":[{"slug":"hello","name":"Hello","template":{"owner":"cs50","repo":"hello-template","branch":"main"},"mode":"group","max_group_size":3,"team_formation":"teacher","autograder":"default"}]}`,
+			wantErrPart: "team_formation",
 		},
 		{
 			name:        "entry with slug-pattern violation",
@@ -1782,7 +1840,8 @@ func TestValidateAssignmentEntry_Rejects(t *testing.T) {
 		{"slug pattern violation", func(e *AssignmentEntry) { e.Slug = "Hello" }, "slug"},
 		{"empty name", func(e *AssignmentEntry) { e.Name = "" }, "--name"},
 		{"empty mode", func(e *AssignmentEntry) { e.Mode = "" }, "mode"},
-		{"unsupported mode", func(e *AssignmentEntry) { e.Mode = "team" }, "invalid mode"},
+		{"unsupported mode", func(e *AssignmentEntry) { e.Mode = "pair" }, "invalid mode"},
+		{"team mode without size or formation", func(e *AssignmentEntry) { e.Mode = "team" }, "max_group_size"},
 		{"empty template owner", func(e *AssignmentEntry) { e.Template.Owner = "" }, "template"},
 		{"empty template repo", func(e *AssignmentEntry) { e.Template.Repo = "" }, "template"},
 		{"empty template branch", func(e *AssignmentEntry) { e.Template.Branch = "" }, "branch"},

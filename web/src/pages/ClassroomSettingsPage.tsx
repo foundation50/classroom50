@@ -12,12 +12,14 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import { Trans, useTranslation } from "react-i18next"
 import { useEditClassroom } from "@/hooks/mutations/useEditClassroom"
 import { isClassroomArchived } from "@/types/classroom"
-import { useToast } from "@/context/notifications/NotificationProvider"
+import { useState } from "react"
 import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireRole from "@/components/RequireRole"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Alert, EmphasisLtr } from "@/components/ui"
+import type { AlertOutcome } from "@/components/ui"
+import { errorText } from "@/types/localizedMessage"
 
 const EditClassroomContent = ({
   org,
@@ -27,9 +29,11 @@ const EditClassroomContent = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
   const trackPublishDeploy = useTrackPublishDeploy()
   const runSave = useSafeSubmit()
+  // Save outcome, rendered inline near the form's actions (Primer: feedback
+  // for a page form belongs next to it, not in a corner toast).
+  const [saveOutcome, setSaveOutcome] = useState<AlertOutcome | null>(null)
   const { data: cl, isLoading: loadingClassroom } = useGetClassroom(
     org,
     classroom,
@@ -68,6 +72,8 @@ const EditClassroomContent = ({
           />
           <EditClassroomForm
             cl={cl}
+            saveOutcome={saveOutcome}
+            onEdit={() => setSaveOutcome(null)}
             onSubmit={(values) =>
               runSave(() =>
                 editClassroomMutation.mutateAsync(
@@ -76,28 +82,26 @@ const EditClassroomContent = ({
                     slug: classroom,
                     org,
                     term: values.term,
+                    // Already normalized by the form; "" clears the key.
+                    pages_base_url: values.customDomain,
                   },
                   {
                     onError: (err) => {
-                      notify({
+                      setSaveOutcome({
                         tone: "error",
                         message:
                           err instanceof GitHubAPIError && err.status === 409
                             ? t("toasts.classroomSaveConflict")
                             : t("toasts.classroomSaveFailed", {
-                                message: err.message,
+                                message: errorText(t, err),
                               }),
                       })
                     },
                     onSuccess: () => {
-                      // Plain-text message only: NotificationProvider is mounted
-                      // ABOVE the RouterProvider, so a TanStack <Link> here has
-                      // no router context and throws on render, blanking the
-                      // app. Settings update in place via the hook's
-                      // invalidations, so no navigation link is needed.
-                      notify({
+                      // Settings update in place via the hook's invalidations,
+                      // so the confirmation sits by the save button it answers.
+                      setSaveOutcome({
                         tone: "success",
-                        durationMs: 5000,
                         message: t("toasts.classroomSettingsSaved"),
                       })
                     },

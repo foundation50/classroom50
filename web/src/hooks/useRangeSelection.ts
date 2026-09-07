@@ -3,9 +3,9 @@ import { useRef } from "react"
 import { selectRange, toggleRow, type KeyOf } from "@/util/rowSelection"
 
 // Checkbox multi-select wiring shared by OrgMembersPage, EnrolledStudents and
-// the assignments table.
-// Owns the shift-click bookkeeping so the two tables (and the regression test)
-// exercise one implementation instead of hand-copied handlers that can drift.
+// the assignments table. Owns the shift-click bookkeeping so every table (and
+// the regression test) exercises one implementation instead of hand-copied
+// handlers that can drift.
 //
 // The subtle bit: a shift-click's onClick fills the range, but the checkbox's
 // onChange still fires and would toggle the just-selected endpoint back off

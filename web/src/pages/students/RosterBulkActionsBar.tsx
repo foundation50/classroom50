@@ -1,16 +1,25 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
+  TriangleDownIcon,
   PaperAirplaneIcon,
-  PlusIcon,
-  UploadIcon,
+  SignOutIcon,
+  TrashIcon,
+  XCircleIcon,
   XIcon,
 } from "@/components/ui/icons"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
-import { Alert, Button, Modal, Toolbar } from "@/components/ui"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
+import {
+  Alert,
+  Button,
+  DropdownMenu,
+  Modal,
+  closeDropdownMenu,
+} from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -18,11 +27,18 @@ import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
-import { resendClassroomInvite, retireEmailInvites } from "@/domain/students"
+import {
+  resendClassroomInvite,
+  retireEmailInvites,
+  removeUnlinkedRows,
+  unlinkedRowRef,
+} from "@/domain/students"
 import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
 import {
+  BulkProgressRow,
   BulkResultSection,
+  bulkProgressPct,
   type BulkPhase,
   type BulkProgress,
   type BulkResultView,
@@ -33,9 +49,9 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("students:RosterBulkActionsBar")
 
-// The three "add students" affordances the toolbar surfaces (when nothing is
-// selected). The page owns the modals; the bar just triggers them, keeping the
-// controls adjacent to the table rather than floating in the page header.
+// The three "add students" affordances (Add / Upload / Invite). The page owns
+// the modals and renders the trigger buttons in the roster toolbar; the type
+// lives here next to the bulk bar they used to sit in.
 export type AddStudentActions = {
   onAddStudent: () => void
   onUploadRoster: () => void
@@ -91,68 +107,55 @@ const buildUnenrollResult = (
   }
 }
 
-// Roster multi-select toolbar: select-all header + count label, and — once a
-// selection exists — Resend / Cancel invite / Unenroll / Clear, each acting on
-// the subset of the selection it can target. Owns one progress -> results
-// <dialog> shared by all three runs. On completion it calls onDone so the page
-// can refresh its roster/invite caches.
+// Roster multi-select actions: the toolbar's selection cluster (count + one
+// "Actions" menu with Resend / Cancel invite / Unenroll + Clear), shown only
+// while rows are selected. Owns one progress -> results <dialog> shared by all
+// three runs. On completion it calls onDone so the page can refresh its
+// roster/invite caches.
 const RosterBulkActionsBar = ({
   org,
   classroom,
   client,
   selectedRows,
-  totalCount,
-  allSelected,
-  someSelected,
-  onToggleSelectAll,
   onClearSelection,
   onDone,
-  addActions,
-  groupBySection,
-  onGroupBySectionChange,
-  canGroupBySection = false,
+  disabled = false,
 }: {
   org: string
   classroom: string
   client: GitHubClient
   selectedRows: TeamRosterRow[]
-  totalCount: number
-  allSelected: boolean
-  someSelected: boolean
-  onToggleSelectAll: () => void
   onClearSelection: () => void
   // Called after a run completes so the page can invalidate roster + invite
   // caches. `action` distinguishes what changed; on an unenroll run the removed
   // rows are passed so the page can suppress the automatic backfills from
   // re-adding them.
   onDone: (
-    action: "unenroll" | "invite" | "cancel",
+    action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => void
-  // The "add students" triggers shown on the right when nothing is selected.
-  addActions?: AddStudentActions
-  // Group-by-section toggle, rendered in the header next to the count. Shown
-  // only when canGroupBySection (the filtered rows have >=1 section).
-  groupBySection?: boolean
-  onGroupBySectionChange?: (value: boolean) => void
-  canGroupBySection?: boolean
+  // Freeze every control (a roster sync is rewriting the state these actions
+  // read/write). A <fieldset disabled> so keyboard activation is off too.
+  disabled?: boolean
 }) => {
   const { t } = useTranslation()
 
-  const [action, setAction] = useState<"unenroll" | "invite" | "cancel" | null>(
-    null,
-  )
+  const [action, setAction] = useState<
+    "unenroll" | "invite" | "cancel" | "removeRows" | null
+  >(null)
   const [phase, setPhase] = useState<BulkPhase>("idle")
   const [progress, setProgress] = useState<BulkProgress>({
     processed: 0,
     total: 0,
     message: "",
   })
+  useBeforeUnloadGuard(phase === "working")
   const [result, setResult] = useState<BulkResultView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
+  const [confirmingRemoveRows, setConfirmingRemoveRows] = useState(false)
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
@@ -168,6 +171,10 @@ const RosterBulkActionsBar = ({
   // ordinary rows, so filter rather than sending the whole selection and letting
   // the writer silently report the pending ones as "already removed".
   const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
+  // Unlinked rows (no GitHub identity): the ONLY bulk action for them is
+  // removing the rows themselves — invite/cancel/unenroll are all keyed on an
+  // identity or an invitation these rows don't have.
+  const unlinkedSelected = selectedRows.filter((r) => r.state === "unlinked")
 
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
@@ -181,6 +188,10 @@ const RosterBulkActionsBar = ({
   }
 
   const runUnenroll = async () => {
+    // Re-check the freeze at the run boundary: the confirm modal renders
+    // OUTSIDE the disabled fieldset (it must survive a selection clear), so a
+    // dialog opened before a sync armed could otherwise fire mid-sync.
+    if (disabled) return
     if (unenrollableSelected.length === 0) return
     setAction("unenroll")
     setPhase("working")
@@ -222,6 +233,7 @@ const RosterBulkActionsBar = ({
   }
 
   const runInvite = async () => {
+    if (disabled) return
     if (invitableSelected === 0) return
     setAction("invite")
     setPhase("working")
@@ -321,6 +333,7 @@ const RosterBulkActionsBar = ({
   }
 
   const runCancel = async () => {
+    if (disabled) return
     if (cancellableSelected.length === 0) return
     setAction("cancel")
     setPhase("working")
@@ -393,80 +406,85 @@ const RosterBulkActionsBar = ({
     onDone("cancel")
   }
 
-  const progressPercent =
-    progress.total === 0
-      ? 0
-      : Math.round((progress.processed / progress.total) * 100)
+  const runRemoveRows = async () => {
+    if (disabled) return
+    if (unlinkedSelected.length === 0) return
+    setAction("removeRows")
+    setPhase("working")
+    setModalOpen(true)
+    setError(null)
+    setResult(null)
+    setProgress({
+      processed: 0,
+      total: unlinkedSelected.length,
+      message: t("students.bulk.starting"),
+    })
+    try {
+      // One commit for the whole batch; rows that gained an identity since the
+      // selection are skipped server-side and reported as missed.
+      const res = await removeUnlinkedRows(client, {
+        org,
+        classroom,
+        rowRefs: unlinkedSelected.map((r) => unlinkedRowRef(r)),
+      })
+      setProgress({
+        processed: unlinkedSelected.length,
+        total: unlinkedSelected.length,
+        message: "",
+      })
+      const sections: BulkResultView["sections"] = []
+      if (res.missed > 0) {
+        sections.push({
+          title: t("students.bulk.resultSkipped"),
+          rows: [
+            {
+              key: "removeRowsMissed",
+              label: t("students.bulk.removeRowsMissed", {
+                count: res.missed,
+              }),
+            },
+          ],
+        })
+      }
+      setResult({
+        headline: t("students.bulk.removedRowsHeadline", {
+          count: res.removed,
+        }),
+        sections,
+      })
+      setPhase("complete")
+      onDone("removeRows")
+    } catch (err) {
+      log.error("bulk remove unlinked rows failed", { err, record: true })
+      setError(getErrorMessage(err))
+      setPhase("error")
+    }
+  }
 
   return (
     <>
-      <Toolbar
-        header
-        className={`transition-colors ${hasSelection ? "bg-base-200/60" : ""}`}
-      >
-        <Toolbar.Selection
-          allSelected={allSelected}
-          someSelected={someSelected}
-          onToggleSelectAll={onToggleSelectAll}
-          selectAllAriaLabel={t("students.bulk.selectAll")}
-          label={
-            hasSelection
-              ? t("students.bulk.selectedCount", { count: selectedRows.length })
-              : t("students.bulk.memberCount", { count: totalCount })
-          }
-          aux={
-            canGroupBySection && onGroupBySectionChange ? (
-              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
-                <input
-                  type="checkbox"
-                  className="toggle toggle-sm"
-                  checked={Boolean(groupBySection)}
-                  onChange={(e) => onGroupBySectionChange(e.target.checked)}
-                />
-                {t("students.groupBySection")}
-              </label>
-            ) : null
-          }
-          idleActions={
-            addActions ? (
-              <div className="join ms-auto">
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.addTitle")}
-                  title={t("students.addTitle")}
-                  onClick={addActions.onAddStudent}
-                >
-                  <PlusIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.uploadTitle")}
-                  title={t("students.uploadTitle")}
-                  onClick={addActions.onUploadRoster}
-                >
-                  <UploadIcon aria-hidden="true" className="size-4" />
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
-                  aria-label={t("students.inviteStudents")}
-                  title={t("students.inviteStudents")}
-                  onClick={addActions.onInviteLinks}
-                >
-                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                </Button>
-              </div>
-            ) : null
-          }
-        >
-          {hasSelection ? (
-            <>
-              <div className="join">
-                <Button
-                  size="sm"
-                  className="join-item"
+      {/* The selection cluster lives in the page toolbar and appears only
+          while rows are selected: count, one consolidated Actions menu, and
+          Clear. The modals below stay mounted regardless, so a completing
+          run's result dialog survives the selection clearing out from under
+          it. display:contents keeps the pieces direct flex children of the
+          toolbar while the fieldset still freezes them during a sync. */}
+      {hasSelection ? (
+        <fieldset disabled={disabled} className="contents">
+          <span className="text-sm font-medium tabular-nums">
+            {t("students.bulk.selectedCount", { count: selectedRows.length })}
+          </span>
+          {/* dropdown-start: the cluster sits on the toolbar's left, so the
+              menu opens rightward instead of off the edge. */}
+          <div className="dropdown dropdown-start">
+            <Button variant="primary" size="sm">
+              {t("students.bulk.actions")}
+              <TriangleDownIcon aria-hidden="true" className="size-4" />
+            </Button>
+            <DropdownMenu className="w-64">
+              <li>
+                <button
+                  type="button"
                   disabled={invitableSelected === 0}
                   title={
                     invitableSelected === 0
@@ -475,14 +493,19 @@ const RosterBulkActionsBar = ({
                           count: invitableSelected,
                         })
                   }
-                  onClick={() => setConfirmingInvite(true)}
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (invitableSelected === 0) return
+                    setConfirmingInvite(true)
+                  }}
                 >
                   <PaperAirplaneIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.invite")}
-                </Button>
-                <Button
-                  size="sm"
-                  className="join-item"
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
                   disabled={cancellableSelected.length === 0}
                   title={
                     cancellableSelected.length === 0
@@ -491,45 +514,77 @@ const RosterBulkActionsBar = ({
                           count: cancellableSelected.length,
                         })
                   }
-                  onClick={() => setConfirmingCancel(true)}
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (cancellableSelected.length === 0) return
+                    setConfirmingCancel(true)
+                  }}
                 >
+                  <XCircleIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.cancelInvite")}
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="join-item text-error hover:bg-error/10"
-                  aria-label={t("students.bulk.unenrollSelected", {
-                    count: unenrollableSelected.length,
-                  })}
+                </button>
+              </li>
+              {/* Unenroll — destructive, so last and in its own group. */}
+              <DropdownMenu.Separator />
+              <li>
+                <button
+                  type="button"
+                  className="text-error"
+                  disabled={unenrollableSelected.length === 0}
                   title={t("students.bulk.unenrollSelected", {
                     count: unenrollableSelected.length,
                   })}
-                  disabled={unenrollableSelected.length === 0}
-                  onClick={() => setConfirmingUnenroll(true)}
+                  onClick={() => {
+                    closeDropdownMenu()
+                    if (unenrollableSelected.length === 0) return
+                    setConfirmingUnenroll(true)
+                  }}
                 >
+                  <SignOutIcon aria-hidden="true" className="size-4" />
                   {t("students.bulk.unenroll")}
-                </Button>
-              </div>
-
-              <Button
-                variant="ghost"
-                size="sm"
-                shape="square"
-                aria-label={t("students.bulk.clearSelection")}
-                title={t("students.bulk.clearSelection")}
-                onClick={onClearSelection}
-              >
-                <XIcon aria-hidden="true" className="size-4" />
-              </Button>
-            </>
-          ) : null}
-        </Toolbar.Selection>
-      </Toolbar>
+                </button>
+              </li>
+              {/* Remove unlinked rows — the roster-only delete for rows with
+                  no GitHub identity. Destructive; rendered only when the
+                  selection actually contains such rows, so the menu doesn't
+                  grow a dead entry for ordinary selections. */}
+              {unlinkedSelected.length > 0 ? (
+                <li>
+                  <button
+                    type="button"
+                    className="text-error"
+                    title={t("students.bulk.removeRowsSelected", {
+                      count: unlinkedSelected.length,
+                    })}
+                    onClick={() => {
+                      closeDropdownMenu()
+                      setConfirmingRemoveRows(true)
+                    }}
+                  >
+                    <TrashIcon aria-hidden="true" className="size-4" />
+                    {t("students.bulk.removeRows")}
+                  </button>
+                </li>
+              ) : null}
+            </DropdownMenu>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="square"
+            aria-label={t("students.bulk.clearSelection")}
+            title={t("students.bulk.clearSelection")}
+            onClick={onClearSelection}
+          >
+            <XIcon aria-hidden="true" className="size-4" />
+          </Button>
+        </fieldset>
+      ) : null}
 
       <ConfirmModal
-        open={confirmingUnenroll}
-        dangerous
+        open={confirmingUnenroll && !disabled}
+        tone="error"
+        warning={t("students.bulk.confirmUnenrollWarning")}
         needsConfirm={false}
         title={t("students.bulk.confirmUnenrollTitle", {
           count: unenrollableSelected.length,
@@ -546,8 +601,8 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
-        open={confirmingInvite}
-        dangerous={false}
+        open={confirmingInvite && !disabled}
+        tone="warning"
         needsConfirm={false}
         title={t("students.bulk.confirmInviteTitle", {
           count: invitableSelected,
@@ -564,8 +619,26 @@ const RosterBulkActionsBar = ({
       />
 
       <ConfirmModal
-        open={confirmingCancel}
-        dangerous
+        open={confirmingRemoveRows && !disabled}
+        tone="warning"
+        needsConfirm={false}
+        title={t("students.bulk.confirmRemoveRowsTitle", {
+          count: unlinkedSelected.length,
+        })}
+        description={t("students.bulk.confirmRemoveRowsBody", {
+          count: unlinkedSelected.length,
+        })}
+        confirmLabel={t("students.bulk.removeRows")}
+        onConfirm={async () => {
+          setConfirmingRemoveRows(false)
+          deferRun(runRemoveRows)
+        }}
+        onClose={() => setConfirmingRemoveRows(false)}
+      />
+
+      <ConfirmModal
+        open={confirmingCancel && !disabled}
+        tone="error"
         needsConfirm={false}
         title={t("students.bulk.confirmCancelTitle", {
           count: cancellableSelected.length,
@@ -591,7 +664,9 @@ const RosterBulkActionsBar = ({
             ? t("students.bulk.inviteTitle")
             : action === "cancel"
               ? t("students.bulk.cancelTitle")
-              : t("students.bulk.unenrollTitle")
+              : action === "removeRows"
+                ? t("students.bulk.removeRowsTitle")
+                : t("students.bulk.unenrollTitle")
         }
         footer={
           phase === "complete" ? (
@@ -606,26 +681,18 @@ const RosterBulkActionsBar = ({
         }
       >
         {phase === "working" && (
-          <div className="mt-6">
-            <p className="mb-2 font-medium">{progress.message}</p>
-            <progress
-              className="progress progress-primary w-full"
-              value={progress.processed}
-              max={progress.total || 1}
-            />
-            <div className="mt-2 flex justify-between text-sm opacity-70">
-              <span>
-                {t("students.bulk.progressProcessed", {
-                  processed: progress.processed,
-                  total: progress.total,
-                })}
-              </span>
-              <span>{progressPercent}%</span>
-            </div>
+          <BulkProgressRow
+            progress={progress}
+            processedCaption={t("students.bulk.progressProcessed", {
+              processed: progress.processed,
+              total: progress.total,
+            })}
+            percentCaption={`${bulkProgressPct(progress)}%`}
+          >
             <Alert tone="info" className="mt-6">
               <span>{t("students.bulk.keepTabOpen")}</span>
             </Alert>
-          </div>
+          </BulkProgressRow>
         )}
 
         {phase === "complete" && result && (

@@ -84,28 +84,40 @@ export function planBulkReuseSlugs({
         nextAvailableSlug(slugify(source.slug), unavailable, budget)
     const targetSlug = slugify(value)
     const lower = targetSlug.toLowerCase()
-    const issue = classify()
+    const issue = classifySlug(targetSlug, lower, {
+      budget,
+      taken,
+      reserved,
+      unavailable,
+    })
     // An invalid row still claims its slug: submit is blocked anyway, and
     // leaving it unclaimed would let a later row silently take the same one.
     if (lower) unavailable.add(lower)
     return { source, value, targetSlug, edited, issue }
-
-    // Declared here so the row's own inputs stay in scope; it reads only
-    // `targetSlug`, `lower` and the sets above.
-    function classify(): BulkReuseSlugIssue | null {
-      // No slug at all: either the classroom name eats the whole budget (a
-      // legacy over-long classroom — nothing the teacher can type will fit,
-      // which reuseSlugStatus words for itself from the budget), or the field
-      // is simply empty and wants one.
-      if (!targetSlug) return budget < 2 ? "overBudget" : "empty"
-      if (targetSlug.length > budget) return "overBudget"
-      if (taken.has(lower)) return "taken"
-      if (reserved.has(lower)) return "reserved"
-      // Neither the target's nor a reservation's, so an earlier row's.
-      if (unavailable.has(lower)) return "duplicate"
-      return null
-    }
   })
 
   return { rows, budget, valid: rows.every((r) => r.issue === null) }
+}
+
+function classifySlug(
+  targetSlug: string,
+  lower: string,
+  sets: {
+    budget: number
+    taken: ReadonlySet<string>
+    reserved: ReadonlySet<string>
+    // Everything claimed so far, including earlier rows of this run.
+    unavailable: ReadonlySet<string>
+  },
+): BulkReuseSlugIssue | null {
+  // No slug at all: either the classroom name eats the whole budget (a legacy
+  // over-long classroom, where nothing the teacher can type will fit and
+  // reuseSlugStatus words that from the budget), or the field is simply empty.
+  if (!targetSlug) return sets.budget < 2 ? "overBudget" : "empty"
+  if (targetSlug.length > sets.budget) return "overBudget"
+  if (sets.taken.has(lower)) return "taken"
+  if (sets.reserved.has(lower)) return "reserved"
+  // Neither the target's nor a reservation's, so an earlier row's.
+  if (sets.unavailable.has(lower)) return "duplicate"
+  return null
 }

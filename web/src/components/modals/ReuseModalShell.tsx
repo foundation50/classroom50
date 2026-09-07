@@ -64,6 +64,10 @@ export const ReuseModalShell = ({
           {showSubmit && !warning ? (
             <Button
               variant="primary"
+              // Deliberately gated: `canSubmit` folds source/target loading
+              // and taken-slug probes across two consumer hooks, so this is a
+              // data-dependency gate more than a validity one; the shell can't
+              // surface a per-field error for its consumers.
               disabled={!canSubmit}
               loading={isPending}
               loadingLabel={t("components.modals.reuseShell.copying")}

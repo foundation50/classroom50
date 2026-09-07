@@ -16,10 +16,19 @@ import { buildVpatReport } from "./vpatReport"
 const report = buildVpatReport()
 
 describe("VPAT integrity guard", () => {
-  it("has a non-empty criteria set covering both Level A and AA", () => {
-    expect(report.criteria.length).toBeGreaterThanOrEqual(25)
-    expect(report.criteria.some((c) => c.level === "A")).toBe(true)
-    expect(report.criteria.some((c) => c.level === "AA")).toBe(true)
+  it("lists every WCAG 2.2 Level A/AA criterion (55), so nothing is silently omitted", () => {
+    // 4.1.1 is a 2.0/2.1-only row kept for those reviewers; it is not one of
+    // the 55 WCAG 2.2 A/AA criteria.
+    const aa = report.criteria.filter(
+      (c) => c.level !== "AAA" && c.id !== "4.1.1",
+    )
+    expect(aa).toHaveLength(55)
+    expect(aa.filter((c) => c.level === "A")).toHaveLength(31)
+    expect(aa.filter((c) => c.level === "AA")).toHaveLength(24)
+  })
+
+  it("declares the WCAG versions the report can be filed against", () => {
+    expect(report.wcagVersions).toEqual(["2.0", "2.1", "2.2"])
   })
 
   it.each(report.criteria)(
@@ -30,6 +39,20 @@ describe("VPAT integrity guard", () => {
           c.evidence,
           `${c.id} claims Supports with no evidence tag`,
         ).toBeDefined()
+      }
+    },
+  )
+
+  it.each(report.criteria)(
+    "$id never claims Not Applicable without an architectural reason",
+    (c) => {
+      if (c.status === "notApplicable") {
+        expect(c.evidence, `${c.id} N/A with no evidence tag`).toBe(
+          "architectural",
+        )
+        expect(c.remark, `${c.id} N/A with no reason`).toMatch(
+          /^Not applicable: /,
+        )
       }
     },
   )

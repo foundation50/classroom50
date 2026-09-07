@@ -1,10 +1,6 @@
-import { useParams, Link } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import {
-  ChevronDownIcon,
-  MarkGithubIcon,
-  PlusIcon,
-} from "@/components/ui/icons"
+import { PlusIcon } from "@/components/ui/icons"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -17,7 +13,7 @@ import {
   SkeletonRegion,
   ToolbarSkeleton,
 } from "@/components/list"
-import { Alert, Button, Card, DropdownMenu, EmphasisLtr } from "@/components/ui"
+import { Alert, Button, Card, EmphasisLtr, RouterButton } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
@@ -30,46 +26,13 @@ import ClassroomList from "@/pages/classes/ClassroomList"
 import StudentClassroomList from "@/pages/classes/StudentClassroomList"
 import { useStudentClassroomSummaries } from "@/hooks/useStudentClassroomSummaries"
 
-// Split button: "New classroom" (primary) with a chevron dropdown whose only
-// item is "Import from GitHub Classroom". Mirrors the assignments-page new
-// button. The dropdown item is the removable migration entry point (#312) — the
-// primary Link and this whole control's shell stay if migration is dropped.
 const NewClassroomButton = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   return (
-    <div className="join">
-      <Link
-        to="/$org/classes/new"
-        params={{ org }}
-        className="btn btn-primary join-item"
-      >
-        <PlusIcon aria-hidden="true" className="size-4" />
-        {t("classes.empty.createButton")}
-      </Link>
-      {/* Not a join-item itself: daisyUI resets the join radius vars for a
-          join-item's children, which would square the inner button's corners.
-          The wrapper still inherits the vars as the join's last child; -ms-px
-          keeps the 1px border overlap join-item would have provided. */}
-      <div className="dropdown dropdown-end -ms-px">
-        <Button
-          variant="primary"
-          tabIndex={0}
-          className="join-item h-full border-s border-primary-content/20 px-2"
-          aria-label={t("classes.newButton.moreOptions")}
-        >
-          <ChevronDownIcon aria-hidden="true" className="size-4" />
-        </Button>
-        <DropdownMenu className="w-max">
-          {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
-          <li>
-            <Link to="/$org/import" params={{ org }}>
-              <MarkGithubIcon aria-hidden="true" className="size-4" />
-              {t("migration.entryButton")}
-            </Link>
-          </li>
-        </DropdownMenu>
-      </div>
-    </div>
+    <RouterButton to="/$org/classes/new" params={{ org }} variant="primary">
+      <PlusIcon aria-hidden="true" className="size-4" />
+      {t("classes.empty.createButton")}
+    </RouterButton>
   )
 }
 
@@ -161,8 +124,19 @@ const ClassesPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.classes"))
   const { org } = useParams({ strict: false })
-  const { classes, isLoading: classesLoading } = useGetClasses(org)
-  const { isStaff, isNonStaff, isLoading: roleLoading } = useOrgStaff(org)
+  const {
+    classes,
+    isLoading: classesLoading,
+    isError: classesError,
+    refetch: refetchClasses,
+  } = useGetClasses(org)
+  const {
+    isStaff,
+    isNonStaff,
+    isLoading: roleLoading,
+    isError: roleError,
+    refetch: refetchRole,
+  } = useOrgStaff(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
   const { githubOrgRole } = useGitHubOrgRole()
@@ -200,6 +174,24 @@ const ClassesPage = () => {
           <ToolbarSkeleton />
           <CardGridSkeleton cardClassName="col-span-6 h-32 xl:col-span-4" />
         </SkeletonRegion>
+      ) : roleError ? (
+        // A settled role-read failure used to render neither list nor empty
+        // state — a silent blank region. Name the failure and offer retry.
+        <Alert tone="error" className="items-start">
+          <span className="text-sm">{t("classes.roleLoadError")}</span>
+          <Button variant="ghost" size="sm" onClick={() => refetchRole()}>
+            {t("classes.retry")}
+          </Button>
+        </Alert>
+      ) : isStaff && classesError ? (
+        // Never render the first-use "create your first classroom" pane on a
+        // failed read — it tells a teacher their classrooms are gone.
+        <Alert tone="error" className="items-start">
+          <span className="text-sm">{t("classes.loadError")}</span>
+          <Button variant="ghost" size="sm" onClick={() => refetchClasses()}>
+            {t("classes.retry")}
+          </Button>
+        </Alert>
       ) : (
         <>
           {classes.length === 0 && isStaff && <CreateClassroomPane org={org} />}

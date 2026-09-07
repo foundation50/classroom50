@@ -107,23 +107,35 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 	return true, nil
 }
 
-// ValidateToken confirms a service token can do what the pipeline needs:
+// RequiredTokenPermissions is the fine-grained token configuration collection
+// and regrade need, as the one sentence every permission-shaped rejection
+// quotes (the 401 and the Members-only 403 name their own single cause). The
+// rotate help's bullet list is pinned to it by test, and collect_scores.py's
+// grant hint to the two settings a grant failure can mean, so a permission
+// added in one place cannot go missing from another.
+const RequiredTokenPermissions = "Repository access = All repositories, " +
+	"Repository permissions Contents: Read and write, Actions: Read and write, " +
+	"and Administration: Read and write, and Organization permissions Members: Read"
+
+// ValidateTokenVerbose confirms a service token can do what the pipeline needs:
 // Contents Read+Write in the org (collect reads, regrade pushes submit/* tags),
 // Administration: write (collect grants staff teams repo access via PUT
 // /orgs/{org}/teams/{slug}/repos/... — a scope not implied by Contents), AND
 // org Members: Read (collection is team-driven and lists the classroom team's
 // members — also not implied by any repository permission). Catches a
 // misconfigured PAT at provisioning time rather than as an opaque collect-time 403.
-func ValidateToken(token []byte, org string) error {
-	return ValidateTokenVerbose(token, org, io.Discard)
-}
-
-// ValidateTokenVerbose is ValidateToken with a writer for advisory notes. When
-// the org-members probe is INCONCLUSIVE (401/5xx/timeout after a proven-live
-// repo read), validation still passes (fail-open) but warns to `out` so the
-// teacher knows Members: Read wasn't positively confirmed and should run the
-// `probe-token` workflow before relying on collection.
-func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
+//
+// `out` receives advisory notes. When the org-members probe is INCONCLUSIVE
+// (401/5xx/timeout after a proven-live repo read), validation still passes
+// (fail-open) but warns to `out` so the teacher knows Members: Read wasn't
+// positively confirmed and should run the `probe-token` workflow before relying
+// on collection.
+//
+// `teacher` is the caller's own authenticated client. When non-nil it is used
+// to find a private repo other than classroom50 to read as the token, which is
+// the only way to tell a PAT scoped to "All repositories" from one scoped to
+// selected repositories (see validateRepoScopeWithClients). nil skips that probe.
+func ValidateTokenVerbose(token []byte, org string, teacher githubapi.Client, out io.Writer) error {
 	tokenClient, err := githubapi.NewClient(githubapi.ClientOptions{
 		AuthToken: string(token),
 	})
@@ -131,10 +143,16 @@ func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("build token client: %w", err)
 	}
-	return validateTokenWithClient(tokenClient, org, out)
+	if err := validateTokenWithClient(tokenClient, org, out); err != nil {
+		return err
+	}
+	if teacher == nil {
+		return nil
+	}
+	return validateRepoScopeWithClients(tokenClient, teacher, org, out)
 }
 
-// validateTokenWithClient is ValidateToken's testable core: reads the config
+// validateTokenWithClient is ValidateTokenVerbose's testable core: reads the config
 // repo with a client authenticated as the token, asserts it can write contents
 // AND administer repos, then probes org members, mapping each failure mode to
 // an actionable error.
@@ -162,7 +180,7 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 		case cliutil.IsHTTPStatus(err, http.StatusUnauthorized):
 			return fmt.Errorf("the supplied token is invalid, expired, or revoked (401). Create a fresh fine-grained PAT and try again")
 		case cliutil.IsHTTPStatus(err, http.StatusNotFound), cliutil.IsHTTPStatus(err, http.StatusForbidden):
-			return fmt.Errorf("the supplied token can't read %s/%s. Create a fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write (regrade re-runs autograde workflow runs; collect grants staff teams repo access). If your org requires PAT approval and you are not an org owner, an owner must approve it first (owners' tokens are auto-approved). Underlying error: %v", org, configrepo.ConfigRepoName, org, err)
+			return fmt.Errorf("the supplied token can't read %s/%s. Create a fine-grained PAT with Resource owner = %q and %s (regrade re-runs autograde workflow runs; collect grants staff teams repo access). If your org requires PAT approval and you are not an org owner, an owner must approve it first (owners' tokens are auto-approved). Underlying error: %v", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions, err)
 		default:
 			return fmt.Errorf("couldn't verify the token against %s/%s: %w", org, configrepo.ConfigRepoName, err)
 		}
@@ -170,14 +188,14 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 	// Token can read the repo, but regrade needs Contents: write to push
 	// submit/* tags. A read-only PAT reports push == false; reject it.
 	if !repo.Permissions.Push {
-		return fmt.Errorf("the supplied token can read %s/%s but lacks write access (Contents: write) — collecting scores needs read, but regrading needs to push submit/* tags to student repos. Re-create the fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write (regrade re-runs student autograde workflow runs; collect grants staff teams repo access)", org, configrepo.ConfigRepoName, org)
+		return fmt.Errorf("the supplied token can read %s/%s but lacks write access (Contents: write): collecting scores needs read, but regrading needs to push submit/* tags to student repos. Re-create the fine-grained personal access token with Resource owner = %q and %s (regrade re-runs student autograde workflow runs; collect grants staff teams repo access)", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions)
 	}
 
 	// Contents is proven, but collect grants staff teams repo access, needing
 	// Administration (not implied by Contents); reject an admin-less PAT here
 	// rather than as a collect-time 403 on the first grant.
 	if !repo.Permissions.Admin {
-		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write) — collecting scores grants staff teams (e.g., TAs) read access to student repos, which needs the Administration permission. Re-create the fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write", org, configrepo.ConfigRepoName, org)
+		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write): collecting scores grants staff teams (TAs, for example) read access to student repos, which needs the Administration permission. Re-create the fine-grained personal access token with Resource owner = %q and %s", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions)
 	}
 
 	// Contents is proven, but collection is team-driven: it lists the
@@ -188,13 +206,53 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 	membersPath := fmt.Sprintf("orgs/%s/members?per_page=1", url.PathEscape(org))
 	if err := tokenClient.Get(membersPath, nil); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) || cliutil.IsHTTPStatus(err, http.StatusForbidden) {
-			return fmt.Errorf("the supplied token can read %s/%s but can't read the org's members — collecting scores is team-driven and lists the classroom team's members, which needs the org-level Members permission. Re-create the fine-grained PAT with Resource owner = %q and add Organization permissions -> Members: Read (this is a separate section from Repository permissions; it appears only once the org is selected as Resource owner). Underlying error: %v", org, configrepo.ConfigRepoName, org, err)
+			return fmt.Errorf("the supplied token can read %s/%s but can't read the org's members: collecting scores is team-driven and lists the classroom team's members, which needs the org-level Members permission. Re-create the fine-grained personal access token with Resource owner = %q and add Organization permissions -> Members: Read (this is a separate section from Repository permissions; it appears only once the org is selected as Resource owner). Underlying error: %v", org, configrepo.ConfigRepoName, org, err)
 		}
 		// Inconclusive (401 after a 200 repo read, 5xx, rate-limit, timeout):
 		// proceed but WARN — Members: Read wasn't confirmed, and an
 		// unconfirmed Members-less token 403s at collect time. Point at
 		// probe-token.
 		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Organization -> Members: Read scope (%v). Proceeding, since the repo read proved the token live, but if it in fact lacks Members: Read, collection will 403 and skip. Run the `probe-token` workflow to verify all scopes before the first collect.\n", err)
+	}
+	return nil
+}
+
+// validateRepoScopeWithClients checks that the token reaches repos beyond
+// classroom50. The config-repo read proves nothing about the student repos: a
+// PAT scoped to "Only select repositories" (with classroom50 selected) passes
+// every check above and then 404s on every student repo, which surfaces weeks
+// later as a collect-time 403 on the first staff-team grant.
+//
+// The teacher's own client picks a private org repo other than classroom50 (a
+// repo they can see, so a token they own with All repositories can see it too)
+// and the token reads it. 404 is definitive: the repo is outside the token's
+// selection, or its Resource owner isn't the org. No other private repo yet
+// means there is nothing to prove; any other failure is inconclusive and warns.
+func validateRepoScopeWithClients(tokenClient, teacher githubapi.Client, org string, out io.Writer) error {
+	listPath := fmt.Sprintf("orgs/%s/repos?type=private&sort=created&direction=asc&per_page=10", url.PathEscape(org))
+	var repos []struct {
+		Name string `json:"name"`
+	}
+	if err := teacher.Get(listPath, &repos); err != nil {
+		_, _ = fmt.Fprintf(out, "Warning: couldn't list %s's private repositories to confirm the token's Repository access setting (%v). Proceeding; if the token is scoped to selected repositories, collection can't reach student repos. Run the `probe-token` workflow to verify.\n", org, err)
+		return nil
+	}
+	probe := ""
+	for _, r := range repos {
+		if !strings.EqualFold(r.Name, configrepo.ConfigRepoName) {
+			probe = r.Name
+			break
+		}
+	}
+	if probe == "" {
+		return nil
+	}
+	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(probe))
+	if err := tokenClient.Get(path, nil); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return fmt.Errorf("the supplied token can read %s/%s but not %s/%s, so it is scoped to selected repositories (or its Resource owner isn't %q). Collecting scores reads every student repo and grants staff teams access to them. Re-create the fine-grained personal access token with Resource owner = %q and %s", org, configrepo.ConfigRepoName, org, probe, org, org, RequiredTokenPermissions)
+		}
+		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Repository access setting by reading %s/%s (%v). Proceeding; if the token is scoped to selected repositories, collection can't reach student repos. Run the `probe-token` workflow to verify.\n", org, probe, err)
 	}
 	return nil
 }
@@ -262,26 +320,30 @@ func ProvisionSecret(client githubapi.Client, out io.Writer, owner, repo string,
 func NewRotateCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rotate-service-token <org>",
-		Short: "Rotate the CLASSROOM50_SERVICE_TOKEN repo secret",
-		Long: "Re-uploads the CLASSROOM50_SERVICE_TOKEN repo-level\n" +
-			"Actions secret on <org>/classroom50 with a freshly-supplied\n" +
-			"PAT value. The token is read from the\n" +
-			"CLASSROOM50_SERVICE_TOKEN environment variable, falling\n" +
-			"back to a hidden stdin prompt when run interactively.\n\n" +
-			"The token is validated against the org before it's stored\n" +
-			"(it must be able to read AND write repository contents:\n" +
-			"collect-scores reads, regrade pushes submit/* tags; it must\n" +
-			"be able to administer repos: collect grants staff teams repo\n" +
-			"access; and it must be able to read the org's members:\n" +
-			"collection is team-driven and lists the classroom team). So a\n" +
-			"misconfigured PAT is caught here rather than via a failed\n" +
-			"collect-scores or regrade run.\n\n" +
-			"Required fine-grained PAT scopes: Repository permissions ->\n" +
-			"Contents: Read and write AND Actions: Read and write AND\n" +
-			"Administration: Read and write (Metadata: Read is auto-included),\n" +
-			"and Organization permissions -> Members: Read (a separate section\n" +
-			"shown only once the org is the Resource owner).\n\n" +
-			"Idempotent: the repo secret is replaced in place.",
+		Short: "Rotate the classroom service token",
+		Long: "Replace the CLASSROOM50_SERVICE_TOKEN repository secret on\n" +
+			"<org>/classroom50 with a freshly-supplied personal access token.\n" +
+			"The token is read from the CLASSROOM50_SERVICE_TOKEN environment\n" +
+			"variable, falling back to a hidden stdin prompt when run\n" +
+			"interactively.\n\n" +
+			"The token is validated against the organization before it's\n" +
+			"stored, so a misconfigured token is caught here rather than via\n" +
+			"a failed collect-scores or regrade run. It must be able to:\n" +
+			"  - read and write repository contents (collect-scores reads,\n" +
+			"    regrade pushes submit/* tags)\n" +
+			"  - administer repositories (collect grants staff teams repo\n" +
+			"    access)\n" +
+			"  - read the org's members (collection is team-driven and lists\n" +
+			"    the classroom team)\n\n" +
+			"Required fine-grained token permissions:\n" +
+			"  - Repository access -> All repositories (a token limited to\n" +
+			"    selected repositories can't reach student repos)\n" +
+			"  - Repository permissions -> Contents: Read and write, Actions:\n" +
+			"    Read and write, and Administration: Read and write\n" +
+			"    (Metadata: Read is auto-included)\n" +
+			"  - Organization permissions -> Members: Read (a separate section\n" +
+			"    shown only once the org is the Resource owner)\n\n" +
+			"Idempotent: the repository secret is replaced in place.",
 		Example: "  CLASSROOM50_SERVICE_TOKEN=github_pat_xxx gh teacher rotate-service-token cs50-fall-2026\n" +
 			"  gh teacher rotate-service-token cs50-fall-2026   # interactive prompt",
 		Args: cobra.ExactArgs(1),
@@ -313,7 +375,7 @@ func NewRotateCmd() *cobra.Command {
 			}
 			// Validate before storing: catch a bad PAT now, not weeks later.
 			// Verbose so an inconclusive Members-scope probe warns.
-			if err := ValidateTokenVerbose(token, org, out); err != nil {
+			if err := ValidateTokenVerbose(token, org, client, out); err != nil {
 				return fmt.Errorf("service token validation failed: %w", err)
 			}
 			return ProvisionSecret(client, out, org, configrepo.ConfigRepoName, token, "rotated")

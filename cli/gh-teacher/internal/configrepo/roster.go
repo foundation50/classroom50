@@ -32,7 +32,7 @@ func ResolveConfigRepoBranch(client githubapi.Client, org string) (string, error
 	var repo ConfigRepo
 	if err := client.Get(repoPath, &repo); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return "", fmt.Errorf("%s/%s not found — run `gh teacher init %s` first", org, ConfigRepoName, org)
+			return "", fmt.Errorf("%s/%s not found: run `gh teacher init %s` first", org, ConfigRepoName, org)
 		}
 		return "", fmt.Errorf("GET %s: %w", repoPath, err)
 	}
@@ -66,7 +66,7 @@ func loadRoster(client githubapi.Client, org, classroom, parentSHA string, lenie
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("%s/%s/%s not found — run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
+		return nil, fmt.Errorf("%s/%s/%s not found: run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
 			org, ConfigRepoName, path, org, classroom)
 	}
 	parse := ParseRoster

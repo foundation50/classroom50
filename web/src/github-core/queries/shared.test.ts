@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
-import { retryOnRateLimit, withGithubReadSlot } from "./shared"
+import {
+  retryOnRateLimit,
+  withFreshRepoRetry,
+  withGithubReadSlot,
+  withRetry,
+} from "./shared"
 
 const noRateLimit: GitHubRateLimit = {
   limit: null,
@@ -29,6 +34,97 @@ const plainError = (status: number) =>
     body: null,
     rateLimit: noRateLimit,
   })
+
+describe("withRetry", () => {
+  const always = () => true
+
+  it("stops after `attempts` and rethrows the last error", async () => {
+    const fn = vi.fn().mockRejectedValue(plainError(500))
+    await expect(
+      withRetry(fn, { attempts: 3, shouldRetry: always, waitMs: () => 0 }),
+    ).rejects.toMatchObject({ status: 500 })
+    expect(fn).toHaveBeenCalledTimes(3)
+  })
+
+  it("gives up at once when waitMs returns null", async () => {
+    const fn = vi.fn().mockRejectedValue(plainError(500))
+    await expect(
+      withRetry(fn, { attempts: 3, shouldRetry: always, waitMs: () => null }),
+    ).rejects.toMatchObject({ status: 500 })
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not retry once the signal is aborted, and aborts a wait in progress", async () => {
+    const controller = new AbortController()
+    const fn = vi.fn().mockRejectedValue(plainError(500))
+    const pending = withRetry(fn, {
+      attempts: 3,
+      shouldRetry: always,
+      waitMs: () => 10_000,
+      signal: controller.signal,
+    })
+    await Promise.resolve()
+    controller.abort(new DOMException("Aborted", "AbortError"))
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" })
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+
+  it("reports each retry with its wait", async () => {
+    const onRetry = vi.fn()
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(plainError(500))
+      .mockRejectedValueOnce(plainError(502))
+      .mockResolvedValue("ok")
+    await expect(
+      withRetry(fn, {
+        attempts: 3,
+        shouldRetry: always,
+        waitMs: (_err, attempt) => attempt + 1,
+        onRetry,
+      }),
+    ).resolves.toBe("ok")
+    expect(onRetry.mock.calls).toEqual([
+      [0, 1],
+      [1, 2],
+    ])
+  })
+})
+
+describe("withFreshRepoRetry", () => {
+  it("caps each wait at maxDelayMs and forwards the retry hook", async () => {
+    const onRetry = vi.fn()
+    const fn = vi
+      .fn()
+      .mockRejectedValueOnce(plainError(404))
+      .mockRejectedValueOnce(plainError(404))
+      .mockRejectedValueOnce(plainError(404))
+      .mockResolvedValue("ok")
+    await expect(
+      withFreshRepoRetry(fn, {
+        attempts: 5,
+        baseDelayMs: 1,
+        backoffFactor: 4,
+        maxDelayMs: 5,
+        onRetry,
+      }),
+    ).resolves.toBe("ok")
+    // 1, 4, then 16 capped to 5.
+    expect(onRetry.mock.calls).toEqual([
+      [0, 1],
+      [1, 4],
+      [2, 5],
+    ])
+  })
+
+  it("does not retry a non-lag error", async () => {
+    const fn = vi.fn().mockRejectedValue(plainError(500))
+    await expect(
+      withFreshRepoRetry(fn, { attempts: 4, baseDelayMs: 0 }),
+    ).rejects.toMatchObject({ status: 500 })
+    expect(fn).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe("retryOnRateLimit", () => {
   it("returns the result when the call succeeds first try", async () => {

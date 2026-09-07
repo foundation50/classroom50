@@ -8,9 +8,8 @@ Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 `gh teacher` and `gh student` command-line tools.
 
 > [!NOTE]
-> The Fifty Foundation hosted two online training sessions to teach you how to
-> use Classroom 50 and to answer questions live. Recordings and slides from both
-> sessions are available below:
+> The Fifty Foundation hosted two online training sessions on using Classroom 50,
+> with live questions. Recordings and slides from both sessions:
 >
 > - [Friday, July 24, 1pm-2pm EDT](https://time.cs50.io/20260724T1300-0400/PT1H?title=Classroom+50+Training+Session)
 >   - [Slides](slides/classroom_50_training_session_20260724.pdf)
@@ -36,7 +35,9 @@ assignment run at the time you perform them and record the resulting state.
 Teachers therefore stay more involved in administration than they would with a
 hosted service.
 
-For the full model, see [How Classroom 50 Works](How-Classroom-50-Works).
+For the full model, see [How Classroom 50 Works](How-Classroom-50-Works). For
+where student data lives and what leaves your browser, including FERPA
+considerations, see [Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
 
 ## What you can do
 
@@ -45,8 +46,8 @@ For the full model, see [How Classroom 50 Works](How-Classroom-50-Works).
 - Leave inline feedback on student work.
 - Manage rosters, track submissions, and collect scores.
 
-Auto-grading and background tasks run in **GitHub Actions**; published data is
-served from **GitHub Pages** — all inside your own organization.
+Auto-grading and background tasks run in GitHub Actions, and published data is
+served from GitHub Pages, all inside your own organization.
 
 ## What you need
 

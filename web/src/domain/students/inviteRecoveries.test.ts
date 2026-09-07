@@ -6,6 +6,7 @@ const readInviteTeam = vi.fn()
 const deleteInviteTeam = vi.fn()
 const listTeamMembers = vi.fn()
 const listOrgInvitations = vi.fn()
+const getTeamMembershipState = vi.fn()
 const resolveClassroomTeamSlugs = vi.fn()
 
 vi.mock("@/github-core/mutations", () => ({
@@ -16,6 +17,7 @@ vi.mock("@/github-core/mutations", () => ({
 vi.mock("@/github-core/queries", () => ({
   listTeamMembers: (...a: unknown[]) => listTeamMembers(...a),
   listOrgInvitations: (...a: unknown[]) => listOrgInvitations(...a),
+  getTeamMembershipState: (...a: unknown[]) => getTeamMembershipState(...a),
 }))
 vi.mock("./rosterPrimitives", () => ({
   resolveClassroomTeamSlugs: (...a: unknown[]) =>
@@ -96,6 +98,9 @@ beforeEach(() => {
     { id: 2, login: "member2" },
     { id: 3, login: "member3" },
   ])
+  // Default: the decision-time enrollment re-check agrees with the snapshot —
+  // a login absent from listTeamMembers is genuinely on no classroom team.
+  getTeamMembershipState.mockResolvedValue(null)
 })
 
 describe("INVITE_TEAM_GC_MIN_AGE_MS — cross-tool contract", () => {
@@ -159,7 +164,7 @@ describe("collectInviteRecoveries", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
-  it("counts a young pending team's email as live without reading invitations", async () => {
+  it("counts a young pending team's email as live after ONE up-front invitation read", async () => {
     const team = await inviteState("cs101", "bob@example.com", [])
     listInviteTeams.mockResolvedValue([{ slug: team.slug }])
     readInviteTeam.mockResolvedValue(team)
@@ -167,7 +172,44 @@ describe("collectInviteRecoveries", () => {
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.liveInviteEmails.has("bob@example.com")).toBe(true)
     expect(state.trusted).toBe(true)
+    // The invitation list is the pass's ONE up-front liveness read (#800),
+    // never a per-team one.
+    expect(listOrgInvitations).toHaveBeenCalledTimes(1)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("reads no invitations at all when there is nothing to classify", async () => {
+    listInviteTeams.mockResolvedValue([])
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.trusted).toBe(true)
     expect(listOrgInvitations).not.toHaveBeenCalled()
+  })
+
+  // #800: an outstanding org invitation proves nobody accepted, so the team
+  // holds no mapping to recover — the pass classifies it live from the
+  // invitation alone, skipping both per-team reads that dominated large
+  // classrooms.
+  it("skips a still-pending team entirely (live from the invitation, no team read)", async () => {
+    const pendingTeam = await inviteState("cs101", "waiting@example.com", [])
+    const accepted = await inviteState("cs101", "alice@example.com", [
+      { id: 2, login: "alice" },
+    ])
+    listInviteTeams.mockResolvedValue([
+      { slug: pendingTeam.slug },
+      { slug: accepted.slug },
+    ])
+    readInviteTeam.mockResolvedValue(accepted)
+    listOrgInvitations.mockResolvedValue([
+      { id: 1, login: null, email: "waiting@example.com" },
+    ])
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.liveInviteEmails.has("waiting@example.com")).toBe(true)
+    expect(state.recovered.map((r) => r.email)).toEqual(["alice@example.com"])
+    expect(state.trusted).toBe(true)
+    // Only the accepted team was read; the pending one cost nothing.
+    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+    expect(readInviteTeam).toHaveBeenCalledWith(client, "org", accepted.slug)
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
@@ -200,7 +242,7 @@ describe("collectInviteRecoveries", () => {
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
-  it("flips trusted off when the invitations read fails (fail-safe)", async () => {
+  it("flips trusted off when the invitations read fails, falling back to the full walk", async () => {
     const team = await inviteState("cs101", "held@example.com", [], {
       createdAt: OLD_ENOUGH,
     })
@@ -211,6 +253,10 @@ describe("collectInviteRecoveries", () => {
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.trusted).toBe(false)
     expect(state.deletedStale).toBe(0)
+    // No liveness shortcut without the invitation list: the team is still
+    // read the long way, and uncertainty keeps it (and its row) live.
+    expect(readInviteTeam).toHaveBeenCalledWith(client, "org", team.slug)
+    expect(state.liveInviteEmails.has("held@example.com")).toBe(true)
     expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
@@ -281,7 +327,128 @@ describe("collectInviteRecoveries", () => {
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.recovered).toEqual([])
     expect(state.deletedStale).toBe(1)
+    // The delete was authorized by decision-time point reads, not the snapshot.
+    expect(getTeamMembershipState).toHaveBeenCalled()
     expect(deleteInviteTeam).toHaveBeenCalledWith(client, "org", team.slug)
+  })
+
+  // The #756 race: a student accepts WHILE the pass iterates, so they sit on
+  // their invite team but are absent from the enrollment snapshot taken
+  // earlier. The stale snapshot must never authorize the irreversible team
+  // delete — the decision-time re-check proves they enrolled mid-pass.
+  it("recovers (never deletes) a mid-pass acceptor the snapshot missed", async () => {
+    const team = await inviteState("cs101", "fresh@example.com", [
+      { id: 99, login: "fresh" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    // Snapshot predates their acceptance...
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+    // ...but the point read shows them on the classroom team NOW.
+    getTeamMembershipState.mockResolvedValue("active")
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered).toEqual([
+      {
+        email: "fresh@example.com",
+        invitee: { id: 99, login: "fresh" },
+        slug: team.slug,
+      },
+    ])
+    expect(state.deletedStale).toBe(0)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("counts a PENDING team membership as enrolled in the re-check", async () => {
+    // Any membership record means the invite lifecycle is not provably over —
+    // a refactor to `state === "active"` must fail this test, or a mid-window
+    // acceptor would lose their mapping.
+    const team = await inviteState("cs101", "mid@example.com", [
+      { id: 99, login: "mid" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+    getTeamMembershipState.mockResolvedValue("pending")
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered.map((r) => r.email)).toEqual(["mid@example.com"])
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+  })
+
+  it("a rate-limited re-check stops the pass early (never one team's 'unknown')", async () => {
+    // More teams than the read pool: the rate limit must stop workers from
+    // pulling the remainder, not burn a request per remaining team.
+    const teams = await Promise.all(
+      Array.from({ length: 7 }, (_, i) =>
+        inviteState("cs101", `member${i}@example.com`, [
+          { id: 900 + i, login: `member${i}` },
+        ]),
+      ),
+    )
+    const bySlug = new Map(teams.map((t) => [t.slug, t]))
+    listInviteTeams.mockResolvedValue(teams.map((t) => ({ slug: t.slug })))
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) => bySlug.get(slug),
+    )
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+    getTeamMembershipState.mockRejectedValue(rateLimitError())
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.trusted).toBe(false)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+    // Only the pool-width batch already in flight was read; the remaining
+    // teams were never pulled.
+    expect(readInviteTeam).toHaveBeenCalledTimes(5)
+  })
+
+  it("readOnly classifies identically but never deletes (the sync's re-collect mode)", async () => {
+    // One confirmed-unenrolled team and one aged member-less team: a normal
+    // pass deletes both; readOnly must classify the same (neither counted
+    // live) while touching nothing.
+    const gone = await inviteState("cs101", "left@example.com", [
+      { id: 99, login: "left" },
+    ])
+    const aged = await inviteState("cs101", "stale@example.com", [], {
+      createdAt: OLD_ENOUGH,
+    })
+    listInviteTeams.mockResolvedValue([
+      { slug: gone.slug },
+      { slug: aged.slug },
+    ])
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) =>
+        slug === gone.slug ? gone : aged,
+    )
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+
+    const state = await collectInviteRecoveries(client, {
+      ...INPUT,
+      readOnly: true,
+    })
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
+    expect(state.deletedStale).toBe(0)
+    expect(state.recovered).toEqual([])
+    // Neither email reads as live: the classification matched a mutating pass.
+    expect(state.liveInviteEmails.size).toBe(0)
+    expect(state.trusted).toBe(true)
+  })
+
+  it("keeps the team (untrusted) when the enrollment re-check fails", async () => {
+    const team = await inviteState("cs101", "blip@example.com", [
+      { id: 99, login: "blip" },
+    ])
+    listInviteTeams.mockResolvedValue([{ slug: team.slug }])
+    readInviteTeam.mockResolvedValue(team)
+    listTeamMembers.mockResolvedValue([{ id: 2, login: "someone-else" }])
+    // Absence can't be proven: a failed re-check must keep the team.
+    getTeamMembershipState.mockRejectedValue(new Error("boom"))
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    expect(state.recovered).toEqual([])
+    expect(state.deletedStale).toBe(0)
+    expect(state.trusted).toBe(false)
+    expect(deleteInviteTeam).not.toHaveBeenCalled()
   })
 
   it("keeps the team (untrusted) when NO classroom member is visible at all", async () => {
@@ -368,15 +535,49 @@ describe("collectInviteRecoveries", () => {
   })
 
   it("a rate limit stops the pass and flips trusted off", async () => {
-    listInviteTeams.mockResolvedValue([
-      { slug: "invite-aaaaaaaaaaaaaaaa" },
-      { slug: "invite-bbbbbbbbbbbbbbbb" },
-    ])
+    // 12 teams against a pool of 5: every read rejects rate-limited, so only
+    // the in-flight batch is ever read and no further team is pulled.
+    listInviteTeams.mockResolvedValue(
+      Array.from({ length: 12 }, (_, i) => ({
+        slug: `invite-${i.toString(16).padStart(16, "0")}`,
+      })),
+    )
     readInviteTeam.mockRejectedValue(rateLimitError())
 
     const state = await collectInviteRecoveries(client, INPUT)
     expect(state.trusted).toBe(false)
-    expect(readInviteTeam).toHaveBeenCalledTimes(1)
+    expect(readInviteTeam).toHaveBeenCalledTimes(5)
+  })
+
+  it("classifies teams concurrently, bounded by the read pool", async () => {
+    const teams = await Promise.all(
+      Array.from({ length: 12 }, (_, i) =>
+        inviteState("cs101", `bulk${i}@example.com`, []),
+      ),
+    )
+    const bySlug = new Map(teams.map((t) => [t.slug, t]))
+    listInviteTeams.mockResolvedValue(teams.map((t) => ({ slug: t.slug })))
+    let inFlight = 0
+    let maxInFlight = 0
+    readInviteTeam.mockImplementation(
+      async (_c: unknown, _o: unknown, slug: string) => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        inFlight--
+        return bySlug.get(slug)
+      },
+    )
+
+    const state = await collectInviteRecoveries(client, INPUT)
+    // Every team still classified (young + member-less -> live) ...
+    expect(readInviteTeam).toHaveBeenCalledTimes(12)
+    expect(state.liveInviteEmails.size).toBe(12)
+    expect(state.trusted).toBe(true)
+    // ... several at a time, but never unbounded (GitHub's secondary rate
+    // limits are concurrency-sensitive).
+    expect(maxInFlight).toBeGreaterThan(1)
+    expect(maxInFlight).toBeLessThanOrEqual(5)
   })
 })
 

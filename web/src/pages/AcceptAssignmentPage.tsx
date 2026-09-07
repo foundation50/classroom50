@@ -3,35 +3,39 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   ChevronDownIcon,
-  GlobeIcon,
+  LinkExternalIcon,
   LockIcon,
   MarkGithubIcon,
-  MortarBoardIcon,
+  PeopleIcon,
   PersonIcon,
 } from "@/components/ui/icons"
 
 import { Spinner } from "@/components/Spinner"
 import {
   Alert,
+  Badge,
   Button,
   Card,
   Markdown,
   MonoLtr,
   Heading,
+  RouterButton,
 } from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
-import { Link, useParams, useSearch } from "@tanstack/react-router"
+import { GitHubAPIError } from "@/github-core/errors"
+import { useParams, useSearch } from "@tanstack/react-router"
 import { useAcceptAssignment } from "@/hooks/mutations/useAcceptAssignment"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { useRef, useState } from "react"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
 import {
   localizedMessageOf,
   resolveLocalizedMessage,
+  errorText,
   type LocalizedMessage,
 } from "@/types/localizedMessage"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
@@ -40,16 +44,29 @@ import {
   MembershipError,
 } from "@/components/MembershipError"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
+import { attemptedPagesAssignmentUrls } from "@/github-core/queries"
 import { useClassroomEnrollment } from "@/hooks/useClassroomEnrollment"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
-import { studentRepoName } from "@/util/studentRepo"
+import {
+  studentRepoName,
+  groupRepoName,
+  GROUP_REPO_SEGMENT,
+} from "@/util/studentRepo"
 import useGetRepo from "@/hooks/useGetRepo"
+import useAssignmentRepoSetup from "@/hooks/useAssignmentRepoSetup"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
+import useMyGroupTeam from "@/hooks/useMyGroupTeam"
+import useGroupTeams from "@/hooks/useGroupTeams"
+import { useGroupTeamMembers } from "@/hooks/useGroupTeamMembers"
+import { groupTeamUrl } from "@/domain/teams/groupTeams"
+import { groupDisplayName } from "@/util/groupTeam"
+import useCreateGroupTeam from "@/hooks/mutations/useCreateGroupTeam"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
-import { LanguageDialog } from "@/components/LanguageDialog"
+import { Input } from "@/components/ui"
+import { errorText as resolveErrorText } from "@/types/localizedMessage"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useOutageHint } from "@/lib/githubHealth"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -67,35 +84,6 @@ const initialsFor = (user: GitHubUser | null) => {
     .join("")
 }
 
-const AcceptNavbar = () => {
-  const { t } = useTranslation()
-  const langDialogRef = useRef<HTMLDialogElement>(null)
-  return (
-    <div className="navbar bg-base-100 shadow-sm">
-      <div className="flex-1">
-        <Link to="/">
-          <div className="flex p-6 text-lg font-bold">
-            <MortarBoardIcon aria-hidden="true" className="size-8 me-2" />{" "}
-            {t("nav.appName")}
-          </div>
-        </Link>
-      </div>
-      <div className="flex-none pe-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          className="gap-2"
-          onClick={() => langDialogRef.current?.showModal()}
-        >
-          <GlobeIcon aria-hidden="true" className="size-4" />
-          <span className="hidden sm:inline">{t("nav.language")}</span>
-        </Button>
-      </div>
-      <LanguageDialog ref={langDialogRef} />
-    </div>
-  )
-}
-
 const AcceptCard = ({ children }: { children: React.ReactNode }) => {
   return (
     <Card shadow={false} className="w-200 max-w-full p-8">
@@ -109,7 +97,6 @@ const AcceptCard = ({ children }: { children: React.ReactNode }) => {
 const AcceptLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex min-h-screen flex-col bg-base-100">
-      <AcceptNavbar />
       <div className="flex flex-1 items-center justify-center p-4">
         {children}
       </div>
@@ -151,12 +138,26 @@ const UserInfo = ({ user }: { user: GitHubUser | null }) => {
   )
 }
 
-const AssignmentNotFound = ({
+// One scaffold for every terminal accept-page state (not found / load error /
+// locked / closed / not enrolled): tone badge + title + body, optional detail
+// sections, and the signed-in-as footer. One recipe, one source — the
+// per-state components below only choose copy and detail content.
+const AcceptErrorCard = ({
+  tone,
+  icon,
+  badge,
+  title,
+  body,
+  children,
   user,
-  assignment,
 }: {
+  tone: "error" | "warning"
+  icon: React.ReactNode
+  badge: string
+  title: string
+  body: React.ReactNode
+  children?: React.ReactNode
   user: GitHubUser | null
-  assignment?: string
 }) => {
   const { t } = useTranslation()
   return (
@@ -164,58 +165,19 @@ const AssignmentNotFound = ({
       <AcceptCard>
         <Card.Body className="gap-8">
           <div>
-            <span className="badge badge-error badge-soft gap-2">
-              <AlertIcon aria-hidden="true" className="size-4" />
-              {t("accept.notFound.badge")}
-            </span>
+            <Badge tone={tone} size="md" className="gap-2">
+              {icon}
+              {badge}
+            </Badge>
 
             <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.notFound.title")}
+              {title}
             </Heading>
 
-            <p className="mt-2 text-base text-base-content/70">
-              <Trans
-                i18nKey="accept.notFound.body"
-                values={{ assignment }}
-                components={{
-                  assignment: (
-                    <MonoLtr className="font-semibold text-base-content" />
-                  ),
-                }}
-              />
-            </p>
+            <p className="mt-2 text-base text-base-content/70">{body}</p>
           </div>
 
-          <div className="rounded-box border border-error/20 bg-error/5 p-5">
-            <div className="flex items-start gap-4">
-              <div className="rounded-full bg-error/10 p-3 text-error">
-                <AlertIcon aria-hidden="true" className="size-6" />
-              </div>
-
-              <div className="min-w-0">
-                <div className="font-bold text-error">
-                  {t("accept.notFound.unableToLoad")}
-                </div>
-
-                <div className="mt-1 text-sm text-base-content/70">
-                  {t("accept.notFound.expectedSlug")}
-                </div>
-
-                <pre className="mt-3 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
-                  {assignment}
-                </pre>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
-            <Trans
-              i18nKey="accept.notFound.checkUrl"
-              components={{
-                file: <MonoLtr className="text-base-content" />,
-              }}
-            />
-          </div>
+          {children}
 
           <div className="divider my-0" />
 
@@ -232,6 +194,140 @@ const AssignmentNotFound = ({
   )
 }
 
+// The red detail panel shared by the not-found and load-error cards.
+const ErrorDetailPanel = ({
+  title,
+  children,
+}: {
+  title: string
+  children: React.ReactNode
+}) => (
+  <div className="rounded-box border border-error/20 bg-error/5 p-5">
+    <div className="flex items-start gap-4">
+      <div className="rounded-full bg-error/10 p-3 text-error">
+        <AlertIcon aria-hidden="true" className="size-6" />
+      </div>
+
+      <div className="min-w-0">
+        <div className="font-bold text-error">{title}</div>
+        {children}
+      </div>
+    </div>
+  </div>
+)
+
+const AssignmentNotFound = ({
+  user,
+  assignment,
+}: {
+  user: GitHubUser | null
+  assignment?: string
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptErrorCard
+      tone="error"
+      icon={<AlertIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.notFound.badge")}
+      title={t("accept.notFound.title")}
+      body={
+        <Trans
+          i18nKey="accept.notFound.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    >
+      <ErrorDetailPanel title={t("accept.notFound.unableToLoad")}>
+        <div className="mt-1 text-sm text-base-content/70">
+          {t("accept.notFound.expectedSlug")}
+        </div>
+
+        <pre className="mt-3 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
+          {assignment}
+        </pre>
+      </ErrorDetailPanel>
+
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
+        <Trans
+          i18nKey="accept.notFound.checkUrl"
+          components={{
+            file: <MonoLtr className="text-base-content" />,
+          }}
+        />
+      </div>
+    </AcceptErrorCard>
+  )
+}
+
+// Shown when the published assignments manifest couldn't be LOADED at all —
+// network failure, a CORS-blocked custom-domain redirect, a 404'd Pages site,
+// or a malformed manifest. Distinct from AssignmentNotFound, which means the
+// manifest loaded fine but lacks the slug. Renders the failure detail and the
+// URL(s) attempted so a student's screenshot alone is diagnosable.
+const AssignmentLoadError = ({
+  user,
+  assignment,
+  error,
+  urls,
+  bootstrapUnknown,
+}: {
+  user: GitHubUser | null
+  assignment?: string
+  error: unknown
+  urls: string[]
+  // The teams read failed, so a custom Pages domain (if the classroom has
+  // one) could not be discovered — the URL list may be incomplete.
+  bootstrapUnknown?: boolean
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptErrorCard
+      tone="error"
+      icon={<AlertIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.loadError.badge")}
+      title={t("accept.loadError.title")}
+      body={
+        <Trans
+          i18nKey="accept.loadError.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    >
+      <ErrorDetailPanel title={t("accept.loadError.detailTitle")}>
+        <div className="mt-1 text-sm text-base-content/70">
+          {errorText(t, error)}
+        </div>
+
+        <div className="mt-3 text-sm text-base-content/70">
+          {t("accept.loadError.urlsLabel")}
+        </div>
+
+        <pre className="mt-1 overflow-x-auto rounded-field bg-base-100 p-3 text-sm">
+          {urls.join("\n")}
+        </pre>
+
+        {bootstrapUnknown && (
+          <div className="mt-3 text-sm text-base-content/70">
+            {t("accept.loadError.bootstrapUnknown")}
+          </div>
+        )}
+      </ErrorDetailPanel>
+
+      <div className="rounded-box border border-base-300 bg-base-100 p-4 text-sm text-base-content/70">
+        {t("accept.loadError.retryHint")}
+      </div>
+    </AcceptErrorCard>
+  )
+}
+
 // Shown when the requested assignment is locked. A locked assignment is closed
 // to every student (see the Assignment.locked contract), so the accept CTA and
 // mutation are never reached — this is a terminal state, not a retryable error.
@@ -244,44 +340,22 @@ const AssignmentLocked = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <AcceptLayout>
-      <AcceptCard>
-        <Card.Body className="gap-8">
-          <div>
-            <span className="badge badge-warning badge-soft gap-2">
-              <LockIcon aria-hidden="true" className="size-4" />
-              {t("accept.locked.badge")}
-            </span>
-
-            <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.locked.title")}
-            </Heading>
-
-            <p className="mt-2 text-base text-base-content/70">
-              <Trans
-                i18nKey="accept.locked.body"
-                values={{ assignment }}
-                components={{
-                  assignment: (
-                    <MonoLtr className="font-semibold text-base-content" />
-                  ),
-                }}
-              />
-            </p>
-          </div>
-
-          <div className="divider my-0" />
-
-          <div className="space-y-3">
-            <label className="label p-0 text-base font-semibold">
-              {t("accept.signedInAs")}
-            </label>
-
-            <UserInfo user={user} />
-          </div>
-        </Card.Body>
-      </AcceptCard>
-    </AcceptLayout>
+    <AcceptErrorCard
+      tone="warning"
+      icon={<LockIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.locked.badge")}
+      title={t("accept.locked.title")}
+      body={
+        <Trans
+          i18nKey="accept.locked.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    />
   )
 }
 
@@ -298,44 +372,22 @@ const AssignmentClosed = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <AcceptLayout>
-      <AcceptCard>
-        <Card.Body className="gap-8">
-          <div>
-            <span className="badge badge-warning badge-soft gap-2">
-              <CalendarIcon aria-hidden="true" className="size-4" />
-              {t("accept.closed.badge")}
-            </span>
-
-            <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.closed.title")}
-            </Heading>
-
-            <p className="mt-2 text-base text-base-content/70">
-              <Trans
-                i18nKey="accept.closed.body"
-                values={{ assignment }}
-                components={{
-                  assignment: (
-                    <MonoLtr className="font-semibold text-base-content" />
-                  ),
-                }}
-              />
-            </p>
-          </div>
-
-          <div className="divider my-0" />
-
-          <div className="space-y-3">
-            <label className="label p-0 text-base font-semibold">
-              {t("accept.signedInAs")}
-            </label>
-
-            <UserInfo user={user} />
-          </div>
-        </Card.Body>
-      </AcceptCard>
-    </AcceptLayout>
+    <AcceptErrorCard
+      tone="warning"
+      icon={<CalendarIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.closed.badge")}
+      title={t("accept.closed.title")}
+      body={
+        <Trans
+          i18nKey="accept.closed.body"
+          values={{ assignment }}
+          components={{
+            assignment: <MonoLtr className="font-semibold text-base-content" />,
+          }}
+        />
+      }
+      user={user}
+    />
   )
 }
 
@@ -350,23 +402,219 @@ const AssignmentClosed = ({
 const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
   const { t } = useTranslation()
   return (
+    <AcceptErrorCard
+      tone="warning"
+      icon={<LockIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.notEnrolled.badge")}
+      title={t("accept.notEnrolled.title")}
+      body={t("accept.notEnrolled.body")}
+      user={user}
+    />
+  )
+}
+
+// Team mode, teacher formation: the viewer isn't on any of this assignment's
+// groups yet. The teacher forms the groups, so accepting is blocked until the
+// teacher adds them — a waiting state, not an error.
+const TeamNotAssigned = ({ user }: { user: GitHubUser | null }) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptErrorCard
+      tone="warning"
+      icon={<PersonIcon aria-hidden="true" className="size-4" />}
+      badge={t("accept.teamBlocked.badge")}
+      title={t("accept.teamBlocked.title")}
+      body={t("accept.teamBlocked.body")}
+      user={user}
+    />
+  )
+}
+
+// Team mode, student formation: the viewer is on no group yet, so the first
+// step is founding one (they become the team maintainer and can add roster
+// teammates). On success the my-team cache refreshes and the page falls
+// through to the normal accept flow.
+const CreateGroupCard = ({
+  org,
+  classroom,
+  assignment,
+  assignmentName,
+  maxGroupSize,
+  username,
+  user,
+  onRecheck,
+  recheckPending = false,
+}: {
+  org: string
+  classroom: string
+  assignment: string
+  assignmentName?: string
+  maxGroupSize?: number
+  username?: string
+  user: GitHubUser | null
+  // Re-runs the viewer's own-team resolution — the "I was approved on GitHub,
+  // check again" affordance under the join list.
+  onRecheck?: () => void
+  recheckPending?: boolean
+}) => {
+  const { t } = useTranslation()
+  const [displayName, setDisplayName] = useState("")
+  const createTeam = useCreateGroupTeam({ org, classroom, assignment })
+  // Student-formed teams are closed (visible), so classmates can browse them
+  // here and request to join through GitHub's native flow — the REST API
+  // exposes no join requests, so requesting, cancelling, and reviewing all
+  // happen on the team's GitHub page.
+  const teamsQuery = useGroupTeams(org, classroom, assignment)
+  const teams = teamsQuery.data ?? []
+  const { membersBySlug } = useGroupTeamMembers(
+    org,
+    teams.map((team) => team.slug),
+  )
+  // An org that restricts team creation to owners 403s the create; name that
+  // case for the student instead of surfacing GitHub's raw message.
+  const createError = createTeam.error
+    ? createTeam.error instanceof GitHubAPIError && createTeam.error.isForbidden
+      ? t("accept.createGroup.createForbidden")
+      : resolveErrorText(t, createTeam.error)
+    : null
+
+  return (
     <AcceptLayout>
       <AcceptCard>
-        <Card.Body className="gap-8">
+        <Card.Body className="gap-6">
           <div>
-            <span className="badge badge-warning badge-soft gap-2">
-              <LockIcon aria-hidden="true" className="size-4" />
-              {t("accept.notEnrolled.badge")}
-            </span>
-
+            <Badge tone="primary" size="md" className="gap-2">
+              <PersonIcon aria-hidden="true" className="size-4" />
+              {t("accept.modeTeam")}
+            </Badge>
             <Heading as="h1" variant="title-medium" className="mt-6">
-              {t("accept.notEnrolled.title")}
+              {assignmentName}
             </Heading>
-
             <p className="mt-2 text-base text-base-content/70">
-              {t("accept.notEnrolled.body")}
+              {maxGroupSize
+                ? t("accept.createGroup.body", { max: maxGroupSize })
+                : t("accept.createGroup.bodyNoMax")}
             </p>
           </div>
+
+          {createError ? (
+            <Alert tone="error" className="text-sm">
+              {createError}
+            </Alert>
+          ) : null}
+
+          {teams.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="label p-0 text-sm font-medium">
+                {t("accept.joinGroup.title")}
+              </span>
+              <ul className="divide-y divide-base-200 rounded-box border border-base-200">
+                {teams.map((team) => {
+                  const members = membersBySlug.get(team.slug)
+                  const count = members?.length
+                  const isFull =
+                    maxGroupSize !== undefined &&
+                    count !== undefined &&
+                    count >= maxGroupSize
+                  return (
+                    <li
+                      key={team.slug}
+                      className="flex items-center gap-3 px-4 py-2.5"
+                    >
+                      <PeopleIcon
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-base-content/70"
+                      />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                        {groupDisplayName(team, t)}
+                      </span>
+                      <span className="text-xs text-base-content/70">
+                        {count === undefined
+                          ? "—"
+                          : maxGroupSize !== undefined
+                            ? t("accept.joinGroup.memberCountOfMax", {
+                                count,
+                                max: maxGroupSize,
+                              })
+                            : t("accept.joinGroup.memberCount", { count })}
+                      </span>
+                      {isFull ? (
+                        <Badge ghost>{t("accept.joinGroup.full")}</Badge>
+                      ) : (
+                        <Button
+                          as="a"
+                          href={groupTeamUrl(org, team.slug)}
+                          target="_blank"
+                          rel="noreferrer"
+                          variant="outline"
+                          size="sm"
+                        >
+                          {t("accept.joinGroup.request")}
+                          <LinkExternalIcon
+                            aria-hidden="true"
+                            className="size-3.5"
+                          />
+                        </Button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
+              <p className="text-xs text-base-content/70">
+                {t("accept.joinGroup.help")}
+              </p>
+              {onRecheck && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-fit"
+                  disabled={recheckPending}
+                  loading={recheckPending}
+                  onClick={onRecheck}
+                >
+                  {t("accept.joinGroup.recheck")}
+                </Button>
+              )}
+              <div className="divider my-0">{t("accept.joinGroup.or")}</div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <label
+              className="label p-0 text-sm font-medium"
+              htmlFor="group-display-name"
+            >
+              {t("accept.createGroup.nameLabel")}
+            </label>
+            <Input
+              id="group-display-name"
+              value={displayName}
+              maxLength={80}
+              placeholder={t("accept.createGroup.namePlaceholder")}
+              onChange={(e) => setDisplayName(e.target.value)}
+            />
+            <p className="text-xs text-base-content/70">
+              {t("accept.createGroup.nameHelp")}
+            </p>
+          </div>
+
+          <Button
+            variant="primary"
+            className="w-full text-lg p-5"
+            disabled={!username || createTeam.isPending}
+            loading={createTeam.isPending}
+            loadingLabel={t("accept.createGroup.createButton")}
+            onClick={() =>
+              createTeam.mutate({
+                displayName: displayName.trim() || undefined,
+                creatorLogin: username ?? "",
+                founderLogin: username ?? "",
+                formation: "student",
+              })
+            }
+          >
+            {t("accept.createGroup.createButton")}
+          </Button>
 
           <div className="divider my-0" />
 
@@ -374,7 +622,6 @@ const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
             <label className="label p-0 text-base font-semibold">
               {t("accept.signedInAs")}
             </label>
-
             <UserInfo user={user} />
           </div>
         </Card.Body>
@@ -386,20 +633,40 @@ const NotEnrolled = ({ user }: { user: GitHubUser | null }) => {
 const modeLabelKey: Record<string, string> = {
   individual: "accept.modeIndividual",
   group: "accept.modeGroup",
+  team: "accept.modeTeam",
 }
 
 // Pending-state placeholders. Once a step emits, the domain sends the same
 // `accept.steps.*` key back as a { key, params } descriptor — one source of
 // truth for every step label (see AGENTS.md's `{ key, params }` rule).
-const ACCEPT_STEP_ORDER: { id: AcceptStepId; labelKey: string }[] = [
+// Team-mode accepts insert the group-resolution step after the assignment
+// lookup; other modes never emit it, so it's omitted from their checklist.
+const acceptStepOrder = (
+  isTeam: boolean,
+): { id: AcceptStepId; labelKey: string }[] => [
   { id: "account", labelKey: "accept.steps.account" },
   { id: "membership", labelKey: "accept.steps.membership" },
   { id: "assignment", labelKey: "accept.steps.assignment" },
+  ...(isTeam
+    ? [{ id: "team" as AcceptStepId, labelKey: "accept.steps.team" }]
+    : []),
   { id: "autograder", labelKey: "accept.steps.autograder" },
   { id: "repo", labelKey: "accept.steps.repo" },
   { id: "setup", labelKey: "accept.steps.setup" },
   { id: "feedback", labelKey: "accept.steps.feedback" },
   { id: "access", labelKey: "accept.steps.access" },
+]
+
+const ALL_ACCEPT_STEP_IDS: AcceptStepId[] = [
+  "account",
+  "membership",
+  "assignment",
+  "team",
+  "autograder",
+  "repo",
+  "setup",
+  "feedback",
+  "access",
 ]
 
 type StepState = Record<
@@ -412,7 +679,7 @@ type StepState = Record<
 >
 
 const initialStepState: StepState = Object.fromEntries(
-  ACCEPT_STEP_ORDER.map((step) => [step.id, { status: "pending" as const }]),
+  ALL_ACCEPT_STEP_IDS.map((id) => [id, { status: "pending" as const }]),
 ) as StepState
 
 const StatusIcon = ({ status }: { status: AcceptStepStatus }) => {
@@ -544,12 +811,18 @@ const CircularProgress = ({
   )
 }
 
-const AcceptProgress = ({ steps }: { steps: StepState }) => {
+const AcceptProgress = ({
+  steps,
+  order,
+}: {
+  steps: StepState
+  order: { id: AcceptStepId; labelKey: string }[]
+}) => {
   const { t } = useTranslation()
-  const stepStates = ACCEPT_STEP_ORDER.map((step) => steps[step.id])
+  const stepStates = order.map((step) => steps[step.id])
   const completed = stepStates.filter((s) => s.status === "complete").length
   const hasError = stepStates.some((s) => s.status === "error")
-  const allDone = completed === ACCEPT_STEP_ORDER.length
+  const allDone = completed === order.length
   // Between steps, the finishing step is already "complete" while the next
   // hasn't emitted "running" yet — a momentary gap where no step is running.
   // Treat that gap as running so the header doesn't flicker back to pending on
@@ -591,11 +864,11 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
         <span className="flex items-center gap-3">
           <CircularProgress
             completed={completed}
-            total={ACCEPT_STEP_ORDER.length}
+            total={order.length}
             status={headerStatus}
             label={t("accept.progress.count", {
               completed,
-              total: ACCEPT_STEP_ORDER.length,
+              total: order.length,
             })}
           />
           <span className="font-medium">{summary}</span>
@@ -611,7 +884,7 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
 
       {expanded && (
         <div className="flex flex-col gap-3 border-t border-base-300 p-5">
-          {ACCEPT_STEP_ORDER.map((step) => (
+          {order.map((step) => (
             <StepRow
               key={step.id}
               label={t(step.labelKey)}
@@ -698,13 +971,16 @@ const AcceptAssignmentPage = () => {
   const linkSecret =
     typeof search.k === "string" && search.k !== "" ? search.k : undefined
 
-  // Fallback for a bare accept link (no ?k=): an already-enrolled student's own
-  // team description carries the classroom's capability secret.
-  const { secret: teamSecret, isLoading: loadingSecret } = useClassroomSecret(
-    org,
-    classroom,
-    !linkSecret,
-  )
+  // Bootstrap record from the student's own team description. Also the
+  // fallback secret source for a bare accept link (no ?k=) — but read ALWAYS
+  // (even when the link carries ?k=) because the custom Pages base URL for an
+  // org off the github.io default is only discoverable here, never in the link.
+  const {
+    secret: teamSecret,
+    pagesBaseUrl,
+    isLoading: loadingSecret,
+    isError: bootstrapError,
+  } = useClassroomSecret(org, classroom)
   const secret = linkSecret ?? teamSecret
 
   const { user } = useGithubAuth()
@@ -721,8 +997,14 @@ const AcceptAssignmentPage = () => {
   const { verdict: enrollmentVerdict, isLoading: loadingEnrollment } =
     useClassroomEnrollment(org, classroom, username)
 
-  const { data: assignmentsData, isLoading: loadingAssignmentsData } =
-    usePagesAssignments(org, classroom, secret, { enabled: !loadingSecret })
+  const {
+    data: assignmentsData,
+    isLoading: loadingAssignmentsData,
+    error: assignmentsError,
+  } = usePagesAssignments(org, classroom, secret, {
+    enabled: !loadingSecret,
+    pagesBaseUrl,
+  })
   const loadingAssignments = loadingSecret || loadingAssignmentsData
   const {
     data: orgInvite,
@@ -735,19 +1017,58 @@ const AcceptAssignmentPage = () => {
 
   const pastDue = Boolean(assignmentData?.due && isPastDue(assignmentData.due))
 
-  const expectedRepoName = username
-    ? studentRepoName(classroom ?? "", assignment ?? "", username)
-    : studentRepoName(
-        classroom ?? "",
-        assignment ?? "",
-        "{your-github-username}",
-      )
+  // Team mode: resolve MY group team before anything repo-shaped — the repo is
+  // named after the team's counter, and a student on no team is blocked
+  // (teacher formation) or offered the create-a-group flow (student formation).
+  const isTeamMode = assignmentData?.mode === "team"
+  const teamFormation = assignmentData?.team_formation ?? "teacher"
+  const {
+    data: myTeam,
+    isLoading: loadingMyTeam,
+    isError: myTeamError,
+    refetch: refetchMyTeam,
+    isFetching: fetchingMyTeam,
+  } = useMyGroupTeam(org, classroom, assignment, {
+    enabled: isTeamMode && Boolean(username),
+  })
+
+  const expectedRepoName = isTeamMode
+    ? myTeam
+      ? groupRepoName(classroom ?? "", assignment ?? "", myTeam.n)
+      : // Placeholder counter until the team resolves; only rendered, never
+        // queried (see repoLookupName).
+        `${studentRepoName(classroom ?? "", assignment ?? "", GROUP_REPO_SEGMENT)}{n}`
+    : username
+      ? studentRepoName(classroom ?? "", assignment ?? "", username)
+      : studentRepoName(
+          classroom ?? "",
+          assignment ?? "",
+          "{your-github-username}",
+        )
+
+  // Only probe a repo name that's fully resolved: a team-mode student on no
+  // team has no repo to check.
+  const repoLookupName = isTeamMode && !myTeam ? "" : expectedRepoName
 
   const { data: checkedRepo, isLoading: isLoadingRepo } = useGetRepo(
     org,
-    expectedRepoName,
+    repoLookupName,
   )
-  const repoExistsAlready = checkedRepo?.name === expectedRepoName
+  const repoExistsAlready =
+    Boolean(repoLookupName) && checkedRepo?.name === repoLookupName
+
+  // An existing repo isn't proof the accept finished (issue #502): the flow
+  // can die between repo creation and the setup commit, leaving a repo that
+  // clones fine but never autogrades. Probe the marker so the page can lead
+  // with "Re-run setup" instead of a success-looking "Open repository". Wait
+  // for the assignment to resolve first: an empty_repo assignment never writes
+  // the marker, and the repo read can settle before the manifest does.
+  const repoSetup = useAssignmentRepoSetup(org, repoLookupName, {
+    enabled:
+      repoExistsAlready &&
+      assignmentData !== undefined &&
+      assignmentData.empty_repo !== true,
+  })
 
   const [steps, setSteps] = useState<StepState>(initialStepState)
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
@@ -769,6 +1090,7 @@ const AcceptAssignmentPage = () => {
     classroom: classroom ?? "",
     assignmentSlug: assignment ?? "",
     secret,
+    pagesBaseUrl,
     onStepUpdate: (update) =>
       setSteps((prev) => ({
         ...prev,
@@ -791,9 +1113,22 @@ const AcceptAssignmentPage = () => {
         if (result.status === "created") {
           fireConfetti()
         }
+        // A heal re-run just landed the marker; drop the stale "incomplete"
+        // verdict so the card flips to the healthy state.
+        void repoSetup.refetch()
       },
     })
   }
+
+  // The repo exists but the accept never finished. Cleared once a re-run
+  // succeeds in this session (the mutation's data is the authoritative signal
+  // until the marker probe refetches). Never raised for an empty_repo
+  // assignment, whose repos legitimately carry no marker.
+  const setupIncomplete =
+    repoExistsAlready &&
+    assignmentData?.empty_repo !== true &&
+    repoSetup.state === "incomplete" &&
+    !acceptMutation.isSuccess
 
   // Accept errors name their message ({ key, params }) rather than carrying
   // assembled English, so the remedy renders in the student's language. An error
@@ -803,8 +1138,10 @@ const AcceptAssignmentPage = () => {
   if (
     loadingAssignments ||
     isLoadingRepo ||
+    repoSetup.isLoading ||
     loadingOrgMembership ||
-    loadingEnrollment
+    loadingEnrollment ||
+    (isTeamMode && loadingMyTeam)
   ) {
     return (
       <AcceptLayout>
@@ -891,6 +1228,30 @@ const AcceptAssignmentPage = () => {
     return <NotEnrolled user={user} />
   }
 
+  // The manifest couldn't be loaded at all (vs. loaded-but-slug-missing below).
+  // Renders the failure and the exact URL(s) attempted so a screenshot is
+  // enough to triage — see discussion #776, where a CORS-blocked custom-domain
+  // redirect masqueraded as "assignment not found".
+  if (assignmentsError) {
+    return (
+      <AssignmentLoadError
+        user={user}
+        assignment={assignment}
+        error={assignmentsError}
+        urls={attemptedPagesAssignmentUrls(
+          org ?? "",
+          classroom ?? "",
+          secret,
+          pagesBaseUrl,
+        )}
+        // A failed teams read means a custom Pages domain couldn't be
+        // discovered (fail-open kept the fetch going on the default host);
+        // say so instead of presenting the github.io URL as the whole story.
+        bootstrapUnknown={bootstrapError && !pagesBaseUrl}
+      />
+    )
+  }
+
   if (!assignmentData) {
     return <AssignmentNotFound user={user} assignment={assignment} />
   }
@@ -905,6 +1266,29 @@ const AcceptAssignmentPage = () => {
     return <AssignmentClosed user={user} assignment={assignment} />
   }
 
+  // Team mode with no group yet (a SETTLED null — a transient my-teams failure
+  // falls through, and the accept flow's own team step surfaces a retryable
+  // error instead of a wrongful block). Teacher formation waits for the
+  // teacher; student formation founds a group first.
+  if (isTeamMode && !myTeam && !myTeamError && username) {
+    if (teamFormation === "student") {
+      return (
+        <CreateGroupCard
+          org={org ?? ""}
+          classroom={classroom ?? ""}
+          assignment={assignment ?? ""}
+          assignmentName={assignmentData.name}
+          maxGroupSize={assignmentData.max_group_size}
+          username={username}
+          user={user}
+          onRecheck={() => void refetchMyTeam()}
+          recheckPending={fetchingMyTeam}
+        />
+      )
+    }
+    return <TeamNotAssigned user={user} />
+  }
+
   const description = assignmentDescription(assignmentData)
 
   return (
@@ -912,29 +1296,35 @@ const AcceptAssignmentPage = () => {
       <AcceptCard>
         <EnterDiv className="card-body gap-4">
           <div className="flex justify-between">
-            <span className="badge badge-primary badge-soft">
+            <Badge tone="primary" size="md">
               <PersonIcon aria-hidden="true" className="size-4" />
               {assignmentData?.mode && modeLabelKey[assignmentData.mode]
                 ? t(modeLabelKey[assignmentData.mode])
                 : ""}
-            </span>
-            <span
-              className={`badge ${pastDue ? "badge-error badge-soft" : ""}`}
-            >
+            </Badge>
+            <Badge tone={pastDue ? "error" : "neutral"} size="md">
               {assignmentData?.due
                 ? t(pastDue ? "accept.pastDue" : "accept.due", {
                     date: formatDueDateTime(assignmentData.due),
                   })
                 : t("accept.noDueDate")}
-            </span>
+            </Badge>
           </div>
           <Heading as="h1" variant="title-medium" className="pt-2">
             {assignmentData?.name}
           </Heading>
           <h2 className="text-lg">
             {repoExistsAlready
-              ? t("accept.alreadyAcceptedHeading")
-              : t("accept.acceptHeading")}
+              ? t(
+                  isTeamMode
+                    ? "accept.alreadyAcceptedHeadingTeam"
+                    : "accept.alreadyAcceptedHeading",
+                )
+              : t(
+                  isTeamMode
+                    ? "accept.acceptHeadingTeam"
+                    : "accept.acceptHeading",
+                )}
           </h2>
 
           {description ? (
@@ -969,9 +1359,61 @@ const AcceptAssignmentPage = () => {
               </div>
             </div>
 
+            {/* Upfront disclosure (issue #766): shown while the repo is yet to
+                be created. Once it exists the notice would be stale — the
+                accept step message carries the visibility that landed. */}
+            {assignmentData.repo_visibility === "public" &&
+              !repoExistsAlready &&
+              !acceptMutation.data && (
+                <Alert tone="warning" className="items-start">
+                  <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
+                  <div>
+                    <div className="font-bold">
+                      {t("accept.publicRepo.title")}
+                    </div>
+                    <div className="mt-1 text-sm">
+                      {t("accept.publicRepo.body")}
+                    </div>
+                  </div>
+                </Alert>
+              )}
+
             {(acceptMutation.isPending ||
               acceptMutation.isError ||
-              acceptMutation.isSuccess) && <AcceptProgress steps={steps} />}
+              acceptMutation.isSuccess) && (
+              <AcceptProgress
+                steps={steps}
+                order={acceptStepOrder(isTeamMode)}
+              />
+            )}
+
+            {acceptMutation.isPending && (
+              <p className="text-sm text-base-content/70" role="status">
+                {t("accept.keepTabOpen")}
+              </p>
+            )}
+
+            {setupIncomplete && !acceptMutation.isPending && (
+              <Alert tone="warning" className="items-start">
+                <AlertIcon aria-hidden="true" className="size-5 shrink-0" />
+                <div className="flex-1">
+                  <div className="font-bold">
+                    {t("accept.setupIncomplete.title")}
+                  </div>
+                  <div className="mt-1 text-sm">
+                    {t("accept.setupIncomplete.body")}
+                  </div>
+                  <Button
+                    variant="warning"
+                    className="mt-3 w-full"
+                    disabled={!username}
+                    onClick={() => void runAccept(() => runAcceptFlow())}
+                  >
+                    {t("accept.repair.rerun")}
+                  </Button>
+                </div>
+              </Alert>
+            )}
 
             {acceptMutation.isError && (
               <Alert tone="error" className="items-start">
@@ -1013,8 +1455,12 @@ const AcceptAssignmentPage = () => {
                     exit="exit"
                     className="flex flex-col gap-4 overflow-hidden"
                   >
-                    <a
-                      className="btn btn-primary w-full text-lg p-5"
+                    <Button
+                      as="a"
+                      // Demoted while setup is incomplete so the warning's
+                      // "Re-run setup" reads as the one thing to do next.
+                      variant={setupIncomplete ? "outline" : "primary"}
+                      className="w-full text-lg p-5"
                       href={
                         acceptMutation?.data?.repo.html_url ||
                         `https://www.github.com/${org}/${checkedRepo?.name}`
@@ -1023,7 +1469,7 @@ const AcceptAssignmentPage = () => {
                       rel="noreferrer"
                     >
                       {t("accept.openRepository")}
-                    </a>
+                    </Button>
 
                     {assignmentData?.mode === "group" && (
                       <Button
@@ -1036,17 +1482,43 @@ const AcceptAssignmentPage = () => {
                     )}
 
                     {org && classroom && (
-                      <Link
+                      // outline variant (primary outline) aligns this with its
+                      // Edit-collaborators sibling above; it was a bare neutral
+                      // outline before.
+                      <RouterButton
                         to="/$org/$classroom"
                         params={{ org, classroom }}
-                        className="btn btn-outline w-full text-lg p-5"
+                        variant="outline"
+                        className="w-full text-lg p-5"
                       >
                         {t("accept.goToClassroom")}
-                      </Link>
+                      </RouterButton>
                     )}
                   </motion.div>
                 )}
             </AnimatePresence>
+
+            {/* Team mode: group management lives on the dedicated Manage
+                group view (the assignment settings student branch), so the
+                accept card stays a lightweight confirmation — one button in
+                the post-accept action stack instead of an inline panel. */}
+            {isTeamMode &&
+              myTeam &&
+              (acceptMutation.data || repoExistsAlready) &&
+              !acceptMutation.isPending &&
+              org &&
+              classroom &&
+              assignment && (
+                <RouterButton
+                  to="/$org/$classroom/assignments/$assignment/settings"
+                  params={{ org, classroom, assignment }}
+                  variant="outline"
+                  className="w-full text-lg p-5"
+                >
+                  <PeopleIcon aria-hidden="true" className="size-5" />
+                  {t("accept.manageGroupButton")}
+                </RouterButton>
+              )}
 
             {!acceptMutation.data &&
               !repoExistsAlready &&
@@ -1063,7 +1535,9 @@ const AcceptAssignmentPage = () => {
 
             {(repoExistsAlready || acceptMutation.isError) &&
               !acceptMutation.data &&
-              !acceptMutation.isPending && (
+              !acceptMutation.isPending &&
+              // The incomplete-setup warning already carries the re-run button.
+              !setupIncomplete && (
                 <RepairToggle
                   disabled={!username || acceptMutation.isPending}
                   onRerun={() => {

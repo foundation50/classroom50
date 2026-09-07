@@ -182,9 +182,9 @@ func TestTemplatedInheritAppliesTemplateFeatures(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
-	_, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(
+	_, _, branch, _, err := createTemplatedAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
-		"alice", "cs-principles", "hello", "o", tmpl, nil /* inherit */, false,
+		"alice", "cs-principles", "hello", "o", tmpl, nil /* inherit */, false, false,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -246,11 +246,11 @@ func TestTemplatedExplicitOverridePatchesSetKeys(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
-	_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(
+	_, _, _, _, err := createTemplatedAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "hello", "o", tmpl,
 		&assignments.RepoFeatures{Issues: boolPtr(false)},
-		false,
+		false, false,
 	)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -301,11 +301,11 @@ func TestTemplatedFeaturePatchFailsOpen(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
-	htmlURL, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(
+	htmlURL, _, branch, _, err := createTemplatedAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "hello", "o", tmpl,
 		&assignments.RepoFeatures{Projects: boolPtr(true)}, // forces a PATCH that 422s
-		false,
+		false, false,
 	)
 	if err != nil {
 		t.Fatalf("accept must not fail when the feature PATCH is rejected (fail-open): %v", err)
@@ -370,11 +370,11 @@ func TestTemplatedFeaturePatchRetriesWithForcedKeysOnly(t *testing.T) {
 	t.Cleanup(server.Close)
 
 	var out bytes.Buffer
-	_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(
+	_, _, _, _, err := createTemplatedAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "hello", "o", tmpl,
 		&assignments.RepoFeatures{Issues: boolPtr(false)}, // forced OFF; projects inherited ON
-		false,
+		false, false,
 	)
 	if err != nil {
 		t.Fatalf("accept must not fail: %v", err)
@@ -424,10 +424,11 @@ func TestEmptyFeaturePatchFailsOpen(t *testing.T) {
 	// Force a feature so a PATCH is actually sent (a nil/all-default template-
 	// less assignment now sends none); the org rejects it and accept must still
 	// succeed.
-	htmlURL, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(
+	htmlURL, _, branch, _, err := createEmptyAssignmentRepoInOrg(
 		newTestRESTClient(t, server), ui.NewForced(&out, false), false,
 		"alice", "cs-principles", "solo", "o", true,
 		&assignments.RepoFeatures{Projects: boolPtr(true)},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("empty accept must not fail when the feature PATCH is rejected: %v", err)

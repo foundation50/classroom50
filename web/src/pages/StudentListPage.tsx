@@ -27,6 +27,7 @@ import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/rosterPath"
 import { Badge } from "@/components/ui"
+import { PeopleIcon } from "@/components/ui/icons"
 import { ROLE_BADGE_TONE } from "@/util/classroomRoleUI"
 import { useTranslation } from "react-i18next"
 
@@ -54,7 +55,7 @@ const TeamRosterContent = ({
   // unenroll and skips them in the auto-backfills) and the Add modal (which
   // forgets a login on a successful re-enroll) share one set — otherwise a
   // re-added student would stay suppressed until reload.
-  const suppressedLogins = useSuppressedLogins()
+  const suppressedLogins = useSuppressedLogins(org, classroom)
 
   // Which add-students affordance is open (all mutually exclusive modals).
   const [addOpen, setAddOpen] = useState(false)
@@ -93,10 +94,24 @@ const TeamRosterContent = ({
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {countReady ? (
               <>
-                <Badge tone="neutral" ghost className="shrink-0">
-                  {t("students.membersEnrolledCount", {
+                {/* Head count as icon + number; the full phrase stays the
+                    accessible name (an icon-only count reads as nothing). */}
+                <Badge
+                  tone="neutral"
+                  ghost
+                  className="shrink-0 gap-1"
+                  role="img"
+                  aria-label={t("students.membersEnrolledCount", {
                     count: counts.enrolled,
                   })}
+                  title={t("students.membersEnrolledCount", {
+                    count: counts.enrolled,
+                  })}
+                >
+                  <PeopleIcon aria-hidden="true" className="size-3.5" />
+                  <span aria-hidden="true" className="tabular-nums">
+                    {counts.enrolled}
+                  </span>
                 </Badge>
                 {showStudentCount ? (
                   <Badge
@@ -127,7 +142,7 @@ const TeamRosterContent = ({
                   </Badge>
                 ) : null}
               </>
-            ) : (
+            ) : rosterError ? null : ( // hide the counts on error, never a stuck "Loading roster…"
               <span>{t("students.enrolledCountLoading")}</span>
             )}
             <span aria-hidden="true" className="text-base-content/30">
@@ -225,7 +240,10 @@ const CsvRosterContent = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { students, isLoading } = useGetStudents(org, classroom)
+  const { students, isLoading, isError, recheckRoster } = useGetStudents(
+    org,
+    classroom,
+  )
 
   return (
     <>
@@ -241,7 +259,12 @@ const CsvRosterContent = ({
           </span>
         }
       />
-      <CsvRosterView students={students} loading={isLoading} />
+      <CsvRosterView
+        students={students}
+        loading={isLoading}
+        loadError={isError}
+        onRetryLoad={recheckRoster}
+      />
     </>
   )
 }

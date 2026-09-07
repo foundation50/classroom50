@@ -3,6 +3,7 @@ import { ChevronLeftIcon, ChevronRightIcon } from "./icons"
 
 import { cx } from "./cx"
 import { rtlFlip } from "./icons"
+import { Button } from "./Button"
 import { Select } from "./Select"
 
 // A conventional table pager: a "Show N entries" size selector, a "N to M of T"
@@ -71,9 +72,9 @@ export function TablePagination({
       </span>
 
       <nav className="join" aria-label={t("common.pagination.navAria")}>
-        <button
-          type="button"
-          className="btn btn-sm join-item"
+        <Button
+          size="sm"
+          className="join-item"
           disabled={page <= 0}
           onClick={() => onPageChange(page - 1)}
           aria-label={t("common.pagination.previous")}
@@ -82,33 +83,34 @@ export function TablePagination({
             aria-hidden="true"
             className={cx("size-4", rtlFlip)}
           />
-        </button>
+        </Button>
         {pages.map((p, i) =>
           p === null ? (
-            <button
+            <Button
               key={`gap-${i}`}
-              type="button"
-              className="btn btn-sm join-item btn-disabled"
+              size="sm"
+              className="join-item btn-disabled"
               tabIndex={-1}
               aria-hidden="true"
             >
               …
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               key={p}
-              type="button"
-              className={cx("btn btn-sm join-item", p === page && "btn-active")}
+              size="sm"
+              className="join-item"
+              active={p === page}
               aria-current={p === page ? "page" : undefined}
               onClick={() => onPageChange(p)}
             >
               {p + 1}
-            </button>
+            </Button>
           ),
         )}
-        <button
-          type="button"
-          className="btn btn-sm join-item"
+        <Button
+          size="sm"
+          className="join-item"
           disabled={page >= pageCount - 1}
           onClick={() => onPageChange(page + 1)}
           aria-label={t("common.pagination.next")}
@@ -117,7 +119,7 @@ export function TablePagination({
             aria-hidden="true"
             className={cx("size-4", rtlFlip)}
           />
-        </button>
+        </Button>
       </nav>
     </div>
   )

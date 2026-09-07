@@ -1,4 +1,4 @@
-# Course lifecycle and end of term
+# Course Lifecycle and End of Term
 
 The moments in a course that aren't covered by day-to-day assignment work:
 staging an assignment before release, ending one at the due date, updating
@@ -12,13 +12,38 @@ Two controls build on that:
 
 - **Release date** lists the assignment for everyone once the date passes.
   It controls listing only, not access: a student with the invite link can
-  still accept early, and students who already accepted always see the
-  assignment.
-- **Lock assignment** (in the submissions page's **Actions** menu) blocks
-  access entirely: students can't accept it, and for a private template the
-  student team's read access is removed. **Unlock assignment** reopens it and
-  restores template access. Use it to prepare an assignment with no chance
-  of early accepts.
+  still accept early, students who already accepted always see the
+  assignment, and for a private template in your organization the classroom
+  team can read the template as soon as you save. When you set a future
+  release date on such a template without locking, the form says so and
+  offers to lock the assignment in one click.
+- **Lock assignment** blocks access entirely: students can't see or accept
+  it, and for a private template in your organization the classroom team
+  loses read access to the template. Unlocking reverses both. The toggle is
+  in the **Schedule and access** section of the assignment form and in the
+  submissions page's **Actions** menu; the CLI equivalents are
+  `gh teacher assignment add --locked` and `gh teacher assignment lock`.
+  Nothing unlocks at the release date: to release a locked assignment, unlock
+  it yourself when the date arrives.
+
+### Timed assessments
+
+For an in-class test or exam, create the assignment locked so students can't
+read the template before the session starts.
+
+Prerequisite: the template repository is **private** and inside the
+classroom's organization. Locking a public template only hides the assignment
+in Classroom 50; anyone can still read the repository.
+
+1. Create the assignment with **Lock assignment** turned on, or run
+   `gh teacher assignment add` with `--locked`.
+2. When the session starts, turn **Lock assignment** off in the assignment's
+   settings, or run `gh teacher assignment lock` with `--unlock`.
+3. Send students the invite link.
+4. When the session ends, lock the assignment again to stop late accepts.
+   Existing student repositories are kept.
+
+Saving other settings on a locked assignment keeps it locked.
 
 To try the assignment before students do, accept it yourself from a separate
 student account, or add yourself to the roster; see
@@ -118,7 +143,10 @@ Wrap up a finished course in this order:
 5. Remove students if you need to. Unenrolling a student removes them
    from the roster and classroom team but not from the organization, and
    never deletes repositories; removing them from the organization revokes
-   access but still deletes nothing. See
+   access but still deletes nothing. To remove a whole classroom's students
+   from the organization at once, open the organization's **Members** page,
+   filter by the classroom, select the rows, and use **Actions**, then
+   **Remove from organization**. See
    [Enroll, unenroll, and remove are separate](How-Classroom-50-Works#lifecycle-enroll-unenroll-and-remove-are-separate).
 
 ## Reusing assignments next term
@@ -137,22 +165,34 @@ template inside the organization. The web app offers the same action as
 dialog. See
 [`gh teacher assignment reuse`](gh-teacher#assignment-reuse).
 
+Groups aren't copied either: they are per-assignment, and a new term's
+classroom has a new roster, so a reused group assignment starts with no
+groups. Within one classroom you can carry groups forward from one assignment
+to the next with **Copy groups** on the **Manage groups** page, or
+[`gh teacher team copy`](gh-teacher#team-copy): same members and display
+names, fresh numbering.
+
 ## Resetting an organization (destructive)
 
-**Tear down organization** (web app: organization settings, Danger zone; CLI:
-`gh teacher teardown`) deletes every repository Classroom 50 manages in the
-organization, along with each classroom's GitHub team, after you type an
-explicit confirmation. The CLI also removes any invite teams it finds. Teardown
-exists for development resets and complete decommissioning.
+**Tear down organization** (web app: organization settings, **Danger zone**;
+CLI: `gh teacher teardown`) deletes **every** repository in the organization,
+not only the ones Classroom 50 created, along with each classroom's GitHub
+teams, after you type an explicit confirmation. The `classroom50` repository is
+deleted last, so an interrupted run can be re-run safely. The CLI also removes
+any invite teams it finds and sweeps each classroom's group teams, so no
+assignment's groups are left behind. Teardown exists for development resets and
+complete decommissioning.
 
 > [!WARNING]
-> Teardown deletes student work permanently. Export scores and download
-> submissions first. It requires the `delete_repo` scope, which the CLI only
-> requests when you opt in (`gh teacher login -s delete_repo`).
+> Teardown deletes every repository in the organization, including student work
+> and any repository you created by hand, permanently. Export scores and
+> download submissions first. It requires the `delete_repo` scope, which the
+> CLI only requests when you opt in (`gh teacher login -s delete_repo`) and the
+> web app requests on demand.
 
 ## Further reading
 
-- [Managing Actions cost](Managing-Actions-Cost) for pausing grading over a
+- [Managing Actions Cost](Managing-Actions-Cost) for pausing grading over a
   break.
 - [Which commits grade](Autograding-Basics#which-commits-grade) for submission modes
   and milestone tags.

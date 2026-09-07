@@ -31,7 +31,7 @@ vi.mock("@/hooks/mutations/useRepairFeedbackPr", () => ({
   default: () => ({ mutate, isPending: false }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify }),
+  useToast: () => ({ notify, announce: vi.fn() }),
 }))
 
 import { ReviewButton } from "./ReviewButton"

@@ -46,7 +46,9 @@ const base: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,
@@ -73,6 +75,7 @@ const base: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_visibility: "private",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "auto",
@@ -203,6 +206,62 @@ describe("validateAssignmentForm — group size", () => {
       validateAssignmentForm({ ...base, mode: "group", max_group_size: 0 }, t)
         .max_group_size,
     ).toBe("assignments.form.validation.maxGroupSizeInvalid")
+  })
+
+  it("applies the same bounds to team mode", () => {
+    expect(
+      validateAssignmentForm({ ...base, mode: "team", max_group_size: 999 }, t)
+        .max_group_size,
+    ).toBe("validation.groupSizeRange")
+    expect(
+      validateAssignmentForm({ ...base, mode: "team", max_group_size: 4 }, t),
+    ).toEqual({})
+  })
+})
+
+describe("validateAssignmentForm — team formation", () => {
+  it("rejects a tampered formation value in team mode", () => {
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          mode: "team",
+          max_group_size: 3,
+          team_formation: "anarchy" as never,
+        },
+        t,
+      ).team_formation,
+    ).toBe("assignments.form.validation.teamFormationInvalid")
+  })
+
+  it("ignores the formation outside team mode", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, mode: "individual", team_formation: "anarchy" as never },
+        t,
+      ).team_formation,
+    ).toBeUndefined()
+  })
+})
+
+describe("toSubmitValues — team formation clearing", () => {
+  it("passes the formation through for team mode", () => {
+    const out = toSubmitValues({
+      ...base,
+      mode: "team",
+      max_group_size: 4,
+      team_formation: "student",
+    })
+    expect(out.team_formation).toBe("student")
+  })
+
+  it("resets a stale formation to the default outside team mode", () => {
+    const out = toSubmitValues({
+      ...base,
+      mode: "individual",
+      team_formation: "student",
+    })
+    expect(out.team_formation).toBe("teacher")
   })
 })
 
@@ -705,7 +764,7 @@ describe("toSubmitValues — runtime field clearing", () => {
     // The built-in-only field clearing keys off the built-in autograder toggle
     // (autograding_state), NOT the grading choice — so a built-in assignment
     // graded Manually must KEEP its advanced config on submit even though the
-    // (immutable) Manual choice hides the panes in the UI. Guards the invariant
+    // Manual choice hides the panes in the UI. Guards the invariant
     // deriveFormShape's showBuiltInConfig doc calls out.
     const out = toSubmitValues({
       ...base,
@@ -1073,6 +1132,29 @@ describe("available_from (release date)", () => {
       toSubmitValues({ ...base, available_from_date: " 2026-09-01T12:00 " })
         .available_from_date,
     ).toBe("2026-09-01T12:00")
+  })
+})
+
+describe("locked (Lock assignment toggle)", () => {
+  it("reads an absent flag as unlocked and a stored true as locked", () => {
+    const stored = {
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual" as const,
+      autograder: "default" as const,
+    }
+    expect(assignmentToFormValues(stored).locked).toBe(false)
+    expect(assignmentToFormValues({ ...stored, locked: true }).locked).toBe(
+      true,
+    )
+  })
+
+  it("passes through on submit regardless of repo shape", () => {
+    expect(toSubmitValues({ ...base, locked: true }).locked).toBe(true)
+    expect(
+      toSubmitValues({ ...base, locked: true, empty_repo: true }).locked,
+    ).toBe(true)
+    expect(toSubmitValues(base).locked).toBe(false)
   })
 })
 

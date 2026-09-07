@@ -236,8 +236,10 @@ export async function copyAssignmentToClassroom(
   })
   const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
+  // A locked source copies as locked, so withhold the grant like create and
+  // the CLI's reuse do; unlocking the copy grants it.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && entry.template) {
+  if (needsTeamGrant && entry.template && !entry.locked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
       org,

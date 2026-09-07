@@ -1,7 +1,7 @@
 import { SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, cx } from "@/components/ui"
+import { Alert, Button } from "@/components/ui"
 import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 
 // The submissions dashboard's freshness surface: the shared freshness strip
@@ -14,8 +14,11 @@ import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 // viewer, not just owners. Following data-freshness UX guidance: never let
 // stale data look authoritative, and give the user a direct way to refresh it.
 //
-// The button reads "Collect now" in every state — the same string the Manage
-// hub's collect action uses, because it is the same dispatch.
+// For a viewer who can dispatch the collect (teacher, head TA) the button reads
+// "Collect now" (and "Collecting…" while the run is in flight) — the same
+// strings the Manage hub's collect action uses, because it is the same dispatch. A TA has read-only config-repo access
+// and can't dispatch, so their button is "Refresh" (re-read what a teacher
+// collected) with a note on who to ask.
 //
 // A bare empty_repo assignment has no collect at all — the page omits this
 // component and the header's grading badge explains why. A no_autograder
@@ -28,13 +31,22 @@ export type DataFreshnessProps = {
   // An assignment repo was pushed after the last collect, so the snapshot is
   // (probably) out of date — surfaces the "Out of date" badge.
   stale: boolean
-  // A collect is in flight (dispatching/running) — disables the button and spins.
+  // A collect is in flight (dispatching/running). The button becomes the
+  // in-page progress indicator: it spins, reads "Collecting…", and goes inert
+  // (but stays focusable) until the run settles.
   collecting: boolean
-  // Trigger a Collect Scores run to rebuild scores.json. Omitted when the
-  // viewer can't collect (e.g., empty roster) — then no button renders.
+  // The read-only Refresh variant's re-reads are in flight. Same treatment as
+  // `collecting`, reading "Refreshing…": a TA gets feedback for the click even
+  // though no workflow phase changes for them.
+  refreshing?: boolean
+  // Collect (canCollect) or re-read (otherwise) the submission data. Omitted
+  // when neither applies (e.g., empty roster) — then no button renders.
   onRefresh?: () => void
-  // Repos the live fan-out couldn't read (owner only); > 0 shows a warning so
-  // an incomplete live status doesn't look authoritative.
+  // Whether the viewer can dispatch the collect workflow (config-repo write).
+  // False renders the read-only Refresh variant and the ask-a-teacher note.
+  canCollect?: boolean
+  // Repos the live fan-out couldn't read; > 0 shows a warning so an incomplete
+  // live status doesn't look authoritative.
   errorCount?: number
 }
 
@@ -42,10 +54,13 @@ export function DataFreshness({
   lastCollectedLabel,
   stale,
   collecting,
+  refreshing = false,
   onRefresh,
+  canCollect = true,
   errorCount = 0,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
+  const busy = collecting || refreshing
 
   return (
     <div className="flex flex-col items-start gap-1">
@@ -56,25 +71,40 @@ export function DataFreshness({
         {onRefresh && (
           // A quiet ghost button in both states, so the freshness line doesn't
           // outshout the search/filter controls beside it in the toolbar.
+          // `loading` swallows clicks and `busyLabel` is the in-place progress
+          // text, so no `disabled` (which would drop keyboard focus mid-action).
           <Button
             variant="ghost"
             size="sm"
-            disabled={collecting}
+            loading={busy}
+            busyLabel={
+              collecting
+                ? t("submissions.collect.active")
+                : t("submissions.freshness.refreshing")
+            }
             onClick={onRefresh}
-            aria-live="polite"
             className="text-base-content/70"
-            title={t("submissions.freshness.collectHelp")}
+            title={
+              canCollect
+                ? t("submissions.freshness.collectHelp")
+                : t("submissions.freshness.refreshHelp")
+            }
           >
-            <SyncIcon
-              aria-hidden="true"
-              className={cx("size-4", collecting && "animate-spin")}
-            />
-            {collecting
-              ? t("submissions.collect.active")
-              : t("submissions.collect.label")}
+            <SyncIcon aria-hidden="true" className="size-4" />
+            {canCollect
+              ? t("submissions.collect.label")
+              : t("submissions.freshness.refreshLabel")}
           </Button>
         )}
       </SubmissionFreshnessLine>
+
+      {/* A TA can't rebuild the data themselves: say who can, so a stale
+          snapshot has a next step rather than a dead end. */}
+      {!canCollect && (
+        <p className="text-xs text-base-content/60">
+          {t("submissions.freshness.collectRestricted")}
+        </p>
+      )}
 
       {/* Degraded live read: some repos couldn't be read, so live status is
           provisional. Say so rather than showing an incomplete view as

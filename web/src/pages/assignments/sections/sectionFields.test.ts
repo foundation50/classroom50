@@ -15,7 +15,9 @@ const defaults: CreateAssignmentFormValues = {
   template_repo: "",
   due_date: "",
   available_from_date: "",
+  locked: false,
   max_group_size: 2,
+  team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
   empty_repo: false,
@@ -42,6 +44,7 @@ const defaults: CreateAssignmentFormValues = {
   pass_threshold_enabled: false,
   pass_threshold: 80,
   student_permission: "",
+  repo_visibility: "private",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "off",
@@ -118,6 +121,12 @@ describe("sectionIsConfigured", () => {
     const output = { ...defaults, test_show_output: true }
     expect(sectionIsConfigured("submission", output, defaults)).toBe(true)
     expect(sectionIsConfigured("details", output, defaults)).toBe(false)
+  })
+
+  it("attributes the lock toggle to the schedule and access section", () => {
+    const locked = { ...defaults, locked: true }
+    expect(sectionIsConfigured("schedule", locked, defaults)).toBe(true)
+    expect(sectionIsConfigured("details", locked, defaults)).toBe(false)
   })
 })
 

@@ -2,6 +2,10 @@ import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomPagesSegment } from "@/util/secret"
 import { safeShimTagPatterns } from "@/util/submissionTags"
 import { fetchTextWithFriendlyErrors } from "../queries/assignments"
+import {
+  attemptedPagesUrls,
+  CUSTOM_HOST_TIMEOUT_MS,
+} from "@/github-core/queries"
 import { localizedError } from "@/types/localizedMessage"
 import type { SubmissionMode } from "@/types/classroom"
 
@@ -75,15 +79,23 @@ export function createClassroom50Yaml(params: {
   return lines.join("\n")
 }
 
-function pagesAutograderUrl(params: {
+// The URL(s) a teacher-authored autograder fetch attempts: custom Pages base
+// first when set, github.io fallback — same order and dedupe as the
+// assignments-manifest read (attemptedPagesUrls owns the recipe).
+function pagesAutograderUrls(params: {
   org: string
   classroom: string
   name: string
   secret?: string
-}) {
-  const { org, classroom, name, secret } = params
+  pagesBaseUrl?: string
+}): string[] {
+  const { org, classroom, name, secret, pagesBaseUrl } = params
   const segment = classroomPagesSegment(classroom, secret)
-  return `https://${org}.github.io/${CONFIG_REPO}/${segment}/autograders/${name}.yaml`
+  return attemptedPagesUrls(
+    org,
+    `${segment}/autograders/${name}.yaml`,
+    pagesBaseUrl,
+  )
 }
 
 // The shim's on.push.tags flow sequence: the teacher's milestone patterns (if
@@ -150,6 +162,9 @@ export async function resolveAutograderWorkflow(params: {
   classroom: string
   autograder?: string
   secret?: string
+  // Custom Pages base URL for an org off the github.io default; the
+  // teacher-authored autograder is fetched from it first, like the manifest.
+  pagesBaseUrl?: string
   // The assignment repo's default branch (the shim's push trigger) and the
   // config repo's default branch (the reusable-workflow ref). Only used for the
   // built-in default shim; teacher-authored autograders are branch-agnostic.
@@ -168,6 +183,7 @@ export async function resolveAutograderWorkflow(params: {
     classroom,
     autograder,
     secret,
+    pagesBaseUrl,
     branch,
     configBranch,
     submissionMode,
@@ -185,11 +201,40 @@ export async function resolveAutograderWorkflow(params: {
   // Narrowed: isDefaultAutograder returns true for undefined/"default", so a
   // non-default autograder name is a non-empty string here.
   const autograderName = autograder as string
+  const label = {
+    key: "pagesErrors.autograderLabel",
+    params: { autograderName },
+  }
 
-  const workflow = await fetchTextWithFriendlyErrors(
-    pagesAutograderUrl({ org, classroom, name: autograderName, secret }),
-    { key: "pagesErrors.autograderLabel", params: { autograderName } },
-  )
+  const urls = pagesAutograderUrls({
+    org,
+    classroom,
+    name: autograderName,
+    secret,
+    pagesBaseUrl,
+  })
+
+  // Custom-domain-first with github.io fallback, mirroring
+  // fetchPagesAssignments. Only the (bounded) custom attempt may be a
+  // non-final URL; the last attempt's error is the one surfaced.
+  let workflow: string | undefined
+  let lastErr: unknown
+  for (const [i, url] of urls.entries()) {
+    const isFallbackable = i < urls.length - 1
+    try {
+      workflow = await fetchTextWithFriendlyErrors(
+        url,
+        label,
+        isFallbackable ? { timeoutMs: CUSTOM_HOST_TIMEOUT_MS } : undefined,
+      )
+      break
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  if (workflow === undefined) {
+    throw lastErr
+  }
 
   if (!workflow.includes("jobs:")) {
     throw localizedError({

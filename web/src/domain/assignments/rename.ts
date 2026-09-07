@@ -283,8 +283,9 @@ async function commitRenameConfig(
       })
     }
 
-    // Map in place so the entry keeps its position in the array (unlike the
-    // lock flip's filter+push, a rename shouldn't reorder the manifest).
+    // Map in place so the entry keeps its position in the array: a rename
+    // shouldn't reorder the manifest, same as the edit/lock/close writers in
+    // createEdit.ts and the CLI's UpsertAssignment.
     // Lock for the fan-out window: an accept mid-rename would mint a fresh
     // empty repo at the NEW name and 422 the real repo's rename.
     const nextAssignments: AssignmentsFile = {

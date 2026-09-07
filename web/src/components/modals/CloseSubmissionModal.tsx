@@ -15,6 +15,7 @@ import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
 import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type CloseSubmissionModalProps = {
   open: boolean
@@ -204,6 +205,7 @@ export function CloseSubmissionModal({
   }
 
   const busy = phase === "working"
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal

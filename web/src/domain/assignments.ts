@@ -74,7 +74,11 @@ export {
 } from "./assignments/rename"
 export {
   provisioningSettingsChanged,
+  provisioningChanges,
   provisioningFieldsFromAssignment,
+  editImpactSummary,
+  type EditImpact,
+  type ProvisioningField,
   type ProvisioningFields,
 } from "./assignments/provisioningChange"
 export {
@@ -85,13 +89,6 @@ export {
   type OpenAllRepoResult,
   type OpenAllProgress,
 } from "./assignments/feedbackPr"
-export {
-  submitAssignment,
-  normalizeRepoPath,
-  isReservedUploadPath,
-  type UploadFile,
-  type SubmitAssignmentResult,
-} from "./assignments/submit"
 export {
   downloadAllSubmissions,
   streamSubmissionsToDirectory,

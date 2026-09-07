@@ -55,8 +55,10 @@ import type {
   AssignmentTestFailureDetails,
   RepoPermission,
   RepoFeatures,
+  RepoVisibility,
   SubmissionMode,
   GradingMode,
+  TeamFormation,
 } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
@@ -65,9 +67,11 @@ import {
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
   SUBMISSION_MODES,
   GRADING_MODES,
   GRADING_MAX_POINTS_MIN,
+  TEAM_FORMATIONS,
 } from "@/types/classroom"
 
 // Default manual max-points shown when a teacher first picks manual grading.
@@ -91,12 +95,21 @@ export type CreateAssignmentFormValues = {
   // URL/repo slug for the assignment (edited on create only).
   slug: string
   description: string
-  mode: "group" | "individual"
+  mode: "group" | "individual" | "team"
   template_repo: string
   due_date: string
   // Release date (datetime-local wall-clock, "" when unset).
   available_from_date: string
+  // Lock the assignment against every student surface. Saving a change here has
+  // the same effect as the Lock/Unlock action (the team's read on a private
+  // in-org template is revoked or re-granted). Maps to the wire `locked`.
+  locked: boolean
   max_group_size: number
+  // Who forms the groups of a team assignment (teacher-assigned vs
+  // student-formed). Only meaningful when mode === "team"; reset to the
+  // "teacher" default on submit otherwise so a stale pick can't reach the
+  // wire. Editable on edit (unlike mode).
+  team_formation: TeamFormation
   feedback_pr: boolean
   // Use the template repo's native pull_request_template.md as the Feedback PR
   // body instead of the built-in body. Only meaningful with feedback_pr on and
@@ -104,10 +117,11 @@ export type CreateAssignmentFormValues = {
   // feedback_pr_template. Auto-checked when the form detects a template PR file.
   feedback_pr_template: boolean
   // Truly bare student repos: no starter content, no control files, autograding
-  // and the Feedback PR off. Immutable after creation (the edit form renders it
-  // locked). While checked, the template/autograding/advanced grading sections
-  // are hidden and their values cleared on submit, mirroring runtime_env's
-  // conditional-clear idiom.
+  // and the Feedback PR off. Editable, but a change only affects repos accepted
+  // from then on (the edit form confirms once students have accepted). While
+  // checked, the template/autograding/advanced grading sections are hidden and
+  // their values cleared on submit, mirroring runtime_env's conditional-clear
+  // idiom.
   empty_repo: boolean
   // UI-only repository-source discriminator (never sent verbatim; folds into
   // empty_repo + template_repo on submit). "template" = start from a template
@@ -173,6 +187,12 @@ export type CreateAssignmentFormValues = {
   // pins it. buildAssignmentEntry omits it when it equals the default and
   // clamps group up to admin.
   student_permission: "" | RepoPermission
+  // The visibility each student repo is CREATED with at accept time:
+  // "private" (the default; omitted on the wire) or "public" (peer-review /
+  // portfolio / showcase work — students are warned before accepting).
+  // Editing it later affects only repos created from then on; existing repos
+  // are flipped from the submissions page.
+  repo_visibility: RepoVisibility
   // When the autograder fires: "every-push" (the default; omitted on the
   // wire) or "tag" (only submit/* tag pushes grade — the submit flows push
   // the tag; plain `git push` costs no Actions minutes). Baked into each
@@ -353,7 +373,7 @@ export function validateAssignmentForm(
   if (!Number(value.max_group_size)) {
     errors.max_group_size = t("assignments.form.validation.maxGroupSizeInvalid")
   } else if (
-    value.mode === "group" &&
+    (value.mode === "group" || value.mode === "team") &&
     (!Number.isInteger(Number(value.max_group_size)) ||
       Number(value.max_group_size) < GROUP_SIZE_MIN ||
       Number(value.max_group_size) > GROUP_SIZE_MAX)
@@ -364,6 +384,17 @@ export function validateAssignmentForm(
       min: GROUP_SIZE_MIN,
       max: GROUP_SIZE_MAX,
     })
+  }
+
+  // Team mode requires a formation; guard the radio against a hand-tampered
+  // value (mirrors buildAssignmentEntry's assertTeamFormation).
+  if (
+    value.mode === "team" &&
+    !TEAM_FORMATIONS.includes(value.team_formation)
+  ) {
+    errors.team_formation = t(
+      "assignments.form.validation.teamFormationInvalid",
+    )
   }
 
   // Mirror gh-teacher's write-time validation so a bad test is caught in the
@@ -527,6 +558,13 @@ export function validateAssignmentForm(
     )
   }
 
+  // Guard the visibility picker against a hand-tampered value.
+  if (!REPO_VISIBILITIES.includes(value.repo_visibility)) {
+    errors.repo_visibility = t(
+      "assignments.form.validation.repoVisibilityInvalid",
+    )
+  }
+
   // Mirror the CLI's ValidateSubmissionTags so a bad pattern can't reach the
   // file (the util returns its own user-readable message). Only validated in
   // "tag" mode: the tags field is hidden and cleared on submit for every-push,
@@ -615,7 +653,11 @@ export function toSubmitValues(
     template_repo: isTemplate ? value.template_repo.trim() : "",
     due_date: value.due_date.trim(),
     available_from_date: value.available_from_date.trim(),
+    locked: value.locked,
     max_group_size: value.max_group_size,
+    // Formation only belongs to a team assignment; reset to the default
+    // otherwise so a stale pick can't reach the wire.
+    team_formation: value.mode === "team" ? value.team_formation : "teacher",
     feedback_pr: isEmptyRepo ? false : value.feedback_pr,
     // Only meaningful with a template source and the Feedback PR on; clear it
     // otherwise so a stale toggle can't reach the wire (buildAssignmentEntry
@@ -653,6 +695,9 @@ export function toSubmitValues(
     pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     student_permission: value.student_permission,
+    // Repo visibility is accept-time provisioning like student_permission, so
+    // it is NOT cleared by any repo shape.
+    repo_visibility: value.repo_visibility,
     // The submission MODE is how the app identifies submissions and is valid
     // for every repo shape (with a shim it also drives the trigger; without one
     // it's the detection definition), so it is NOT cleared by noBuiltIn.
@@ -703,7 +748,9 @@ export const useAssignmentForm = (
       available_from_date: utcIsoToDatetimeLocalValue(
         defaultValues?.available_from_date,
       ),
+      locked: defaultValues?.locked ?? false,
       max_group_size: defaultValues?.max_group_size || 2,
+      team_formation: defaultValues?.team_formation ?? "teacher",
       feedback_pr: defaultValues?.feedback_pr ?? true,
       // Default off; on the create form the template probe auto-checks it when
       // a pull_request_template.md is detected. On edit it reflects the saved
@@ -742,6 +789,7 @@ export const useAssignmentForm = (
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
       student_permission: defaultValues?.student_permission ?? "",
+      repo_visibility: defaultValues?.repo_visibility ?? "private",
       submission_mode: resolveSubmissionMode(defaultValues?.submission_mode),
       submission_tags: defaultValues?.submission_tags || "",
       // Create default is "off" (not graded); the option order is off ->
@@ -805,7 +853,10 @@ export const assignmentToFormValues = (
     name: assignment.name,
     slug: assignment.slug,
     description: assignment.description ?? "",
-    mode: assignment.mode === "group" ? "group" : "individual",
+    mode:
+      assignment.mode === "group" || assignment.mode === "team"
+        ? assignment.mode
+        : "individual",
     // A custom source branch isn't supported (#673); the stored branch is always
     // the template's own default, so surface just `owner/repo`.
     template_repo: assignment.template
@@ -813,7 +864,10 @@ export const assignmentToFormValues = (
       : "",
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
     available_from_date: utcIsoToDatetimeLocalValue(assignment.available_from),
+    // Absent means unlocked (the wire's omitempty shape).
+    locked: assignment.locked ?? false,
     max_group_size: assignment.max_group_size ?? 2,
+    team_formation: assignment.team_formation ?? "teacher",
     feedback_pr: assignment.feedback_pr ?? true,
     feedback_pr_template: assignment.feedback_pr_template ?? false,
     empty_repo: assignment.empty_repo ?? false,
@@ -822,7 +876,7 @@ export const assignmentToFormValues = (
     // a template-less repo that is neither bare (empty_repo) nor shim-only
     // (init_shim) — those two no-README states must round-trip to add_readme
     // false so deriveFormShape re-derives empty_repo/init_shim, not a README
-    // repo (which would silently try to flip the immutable flag on re-save).
+    // repo (which would silently flip the provisioning flag on re-save).
     repo_source: assignment.template ? "template" : "none",
     add_readme:
       !(assignment.empty_repo ?? false) && !(assignment.init_shim ?? false),
@@ -859,6 +913,8 @@ export const assignmentToFormValues = (
     // Absent means the mode default; the form shows "Default" and the submit
     // path re-omits it. A stored value pins the picker to that level.
     student_permission: assignment.student_permission ?? "",
+    // Absent means private (the wire default, collapsed by writers).
+    repo_visibility: assignment.repo_visibility ?? "private",
     // Absent means every-push (the wire default, collapsed by writers).
     submission_mode: resolveSubmissionMode(assignment.submission_mode),
     // Milestone tag patterns, joined one-per-line for the textarea.

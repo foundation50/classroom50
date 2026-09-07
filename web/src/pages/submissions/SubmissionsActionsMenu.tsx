@@ -1,10 +1,11 @@
 import {
   CalendarIcon,
-  ChevronDownIcon,
+  TriangleDownIcon,
   DownloadIcon,
   FileZipIcon,
   GitBranchIcon,
   GitPullRequestIcon,
+  GlobeIcon,
   GraphIcon,
   LinkExternalIcon,
   LockIcon,
@@ -45,6 +46,7 @@ export function SubmissionsActionsMenu({
   downloadAllDisabled,
   onBulkAccess,
   onBulkFeatures,
+  onBulkVisibility,
   onBulkTrigger,
   onBulkPause,
   onBulkResume,
@@ -58,10 +60,10 @@ export function SubmissionsActionsMenu({
   collecting: boolean
   regrading: boolean
   regradeAllActive: boolean
-  // Whether the viewer may trigger "Regrade all" (teacher|hta). A plain TA can
-  // Collect and regrade individual rows but not batch-regrade; GitHub 403s a
-  // pull-only TA regardless, so this is the UX gate. Defaults true for callers
-  // that don't gate (the item stays visible).
+  // Whether the viewer may trigger "Regrade all" (teacher|hta). Workflow
+  // dispatch needs config-repo write, which a pull-only TA lacks; GitHub 403s
+  // them regardless, so this is the UX gate. Defaults true for callers that
+  // don't gate (the item stays visible).
   canRegradeAll?: boolean
   emptyRoster: boolean
   // The assignment never autogrades (empty_repo OR no_autograder), so the
@@ -71,7 +73,9 @@ export function SubmissionsActionsMenu({
   // Opens the Metrics modal. Omitted (hidden) in live view, where the graded
   // snapshot stats don't apply.
   onMetrics?: () => void
-  onCollect: () => void
+  // Dispatches a collect. Omitted (hidden) for a viewer who can't dispatch
+  // workflows in the config repo (a TA); they refresh from the toolbar instead.
+  onCollect?: () => void
   onRegradeAll: () => void
   // Opens the "Open all Feedback PRs" modal. Omitted (hidden) when the viewer
   // can't write every repo (non-owner) or the assignment has no Feedback PRs
@@ -93,6 +97,9 @@ export function SubmissionsActionsMenu({
   // onBulkAccess (owner, individual, non-empty, has accepted repos); omitted
   // otherwise. Reconciles existing repos with the assignment's repo_features.
   onBulkFeatures?: () => void
+  // Opens the whole-assignment "Change repository visibility" modal (issue
+  // #766). Same gate as onBulkFeatures; omitted otherwise.
+  onBulkVisibility?: () => void
   // Opens the whole-assignment "Update autograding triggers" modal (retrofits
   // each repo's shim to the assignment's submission_mode). Bulk-features gate
   // plus default-autograder only; omitted otherwise.
@@ -146,18 +153,22 @@ export function SubmissionsActionsMenu({
 
   return (
     <div className="dropdown dropdown-end">
+      {/* The trigger spins only for the action it owns (Regrade all). A
+          collect is indicated by the toolbar's Collect now button, so the
+          menu stays open for business (exports, View run) meanwhile; its
+          workflow items are still gated via disabledActions. */}
       <Button
         variant="primary"
         size="sm"
-        loading={busy}
-        loadingLabel={t("submissions.menu.actions")}
+        loading={regrading}
+        loadingLabel={t("submissions.regradeAll.active")}
       >
-        {busy
-          ? collecting
-            ? t("submissions.collect.active")
-            : t("submissions.regradeAll.active")
+        {regrading
+          ? t("submissions.regradeAll.active")
           : t("submissions.menu.actions")}
-        {!busy && <ChevronDownIcon aria-hidden="true" className="size-4" />}
+        {!regrading && (
+          <TriangleDownIcon aria-hidden="true" className="size-4" />
+        )}
       </Button>
       <DropdownMenu className="w-64">
         {/* Metrics — graded-snapshot stats; hidden in live view (onMetrics
@@ -214,24 +225,27 @@ export function SubmissionsActionsMenu({
         )}
         {/* Collect stays for non-autograding assignments: it's org-wide and
             collect_scores.py skips this assignment server-side (see the
-            SubmissionsPage comment). Only grading actions hide. */}
-        <li>
-          <button
-            type="button"
-            disabled={disabledActions}
-            title={collectTitle}
-            onClick={() => {
-              closeMenu()
-              if (disabledActions) return
-              onCollect()
-            }}
-          >
-            <DownloadIcon aria-hidden="true" className="size-4" />
-            {collecting
-              ? t("submissions.collect.active")
-              : t("submissions.collect.label")}
-          </button>
-        </li>
+            SubmissionsPage comment). Only grading actions hide. Omitted for a
+            viewer who can't dispatch the workflow (a pull-only TA). */}
+        {onCollect && (
+          <li>
+            <button
+              type="button"
+              disabled={disabledActions}
+              title={collectTitle}
+              onClick={() => {
+                closeMenu()
+                if (disabledActions) return
+                onCollect()
+              }}
+            >
+              <DownloadIcon aria-hidden="true" className="size-4" />
+              {collecting
+                ? t("submissions.collect.active")
+                : t("submissions.collect.label")}
+            </button>
+          </li>
+        )}
         {!skipsGrading && (
           <>
             {canRegradeAll && (
@@ -309,6 +323,27 @@ export function SubmissionsActionsMenu({
                 >
                   <SlidersIcon aria-hidden="true" className="size-4" />
                   {t("submissions.bulkFeatures.menuLabel")}
+                </button>
+              </li>
+            )}
+            {onBulkVisibility && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={
+                    emptyRoster
+                      ? t("submissions.bulkVisibility.titleEmptyRoster")
+                      : t("submissions.bulkVisibility.menuTitle")
+                  }
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onBulkVisibility()
+                  }}
+                >
+                  <GlobeIcon aria-hidden="true" className="size-4" />
+                  {t("submissions.bulkVisibility.menuLabel")}
                 </button>
               </li>
             )}

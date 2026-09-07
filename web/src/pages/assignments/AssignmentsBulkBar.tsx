@@ -19,25 +19,21 @@ import { BulkReuseAssignmentsModal } from "@/components/modals/BulkReuseAssignme
 import type { Assignment } from "@/types/classroom"
 
 // The assignments table's selection actions, rendered INSIDE the table head so
-// they sit on the row that already carries the select-all checkbox. A separate
+// they sit on the row that already carries the select-all checkbox: a separate
 // bar above the table would mean a second select-all control for the same
-// state — which is what it did before, and the two boxes disagreed on nothing
-// but were confusing all the same.
+// state.
 //
-// Only the actions that are
-// genuinely plural live here — lock/unlock, delete, and reuse. Edit is
-// navigation to one page, template access is a diagnostic modal rather than an
-// action, clone-submissions renders a CLI command, and collect deliberately
-// stays out: collect-scores.yaml scopes to one assignment or the whole
-// classroom, so a selection would mean N dispatches serialized on the same
-// concurrency group — the fan-out #719 evaluated and rejected. "Collect all"
-// already covers the classroom case.
+// Only the genuinely plural actions live here: lock/unlock, delete, and reuse.
+// Edit is navigation to one page, template access is a diagnostic modal rather
+// than an action, clone-submissions renders a CLI command, and collect
+// deliberately stays out: collect-scores.yaml scopes to one assignment or the
+// whole classroom, so a selection would mean N dispatches serialized on the
+// same concurrency group (the fan-out #719 evaluated and rejected), and
+// "Collect all" already covers the classroom case.
 //
-// Lock and delete go through the batched domain functions: one commit for the
-// whole selection, so the classroom's history gets one entry per user action
-// and a half-applied selection is impossible. Reuse cannot batch (each copy
-// writes the target classroom and may create a repo), so it reports progress
-// and a per-assignment outcome instead of a single verdict.
+// Lock and delete go through the batched domain functions (one commit for the
+// whole selection); reuse cannot batch, so it reports progress and a
+// per-assignment outcome instead. See domain/assignments/bulkActions.ts.
 
 type Props = {
   org: string
@@ -286,15 +282,16 @@ export function AssignmentsBulkBar({
         </div>
       </div>
 
-      {/* One dialog for both directions — they differ only in wording and in
-          the boolean they pass. Neither is destructive: locking is reversible
-          and unlocking restores what it removed, so no type-to-confirm. */}
+      {/* One dialog for both directions: they differ only in wording and in
+          the boolean they pass. Neither is destructive (locking is reversible
+          and unlocking restores what it removed), so no type-to-confirm and no
+          irreversibility warning. */}
       <ConfirmModal
         open={pending === "lock" || pending === "unlock"}
         title={t(lockCopy.title, { count })}
         description={t(lockCopy.body)}
         confirmLabel={t(lockCopy.label)}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         onConfirm={() => runLock(lockCopy.locked)}
         onClose={() => setPending(null)}
@@ -308,6 +305,8 @@ export function AssignmentsBulkBar({
         description={t("assignments.bulk.deleteBody")}
         confirmText={t("assignments.bulk.deleteConfirmWord")}
         confirmLabel={t("assignments.bulk.delete")}
+        tone="error"
+        warning={t("assignments.bulk.deleteWarning")}
         onConfirm={runDelete}
         onClose={() => setPending(null)}
       />

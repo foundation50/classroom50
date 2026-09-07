@@ -1,8 +1,7 @@
 // Package classroom implements the `gh teacher classroom` command group:
 // managing classroom directories inside the <org>/classroom50 repository
-// (add/list/edit/remove) plus `classroom migrate` (imports an existing GitHub
-// Classroom). Only NewCmd is exported. The four-file scaffold lands through the
-// race-safe internal/configwrite seam.
+// (add/list/edit/remove). Only NewCmd is exported. The four-file scaffold lands
+// through the race-safe internal/configwrite seam.
 package classroom
 
 import (
@@ -37,18 +36,13 @@ const (
 // rosterCSVHeader derives from configrepo.RosterColumns so they can't drift.
 var rosterCSVHeader = strings.Join(configrepo.RosterColumns, ",") + "\n"
 
-// defaultAutograderName is the "use the universal default autograder"
-// sentinel, single-sourced from the shared contract; the migrate path stamps
-// it onto imported assignments that don't name their own autograder.
-const defaultAutograderName = contract.DefaultAutograderName
-
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "classroom",
 		Short: "Manage classroom directories inside the classroom50 repository",
 		Long: "Manage classrooms within an org's classroom50 repository.\n\n" +
 			"A classroom is a directory at the root of <org>/classroom50,\n" +
-			"named by its short-name (e.g., cs-principles). Each classroom\n" +
+			"named by its short-name (cs-principles, say). Each classroom\n" +
 			"holds four files: classroom.json (metadata), assignments.json\n" +
 			"(assignment manifest), roster.csv (roster), and scores.json\n" +
 			"(collected scores). The runner-side bootstrap (runner.py)\n" +
@@ -67,7 +61,6 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(classroomArchiveCmd())
 	cmd.AddCommand(classroomUnarchiveCmd())
 	cmd.AddCommand(classroomRemoveCmd())
-	cmd.AddCommand(classroomMigrateCmd())
 	return cmd
 }
 
@@ -97,14 +90,15 @@ func classroomAddCmd() *cobra.Command {
 			"assignment slug and any username.\n\n" +
 			"Unlisted resources (opt-in): pass --unlisted to publish this\n" +
 			"classroom's resources at an unguessable URL path segment\n" +
-			"(`<classroom>/<key>/...`) instead of the guessable default. This\n" +
-			"is obscurity, not access control — anyone who has the link can\n" +
-			"read the files, and links can leak. You'll be shown a generated\n" +
-			"key to accept or replace, or supply your own with --key <value>.\n" +
-			"Off by default.\n\n" +
+			"(`<classroom>/<key>/...`) instead of the guessable default.\n" +
+			"  - This is obscurity, not access control: anyone who has the\n" +
+			"    link can read the files, and links can leak.\n" +
+			"  - You'll be shown a generated key to accept or replace, or\n" +
+			"    supply your own with --key <value>.\n" +
+			"  - Off by default.\n\n" +
 			"If <org>/classroom50 doesn't exist yet, run `gh teacher init\n" +
-			"<org>` first. If <short-name> already exists in the repo, the\n" +
-			"command exits with an error rather than overwriting state —\n" +
+			"<org>` first. If <short-name> already exists in the repository,\n" +
+			"the command exits with an error rather than overwriting state;\n" +
 			"use `gh teacher roster add` or `gh teacher assignment add` to\n" +
 			"modify an existing classroom.",
 		Example: "  gh teacher classroom add cs50-fall-2026 cs-principles --name \"CS Principles\" --term Spring-2026\n" +
@@ -145,8 +139,8 @@ func classroomAddCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", `Full display name for the classroom (e.g., "CS Principles")`)
-	cmd.Flags().StringVar(&term, "term", "", "Term identifier (e.g., Spring-2026)")
+	cmd.Flags().StringVar(&name, "name", "", `Full display name for the classroom, for example "CS Principles"`)
+	cmd.Flags().StringVar(&term, "term", "", "Term identifier, for example Spring-2026")
 	cmd.Flags().BoolVar(&unlisted, "unlisted", false, "Publish this classroom's resources at an unguessable URL path segment (obscurity, not access control; prompts to accept a generated key)")
 	cmd.Flags().StringVar(&key, "key", "", "Supply a specific access key for the unlisted URL (implies --unlisted); must match "+configrepo.SecretPatternDescription)
 	return cmd
@@ -204,7 +198,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	if exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, shortName, branch); err != nil {
 		return err
 	} else if exists {
-		return fmt.Errorf("classroom %q already exists in %s/%s — refusing to overwrite (inspect or edit at https://github.com/%s/%s/tree/%s/%s)",
+		return fmt.Errorf("classroom %q already exists in %s/%s: refusing to overwrite (inspect or edit at https://github.com/%s/%s/tree/%s/%s)",
 			shortName, org, configrepo.ConfigRepoName,
 			org, configrepo.ConfigRepoName, branch, shortName)
 	}
@@ -215,7 +209,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	// classroom50/team/v1 bootstrap record so a plain student can enumerate
 	// their classrooms (and read the capability secret) without config-repo
 	// access — safe because the team is secret.
-	teamDesc, err := configrepo.MarshalTeamDescription(name, term, secret, true)
+	teamDesc, err := configrepo.MarshalTeamDescription(name, term, secret, "", true)
 	if err != nil {
 		return err
 	}
@@ -248,7 +242,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 		_, _ = fmt.Fprintf(errOut, "Warning: couldn't grant staff teams access to the classroom50 repository (%v); staff may lack write until re-affirmed.\n", err)
 	}
 
-	files, err := classroomScaffold(org, shortName, name, term, secret, nil, nil, &team, staffTeams)
+	files, err := classroomScaffold(org, shortName, name, term, secret, &team, staffTeams)
 	if err != nil {
 		return err
 	}
@@ -261,7 +255,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 			return nil, err
 		}
 		if exists {
-			return nil, fmt.Errorf("classroom %q already exists in %s/%s — refusing to overwrite (inspect or edit at https://github.com/%s/%s/tree/%s/%s)",
+			return nil, fmt.Errorf("classroom %q already exists in %s/%s: refusing to overwrite (inspect or edit at https://github.com/%s/%s/tree/%s/%s)",
 				shortName, org, configrepo.ConfigRepoName,
 				org, configrepo.ConfigRepoName, branch, shortName)
 		}
@@ -300,8 +294,8 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 }
 
 // seedStaffTeams creates (or adopts) the staff teams (teacher, hta, ta) and
-// adds the acting teacher as teacher-team maintainer — shared by `classroom
-// add` and `classroom migrate`. It does NOT grant config-repo access; the
+// adds the acting teacher as teacher-team maintainer for `classroom add`.
+// It does NOT grant config-repo access; the
 // caller does that via GrantStaffTeamsConfigRepoAccess after the creator drop
 // (see EnsureStaffTeams). Returns the resolved acting login (empty when it
 // couldn't be read) so the caller can drop that same user from the non-teacher
@@ -356,7 +350,7 @@ func dropCreatorFromNonTeacherTeams(client githubapi.Client, errOut io.Writer, o
 			continue
 		}
 		if err := configrepo.RemoveTeamMembership(client, org, slug, login); err != nil {
-			_, _ = fmt.Fprintf(errOut, "Warning: couldn't remove you (%s) from team %s (%v); you were auto-added when it was created — remove yourself at https://github.com/orgs/%s/teams/%s if you don't want to appear on its roster.\n",
+			_, _ = fmt.Fprintf(errOut, "Warning: couldn't remove you (%s) from team %s (%v); you were auto-added when it was created. Remove yourself at https://github.com/orgs/%s/teams/%s if you don't want to appear on its roster.\n",
 				login, slug, err, org, slug)
 		}
 	}
@@ -384,18 +378,19 @@ func classroomListCmd() *cobra.Command {
 		Short: "List the classrooms registered in the classroom50 repository",
 		Long: "List every classroom registered in <org>/classroom50.\n\n" +
 			"A classroom is a root-level directory holding a classroom.json;\n" +
-			"directories without one (e.g., .github) are skipped.\n\n" +
-			"Archived classrooms (classroom.json `active: false`) are hidden\n" +
-			"by default, mirroring the web's default classes list; pass --all\n" +
-			"to include them. In the default output an archived classroom is\n" +
-			"tagged ` (archived)` after its short-name; in --json it carries\n" +
-			"`\"active\": false`.\n\n" +
-			"Default output is one short-name per line on stdout — pipeable\n" +
-			"into `xargs`, `grep`, or an agent loop. Pass --json to emit the\n" +
-			"full array of {short_name, name, term} objects instead. A\n" +
-			"one-line `<org>/<repo>: N classroom(s)` summary goes to stderr\n" +
-			"unless --quiet is set.\n\n" +
-			"This is a read-only command; no commit lands on the repo.",
+			"directories without one (such as .github) are skipped.\n\n" +
+			"  - Archived classrooms (classroom.json `active: false`) are\n" +
+			"    hidden by default, mirroring the web's default classes list;\n" +
+			"    pass --all to include them. In the default output an archived\n" +
+			"    classroom is tagged ` (archived)` after its short-name; in\n" +
+			"    --json it carries `\"active\": false`.\n" +
+			"  - Default output is one short-name per line on stdout, pipeable\n" +
+			"    into `xargs`, `grep`, or an agent loop.\n" +
+			"  - Pass --json to emit the full array of {short_name, name, term}\n" +
+			"    objects instead.\n" +
+			"  - A one-line `<org>/<repo>: N classroom(s)` summary goes to\n" +
+			"    stderr unless --quiet is set.\n\n" +
+			"This is a read-only command; no commit lands on the repository.",
 		Example: "  gh teacher classroom list cs50-fall-2026\n" +
 			"  gh teacher classroom list cs50-fall-2026 --all\n" +
 			"  gh teacher classroom list cs50-fall-2026 --json",
@@ -486,7 +481,7 @@ func summarizeClassroomList(org string, count int) string {
 	path := fmt.Sprintf("%s/%s", org, configrepo.ConfigRepoName)
 	switch count {
 	case 0:
-		return fmt.Sprintf("%s: no classrooms registered yet — use `gh teacher classroom add %s <short-name>` to create one", path, org)
+		return fmt.Sprintf("%s: no classrooms registered yet. Create one with `gh teacher classroom add %s <short-name>`", path, org)
 	case 1:
 		return fmt.Sprintf("%s: 1 classroom", path)
 	default:
@@ -505,10 +500,10 @@ func classroomEditCmd() *cobra.Command {
 		Long: "Update the display name and/or term in\n" +
 			"<org>/classroom50/<short-name>/classroom.json. At least one of\n" +
 			"--name or --term must be provided.\n\n" +
-			"The short-name itself is immutable — it flows into student\n" +
+			"The short-name itself is immutable: it flows into student\n" +
 			"repo names (`<short-name>-<assignment>-<username>`), so renaming\n" +
 			"would orphan existing repos. To rename, add a new classroom.\n\n" +
-			"Lands as a single Tree commit on the classroom50 repository. Re-running\n" +
+			"Lands as a single commit on the classroom50 repository. Re-running\n" +
 			"with values that already match the file is a no-op.",
 		Example: "  gh teacher classroom edit cs50-fall-2026 cs-principles --name \"CS Principles\"\n" +
 			"  gh teacher classroom edit cs50-fall-2026 cs-principles --term Fall-2026",
@@ -522,7 +517,7 @@ func classroomEditCmd() *cobra.Command {
 			setName := cmd.Flags().Changed("name")
 			setTerm := cmd.Flags().Changed("term")
 			if !setName && !setTerm {
-				return errors.New("nothing to update — pass --name and/or --term")
+				return errors.New("nothing to update: pass --name and/or --term")
 			}
 			client, err := githubapi.RequireAuthClient(cmd)
 			if err != nil {
@@ -531,8 +526,8 @@ func classroomEditCmd() *cobra.Command {
 			return editClassroom(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, shortName, setName, strings.TrimSpace(name), setTerm, strings.TrimSpace(term))
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", `New display name for the classroom (e.g., "CS Principles")`)
-	cmd.Flags().StringVar(&term, "term", "", "New term identifier (e.g., Fall-2026)")
+	cmd.Flags().StringVar(&name, "name", "", `New display name for the classroom, for example "CS Principles"`)
+	cmd.Flags().StringVar(&term, "term", "", "New term identifier, for example Fall-2026")
 	return cmd
 }
 
@@ -553,7 +548,7 @@ func commitClassroomMutation(client githubapi.Client, org, shortName, message st
 			return nil, err
 		}
 		if !ok {
-			return nil, fmt.Errorf("classroom %q not found in %s/%s — run `gh teacher classroom add %s %s` first",
+			return nil, fmt.Errorf("classroom %q not found in %s/%s: run `gh teacher classroom add %s %s` first",
 				shortName, org, configrepo.ConfigRepoName, org, shortName)
 		}
 		var c configrepo.ClassroomJSON
@@ -599,7 +594,7 @@ func editClassroom(client githubapi.Client, out, errOut io.Writer, org, shortNam
 	// Re-project the classroom50/team/v1 record onto the student team so a
 	// renamed/re-termed classroom isn't left showing a stale title in a
 	// student's "My Classrooms". Best-effort: a reconcile failure must not fail
-	// the edit (the config write already landed); a later add/migrate converges.
+	// the edit (the config write already landed); a later add converges.
 	if _, rErr := configrepo.ReconcileClassroomTeamDescription(client, org, shortName, branch); rErr != nil {
 		_, _ = fmt.Fprintf(errOut, "Note: couldn't refresh the student team's classroom record: %v\n", rErr)
 	}
@@ -741,9 +736,9 @@ func classroomRemoveCmd() *cobra.Command {
 		Long: "Delete the <short-name>/ directory (classroom.json,\n" +
 			"assignments.json, roster.csv, scores.json, and any\n" +
 			"autograders/) from <org>/classroom50 in a single commit.\n\n" +
-			"This removes the classroom's configuration only. It does NOT\n" +
+			"This removes the classroom's configuration only. It does not\n" +
 			"delete student assignment repositories already created in the\n" +
-			"org — remove those via the GitHub web UI if intended.\n\n" +
+			"org; remove those via the GitHub web UI if intended.\n\n" +
 			"You'll be asked to type the short-name to confirm; pass --yes\n" +
 			"to skip the prompt (scripted runs only).",
 		Example: "  gh teacher classroom remove cs50-fall-2026 cs-principles\n" +
@@ -782,7 +777,7 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("classroom %q not found in %s/%s — nothing to remove", shortName, org, configrepo.ConfigRepoName)
+		return fmt.Errorf("classroom %q not found in %s/%s: nothing to remove", shortName, org, configrepo.ConfigRepoName)
 	}
 
 	if !skipConfirm {
@@ -867,38 +862,32 @@ func confirmClassroomRemove(in io.Reader, out io.Writer, shortName string) error
 		return fmt.Errorf("read confirmation: %w", err)
 	}
 	if strings.TrimSpace(line) != shortName {
-		return errors.New("confirmation did not match short-name — aborted without deleting anything")
+		return errors.New("confirmation did not match the short-name: aborted without deleting anything")
 	}
 	return nil
 }
 
 // classroomScaffold returns destination-path → content for the four-file
-// scaffold. A nil `entries` normalizes to an empty slice so assignments.json
-// marshals as `[]`. `migration` populates classroom.json's optional
-// `migrated_from` block.
-func classroomScaffold(org, shortName, name, term, secret string, entries []assignment.AssignmentEntry, migration *configrepo.MigratedFromRef, team *configrepo.TeamRef, staffTeams *configrepo.StaffTeamsRef) (map[string]string, error) {
+// scaffold.
+func classroomScaffold(org, shortName, name, term, secret string, team *configrepo.TeamRef, staffTeams *configrepo.StaffTeamsRef) (map[string]string, error) {
 	classroom := configrepo.ClassroomJSON{
-		Schema:       classroomSchemaV1,
-		Name:         name,
-		ShortName:    shortName,
-		Term:         term,
-		Org:          org,
-		Secret:       secret,
-		Team:         team,
-		Teams:        staffTeams,
-		MigratedFrom: migration,
+		Schema:    classroomSchemaV1,
+		Name:      name,
+		ShortName: shortName,
+		Term:      term,
+		Org:       org,
+		Secret:    secret,
+		Team:      team,
+		Teams:     staffTeams,
 	}
 	classroomBytes, err := output.JSONPretty(classroom)
 	if err != nil {
 		return nil, fmt.Errorf("encode classroom.json: %w", err)
 	}
 
-	if entries == nil {
-		entries = []assignment.AssignmentEntry{}
-	}
 	assignmentsBytes, err := assignment.EncodeAssignments(assignment.AssignmentsJSON{
 		Schema:      assignmentsSchemaV1,
-		Assignments: entries,
+		Assignments: []assignment.AssignmentEntry{},
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encode assignments.json: %w", err)

@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { AlertIcon, CalendarIcon, DownloadIcon } from "@/components/ui/icons"
+import {
+  AlertIcon,
+  CalendarIcon,
+  DownloadIcon,
+  PeopleIcon,
+} from "@/components/ui/icons"
 import Papa from "papaparse"
 
 import { useQueryClient } from "@tanstack/react-query"
@@ -22,7 +27,8 @@ import {
   EmphasisLtr,
   HelpTooltip,
   MetricBar,
-  Spinner,
+  InlineSpinner,
+  RouterButton,
 } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
@@ -36,11 +42,13 @@ import { CloneSubmissionsModal } from "@/pages/submissions/CloneSubmissionsModal
 import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { CloseSubmissionModal } from "@/components/modals/CloseSubmissionModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
+import { BulkRepoVisibilityModal } from "@/components/modals/BulkRepoVisibilityModal"
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import {
+  AssignmentTitleWithSlug,
   AutogradingMeta,
   MetaItem,
   MetaStrip,
@@ -58,6 +66,7 @@ import {
   acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
+  assignmentRepoCandidateLogins,
   assignmentRepoNames,
   buildScoresCsvRows,
   buildSectionLookup,
@@ -66,6 +75,7 @@ import {
   displayPageOwners,
   distinctSections,
   existingGroupRepos,
+  existingTeamRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
@@ -73,16 +83,20 @@ import {
   effectiveCollectedAt,
   mergeDetectedSubmissions,
   mergeLiveRows,
+  orgReposReadEnabled,
   reconcileNonSubmitters,
   pendingMayHide,
   rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
+  showCheckingAccepted,
   showsNonSubmitters,
   snapshotIsStale,
   sortNameMode,
+  staffRolesByLogin,
   studentInSection,
   submissionRosterStudents,
+  teamsWithoutRepos,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
@@ -94,18 +108,24 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { getName, sortStudentsByName } from "@/util/students"
-import { studentRepoName } from "@/util/studentRepo"
+import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
+import { groupDisplayName } from "@/util/groupTeam"
+import useGroupTeams from "@/hooks/useGroupTeams"
+import useGroupTeamMembers from "@/hooks/useGroupTeamMembers"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { downloadBlob } from "@/util/downloadBlob"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { isClassroomArchived } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
-import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import { useAssignmentRepos } from "@/hooks/useAssignmentRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
-import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
+import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
+import { useCollectController } from "./submissions/useCollectController"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
@@ -113,7 +133,6 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { can } from "@/authz"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
@@ -138,27 +157,27 @@ import { GitHubLink } from "@/components/GitHubLink"
 // identity is stable across renders and doesn't churn the memo.
 const EMPTY_SET: Set<string> = new Set()
 
+// Stable empty list for the disabled legacy collaborators fan-out (team mode).
+const EMPTY_GROUP_REPOS: { owner: string; repoName: string }[] = []
+
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
   const queryClient = useQueryClient()
   const navigate = useNavigate()
-  // Regrade-all is a config-repo-write tier action (teacher|hta); Collect and
-  // per-row regrade stay all-staff (the page already gates entry on
-  // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
-  const { role: classroomRole } = useClassroomRoleContext()
-  const canRegradeAll = can("authorAssignments", { classroomRole })
-  // Live reads (submit/* releases) hit student repos with the VIEWER's personal
-  // token. Only an org owner is admin on every repo and can read them; a TA/HTA
-  // is granted per-repo read at collect time but can't enumerate the org, so
-  // their live fan-out would 404. So the live overlay is owner-only — non-owners
-  // render purely from the collected snapshot. `isOwner` is fail-closed: false
-  // until the org role is CONFIRMED owner, so the page shows the snapshot without
-  // a live flash while the role resolves.
-  const { isOwner } = useIsOrgOwner()
+  // Page entry is gated on viewClassroomStaffContent; what the viewer may DO
+  // here (dispatch workflows, owner-only bulk actions) comes from one place.
+  const {
+    isOwner,
+    acceptanceComplete,
+    canDispatchWorkflows,
+    canRegradeAll,
+    canChangeVisibility,
+  } = useStaffCapabilities()
   const {
     data: scoresData,
     refetch: refetchScores,
+    isRefetching: scoresRefetching,
     isError: scoresError,
     error: scoresErrorObj,
   } = useGetScores(org, classroom)
@@ -166,8 +185,11 @@ const SubmissionsPageContent = () => {
   // comes from the PRIVATE config repo (source:"config"); students never reach
   // this page. `assignments` carries the sibling list for repo-prefix
   // disambiguation below.
-  const { assignment: assignmentInfo, assignments: allAssignments } =
-    useSubmissionAssignment(org, classroom, assignment, { source: "config" })
+  const {
+    assignment: assignmentInfo,
+    assignments: allAssignments,
+    isLoading: assignmentLoading,
+  } = useSubmissionAssignment(org, classroom, assignment, { source: "config" })
   // Team-driven usernames: the classroom GitHub teams are authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
   // Student[], so map enrolled team rows into that shape (see
@@ -179,11 +201,16 @@ const SubmissionsPageContent = () => {
   const { students: csvStudents } = useGetStudents(org, classroom)
   // Surface the team fetch's error/loading: a transient or permission failure
   // of the enrolled source of truth must render as error+retry, not an
-  // authoritative empty roster.
+  // authoritative empty roster. A non-owner off the secret student team reads
+  // it as 404, so their rows come from roster.csv (rosterSource "csv"); when
+  // even that has no students the roster is UNKNOWN, never empty (see
+  // rosterReady).
   const {
     rows: teamRows,
     isLoading: rosterLoading,
     isError: rosterError,
+    rosterSource,
+    studentRosterKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
 
@@ -195,6 +222,13 @@ const SubmissionsPageContent = () => {
   // hidden. Students are always shown (a not-yet-accepted student still lists as
   // "not accepted"), unchanged.
   const isGroupAssignment = assignmentInfo?.mode === "group"
+  // Team mode: a shared repo backed by a per-assignment GitHub Team. Rows are
+  // keyed by the `group-<n>` owner segment, members resolve from LIVE team
+  // membership, and the legacy collaborator machinery stays untouched.
+  const isTeamAssignment = assignmentInfo?.mode === "team"
+  // Either shared-repo flavor (legacy group or team): everywhere rows are
+  // keyed by a shared repo rather than a student login.
+  const isGroupFlavor = isGroupAssignment || isTeamAssignment
   // Whether the assignment entry has been read. Every value derived from it
   // falls back to a default while the query loads and after it fails, so any
   // gate that depends on the real mode or autograder must require this too.
@@ -226,11 +260,36 @@ const SubmissionsPageContent = () => {
   // staleness heuristic). `refetch` is wired to Collect now + collect-completion so
   // `latestPush` isn't frozen at page load (else a push after load never flips
   // the freshness line to "Out of date").
+  // For an individual assignment the repo names are derivable from the enrolled
+  // roster, so the read is scoped to them and can skip walking a large org.
+  // When they are not (see assignmentRepoCandidateLogins) it reads the full
+  // listing rather than probing a partial candidate set, which would stop at
+  // page one.
+  const candidateLogins = useMemo(
+    () =>
+      assignmentRepoCandidateLogins(isGroupFlavor, teamRows, {
+        rosterKnown: studentRosterKnown,
+        rosterError,
+      }),
+    [studentRosterKnown, rosterError, isGroupFlavor, teamRows],
+  )
   const {
     data: orgRepos,
     isLoading: orgReposLoading,
+    isPending: orgReposPending,
+    isRefetching: orgReposRefetching,
     refetch: refetchOrgRepos,
-  } = useGetOrgRepos(org ?? "")
+  } = useAssignmentRepos({
+    org: org ?? "",
+    classroom: classroom ?? "",
+    assignment: assignment ?? "",
+    logins: candidateLogins,
+    enabled: orgReposReadEnabled({
+      assignmentLoading,
+      isGroupFlavor,
+      rosterLoading,
+    }),
+  })
   // Sibling slugs guard group-repo attribution against a slug-extending sibling
   // ("hw1-bonus" under "hw1"); see existingGroupRepos.
   const siblingSlugs = useMemo(
@@ -239,28 +298,99 @@ const SubmissionsPageContent = () => {
   )
   const groupRepoList = useMemo(
     () =>
-      isGroupAssignment
-        ? existingGroupRepos(
-            orgRepos,
-            classroom ?? "",
-            assignment ?? "",
-            siblingSlugs,
-          )
-        : [],
-    [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
+      isTeamAssignment
+        ? existingTeamRepos(orgRepos, classroom ?? "", assignment ?? "")
+        : isGroupAssignment
+          ? existingGroupRepos(
+              orgRepos,
+              classroom ?? "",
+              assignment ?? "",
+              siblingSlugs,
+            )
+          : [],
+    [
+      isGroupAssignment,
+      isTeamAssignment,
+      orgRepos,
+      classroom,
+      assignment,
+      siblingSlugs,
+    ],
   )
-  // Members of every existing group repo (founders known from the repo name,
-  // plus each repo's collaborators). Feeds both the staff-acceptance gate and
-  // the "no group" reconciliation below (one shared derivation).
-  const { logins: groupRepoMembers, isPending: groupMembersPending } =
-    useGroupRepoMemberLogins(org ?? "", groupRepoList)
+  // Members of every existing group repo. Legacy group: founders (from the
+  // repo name) plus each repo's collaborators. Team mode: LIVE team
+  // membership (the authoritative link) — the collaborators fan-out is
+  // disabled (empty repo list) so legacy behavior stays byte-identical.
+  const { logins: groupCollabLogins, isPending: groupCollabPending } =
+    useGroupRepoMemberLogins(
+      org ?? "",
+      isTeamAssignment ? EMPTY_GROUP_REPOS : groupRepoList,
+    )
+  const groupTeamsQuery = useGroupTeams(org, classroom, assignment, {
+    enabled: isTeamAssignment,
+  })
+  const groupTeams = groupTeamsQuery.data
+  // Whether the teams listing has SETTLED (fetched successfully at least
+  // once). Gates both mismatch indicators — the repo-less team rows and the
+  // per-row "team missing" error — so neither flashes while the listing
+  // loads (or asserts anything after a failed listing).
+  const teamsSettled = isTeamAssignment && groupTeamsQuery.isSuccess
+  const groupTeamSlugs = useMemo(
+    () => (groupTeams ?? []).map((team) => team.slug),
+    [groupTeams],
+  )
+  const {
+    membersBySlug: teamMembersBySlug,
+    logins: teamMemberLogins,
+    isPending: teamMembersPending,
+  } = useGroupTeamMembers(org ?? "", groupTeamSlugs)
+  const groupRepoMembers = isTeamAssignment
+    ? teamMemberLogins
+    : groupCollabLogins
+  const groupMembersPending = isTeamAssignment
+    ? groupTeamsQuery.isLoading || teamMembersPending
+    : groupCollabPending
+  // Team lookups keyed by the `group-<n>` owner segment (lowercased): live
+  // member logins, display names ("Group <n>" when the record has none), and
+  // the team slug (recorded on a manual override entry).
+  const teamByOwner = useMemo(() => {
+    const map = new Map<string, GroupTeamRef>()
+    for (const team of groupTeams ?? []) {
+      map.set(`${GROUP_REPO_SEGMENT}${team.n}`, team)
+    }
+    return map
+  }, [groupTeams])
+  const groupMemberLogins = useMemo(() => {
+    if (!isTeamAssignment) return undefined
+    const map = new Map<string, string[]>()
+    for (const [owner, team] of teamByOwner) {
+      const members = teamMembersBySlug.get(team.slug)
+      if (members) {
+        map.set(
+          owner,
+          members.map((m) => m.login),
+        )
+      }
+    }
+    return map
+  }, [isTeamAssignment, teamByOwner, teamMembersBySlug])
+  const groupDisplayNames = useMemo(() => {
+    if (!isTeamAssignment) return undefined
+    const map = new Map<string, string>()
+    for (const [owner, team] of teamByOwner) {
+      map.set(owner, groupDisplayName(team, t))
+    }
+    return map
+  }, [isTeamAssignment, teamByOwner, t])
   const groupRepoFounders = useMemo(
     () =>
       new Set([
-        ...groupRepoList.map((repo) => repo.owner),
+        // Team owners are `group-<n>` counters, not logins — members alone
+        // carry the identity there.
+        ...(isTeamAssignment ? [] : groupRepoList.map((repo) => repo.owner)),
         ...groupRepoMembers,
       ]),
-    [groupRepoList, groupRepoMembers],
+    [isTeamAssignment, groupRepoList, groupRepoMembers],
   )
   // Staff logins who accepted an INDIVIDUAL assignment (their repo exists). Only
   // pure-staff rows need gating; a student row is always included, so scope this
@@ -268,7 +398,7 @@ const SubmissionsPageContent = () => {
   // groupRepoFounders (a founder/member set), so this stays individual-only.
   const acceptedStaffLogins = useMemo(() => {
     const set = new Set<string>()
-    if (isGroupAssignment || !orgRepos) return set
+    if (isGroupFlavor || !orgRepos) return set
     const repoNames = new Set(orgRepos.map((r) => r.name.toLowerCase()))
     for (const row of teamRows) {
       if (row.state !== "enrolled" || hasStudentEnrollment(row)) continue
@@ -281,7 +411,7 @@ const SubmissionsPageContent = () => {
       }
     }
     return set
-  }, [teamRows, orgRepos, isGroupAssignment, classroom, assignment])
+  }, [teamRows, orgRepos, isGroupFlavor, classroom, assignment])
   const [sort, setSort] = useState<SubmissionSort>("name-first")
   // The roster spine's name order follows the user's first/last choice in every
   // mode. `sortNameMode` maps a time sort to first-name order, so a non-name
@@ -299,6 +429,9 @@ const SubmissionsPageContent = () => {
       ),
     [teamRows, acceptedStaffLogins, groupRepoFounders, rosterSortMode],
   )
+  // Staff roles per login, for the row chips that mark a teacher/TA testing
+  // the assignment (they enter the spine via acceptedStaffLogins above).
+  const staffRoles = useMemo(() => staffRolesByLogin(teamRows), [teamRows])
   // Gate Regrade all / Collect now on an empty roster: dispatching with no
   // students is wasted effort. `show` is loading-aware (won't flash before the
   // roster resolves).
@@ -341,15 +474,18 @@ const SubmissionsPageContent = () => {
   const [cloneCliOpen, setCloneCliOpen] = useState(false)
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
   const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
+  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
   const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
   const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
   const [closeSubmissionOpen, setCloseSubmissionOpen] = useState(false)
 
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
-  // Gate on a resolved roster so a transient load/permission failure falls back
-  // to unscoped rows rather than blanking a populated gradebook.
-  const rosterReady = !rosterLoading && !rosterError
+  // Gate on a resolved, KNOWN roster so a transient load/permission failure, or
+  // a viewer who can't see the student list at all, falls back to unscoped rows
+  // rather than blanking a populated gradebook (discussion #677: every row
+  // filtered out against a roster the viewer couldn't read).
+  const rosterReady = !rosterLoading && !rosterError && studentRosterKnown
   const snapshotRows = useMemo(() => {
     return scoresData?.submissions?.[assignment ?? ""] || []
   }, [scoresData, assignment])
@@ -377,23 +513,65 @@ const SubmissionsPageContent = () => {
       setFilters((current) => applyStatusSelection(current, statusParam))
     }
   }
-  // Client-side table pagination over the display list. `page` is 0-based;
-  // clamped at render (pageBounds) so a filter that shrinks the list can't
-  // strand the view on an empty page.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  // Client-side table pagination over the display list, held in the URL
+  // (Primer: pagination is URL state — reload/back keep the page and a view
+  // is sharable). 1-based `?page=` in the URL, 0-based internally; page 1 and
+  // the default size never travel. Clamped at render (pageBounds) so a
+  // filter that shrinks the list can't strand the view on an empty page.
+  const { page: pageParam, pageSize: pageSizeParam } = useSearch({
+    strict: false,
+  })
+  const page = (pageParam ?? 1) - 1
+  const pageSize = pageSizeParam ?? DEFAULT_PAGE_SIZE
+  const setPage = useCallback(
+    (next: number) => {
+      void navigate({
+        to: ".",
+        // Paging is a navigation step: pushed, so Back walks pages.
+        search: (prev) => ({
+          ...prev,
+          page: next >= 1 ? next + 1 : undefined,
+        }),
+        resetScroll: false,
+      })
+    },
+    [navigate],
+  )
+  const setPageSize = useCallback(
+    (next: number) => {
+      void navigate({
+        to: ".",
+        search: (prev) => ({
+          ...prev,
+          pageSize: next === DEFAULT_PAGE_SIZE ? undefined : next,
+          page: undefined,
+        }),
+        resetScroll: false,
+      })
+    },
+    [navigate],
+  )
   // Reset to the first page whenever the visible set changes (new search,
-  // filter, sort, page size, or a different assignment). Done render-purely via
-  // a stored view signature (setState-during-render, not an effect) so the reset
-  // lands in the same commit as the change — no extra render, and no
-  // setState-in-effect. React bails out of the re-render once the signature
-  // matches.
+  // filter, sort, or a different assignment). The URL page param is cleared
+  // via a replace so the reset doesn't pollute history; the render-time
+  // clamp covers the frame until the navigation lands.
   const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
-  const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
-  if (viewSignature !== lastViewSignature) {
-    setLastViewSignature(viewSignature)
-    setPage(0)
-  }
+  const lastViewSignatureRef = useRef(viewSignature)
+  useEffect(() => {
+    if (viewSignature === lastViewSignatureRef.current) return
+    lastViewSignatureRef.current = viewSignature
+    if (pageParam !== undefined) {
+      void navigate({
+        to: ".",
+        search: (prev) => ({
+          ...prev,
+          page: undefined,
+        }),
+        replace: true,
+        resetScroll: false,
+      })
+    }
+  }, [viewSignature, pageParam, navigate])
   // The animation signature drops the search text: re-keying the rows on every
   // keystroke would remount and replay the whole tbody entrance while typing.
   // Filter/sort/size/assignment changes still re-stagger.
@@ -417,11 +595,11 @@ const SubmissionsPageContent = () => {
     ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
     : null
 
-  // Whether the live presence overlay applies here: owner-only (personal token
-  // can read the repos) and an assignment that autogrades (empty_repo and
-  // no_autograder never produce submit/* releases). A non-owner renders purely
-  // from the collected snapshot.
-  const liveCapable = isOwner && !skipsGrading
+  // Whether the live presence overlay applies here: an assignment that
+  // autogrades (empty_repo and no_autograder never produce submit/* releases).
+  // Runs for every staff viewer: reading a release needs only repo read, and a
+  // repo this viewer can't see 404s into "not submitted" inside the fan-out.
+  const liveCapable = !skipsGrading
 
   // Detection is a SEPARATE capability from live presence, and deliberately
   // wider: it reads raw repo state (commits/tags), so it works for a
@@ -429,7 +607,7 @@ const SubmissionsPageContent = () => {
   // collect_scores.py skips outright — leaving scores.json permanently empty
   // (issue #659). Only a bare empty_repo is excluded: it carries no submission
   // definition to detect against.
-  const detectionCapable = isOwner && !isEmptyRepoAssignment
+  const detectionCapable = !isEmptyRepoAssignment
 
   // Either overlay makes the view more than a replay of the collected snapshot,
   // so the affordances that describe "we're still resolving rows beyond the
@@ -442,12 +620,27 @@ const SubmissionsPageContent = () => {
   // from the SNAPSHOT display list (never the live-merged rows), so honoring the
   // real sort/filters can't loop the fan-out's output back into its input.
   // PAGE-SCOPED: it reads only the repos on the CURRENT table page (#359's burst
-  // mitigation). Owner-only, off for empty_repo.
+  // mitigation). Off for empty_repo.
   const snapshotScoped = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
     [rosterReady, snapshotRows, students],
   )
+  // Team mode's inverse gap (state 1): live teams whose expected repo doesn't
+  // exist and that no score row credits — otherwise invisible on this view.
+  // Derived from the SNAPSHOT owners (like the fan-out spine): a live-only row
+  // requires an existing repo, which already excludes its team here, so the
+  // snapshot set is complete and can't loop the fan-out's output back into its
+  // input. Computed only once the teams query has settled AND the org repo
+  // list is loaded, so the rows can't flash while either source resolves.
+  const missingRepoTeams = useMemo(() => {
+    if (!teamsSettled || !orgRepos) return []
+    return teamsWithoutRepos(
+      groupTeams ?? [],
+      new Set(groupRepoList.map((repo) => repo.owner)),
+      new Set(snapshotScoped.map((row) => row.owner.toLowerCase())),
+    )
+  }, [teamsSettled, orgRepos, groupTeams, groupRepoList, snapshotScoped])
   // Non-submitter pool for the fan-out's display list, filtered by the SAME
   // query + section + submission axes the rendered table applies — so the
   // fanned page lines up with the visible page. The ACCEPTED axis is neutralized
@@ -468,7 +661,7 @@ const SubmissionsPageContent = () => {
   )
   const liveOwnerArgs = useMemo(
     () => ({
-      isGroup: isGroupAssignment,
+      isGroup: isGroupFlavor,
       sort,
       students,
       rows: filterAndSortRows(snapshotScoped, {
@@ -481,9 +674,10 @@ const SubmissionsPageContent = () => {
       }),
       nonSubmitters: liveNonSubmitterPool,
       groupRepos: groupRepoList,
+      teamsWithoutRepos: missingRepoTeams,
     }),
     [
-      isGroupAssignment,
+      isGroupFlavor,
       sort,
       students,
       snapshotScoped,
@@ -492,6 +686,7 @@ const SubmissionsPageContent = () => {
       sectionByUsername,
       groupRepoList,
       liveNonSubmitterPool,
+      missingRepoTeams,
     ],
   )
   const livePageOwners = useMemo(
@@ -508,7 +703,7 @@ const SubmissionsPageContent = () => {
     classroom,
     assignment,
     repoOwners: livePageOwners,
-    // Owner-only, not empty_repo — see liveCapable.
+    // Not empty_repo — see liveCapable.
     enabled: liveCapable,
   })
 
@@ -527,22 +722,23 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    // Owner-only and detection-capable (no_autograder included) — see
-    // detectionCapable. Resolved-only: otherwise the fan-out starts with an
+    // Detection-capable (no_autograder included) — see detectionCapable.
+    // Resolved-only: otherwise the fan-out starts with an
     // undefined mode and counts a tag-mode assignment in branch mode.
     enabled: detectionCapable && assignmentResolved,
   })
 
-  // Overlay live presence over the snapshot for a live-capable viewer (snapshot
-  // wins per owner for GRADES; live adds a pending row for an as-yet-uncollected
-  // submitter and bumps stale counts), then overlay detection the same way (a
-  // second count/presence-only overlay on the same snapshot — KTD6). A viewer
-  // with NEITHER overlay (TA/HTA) uses the collected snapshot ALONE. The two
-  // overlays are independent: a no_autograder assignment is detection-capable
-  // but not live-capable, and detection alone is what makes its submissions
-  // visible at all (issue #659). Then roster-scope, gated on a resolved roster
-  // so a transient failure falls back to unscoped rows rather than blanking a
-  // populated gradebook.
+  // Overlay live presence over the snapshot for a live-capable assignment
+  // (snapshot wins per owner for GRADES; live adds a pending row for an
+  // as-yet-uncollected submitter and bumps stale counts), then overlay
+  // detection the same way (a second count/presence-only overlay on the same
+  // snapshot — KTD6). An assignment with NEITHER overlay (a bare empty_repo)
+  // uses the collected snapshot ALONE. The two overlays are independent: a
+  // no_autograder assignment is detection-capable but not live-capable, and
+  // detection alone is what makes its submissions visible at all (issue #659).
+  // Then roster-scope, gated on a resolved, known roster so a transient
+  // failure or an unreadable student list falls back to unscoped rows rather
+  // than blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
     if (!overlayCapable) {
       return rosterReady
@@ -611,8 +807,14 @@ const SubmissionsPageContent = () => {
   // Group mode additionally waits for the org repo list: its rows (and the
   // "No groups yet" empty state) are derived from repo existence, so painting
   // before the list resolves would flash a wrong affirmative claim.
+  // Team mode also waits for the group-teams listing: row titles come from the
+  // teams' display names and would first paint as raw repo names, then flip.
+  // isLoading (not isFetching) so a background refetch never blanks the table.
   const initialLoading =
-    !scoresLoaded || rosterLoading || (isGroupAssignment && orgReposLoading)
+    !scoresLoaded ||
+    rosterLoading ||
+    (isGroupFlavor && orgReposLoading) ||
+    (isTeamAssignment && groupTeamsQuery.isLoading)
   const nonSubmittersReady =
     scoresLoaded && !livePending && !detectedPending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
@@ -655,7 +857,7 @@ const SubmissionsPageContent = () => {
       acceptedUsernames(orgRepos, classroom ?? "", assignment ?? "", students),
     [orgRepos, classroom, assignment, students],
   )
-  const acceptedAvailable = !isGroupAssignment && orgRepos != null
+  const acceptedAvailable = !isGroupFlavor && orgRepos != null
 
   // Every existing assignment repo name (individual + group), for the bulk
   // "Open all Feedback PRs" action. Derived from the already-loaded org repo
@@ -665,6 +867,7 @@ const SubmissionsPageContent = () => {
     () =>
       assignmentRepoNames({
         isGroup: isGroupAssignment,
+        isTeam: isTeamAssignment,
         repos: orgRepos,
         classroom: classroom ?? "",
         assignment: assignment ?? "",
@@ -673,6 +876,7 @@ const SubmissionsPageContent = () => {
       }),
     [
       isGroupAssignment,
+      isTeamAssignment,
       orgRepos,
       classroom,
       assignment,
@@ -680,6 +884,25 @@ const SubmissionsPageContent = () => {
       siblingSlugs,
     ],
   )
+
+  // This assignment's currently-PUBLIC repos (lowercased), for the table's
+  // per-row warning badge — derived from the already-loaded org repo list, no
+  // extra reads. undefined while that list loads, so the table renders no
+  // badges rather than asserting "all private".
+  const publicRepoNames = useMemo(() => {
+    if (!orgRepos) return undefined
+    const assignmentRepos = new Set(
+      allAssignmentRepos.map((name) => name.toLowerCase()),
+    )
+    const set = new Set<string>()
+    for (const repo of orgRepos) {
+      const name = repo.name.toLowerCase()
+      if (repo.private === false && assignmentRepos.has(name)) {
+        set.add(name)
+      }
+    }
+    return set
+  }, [orgRepos, allAssignmentRepos])
 
   // Group repos that exist but have no submission yet: for group assignments the
   // repo is named after the founder (not each member), so acceptance can't be
@@ -769,7 +992,7 @@ const SubmissionsPageContent = () => {
   const submittedGroups = groupRepoList.length - unsubmittedGroupRepos.length
   // Show the bar once its denominator is real: repo list resolved, and (for
   // groups) at least one group repo exists.
-  const showSubmissionProgress = isGroupAssignment
+  const showSubmissionProgress = isGroupFlavor
     ? orgRepos != null && groupRepoList.length > 0
     : acceptedAvailable
 
@@ -848,29 +1071,62 @@ const SubmissionsPageContent = () => {
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
 
-  // Scope the manual collect to this assignment: the workflow serializes runs
-  // per scope and the Python side collects only the matching slug, so "Collect
-  // now" here doesn't rebuild every classroom's gradebook.
-  const collectScores = useTriggerScoreCollection(
+  // Repo-less teams, gated like the unsubmitted group repos (hidden while a
+  // narrowing filter other than "not submitted" is active) and matched against
+  // the search by display name or `group-<n>` owner segment.
+  const visibleMissingRepoTeams = useMemo(() => {
+    if (!showsNonSubmitters(effectiveFilters)) return []
+    const q = query.trim().toLowerCase()
+    if (!q) return missingRepoTeams
+    return missingRepoTeams.filter((team) => {
+      const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+      if (owner.includes(q)) return true
+      const name = groupDisplayNames?.get(owner)?.toLowerCase() ?? ""
+      return name.includes(q)
+    })
+  }, [effectiveFilters, query, missingRepoTeams, groupDisplayNames])
+
+  // The read-only Refresh's own re-reads, for its spinner and latch (a viewer
+  // who dispatches is gated by the collect itself).
+  const refreshing =
+    !canDispatchWorkflows && (scoresRefetching || orgReposRefetching)
+  const {
+    collectScores,
+    collecting,
+    refresh: refreshSubmissions,
+  } = useCollectController({
     org,
-    classroom && assignment ? { classroom, assignment } : undefined,
-  )
+    classroom,
+    assignment,
+    names: {
+      classroom: classroomMeta?.name || classroomMeta?.short_name,
+      assignment: assignmentInfo?.name,
+    },
+    canDispatch: canDispatchWorkflows,
+    refetchScores,
+    refetchOrgRepos,
+    refetchLive: liveCapable ? refetchLive : undefined,
+    refetchDetected: detectionCapable ? refetchDetected : undefined,
+    refreshing,
+  })
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   // Lock/unlock this assignment. The page owns the mutation (like Regrade all)
   // and surfaces the non-fatal template-access warning; the menu just triggers
   // the confirm. Gated on authoring rights at the call site.
   const setLock = useSetAssignmentLock(org ?? "", classroom ?? "", (result) => {
     if (result.templateAccessWarning) {
+      // Kept as a toast: a non-fatal partial outcome with no page anchor.
       notify({ tone: "warning", message: result.templateAccessWarning })
       return
     }
-    notify({
-      tone: "success",
-      message: result.locked
+    // The locked/closed banner and header badge flip in place — SR
+    // announcement only (Primer: success messaging sparingly).
+    announce(
+      result.locked
         ? t("submissions.lock.lockSuccess")
         : t("submissions.lock.unlockSuccess"),
-    })
+    )
   })
   // Same delete mechanism as the assignments table's manage hub (removes the
   // assignments.json entry; student repos are kept).
@@ -881,14 +1137,10 @@ const SubmissionsPageContent = () => {
   const regrading = regradeAll.anyRegrading
   // Whether "Regrade all" specifically is mid-dispatch, for its own
   // spinner/label (distinct from the page-wide `regrading` gate).
-  const regradeAllActive =
-    regradeAll.phase === "dispatching" || regradeAll.phase === "running"
+  const regradeAllActive = regradeAll.inFlight
   const { data: lastRun } = useGetLastCollectScoresRun(org)
   const collectWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}`
   const regradeWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}`
-  const collecting =
-    collectScores.phase === "dispatching" || collectScores.phase === "running"
-
   // Which action the single "View …" link points at and which status strip (if
   // any) shows. Running takes precedence; else most recently finished; else
   // null. Derived fresh every render so the link never gets stuck on a stale
@@ -955,24 +1207,6 @@ const SubmissionsPageContent = () => {
     !isEmptyRepoAssignment &&
     snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
-  // Refresh scores + last-run timestamp + org repo list once a manual collection
-  // finishes, so the freshness line re-derives (the collect just consumed the
-  // pushes latestPush was flagging). Invalidate the last-run query rather than
-  // refetching it: its 60s staleTime would otherwise let a cached entry from
-  // before the run short-circuit the update, leaving the "Last collected" line
-  // lagging even though the button color is already correct from the tracked run.
-  useEffect(() => {
-    if (collectScores.phase === "completed") {
-      refetchScores()
-      if (org) {
-        queryClient.invalidateQueries({
-          queryKey: githubKeys.lastCollectScoresRun(org),
-        })
-      }
-      refetchOrgRepos()
-    }
-  }, [collectScores.phase, org, queryClient, refetchScores, refetchOrgRepos])
-
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
     // "score 0" row is meaningless — and worse, on a degraded collect that
@@ -981,7 +1215,7 @@ const SubmissionsPageContent = () => {
     // via their group's row, not as individual score-0 rows (restoring the
     // pre-#174 export). Individual non-submitters (accepted-no-push or
     // never-accepted) are still legitimately 0 and stay in the export.
-    const csvNonSubmitters = isGroupAssignment ? [] : nonSubmitters
+    const csvNonSubmitters = isGroupFlavor ? [] : nonSubmitters
     // Export the authoritative snapshot, not the live-merged view: `scoresInfo`
     // carries live count bumps only for the current page's owners, which would
     // make the file's counts depend on the last-viewed page. `snapshotScoped`
@@ -1011,7 +1245,7 @@ const SubmissionsPageContent = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("nav.submissions")} />
+      <Breadcrumb switcher="assignment" assignmentName={assignmentInfo?.name} />
       {emptyRoster.show && (
         <EmptyRosterNotice
           org={org}
@@ -1036,7 +1270,7 @@ const SubmissionsPageContent = () => {
             <>
               {scoresErrorObj instanceof Error
                 ? t("submissions.errors.gradebookLoadWithReason", {
-                    reason: scoresErrorObj.message,
+                    reason: errorText(t, scoresErrorObj),
                   })
                 : t("submissions.errors.gradebookLoad")}{" "}
               {t("submissions.errors.gradebookLoadHint")}
@@ -1046,7 +1280,14 @@ const SubmissionsPageContent = () => {
         />
       )}
       <PageHeader
-        title={assignmentInfo?.name}
+        title={
+          assignmentInfo && (
+            <AssignmentTitleWithSlug
+              name={assignmentInfo.name}
+              slug={assignmentInfo.slug}
+            />
+          )
+        }
         subtitle={
           // Property items are quiet meta text; only genuine states (overdue,
           // approaching deadline, late, closed) keep toned badges. The
@@ -1054,6 +1295,16 @@ const SubmissionsPageContent = () => {
           // number — and doubles as a one-click jump to who hasn't submitted.
           <MetaStrip
             items={[
+              showCheckingAccepted({
+                showSubmissionProgress,
+                orgReposPending,
+                isEmptyRepoAssignment,
+              }) && (
+                <MetaItem>
+                  <InlineSpinner />
+                  {t("submissions.funnel.checkingAccepted")}
+                </MetaItem>
+              ),
               showSubmissionProgress && (
                 <button
                   type="button"
@@ -1062,12 +1313,12 @@ const SubmissionsPageContent = () => {
                   className="-m-1 cursor-pointer rounded-btn p-1 hover:bg-base-200"
                 >
                   <MetricBar
-                    value={isGroupAssignment ? submittedGroups : submittedShare}
-                    max={isGroupAssignment ? groupRepoList.length : funnelTotal}
+                    value={isGroupFlavor ? submittedGroups : submittedShare}
+                    max={isGroupFlavor ? groupRepoList.length : funnelTotal}
                     tone="success"
                     showNumbers={false}
                     title={
-                      isGroupAssignment
+                      isGroupFlavor
                         ? t("submissions.funnel.submittedTitleGroup", {
                             submitted: submittedGroups,
                             accepted: groupRepoList.length,
@@ -1146,38 +1397,36 @@ const SubmissionsPageContent = () => {
       />
 
       {isLockedAssignment && (
-        <Alert tone="warning" role="status">
+        <Alert tone="info" role="status">
           {t("submissions.lockedNotice")}
         </Alert>
       )}
 
       {isClosedAssignment && !isLockedAssignment && (
-        <Alert tone="warning" role="status">
+        <Alert tone="info" role="status">
           {t("submissions.closedNotice")}
         </Alert>
       )}
 
-      {/* Live status strip. Full phase mapping: dispatching stays a quiet
-          neutral line (transient); running/completed/failed/timeout become an
-          Alert; idle renders nothing. */}
+      {/* Non-owner staff can't read the secret classroom teams, so their
+          student list is the last synced roster.csv. Say so: a student enrolled
+          since then is missing here, not missing from the class. */}
+      {rosterSource === "csv" && !rosterLoading && (
+        <Alert tone="info" role="status">
+          {t("submissions.rosterFromCsvNotice")}
+        </Alert>
+      )}
+
+      {/* Workflow outcome strip. In-flight progress is NOT shown here: the
+          initiating button spins (DataFreshness for collect, the Actions
+          trigger for regrade) and the app-wide Actions banner carries the run
+          with elapsed time, "View run", and the done state. Only outcomes the
+          banner can't cover stay on the page: a failure with its reason (a
+          rejected dispatch never registers a banner row) and this client's
+          poll timeout. Regrade's "completed" stays too, since it tells the
+          teacher what to do next. */}
       {activeAction === "collect" && collectScores.phase !== "idle" && (
         <>
-          {collectScores.phase === "dispatching" && (
-            <p className="text-sm text-base-content/70" role="status">
-              {t("submissions.collect.statusDispatching")}
-            </p>
-          )}
-          {collectScores.phase === "running" && (
-            <Alert tone="info" role="status">
-              <Spinner size="xs" />
-              {t("submissions.collect.statusRunning")}
-            </Alert>
-          )}
-          {collectScores.phase === "completed" && (
-            <Alert tone="success" role="status">
-              {t("submissions.collect.statusCompleted")}
-            </Alert>
-          )}
           {collectScores.phase === "failed" && (
             <Alert tone="error" role="status">
               {collectScores.error instanceof CollectInputsUnsupportedError ? (
@@ -1186,7 +1435,7 @@ const SubmissionsPageContent = () => {
                 <>
                   {collectScores.error instanceof Error
                     ? t("submissions.collect.statusFailedWithReason", {
-                        reason: collectScores.error.message,
+                        reason: errorText(t, collectScores.error),
                       })
                     : t("submissions.collect.statusFailed")}{" "}
                   {t("submissions.collect.statusFailedHint")}
@@ -1203,17 +1452,6 @@ const SubmissionsPageContent = () => {
       )}
       {activeAction === "regrade" && regradeAll.phase !== "idle" && (
         <>
-          {regradeAll.phase === "dispatching" && (
-            <p className="text-sm text-base-content/70" role="status">
-              {t("submissions.regradeAll.statusDispatching")}
-            </p>
-          )}
-          {regradeAll.phase === "running" && (
-            <Alert tone="info" role="status">
-              <Spinner size="xs" />
-              {t("submissions.regradeAll.statusRunning")}
-            </Alert>
-          )}
           {regradeAll.phase === "completed" && (
             <Alert tone="success" role="status">
               <Trans
@@ -1229,7 +1467,7 @@ const SubmissionsPageContent = () => {
             <Alert tone="error" role="status">
               {regradeAll.error instanceof Error
                 ? t("submissions.regradeAll.statusFailedWithReason", {
-                    reason: regradeAll.error.message,
+                    reason: errorText(t, regradeAll.error),
                   })
                 : t("submissions.regradeAll.statusFailed")}{" "}
               {t("submissions.regradeAll.statusFailedHint")}
@@ -1252,8 +1490,9 @@ const SubmissionsPageContent = () => {
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          isGroup={isGroupAssignment}
+          isGroup={isGroupFlavor}
           acceptedAvailable={acceptedAvailable}
+          acceptanceComplete={acceptanceComplete}
           passingAvailable={passingEnabled}
           sections={sections}
           onShare={() => setAcceptOpen(true)}
@@ -1274,32 +1513,37 @@ const SubmissionsPageContent = () => {
                 lastCollectedLabel={lastCollectedLabel}
                 stale={snapshotStale}
                 collecting={collecting}
+                refreshing={refreshing}
                 errorCount={liveErrorCount}
+                canCollect={canDispatchWorkflows}
+                // Stays mounted while collecting: the button IS the in-page
+                // progress indicator (it spins and goes inert), so it must
+                // not vanish the moment it's clicked. Omitted only when a
+                // dispatching viewer has nobody to collect for.
                 onRefresh={
-                  collecting || emptyRoster.show
+                  canDispatchWorkflows && emptyRoster.show
                     ? undefined
-                    : () => {
-                        // Collect now = re-collect (rebuild scores.json). Re-read the org
-                        // repo list too so the staleness line re-derives against the
-                        // newest pushes (latestPush would otherwise stay frozen at
-                        // page load), and re-run the live fan-out for a live-capable
-                        // viewer so presence refreshes alongside the dispatched
-                        // collect.
-                        collectScores.collect()
-                        refetchOrgRepos()
-                        if (liveCapable) {
-                          refetchLive()
-                        }
-                        if (detectionCapable) {
-                          refetchDetected()
-                        }
-                      }
+                    : refreshSubmissions
                 }
               />
             )
           }
           trailing={
             <>
+              {/* Team-mode groups are managed on their own page (create,
+                  members, visibility, snapshot); the per-row manage-group
+                  dialog stays for quick fixes. */}
+              {isTeamAssignment && (
+                <RouterButton
+                  variant="outline"
+                  size="sm"
+                  to="/$org/$classroom/assignments/$assignment/groups"
+                  params={{ org, classroom, assignment }}
+                >
+                  <PeopleIcon aria-hidden="true" className="size-4" />
+                  {t("manageGroups.title")}
+                </RouterButton>
+              )}
               {/* Clone submissions (CLI) — icon-only so the toolbar stays
                   compact; opens a modal with the `gh teacher download`
                   command. See https://github.com/foundation50/classroom50/issues/724. */}
@@ -1329,7 +1573,11 @@ const SubmissionsPageContent = () => {
                 onMetrics={
                   overlayCapable ? undefined : () => setMetricsOpen(true)
                 }
-                onCollect={() => collectScores.collect()}
+                onCollect={
+                  canDispatchWorkflows
+                    ? () => collectScores.collect()
+                    : undefined
+                }
                 onRegradeAll={() => setRegradeConfirmOpen(true)}
                 // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
                 // like the live reads), never for empty_repo (no PRs). A
@@ -1353,7 +1601,7 @@ const SubmissionsPageContent = () => {
                 // founder-managed), never empty_repo, and only when repos exist.
                 onBulkAccess={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment &&
                   acceptedSet.size > 0
                     ? () => setBulkAccessOpen(true)
@@ -1364,10 +1612,21 @@ const SubmissionsPageContent = () => {
                 // accept-time only).
                 onBulkFeatures={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment &&
                   acceptedSet.size > 0
                     ? () => setBulkFeaturesOpen(true)
+                    : undefined
+                }
+                // Bulk change repo visibility (issue #766): same gate as bulk
+                // features. Flips existing repos public/private — the
+                // assignment's repo_visibility applies at accept-time only.
+                onBulkVisibility={
+                  isOwner &&
+                  !isGroupFlavor &&
+                  !isEmptyRepoAssignment &&
+                  acceptedSet.size > 0
+                    ? () => setBulkVisibilityOpen(true)
                     : undefined
                 }
                 // Bulk retrofit autograding triggers: same gate as bulk features
@@ -1378,7 +1637,7 @@ const SubmissionsPageContent = () => {
                 // Requires a resolved entry — see assignmentResolved.
                 onBulkTrigger={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !skipsGrading &&
                   assignmentResolved &&
                   isDefaultAutograder(assignmentInfo.autograder) &&
@@ -1392,7 +1651,7 @@ const SubmissionsPageContent = () => {
                 // autograder + accepted repos exist).
                 onBulkPause={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !skipsGrading &&
                   assignmentResolved &&
                   isDefaultAutograder(assignmentInfo.autograder) &&
@@ -1402,7 +1661,7 @@ const SubmissionsPageContent = () => {
                 }
                 onBulkResume={
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !skipsGrading &&
                   assignmentResolved &&
                   isDefaultAutograder(assignmentInfo.autograder) &&
@@ -1425,7 +1684,7 @@ const SubmissionsPageContent = () => {
                 onCloseToggle={
                   canRegradeAll &&
                   isOwner &&
-                  !isGroupAssignment &&
+                  !isGroupFlavor &&
                   !isEmptyRepoAssignment
                     ? () => setCloseSubmissionOpen(true)
                     : undefined
@@ -1441,18 +1700,45 @@ const SubmissionsPageContent = () => {
             </>
           }
         />
+        {/* Dense-content skip (Primer): keyboard users can jump past the
+            whole submissions table instead of tabbing through every row's
+            links and actions. Mirrors the global skip-to-main recipe. */}
+        <Button
+          as="a"
+          href="#after-submissions-table"
+          variant="primary"
+          size="sm"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
+        >
+          {t("submissions.skipPastTable")}
+        </Button>
         <SubmissionsTable
           scores={visibleRows}
           students={students}
           nonSubmitters={visibleNonSubmitters}
           unsubmittedGroupRepos={visibleGroupRepos}
-          isGroup={isGroupAssignment}
+          isGroup={isGroupFlavor}
+          isTeam={isTeamAssignment}
+          groupDisplayNames={groupDisplayNames}
+          groupMemberLogins={groupMemberLogins}
+          staffRolesByLogin={staffRoles}
+          teamsByOwner={isTeamAssignment ? teamByOwner : undefined}
+          teamsWithoutRepos={
+            isTeamAssignment ? visibleMissingRepoTeams : undefined
+          }
+          teamsSettled={teamsSettled}
+          teamFormation={
+            isTeamAssignment ? assignmentInfo?.team_formation : undefined
+          }
           org={org}
           classroom={classroom}
           assignment={assignment}
           assignmentName={assignmentInfo?.name}
           maxGroupSize={assignmentInfo?.max_group_size}
           acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
+          // Only an owner sees every org repo; a non-owner's list is the repos
+          // they were granted, so an absence is "not visible", not "not accepted".
+          acceptanceComplete={acceptanceComplete}
           thresholdFraction={thresholdFraction}
           filtered={hasActiveFilter}
           onClearFilters={clearFilters}
@@ -1493,7 +1779,11 @@ const SubmissionsPageContent = () => {
                     org,
                     classroom,
                     assignment,
-                    assignmentType: isGroupAssignment ? "group" : "individual",
+                    assignmentType: isTeamAssignment
+                      ? "team"
+                      : isGroupAssignment
+                        ? "group"
+                        : "individual",
                     mode: "manual" as const,
                     maxPoints: assignmentInfo.grading.max_points,
                   }
@@ -1506,7 +1796,11 @@ const SubmissionsPageContent = () => {
                     org,
                     classroom,
                     assignment,
-                    assignmentType: isGroupAssignment ? "group" : "individual",
+                    assignmentType: isTeamAssignment
+                      ? "team"
+                      : isGroupAssignment
+                        ? "group"
+                        : "individual",
                     mode: "auto" as const,
                   }
                 : undefined
@@ -1517,11 +1811,18 @@ const SubmissionsPageContent = () => {
           // group-assignment reach.
           canPauseAutograding={
             isOwner &&
-            !isGroupAssignment &&
+            !isGroupFlavor &&
             !skipsGrading &&
             assignmentResolved &&
             isDefaultAutograder(assignmentInfo.autograder)
           }
+          // Per-repo visibility toggle in the manage hub (issue #766): owner-
+          // only — org policy blocks members from flipping visibility, and
+          // GitHub 403s them regardless. Every repo shape qualifies (a bare or
+          // group repo is still showcaseable).
+          canChangeVisibility={canChangeVisibility}
+          canRegrade={canDispatchWorkflows}
+          publicRepoNames={publicRepoNames}
           initialLoading={initialLoading}
           nonSubmittersLoading={
             !nonSubmittersReady &&
@@ -1545,6 +1846,8 @@ const SubmissionsPageContent = () => {
           // is enabled, so a detection-only view (no_autograder) still shimmers.
           settling={overlayCapable && (livePending || detectedPending)}
         />
+        {/* The skip link's landing point, focusable so focus actually moves. */}
+        <span id="after-submissions-table" tabIndex={-1} />
       </div>
       <ConfirmModal
         open={regradeConfirmOpen}
@@ -1568,7 +1871,7 @@ const SubmissionsPageContent = () => {
         confirmText="regrade"
         confirmLabel={t("submissions.regradeAll.label")}
         cancelLabel={t("common.cancel")}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           regradeAll.regrade()
@@ -1599,7 +1902,7 @@ const SubmissionsPageContent = () => {
             : t("submissions.lock.lockLabel")
         }
         cancelLabel={t("common.cancel")}
-        dangerous={!isLockedAssignment}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           await setLock.mutateAsync({
@@ -1631,7 +1934,8 @@ const SubmissionsPageContent = () => {
         confirmText={assignment}
         confirmLabel={t("assignments.table.deleteConfirm")}
         cancelLabel={t("assignments.table.deleteCancel")}
-        dangerous
+        tone="error"
+        warning={t("assignments.table.deleteWarning")}
         onConfirm={async () => {
           await deleteAssignmentMutation.mutateAsync({
             org,
@@ -1657,7 +1961,7 @@ const SubmissionsPageContent = () => {
       <MetricsModal
         open={metricsOpen && !overlayCapable}
         onClose={() => setMetricsOpen(false)}
-        isGroup={isGroupAssignment}
+        isGroup={isGroupFlavor}
         submitted={stats.submitted}
         rosterCount={scopedStudents.length}
         avgScore={avgScore}
@@ -1690,7 +1994,7 @@ const SubmissionsPageContent = () => {
         onClose={() => setOpenAllPrsOpen(false)}
         org={org}
         assignmentName={assignmentInfo?.name ?? assignment}
-        mode={isGroupAssignment ? "group" : "individual"}
+        mode={isGroupFlavor ? "group" : "individual"}
         repos={allAssignmentRepos}
       />
       <DownloadAllSubmissionsModal
@@ -1719,6 +2023,15 @@ const SubmissionsPageContent = () => {
       <BulkRepoFeaturesModal
         open={bulkFeaturesOpen}
         onClose={() => setBulkFeaturesOpen(false)}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        owners={acceptedOwners}
+        students={students}
+      />
+      <BulkRepoVisibilityModal
+        open={bulkVisibilityOpen}
+        onClose={() => setBulkVisibilityOpen(false)}
         org={org}
         classroom={classroom}
         assignment={assignment}

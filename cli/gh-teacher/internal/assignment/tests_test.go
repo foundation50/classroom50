@@ -271,12 +271,16 @@ func TestParseTestsFile_EmptyPathIsNoOp(t *testing.T) {
 
 func TestParseTestsFileFrom_Stdin(t *testing.T) {
 	body := `[{"name":"compiles","type":"run","run":"true","points":1}]`
-	got, err := parseTestsFileFrom("-", strings.NewReader(body))
+	parsed, err := parseTestsFileFrom("-", strings.NewReader(body))
 	if err != nil {
 		t.Fatalf("parseTestsFileFrom: %v", err)
 	}
+	got := parsed.Tests
 	if len(got) != 1 || got[0].Name != "compiles" || got[0].Type != "run" {
 		t.Errorf("stdin tests not parsed: %#v", got)
+	}
+	if parsed.Envelope || parsed.Defaults != nil {
+		t.Errorf("bare array must not report an envelope: %#v", parsed)
 	}
 }
 
@@ -290,12 +294,72 @@ func TestParseTestsFile_HappyPath(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	got, err := ParseTestsFile(path)
+	parsed, err := ParseTestsFile(path)
 	if err != nil {
 		t.Fatalf("ParseTestsFile: %v", err)
 	}
+	got := parsed.Tests
 	if len(got) != 2 || got[0].Name != "compiles" || got[1].Comparison != "included" {
 		t.Errorf("tests not parsed: %#v", got)
+	}
+}
+
+// TestParseTestsFile_EnvelopeAccepted pins discussion #805: the generated
+// bundle tests.json (schema + tests + defaults) is valid `--tests` input, so
+// a teacher who keeps that file in a course repo can pass it straight through.
+func TestParseTestsFile_EnvelopeAccepted(t *testing.T) {
+	body := `{
+  "schema": "classroom50/tests/v1",
+  "tests": [{"name":"compiles","type":"run","run":"true","points":1}],
+  "defaults": {"failure-details": "none", "show-output": true}
+}`
+	parsed, err := parseTestsFileFrom("-", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("parseTestsFileFrom: %v", err)
+	}
+	if !parsed.Envelope {
+		t.Error("envelope not reported")
+	}
+	if len(parsed.Tests) != 1 || parsed.Tests[0].Name != "compiles" {
+		t.Errorf("envelope tests not parsed: %#v", parsed.Tests)
+	}
+	if parsed.Defaults == nil || parsed.Defaults.FailureDetails != "none" || parsed.Defaults.ShowOutput == nil || !*parsed.Defaults.ShowOutput {
+		t.Errorf("envelope defaults not parsed: %#v", parsed.Defaults)
+	}
+}
+
+func TestParseTestsFile_EnvelopeWithoutDefaults(t *testing.T) {
+	body := `{"schema": "classroom50/tests/v1", "tests": []}`
+	parsed, err := parseTestsFileFrom("-", strings.NewReader(body))
+	if err != nil {
+		t.Fatalf("parseTestsFileFrom: %v", err)
+	}
+	if !parsed.Envelope || parsed.Defaults != nil || parsed.Tests == nil || len(parsed.Tests) != 0 {
+		t.Errorf("expected envelope with empty non-nil tests and nil defaults, got %#v", parsed)
+	}
+}
+
+func TestParseTestsFile_EnvelopeRejections(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		want string
+	}{
+		{name: "wrong schema", body: `{"schema": "classroom50/tests/v2", "tests": []}`, want: `"schema" is "classroom50/tests/v2"`},
+		{name: "missing tests", body: `{"schema": "classroom50/tests/v1"}`, want: `missing the "tests" array`},
+		{name: "bad defaults", body: `{"schema": "classroom50/tests/v1", "tests": [], "defaults": {"failure-details": "loud"}}`, want: "defaults: invalid failure-details"},
+		{name: "unknown envelope key", body: `{"schema": "classroom50/tests/v1", "tests": [], "extra": 1}`, want: `unknown field "extra"`},
+		// A single test object is neither shape; the error names both.
+		{name: "single test object", body: `{"name":"t","type":"run","run":"x","points":1}`, want: "expected a JSON array of tests"},
+		{name: "scalar", body: `"tests"`, want: "expected a JSON array of tests"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := parseTestsFileFrom("-", strings.NewReader(tc.body))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %v", tc.want, err)
+			}
+		})
 	}
 }
 
@@ -439,10 +503,11 @@ func TestParseTestsFile_ShowOutputFalseRoundTrips(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
-	got, err := ParseTestsFile(path)
+	parsed, err := ParseTestsFile(path)
 	if err != nil {
 		t.Fatalf("ParseTestsFile: %v", err)
 	}
+	got := parsed.Tests
 	if got[0].ShowOutput == nil || *got[0].ShowOutput {
 		t.Errorf("explicit show-output:false lost: %#v", got[0].ShowOutput)
 	}

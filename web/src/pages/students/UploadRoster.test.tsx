@@ -25,6 +25,7 @@ const bulkEnrollStudentsInClassroom = vi.fn()
 const repairRosterUsernames = vi.fn()
 const writeClassroomRoles = vi.fn()
 const updateClassroomMetadata = vi.fn()
+const resolveEmailRows = vi.fn()
 const getUserById = vi.fn()
 
 vi.mock("@/domain/students", async (importOriginal) => {
@@ -42,6 +43,23 @@ vi.mock("@/domain/students", async (importOriginal) => {
     writeClassroomRoles: (...args: unknown[]) => writeClassroomRoles(...args),
     updateClassroomMetadata: (...args: unknown[]) =>
       updateClassroomMetadata(...args),
+    resolveEmailRows: (...args: unknown[]) => resolveEmailRows(...args),
+  }
+})
+
+// The cached resolver hook needs a QueryClientProvider these tests don't
+// mount; mirror its real semantics (empty input short-circuits) over the
+// same resolveEmailRows spy the domain mock uses.
+vi.mock("@/hooks/useIdentityDirectory", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/useIdentityDirectory")>()
+  return {
+    ...actual,
+    useResolveEmailRows:
+      (client: unknown, org: unknown) => (emails: string[]) =>
+        emails.length === 0
+          ? Promise.resolve({ links: [], degraded: false })
+          : resolveEmailRows(client, org, emails),
   }
 })
 
@@ -87,6 +105,7 @@ const stubContext = {
 }
 beforeEach(() => {
   resolveRosterUploadContext.mockResolvedValue(stubContext)
+  resolveEmailRows.mockResolvedValue({ links: [], degraded: false })
   classifyRosterUpload.mockReturnValue({
     noAction: [],
     metadataUpdate: [],
@@ -833,6 +852,108 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
   })
 })
 
+describe("UploadRoster resolve-before-invite email links", () => {
+  const zoeLink = {
+    email: "zoe@x.edu",
+    id: 7,
+    login: "zoe-gh",
+    classroom: "cs50-fall",
+  }
+
+  it("surfaces the links notice, gates behind the confirm, then moves linked rows into the account pipeline", async () => {
+    const user = userEvent.setup()
+    resolveEmailRows.mockResolvedValue({ links: [zoeLink], degraded: false })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // Two addresses: one links to a previous classroom's member, one doesn't.
+    await uploadFile(
+      user,
+      file(
+        "roster.csv",
+        "email,first_name,last_name,section\n" +
+          "zoe@x.edu,Zoe,Z,Lab 2\n" +
+          "newbie@x.edu,New,B,Lab 1\n",
+      ),
+    )
+
+    // The notice names the linked count, and the import stays disabled until
+    // the teacher confirms the linking.
+    await waitFor(() =>
+      expect(screen.getByText(/students.emailLinksNotice:1/)).toBeTruthy(),
+    )
+    const button = primaryButton()
+    expect(button.disabled).toBe(true)
+
+    const confirm = screen
+      .getByText("students.emailLinksConfirm")
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+    await user.click(confirm)
+    await waitFor(() => expect(primaryButton().disabled).toBe(false))
+
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "newbie@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    await user.click(primaryButton())
+
+    // The linked row rides the ACCOUNT pipeline under the verified login+id,
+    // carrying the file's metadata...
+    await waitFor(() =>
+      expect(bulkEnrollStudentsInClassroom).toHaveBeenCalledTimes(1),
+    )
+    expect(bulkEnrollStudentsInClassroom.mock.calls[0][1]).toMatchObject({
+      rows: [
+        {
+          username: "zoe-gh",
+          github_id: "7",
+          first_name: "Zoe",
+          last_name: "Z",
+          section: "Lab 2",
+          role: "student",
+        },
+      ],
+    })
+    // ...and its address left the invite list, which keeps only the unlinked one.
+    await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
+    expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
+      invites: [{ email: "newbie@x.edu" }],
+    })
+  })
+
+  it("appends the degraded warning to the links notice", async () => {
+    const user = userEvent.setup()
+    resolveEmailRows.mockResolvedValue({ links: [zoeLink], degraded: true })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "email\nzoe@x.edu\n"))
+    await waitFor(() =>
+      expect(screen.getByText(/students.emailLinksDegraded/)).toBeTruthy(),
+    )
+  })
+
+  it("never calls resolveEmailRows for a file with no email rows", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "username\nada\n"))
+    await waitFor(() => expect(primaryButton()).toBeTruthy())
+    expect(resolveEmailRows).not.toHaveBeenCalled()
+  })
+})
+
 describe("UploadRoster identity mismatch gate", () => {
   it("blocks until the teacher confirms, then repairs the stored username", async () => {
     const user = userEvent.setup()
@@ -1021,7 +1142,7 @@ describe("UploadRoster identity mismatch gate", () => {
     expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
   })
 
-  it("reports an identity-less row but still imports everyone else", async () => {
+  it("keeps an identity-less named row as unlinked and still imports everyone else", async () => {
     const user = userEvent.setup()
     classifyRosterUpload.mockReturnValue({
       noAction: [],
@@ -1036,16 +1157,18 @@ describe("UploadRoster identity mismatch gate", () => {
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
     )
 
-    // The one deliberate non-blocking case: a student who hasn't supplied a handle.
-    // There is nothing to fix, so the import must stay available.
+    // The one deliberate non-blocking case: a student who hasn't supplied a
+    // handle. Their named row is KEPT as an unlinked roster row (not dropped),
+    // and the import must stay available.
     await uploadFile(
       user,
       file("roster.csv", "username,email,first_name\nada,,Ada\n,,Nobody\n"),
     )
 
     await waitFor(() =>
-      expect(screen.getByText("students.importSkipped:1")).toBeTruthy(),
+      expect(screen.getByText("students.unlinkedRosterNotice:1")).toBeTruthy(),
     )
+    expect(screen.queryByText(/students.importSkipped/)).toBeNull()
     expect(screen.queryByText(/students.importBlocked/)).toBeNull()
     expect(importButton()?.disabled).toBe(false)
   })
@@ -1106,5 +1229,130 @@ describe("UploadRoster legacy-encoding fallback", () => {
     expect(
       screen.queryByText("students.uploadEncodingFallbackNotice"),
     ).toBeNull()
+  })
+})
+
+// The footer branches took over the action rows the blocked/complete views used
+// to render in-body (see ImportProblemsReport / RosterImportResult): the retry
+// gate, the cancel reset, and the Done dismissal live on the Modal footer now.
+describe("UploadRoster footer phase branches", () => {
+  const lookupError = (status: number) =>
+    new GitHubAPIError({
+      status,
+      url: "https://api.github.com/user/42",
+      message: "boom",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  it("offers the retry for transient-only blockers, and retrying re-resolves", async () => {
+    const user = userEvent.setup()
+    // A 5xx means we could not ASK GitHub about the id — the file is fine, so
+    // the footer offers the retry that actually resolves it.
+    getUserById.mockRejectedValueOnce(lookupError(500))
+    getUserById.mockResolvedValue({ login: "ada" })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    await uploadFile(user, file("roster.csv", "github_id,username\n42,ada\n"))
+    await waitFor(() =>
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
+    )
+
+    const retry = screen
+      .getByRole("button", { name: "students.importRetryLookup" })
+      .closest("button") as HTMLButtonElement
+    expect(screen.getByRole("button", { name: "common.cancel" })).toBeTruthy()
+
+    await user.click(retry)
+
+    // The re-parse asks again, succeeds, and the preview replaces the report.
+    await waitFor(() => expect(getUserById).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: /noChangesToApply/ }),
+      ).toBeTruthy(),
+    )
+    expect(screen.queryByText(/students.importBlocked/)).toBeNull()
+    expect(
+      screen.queryByRole("button", { name: "students.importRetryLookup" }),
+    ).toBeNull()
+  })
+
+  it("offers no retry when any blocker is a content problem; Cancel resets", async () => {
+    const user = userEvent.setup()
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+
+    // "n/a" is a bad email — a file the teacher has to fix; a retry would
+    // deterministically fail, so it must not be offered.
+    await uploadFile(
+      user,
+      file("roster.csv", "username,email\nada,ada@x.edu\nbob,n/a\n"),
+    )
+    await waitFor(() =>
+      expect(screen.getByText("students.importBlocked:1")).toBeTruthy(),
+    )
+    expect(
+      screen.queryByRole("button", { name: "students.importRetryLookup" }),
+    ).toBeNull()
+
+    await user.click(screen.getByRole("button", { name: "common.cancel" }))
+    await waitFor(() =>
+      expect(screen.getByText("students.uploadDropPrompt")).toBeTruthy(),
+    )
+  })
+
+  it("dismisses a completed import with the footer Done", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "zoe@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    renderModal(
+      <UploadRoster
+        org="acme"
+        classroom="cs50"
+        client={client}
+        open={true}
+        onOpenChange={onOpenChange}
+      />,
+    )
+
+    await uploadFile(user, file("roster.csv", "email\nzoe@x.edu\n"))
+    await user.click(
+      await waitFor(() => {
+        const b = screen
+          .getByRole("button", { name: /importAndInviteMembers/ })
+          .closest("button") as HTMLButtonElement
+        expect(b.disabled).toBe(false)
+        return b
+      }),
+    )
+
+    const done = await waitFor(
+      () =>
+        screen
+          .getByRole("button", { name: "students.done" })
+          .closest("button") as HTMLButtonElement,
+    )
+    await user.click(done)
+    expect(onOpenChange).toHaveBeenCalledWith(false)
   })
 })

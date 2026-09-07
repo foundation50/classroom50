@@ -44,6 +44,36 @@
         "active": false
       },
       "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"CS\",\"secret\":\"a1b2c3d4\",\"active\":false}"
+    },
+    {
+      "input": {
+        "name": "CS",
+        "term": "Fall 2026",
+        "secret": "a1b2c3d4",
+        "pages_base_url": "https://cs.example.edu/classroom50",
+        "active": true
+      },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"CS\",\"term\":\"Fall 2026\",\"secret\":\"a1b2c3d4\",\"pages_base_url\":\"https://cs.example.edu/classroom50\"}"
+    },
+    {
+      "input": {
+        "name": "CS",
+        "term": "",
+        "secret": "",
+        "pages_base_url": "https://pages.example.edu",
+        "active": false
+      },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"CS\",\"pages_base_url\":\"https://pages.example.edu\",\"active\":false}"
+    },
+    {
+      "input": {
+        "name": "CS",
+        "term": "",
+        "secret": "",
+        "pages_base_url": "http://insecure.example.edu/classroom50",
+        "active": true
+      },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"CS\"}"
     }
   ]
 }

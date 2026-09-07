@@ -15,12 +15,10 @@ import {
   type BulkLockResult,
 } from "@/domain/assignments"
 
-// Write boundary for the assignments page's bulk bar. Lock and delete delegate
-// to the batched domain functions (one commit for the whole selection), so both
-// are ordinary mutations. Reuse cannot batch — each copy writes the TARGET
-// classroom's assignments.json and may create a repo — so it runs sequentially
-// and reports progress and a per-assignment outcome instead of a single
-// success/failure. See domain/assignments/bulkActions.ts.
+// Write boundary for the assignments page's bulk bar. Lock and delete are
+// ordinary mutations over the batched domain functions; reuse cannot batch
+// (see bulkCopyAssignments), so it runs the domain loop and exposes its
+// progress and per-assignment outcomes as state.
 
 function invalidateAssignments(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -45,6 +43,8 @@ export function useBulkSetAssignmentLock(org: string, classroom: string) {
     Error,
     { slugs: string[]; locked: boolean }
   >({
+    // One commit, then a template grant/revoke per selected assignment.
+    meta: { keepTabOpen: true },
     mutationFn: ({ slugs, locked }) =>
       setAssignmentsLockWithConflictRetry(client, {
         org,
@@ -61,6 +61,8 @@ export function useBulkDeleteAssignments(org: string, classroom: string) {
   const queryClient = useQueryClient()
 
   return useMutation<BulkDeleteResult, Error, { slugs: string[] }>({
+    // Not flagged keepTabOpen: one git-data commit, dangling until the ref
+    // moves, so a closed tab strands nothing.
     mutationFn: ({ slugs }) =>
       deleteAssignmentsWithConflictRetry(client, { org, classroom, slugs }),
     onSuccess: () => invalidateAssignments(queryClient, org, classroom),
@@ -82,8 +84,7 @@ const IDLE: BulkReuseState = {
 }
 
 // React shell around bulkCopyAssignments: the run's progress as state, the
-// re-entrancy latch, and the target classroom's query invalidation. The loop
-// itself lives in the domain, next to the batched lock and delete.
+// re-entrancy latch, and the target classroom's query invalidation.
 export function useBulkReuseAssignments(org: string) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()

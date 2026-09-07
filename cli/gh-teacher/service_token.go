@@ -29,7 +29,7 @@ func provisionServiceToken(cmd *cobra.Command, client githubapi.Client, summary 
 	// 1. Env var wins (CI / scripted / explicit refresh).
 	if v := strings.TrimSpace(os.Getenv(servicetoken.EnvServiceToken)); v != "" {
 		token := []byte(v)
-		if err := servicetoken.ValidateTokenVerbose(token, org, errOut); err != nil {
+		if err := servicetoken.ValidateTokenVerbose(token, org, client, errOut); err != nil {
 			return fmt.Errorf("the %s in your environment failed validation: %w", servicetoken.EnvServiceToken, err)
 		}
 		if err := servicetoken.ProvisionSecret(client, io.Discard, org, configrepo.ConfigRepoName, token, "stored"); err != nil {
@@ -43,7 +43,7 @@ func provisionServiceToken(cmd *cobra.Command, client githubapi.Client, summary 
 	// 2. Re-run with the secret already present: don't re-prompt.
 	if secretExists {
 		summary.ServiceToken = "already configured"
-		_, _ = fmt.Fprintf(errOut, "Service token: already configured — left as-is. To replace it, run `gh teacher rotate-service-token %s` (or set %s and re-run).\n", org, servicetoken.EnvServiceToken)
+		_, _ = fmt.Fprintf(errOut, "Service token: already configured, left as-is. To replace it, run `gh teacher rotate-service-token %s` (or set %s and re-run).\n", org, servicetoken.EnvServiceToken)
 		return nil
 	}
 
@@ -52,7 +52,7 @@ func provisionServiceToken(cmd *cobra.Command, client githubapi.Client, summary 
 	if err != nil {
 		return err
 	}
-	if err := servicetoken.ValidateTokenVerbose(token, org, errOut); err != nil {
+	if err := servicetoken.ValidateTokenVerbose(token, org, client, errOut); err != nil {
 		return fmt.Errorf("service token validation failed: %w", err)
 	}
 	if err := servicetoken.ProvisionSecret(client, io.Discard, org, configrepo.ConfigRepoName, token, "stored"); err != nil {

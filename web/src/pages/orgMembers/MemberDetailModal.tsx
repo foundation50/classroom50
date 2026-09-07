@@ -9,15 +9,30 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
+import {
+  AnimatedAlert,
+  Badge,
+  Button,
+  EmphasisLtr,
+  Modal,
+  MonoLtr,
+  rtlFlip,
+} from "@/components/ui"
 import { GitHubLink } from "@/components/GitHubLink"
+import Avatar from "@/components/avatar"
+import {
+  DetailRow,
+  NotSetValue,
+} from "@/components/memberList/memberPresentation"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
+  initialsFor,
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
-import MemberDetailHeader from "@/components/memberList/MemberDetailHeader"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { errorText } from "@/types/localizedMessage"
 
 // Centered modal showing one org member's details: identity, classification,
 // per-classroom access, and member-level actions (invite an on-roster
@@ -42,19 +57,24 @@ const MemberDetailModal = ({
   isSelf: boolean
   isOwner: boolean
   onClose: () => void
-  // Called after the member is removed from the org (refresh + optimistic drop).
-  onRemoved: () => void
+  // Called after the removal flow ran: `removed` = the org-membership DELETE
+  // succeeded; `unenrolledClassrooms` = what the run actually unenrolled (the
+  // page seeds exactly those caches, never the row's full classroom list).
+  onRemoved: (removed: boolean, unenrolledClassrooms: string[]) => void
   // Called after an on-roster non-member is invited (refresh only — no classroom
   // membership changed).
   onInvited: () => void
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const [confirming, setConfirming] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [working, setWorking] = useState(false)
+  useBeforeUnloadGuard(working)
   const [inviting, setInviting] = useState(false)
+  // Failure of the in-dialog remove action, rendered as an in-dialog banner.
+  const [actionError, setActionError] = useState<string | null>(null)
 
   // Retain the last non-null row so the fading dialog keeps its content after
   // the parent clears the selection (close-animation note in ui/Modal).
@@ -70,6 +90,7 @@ const MemberDetailModal = ({
     setConfirming(false)
     setConfirmingInvite(false)
     setInviting(false)
+    setActionError(null)
   }, [open])
 
   // Disarm the confirm panels during render when the row identity changes
@@ -84,7 +105,9 @@ const MemberDetailModal = ({
   }
 
   const handleClose = () => {
-    if (working) return
+    // Both writes route failures into the in-dialog banner, which
+    // reset-on-open wipes — so dismissal mid-flight would lose them.
+    if (working || inviting) return
     onClose()
   }
 
@@ -107,8 +130,23 @@ const MemberDetailModal = ({
   const handleInvite = async () => {
     if (inviting) return
     setInviting(true)
+    setActionError(null)
     try {
-      await runInviteMember(client, org, row, notify, onInvited, t)
+      await runInviteMember(
+        client,
+        org,
+        row,
+        {
+          // Kept as a toast: the pending badge lags the eventually-consistent
+          // refetch, and this dialog is closing.
+          onSuccess: (message) =>
+            notify({ tone: "success", durationMs: 6000, message }),
+          // The dialog stays open on failure, so the error belongs inside it.
+          onError: setActionError,
+        },
+        onInvited,
+        t,
+      )
     } finally {
       setInviting(false)
       setConfirmingInvite(false)
@@ -118,37 +156,38 @@ const MemberDetailModal = ({
   const handleRemove = async () => {
     if (working) return
     setWorking(true)
+    setActionError(null)
     try {
       const result = await removeMemberFromOrg(client, { org, row }, t)
       if (result.warnings.length > 0) {
+        // Kept as a toast: it outlives the closing dialog, and the partial
+        // outcome isn't evident from the row update alone.
         notify({
           tone: "warning",
           durationMs: 8000,
           message: result.warnings.join(" "),
         })
       } else {
-        notify({
-          tone: "success",
-          durationMs: 6000,
-          message: result.unenrolledClassrooms.length
+        // The member row disappears from the list — SR announcement only.
+        announce(
+          result.unenrolledClassrooms.length
             ? t("orgMembers.removedWithUnenroll", {
                 label,
                 org,
                 count: result.unenrolledClassrooms.length,
               })
             : t("orgMembers.removed", { label, org }),
-        })
+        )
       }
-      onRemoved()
+      onRemoved(result.removed, result.unenrolledClassrooms)
     } catch (err) {
-      notify({
-        tone: "error",
-        message: t("orgMembers.removeFailed", {
+      // The dialog stays open on failure, so the error belongs inside it.
+      setActionError(
+        t("orgMembers.removeFailed", {
           label,
-          reason:
-            err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
+          reason: errorText(t, err),
         }),
-      })
+      )
     } finally {
       setWorking(false)
       setConfirming(false)
@@ -163,7 +202,7 @@ const MemberDetailModal = ({
     <Modal
       open={open}
       onClose={handleClose}
-      closeDisabled={working}
+      closeDisabled={working || inviting}
       size="2xl"
       title={t("orgMembers.detailTitle")}
       footer={
@@ -192,10 +231,70 @@ const MemberDetailModal = ({
       }
     >
       <div className="mt-4 flex flex-col gap-4">
+        <AnimatedAlert
+          tone="error"
+          show={actionError != null}
+          className="text-sm"
+        >
+          {actionError}
+        </AnimatedAlert>
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <MemberDetailHeader row={row} />
+          <Avatar
+            name={row.name || label}
+            github={row.username}
+            initials={initialsFor(row)}
+          />
           <ClassificationBadge row={row} isOwner={isOwner} />
         </div>
+
+        {/* The organization row looks redundant — every row on this page
+            shares it — but it anchors what "Remove from organization" acts on. */}
+        <dl className="divide-y divide-base-300 rounded-box border border-base-300">
+          <DetailRow label={t("orgMembers.details.name")}>
+            {row.name || (
+              <NotSetValue>{t("orgMembers.details.notSet")}</NotSetValue>
+            )}
+          </DetailRow>
+          <DetailRow label={t("orgMembers.details.username")}>
+            {row.username ? (
+              <MonoLtr>{row.username}</MonoLtr>
+            ) : (
+              <span className="italic text-base-content/70">
+                {t("orgMembers.noGitHubUsername")}
+              </span>
+            )}
+          </DetailRow>
+          <DetailRow label={t("orgMembers.details.githubId")}>
+            {row.github_id ? (
+              <MonoLtr>{row.github_id}</MonoLtr>
+            ) : (
+              <NotSetValue>{t("orgMembers.details.notSet")}</NotSetValue>
+            )}
+          </DetailRow>
+          {row.emails.length > 0 ? (
+            <DetailRow
+              label={t("orgMembers.details.email", {
+                count: row.emails.length,
+              })}
+            >
+              <span className="flex flex-col gap-0.5">
+                {row.emails.map((email) => (
+                  <span key={email.toLowerCase()}>{email}</span>
+                ))}
+              </span>
+            </DetailRow>
+          ) : null}
+          <DetailRow label={t("orgMembers.details.organization")}>
+            <EmphasisLtr>{org}</EmphasisLtr>
+          </DetailRow>
+          <DetailRow label={t("orgMembers.details.orgRole")}>
+            {isOwner
+              ? t("orgMembers.badgeOwner")
+              : row.isMember
+                ? t("orgMembers.badgeMember")
+                : t("orgMembers.badgeNotMember")}
+          </DetailRow>
+        </dl>
 
         <div>
           <h3 className="mb-2 text-sm font-semibold">

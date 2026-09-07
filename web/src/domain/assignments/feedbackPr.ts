@@ -422,9 +422,10 @@ async function pushEmptyCommit(params: {
 // The baseline commit to freeze `feedback` at: the OLDEST commit touching the
 // .classroom50.yaml marker (the accept commit), or null when the marker can't
 // be resolved — the same rule the runner's baseline_sha() applies. Read-only
-// and 404/lag-tolerant (any read failure collapses to null) so callers decide
-// what to do with an unresolvable baseline. Accept adds a just-committed-SHA
-// fallback on top; the teacher repair has no such fallback and defers instead.
+// and 404/lag-tolerant (any read failure collapses to null) for the accept
+// path, which has a just-committed-SHA fallback. The teacher repair reads the
+// marker directly instead, because there a read failure and an empty history
+// call for different remedies.
 export async function resolveFeedbackBaselineSha(
   client: GitHubClient,
   org: string,
@@ -439,9 +440,10 @@ export async function resolveFeedbackBaselineSha(
 }
 
 // A teacher-initiated repair returns the ensure result, plus an "unsupported"
-// verdict for a repo that structurally can't have a Feedback PR (no baseline
-// marker — e.g. an empty_repo assignment), which the UI explains rather than
-// surfacing as a transient failure to retry.
+// verdict for a repo that can't have a Feedback PR yet: no baseline marker (the
+// student's accept stopped before the setup commit, so their "Re-run setup" is
+// the repair) or the repo is missing. The UI explains both rather than
+// surfacing them as a transient failure to retry.
 export type RepairFeedbackPrResult =
   EnsureFeedbackPrResult | { ok: false; reason: string; unsupported: true }
 
@@ -471,11 +473,32 @@ export async function repairFeedbackPullRequest(params: {
   }
   const branch = repoInfo.default_branch || "main"
 
-  const acceptCommitSha = await resolveFeedbackBaselineSha(client, org, repo)
+  // The marker read is NOT collapsed to null here (unlike the accept-side
+  // resolveFeedbackBaselineSha): "no-baseline" tells the teacher to send the
+  // student back to re-run setup, so it must mean a genuinely empty marker
+  // history, never a 5xx or rate limit. A read failure is a transient result
+  // the bulk summary routes to the retryable bucket.
+  let acceptCommitSha: string | null
+  try {
+    acceptCommitSha = await getOldestCommitShaForPath(
+      client,
+      org,
+      repo,
+      ".classroom50.yaml",
+    )
+  } catch (err) {
+    return {
+      ok: false,
+      reason: err instanceof Error ? err.message : String(err),
+      code: "transient",
+    }
+  }
   if (!acceptCommitSha) {
     // No .classroom50.yaml marker means no frozen baseline to open the PR
-    // against (an empty_repo assignment, or a repo that isn't a Classroom 50
-    // assignment repo). The runner refuses the same case.
+    // against. For the repos the teacher UI offers this on (never empty_repo,
+    // which is gated out upstream) that means the student's accept stopped
+    // before the setup commit (issue #502); the student's "Re-run setup" is
+    // the repair. The runner refuses the same case.
     return { ok: false, reason: "no-baseline", unsupported: true }
   }
 
@@ -490,15 +513,18 @@ export async function repairFeedbackPullRequest(params: {
 }
 
 // The outcome of one repo in a bulk open, classified for the summary. The
-// three failure shapes are deliberately distinct because their remedies are:
-//   unsupported  no Feedback PR is possible for this repo (no baseline marker /
-//                repo missing) — nothing to retry.
+// four failure shapes are deliberately distinct because their remedies are:
+//   incomplete   the accept never landed the .classroom50.yaml marker, so
+//                there is no baseline — the student must re-run setup;
+//                re-running this action alone never fixes it.
+//   unsupported  the repo is missing (not accepted, or renamed) — nothing to
+//                open.
 //   blocked      the `feedback` branch is frozen at the wrong SHA — only an org
 //                admin deleting the branch fixes it; re-running never will.
 //   failed       a transient error (outage / rate limit / lag) — re-running the
 //                action retries just the repos still missing a PR.
 export type OpenAllOutcome =
-  "created" | "existed" | "unsupported" | "blocked" | "failed"
+  "created" | "existed" | "incomplete" | "unsupported" | "blocked" | "failed"
 
 export type OpenAllProgress = {
   done: number
@@ -517,6 +543,7 @@ export type OpenAllFeedbackPrsSummary = {
   total: number
   created: number
   existed: number
+  incomplete: OpenAllRepoResult[]
   unsupported: OpenAllRepoResult[]
   blocked: OpenAllRepoResult[]
   failed: OpenAllRepoResult[]
@@ -555,7 +582,11 @@ export async function openAllFeedbackPullRequests(params: {
         if (r.ok) {
           result = { repo, outcome: r.created ? "created" : "existed" }
         } else if ("unsupported" in r) {
-          result = { repo, outcome: "unsupported", reason: r.reason }
+          result = {
+            repo,
+            outcome: r.reason === "no-baseline" ? "incomplete" : "unsupported",
+            reason: r.reason,
+          }
         } else if (r.code === "base-mismatch") {
           // Never-retryable: an org admin must delete the mis-frozen branch.
           // Keep it out of `failed` so the "re-run to retry" copy stays honest.
@@ -580,6 +611,7 @@ export async function openAllFeedbackPullRequests(params: {
     total,
     created: results.filter((r) => r.outcome === "created").length,
     existed: results.filter((r) => r.outcome === "existed").length,
+    incomplete: results.filter((r) => r.outcome === "incomplete"),
     unsupported: results.filter((r) => r.outcome === "unsupported"),
     blocked: results.filter((r) => r.outcome === "blocked"),
     failed: results.filter((r) => r.outcome === "failed"),

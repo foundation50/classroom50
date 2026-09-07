@@ -48,6 +48,7 @@ export function useReinviteFailedInvite(
   const queryClient = useQueryClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: async (inv: GitHubOrgInvitation) => {
       const who = inv.login || inv.email || String(inv.id)
       await cancelOrgInvitation(client, { org, invitationId: inv.id })

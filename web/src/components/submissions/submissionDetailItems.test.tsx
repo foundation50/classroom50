@@ -38,9 +38,105 @@ describe("commitDetailItems", () => {
     expect(items[1].href).toBeUndefined()
     expect(items[1].releaseHref).toBeUndefined()
   })
+
+  it("omits the author unless asked (an individual repo's author is the student)", () => {
+    const commits = [
+      {
+        key: "c",
+        author: { login: "alice", avatarUrl: "https://avatars/alice" },
+      },
+    ]
+    expect(commitDetailItems(commits, t)[0].author).toBeUndefined()
+    expect(
+      commitDetailItems(commits, t, { showAuthors: true })[0].author,
+    ).toEqual({ label: "alice", avatarUrl: "https://avatars/alice" })
+  })
+
+  it("names an unlinked commit by its git author, without an avatar", () => {
+    const [item] = commitDetailItems(
+      [{ key: "c", author: { name: "Alice Git" } }],
+      t,
+      { showAuthors: true },
+    )
+    expect(item.author).toEqual({ label: "Alice Git", avatarUrl: undefined })
+  })
+
+  it("prefers the roster name for a linked login, falling back to the login", () => {
+    const roster: Record<string, string> = { alice: "Alice Anderson" }
+    const items = commitDetailItems(
+      [
+        {
+          key: "a",
+          author: { login: "alice", avatarUrl: "https://avatars/alice" },
+        },
+        {
+          key: "b",
+          author: { login: "bob", avatarUrl: "https://avatars/bob" },
+        },
+        // An unlinked commit has no login to resolve, so the resolver is skipped
+        // and the git author name stands.
+        { key: "c", author: { name: "Carol Git" } },
+      ],
+      t,
+      { showAuthors: true, authorName: (login) => roster[login] },
+    )
+    expect(items[0].author).toEqual({
+      label: "Alice Anderson",
+      avatarUrl: "https://avatars/alice",
+    })
+    expect(items[1].author).toEqual({
+      label: "bob",
+      avatarUrl: "https://avatars/bob",
+    })
+    expect(items[2].author).toEqual({
+      label: "Carol Git",
+      avatarUrl: undefined,
+    })
+  })
+
+  it("treats an empty resolved name as unavailable", () => {
+    const [item] = commitDetailItems(
+      [{ key: "a", author: { login: "alice" } }],
+      t,
+      { showAuthors: true, authorName: () => "" },
+    )
+    expect(item.author?.label).toBe("alice")
+  })
+
+  it("guards the avatar URL and skips an authorless commit", () => {
+    const items = commitDetailItems(
+      [
+        { key: "a", author: { login: "alice", avatarUrl: "javascript:x" } },
+        { key: "b" },
+      ],
+      t,
+      { showAuthors: true },
+    )
+    expect(items[0].author).toEqual({ label: "alice", avatarUrl: undefined })
+    expect(items[1].author).toBeUndefined()
+  })
 })
 
 describe("buildSubmissionDetailItems", () => {
+  it("labels pushes with their author on a shared repo", () => {
+    const items = buildSubmissionDetailItems(
+      {
+        tags: [],
+        commits: [
+          { key: "c", author: { login: "bob" } },
+          { key: "d", author: { login: "dan" } },
+        ],
+        showAuthors: true,
+        authorName: (login) => (login === "bob" ? "Bob Brown" : undefined),
+      },
+      "every-push",
+      "acme",
+      "cs101-hw1-group-1",
+      t,
+    )
+    expect(items[0].author?.label).toBe("Bob Brown")
+    expect(items[1].author?.label).toBe("dan")
+  })
   it("uses tag entries in tag mode", () => {
     const items = buildSubmissionDetailItems(
       {

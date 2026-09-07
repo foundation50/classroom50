@@ -25,6 +25,7 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
@@ -113,7 +114,6 @@ export function RepoAccessModal({
   assignmentName,
   students = [],
 }: RepoAccessModalProps) {
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const savingRef = useRef(false)
   const { user } = useGithubAuth()
   const { t } = useTranslation()
@@ -192,13 +192,6 @@ export function RepoAccessModal({
     setInvalidLogins(new Set())
   }, [open])
 
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    },
-    [],
-  )
-
   const clearInvalid = (login: string) => {
     const normalized = normalizeUsername(login)
     setInvalidLogins((current) => {
@@ -264,6 +257,7 @@ export function RepoAccessModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
+  useBeforeUnloadGuard(isSaving)
 
   // A change is: a new/restored collaborator, a struck-through server row, or a
   // permission level that differs from the server's.
@@ -377,9 +371,9 @@ export function RepoAccessModal({
       }
 
       await refetchCollaborators()
+      // Persists until the next edit or save attempt (Primer: don't
+      // auto-dismiss status messages on a timer).
       setSaved(true)
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
     } finally {
       savingRef.current = false
     }

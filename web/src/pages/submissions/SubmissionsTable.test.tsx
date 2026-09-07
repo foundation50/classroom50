@@ -26,6 +26,9 @@ vi.mock("@/hooks/useGetRepo", () => ({
 vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => ({ data: undefined, isLoading: false, isError: false }),
 }))
+vi.mock("@/hooks/useAssignmentRepoSetup", () => ({
+  default: () => ({ state: "complete", isLoading: false }),
+}))
 const feedbackRefetch = vi.fn()
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: feedbackRefetch }),
@@ -42,7 +45,7 @@ vi.mock("@/hooks/mutations/useSetScoreOverride", () => ({
   }),
 }))
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify: vi.fn() }),
+  useToast: () => ({ notify: vi.fn(), announce: vi.fn() }),
 }))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),
@@ -64,6 +67,8 @@ vi.mock("@/components/modals/StudentProfileModal", () => ({
 import SubmissionsTable from "./SubmissionsTable"
 import type { Student } from "@/types/classroom"
 import type { SubmissionRow } from "@/hooks/useGetScores"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import type { ClassroomRole } from "@/util/teamRoster"
 
 const student = (over: Partial<Student> = {}): Student => ({
   username: "alice",
@@ -146,6 +151,23 @@ describe("SubmissionsTable non-submitter repo links", () => {
       />,
     )
     expect(screen.queryByRole("link")).toBeNull()
+    expect(screen.getByText("submissions.table.notAccepted")).not.toBeNull()
+  })
+
+  it("says 'not visible to you' rather than 'not accepted' when the viewer's repo list is incomplete", () => {
+    // A non-owner (TA/HTA) can't see a repo their team wasn't granted, and
+    // GitHub 404s it exactly like a missing one — so a missing repo is not
+    // evidence the student hasn't accepted.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        nonSubmitters={[student()]}
+        acceptedUsernames={new Set()}
+        acceptanceComplete={false}
+      />,
+    )
+    expect(screen.queryByText("submissions.table.notAccepted")).toBeNull()
+    expect(screen.getByText("submissions.table.repoNotVisible")).not.toBeNull()
   })
 
   it("renders unsubmitted group repos with a repo link even with no roster match", () => {
@@ -725,10 +747,13 @@ describe("SubmissionsTable hub action list", () => {
     expect(
       screen.getByRole("button", { name: "submissions.rowDownload.aria" }),
     ).toBeTruthy()
-    // The group Members hand-off is present; the per-student Manage-access
-    // action is not (group access is managed via the Members modal).
+    // The group Manage-group hand-off is present; the per-student
+    // Manage-access action is not (group access is managed via the group
+    // members editor).
     expect(
-      screen.getByRole("button", { name: /submissions\.table\.members/ }),
+      screen.getByRole("button", {
+        name: /submissions\.manageModal\.manageGroup/,
+      }),
     ).toBeTruthy()
     expect(
       screen.queryByRole("button", {
@@ -962,6 +987,94 @@ describe("SubmissionsTable submission details modal", () => {
     )
   })
 
+  it("names who made each detected push on a team row, but not on an individual row", async () => {
+    const user = userEvent.setup()
+    const detectedEntries = [
+      {
+        kind: "commit" as const,
+        label: "ccc3333",
+        count: 1,
+        sha: "ccc3333",
+        author: { login: "alice", avatarUrl: "https://avatars/alice" },
+      },
+      {
+        kind: "commit" as const,
+        label: "bbb2222",
+        count: 1,
+        sha: "bbb2222",
+        author: { login: "zed", avatarUrl: "https://avatars/zed" },
+      },
+      {
+        kind: "commit" as const,
+        label: "aaa1111",
+        count: 1,
+        sha: "aaa1111",
+        author: { name: "Bob Git" },
+      },
+    ]
+    const teamView = render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={
+          new Map<string, GroupTeamRef>([
+            [
+              "group-1",
+              { slug: "classroom50-group-x-1", id: 1, n: 1, name: "Rocket" },
+            ],
+          ])
+        }
+        scores={[
+          scoreRow({
+            owner: "group-1",
+            usernames: ["alice", "zed"],
+            submissionCount: 3,
+            submissions: [],
+            detectedEntries,
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice", "zed"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    // Linked account on the roster: its roster name. Linked account off the
+    // roster: the login. Unlinked commit: the git author name.
+    const byLines = screen.getAllByText("submissions.details.commitBy")
+    expect(byLines).toHaveLength(3)
+    expect(screen.getByText("Alice A")).toBeTruthy()
+    expect(screen.queryByText("alice")).toBeNull()
+    expect(screen.getByText("zed")).toBeTruthy()
+    expect(screen.getByText("Bob Git")).toBeTruthy()
+    teamView.unmount()
+
+    // The same detected entries on an individual row stay author-less: the
+    // author is always the student, so it would only add noise.
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        assignmentMode="every-push"
+        scores={[
+          scoreRow({
+            submissionCount: 3,
+            submissions: [],
+            detectedEntries,
+          }),
+        ]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    await user.click(
+      screen.getByRole("button", { name: "submissions.type.countEveryPush" }),
+    )
+    expect(screen.queryByText("submissions.details.commitBy")).toBeNull()
+    expect(screen.queryByText("Bob Git")).toBeNull()
+  })
+
   it("shows the empty state with a tags link when a tag-mode row has no submissions", async () => {
     const user = userEvent.setup()
     render(
@@ -990,5 +1103,195 @@ describe("SubmissionsTable submission details modal", () => {
     expect(emptyLink.getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-alice/tags",
     )
+  })
+})
+
+describe("SubmissionsTable team/repo mismatch indicators", () => {
+  const team: GroupTeamRef = {
+    slug: "classroom50-group-abc123-2",
+    id: 102,
+    n: 2,
+    name: "Rocket",
+  }
+
+  it("renders a repo-less team as a row with the no-repository badge and a team link", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={new Map([["group-2", team]])}
+        teamsWithoutRepos={[team]}
+      />,
+    )
+    expect(screen.getByText("submissions.table.teamNoRepo")).toBeTruthy()
+    // The name cell links to the team's GitHub page, not a (404) repo URL.
+    const link = screen.getByRole("link", { name: "Rocket" })
+    expect(link.getAttribute("href")).toBe(
+      "https://github.com/orgs/acme/teams/classroom50-group-abc123-2",
+    )
+    // The empty-state row must not render alongside the team row.
+    expect(
+      screen.queryByText("submissions.table.emptyNoGroupsTitle"),
+    ).toBeNull()
+  })
+
+  it("flags an unsubmitted repo whose team no longer exists once teams settle", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={new Map<string, GroupTeamRef>()}
+        unsubmittedGroupRepos={[
+          { owner: "group-1", repoName: "cs101-hw1-group-1" },
+        ]}
+      />,
+    )
+    expect(screen.getByText("submissions.table.teamMissing")).toBeTruthy()
+  })
+
+  it("flags a submitter row whose team no longer exists", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        isGroup
+        isTeam
+        teamsSettled
+        teamsByOwner={new Map<string, GroupTeamRef>()}
+        scores={[scoreRow({ owner: "group-1", usernames: ["alice"] })]}
+      />,
+    )
+    expect(screen.getByText("submissions.table.teamMissing")).toBeTruthy()
+  })
+
+  it("shows no missing-team badge while the teams query hasn't settled", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[]}
+        isGroup
+        isTeam
+        teamsSettled={false}
+        teamsByOwner={new Map<string, GroupTeamRef>()}
+        unsubmittedGroupRepos={[
+          { owner: "group-1", repoName: "cs101-hw1-group-1" },
+        ]}
+      />,
+    )
+    expect(screen.queryByText("submissions.table.teamMissing")).toBeNull()
+  })
+})
+
+// A student maintainer can add members on GitHub directly, past the cap every
+// Classroom 50 client enforces (#896). The Members column flags the oversize
+// so the teacher sees it before grading.
+describe("SubmissionsTable over-capacity groups", () => {
+  const team: GroupTeamRef = {
+    slug: "classroom50-group-abc123-1",
+    id: 101,
+    n: 1,
+    name: "Rocket",
+  }
+  const overProps = {
+    ...baseProps,
+    isGroup: true,
+    isTeam: true,
+    teamsSettled: true,
+    teamsByOwner: new Map([["group-1", team]]),
+    scores: [scoreRow({ owner: "group-1", usernames: ["alice"] })],
+  }
+
+  it("flags a team row with more members than max_group_size", () => {
+    render(
+      <SubmissionsTable
+        {...overProps}
+        groupMemberLogins={
+          new Map([["group-1", ["alice", "bob", "carol", "dave"]]])
+        }
+        maxGroupSize={3}
+      />,
+    )
+    expect(screen.getByText("components.groupOverCapacity.badge")).toBeTruthy()
+    // The count click-through carries the explanation in its accessible name.
+    expect(
+      screen.getByRole("button", {
+        name: /components\.groupOverCapacity\.title/,
+      }),
+    ).toBeTruthy()
+  })
+
+  it("stays quiet for a group at or under the cap, or with no cap", () => {
+    const { unmount } = render(
+      <SubmissionsTable
+        {...overProps}
+        groupMemberLogins={new Map([["group-1", ["alice", "bob", "carol"]]])}
+        maxGroupSize={3}
+      />,
+    )
+    expect(screen.queryByText("components.groupOverCapacity.badge")).toBeNull()
+    unmount()
+
+    render(
+      <SubmissionsTable
+        {...overProps}
+        groupMemberLogins={
+          new Map([["group-1", ["alice", "bob", "carol", "dave"]]])
+        }
+      />,
+    )
+    expect(screen.queryByText("components.groupOverCapacity.badge")).toBeNull()
+  })
+})
+
+// Teaching staff who accepted an assignment (to test it) sit in the roster
+// spine beside students; their rows carry role chips so a teacher can tell a
+// staff test grade from a student's at a glance.
+describe("SubmissionsTable staff role badges", () => {
+  const staffRoles = new Map<string, ClassroomRole[]>([["prof", ["teacher"]]])
+
+  it("marks a submitter row from teaching staff with its role", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[student(), student({ username: "prof", role: "teacher" })]}
+        scores={[scoreRow({ owner: "Prof", usernames: ["Prof"] })]}
+        staffRolesByLogin={staffRoles}
+      />,
+    )
+    expect(screen.getByText("students.roleTeacher")).toBeTruthy()
+    expect(screen.getByTitle("submissions.table.staffRowTitle")).toBeTruthy()
+  })
+
+  it("marks a staff non-submitter row too", () => {
+    const prof = student({ username: "prof", role: "teacher" })
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        students={[student(), prof]}
+        nonSubmitters={[prof]}
+        acceptedUsernames={new Set(["prof"])}
+        staffRolesByLogin={staffRoles}
+      />,
+    )
+    expect(screen.getByText("students.roleTeacher")).toBeTruthy()
+  })
+
+  it("leaves a plain student row unbadged", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        nonSubmitters={[student({ username: "bob" })]}
+        staffRolesByLogin={staffRoles}
+      />,
+    )
+    expect(screen.queryByText("students.roleStudent")).toBeNull()
+    expect(screen.queryByText("students.roleTeacher")).toBeNull()
+    expect(screen.queryByTitle("submissions.table.staffRowTitle")).toBeNull()
   })
 })

@@ -6,11 +6,13 @@ import {
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
   REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
   SUBMISSION_MODES,
   GRADING_MODES,
   GRADING_MAX_POINTS_MIN,
   TEST_FAILURE_DETAILS_LEVELS,
   assertAssignmentMode,
+  assertTeamFormation,
   defaultStudentPermission,
 } from "@/types/classroom"
 import {
@@ -70,7 +72,6 @@ import {
   log,
   parseTemplateRef,
   resolveTemplate,
-  templateRefUnchanged,
   contentsPathExists,
 } from "./accessPrimitives"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -82,6 +83,10 @@ export type CreateAssignmentResult = CreateClassroomResult & {
   // private in-org template failed — a non-fatal warning the UI surfaces
   // (students can't accept until fixed). Mirrors teamDeleteWarning.
   templateGrantWarning?: string
+  // Set when an edit locked the assignment but revoking the student team's
+  // read on its private in-org template failed (non-fatal, the commit landed).
+  // Same shape and surfacing as SetAssignmentLockResult.templateAccessWarning.
+  templateAccessWarning?: string
 }
 
 // Ownership of every Assignment entry-level key on the edit path. Typed as a
@@ -108,6 +113,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   mode: "classroom50-owned",
   autograder: "classroom50-owned",
   max_group_size: "classroom50-owned",
+  team_formation: "classroom50-owned",
   feedback_pr: "classroom50-owned",
   // Rebuilt from input and MUTABLE: an edit may flip empty_repo now (the UI
   // warns when students already accepted, since existing repos aren't
@@ -128,6 +134,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   release_assets: "classroom50-owned",
   pass_threshold: "classroom50-owned",
   student_permission: "classroom50-owned",
+  repo_visibility: "classroom50-owned",
   submission_mode: "classroom50-owned",
   submission_tags: "classroom50-owned",
   // Rebuilt from input and MUTABLE: an edit may change grading.mode now (the UI
@@ -139,16 +146,17 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // Rebuilt from input alongside tests; a clearing edit (back to the grader
   // defaults) must win over the stale stored block.
   test_defaults: "classroom50-owned",
-  // Written only by the CLI's `migrate`; the form never rebuilds it, so it must
-  // ride through a GUI edit untouched.
+  // Written only by the retired GitHub Classroom migrate feature; the form
+  // never rebuilds it, so it must ride through a GUI edit untouched.
   migrated_from: "preserved",
   // Written only by the one-shot slug rename; carries the reservation and
   // collection-grandfather contracts, so an edit must never drop it.
   renamed_from: "preserved",
-  // Owned by the separate lock/unlock action (useSetAssignmentLock), never the
-  // create/edit form, so an edit must preserve it verbatim — otherwise saving
-  // an edit would silently unlock a locked assignment.
-  locked: "preserved",
+  // Rebuilt from input: the form's "Lock assignment" toggle shares this key
+  // with the lock/unlock action (useSetAssignmentLock). editAssignment carries
+  // the stored value forward when the input carries no decision, and mirrors
+  // the action's template-read revoke on a false-to-true save.
+  locked: "classroom50-owned",
   // Owned by the separate close/reopen action (useSetAssignmentClosed), never
   // the create/edit form, so an edit must preserve it verbatim — otherwise
   // saving an edit would silently reopen a closed submission window.
@@ -162,6 +170,26 @@ const EDIT_MANAGED_ASSIGNMENT_KEYS = new Set<string>(
     .filter(([, ownership]) => ownership === "classroom50-owned")
     .map(([key]) => key),
 )
+
+// Replace an entry in place so the row keeps its position, matching the CLI's
+// UpsertAssignment ("Position preserved on replace"). Drop-and-append would
+// reorder `gh teacher assignment list` and turn a one-field edit into a
+// whole-row diff in the config repo.
+//
+// First match only, also like UpsertAssignment: callers build `entry` from
+// `find`, so replacing every duplicate-slug row would clobber the second one.
+// Callers throw on a missing slug before reaching this, so a miss is a no-op.
+function replaceAssignmentEntry(
+  entries: Assignment[],
+  slug: string,
+  entry: Assignment,
+): Assignment[] {
+  const index = entries.findIndex((a) => a.slug === slug)
+  if (index === -1) return entries
+  const next = [...entries]
+  next[index] = entry
+  return next
+}
 
 // Copy forward entry-level keys the edit form doesn't manage (e.g.
 // `migrated_from`, unknown future keys) onto the rebuilt edit, without
@@ -230,15 +258,24 @@ export async function editAssignment(
   // permissive because it can't cheaply know the acceptance count.
 
   // Normalize the edit like create so it never leaves stray non-schema keys
-  // the CLI rejects. Pass the stored template so an unchanged ref is reused
-  // without a live lookup (non-template edits save even if the template moved).
+  // the CLI rejects. The template ref is re-resolved live either way (a
+  // template that went unusable fails the save before any commit).
   const { entry: editedAssignment, needsTeamGrant } =
-    await buildAssignmentEntry(client, input, targetAssignment.template)
+    await buildAssignmentEntry(client, input)
 
   // Renaming isn't supported: the slug is the assignment's repo-path identity
   // and its lookup key here. Pin the written slug to the stored one so the edit
   // can never rename an assignment, regardless of what the caller passed.
   editedAssignment.slug = targetAssignment.slug
+
+  // An input with no lock decision (input.locked undefined: no lock control, or
+  // a toggle left as it was seeded) must not
+  // silently unlock; only an explicit decision changes the stored state.
+  const wasLocked = Boolean(targetAssignment.locked)
+  if (input.locked === undefined && wasLocked) {
+    editedAssignment.locked = true
+  }
+  const nowLocked = Boolean(editedAssignment.locked)
 
   // The form rebuilds only the fields it manages; carry forward the rest
   // (e.g., `migrated_from`, unknown future keys) so an edit doesn't drop them.
@@ -249,10 +286,11 @@ export async function editAssignment(
 
   const nextAssignments = {
     ...currentAssignments,
-    assignments: [
-      ...currentAssignments.assignments.filter((a) => a.slug !== slug),
+    assignments: replaceAssignmentEntry(
+      currentAssignments.assignments,
+      slug,
       preservedEntry,
-    ],
+    ),
   }
 
   const tree = await createGitTree(client, {
@@ -289,8 +327,9 @@ export async function editAssignment(
   // any other field must not re-grant it (needsTeamGrant re-affirms the grant on
   // every save of a private in-org template). Skip the grant while locked so an
   // ordinary edit can't silently re-open it — mirrors the CLI add/reuse guard.
+  // The same re-affirm is what restores the read on a true-to-false save.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && preservedEntry.template && !preservedEntry.locked) {
+  if (needsTeamGrant && preservedEntry.template && !nowLocked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
       input.org,
@@ -301,6 +340,22 @@ export async function editAssignment(
     )
   }
 
+  // A false-to-true save is the lock action in form clothing: revoke the
+  // student team's read on a private in-org template, exactly like
+  // setAssignmentLock. Only the transition revokes; a save that stays locked
+  // has nothing to remove.
+  let templateAccessWarning: string | undefined
+  if (nowLocked && !wasLocked) {
+    templateAccessWarning = await reconcileLockTemplateAccess(
+      client,
+      input.org,
+      input.classroom,
+      input.slug,
+      preservedEntry.template,
+      true,
+    )
+  }
+
   return {
     previousCommitSha: ref.object.sha,
     baseTreeSha: commit.tree.sha,
@@ -308,6 +363,7 @@ export async function editAssignment(
     newCommitSha: newCommit.sha,
     updatedRef,
     templateGrantWarning,
+    templateAccessWarning,
   }
 }
 
@@ -341,14 +397,11 @@ async function ensureDeclarativeTestsWritable(
 // resolving the template the way the CLI does. Shared by create and edit so
 // both write the same schema-valid shape and apply the team grant.
 //
-// `existingTemplate` (edit only): an unchanged ref (same owner/repo, branch
-// unchanged or omitted) reuses the stored block WITHOUT a live lookup, so an
-// unrelated-field edit still saves when the template was deleted/un-templated/
-// made private-out-of-org. A changed ref is always re-resolved.
+// The template ref is always re-resolved live, changed or not (see the
+// resolveTemplate call below for why an unchanged ref is not reused as stored).
 async function buildAssignmentEntry(
   client: GitHubClient,
   input: CreateAssignmentInput,
-  existingTemplate?: Assignment["template"],
 ): Promise<{ entry: Assignment; needsTeamGrant: boolean }> {
   const userTests = input.tests.map(draftToTest)
 
@@ -538,23 +591,17 @@ async function buildAssignmentEntry(
   let needsTeamGrant = false
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
-    if (templateRefUnchanged(parsedTemplate, existingTemplate)) {
-      // Ref unchanged, but still re-resolve live via resolveTemplate — it fails
-      // closed before any commit on a template that went truly unusable
-      // (deleted, no longer a template, out-of-org private). Use the RESOLVED
-      // block (not the stored one) so an edit heals a legacy non-default
-      // `branch` down to the template's current default (#673): a custom branch
-      // can't be honored, so an unrelated edit shouldn't re-persist a stale one.
-      // Reuse needsTeamGrant so the unchanged-ref save re-affirms the
-      // (idempotent) team read a prior failure may have dropped.
-      const resolved = await resolveTemplate(client, input.org, parsedTemplate)
-      template = resolved.template
-      needsTeamGrant = resolved.needsTeamGrant
-    } else {
-      const resolved = await resolveTemplate(client, input.org, parsedTemplate)
-      template = resolved.template
-      needsTeamGrant = resolved.needsTeamGrant
-    }
+    // Re-resolved live even when the ref is unchanged: resolveTemplate fails
+    // closed before any commit on a template that went truly unusable (deleted,
+    // no longer a template, out-of-org private), and the RESOLVED block (not the
+    // stored one) heals a legacy non-default `branch` down to the template's
+    // current default (#673): a custom branch can't be honored, so an unrelated
+    // edit shouldn't re-persist a stale one. needsTeamGrant is reused so the
+    // unchanged-ref save re-affirms the (idempotent) team read a prior failure
+    // may have dropped.
+    const resolved = await resolveTemplate(client, input.org, parsedTemplate)
+    template = resolved.template
+    needsTeamGrant = resolved.needsTeamGrant
   }
 
   // Must match classroom50/assignments/v1 exactly — the CLI rejects unknown
@@ -626,10 +673,17 @@ async function buildAssignmentEntry(
       entry.available_from_meta = due_meta
     }
   }
-  if (input.mode === "group") {
+  // Written only when true (omitempty), matching setAssignmentLock which drops
+  // the key on unlock. The create/edit write paths gate the template team grant
+  // on this flag so a locked assignment never hands students the template.
+  if (input.locked) {
+    entry.locked = true
+  }
+  if (input.mode === "group" || input.mode === "team") {
     // A group size outside [GROUP_SIZE_MIN, GROUP_SIZE_MAX] (or non-integer)
     // produces an assignments.json the CLI refuses to parse; enforce the
-    // schema bounds here, not just in the form.
+    // schema bounds here, not just in the form. Applies to both group flavors
+    // (legacy group and team).
     if (
       !Number.isInteger(input.max_group_size) ||
       input.max_group_size < GROUP_SIZE_MIN ||
@@ -640,6 +694,18 @@ async function buildAssignmentEntry(
       )
     }
     entry.max_group_size = input.max_group_size
+  }
+
+  // team_formation is required for mode: team and forbidden otherwise (the
+  // CLI schema enforces the same conditional). assertTeamFormation guards a
+  // hand-tampered value before it can reach the file.
+  if (input.mode === "team") {
+    if (!input.team_formation) {
+      throw new Error(
+        "team_formation: a team assignment requires a formation (teacher or student).",
+      )
+    }
+    entry.team_formation = assertTeamFormation(input.team_formation)
   }
 
   // Runtime overrides (Advanced Settings); omit the block when unset.
@@ -807,9 +873,11 @@ async function buildAssignmentEntry(
 
   // student_permission: opt-in accept-time role for the enrolled student on
   // their own repo. Omit when it equals the mode default (absent = default
-  // everywhere downstream), and clamp a group assignment up to admin (a founder
-  // must manage members). Validate against the ladder so a bad value can't
-  // produce a file the CLI refuses to parse.
+  // everywhere downstream). Group is clamped up to admin (a founder must
+  // manage members); team is clamped AWAY from admin down to the push default
+  // (access flows through the team attachment — a per-member admin would let
+  // one student delete the shared repo). Validate against the ladder so a bad
+  // value can't produce a file the CLI refuses to parse.
   if (input.student_permission) {
     if (!REPO_PERMISSIONS.includes(input.student_permission)) {
       throw new Error(
@@ -820,7 +888,9 @@ async function buildAssignmentEntry(
     const effective =
       mode === "group" && input.student_permission !== "admin"
         ? "admin"
-        : input.student_permission
+        : mode === "team" && input.student_permission === "admin"
+          ? defaultStudentPermission(mode)
+          : input.student_permission
     if (effective !== defaultStudentPermission(mode)) {
       entry.student_permission = effective
     }
@@ -841,6 +911,19 @@ async function buildAssignmentEntry(
   }
   if (resolvedSubmissionMode !== "every-push") {
     entry.submission_mode = resolvedSubmissionMode
+  }
+
+  // repo_visibility: validate, then collapse the wire default away like the
+  // CLI so a private entry saved here stays byte-identical to one written
+  // before the field existed. Absence IS private, so no intent is lost.
+  const resolvedRepoVisibility = input.repo_visibility ?? "private"
+  if (!REPO_VISIBILITIES.includes(resolvedRepoVisibility)) {
+    throw new Error(
+      `repo_visibility: must be one of ${REPO_VISIBILITIES.join(", ")} (got "${String(resolvedRepoVisibility)}").`,
+    )
+  }
+  if (resolvedRepoVisibility !== "private") {
+    entry.repo_visibility = resolvedRepoVisibility
   }
 
   // submission_tags: omit when empty (no milestone tags — today's behavior),
@@ -1145,8 +1228,11 @@ export async function createAssignment(
     configBranch,
   )
 
+  // A locked create deliberately hands students no template read: the grant
+  // happens on unlock (setAssignmentLock or a later edit), so a timed
+  // assessment's template stays invisible until the teacher opens it.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && assignmentBody.template) {
+  if (needsTeamGrant && assignmentBody.template && !assignmentBody.locked) {
     templateGrantWarning = await resolveTemplateGrant(
       client,
       input.org,
@@ -1336,10 +1422,11 @@ export async function setAssignmentLock(
 
     const nextAssignments: AssignmentsFile = {
       ...currentAssignments,
-      assignments: [
-        ...currentAssignments.assignments.filter((a) => a.slug !== slug),
+      assignments: replaceAssignmentEntry(
+        currentAssignments.assignments,
+        slug,
         updatedEntry,
-      ],
+      ),
     }
 
     const tree = await createGitTree(client, {
@@ -1477,10 +1564,11 @@ export async function setAssignmentClosed(
 
     const nextAssignments: AssignmentsFile = {
       ...currentAssignments,
-      assignments: [
-        ...currentAssignments.assignments.filter((a) => a.slug !== slug),
+      assignments: replaceAssignmentEntry(
+        currentAssignments.assignments,
+        slug,
         updatedEntry,
-      ],
+      ),
     }
 
     const tree = await createGitTree(client, {

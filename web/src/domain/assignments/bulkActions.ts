@@ -26,19 +26,16 @@ import { reconcileLockTemplateAccess } from "./createEdit"
 // assignments page's bulk bar.
 //
 // The single-assignment functions each do a full read-modify-write of
-// <classroom>/assignments.json — read the ref, read the file, build a tree,
-// commit, move the ref. Looping them over a selection would be N commits to
-// ONE file, strictly serialized on the ref each previous write just moved, and
-// every one of them a conflict-retry candidate. These collapse the selection
-// into a single tree and a single commit instead, so the classroom's history
-// gets one entry for one user action and a partial write is impossible: the
-// commit either lands for every selected assignment or for none.
+// <classroom>/assignments.json. Looping them over a selection would be N
+// commits to ONE file, strictly serialized on the ref each previous write just
+// moved, and every one a conflict-retry candidate. These collapse the selection
+// into a single tree and commit instead, so the classroom's history gets one
+// entry per user action and a partial write is impossible.
 //
-// What deliberately does NOT batch: the lock's template reconciliation. Each
-// private in-org template is its own grant/revoke call, and reconcile already
-// degrades to a non-fatal warning rather than failing a committed flip — so it
-// runs per assignment AFTER the commit, and the warnings come back per slug for
-// the caller to surface.
+// The lock's template reconciliation deliberately does NOT batch: each private
+// in-org template is its own grant/revoke call, and reconcile already degrades
+// to a non-fatal warning rather than failing a committed flip, so it runs per
+// assignment AFTER the commit and the warnings come back per slug.
 
 // One assignment's outcome within a bulk run.
 export type BulkAssignmentOutcome = {
@@ -199,13 +196,11 @@ export async function setAssignmentsLock(
   // grant/revoke, which is exactly the state the single-assignment path
   // re-reconciles on a repeat click.
   //
-  // Run them with bounded concurrency rather than one after another: each is a
-  // repo probe plus a team grant/revoke against a DIFFERENT template repo, it
-  // never touches the config repo's ref, and both team calls are idempotent —
-  // so nothing here serializes on shared state the way the commit above does.
-  // Serially, unlocking twenty private-template assignments is up to a hundred
-  // round trips in a chain. mapWithConcurrency preserves input order, so
-  // `outcomes` still lines up with the selection.
+  // Bounded concurrency rather than one after another: each is a repo probe
+  // plus an idempotent team grant/revoke against a DIFFERENT template repo and
+  // never touches the config repo's ref, so nothing here serializes on shared
+  // state the way the commit above does. mapWithConcurrency preserves input
+  // order, so `outcomes` still lines up with the selection.
   const outcomes = await mapWithConcurrency(
     present,
     RECONCILE_CONCURRENCY,
@@ -322,13 +317,11 @@ export type BulkCopyAssignmentsInput = {
 //
 // The one bulk action here that does NOT batch: every copy is a read-modify-
 // write of the TARGET classroom's assignments.json on the same git ref, and may
-// create a repo besides — so two at once would collide on the ref that the
-// other just moved. Hence a per-assignment outcome rather than a single
-// verdict: with twelve sequential writes, "done" would hide which ones landed.
-//
-// One failed copy never abandons the rest. The remaining sources are
-// independent writes, and stopping here would leave the teacher unable to tell
-// which ones were even attempted.
+// create a repo besides, so two at once would collide on the ref the other just
+// moved. Hence a per-assignment outcome rather than a single verdict, and one
+// failed copy never abandons the rest: the remaining sources are independent
+// writes, and stopping would leave the teacher unable to tell which ones were
+// even attempted.
 export async function bulkCopyAssignments(
   client: GitHubClient,
   input: BulkCopyAssignmentsInput,

@@ -17,6 +17,7 @@ export function useSetOrgActionsMode(org: string) {
   const queryClient = useQueryClient()
 
   return useMutation<SetOrgActionsModeResult, Error, "paused" | "active">({
+    meta: { keepTabOpen: true },
     mutationFn: (mode) => setOrgActionsMode(client, org, mode),
     onSuccess: () => {
       void queryClient.invalidateQueries({

@@ -21,10 +21,16 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 // scripts/a11y/ -> web/ (two levels up): outputs land at the web root.
 const dir = path.resolve(here, "..", "..")
 
+// Tag-derived only, matching vite.config.ts: package.json's version is the last
+// release, not necessarily what this working tree contains.
+const version =
+  (process.env.VITE_APP_VERSION || "").replace(/^web-v/, "") || undefined
+const options = { version }
+
 const outputs: [string, string][] = [
-  ["vpat-report.json", renderVpatJson()],
-  ["VPAT.md", renderVpatReport()],
-  ["ACCESSIBILITY-REPORT.md", renderCombinedReport()],
+  ["vpat-report.json", renderVpatJson(undefined, options)],
+  ["VPAT.md", renderVpatReport(undefined, options)],
+  ["ACCESSIBILITY-REPORT.md", renderCombinedReport(undefined, options)],
 ]
 for (const [name, body] of outputs) {
   const outPath = path.join(dir, name)

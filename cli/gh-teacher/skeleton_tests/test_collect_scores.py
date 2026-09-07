@@ -118,6 +118,13 @@ def stub_team_members_by_slug(monkeypatch, by_slug: dict[str, list[str]]) -> Non
     monkeypatch.setattr(cs, "list_team_member_logins", fake)
 
 
+def stub_no_detections(monkeypatch) -> None:
+    """Stub detect_repo_submissions to find nothing. The graded path probes
+    every accepted repo that has no submit/* release, so a test about releases
+    alone needs the probe off the network."""
+    monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
+
+
 def write_minimal_classroom(root: pathlib.Path) -> pathlib.Path:
     """Create a tiny classroom fixture under `root` and return its path."""
     classroom = root / "cs-principles"
@@ -866,6 +873,10 @@ class TestListRepoCollaboratorLogins:
 
 
 class TestGroupCollectClassroom:
+    @pytest.fixture(autouse=True)
+    def _no_detections(self, monkeypatch):
+        stub_no_detections(monkeypatch)
+
     def _group_assignments(self):
         return {"assignments": [{"slug": "project", "mode": "group", "max_group_size": 3}]}
 
@@ -1055,6 +1066,318 @@ class TestGroupCollectClassroom:
         assert "classroom team" in err
 
 
+class _FakeRepoIndex:
+    """A RepoIndex stand-in with a fixed listing, so team-mode collection
+    resolves its poll targets without HTTP."""
+
+    def __init__(self, repo_names):
+        self._names = [n.lower() for n in repo_names]
+
+    def prefetch(self, repo_names):
+        pass
+
+    def names(self):
+        return list(self._names)
+
+    def contains(self, repo_name):
+        return repo_name.lower() in self._names
+
+    def is_private(self, repo_name):
+        return True
+
+    def facts(self, repo_name):
+        return None
+
+
+class TestTeamCollectClassroom:
+    """The team-mode attribution suite, mirroring TestGroupCollectClassroom:
+    the owner is the repo-name tail `group-<n>` (not a person), members come
+    from the GROUP TEAM intersected with the classroom enrollment, and a
+    failed team read SKIPS the repo (preserving prior credit) instead of
+    degrading to owner-only."""
+
+    CLASSROOM = "cs-principles"
+    SLUG = "project"
+    STUDENT_TEAM = "classroom50-cs-principles"
+
+    def _team_assignments(self):
+        return {"assignments": [{
+            "slug": self.SLUG, "mode": "team", "max_group_size": 3,
+            "team_formation": "teacher",
+        }]}
+
+    def _group_slug(self, counter=1):
+        return cs.group_team_slug(self.CLASSROOM, self.SLUG, counter)
+
+    def _repo_index(self):
+        return _FakeRepoIndex([f"{self.CLASSROOM}-{self.SLUG}-group-1"])
+
+    def _stub_release(self, monkeypatch):
+        def fake_all(*args, **kwargs):
+            return [{
+                "tag_name": "submit/2026-09-16T04-00-00Z",
+                "assets": [{"name": "result.json", "url": "https://api.github.com/assets/1"}],
+            }]
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+
+    def _stub_result(self, monkeypatch):
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(classroom=self.CLASSROOM, assignment=self.SLUG,
+                                        username="group-1", assignment_type="team"),
+        )
+
+    def _collect(self, monkeypatch=None):
+        return cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short=self.CLASSROOM,
+            classroom_meta={},
+            assignments=self._team_assignments(),
+            service_token="token",
+            repo_index=self._repo_index(),
+        )
+
+    def test_team_score_credits_team_members_and_writes_team_slug(self, monkeypatch):
+        self._stub_release(monkeypatch)
+        self._stub_result(monkeypatch)
+        stub_team_members_by_slug(monkeypatch, {
+            self.STUDENT_TEAM: ["alice", "bob", "carol"],
+            self._group_slug(): ["Bob", "alice"],
+        })
+
+        results, _, collected, _ = self._collect()
+        assert len(results) == 1
+        entry = results[0]
+        # The owner is the counter segment, the stable per-bucket key.
+        assert entry["owner"] == "group-1"
+        assert entry["_type"] == "team"
+        # Members: the group team's live members, lowercased and sorted.
+        assert entry["member_usernames"] == ["alice", "bob"]
+        assert entry["team_slug"] == self._group_slug()
+        assert collected[self.SLUG] == "team"
+
+    def test_team_member_not_enrolled_is_not_credited(self, monkeypatch):
+        # The roster intersection: a team member off the classroom team
+        # (dropped the class, out-of-band add) is never credited.
+        self._stub_release(monkeypatch)
+        self._stub_result(monkeypatch)
+        stub_team_members_by_slug(monkeypatch, {
+            self.STUDENT_TEAM: ["alice"],
+            self._group_slug(): ["alice", "intruder"],
+        })
+
+        results, _, _, _ = self._collect()
+        assert results[0]["member_usernames"] == ["alice"]
+        assert "intruder" not in results[0]["member_usernames"]
+
+    def test_team_read_failure_skips_repo_and_preserves_credit(self, monkeypatch, capsys):
+        # NO owner-only degrade: "group-1" is not a person, so a failed team
+        # read must skip the repo (leaving the prior entry intact) and count
+        # toward the aggregate warning naming the token permission fix.
+        self._stub_release(monkeypatch)
+        self._stub_result(monkeypatch)
+        group_slug = self._group_slug()
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == group_slug:
+                raise http_error(403)
+            return ["alice", "bob"]
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+
+        results, _, _, _ = self._collect()
+        assert results == [], "a failed team read must not write any entry"
+        err = capsys.readouterr().err
+        assert "existing member credit is preserved" in err
+        assert "team submission(s) were skipped" in err
+        assert "Organization -> Members: Read" in err
+
+    def test_team_mode_flip_is_first_class(self, monkeypatch, capsys):
+        # A group/individual-typed payload under a team assignment is a mode
+        # flip: rejected by validation and reported through the same guard.
+        self._stub_release(monkeypatch)
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(classroom=self.CLASSROOM, assignment=self.SLUG,
+                                        username="group-1", assignment_type="group"),
+        )
+        stub_team_members_by_slug(monkeypatch, {
+            self.STUDENT_TEAM: ["alice"],
+            self._group_slug(): ["alice"],
+        })
+
+        results, mode_flip, _, _ = self._collect()
+        assert results == []
+        assert mode_flip == 1
+        assert "individual/group/team" in capsys.readouterr().err
+
+    def test_unreadable_poll_targets_skip_the_assignment(self, monkeypatch, capsys):
+        # No repo index AND an unreadable org team listing: the assignment is
+        # skipped un-stamped so prior state (and freshness) is preserved.
+        self._stub_release(monkeypatch)
+        stub_team_members(monkeypatch, ["alice"])
+
+        def boom(*a, **k):
+            raise http_error(404)
+
+        monkeypatch.setattr(cs, "list_assignment_team_counters", boom)
+        results, _, collected, _ = cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short=self.CLASSROOM,
+            classroom_meta={},
+            assignments=self._team_assignments(),
+            service_token="token",
+            repo_index=None,
+        )
+        assert results == []
+        assert self.SLUG not in collected
+        assert "skipping this team assignment" in capsys.readouterr().err
+
+
+class TestTeamHelpers:
+    def test_group_team_hash_shared_fixture_parity(self):
+        # The same golden vectors the Go contract test and the web mirror pin,
+        # so the Python leg of the hash derivation can't drift.
+        repo_root = pathlib.Path(__file__).resolve().parents[3]
+        fixture = repo_root / "cli" / "shared" / "testdata" / "group_vectors.json"
+        doc = json.loads(fixture.read_text())
+        assert doc["cases"], "shared fixture has no cases"
+        assert doc["prefix"] == cs.GROUP_TEAM_PREFIX
+        assert doc["hash_hex_len"] == cs.GROUP_HASH_HEX_LEN
+        for case in doc["cases"]:
+            assert cs.group_team_hash(case["classroom"], case["assignment"]) == case["hash"], case
+            assert cs.group_team_slug(case["classroom"], case["assignment"], 1) == case["team_1"], case
+
+    def test_team_repo_counter(self):
+        assert cs.team_repo_counter("group-1") == 1
+        assert cs.team_repo_counter("group-42") == 42
+        # Mirrors contract.ParseGroupRepoCounter: counters start at 1, no
+        # leading zeros, digits only.
+        for bad in ("group-0", "group-01", "group-", "group-x", "alice", "grouper-1"):
+            assert cs.team_repo_counter(bad) is None, bad
+
+    def test_normalize_assignment_type(self):
+        assert cs.normalize_assignment_type("team") == "team"
+        assert cs.normalize_assignment_type("group") == "group"
+        assert cs.normalize_assignment_type("individual") == "individual"
+        # Fail closed: absent/typo'd modes read as the strictest type.
+        for other in (None, "", "TEAMWORK", 7):
+            assert cs.normalize_assignment_type(other) == "individual", other
+        # Case-insensitive like the old is_group derivation.
+        assert cs.normalize_assignment_type("TEAM") == "team"
+
+    def test_team_poll_owners_from_repo_index(self):
+        index = _FakeRepoIndex([
+            "cs-principles-project-group-2",
+            "cs-principles-project-group-1",
+            "cs-principles-project-group-01",  # leading zero: not a team repo
+            "cs-principles-project-alice",     # a username, not a counter
+            "cs-principles-other-group-9",     # another assignment
+        ])
+        owners, ok = cs.team_poll_owners(
+            "https://api.github.com", "cs50", "cs-principles", "project", "token", index
+        )
+        assert ok
+        assert owners == ["group-1", "group-2"]
+
+    def test_validate_result_expected_type_team(self):
+        # Team mode is a first-class expected type: a team payload passes, a
+        # group/individual one is rejected (and vice versa).
+        payload = make_result(username="group-1", assignment_type="team")
+        cs.validate_result(payload, "cs-principles", "hello", "group-1", expected_type="team")
+        with pytest.raises(ValueError):
+            cs.validate_result(payload, "cs-principles", "hello", "group-1", expected_type="group")
+        group_payload = make_result(username="group-1", assignment_type="group")
+        with pytest.raises(ValueError):
+            cs.validate_result(group_payload, "cs-principles", "hello", "group-1", expected_type="team")
+
+
+class TestTeamCollectDetected:
+    """The detected-records path for a no_autograder TEAM assignment: same
+    counter-derived poll targets and team-member resolution as the graded
+    path, with member_usernames + team_slug written onto each record."""
+
+    CLASSROOM = "cs-principles"
+    SLUG = "notebook"
+    STUDENT_TEAM = "classroom50-cs-principles"
+
+    def _entry(self):
+        return {
+            "slug": self.SLUG, "mode": "team", "max_group_size": 3,
+            "team_formation": "student", "no_autograder": True,
+            "template": {"owner": "cs50", "repo": "t", "branch": "main"},
+        }
+
+    def _detect(self, monkeypatch, member_stub):
+        monkeypatch.setattr(
+            cs, "detect_repo_submissions",
+            lambda *a, **k: [{"branch": "main", "count": 2}],
+        )
+        monkeypatch.setattr(cs, "list_team_member_logins", member_stub)
+        return cs.collect_detected(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short=self.CLASSROOM,
+            slug=self.SLUG,
+            entry=self._entry(),
+            team_usernames=["alice", "bob"],
+            repo_index=_FakeRepoIndex([f"{self.CLASSROOM}-{self.SLUG}-group-1"]),
+            service_token="token",
+        )
+
+    def test_detected_records_credit_team_members(self, monkeypatch):
+        group_slug = cs.group_team_slug(self.CLASSROOM, self.SLUG, 1)
+
+        def members(api_url, org, team_slug, token):
+            assert team_slug == group_slug
+            return ["Bob", "alice", "intruder"]
+
+        atype, records, visited = self._detect(monkeypatch, members)
+        assert atype == "team"
+        assert len(records) == 1
+        record = records[0]
+        assert record["owner"] == "group-1"
+        assert record["member_usernames"] == ["alice", "bob"]
+        assert record["team_slug"] == group_slug
+        assert "group-1" in visited
+
+    def test_detected_team_read_failure_skips_unvisited(self, monkeypatch, capsys):
+        def boom(*a, **k):
+            raise http_error(403)
+
+        atype, records, visited = self._detect(monkeypatch, boom)
+        assert atype == "team"
+        assert records == []
+        # NOT visited: the prior detected record survives the merge in main().
+        assert "group-1" not in visited
+        assert "existing member credit is preserved" in capsys.readouterr().err
+
+
+class TestTeamApplyUpdates:
+    def test_team_bucket_type_is_first_class(self):
+        scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
+        scores["assignments"] = cs.normalize_assignments(scores["assignments"])
+        update = make_update(assignment="project", assignment_type="team",
+                             username="group-1")
+        update["team_slug"] = cs.group_team_slug("cs-principles", "project", 1)
+        changed = cs.apply_updates(scores, [update])
+        assert changed == 1
+        bucket = scores["assignments"]["project"]
+        assert bucket["type"] == "team"
+        assert bucket["entries"][0]["team_slug"] == update["team_slug"]
+
+    def test_normalize_assignments_accepts_team_bucket(self):
+        normalized = cs.normalize_assignments({
+            "project": {"type": "team", "entries": []},
+        })
+        assert normalized["project"]["type"] == "team"
+        with pytest.raises(ValueError):
+            cs.normalize_assignments({"project": {"type": "squad", "entries": []}})
+
+
 # assignment_repo_name --------------------------------------------------------
 
 
@@ -1180,6 +1503,33 @@ class TestListEnrolledLogins:
         assert logins == ["alice"]
         assert students == {"alice"}
 
+    def test_unrecorded_staff_team_is_polled_via_derived_slug(self, monkeypatch):
+        # No `teams` block, but the derived hta team exists and has a member:
+        # that head TA is polled like any other staffer.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice"],
+            "classroom50-cs-principles-hta": ["headta"],
+        })
+        logins, _ = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", {}, "cs-principles", "token"
+        )
+        assert logins == ["alice", "headta"]
+
+    def test_derived_staff_team_404_is_quiet(self, monkeypatch, capsys):
+        import urllib.error
+
+        def fake(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-principles":
+                return ["alice"]
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake)
+        logins, _ = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", {}, "cs-principles", "token"
+        )
+        assert logins == ["alice"]
+        assert "::warning::" not in capsys.readouterr().err
+
     def test_soft_staff_error_skips_that_team(self, monkeypatch, capsys):
         import urllib.error
 
@@ -1214,6 +1564,10 @@ class TestListEnrolledLogins:
 
 
 class TestCollectClassroomTeamDriven:
+    @pytest.fixture(autouse=True)
+    def _no_detections(self, monkeypatch):
+        stub_no_detections(monkeypatch)
+
     def _assignments(self):
         return {"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]}
 
@@ -1625,6 +1979,27 @@ class TestLateness:
 
         # Lateness is marked per submission, inside the row's submissions list.
         assert results[0]["submissions"][0]["late"] is True
+
+    def test_malformed_due_warns_exactly_once_per_autograded_assignment(
+        self, monkeypatch, capsys
+    ):
+        # The graded path and the push detector both need the parsed due date;
+        # the warning for a bad value must not be emitted once by each.
+        monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+        monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
+        stub_team_members(monkeypatch, ["alice"])
+
+        cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short="cs-principles",
+            classroom_meta={},
+            assignments={"assignments": [{"slug": "hello", "due": "2026-09-15"}]},
+            service_token="token",
+        )
+
+        err = capsys.readouterr().err
+        assert err.count("is not an RFC 3339 timestamp with timezone") == 1
 
 
 # roster.csv header lockstep --------------------------------------------------
@@ -2299,10 +2674,105 @@ class TestCommitWalkEarlyStop:
         ]
 
 
+class TestDetectionReusesTheListing:
+    """detect_repo_submissions used to spend GET /repos on every probed repo to
+    learn its default branch, which the org listing (RepoIndex) had already
+    said. Early in term most accepted repos have no release yet, so that read
+    dominated the run's request budget."""
+
+    def _stub_walk(self, monkeypatch, calls):
+        monkeypatch.setattr(
+            cs, "get_repo",
+            lambda *a, **k: calls.append("get_repo") or {"default_branch": "main"},
+        )
+        monkeypatch.setattr(
+            cs, "oldest_commit_sha_for_path",
+            lambda *a, **k: calls.append("baseline") or "base",
+        )
+        monkeypatch.setattr(
+            cs, "list_default_branch_commits",
+            lambda *a, **k: calls.append("commits") or [
+                {"sha": "s1", "commit": {"committer": {"date": "2026-06-01T10:00:00Z"}}},
+                {"sha": "base"},
+            ],
+        )
+
+    def test_known_default_branch_skips_the_repo_read(self, monkeypatch):
+        calls: list[str] = []
+        self._stub_walk(monkeypatch, calls)
+        got = cs.detect_repo_submissions(
+            "https://api.github.com", "cs50", "cs-hw1-alice", "tok", "every-push", [],
+            facts=cs.RepoFacts(True, default_branch="main", size=12),
+        )
+        assert calls == ["baseline", "commits"]
+        assert [d["sha"] for d in got] == ["s1"]
+
+    def test_commitless_repo_is_answered_without_a_request(self, monkeypatch):
+        calls: list[str] = []
+        self._stub_walk(monkeypatch, calls)
+        monkeypatch.setattr(
+            cs, "list_repo_tags", lambda *a, **k: calls.append("tags") or []
+        )
+        for mode in ("every-push", "tag"):
+            assert cs.detect_repo_submissions(
+                "https://api.github.com", "cs50", "cs-hw1-alice", "tok", mode, [],
+                facts=cs.RepoFacts(True, default_branch="main", size=0),
+            ) == []
+        assert calls == []
+
+    def test_no_facts_reads_the_repo_as_before(self, monkeypatch):
+        calls: list[str] = []
+        self._stub_walk(monkeypatch, calls)
+        cs.detect_repo_submissions(
+            "https://api.github.com", "cs50", "cs-hw1-alice", "tok", "every-push", []
+        )
+        assert calls == ["get_repo", "baseline", "commits"]
+
+    def test_detector_hands_the_index_facts_to_detection(self, monkeypatch):
+        seen: dict[str, object] = {}
+
+        def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None):
+            seen["facts"] = facts
+            return []
+
+        monkeypatch.setattr(cs, "detect_repo_submissions", fake_detect)
+        monkeypatch.setattr(
+            cs, "list_org_repos",
+            lambda *a, **k: {
+                "cs-hw1-alice": cs.RepoFacts(True, default_branch="trunk", size=3)
+            },
+        )
+        index = cs.RepoIndex("https://api.github.com", "cs50", "tok")
+        detector = cs.SubmissionDetector(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            slug="hw1", entry={}, service_token="tok", roster_logins=set(),
+            due=None, repo_index=index,
+        )
+        detector.detect("alice", "cs-hw1-alice")
+        assert seen["facts"] == cs.RepoFacts(True, default_branch="trunk", size=3)
+
+    def test_listing_keeps_default_branch_and_size(self):
+        facts = cs.repo_facts(
+            {"name": "r", "private": True, "default_branch": "main", "size": 0}
+        )
+        assert facts == cs.RepoFacts(True, "main", 0)
+        # Anything malformed is simply unknown; `private` stays strict.
+        assert cs.repo_facts({"name": "r", "private": "yes", "size": True}) == (
+            cs.RepoFacts(False, None, None)
+        )
+
+
 # main() hard-failure handling -------------------------------------------------
 
 
 class TestMain:
+    @pytest.fixture(autouse=True)
+    def _no_team_members(self, monkeypatch):
+        # These tests stub collect_classroom and exercise main()'s plumbing; the
+        # grant pass still reads the student team (it now targets derived staff
+        # teams even without a `teams` block), so keep that read off the network.
+        stub_team_members(monkeypatch, [])
+
     def test_api_url_prefers_explicit_override_then_actions_value(
         self, tmp_path, monkeypatch
     ):
@@ -2470,6 +2940,62 @@ class TestMain:
         assert cs.main() == 0
         assert "::warning::" not in capsys.readouterr().err
 
+    def test_no_token_hint_when_pushes_were_detected_but_none_graded(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # Zero graded entries with detected pushes is the autograder not having
+        # published yet, not a token that can't read the repos: detection just
+        # read them. The re-scope hint would contradict the run's own data.
+        write_minimal_classroom(tmp_path)
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        detected = {
+            "hello": ("individual", [{"owner": "alice", "count": 2}], {"alice"})
+        }
+        monkeypatch.setattr(
+            cs,
+            "collect_classroom",
+            lambda **kwargs: ([], 0, {"hello": "individual"}, detected),
+        )
+
+        assert cs.main() == 0
+        err = capsys.readouterr().err
+        assert "collected 0 submissions" not in err
+        assert "rotate-service-token" not in err
+
+    def test_first_empty_detected_list_is_not_counted_as_a_change(
+        self, tmp_path, monkeypatch, capsys
+    ):
+        # A bucket written before detection existed has no `detected` key; the
+        # first run after an upgrade writes [] into it. That is bookkeeping, not
+        # an updated submission, so the summary must not count it.
+        write_minimal_classroom(tmp_path)
+        scores_path = tmp_path / "cs-principles" / "scores.json"
+        scores_path.write_text(
+            json.dumps(
+                {
+                    "schema": cs.SCORES_SCHEMA_V1,
+                    "assignments": {"hello": {"type": "individual", "entries": []}},
+                }
+            )
+        )
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        detected = {"hello": ("individual", [], {"alice"})}
+        monkeypatch.setattr(
+            cs,
+            "collect_classroom",
+            lambda **kwargs: ([], 0, {"hello": "individual"}, detected),
+        )
+
+        assert cs.main() == 0
+        out = capsys.readouterr().out
+        assert "0 updated submission(s)" in out
+        written = json.loads(scores_path.read_text())
+        assert written["assignments"]["hello"]["detected"] == []
+
     def test_warns_when_zero_collected_but_assignments_exist(self, tmp_path, monkeypatch, capsys):
         # Team-driven collection: an empty roster no longer means
         # "nothing to collect" (the CSV is only metadata now). When
@@ -2619,6 +3145,7 @@ class TestDetectedPersistence:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        stub_team_members(monkeypatch, [])  # keep the grant pass off the network
 
     def _seed(self, tmp_path, detected):
         path = tmp_path / "cs-principles" / "scores.json"
@@ -2704,6 +3231,7 @@ class TestCollectedAtStamp:
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+        stub_team_members(monkeypatch, [])  # keep the grant pass off the network
 
     def test_utc_now_iso_matches_schema_shape(self):
         # The writer's stamp source must emit the schema's UTC-Z shape directly
@@ -2815,6 +3343,7 @@ class TestCollectedAtStamp:
         # walked, so neither may be stamped; the group assignment reports its
         # mode so an absent bucket can be scaffolded with the right type.
         stub_team_members(monkeypatch, ["alice"])
+        stub_no_detections(monkeypatch)
         monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
         _, _, collected, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
@@ -2865,7 +3394,7 @@ class TestCollectClassroomModeFlip:
         assert mode_flip == 1
         err = capsys.readouterr().err
         assert "NONE were creditable" in err
-        assert "individual<->group" in err
+        assert "individual/group/team" in err
         # The affected repo is named explicitly in the consolidated warning.
         assert "cs-principles-hello-alice" in err
 
@@ -3089,7 +3618,7 @@ def test_no_autograder_detection_records_no_score(monkeypatch):
 def test_no_autograder_detection_omits_non_submitters(monkeypatch):
     # A repo with nothing detected is OMITTED rather than recorded as 0, so the
     # record list is exactly the submitter set (what the progress bar counts).
-    def per_user(api_url, org, repo_name, token, mode, tags):
+    def per_user(api_url, org, repo_name, token, mode, tags, facts=None):
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}] if "alice" in repo_name else []
 
     monkeypatch.setattr(cs, "detect_repo_submissions", per_user)
@@ -3141,7 +3670,7 @@ def test_no_autograder_detection_tag_mode_reads_tags(monkeypatch):
     # detectTagSubmissions mirrors.
     seen = {}
 
-    def capture(api_url, org, repo_name, token, mode, tags):
+    def capture(api_url, org, repo_name, token, mode, tags, facts=None):
         seen["mode"] = mode
         seen["tags"] = tags
         return [{"count": 2, "datetime": "2026-06-02T10:00:00Z"}]
@@ -3176,7 +3705,7 @@ def test_no_autograder_detection_tag_mode_reads_tags(monkeypatch):
 
 def test_no_autograder_detection_skips_unreadable_repo(monkeypatch, capsys):
     # One unreadable repo warns and is skipped; it must not void the assignment.
-    def flaky(api_url, org, repo_name, token, mode, tags):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
         if "bob" in repo_name:
             raise http_error(500, "Server Error")
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
@@ -3265,7 +3794,7 @@ def test_no_autograder_detection_tag_mode_does_not_trust_tag_times(monkeypatch):
 def test_no_autograder_detection_reports_visited_owners(monkeypatch):
     # `visited` names owners whose repo was actually read, so main() can tell a
     # failed read apart from "nothing detected" and preserve the prior record.
-    def flaky(api_url, org, repo_name, token, mode, tags):
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
         if "bob" in repo_name:
             raise http_error(500, "Server Error")
         return [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}]
@@ -3317,6 +3846,206 @@ def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
     assert "empty_repo" in capsys.readouterr().out
 
 
+# Autograded assignments: pushes without a graded release --------------------
+#
+# Discussion #677: the assignments list read 0 / 1 while the Submissions page
+# showed the student's two pushes as "Pending", because the list counts only
+# scores.json and the collector wrote `detected` for no_autograder only.
+
+
+def _release_for(username: str):
+    return [{
+        "tag_name": "submit/2026-06-01T10-00-00Z",
+        "assets": [{"name": "result.json", "url": f"https://api.github.com/a/{username}"}],
+    }]
+
+
+def test_autograded_assignment_detects_pushes_with_no_release(monkeypatch, capsys):
+    # alice pushed twice but the autograder never published a release; bob has
+    # no repo at all. alice is recorded as detected (count, newest push), bob is
+    # not, and no graded entry is invented for either.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+
+    def per_user(api_url, org, repo_name, token, mode, tags, facts=None):
+        assert mode == "every-push"
+        return (
+            [
+                {"sha": "c2", "datetime": "2026-06-02T10:00:00Z"},
+                {"sha": "c1", "datetime": "2026-06-01T10:00:00Z"},
+            ]
+            if "alice" in repo_name
+            else []
+        )
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", per_user)
+    stub_team_members(monkeypatch, ["alice", "bob"])
+
+    results, _, collected, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+
+    assert results == []
+    assert collected["hw1"] == "individual"
+    atype, records, visited = detected["hw1"]
+    assert atype == "individual"
+    assert records == [
+        {"owner": "alice", "count": 2, "latest_datetime": "2026-06-02T10:00:00Z", "kind": "commit"}
+    ]
+    # Both repos were read: bob's "nothing" is a verdict, not a failed read.
+    assert visited == {"alice", "bob"}
+    assert "0/2 submitted, 1 with pushes but no graded submission" in capsys.readouterr().out
+
+
+def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
+    # A repo with a release is graded, full stop: detection isn't spent on it,
+    # and marking it visited retires a detected record left from a run before
+    # the autograder caught up, so `entries` and `detected` never share an owner.
+    probed: list[str] = []
+    monkeypatch.setattr(
+        cs, "all_submit_releases",
+        lambda a, o, repo, t: _release_for("alice") if "alice" in repo else [],
+    )
+    monkeypatch.setattr(
+        cs, "download_result_asset",
+        lambda *a, **k: make_result(username="alice", assignment="hw1"),
+    )
+    monkeypatch.setattr(
+        cs, "detect_repo_submissions", lambda a, o, repo, *rest, **kw: probed.append(repo) or []
+    )
+    stub_team_members(monkeypatch, ["alice", "bob"])
+
+    results, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+
+    assert [r["owner"] for r in results] == ["alice"]
+    assert probed == ["cs-principles-hw1-bob"]
+    _, records, visited = detected["hw1"]
+    assert records == []
+    assert visited == {"alice", "bob"}
+
+
+def test_autograded_detection_respects_tag_mode(monkeypatch):
+    # A tag-mode assignment probes tags, and (as for no_autograder) a tag's
+    # encoded time isn't trusted for lateness.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+    seen: dict[str, object] = {}
+
+    def fake_detect(api_url, org, repo_name, token, mode, tags, facts=None):
+        seen["mode"], seen["tags"] = mode, tags
+        return [{"count": 1, "datetime": "2026-06-01T10:00:00Z"}]
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", fake_detect)
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{
+            "slug": "hw1", "mode": "individual", "tests": [],
+            "submission_mode": "tag", "submission_tags": ["phase1", ""],
+            "due": "2026-05-01T00:00:00Z",
+        }]},
+        service_token="token",
+    )
+
+    assert seen == {"mode": "tag", "tags": ["phase1"]}
+    (record,) = detected["hw1"][1]
+    assert record == {"owner": "alice", "count": 1, "kind": "tag"}
+
+
+def test_autograded_detection_failure_keeps_prior_record(monkeypatch, capsys):
+    # A failed probe warns and leaves the owner un-visited, so main() keeps the
+    # record from the last run instead of deleting a submitter over a 500.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+
+    def flaky(api_url, org, repo_name, token, mode, tags, facts=None):
+        raise http_error(500, "Server Error")
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", flaky)
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+
+    _, records, visited = detected["hw1"]
+    assert records == [] and visited == set()
+    assert "submission detection failed" in capsys.readouterr().err
+
+
+def test_autograded_release_listing_failure_is_not_probed(monkeypatch):
+    # The release read failing says nothing about the repo's pushes; don't
+    # spend a probe on it, and don't touch the prior record (un-visited).
+    def fail_releases(*a, **k):
+        raise http_error(500, "Server Error")
+
+    monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
+
+    def fail_detect(*a, **k):
+        raise AssertionError("must not probe a repo whose release read failed")
+
+    monkeypatch.setattr(cs, "detect_repo_submissions", fail_detect)
+    stub_team_members(monkeypatch, ["alice"])
+
+    _, _, _, detected = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+    )
+    assert detected["hw1"][1:] == ([], set())
+
+
+def test_main_writes_detected_for_autograded_bucket_beside_entries(tmp_path, monkeypatch):
+    # End to end: an autograded bucket carries both a graded entry and a
+    # detected record for a different owner, and a later run that grades the
+    # detected owner drops their record.
+    write_minimal_classroom(tmp_path)
+    monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+    monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+    monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
+    stub_team_members(monkeypatch, [])
+    path = tmp_path / "cs-principles" / "scores.json"
+
+    monkeypatch.setattr(
+        cs, "collect_classroom",
+        lambda **kwargs: (
+            [make_update(username="alice")],
+            0,
+            {"hello": "individual"},
+            {"hello": ("individual", [{"owner": "bob", "count": 1, "kind": "commit"}], {"alice", "bob"})},
+        ),
+    )
+    assert cs.main() == 0
+    bucket = json.loads(path.read_text())["assignments"]["hello"]
+    assert [e["owner"] for e in bucket["entries"]] == ["alice"]
+    assert bucket["detected"] == [{"owner": "bob", "count": 1, "kind": "commit"}]
+
+    monkeypatch.setattr(
+        cs, "collect_classroom",
+        lambda **kwargs: (
+            [make_update(username="bob")],
+            0,
+            {"hello": "individual"},
+            {"hello": ("individual", [], {"alice", "bob"})},
+        ),
+    )
+    assert cs.main() == 0
+    bucket = json.loads(path.read_text())["assignments"]["hello"]
+    assert sorted(e["owner"] for e in bucket["entries"]) == ["alice", "bob"]
+    assert bucket["detected"] == []
+
+
 # Staff-team repo-access grant ------------------------------------------------
 
 
@@ -3341,24 +4070,47 @@ class TestStaffTeamPermissions:
 
 
 class TestResolveStaffTeamSlugs:
-    def test_returns_present_roles_with_slugs(self):
+    def test_recorded_slugs_are_authoritative(self):
         meta = {
             "teams": {
-                "teacher": {"id": 1, "slug": "classroom50-cs-teacher"},
+                "teacher": {"id": 1, "slug": "classroom50-cs-teacher-1"},
                 "ta": {"id": 2, "slug": "classroom50-cs-ta"},
             }
         }
-        assert cs.resolve_staff_team_slugs(meta) == {
-            "teacher": "classroom50-cs-teacher",
-            "ta": "classroom50-cs-ta",
+        out = cs.resolve_staff_team_slugs(meta, "cs")
+        # A GitHub re-slug on collision (`-1`) is kept verbatim, never re-derived.
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher-1", recorded=True)
+        assert out["ta"] == cs.StaffTeam("classroom50-cs-ta", recorded=True)
+
+    def test_missing_roles_fall_back_to_derived_slug(self):
+        # hta is absent from a `teams` block written before the role existed:
+        # the web creates + populates `classroom50-cs-hta` on first use without
+        # recording it, so the grant pass must still find it.
+        meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs-ta"}}}
+        out = cs.resolve_staff_team_slugs(meta, "cs")
+        assert out["hta"] == cs.StaffTeam("classroom50-cs-hta", recorded=False)
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher", recorded=False)
+        assert set(out) == set(cs.STAFF_ROLES)
+
+    def test_no_teams_block_derives_every_role(self):
+        out = cs.resolve_staff_team_slugs({}, "cs")
+        assert out == {
+            role: cs.StaffTeam(f"classroom50-cs-{role}", recorded=False)
+            for role in cs.STAFF_ROLES
         }
 
-    def test_no_teams_block_yields_empty(self):
-        assert cs.resolve_staff_team_slugs({}) == {}
-
-    def test_skips_role_without_slug(self):
+    def test_role_without_slug_falls_back(self):
         meta = {"teams": {"ta": {"id": 2}, "teacher": {"slug": "  "}}}
-        assert cs.resolve_staff_team_slugs(meta) == {}
+        out = cs.resolve_staff_team_slugs(meta, "cs")
+        assert out["ta"] == cs.StaffTeam("classroom50-cs-ta", recorded=False)
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher", recorded=False)
+
+    def test_derived_slug_mirrors_go_contract(self):
+        # contract.StaffTeamSlug: ConfigRepoName + "-" + short + "-" + role.
+        assert cs.staff_team_slug("cs-principles", "hta") == "classroom50-cs-principles-hta"
+
+    def test_staff_roles_cover_every_grantable_role(self):
+        assert set(cs.STAFF_TEAM_PERMISSIONS) <= set(cs.STAFF_ROLES)
 
 
 class TestAssignmentTemplateRef:
@@ -3459,7 +4211,9 @@ class TestGrantClassroomTeamAccess:
 
     def test_grants_ta_pull_on_each_student_repo(self, monkeypatch):
         grants = self._capture_grants(monkeypatch)
-        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
+        )
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
@@ -3471,23 +4225,54 @@ class TestGrantClassroomTeamAccess:
         assert len([g for g in grants if g[2].startswith("cs-")]) == 4
         assert all(team == "classroom50-cs-ta" and perm == "pull" for team, _, _, perm in grants)
 
-    def test_no_teams_block_is_noop(self, monkeypatch):
+    def test_no_teams_block_grants_via_derived_slugs(self, monkeypatch):
+        # A legacy classroom.json with no `teams` block: the pass still targets
+        # the derived hta/ta teams, so a TA the web put on `classroom50-cs-ta`
+        # is granted even though nothing recorded that team.
         grants = self._capture_grants(monkeypatch)
-        called = {"members": False}
-
-        def fake_members(*a, **k):
-            called["members"] = True
-            return ["alice"]
-
-        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        stub_team_members_by_slug(
+            monkeypatch,
+            {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]},
+        )
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short_name": "cs"},
             assignments=self.ASSIGNMENTS, service_token="tok",
         )
-        assert grants == []
-        # No team block => no membership read either (fully short-circuited).
-        assert called["members"] is False
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-ta"}
+
+    def test_derived_team_404_is_quiet_recorded_team_404_warns(self, monkeypatch, capsys):
+        # A derived team that doesn't exist is expected (nothing said it would);
+        # a RECORDED team that 404s is a real inconsistency worth a warning.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs":
+                return ["alice"]
+            if team_slug == "classroom50-cs-hta":
+                return ["prof"]
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        # ta is recorded (and 404s); hta is derived and populated.
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        err = capsys.readouterr().err
+        assert "could not read staff team 'classroom50-cs-ta'" in err
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-hta"}
+
+        capsys.readouterr()
+        grants.clear()
+        # Now nothing recorded: the derived ta 404 must not warn at all.
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short_name": "cs"},
+            assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert "::warning::" not in capsys.readouterr().err
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-hta"}
 
     def test_grants_private_in_org_template_skips_public_and_out_of_org(self, monkeypatch):
         grants = self._capture_grants(monkeypatch)
@@ -3605,6 +4390,97 @@ class TestGrantClassroomTeamAccess:
         assert grants == []
         assert known_read["hit"] is False  # no bulk read for an empty team
 
+    def test_no_populated_staff_team_warns_instead_of_silent_success(self, monkeypatch, capsys):
+        # Discussion #768: every TA was promoted, leaving the ta team empty, and
+        # the hta team was never recorded and doesn't exist. The pass grants
+        # nothing, which used to look exactly like a healthy run. It must say so.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs":
+                return ["alice", "bob"]
+            if team_slug == "classroom50-cs-ta":
+                return []
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        out, err = capsys.readouterr()
+        assert "::warning::cs: no staff access was granted" in err
+        assert "classroom50-cs-ta" in err and "classroom50-cs-hta" in err
+        assert "gh teacher staff add cs50 cs" in err
+        # Per-team reasons on stdout so the log explains the verdict.
+        assert "'classroom50-cs-ta' (ta) has no members" in out
+        assert "no hta team recorded" in out
+
+    def test_no_staff_team_at_all_is_a_notice_not_a_warning(self, monkeypatch, capsys):
+        # A solo teacher: nothing under `teams`, and neither derived staff team
+        # exists on GitHub. Nothing is misconfigured, so this must not paint a
+        # yellow annotation on every collect; the verdict is still printed as a
+        # notice so a teacher who does expect TAs can find it.
+        grants = self._capture_grants(monkeypatch)
+
+        def fake_members(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs":
+                return ["alice", "bob"]
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake_members)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short_name": "cs"},
+            assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants == []
+        out, err = capsys.readouterr()
+        assert "::warning::" not in err
+        assert "::notice::cs: no staff access was granted" in err
+        assert "no ta team recorded" in out and "no hta team recorded" in out
+
+    def test_no_warning_when_some_staff_team_is_populated(self, monkeypatch, capsys):
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch,
+            {"classroom50-cs": ["alice"], "classroom50-cs-ta": [], "classroom50-cs-hta": ["prof"]},
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META_TA_HTA, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert grants
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_no_targets_does_not_warn_about_staff(self, monkeypatch, capsys):
+        # Nobody has accepted and there is no private template: there is nothing
+        # to grant, which is not a staffing problem.
+        self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(monkeypatch, {"classroom50-cs": [], "classroom50-cs-ta": []})
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert "::warning::" not in capsys.readouterr().err
+
+    def test_populated_team_always_prints_a_summary_line(self, monkeypatch, capsys):
+        # An idempotent re-run grants nothing new; the log still names the team
+        # so "no output" never means "no staff access".
+        monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: False)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        out, err = capsys.readouterr()
+        assert "cs: classroom50-cs-ta needed no new pull grant (2 target repo(s) checked)" in out
+        assert "::warning::" not in err
+
     def test_empty_team_skip_is_per_slug_not_all_or_nothing(self, monkeypatch):
         # ta is empty, hta is populated: the hta team still gets its grants.
         grants = self._capture_grants(monkeypatch)
@@ -3625,7 +4501,8 @@ class TestGrantClassroomTeamAccess:
 
     def test_non_404_skippable_staff_read_skips_that_team(self, monkeypatch, capsys):
         # A 422 (not 401/403/599/throttle) reading staff membership is SKIPPABLE:
-        # skip that team for the run without failing, and don't grant.
+        # skip that team for the run without failing, and don't grant it. The
+        # other staff team is unaffected.
         grants = self._capture_grants(monkeypatch)
 
         def fake_members(api_url, org, team_slug, token):
@@ -3638,7 +4515,7 @@ class TestGrantClassroomTeamAccess:
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
         )
-        assert grants == []
+        assert {team for team, _, _, _ in grants} == {"classroom50-cs-hta"}
         assert "::warning::" in capsys.readouterr().err
 
     def test_hard_error_on_staff_read_propagates(self, monkeypatch):
@@ -3691,7 +4568,7 @@ class TestGrantClassroomTeamAccess:
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
         )
-        assert grants == []
+        assert "classroom50-cs-ta" not in {team for team, _, _, _ in grants}
         assert "::warning::" in capsys.readouterr().err
 
     # --- per-assignment scoping (change 2) ---
@@ -4028,6 +4905,9 @@ class TestGrantThrottled:
         # Collection can't defer — an incomplete gradebook must not report
         # success — but the message still must not blame the token.
         write_minimal_classroom(tmp_path)
+        # The grant pass runs first and reads the student team; keep it off the
+        # network so the only error under test is collection's throttle.
+        stub_team_members(monkeypatch, [])
 
         def fail_collect(**kwargs):
             raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
@@ -4087,8 +4967,14 @@ class StubIndex:
     def __init__(self, names):
         self._names = {n.lower() for n in names}
 
+    def prefetch(self, repo_names):
+        pass
+
     def contains(self, repo_name):
         return repo_name.lower() in self._names
+
+    def facts(self, repo_name):
+        return None
 
 
 class TestPassesSkipMissingRepos:
@@ -4096,7 +4982,9 @@ class TestPassesSkipMissingRepos:
     ASSIGNMENTS = TestGrantThrottled.ASSIGNMENTS
 
     def test_grant_pass_only_touches_existing_repos(self, monkeypatch):
-        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
+        )
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         seen: list[str] = []
 
@@ -4115,6 +5003,7 @@ class TestPassesSkipMissingRepos:
 
     def test_collection_skips_names_without_a_repo(self, monkeypatch):
         polled: list[str] = []
+        probed: list[str] = []
 
         def fake_releases(api_url, org, repo, token):
             polled.append(repo)
@@ -4122,7 +5011,10 @@ class TestPassesSkipMissingRepos:
 
         monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
         monkeypatch.setattr(cs, "all_submit_releases", fake_releases)
-        cs.collect_classroom(
+        monkeypatch.setattr(
+            cs, "detect_repo_submissions", lambda a, o, repo, *rest, **kw: probed.append(repo) or []
+        )
+        _, _, _, detected = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
             classroom_meta=self.META,
             assignments={"schema": cs.ASSIGNMENTS_SCHEMA_V1, "assignments": [{"slug": "hw1", "mode": "individual"}]},
@@ -4130,9 +5022,14 @@ class TestPassesSkipMissingRepos:
             repo_index=StubIndex({"cs-hw1-bob"}),
         )
         assert polled == ["cs-hw1-bob"]
+        # The push probe honors the index too, and a definite "no repo" retires
+        # any stale detected record for that owner.
+        assert probed == ["cs-hw1-bob"]
+        assert detected["hw1"][2] == {"alice", "bob"}
 
     def test_unknown_index_polls_everything(self, monkeypatch):
         polled: list[str] = []
+        stub_no_detections(monkeypatch)
         monkeypatch.setattr(cs, "list_enrolled_logins", lambda *a, **k: (["alice", "bob"], {"alice", "bob"}))
         monkeypatch.setattr(cs, "all_submit_releases", lambda a, o, repo, t: polled.append(repo) or [])
         cs.collect_classroom(
@@ -4342,7 +5239,9 @@ class TestOrgAndTeamListings:
         repos = cs.list_org_repos("https://api.github.com", "CS50", "tok")
         # The private flag rides along from the same bodies, so the grant pass
         # doesn't re-read each template. Strict boolean: a non-bool is not True.
-        assert repos == {"cs-hw1-alice": True, "cs-hw2-bob": False, "starter": False}
+        assert {n: f.private for n, f in repos.items()} == {
+            "cs-hw1-alice": True, "cs-hw2-bob": False, "starter": False
+        }
         # type=all keeps private student repos in the listing; without it the
         # index would call every private repo missing and skip its poll.
         assert "type=all" in self.seen_url and "per_page=100" in self.seen_url
@@ -4382,7 +5281,7 @@ class TestTemplatePrivacyFromTheIndex:
     def test_index_answers_privacy_without_a_per_template_read(self, monkeypatch):
         monkeypatch.setattr(
             cs, "list_org_repos",
-            lambda *a, **k: {"priv-tmpl": True, "pub-tmpl": False},
+            lambda *a, **k: {"priv-tmpl": cs.RepoFacts(True), "pub-tmpl": cs.RepoFacts(False)},
         )
         monkeypatch.setattr(
             cs, "get_repo", lambda *a, **k: pytest.fail("no per-template read expected")
@@ -4477,6 +5376,594 @@ class TestRepoIndexLatch:
         assert index.contains("a") is True
         assert index.contains("b") is True
         assert len(calls) == 1  # read once, warned once
+
+
+def _page_of(names, start):
+    return [{"name": f"{names}-{i}", "private": False} for i in range(start, start + 100)]
+
+
+def _link(base, *, last=None, next_page=None):
+    parts = []
+    if next_page is not None:
+        parts.append(f'<{base}&page={next_page}>; rel="next"')
+    if last is not None:
+        parts.append(f'<{base}&page={last}>; rel="last"')
+    return {"Link": ", ".join(parts)} if parts else {}
+
+
+class TestParallelPagination:
+    """The bulk listings fetch pages 2..last concurrently off page 1's
+    `rel="last"`: a 9,000-repo org is 90 pages, which sequentially was the whole
+    of a five-minute collect run (#825)."""
+
+    BASE = "https://api.github.com/orgs/cs50/repos?per_page=100"
+
+    def _serve(self, monkeypatch, pages, *, headers_for_page1):
+        seen: list[int] = []
+
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            page = int(re.search(r"[?&]page=(\d+)", url).group(1))
+            seen.append(page)
+            headers = headers_for_page1 if page == 1 else {}
+            return json.dumps(pages[page]).encode(), headers
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        return seen
+
+    def _walk(self):
+        return cs._paginate_objects_parallel(
+            page_url=lambda page: f"{self.BASE}&page={page}",
+            api_url="https://api.github.com",
+            token="tok",
+            resource_label="orgs/cs50/repos",
+        )
+
+    def test_fetches_every_page_named_by_rel_last_in_order(self, monkeypatch):
+        pages = {
+            1: _page_of("p1", 0),
+            2: _page_of("p2", 0),
+            3: _page_of("p3", 0),
+            4: [{"name": "p4-0", "private": True}],
+        }
+        seen = self._serve(
+            monkeypatch, pages, headers_for_page1=_link(self.BASE, next_page=2, last=4)
+        )
+        got = self._walk()
+        assert sorted(seen) == [1, 2, 3, 4]
+        assert len(got) == 301
+        # Page order survives the concurrent fetch.
+        assert [item["name"] for item in got][::100] == ["p1-0", "p2-0", "p3-0", "p4-0"]
+
+    def test_single_short_page_without_link_is_one_request(self, monkeypatch):
+        seen = self._serve(monkeypatch, {1: [{"name": "only"}]}, headers_for_page1={})
+        assert [item["name"] for item in self._walk()] == ["only"]
+        assert seen == [1]
+
+    def test_next_without_last_falls_back_to_following_links(self, monkeypatch):
+        # A cursor-paginated endpoint names no last page; the sequential walk
+        # still finishes it.
+        pages = {1: _page_of("p1", 0), 2: [{"name": "p2-0"}]}
+        calls: list[str] = []
+
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            calls.append(url)
+            page = int(re.search(r"[?&]page=(\d+)", url).group(1))
+            headers = _link(self.BASE, next_page=2) if page == 1 else {}
+            return json.dumps(pages[page]).encode(), headers
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        got = self._walk()
+        assert len(got) == 101
+        assert got[-1]["name"] == "p2-0"
+        # Page 1 is handed to the sequential walk, not read again.
+        assert [int(re.search(r"[?&]page=(\d+)", u).group(1)) for u in calls] == [1, 2]
+
+    def test_page_count_past_the_cap_is_incomplete(self, monkeypatch):
+        self._serve(
+            monkeypatch,
+            {1: _page_of("p1", 0)},
+            headers_for_page1=_link(self.BASE, next_page=2, last=cs.MAX_LISTING_PAGES + 1),
+        )
+        with pytest.raises(cs.IncompleteListing):
+            self._walk()
+
+    def test_off_host_rel_last_is_refused(self, monkeypatch):
+        evil = "https://evil.example/orgs/cs50/repos?per_page=100"
+        self._serve(
+            monkeypatch,
+            {1: _page_of("p1", 0)},
+            headers_for_page1=_link(evil, next_page=2, last=3),
+        )
+        with pytest.raises(ValueError, match="off-host"):
+            self._walk()
+
+    def test_a_failing_page_propagates(self, monkeypatch):
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            page = int(re.search(r"[?&]page=(\d+)", url).group(1))
+            if page == 3:
+                raise http_error(500, {}, b"boom")
+            headers = _link(self.BASE, next_page=2, last=4) if page == 1 else {}
+            return json.dumps(_page_of(f"p{page}", 0)).encode(), headers
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            self._walk()
+
+    def test_last_page_number_parses_only_the_page_param(self):
+        assert cs._last_page_number(_link(self.BASE, last=90)["Link"], "https://api.github.com") == 90
+        assert cs._last_page_number(_link(self.BASE, next_page=2)["Link"], "https://api.github.com") is None
+        assert cs._last_page_number(None, "https://api.github.com") is None
+        assert cs._last_page_number("", "https://api.github.com") is None
+
+    def test_team_listings_use_the_parallel_walk(self, monkeypatch):
+        walks: list[str] = []
+
+        def fake_parallel(page_url, api_url, token, resource_label):
+            walks.append(resource_label)
+            return [{"login": "alice", "full_name": "cs50/x"}]
+
+        monkeypatch.setattr(cs, "_paginate_objects_parallel", fake_parallel)
+        cs.list_team_member_logins("https://api.github.com", "cs50", "students", "tok")
+        cs.list_team_repo_full_names("https://api.github.com", "cs50", "tas", "tok")
+        cs.list_org_repos("https://api.github.com", "cs50", "tok")
+        assert walks == [
+            "orgs/cs50/teams/students/members",
+            "orgs/cs50/teams/tas/repos",
+            "orgs/cs50/repos",
+        ]
+
+
+class TestRepoIndexProbeMode:
+    """Given its candidate names up front, the index reads page 1, learns the
+    page count, and probes the names directly when that is fewer requests than
+    the remaining pages. Probing is bounded by what the listing would have
+    cost, so it can never be the more expensive choice."""
+
+    API = "https://api.github.com"
+
+    def _index(
+        self, monkeypatch, *, last, page1=None, existing=(), fail=(), rest_error=None
+    ):
+        page1 = {"starter": False} if page1 is None else dict(page1)
+        page1 = {n: cs.RepoFacts(p) for n, p in page1.items()}
+        probed: list[str] = []
+        rest_reads: list[int] = []
+
+        def first_page(api_url, org, token):
+            return dict(page1), last
+
+        def rest(api_url, org, token, n):
+            rest_reads.append(n)
+            if rest_error is not None:
+                raise rest_error
+            return {name: cs.RepoFacts(False) for name in existing}
+
+        def get_repo(api_url, owner, repo, token):
+            probed.append(repo)
+            if repo in fail:
+                raise http_error(451, {}, b"legal")
+            if repo in existing:
+                return {"name": repo, "private": repo.startswith("priv")}
+            return None
+
+        monkeypatch.setattr(cs, "list_org_repos_first_page", first_page)
+        monkeypatch.setattr(cs, "list_org_repos_rest", rest)
+        monkeypatch.setattr(cs, "get_repo", get_repo)
+        monkeypatch.setattr(cs, "list_org_repos", lambda *a, **k: pytest.fail("full listing read"))
+        return cs.RepoIndex(self.API, "cs50", "tok"), probed, rest_reads
+
+    def test_small_hint_probes_instead_of_listing(self, monkeypatch, capsys):
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=90, existing={"cs-hw1-alice", "priv-cs-hw1-bob"}
+        )
+        index.prefetch(["cs-hw1-ALICE", "priv-cs-hw1-bob", "cs-hw1-carol", "starter"])
+        # Page 1 answered `starter`; the other three were probed, in parallel.
+        assert sorted(probed) == ["cs-hw1-alice", "cs-hw1-carol", "priv-cs-hw1-bob"]
+        assert rest_reads == []
+        assert index.contains("cs-hw1-alice") is True
+        assert index.contains("cs-hw1-carol") is False
+        assert index.contains("starter") is True
+        assert index.is_private("priv-cs-hw1-bob") is True
+        assert index.is_private("cs-hw1-alice") is False
+        assert index.is_private("cs-hw1-carol") is None
+        out = capsys.readouterr().out
+        assert "90 page(s) of repos" in out and "3 candidate repo name(s)" in out
+
+    def test_large_hint_reads_the_rest_of_the_listing(self, monkeypatch, capsys):
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=3, existing={"cs-hw1-alice"}
+        )
+        index.prefetch([f"cs-hw1-user{i}" for i in range(5)])
+        assert probed == []
+        assert rest_reads == [3]
+        assert index.contains("cs-hw1-alice") is True
+        assert index.contains("cs-hw1-user0") is False
+        assert "2 repo(s) visible" in capsys.readouterr().out
+
+    def test_hint_equal_to_pages_left_probes(self, monkeypatch):
+        # The boundary: as many candidates as pages left costs the same either
+        # way, and the probes are the lighter requests.
+        index, probed, rest_reads = self._index(monkeypatch, last=3)
+        index.prefetch(["cs-hw1-alice", "cs-hw1-bob"])
+        assert len(probed) == 2 and rest_reads == []
+
+    def test_probe_budget_is_the_listing_cost(self, monkeypatch):
+        # Two classrooms' hints together exceed the pages left, so the second
+        # prefetch completes the listing rather than probing past the budget.
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=4, existing={"cs-hw1-alice", "cs-hw2-dan"}
+        )
+        index.prefetch(["cs-hw1-alice", "cs-hw1-bob"])
+        assert len(probed) == 2 and rest_reads == []
+        index.prefetch(["cs-hw2-carol", "cs-hw2-dan"])
+        assert len(probed) == 2  # no further probes
+        assert rest_reads == [4]
+        assert index.contains("cs-hw1-alice") is True  # probed answer kept
+        assert index.contains("cs-hw2-dan") is True
+        assert index.contains("cs-hw2-carol") is False
+        assert index.is_private("cs-hw2-dan") is False
+
+    def test_unhinted_name_is_probed_on_demand_once(self, monkeypatch):
+        index, probed, _ = self._index(monkeypatch, last=11, existing={"late"})
+        index.prefetch(["cs-hw1-alice"])
+        assert index.contains("late") is True
+        assert index.contains("LATE") is True
+        assert probed.count("late") == 1
+
+    def test_failed_probe_fails_open(self, monkeypatch):
+        index, _, _ = self._index(monkeypatch, last=11, fail={"cs-hw1-alice"})
+        index.prefetch(["cs-hw1-alice"])
+        assert index.contains("cs-hw1-alice") is True
+        assert index.is_private("cs-hw1-alice") is None
+
+    def test_throttled_probe_propagates_and_stays_unlatched(self, monkeypatch):
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=11, existing={"cs-hw1-alice"}
+        )
+        working = cs.get_repo
+
+        def throttled(*a, **k):
+            raise http_error(403, {"Retry-After": "60"}, b"secondary rate limit")
+
+        monkeypatch.setattr(cs, "get_repo", throttled)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.prefetch(["cs-hw1-alice"])
+        # The failed batch charged no budget and the name is still unresolved,
+        # so the retry probes it for real instead of answering from a guess.
+        monkeypatch.setattr(cs, "get_repo", working)
+        index.prefetch(["cs-hw1-alice"])
+        assert probed == ["cs-hw1-alice"]
+        assert index.contains("cs-hw1-alice") is True
+        assert index.is_private("cs-hw1-alice") is False
+        assert rest_reads == []
+
+    def test_names_completes_the_listing(self, monkeypatch):
+        index, _, rest_reads = self._index(
+            monkeypatch, last=11, existing={"cs-hw1-group-1"}
+        )
+        index.prefetch(["cs-hw1-alice"])
+        assert rest_reads == []
+        assert sorted(index.names()) == ["cs-hw1-group-1", "starter"]
+        assert rest_reads == [11]
+
+    def test_soft_failure_completing_the_listing_fails_open(self, monkeypatch, capsys):
+        # A 5xx on a later page must not abort the run: the listing becomes
+        # unknown, every name polls, and team mode falls back to its own source.
+        index, probed, rest_reads = self._index(
+            monkeypatch, last=11, rest_error=http_error(502, {}, b"bad gateway")
+        )
+        index.prefetch(["cs-hw1-alice"])
+        assert index.names() is None
+        assert rest_reads == [11]
+        assert index.contains("cs-hw1-alice") is True
+        assert index.contains("never-probed") is True
+        assert index.is_private("cs-hw1-alice") is None
+        assert len(probed) == 1  # no further probes once the listing is unknown
+        assert "could not list" in capsys.readouterr().err
+
+    def test_malformed_rest_of_listing_fails_open(self, monkeypatch, capsys):
+        index, _, _ = self._index(
+            monkeypatch, last=3, rest_error=cs.IncompleteListing("orgs/cs50/repos: loop")
+        )
+        # A hint larger than the pages left reads the rest inside _read.
+        index.prefetch(["cs-hw1-alice", "cs-hw1-bob", "cs-hw1-carol"])
+        assert index.contains("cs-hw1-carol") is True
+        assert "malformed" in capsys.readouterr().err
+
+    def test_throttled_rest_of_listing_propagates(self, monkeypatch):
+        index, _, _ = self._index(
+            monkeypatch,
+            last=11,
+            rest_error=http_error(403, {"Retry-After": "60"}, b"secondary rate limit"),
+        )
+        index.prefetch(["cs-hw1-alice"])
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.names()
+        # Still in probe mode: the next attempt retries the completion.
+        with pytest.raises(cs.urllib.error.HTTPError):
+            index.names()
+
+    def test_no_hint_reads_the_whole_listing(self, monkeypatch):
+        monkeypatch.setattr(cs, "list_org_repos", lambda *a, **k: {"cs-hw1-alice": False})
+        monkeypatch.setattr(
+            cs, "list_org_repos_first_page", lambda *a, **k: pytest.fail("split read")
+        )
+        index = cs.RepoIndex(self.API, "cs50", "tok")
+        assert index.contains("cs-hw1-alice") is True
+
+    def test_single_page_org_with_a_hint_is_the_listing(self, monkeypatch):
+        index, probed, rest_reads = self._index(monkeypatch, last=1)
+        index.prefetch(["cs-hw1-alice"])
+        assert probed == [] and rest_reads == []
+        assert index.contains("starter") is True
+        assert index.contains("cs-hw1-alice") is False
+
+    def test_empty_first_page_is_unknown(self, monkeypatch):
+        index, probed, _ = self._index(monkeypatch, last=1, page1={})
+        index.prefetch(["cs-hw1-alice"])
+        assert index.contains("anything") is True
+        assert probed == []
+
+
+class TestCollectPassHintsEveryPoll:
+    """collect_classroom must hand the index every name it will ask about, or
+    each miss costs a request; the hint list is derived separately from the
+    poll loop, so the two are pinned to agree here."""
+
+    class RecordingIndex:
+        def __init__(self):
+            self.hinted: set[str] = set()
+            self.unhinted: list[str] = []
+
+        def prefetch(self, names):
+            self.hinted.update(n.lower() for n in names)
+
+        def contains(self, name):
+            if name.lower() not in self.hinted:
+                self.unhinted.append(name)
+            return False
+
+        def is_private(self, name):
+            return None
+
+        def facts(self, name):
+            return None
+
+        def names(self):
+            return []
+
+    ASSIGNMENTS = {
+        "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+        "assignments": [
+            {"slug": "hw1"},
+            {"slug": "hw2", "mode": "group"},
+            {"slug": "proj", "mode": "team"},
+            {"slug": "warmup", "empty_repo": True},
+            {"slug": "essay", "no_autograder": True},
+        ],
+    }
+
+    @pytest.mark.parametrize("assignment_filter", ["", "essay"])
+    def test_every_polled_name_was_hinted(self, monkeypatch, assignment_filter):
+        monkeypatch.setattr(
+            cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"]
+        )
+        index = self.RecordingIndex()
+        cs.collect_classroom(
+            api_url="https://api.github.com",
+            org="cs50",
+            classroom_short="cs",
+            classroom_meta={"schema": cs.CLASSROOM_SCHEMA_V1, "short": "cs", "name": "CS"},
+            assignments=self.ASSIGNMENTS,
+            service_token="tok",
+            assignment_filter=assignment_filter,
+            repo_index=index,
+        )
+        assert index.unhinted == []
+        assert index.hinted  # the pass did ask about something
+
+
+class TestListOrgReposFirstPage:
+    BASE = "https://api.github.com/orgs/cs50/repos?per_page=100"
+
+    def test_reports_the_page_count_from_rel_last(self, monkeypatch):
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            self.url = url
+            return (
+                json.dumps([{"name": "A", "private": True}]).encode(),
+                _link(self.BASE, next_page=2, last=90),
+            )
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        repos, last = cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok")
+        assert repos == {"a": cs.RepoFacts(True)} and last == 90
+        # Oldest first: a repo created mid-walk lands after the pages in flight.
+        assert "sort=created" in self.url and "direction=asc" in self.url
+
+    def test_single_page_counts_as_one(self, monkeypatch):
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            return json.dumps([{"name": "a"}]).encode(), {}
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        assert cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok") == (
+            {"a": cs.RepoFacts(False)},
+            1,
+        )
+
+    def test_next_without_last_walks_everything_reading_page_one_once(self, monkeypatch):
+        seen: list[int] = []
+        pages = {1: [{"name": f"p1-{i}"} for i in range(100)], 2: [{"name": "p2-0"}]}
+
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            page = int(re.search(r"[?&]page=(\d+)", url).group(1))
+            seen.append(page)
+            headers = _link(self.BASE, next_page=2) if page == 1 else {}
+            return json.dumps(pages[page]).encode(), headers
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        repos, last = cs.list_org_repos_first_page("https://api.github.com", "cs50", "tok")
+        assert len(repos) == 101 and last == 1
+        assert seen == [1, 2]
+
+    def test_rest_fetches_pages_two_through_last(self, monkeypatch):
+        seen: list[int] = []
+
+        def fake_get(url, token, *, accept, max_bytes=None, _retries=3):
+            page = int(re.search(r"[?&]page=(\d+)", url).group(1))
+            seen.append(page)
+            return json.dumps([{"name": f"r{page}", "private": page == 3}]).encode(), {}
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_get)
+        got = cs.list_org_repos_rest("https://api.github.com", "cs50", "tok", 4)
+        assert sorted(seen) == [2, 3, 4]
+        assert got == {
+            "r2": cs.RepoFacts(False), "r3": cs.RepoFacts(True), "r4": cs.RepoFacts(False)
+        }
+
+
+class TestThrottleBudgetUnderConcurrency:
+    """The sleep budget is wall-clock: eight workers waiting out the same
+    throttle at once spend it once, while one thread's back-to-back waits each
+    count in full."""
+
+    @pytest.fixture(autouse=True)
+    def _fresh_budget(self):
+        cs._throttle_sleep_spent = 0.0
+        cs._throttle_sleep_until = 0.0
+        cs._throttle_local.__dict__.clear()
+        yield
+        cs._throttle_sleep_spent = 0.0
+        cs._throttle_sleep_until = 0.0
+        cs._throttle_local.__dict__.clear()
+
+    def test_overlapping_waits_on_other_threads_count_once(self):
+        import threading
+
+        refused: list[bool] = []
+        barrier = threading.Barrier(cs.PARALLEL_PAGE_WORKERS)
+
+        def worker():
+            barrier.wait(timeout=5)
+            refused.append(cs.throttle_sleep_budget_spent(60))
+
+        threads = [threading.Thread(target=worker) for _ in range(cs.PARALLEL_PAGE_WORKERS)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=5)
+        assert refused == [False] * cs.PARALLEL_PAGE_WORKERS
+        # Threads arrive microseconds apart, so the union is a hair over 60s.
+        assert 60 <= cs._throttle_sleep_spent < 61
+
+    def test_sequential_waits_on_one_thread_each_count(self):
+        for _ in range(5):
+            assert cs.throttle_sleep_budget_spent(60) is False
+        # (start + 60) - start on a large monotonic clock loses a few ULPs.
+        assert cs._throttle_sleep_spent == pytest.approx(300)
+        assert cs.throttle_sleep_budget_spent(1) is True
+
+
+class TestProbeOrgRepos:
+    def test_present_missing_and_unknown(self, monkeypatch):
+        def get_repo(api_url, owner, repo, token):
+            if repo == "gone":
+                return None
+            if repo == "blocked":
+                raise http_error(451, {}, b"legal")
+            return {"name": repo, "private": repo == "Priv"}
+
+        monkeypatch.setattr(cs, "get_repo", get_repo)
+        got = cs.probe_org_repos(
+            "https://api.github.com", "cs50", ["Priv", "pub", "gone", "blocked"], "tok"
+        )
+        assert got == {"priv": cs.RepoFacts(True), "pub": cs.RepoFacts(False), "blocked": None}
+
+    def test_fatal_propagates(self, monkeypatch):
+        def get_repo(*a, **k):
+            raise http_error(401, {}, b"bad token")
+
+        monkeypatch.setattr(cs, "get_repo", get_repo)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            cs.probe_org_repos("https://api.github.com", "cs50", ["a", "b"], "tok")
+
+
+class TestPollCandidateNames:
+    ASSIGNMENTS = {
+        "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+        "assignments": [
+            {"slug": "hw1"},
+            {"slug": "hw2", "mode": "group"},
+            {"slug": "proj", "mode": "team"},
+            {"slug": "warmup", "empty_repo": True},
+            {"slug": "essay", "no_autograder": True},
+            {"slug": ""},
+        ],
+    }
+
+    def test_individual_group_and_detected_assignments_for_every_member(self):
+        names = cs.poll_candidate_names("cs", self.ASSIGNMENTS, "", ["Alice", "bob"])
+        assert names == [
+            "cs-hw1-alice",
+            "cs-hw1-bob",
+            "cs-hw2-alice",
+            "cs-hw2-bob",
+            "cs-essay-alice",
+            "cs-essay-bob",
+        ]
+
+    def test_filter_narrows_to_one_assignment(self):
+        assert cs.poll_candidate_names("cs", self.ASSIGNMENTS, "hw2", ["alice"]) == [
+            "cs-hw2-alice"
+        ]
+
+
+class TestRequestCounter:
+    def test_every_transport_attempt_is_counted(self, monkeypatch):
+        before = cs.request_count()
+        attempts: list[int] = []
+
+        class _Ctx:
+            status = 200
+            headers = {}
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+            def read(self, n=None):
+                return b"[]"
+
+        def fake_open(req, timeout=None):
+            attempts.append(1)
+            if len(attempts) == 1:
+                raise http_error(503, {}, b"")
+            return _Ctx()
+
+        monkeypatch.setattr(cs._OPENER, "open", fake_open)
+        monkeypatch.setattr(cs.time, "sleep", lambda s: None)
+        cs._http_get_with_headers("https://api.github.com/x", "tok", accept="a")
+        assert cs.request_count() - before == 2
+
+    def test_main_prints_the_request_total(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
+        monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
+        monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "tok")
+        monkeypatch.delenv("CLASSROOM_FILTER", raising=False)
+        monkeypatch.delenv("ASSIGNMENT_FILTER", raising=False)
+        (tmp_path / "cs").mkdir()
+        (tmp_path / "cs" / "classroom.json").write_text(
+            json.dumps({"schema": cs.CLASSROOM_SCHEMA_V1, "short": "cs", "name": "CS"})
+        )
+        (tmp_path / "cs" / "assignments.json").write_text(
+            json.dumps({"schema": cs.ASSIGNMENTS_SCHEMA_V1, "assignments": []})
+        )
+        monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: [])
+        assert cs.main() == 0
+        out = capsys.readouterr().out
+        assert re.search(r"collect: \d+ GitHub API request\(s\) in \d+\.\ds", out)
+        assert re.search(r"cs: 0 updated submission\(s\) \(\d+\.\ds\)", out)
 
 
 class TestIncompleteListingNeverPersists:
@@ -4577,3 +6064,34 @@ class TestMainThrottleBranches:
         line = next(ln for ln in err.splitlines() if "throttled" in ln)
         assert "do NOT rotate" in line
         assert "rotate-service-token" not in line
+
+
+class TestScope:
+    def test_describes_the_three_shapes_like_the_workflow_run_name(self):
+        assert cs.Scope().describe() == "all classrooms"
+        assert cs.Scope("cs").describe() == "every assignment in cs"
+        assert cs.Scope("cs", "hw1").describe() == "hw1 in cs"
+
+    def test_reads_and_trims_the_dispatch_env(self, monkeypatch):
+        monkeypatch.setenv("CLASSROOM_FILTER", " cs ")
+        monkeypatch.setenv("ASSIGNMENT_FILTER", "hw1 ")
+        assert cs.Scope.from_env() == cs.Scope("cs", "hw1")
+
+
+class TestProbeState:
+    def test_budget_is_the_pages_not_read(self):
+        state = cs._ProbeState({"starter": cs.RepoFacts(False)}, last_page=4)
+        assert state.budget_allows(3) is True
+        state.record(["a", "b"], {"a": cs.RepoFacts(True)})
+        assert state.budget_allows(1) is True
+        assert state.budget_allows(2) is False
+        assert state.resolved("a") and state.resolved("b")
+        assert state.unresolved(["a", "b", "c"]) == ["c"]
+
+    def test_known_keeps_probed_hits_and_drops_unknowns(self):
+        state = cs._ProbeState({"starter": cs.RepoFacts(False)}, last_page=3)
+        state.record(["a", "b"], {"a": cs.RepoFacts(True), "b": None})
+        assert state.known() == {
+            "starter": cs.RepoFacts(False),
+            "a": cs.RepoFacts(True),
+        }

@@ -21,6 +21,7 @@ import { getName } from "@/util/students"
 import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkRepoFeaturesModalProps = {
   open: boolean
@@ -229,6 +230,7 @@ export function BulkRepoFeaturesModal({
   }
 
   const busy = phase === "working"
+  useBeforeUnloadGuard(busy)
 
   return (
     <Modal

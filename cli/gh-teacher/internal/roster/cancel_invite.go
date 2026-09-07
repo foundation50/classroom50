@@ -24,8 +24,8 @@ func rosterCancelInviteCmd() *cobra.Command {
 			"metadata team retaining the address, and the pending row in\n" +
 			"<org>/classroom50/<classroom>/roster.csv. The same teardown the web\n" +
 			"app performs, so either tool can revoke either tool's invitation.\n\n" +
-			"Only ever acts on a PENDING invitation. With no pending invitation\n" +
-			"for the address this reports and changes nothing — an invitation the\n" +
+			"Only ever acts on a pending invitation. With no pending invitation\n" +
+			"for the address this reports and changes nothing: an invitation the\n" +
 			"student already accepted looks exactly the same from here, and the\n" +
 			"metadata team holds the only record of which address their account\n" +
 			"came from. Run `gh teacher roster sync` in that case: it records the\n" +
@@ -76,7 +76,7 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 	invitationID, found := pendingEmailInvitationID(pending, email)
 	if !found {
 		_, _ = fmt.Fprintf(out, "%s: no pending invitation for %s, nothing was cancelled\n", org, email)
-		_, _ = fmt.Fprintf(errOut, "If they already accepted, run `gh teacher roster sync %s %s` to record their username and github_id — it also collects a genuine leftover invite team or pending row under its own checks, which this command deliberately won't do without a pending invitation to revoke.\n",
+		_, _ = fmt.Fprintf(errOut, "If they already accepted, run `gh teacher roster sync %s %s` to record their username and github_id. It also collects a genuine leftover invite team or pending row under its own checks, which this command deliberately won't do without a pending invitation to revoke.\n",
 			org, classroom)
 		return nil
 	}
@@ -175,7 +175,7 @@ func requireClassroomOwnsInvite(client githubapi.Client, org, classroom, email s
 	// blanked description): it names no classroom and must authorize nothing.
 	// `roster sync` deliberately skips such a team, so it is no help here.
 	if state.Record == nil {
-		return "", fmt.Errorf("%s: the metadata team %s holds no invite record — an interrupted send leaves exactly that — so nothing proves the pending invitation for %s is %s's and nothing was cancelled; revoke it from the web app's %s roster or from https://github.com/orgs/%s/people/pending_invitations, and delete the team by hand",
+		return "", fmt.Errorf("%s: the metadata team %s holds no invite record (an interrupted send leaves exactly that), so nothing proves the pending invitation for %s is %s's and nothing was cancelled; revoke it from the web app's %s roster or from https://github.com/orgs/%s/people/pending_invitations, and delete the team by hand",
 			org, slug, email, classroom, classroom, org)
 	}
 	if state.Record.Classroom != classroom {

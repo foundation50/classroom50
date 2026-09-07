@@ -33,13 +33,57 @@ vi.mock("@/hooks/useGitHubOperation", () => ({
   },
 }))
 
-import useTriggerScoreCollection from "./useTriggerScoreCollection"
+import useTriggerScoreCollection, {
+  collectScoresLabel,
+} from "./useTriggerScoreCollection"
+import type { TFunction } from "i18next"
 
 const configFor = (scope?: { classroom: string; assignment?: string }) => {
   configs.length = 0
   renderHook(() => useTriggerScoreCollection("acme", scope))
   return configs[0]
 }
+
+// The banner label is the only thing that tells a per-assignment collect from
+// a classroom sweep or an org-wide run: the Actions API lists a dispatch run
+// without its inputs, so this has to be decided at dispatch time.
+describe("collectScoresLabel", () => {
+  const t = ((key: string, opts?: Record<string, string>) =>
+    opts ? `${key}:${JSON.stringify(opts)}` : key) as unknown as TFunction
+
+  it("stays generic for an org-wide collect", () => {
+    expect(collectScoresLabel(t)).toBe("actionsBanner.workflow.collectScores")
+  })
+
+  it("names the classroom for a sweep, preferring the display name", () => {
+    expect(
+      collectScoresLabel(t, { classroom: "cs50" }, { classroom: "CS50" }),
+    ).toBe('actionsBanner.workflow.collectScoresClassroom:{"classroom":"CS50"}')
+  })
+
+  it("names the assignment and classroom for a single-assignment collect", () => {
+    expect(
+      collectScoresLabel(
+        t,
+        { classroom: "cs50", assignment: "hello" },
+        { classroom: "CS50", assignment: "Hello world" },
+      ),
+    ).toBe(
+      'actionsBanner.workflow.collectScoresAssignment:{"classroom":"CS50","assignment":"Hello world"}',
+    )
+  })
+
+  it("falls back to slugs when the page hasn't loaded display names", () => {
+    expect(
+      collectScoresLabel(t, { classroom: "cs50", assignment: "hello" }),
+    ).toBe(
+      'actionsBanner.workflow.collectScoresAssignment:{"classroom":"cs50","assignment":"hello"}',
+    )
+    expect(
+      collectScoresLabel(t, { classroom: "cs50" }, { classroom: "" }),
+    ).toBe('actionsBanner.workflow.collectScoresClassroom:{"classroom":"cs50"}')
+  })
+})
 
 describe("useTriggerScoreCollection scope keying", () => {
   it("keeps org-wide, classroom-wide and per-assignment tracking on distinct keys", () => {

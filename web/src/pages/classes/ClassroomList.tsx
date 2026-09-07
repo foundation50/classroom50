@@ -1,9 +1,6 @@
-import { Link } from "@tanstack/react-router"
 import {
   ArrowSwitchIcon,
-  ChevronDownIcon,
   FilterIcon,
-  MarkGithubIcon,
   PlusIcon,
   SearchIcon,
 } from "@/components/ui/icons"
@@ -14,9 +11,9 @@ import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import {
   Button,
   cx,
-  DropdownMenu,
   Input,
   LabeledControl,
+  RouterButton,
   Select,
 } from "@/components/ui"
 import useClassroomSummaries, {
@@ -257,38 +254,15 @@ const ClassroomList = ({
 
         <div className="mx-1 hidden h-6 w-px self-center bg-base-300 sm:block" />
 
-        <div className="join">
-          <Link
-            to="/$org/classes/new"
-            params={{ org }}
-            type="button"
-            className="btn btn-primary btn-sm join-item"
-          >
-            <PlusIcon aria-hidden="true" className="size-4" />
-            {t("classes.newClass")}
-          </Link>
-          {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
-          <div className="dropdown dropdown-end -ms-px">
-            <Button
-              variant="primary"
-              size="sm"
-              tabIndex={0}
-              className="join-item h-full border-s border-primary-content/20 px-1.5"
-              aria-label={t("classes.newButton.moreOptions")}
-            >
-              <ChevronDownIcon aria-hidden="true" className="size-4" />
-            </Button>
-            <DropdownMenu className="w-max">
-              {/* FEATURE: github-classroom-migration — removable entry point (#312) */}
-              <li>
-                <Link to="/$org/import" params={{ org }}>
-                  <MarkGithubIcon aria-hidden="true" className="size-4" />
-                  {t("migration.entryButton")}
-                </Link>
-              </li>
-            </DropdownMenu>
-          </div>
-        </div>
+        <RouterButton
+          to="/$org/classes/new"
+          params={{ org }}
+          variant="primary"
+          size="sm"
+        >
+          <PlusIcon aria-hidden="true" className="size-4" />
+          {t("classes.newClass")}
+        </RouterButton>
       </div>
 
       {noResults ? (

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { FormField, Input, Textarea } from "@/components/ui"
+import { FormField, Input, Radio, Textarea, Toggle } from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets } from "@/util/releaseAssets"
 import { RUNTIME_LANGUAGES } from "@/util/runtime"
@@ -45,10 +45,8 @@ export const AdvancedSection = ({
                 htmlFor={`${field.name}-hosted`}
                 className="label cursor-pointer gap-2 p-0"
               >
-                <input
+                <Radio
                   id={`${field.name}-hosted`}
-                  type="radio"
-                  className="radio"
                   name={field.name}
                   value="hosted"
                   checked={field.state.value === "hosted"}
@@ -60,10 +58,8 @@ export const AdvancedSection = ({
                 htmlFor={`${field.name}-container`}
                 className="label cursor-pointer gap-2 p-0"
               >
-                <input
+                <Radio
                   id={`${field.name}-container`}
-                  type="radio"
-                  className="radio"
                   name={field.name}
                   value="container"
                   checked={field.state.value === "container"}
@@ -324,9 +320,9 @@ export const AdvancedSection = ({
                   <div className="mt-4">
                     <div className="flex items-center gap-1.5">
                       <label className="label cursor-pointer justify-start gap-3 p-0 font-bold">
-                        <input
-                          type="checkbox"
-                          className="toggle toggle-sm"
+                        <Toggle
+                          tone="neutral"
+                          size="sm"
                           checked={toggle.state.value}
                           onChange={(e) =>
                             toggle.handleChange(e.target.checked)

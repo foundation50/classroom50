@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
@@ -8,6 +8,7 @@ import {
 } from "@/components/ui/icons"
 
 import { Alert, Badge, Card, Toolbar, cx } from "@/components/ui"
+import { useRovingTabList } from "@/hooks/useRovingTabList"
 import {
   CONFORMANCE_TONE,
   hasGenericRemark,
@@ -19,6 +20,7 @@ import {
 
 import {
   TONE_DOT_CLASS,
+  VPAT_SINCE_KEY,
   VPAT_STATUS_ORDER,
   tabClass,
   useVpatReport,
@@ -26,6 +28,11 @@ import {
 
 type VpatFilter = ConformanceLevel | "all"
 type VpatSort = "criterion" | "status"
+type VpatTab = WcagPrinciple | "all"
+
+// "All" first so the full list is the default view; the per-principle tabs
+// narrow it.
+const TAB_ORDER: VpatTab[] = ["all", ...PRINCIPLE_ORDER]
 
 const STATUS_SORT_WEIGHT: Record<ConformanceLevel, number> = {
   supports: 0,
@@ -38,24 +45,43 @@ const STATUS_SORT_WEIGHT: Record<ConformanceLevel, number> = {
 function VpatConformanceTable({
   criteria,
   generated,
+  groupByPrinciple,
 }: {
   criteria: Criterion[]
   generated: string
+  /** Show principle heading rows in the All view (off when sorted by status). */
+  groupByPrinciple: boolean
 }) {
   const { t } = useTranslation()
-  const [activePrinciple, setActivePrinciple] =
-    useState<WcagPrinciple>("Perceivable")
+  const [activeTab, setActiveTab] = useState<VpatTab>("all")
+  const tabsId = useId()
+  const tabProps = useRovingTabList(
+    TAB_ORDER.length,
+    TAB_ORDER.indexOf(activeTab),
+  )
 
-  // Counts per principle reflect the current search/filter so a tab shows how
-  // many rows it holds (and an emptied tab reads 0 rather than looking broken).
-  const countByPrinciple = useMemo(() => {
-    const counts = {} as Record<WcagPrinciple, number>
+  // Counts per tab reflect the current search/filter so a tab shows how many
+  // rows it holds (and an emptied tab reads 0 rather than looking broken).
+  const countByTab = useMemo(() => {
+    const counts = { all: criteria.length } as Record<VpatTab, number>
     for (const p of PRINCIPLE_ORDER)
       counts[p] = criteria.filter((c) => c.principle === p).length
     return counts
   }, [criteria])
 
-  const rows = criteria.filter((c) => c.principle === activePrinciple)
+  const rows =
+    activeTab === "all"
+      ? criteria
+      : criteria.filter((c) => c.principle === activeTab)
+  // One <tbody> per principle in the All view so each heading row is a proper
+  // row-group header (scope="rowgroup"); a single unlabeled group otherwise.
+  const groups: { principle: WcagPrinciple | null; rows: Criterion[] }[] =
+    activeTab === "all" && groupByPrinciple
+      ? PRINCIPLE_ORDER.map((p) => ({
+          principle: p,
+          rows: rows.filter((c) => c.principle === p),
+        })).filter((g) => g.rows.length > 0)
+      : [{ principle: null, rows }]
 
   return (
     <Card shadow={false}>
@@ -65,86 +91,122 @@ function VpatConformanceTable({
           aria-label={t("accessibility.vpat.principleTabsAria")}
           className="tabs-boxed tabs w-fit"
         >
-          {PRINCIPLE_ORDER.map((principle) => (
+          {TAB_ORDER.map((tab, index) => (
             <button
-              key={principle}
+              key={tab}
               type="button"
               role="tab"
-              aria-selected={principle === activePrinciple}
-              className={tabClass(principle === activePrinciple)}
-              onClick={() => setActivePrinciple(principle)}
+              id={`${tabsId}-tab-${tab}`}
+              aria-selected={tab === activeTab}
+              aria-controls={`${tabsId}-panel`}
+              className={tabClass(tab === activeTab)}
+              onClick={() => setActiveTab(tab)}
+              {...tabProps(index)}
             >
-              {principle}
+              {tab === "all"
+                ? t("accessibility.vpat.tabAll")
+                : t(`accessibility.vpat.principle.${tab}`)}
               <span
                 className={cx(
                   "text-xs tabular-nums",
-                  principle === activePrinciple
+                  tab === activeTab
                     ? "text-primary-content/70"
                     : "text-base-content/50",
                 )}
               >
-                {countByPrinciple[principle]}
+                {countByTab[tab]}
               </span>
             </button>
           ))}
         </div>
 
-        {rows.length === 0 ? (
-          <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
-            <IssueDraftIcon aria-hidden="true" className="size-4" />
-            {t("accessibility.vpat.empty")}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="table w-full">
-              <thead>
-                <tr>
-                  <th className="w-64">
-                    {t("accessibility.vpat.col.criterion")}
-                  </th>
-                  <th className="w-14">{t("accessibility.vpat.col.level")}</th>
-                  <th className="w-40">
-                    {t("accessibility.vpat.col.conformance")}
-                  </th>
-                  <th className="w-28">
-                    {t("accessibility.vpat.col.assessed")}
-                  </th>
-                  <th className="min-w-[24rem]">
-                    {t("accessibility.vpat.col.remarks")}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((c) => (
-                  <tr key={c.id}>
-                    <td className="align-top">
-                      <span className="font-mono text-xs text-base-content/60">
-                        {c.id}
-                      </span>{" "}
-                      {c.name}
-                    </td>
-                    <td className="align-top font-mono text-xs">{c.level}</td>
-                    <td className="align-top">
-                      <Badge tone={CONFORMANCE_TONE[c.status]}>
-                        {t(`accessibility.vpat.status.${c.status}`)}
-                      </Badge>
-                    </td>
-                    <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
-                      {c.assessed ?? generated}
-                    </td>
-                    <td className="align-top text-sm text-base-content/70">
-                      {hasGenericRemark(c) ? (
-                        <span className="text-base-content/40">—</span>
-                      ) : (
-                        c.remark
-                      )}
-                    </td>
+        <div
+          role="tabpanel"
+          id={`${tabsId}-panel`}
+          aria-labelledby={`${tabsId}-tab-${activeTab}`}
+        >
+          {rows.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 p-8 text-center text-sm text-base-content/60">
+              <IssueDraftIcon aria-hidden="true" className="size-4" />
+              {t("accessibility.vpat.empty")}
+            </div>
+          ) : (
+            // Deliberately not TableShell: the VPAT matrix is long-form document
+            // content on the public accessibility statement, where the boxed
+            // list-frame treatment would read as UI chrome.
+            <div className="overflow-x-auto">
+              <table className="table w-full">
+                <thead>
+                  <tr>
+                    <th className="w-64">
+                      {t("accessibility.vpat.col.criterion")}
+                    </th>
+                    <th className="w-14">
+                      {t("accessibility.vpat.col.level")}
+                    </th>
+                    <th className="w-40">
+                      {t("accessibility.vpat.col.conformance")}
+                    </th>
+                    <th className="w-28">
+                      {t("accessibility.vpat.col.assessed")}
+                    </th>
+                    <th className="min-w-[24rem]">
+                      {t("accessibility.vpat.col.remarks")}
+                    </th>
                   </tr>
+                </thead>
+                {groups.map((group) => (
+                  <tbody key={group.principle ?? "all"}>
+                    {group.principle && (
+                      <tr className="bg-base-200/50">
+                        <th
+                          scope="rowgroup"
+                          colSpan={5}
+                          className="text-xs font-semibold tracking-wide text-base-content/70 uppercase"
+                        >
+                          {t(`accessibility.vpat.principle.${group.principle}`)}
+                        </th>
+                      </tr>
+                    )}
+                    {group.rows.map((c) => (
+                      <tr key={c.id}>
+                        <td className="align-top">
+                          <span className="font-mono text-xs text-base-content/60">
+                            {c.id}
+                          </span>{" "}
+                          {c.name}
+                          {c.since && (
+                            <span className="ms-1 text-xs text-base-content/60">
+                              ({t(VPAT_SINCE_KEY[c.since])})
+                            </span>
+                          )}
+                        </td>
+                        <td className="align-top font-mono text-xs">
+                          {c.level}
+                        </td>
+                        <td className="align-top">
+                          <Badge tone={CONFORMANCE_TONE[c.status]}>
+                            {t(`accessibility.vpat.status.${c.status}`)}
+                          </Badge>
+                        </td>
+                        <td className="align-top font-mono text-xs whitespace-nowrap text-base-content/60">
+                          {c.assessed ?? generated}
+                        </td>
+                        <td className="align-top text-sm text-base-content/70">
+                          {hasGenericRemark(c) ? (
+                            <span className="text-base-content/40">—</span>
+                          ) : (
+                            c.remark
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+              </table>
+            </div>
+          )}
+        </div>
       </Card.Body>
     </Card>
   )
@@ -311,6 +373,7 @@ export function VpatSection() {
           <VpatConformanceTable
             criteria={visibleCriteria}
             generated={vpat.generated}
+            groupByPrinciple={sort === "criterion"}
           />
 
           <p className="text-xs text-base-content/60">

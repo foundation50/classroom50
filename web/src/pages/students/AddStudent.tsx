@@ -1,10 +1,10 @@
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
-import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { StudentAlreadyEnrolledError } from "@/domain/students"
@@ -59,7 +59,6 @@ const AddStudent = ({
 }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const { t } = useTranslation()
-  const { notify } = useToast()
   // Ties the footer's submit button (outside the <form> element) to the form.
   const formId = useId()
   const roleId = useId()
@@ -154,8 +153,9 @@ const AddStudent = ({
   })
 
   // Staff branch: delegate to the staff-team backend (config-repo write). A
-  // successful add toasts and clears the username; failures stay in-modal as a
-  // warning so the teacher can correct and retry.
+  // successful add confirms in-modal (matching the student branch) and clears
+  // the form; failures stay in-modal as a warning so the teacher can correct
+  // and retry.
   const submitStaff = async (username: string, staffRole: StaffRole) => {
     await addStaffMutation
       .mutateAsync(
@@ -163,14 +163,12 @@ const AddStudent = ({
         {
           onSuccess: ({ trimmed, role: addedRole }) => {
             form.reset()
-            notify({
-              tone: "success",
-              durationMs: 5000,
-              message: t("toasts.staffAdded", {
+            setSuccess(
+              t("toasts.staffAdded", {
                 username: trimmed,
                 role: t(ROLE_LABEL_KEY[addedRole]),
               }),
-            })
+            )
           },
           onError: (err) => {
             setSuccess("")
@@ -221,14 +219,16 @@ const AddStudent = ({
           >
             {t("common.close")}
           </Button>
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => (
+          <form.Subscribe selector={(state) => [state.isSubmitting]}>
+            {([isSubmitting]) => (
               <Button
                 type="submit"
                 form={formId}
-                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
+                // Enabled while invalid (Primer): submit runs the validators
+                // and surfaces errors. The team gate stays — the classroom
+                // team is still being ensured, a loading dependency for the
+                // student branch, not a validity check.
+                disabled={isSubmitting || (!isStaffRole && !team)}
                 variant="primary"
               >
                 {!isSubmitting
@@ -245,7 +245,8 @@ const AddStudent = ({
         onSubmit={(e) => {
           e.preventDefault()
           e.stopPropagation()
-          form.handleSubmit()
+          const formEl = e.currentTarget as HTMLFormElement
+          void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
         }}
       >
         <AnimatedAlert tone="warning" show={!!warning} className="mt-4 text-sm">

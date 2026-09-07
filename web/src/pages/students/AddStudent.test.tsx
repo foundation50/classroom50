@@ -22,7 +22,7 @@ vi.mock("@/hooks/useEnsureTeam", () => ({
 
 const notify = vi.fn()
 vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify }),
+  useToast: () => ({ notify, announce: vi.fn() }),
 }))
 
 // Both mutation hooks are stubbed so the test asserts which backend a role
@@ -134,9 +134,8 @@ describe("AddStudent — role routing", () => {
       username: "prof",
       role: "teacher",
     })
-    expect(notify).toHaveBeenCalledWith(
-      expect.objectContaining({ tone: "success" }),
-    )
+    // Success confirms in-modal (matching the student branch), not as a toast.
+    expect(await screen.findByText(/toasts\.staffAdded/)).toBeTruthy()
   })
 
   it("routes a TA selection to the staff backend", async () => {

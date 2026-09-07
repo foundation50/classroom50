@@ -60,7 +60,7 @@ func PaginateAll[T any](
 		}
 		path = pageURL(page + 1)
 	}
-	return nil, fmt.Errorf("pagination hit the %d-page safety cap (>%d items) -- unexpected; retry or file an issue",
+	return nil, fmt.Errorf("pagination hit the %d-page safety cap (>%d items), which is unexpected; retry or file an issue",
 		maxPages, maxPages*perPage)
 }
 

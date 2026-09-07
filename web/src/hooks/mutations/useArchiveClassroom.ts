@@ -33,6 +33,7 @@ export function useArchiveClassroom(org: string, classroom: string) {
     // not the true original. A shared scope id makes React Query run same-key
     // toggles one at a time, so each snapshot sees a settled state.
     scope: { id: `archive-classroom:${org}:${classroom}` },
+    meta: { keepTabOpen: true },
     mutationFn: (active: boolean) =>
       editClassroomWithConflictRetry(client, { org, slug: classroom, active }),
     onMutate: async (active: boolean) => {
@@ -53,12 +54,18 @@ export function useArchiveClassroom(org: string, classroom: string) {
       // in the wrong lifecycle state. Toast is the call site's job.
       if (ctx) queryClient.setQueryData(classroomKey, ctx.prev)
     },
-    onSettled: () => {
+    onSettled: (data) => {
       // Repartition the classes list (Active/Archived/All) — a different query
       // than the per-classroom classroom.json flipped above.
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
       })
+      if (data?.teamDescription.changed) {
+        // The toggle re-projected the classroom50/team/v1 record (its `active`
+        // flag) onto the student team; refresh GET /user/teams so a teacher
+        // previewing as a student sees the lifecycle change immediately.
+        void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
+      }
     },
   })
 }

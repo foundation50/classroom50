@@ -3,6 +3,7 @@ import {
   ID_RESOLUTION_CAP,
   identityKey,
   resolveImportIdentities,
+  splitEmailRowsByLink,
 } from "./rosterImportResolve"
 import type { ParsedImportRow } from "./rosterImportParse"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
@@ -237,5 +238,103 @@ describe("resolveImportIdentities", () => {
     expect(res.rows).toHaveLength(1)
     // First occurrence wins, so the id-resolved row's metadata is kept.
     expect(res.rows[0]?.identity).toMatchObject({ github_id: "42" })
+  })
+})
+
+describe("splitEmailRowsByLink", () => {
+  const emailRow = (
+    email: string,
+    metadata: {
+      first_name?: string
+      last_name?: string
+      email?: string
+      section?: string
+    } = {},
+  ) => ({ identity: { kind: "email" as const, email }, ...metadata })
+  const studentFor = () => "student" as const
+
+  it("partitions linked rows out of the invite list, preserving file order", () => {
+    const rows = [
+      emailRow("ada@uni.edu"),
+      emailRow("bob@uni.edu"),
+      emailRow("cara@uni.edu"),
+    ]
+    const links = [
+      { email: "cara@uni.edu", id: 3, login: "cara", classroom: "cs50-2025" },
+      { email: "ada@uni.edu", id: 1, login: "ada", classroom: "cs50-2024" },
+    ]
+    const res = splitEmailRowsByLink(rows, links, studentFor)
+    expect(res.linkedRows.map((r) => r.username)).toEqual(["ada", "cara"])
+    // The confirmed binding echoes the LINK's account and source classroom.
+    expect(res.linkedEmails).toEqual([
+      { email: "ada@uni.edu", login: "ada", classroom: "cs50-2024" },
+      { email: "cara@uni.edu", login: "cara", classroom: "cs50-2025" },
+    ])
+    expect(res.emailInvites.map((i) => i.email)).toEqual(["bob@uni.edu"])
+  })
+
+  it("carries metadata onto the linked account row and the invite alike", () => {
+    const metadata = { first_name: "Ada", last_name: "Lovelace", section: "L1" }
+    const res = splitEmailRowsByLink(
+      [emailRow("ada@uni.edu", metadata), emailRow("zoe@uni.edu", metadata)],
+      [{ email: "ada@uni.edu", id: 42, login: "ada", classroom: "cs50" }],
+      studentFor,
+    )
+    // The link's id rides along so downstream writes join on the account.
+    expect(res.linkedRows).toEqual([
+      {
+        username: "ada",
+        github_id: "42",
+        email: "ada@uni.edu",
+        role: "student",
+        ...metadata,
+      },
+    ])
+    expect(res.emailInvites).toEqual([
+      { email: "zoe@uni.edu", role: "student", ...metadata },
+    ])
+  })
+
+  it("assigns each row the role the teacher chose for its identity", () => {
+    const res = splitEmailRowsByLink(
+      [emailRow("ada@uni.edu"), emailRow("prof@uni.edu")],
+      [{ email: "ada@uni.edu", id: 1, login: "ada", classroom: "cs50" }],
+      (identity) =>
+        identity.kind === "email" && identity.email === "prof@uni.edu"
+          ? "teacher"
+          : "ta",
+    )
+    expect(res.linkedRows[0]?.role).toBe("ta")
+    expect(res.emailInvites[0]?.role).toBe("teacher")
+  })
+
+  it("keeps the raw metadata email cell, falling back to the identity address", () => {
+    // Stored roster addresses keep their casing (metadata compares
+    // case-sensitively); only a row with no email cell takes the normalized one.
+    const res = splitEmailRowsByLink(
+      [
+        emailRow("ada@uni.edu", { email: "Ada@Uni.edu" }),
+        emailRow("bob@uni.edu"),
+      ],
+      [
+        { email: "ada@uni.edu", id: 1, login: "ada", classroom: "cs50" },
+        { email: "bob@uni.edu", id: 2, login: "bob", classroom: "cs50" },
+      ],
+      studentFor,
+    )
+    expect(res.linkedRows.map((r) => r.email)).toEqual([
+      "Ada@Uni.edu",
+      "bob@uni.edu",
+    ])
+  })
+
+  it("returns three empty buckets for no email rows", () => {
+    expect(
+      splitEmailRowsByLink(
+        [],
+        [{ email: "a@x.io", id: 1, login: "a", classroom: "c" }],
+        studentFor,
+      ),
+    ).toEqual({ linkedRows: [], linkedEmails: [], emailInvites: [] })
   })
 })

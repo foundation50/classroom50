@@ -23,7 +23,7 @@ describe("bundled skeleton", () => {
   it("deploys every bundled path it declares (no silent CLI-side additions)", () => {
     // Reverse of the check above: a skeleton file the CLI commits (now bundled)
     // that the GUI forgot to add to SKELETON_PATHS would ship via
-    // `gh teacher init` but never via GUI org setup — silently reopening the
+    // `gh teacher init` but never via GUI org setup, silently reopening the
     // action-parity gap this bundling closes. Fail the build instead.
     const declared = new Set<string>(SKELETON_PATHS)
     for (const rel of bundledSkeletonPaths()) {

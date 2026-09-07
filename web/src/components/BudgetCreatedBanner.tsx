@@ -12,6 +12,7 @@ import {
   dismissBudgetNotice,
   readBudgetNotice,
 } from "@/orgPolicy/budgetNoticeStore"
+import { useBannerSlot } from "@/context/bannerStack/BannerStackProvider"
 
 export type BudgetBannerView = "success" | "hidden"
 
@@ -69,6 +70,10 @@ export function BudgetCreatedBanner() {
     created: notice.created,
     dismissed: notice.dismissed,
   })
+  const granted = useBannerSlot(
+    "budget-created",
+    view !== "hidden" && Boolean(org),
+  )
 
   const dismiss = () => {
     if (org) dismissBudgetNotice(org)
@@ -76,7 +81,7 @@ export function BudgetCreatedBanner() {
 
   return (
     <AnimatePresence initial={false}>
-      {view !== "hidden" && org ? (
+      {granted && org ? (
         <AppBanner
           key="budget-created"
           tone="success"

@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Badge, Select, SkeletonCell } from "@/components/ui"
+import { Badge, Select, SkeletonCell, TableShell } from "@/components/ui"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
   ROLE_LABEL_KEY,
@@ -177,112 +177,110 @@ export const RosterPreviewTable = ({
     length: skeletonRowCount ?? rows.length,
   })
   return (
-    <div className="max-h-80 overflow-auto rounded-box border border-base-300">
-      <table className="table table-sm" aria-busy={loading || undefined}>
-        <thead>
-          <tr>
-            <th scope="col">#</th>
-            <th scope="col">{t("students.githubUsernameColumn")}</th>
-            <th scope="col">{t("students.nameColumn")}</th>
-            <th scope="col">{t("students.emailColumn")}</th>
-            <th scope="col">{t("students.sectionColumn")}</th>
-            <th scope="col">{t("students.roleColumn")}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {loading
-            ? skeletonRows.map((_, index) => (
-                <tr key={`skeleton-${index}`} aria-hidden="true">
+    <TableShell
+      animate={false}
+      size="sm"
+      frameClassName="max-h-80 overflow-auto"
+      ariaBusy={loading}
+    >
+      <thead>
+        <tr>
+          <th scope="col">#</th>
+          <th scope="col">{t("students.githubUsernameColumn")}</th>
+          <th scope="col">{t("students.nameColumn")}</th>
+          <th scope="col">{t("students.emailColumn")}</th>
+          <th scope="col">{t("students.sectionColumn")}</th>
+          <th scope="col">{t("students.roleColumn")}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {loading
+          ? skeletonRows.map((_, index) => (
+              <tr key={`skeleton-${index}`} aria-hidden="true">
+                <td>{index + 1}</td>
+                <SkeletonCell bar="h-4 w-24" />
+                <SkeletonCell bar="h-4 w-28" />
+                <SkeletonCell bar="h-4 w-40" />
+                <SkeletonCell bar="h-4 w-16" />
+                <SkeletonCell bar="h-8 w-32" />
+              </tr>
+            ))
+          : rows.map((row, index) => {
+              const key = identityKey(row.identity)
+              const rowChanges = changes[key] ?? []
+              const roleChange = roleChanges[key]
+              const identityChange = identityChanges[key]
+              const changed =
+                rowChanges.length > 0 ||
+                Boolean(roleChange) ||
+                Boolean(identityChange)
+              return (
+                <tr key={key} className={changed ? "bg-warning/10" : undefined}>
                   <td>{index + 1}</td>
-                  <SkeletonCell bar="h-4 w-24" />
-                  <SkeletonCell bar="h-4 w-28" />
-                  <SkeletonCell bar="h-4 w-40" />
-                  <SkeletonCell bar="h-4 w-16" />
-                  <SkeletonCell bar="h-8 w-32" />
-                </tr>
-              ))
-            : rows.map((row, index) => {
-                const key = identityKey(row.identity)
-                const rowChanges = changes[key] ?? []
-                const roleChange = roleChanges[key]
-                const identityChange = identityChanges[key]
-                const changed =
-                  rowChanges.length > 0 ||
-                  Boolean(roleChange) ||
-                  Boolean(identityChange)
-                return (
-                  <tr
-                    key={key}
-                    className={changed ? "bg-warning/10" : undefined}
-                  >
-                    <td>{index + 1}</td>
-                    <IdentityCell
-                      row={row}
-                      declaredUsername={identityChange?.declaredUsername}
-                      alreadyOnRoster={alreadyOnRosterKeys?.has(key)}
-                    />
-                    <PreviewCell
-                      value={[row.first_name, row.last_name]
-                        .filter(Boolean)
-                        .join(" ")}
-                      changes={rowChanges}
-                      cell="name"
-                    />
-                    <PreviewCell
-                      value={row.email ?? ""}
-                      changes={rowChanges}
-                      cell="email"
-                    />
-                    <PreviewCell
-                      value={row.section ?? ""}
-                      changes={rowChanges}
-                      cell="section"
-                    />
-                    <td className={roleChange ? CHANGED_CELL_CLASS : undefined}>
-                      {/* Highlight the cell like the other changed columns, but show
+                  <IdentityCell
+                    row={row}
+                    declaredUsername={identityChange?.declaredUsername}
+                    alreadyOnRoster={alreadyOnRosterKeys?.has(key)}
+                  />
+                  <PreviewCell
+                    value={[row.first_name, row.last_name]
+                      .filter(Boolean)
+                      .join(" ")}
+                    changes={rowChanges}
+                    cell="name"
+                  />
+                  <PreviewCell
+                    value={row.email ?? ""}
+                    changes={rowChanges}
+                    cell="email"
+                  />
+                  <PreviewCell
+                    value={row.section ?? ""}
+                    changes={rowChanges}
+                    cell="section"
+                  />
+                  <td className={roleChange ? CHANGED_CELL_CLASS : undefined}>
+                    {/* Highlight the cell like the other changed columns, but show
                       the role change as an inline "was <role>" hint rather than a
                       hover tooltip — a tooltip fights the native Select dropdown
                       and overlaps it. The Select already shows the new role. */}
-                      <div className="flex flex-col gap-0.5">
-                        <Select
-                          selectSize="xs"
-                          className="w-32"
-                          aria-label={t("students.assignRoleLabel")}
-                          value={rolesByUser[key] ?? "student"}
-                          onChange={(e) => {
-                            // Read the value synchronously — React nulls the event's
-                            // currentTarget after the handler returns, so a deferred
-                            // setState updater must not touch `e`.
-                            const role =
-                              coerceImportRole(e.target.value) ?? "student"
-                            onRoleChange(key, role)
-                          }}
-                        >
-                          <option value="student">
-                            {t("students.roleStudent")}
-                          </option>
-                          <option value="ta">{t("students.roleTa")}</option>
-                          <option value="hta">
-                            {t("students.roleHeadTa")}
-                          </option>
-                          <option value="teacher">
-                            {t("students.roleTeacher")}
-                          </option>
-                        </Select>
-                        {roleChange ? (
-                          <span className="text-xs opacity-70">
-                            {t("students.rolePreviousHint", {
-                              role: t(ROLE_LABEL_KEY[roleChange.from]),
-                            })}
-                          </span>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-        </tbody>
-      </table>
-    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <Select
+                        selectSize="xs"
+                        className="w-32"
+                        aria-label={t("students.assignRoleLabel")}
+                        value={rolesByUser[key] ?? "student"}
+                        onChange={(e) => {
+                          // Read the value synchronously — React nulls the event's
+                          // currentTarget after the handler returns, so a deferred
+                          // setState updater must not touch `e`.
+                          const role =
+                            coerceImportRole(e.target.value) ?? "student"
+                          onRoleChange(key, role)
+                        }}
+                      >
+                        <option value="student">
+                          {t("students.roleStudent")}
+                        </option>
+                        <option value="ta">{t("students.roleTa")}</option>
+                        <option value="hta">{t("students.roleHeadTa")}</option>
+                        <option value="teacher">
+                          {t("students.roleTeacher")}
+                        </option>
+                      </Select>
+                      {roleChange ? (
+                        <span className="text-xs opacity-70">
+                          {t("students.rolePreviousHint", {
+                            role: t(ROLE_LABEL_KEY[roleChange.from]),
+                          })}
+                        </span>
+                      ) : null}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+      </tbody>
+    </TableShell>
   )
 }

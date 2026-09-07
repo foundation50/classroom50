@@ -23,11 +23,18 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
 })
 
 // Drives editClassroomWithConflictRetry; switchable to fail so we can assert the
-// optimistic flip rolls back.
+// optimistic flip rolls back, and switchable teamDescription outcome so we can
+// assert the myTeams invalidation is gated on an actual description rewrite.
 let editShouldFail = false
+let editDescriptionChanged = false
 const editClassroom = vi.fn((_client: unknown, input: { active?: boolean }) => {
   if (editShouldFail) return Promise.reject(new Error("boom"))
-  return Promise.resolve(input)
+  return Promise.resolve({
+    ...input,
+    teamDescription: editDescriptionChanged
+      ? { changed: true, slug: "classroom50-cs101" }
+      : { changed: false },
+  })
 })
 
 vi.mock("@/domain/classrooms", () => ({
@@ -65,6 +72,7 @@ function setup() {
 
 beforeEach(() => {
   editShouldFail = false
+  editDescriptionChanged = false
   editClassroom.mockClear()
 })
 
@@ -114,6 +122,23 @@ describe("useArchiveClassroom", () => {
 
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.jsonFile(ORG, CONFIG_REPO),
+    })
+    // No description rewrite -> the student enumeration cache is untouched.
+    expect(invalidate).not.toHaveBeenCalledWith({
+      queryKey: githubKeys.myTeams(),
+    })
+  })
+
+  it("invalidates my-teams when the toggle rewrote the team description", async () => {
+    editDescriptionChanged = true
+    const { queryClient, result } = setup()
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+
+    result.current.mutate(false)
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: githubKeys.myTeams(),
     })
   })
 

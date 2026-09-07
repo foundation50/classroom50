@@ -33,6 +33,7 @@ const row = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
   github_id: "42",
   name: "Alice",
   email: "alice@x.edu",
+  emails: [],
   isMember: true,
   classrooms: [],
   classification: "member-on-roster",
@@ -159,6 +160,39 @@ describe("removeMemberFromOrg", () => {
         row: row({ github_id: "42", username: "alice" }),
       }),
     ).rejects.toThrow(/your own account/i)
+    expect(unenrollMock).not.toHaveBeenCalled()
+    expect(removeOrgMembershipMock).not.toHaveBeenCalled()
+  })
+
+  it("uses a pre-resolved viewer without re-fetching the authenticated user", async () => {
+    getAuthenticatedUserMock.mockReset()
+    unenrollMock.mockReset().mockResolvedValue({})
+    removeOrgMembershipMock.mockReset().mockResolvedValue(undefined)
+
+    const result = await removeMemberFromOrg(client, {
+      org: "acme",
+      row: row({ classrooms: [access("cs101")] }),
+      viewer: { id: 999, login: "teacher" } as never,
+    })
+
+    expect(getAuthenticatedUserMock).not.toHaveBeenCalled()
+    expect(result.removed).toBe(true)
+    expect(result.unenrolledClassrooms).toEqual(["cs101"])
+  })
+
+  it("still self-guards against a pre-resolved viewer matching the row", async () => {
+    getAuthenticatedUserMock.mockReset()
+    unenrollMock.mockReset()
+    removeOrgMembershipMock.mockReset()
+
+    await expect(
+      removeMemberFromOrg(client, {
+        org: "acme",
+        row: row({ github_id: "42", username: "alice" }),
+        viewer: { id: 42, login: "alice" } as never,
+      }),
+    ).rejects.toThrow(/your own account/i)
+    expect(getAuthenticatedUserMock).not.toHaveBeenCalled()
     expect(unenrollMock).not.toHaveBeenCalled()
     expect(removeOrgMembershipMock).not.toHaveBeenCalled()
   })

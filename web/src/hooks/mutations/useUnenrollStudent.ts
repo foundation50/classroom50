@@ -10,6 +10,7 @@ export function useUnenrollStudent(org: string, classroom: string) {
   const client = useGitHubClient()
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: (student: UnenrollStudentInput["student"]) =>
       unenrollStudent(client, { org, classroom, student }),
   })

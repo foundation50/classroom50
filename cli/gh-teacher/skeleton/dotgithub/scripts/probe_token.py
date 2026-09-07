@@ -4,7 +4,7 @@
 Exercises EVERY GitHub API scope the CLASSROOM50_SERVICE_TOKEN needs, so a
 teacher runs one workflow after provisioning/rotating and gets a single
 green/red signal covering scopes the pre-provisioning validators (`gh teacher
-init` / the web "validate & save") can't cheaply check — the org-team read and
+init` / the web "validate & save") can't cheaply check: the org-team read and
 the repo-level Actions permission that only surface at collect/regrade time.
 
 SIDE-EFFECT FREE by design. Never pushes a tag, re-runs a workflow, writes a
@@ -33,24 +33,25 @@ Scope -> probe (mirrors the wiki REST table):
 
 Config + org scopes are ALWAYS probed. Per-classroom, the probe also reads the
 classroom team's members (the exact call collect-scores makes), which exercises
-team VISIBILITY — a secret team the token can't see 404/403s here even when the
-org-members proxy passes. It additionally reads each STAFF team (classroom.json
-`teams`, e.g., `classroom50-<short>-ta`) the collect-time grant targets, so a
-secret/invisible staff team fails RED here rather than silently granting TAs no
-access at collect time. A team that doesn't exist yet (404) is a PASS with a note (an
-early-term classroom legitimately has no team), never a failure.
+team VISIBILITY: a secret team the token can't see 404/403s here even when the
+org-members proxy passes. It additionally reads each STAFF team the collect-time
+grant targets (classroom.json `teams`, falling back to the derived
+`classroom50-<short>-<role>`), so a secret/invisible staff team fails RED here
+rather than silently granting TAs no access at collect time. A team that doesn't
+exist yet (404) is a PASS with a note (an early-term classroom legitimately has
+no team), never a failure.
 
 Environment (set by `probe-token.yaml`):
-  CLASSROOM50_SERVICE_TOKEN — the fine-grained PAT to probe.
-  GITHUB_REPOSITORY_OWNER   — org name (auto-set by Actions).
-  GITHUB_WORKSPACE          — checkout root (holds the per-classroom dirs).
-  GITHUB_API_URL            — API URL on GHES runners.
-  GH_API_URL                — explicit override (test servers).
+  CLASSROOM50_SERVICE_TOKEN: the fine-grained PAT to probe.
+  GITHUB_REPOSITORY_OWNER:   org name (auto-set by Actions).
+  GITHUB_WORKSPACE:          checkout root (holds the per-classroom dirs).
+  GITHUB_API_URL:            API URL on GHES runners.
+  GH_API_URL:                explicit override (test servers).
 
 Exit codes:
-  0 — every required scope present (a per-classroom team read may be skipped
-      with a note when the team doesn't exist yet).
-  1 — at least one required scope missing, or the token is invalid/expired.
+  0: every required scope present (a per-classroom team read may be skipped
+     with a note when the team doesn't exist yet).
+  1: at least one required scope missing, or the token is invalid/expired.
 """
 
 from __future__ import annotations
@@ -66,12 +67,15 @@ import urllib.parse
 import urllib.request
 from typing import Any
 
-# Config repo name. Cross-binary contract — mirrors ConfigRepoName in
+# Config repo name. Cross-binary contract: mirrors ConfigRepoName in
 # cli/gh-teacher/internal/configrepo and the collect/regrade scripts.
 CONFIG_REPO = "classroom50"
 
-# Schema sentinel for a classroom.json — keep aligned with collect_scores.py.
+# Schema sentinel for a classroom.json; keep aligned with collect_scores.py.
 CLASSROOM_SCHEMA_V1 = "classroom50/classroom/v1"
+
+# Staff roles with a classroom team; mirrors collect_scores.py STAFF_ROLES.
+STAFF_ROLES = ("teacher", "hta", "ta")
 
 # Throttle classifier constants, hand-mirrored from collect_scores.py (which
 # documents them); pinned by TestRateLimitMarkersParity_GoVsInlinePython.
@@ -105,7 +109,7 @@ def http_get(url: str, token: str, *, _retries: int = 3) -> tuple[int, bytes]:
     urllib.error.HTTPError for a non-2xx so callers can classify. Retries
     throttles and 5xx/429 with exponential backoff (honoring Retry-After),
     mirroring the collect/regrade transport. The token lives only in the
-    Authorization header — never logged or interpolated into output."""
+    Authorization header, never logged or interpolated into output."""
     for attempt in range(_retries):
         req = urllib.request.Request(
             url,
@@ -236,7 +240,7 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
 # Individual scope checks -----------------------------------------------------
 #
 # Each returns a Check: ok True/False and a human message. A check that can't
-# run for a benign reason (no student repos yet) is `skipped` — a pass with a
+# run for a benign reason (no student repos yet) is `skipped`: a pass with a
 # note, not a failure.
 
 
@@ -259,21 +263,21 @@ def _classify_repo_read(exc: urllib.error.HTTPError) -> str:
     throttle_reason = rate_limit_reason(exc)
     if throttle_reason is not None:
         return (
-            f"HTTP {exc.code} — GitHub is THROTTLING, not refusing ({throttle_reason}); "
+            f"HTTP {exc.code}: GitHub is THROTTLING, not refusing ({throttle_reason}); "
             f"the token is fine, do NOT rotate it. Re-run the probe once the "
-            f"limit resets."
+            f"limit resets"
         )
     if exc.code == 401:
         return "token is invalid, expired, or revoked (401)"
     if exc.code in (403, 404):
-        return f"HTTP {exc.code} — the scope is missing or the resource is out of the token's reach"
+        return f"HTTP {exc.code}: the scope is missing or the resource is out of the token's reach"
     return f"HTTP {exc.code} ({exc.reason or 'no reason'})"
 
 
 def check_config_contents_and_write(api_url: str, org: str, token: str) -> list[Check]:
     """Contents: Read (config repo readable), Contents: Write
-    (permissions.push true), AND Administration: Write (permissions.admin true —
-    collect grants staff teams repo access). One request establishes all three."""
+    (permissions.push true), AND Administration: Write (permissions.admin true,
+    which collect needs to grant staff teams repo access). One request establishes all three."""
     url = _repo_url(api_url, org, CONFIG_REPO)
     try:
         _status, body = http_get(url, token)
@@ -281,16 +285,16 @@ def check_config_contents_and_write(api_url: str, org: str, token: str) -> list[
         cause = _classify_repo_read(exc)
         return [
             Check("Contents: Read (config repo)", False, f"GET {org}/{CONFIG_REPO}: {cause}"),
-            Check("Contents: Write (config repo)", False, "not checked — the config-repo read failed above"),
-            Check("Administration: Write (config repo)", False, "not checked — the config-repo read failed above"),
+            Check("Contents: Write (config repo)", False, "not checked: the config-repo read failed above"),
+            Check("Administration: Write (config repo)", False, "not checked: the config-repo read failed above"),
         ]
     try:
         repo = json.loads(body.decode("utf-8"))
     except (json.JSONDecodeError, ValueError) as exc:
         return [
             Check("Contents: Read (config repo)", False, f"GET {org}/{CONFIG_REPO}: malformed JSON ({exc})"),
-            Check("Contents: Write (config repo)", False, "not checked — the config-repo read failed above"),
-            Check("Administration: Write (config repo)", False, "not checked — the config-repo read failed above"),
+            Check("Contents: Write (config repo)", False, "not checked: the config-repo read failed above"),
+            Check("Administration: Write (config repo)", False, "not checked: the config-repo read failed above"),
         ]
     permissions = repo.get("permissions") if isinstance(repo, dict) else None
     permissions = permissions if isinstance(permissions, dict) else {}
@@ -303,22 +307,22 @@ def check_config_contents_and_write(api_url: str, org: str, token: str) -> list[
             push,
             "permissions.push is true (regrade can push submit/* tags)"
             if push
-            else "permissions.push is false — the token is read-only; regrade needs Contents: Read and write",
+            else "permissions.push is false: the token is read-only; regrade needs Contents: Read and write",
         ),
         Check(
             "Administration: Write (config repo)",
             admin,
-            "permissions.admin is true (collect can grant staff teams repo access) — "
-            "note this proves admin on the config repo only; the grant targets student "
+            "permissions.admin is true (collect can grant staff teams repo access). "
+            "Note this proves admin on the config repo only; the grant targets student "
             "repos + templates, so the token must be scoped to All repositories"
             if admin
-            else "permissions.admin is false — collect grants staff teams (e.g., TAs) repo access, which needs Administration: Read and write",
+            else "permissions.admin is false: collect grants staff teams (e.g., TAs) repo access, which needs Administration: Read and write",
         ),
     ]
 
 
 def check_actions(api_url: str, org: str, token: str) -> Check:
-    """Actions: Read/Write — GET .../actions/permissions is reachable only with
+    """Actions: Read/Write. GET .../actions/permissions is reachable only with
     the Actions permission (a fine-grained Actions permission is a single
     read/write pair, so reachability establishes the grant regrade's rerun API
     needs). Read-only: no run is re-run."""
@@ -329,8 +333,8 @@ def check_actions(api_url: str, org: str, token: str) -> Check:
         return Check(
             "Actions: Read and write (config repo)",
             False,
-            f"GET {org}/{CONFIG_REPO}/actions/permissions: {_classify_repo_read(exc)} — "
-            f"regrade re-runs student autograde workflows and needs Actions: Read and write",
+            f"GET {org}/{CONFIG_REPO}/actions/permissions: {_classify_repo_read(exc)}. "
+            f"Regrade re-runs student autograde workflows and needs Actions: Read and write",
         )
     return Check(
         "Actions: Read and write (config repo)",
@@ -340,7 +344,7 @@ def check_actions(api_url: str, org: str, token: str) -> Check:
 
 
 def check_metadata(api_url: str, org: str, token: str) -> Check:
-    """Metadata: Read — /collaborators is a Metadata endpoint, what group
+    """Metadata: Read. /collaborators is a Metadata endpoint, what group
     attribution reads. Metadata is auto-included on every fine-grained PAT, so
     this is expected to pass; a failure means the token is scoped to the wrong
     resource owner or a repo subset."""
@@ -351,8 +355,8 @@ def check_metadata(api_url: str, org: str, token: str) -> Check:
         return Check(
             "Metadata: Read (collaborators)",
             False,
-            f"GET {org}/{CONFIG_REPO}/collaborators: {_classify_repo_read(exc)} — "
-            f"group attribution reads repo collaborators via Metadata: Read",
+            f"GET {org}/{CONFIG_REPO}/collaborators: {_classify_repo_read(exc)}. "
+            f"Group attribution reads repo collaborators via Metadata: Read",
         )
     return Check(
         "Metadata: Read (collaborators)",
@@ -362,7 +366,7 @@ def check_metadata(api_url: str, org: str, token: str) -> Check:
 
 
 def check_org_members(api_url: str, org: str, token: str) -> Check:
-    """Members: Read — GET /orgs/{org}/members. The org-wide proxy for the
+    """Members: Read. GET /orgs/{org}/members is the org-wide proxy for the
     per-team read collect-scores makes; both need the same Members permission.
     The per-classroom team read below is the stronger, exact check."""
     url = f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/members?per_page=1"
@@ -372,8 +376,8 @@ def check_org_members(api_url: str, org: str, token: str) -> Check:
         return Check(
             "Members: Read (org members)",
             False,
-            f"GET orgs/{org}/members: {_classify_repo_read(exc)} — "
-            f"collection is team-driven and lists the classroom team; add "
+            f"GET orgs/{org}/members: {_classify_repo_read(exc)}. "
+            f"Collection is team-driven and lists the classroom team; add "
             f"Organization permissions -> Members: Read",
         )
     return Check(
@@ -387,7 +391,7 @@ def check_org_members(api_url: str, org: str, token: str) -> Check:
 
 
 def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> str:
-    """The classroom's GitHub team slug — persisted `team.slug` when present,
+    """The classroom's GitHub team slug: persisted `team.slug` when present,
     else the derived `classroom50-<short>`. Mirrors collect_scores.py's
     resolve_team_slug so the probe reads the EXACT team collection reads."""
     team = classroom_meta.get("team")
@@ -398,27 +402,33 @@ def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> s
     return f"classroom50-{classroom_short}"
 
 
-def resolve_staff_team_slugs(classroom_meta: dict[str, Any]) -> dict[str, str]:
-    """role -> slug for each staff team present in classroom.json `teams`.
-    Mirrors collect_scores.py's resolve_staff_team_slugs so the probe reads the
-    EXACT staff teams the grant pass targets."""
-    teams = classroom_meta.get("teams")
-    if not isinstance(teams, dict):
-        return {}
+def resolve_staff_team_slugs(
+    classroom_meta: dict[str, Any], classroom_short: str
+) -> dict[str, str]:
+    """role -> slug for each staff team the grant pass targets: a slug recorded
+    in classroom.json `teams` is authoritative; every other role in STAFF_ROLES
+    falls back to the derived `classroom50-<short>-<role>`. Mirrors
+    collect_scores.py's resolve_staff_team_slugs so the probe reads the EXACT
+    staff teams the grant pass targets (a derived team that doesn't exist reads
+    as a 404, which check_staff_team_visible already treats as a skip)."""
     out: dict[str, str] = {}
-    for role, ref in teams.items():
-        if not isinstance(ref, dict):
-            continue
-        slug = ref.get("slug")
-        if isinstance(slug, str) and slug.strip():
-            out[role] = slug.strip()
+    teams = classroom_meta.get("teams")
+    if isinstance(teams, dict):
+        for role, ref in teams.items():
+            if not isinstance(ref, dict):
+                continue
+            slug = ref.get("slug")
+            if isinstance(slug, str) and slug.strip():
+                out[role] = slug.strip()
+    for role in STAFF_ROLES:
+        out.setdefault(role, f"{CONFIG_REPO}-{classroom_short}-{role}")
     return out
 
 
 def iter_classroom_meta(base_dir: pathlib.Path):
     """Yield (short_name, classroom_meta) for each v1 classroom dir. Non-v1 or
     unreadable dirs are skipped silently (the probe is about the token, not the
-    config's validity — collect-scores validates that)."""
+    config's validity; collect-scores validates that)."""
     if not base_dir.is_dir():
         return
     for entry in sorted(p for p in base_dir.iterdir() if p.is_dir()):
@@ -439,7 +449,7 @@ def check_classroom_team(
     """The EXACT read collect-scores makes: GET the classroom team's members.
     Stronger than the org-members proxy because it also exercises team
     VISIBILITY (a secret team not visible to the token would 404/403 here even
-    when the org-members proxy passes — the visibility-asymmetry gap)."""
+    when the org-members proxy passes, the visibility-asymmetry gap)."""
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/members?per_page=1"
@@ -449,18 +459,18 @@ def check_classroom_team(
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
             # The team may not exist yet (classroom created but team not
-            # provisioned), which is not a token problem — note and pass.
+            # provisioned), which is not a token problem: note and pass.
             return Check(
                 f"Team members: {classroom_short} ({team_slug})",
                 True,
-                "team not found (404) — not created yet, or renamed; not a token scope problem",
+                "team not found (404): not created yet, or renamed; not a token scope problem",
                 skipped=True,
             )
         return Check(
             f"Team members: {classroom_short} ({team_slug})",
             False,
-            f"GET orgs/{org}/teams/{team_slug}/members: {_classify_repo_read(exc)} — "
-            f"the token can't read this classroom team (Members: Read, and the team must be visible)",
+            f"GET orgs/{org}/teams/{team_slug}/members: {_classify_repo_read(exc)}. "
+            f"The token can't read this classroom team (Members: Read, and the team must be visible)",
         )
     return Check(
         f"Team members: {classroom_short} ({team_slug})",
@@ -473,7 +483,7 @@ def check_staff_team_visible(
     api_url: str, org: str, token: str, classroom_short: str, role: str, team_slug: str
 ) -> Check:
     """Staff-team visibility for the collect-time grant. `PUT .../teams/{slug}/
-    repos/...` needs the token to SEE the team — a scope the config-repo admin
+    repos/...` needs the token to SEE the team, a scope the config-repo admin
     check can't prove. Without this probe, a secret/invisible staff team passes
     every other check, then the grant soft-skips its 404 and TAs silently get NO
     access while the run reports success. Reading the team's members is the same
@@ -487,19 +497,19 @@ def check_staff_team_visible(
         http_get(url, token)
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            # Staff team not provisioned yet (or renamed) — not a token problem,
+            # Staff team not provisioned yet (or renamed) is not a token problem,
             # and the grant simply skips a role whose team is absent.
             return Check(
                 label,
                 True,
-                "staff team not found (404) — not created yet, or renamed; not a token scope problem",
+                "staff team not found (404): not created yet, or renamed; not a token scope problem",
                 skipped=True,
             )
         return Check(
             label,
             False,
-            f"GET orgs/{org}/teams/{team_slug}/members: {_classify_repo_read(exc)} — "
-            f"the grant can't see this staff team, so it would silently grant TAs no "
+            f"GET orgs/{org}/teams/{team_slug}/members: {_classify_repo_read(exc)}. "
+            f"The grant can't see this staff team, so it would silently grant TAs no "
             f"access (Members: Read, and the team must be visible to the token)",
         )
     return Check(
@@ -537,14 +547,14 @@ def main() -> int:
     org = (os.environ.get("GITHUB_REPOSITORY_OWNER") or "").strip()
     if not org:
         emit_error(
-            "GITHUB_REPOSITORY_OWNER is empty — this script must run inside a GitHub Actions workflow"
+            "GITHUB_REPOSITORY_OWNER is empty: this script must run inside a GitHub Actions workflow"
         )
         return 1
 
     token = (os.environ.get("CLASSROOM50_SERVICE_TOKEN") or "").strip()
     if not token:
         emit_error(
-            "CLASSROOM50_SERVICE_TOKEN is empty — run `gh teacher rotate-service-token <org>` to provision it"
+            "CLASSROOM50_SERVICE_TOKEN is empty: run `gh teacher rotate-service-token <org>` to provision it"
         )
         return 1
 
@@ -575,14 +585,14 @@ def main() -> int:
             print_check(check)
             checks.append(check)
             # Probe each staff team the grant targets (see check_staff_team_visible).
-            for role, staff_slug in resolve_staff_team_slugs(meta).items():
+            for role, staff_slug in resolve_staff_team_slugs(meta, classroom_short).items():
                 staff_check = check_staff_team_visible(
                     api_url, org, token, classroom_short, role, staff_slug
                 )
                 print_check(staff_check)
                 checks.append(staff_check)
     else:
-        print("\nNo classrooms found in the config repo yet — skipping per-team reads.")
+        print("\nNo classrooms found in the config repo yet; skipping per-team reads.")
 
     failed = [c for c in checks if not c.ok and not c.skipped]
     passed = [c for c in checks if c.ok and not c.skipped]

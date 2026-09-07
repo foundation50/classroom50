@@ -12,10 +12,12 @@ import {
   renameConfigRepoToMain,
   resendOrgInvitation,
   triggerRegrade,
+  updateOrgTeamCreation,
   validateServiceToken,
 } from "./mutations"
 import { REGRADE_WORKFLOW } from "./workflows"
 import { GitHubAPIError } from "./errors"
+import { localizedMessageOf } from "@/types/localizedMessage"
 import { createGitHubClient } from "./client"
 import { buildSkeletonFiles } from "@/skeleton/skeleton"
 
@@ -91,6 +93,33 @@ describe("buildClassroomUpdate", () => {
 
   it("omits every optional field when none are provided (identity merge)", () => {
     expect(buildClassroomUpdate(base, {})).toEqual(base)
+  })
+
+  it('pages_base_url: non-empty sets, undefined preserves, "" deletes', () => {
+    const url = "https://pages.example.edu/classroom50"
+
+    const set = buildClassroomUpdate(base, { pages_base_url: url })
+    expect(set.pages_base_url).toBe(url)
+
+    // An edit that omits the field (e.g. a pure archive toggle) must not
+    // touch a persisted custom domain.
+    const preserved = buildClassroomUpdate(
+      { ...base, pages_base_url: url },
+      { active: false },
+    )
+    expect(preserved.pages_base_url).toBe(url)
+
+    // Clearing deletes the key outright — never writes an empty string an
+    // old reader would trip on.
+    const cleared = buildClassroomUpdate(
+      { ...base, pages_base_url: url },
+      { pages_base_url: "" },
+    )
+    expect("pages_base_url" in cleared).toBe(false)
+
+    // Clearing an already-absent field stays a no-op (no key introduced).
+    const noop = buildClassroomUpdate(base, { pages_base_url: "" })
+    expect("pages_base_url" in noop).toBe(false)
   })
 })
 
@@ -204,6 +233,139 @@ describe("editClassroom archived read-only guard", () => {
       editClassroom(client, { org: "acme", slug: "cs101", name: "Renamed" }),
     ).resolves.toMatchObject({ newCommitSha: "new-commit-sha" })
     expect(blobPost).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Students never read classroom.json — they render the classroom50/team/v1
+// record projected onto the student team's description (GET /user/teams). An
+// edit must re-project that record, or existing students keep seeing the old
+// name forever (the classroom-rename stale-title bug). The projection derives
+// from the record the edit just committed, NOT a contents re-read (the
+// Contents API is read-after-write eventual and could echo the pre-write body).
+describe("editClassroom team-description re-projection", () => {
+  const makeClient = (opts?: {
+    teamPrivacy?: string
+    patchFails?: boolean
+  }) => {
+    const patched: { body: unknown }[] = []
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/contents/")) {
+        return Promise.resolve(
+          JSON.stringify({
+            schema: "classroom50/classroom/v1",
+            short_name: "cs101",
+            name: "CS 101",
+            term: "Fall",
+            org: "acme",
+            team: { id: 7, slug: "classroom50-cs101" },
+          }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const request = vi
+      .fn()
+      .mockImplementation(
+        (path: string, init?: { method?: string; body?: unknown }) => {
+          const method = init?.method ?? "GET"
+          if (/\/repos\/[^/]+\/classroom50$/.test(path)) {
+            return Promise.resolve({ default_branch: "main" })
+          }
+          if (path.endsWith("/git/ref/heads/main")) {
+            return Promise.resolve({ object: { sha: "base-sha" } })
+          }
+          if (path.includes("/git/commits/")) {
+            return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+          }
+          if (path.endsWith("/git/blobs")) {
+            return Promise.resolve({ sha: "blob-sha" })
+          }
+          if (path.endsWith("/git/trees")) {
+            return Promise.resolve({ sha: "tree-sha" })
+          }
+          if (path.endsWith("/git/commits")) {
+            return Promise.resolve({ sha: "new-commit-sha" })
+          }
+          if (path.endsWith("/git/refs/heads/main")) {
+            return Promise.resolve({})
+          }
+          if (method === "GET" && /\/orgs\/[^/]+\/teams\/[^/]+$/.test(path)) {
+            return Promise.resolve({
+              id: 7,
+              slug: "classroom50-cs101",
+              privacy: opts?.teamPrivacy ?? "secret",
+              description: JSON.stringify({
+                schema: "classroom50/team/v1",
+                name: "CS 101",
+                term: "Fall",
+              }),
+            })
+          }
+          if (method === "PATCH" && /\/orgs\/[^/]+\/teams\/[^/]+$/.test(path)) {
+            if (opts?.patchFails) {
+              return Promise.reject(new Error("PATCH forbidden"))
+            }
+            patched.push({ body: init?.body })
+            return Promise.resolve({})
+          }
+          return Promise.reject(new Error(`unexpected request: ${path}`))
+        },
+      )
+    const client = { request, requestRaw } as unknown as GitHubClient
+    return { client, patched, requestRaw }
+  }
+
+  it("PATCHes the student team description with the just-committed record", async () => {
+    const { client, patched, requestRaw } = makeClient()
+
+    const result = await editClassroom(client, {
+      org: "acme",
+      slug: "cs101",
+      name: "Renamed",
+      term: "Spring",
+    })
+
+    expect(result.teamDescription).toEqual({
+      changed: true,
+      slug: "classroom50-cs101",
+    })
+    expect(patched).toHaveLength(1)
+    const body = patched[0].body as { description: string }
+    expect(JSON.parse(body.description)).toEqual({
+      schema: "classroom50/team/v1",
+      name: "Renamed",
+      term: "Spring",
+    })
+    // Exactly one contents read (the pre-edit merge source): the projection
+    // must come from the committed record, never a post-commit re-read that
+    // could echo the pre-write body.
+    expect(requestRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it("is best-effort: a failed team PATCH doesn't fail the committed edit", async () => {
+    const { client } = makeClient({ patchFails: true })
+
+    const result = await editClassroom(client, {
+      org: "acme",
+      slug: "cs101",
+      name: "Renamed",
+    })
+
+    expect(result.newCommitSha).toBe("new-commit-sha")
+    expect(result.teamDescription).toEqual({ changed: false })
+  })
+
+  it("skips a non-secret team rather than leaking the record", async () => {
+    const { client, patched } = makeClient({ teamPrivacy: "closed" })
+
+    const result = await editClassroom(client, {
+      org: "acme",
+      slug: "cs101",
+      name: "Renamed",
+    })
+
+    expect(result.teamDescription).toEqual({ changed: false })
+    expect(patched).toHaveLength(0)
   })
 })
 
@@ -485,6 +647,21 @@ describe("validateServiceToken", () => {
       rateLimit,
     })
 
+  // Every rejection names an en.json key (rendered by errorText at the view),
+  // so assert the key rather than assembled English.
+  const rejectsWithKey = async (promise: Promise<unknown>, key: string) => {
+    const err: unknown = await promise.then(
+      () => {
+        throw new Error("expected rejection")
+      },
+      (e: unknown) => e,
+    )
+    expect(localizedMessageOf(err)?.key).toBe(
+      `orgSettings.serviceToken.validate.${key}`,
+    )
+    return localizedMessageOf(err)
+  }
+
   it("accepts a token with write access and org-members read", async () => {
     const request = mockTokenClient((path) => {
       if (path === "/repos/acme/classroom50") {
@@ -505,17 +682,25 @@ describe("validateServiceToken", () => {
 
   it("rejects a read-only token (permissions.push false) with a write hint", async () => {
     mockTokenClient(() => Promise.resolve({ permissions: { push: false } }))
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /lacks write access|Read and write/,
+    const message = await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "readOnly",
     )
+    // The scope hint rides along as a nested message, so the view renders the
+    // fix beside the finding.
+    expect(message?.params?.hint).toMatchObject({
+      key: "orgSettings.serviceToken.validate.scopeHint",
+      params: { org: "acme" },
+    })
   })
 
   it("rejects an admin-less token (permissions.admin false) with an admin hint", async () => {
     mockTokenClient(() =>
       Promise.resolve({ permissions: { push: true, admin: false } }),
     )
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /lacks admin access|Administration: Read and write/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noAdmin",
     )
   })
 
@@ -526,8 +711,9 @@ describe("validateServiceToken", () => {
       }
       return Promise.reject(apiError(403))
     })
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /Members: Read|can't read the org's members/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noMembersRead",
     )
   })
 
@@ -538,8 +724,9 @@ describe("validateServiceToken", () => {
       }
       return Promise.reject(apiError(404))
     })
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /Members: Read|can't read the org's members/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noMembersRead",
     )
   })
 
@@ -581,23 +768,131 @@ describe("validateServiceToken", () => {
 
   it("maps a 403 to the actionable scope hint", async () => {
     mockTokenClient(() => Promise.reject(apiError(403)))
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /Read and write/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "noAccess",
     )
   })
 
   it("maps a 401 to invalid/expired/revoked", async () => {
     mockTokenClient(() => Promise.reject(apiError(401)))
-    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
-      /invalid, expired, or revoked/,
+    await rejectsWithKey(
+      validateServiceToken("github_pat_x", "acme"),
+      "invalid",
     )
   })
 
   it("requires an org and a non-empty token", async () => {
     await expect(validateServiceToken("tok", undefined)).rejects.toThrow(/org/)
-    await expect(validateServiceToken("   ", "acme")).rejects.toThrow(
-      /Enter a token/,
-    )
+    await rejectsWithKey(validateServiceToken("   ", "acme"), "empty")
+  })
+
+  // The "All repositories" probe (discussion #768): a token scoped to selected
+  // repositories reads classroom50 fine and 404s on every student repo. With
+  // the teacher's client supplied, the token must also read one other private
+  // org repo; only a 404 there is a verdict.
+  describe("repository access probe", () => {
+    const okToken = (probeResult: () => Promise<unknown>) =>
+      mockTokenClient((path) => {
+        if (path === "/repos/acme/classroom50") {
+          return Promise.resolve({ permissions: { push: true, admin: true } })
+        }
+        if (path === "/orgs/acme/members?per_page=1") {
+          return Promise.resolve([])
+        }
+        if (path === "/repos/acme/cs-hw1-alice") return probeResult()
+        throw new Error(`unexpected path ${path}`)
+      })
+    const teacherWith = (repos: { name: string }[] | Error) => {
+      const request = vi.fn().mockImplementation((path: string) => {
+        expect(path).toMatch(/^\/orgs\/acme\/repos\?type=private/)
+        return repos instanceof Error
+          ? Promise.reject(repos)
+          : Promise.resolve(repos)
+      })
+      return { request } as unknown as ReturnType<typeof createGitHubClient>
+    }
+
+    it("passes when the token reads another private repo", async () => {
+      const request = okToken(() => Promise.resolve({ name: "cs-hw1-alice" }))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith([{ name: "classroom50" }, { name: "cs-hw1-alice" }]),
+        ),
+      ).resolves.toBeUndefined()
+      expect(request).toHaveBeenCalledWith("/repos/acme/cs-hw1-alice")
+    })
+
+    it("rejects a token scoped to selected repositories (404 on another repo)", async () => {
+      okToken(() => Promise.reject(apiError(404)))
+      const message = await rejectsWithKey(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith([{ name: "classroom50" }, { name: "cs-hw1-alice" }]),
+        ),
+        "selectedRepos",
+      )
+      expect(message?.params).toMatchObject({
+        org: "acme",
+        probe: "cs-hw1-alice",
+      })
+    })
+
+    it("never probes with classroom50 itself, whatever its casing", async () => {
+      const request = okToken(() => Promise.resolve({}))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith([{ name: "Classroom50" }]),
+        ),
+      ).resolves.toBeUndefined()
+      // Only the baseline config-repo read and members probe ran; no third
+      // read against the config repo under another casing.
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(request).not.toHaveBeenCalledWith("/repos/acme/Classroom50")
+    })
+
+    it("has nothing to prove when the org has no other private repo", async () => {
+      const request = okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken("github_pat_x", "acme", teacherWith([])),
+      ).resolves.toBeUndefined()
+      expect(request).not.toHaveBeenCalledWith("/repos/acme/cs-hw1-alice")
+    })
+
+    it("is inconclusive when the teacher's listing fails or the probe 403s/500s", async () => {
+      okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken(
+          "github_pat_x",
+          "acme",
+          teacherWith(new TypeError("Failed to fetch")),
+        ),
+      ).resolves.toBeUndefined()
+
+      for (const status of [403, 500]) {
+        okToken(() => Promise.reject(apiError(status)))
+        await expect(
+          validateServiceToken(
+            "github_pat_x",
+            "acme",
+            teacherWith([{ name: "cs-hw1-alice" }]),
+          ),
+        ).resolves.toBeUndefined()
+      }
+    })
+
+    it("skips the probe entirely without a teacher client", async () => {
+      const request = okToken(() => Promise.reject(apiError(404)))
+      await expect(
+        validateServiceToken("github_pat_x", "acme"),
+      ).resolves.toBeUndefined()
+      expect(request).toHaveBeenCalledTimes(2)
+    })
   })
 })
 
@@ -1285,6 +1580,37 @@ describe("resendOrgInvitation carries team_ids", () => {
       invitee_id: 1,
       team_ids: [4242],
       role: "admin",
+    })
+  })
+})
+
+describe("updateOrgTeamCreation", () => {
+  // The body must carry ONLY members_can_create_teams: PATCH /orgs/{org}
+  // applies every field it receives, so a stray field would silently rewrite
+  // an unrelated org setting.
+  it("PATCHes /orgs/{org} with just the team-creation flag", async () => {
+    const updated = { login: "acme", members_can_create_teams: true }
+    const request = vi.fn().mockResolvedValue(updated)
+    const client = { request } as unknown as GitHubClient
+
+    await expect(updateOrgTeamCreation(client, "acme", true)).resolves.toBe(
+      updated,
+    )
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(request).toHaveBeenCalledWith("/orgs/acme", {
+      method: "PATCH",
+      body: { members_can_create_teams: true },
+    })
+  })
+
+  it("sends false when disabling", async () => {
+    const request = vi.fn().mockResolvedValue({ login: "acme" })
+    const client = { request } as unknown as GitHubClient
+
+    await updateOrgTeamCreation(client, "acme", false)
+    expect(request).toHaveBeenCalledWith("/orgs/acme", {
+      method: "PATCH",
+      body: { members_can_create_teams: false },
     })
   })
 })

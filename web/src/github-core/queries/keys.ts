@@ -2,6 +2,25 @@ import type { QueryClient } from "@tanstack/react-query"
 
 import { CONFIG_REPO } from "@/util/configRepo"
 
+// The tracker key for one workflow dispatch. `scope` narrows it to the surface
+// that dispatched (a regrade is per classroom/assignment/owner so one
+// assignment's run never shows as in progress on another's page); `sinceRunId`
+// binds the poll to our own dispatch. Every dispatch tracker key is built here
+// so a new workflow needs no hand-written key.
+const dispatchRun = (
+  workflow: string,
+  owner: string,
+  scope: readonly string[],
+  sinceRunId: number | null,
+) =>
+  [
+    ...githubKeys.all,
+    `${workflow}-run`,
+    owner,
+    ...scope,
+    sinceRunId ?? "none",
+  ] as const
+
 // The cache-key factory for every github-core read. This is the leaf of the
 // queries module: every *Query sub-module imports these keys, and this file
 // imports nothing from them, so the split stays cycle-free (import-x/no-cycle).
@@ -28,6 +47,25 @@ export const githubKeys = {
     [...githubKeys.all, "memberships", "orgs", org] as const,
 
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
+
+  // One assignment's slice of the org repo list, resolved for a known set of
+  // candidate logins (see getAssignmentRepos). The logins are part of the key
+  // because the result depends on them: a roster change must re-resolve.
+  // Prefixed by `orgRepos` so every invalidation of the full listing reaches
+  // it too.
+  assignmentRepos: (
+    org: string,
+    classroom: string,
+    assignment: string,
+    logins: readonly string[],
+  ) =>
+    [
+      ...githubKeys.orgRepos(org),
+      "assignment",
+      classroom,
+      assignment,
+      logins,
+    ] as const,
 
   // The org's template repos (GET /orgs/{org}/repos, filtered locally). Distinct
   // from `orgRepos`: this is a bounded, recency-sorted walk cached for the
@@ -66,6 +104,20 @@ export const githubKeys = {
 
   myTeams: () => [...githubKeys.all, "my-teams"] as const,
 
+  // One assignment's group teams (team-mode), from the org team listing.
+  groupTeams: (org: string, classroom: string, assignment: string) =>
+    [...githubKeys.all, "group-teams", org, classroom, assignment] as const,
+
+  // The viewer's OWN group team for one assignment (from /user/teams).
+  myGroupTeam: (org: string, classroom: string, assignment: string) =>
+    [...githubKeys.all, "my-group-team", org, classroom, assignment] as const,
+
+  // The <classroom>/teams.json snapshot (classroom50/teams/v1). Distinct from
+  // jsonFile: the read tolerates an absent file (a classroom has no teams.json
+  // until the first snapshot write).
+  teamsFile: (org: string, classroom: string) =>
+    [...githubKeys.all, "teams-file", org, classroom] as const,
+
   repo: (owner: string, repo: string) =>
     [...githubKeys.all, "repo", owner, repo] as const,
 
@@ -84,6 +136,9 @@ export const githubKeys = {
 
   configCommits: (org: string, perPage: number) =>
     [...githubKeys.all, "config-commits", org, perPage] as const,
+
+  configFileCommit: (org: string, path: string) =>
+    [...githubKeys.all, "config-file-commit", org, path] as const,
 
   rawFile: (owner: string, repo: string, path: string, ref?: string) =>
     [...githubKeys.all, "raw-file", owner, repo, path, ref ?? null] as const,
@@ -115,19 +170,11 @@ export const githubKeys = {
     [...githubKeys.all, "csv-file", owner, repo, path, ref ?? null] as const,
 
   collectScoresRun: (owner: string, sinceRunId: number | null) =>
-    [
-      ...githubKeys.all,
-      "collect-scores-run",
-      owner,
-      sinceRunId ?? "none",
-    ] as const,
+    dispatchRun("collect-scores", owner, [], sinceRunId),
 
   lastCollectScoresRun: (owner: string) =>
     [...githubKeys.all, "last-collect-scores-run", owner] as const,
 
-  // Scoped by classroom + assignment (+ optional repo owner) so a regrade of
-  // one assignment doesn't surface as in-progress on another assignment's
-  // page; sinceRunId binds the poll to our specific dispatch.
   regradeRun: (
     owner: string,
     classroom: string,
@@ -135,18 +182,21 @@ export const githubKeys = {
     repoOwner: string | null,
     sinceRunId: number | null,
   ) =>
-    [
-      ...githubKeys.all,
-      "regrade-run",
+    dispatchRun(
+      "regrade",
       owner,
-      classroom,
-      assignment,
-      repoOwner ?? "all",
-      sinceRunId ?? "none",
-    ] as const,
+      [classroom, assignment, repoOwner ?? "all"],
+      sinceRunId,
+    ),
 
   serviceToken: (owner: string) =>
     [...githubKeys.all, "serviceToken", owner] as const,
+
+  probeTokenRun: (owner: string, sinceRunId: number | null) =>
+    dispatchRun("probe-token", owner, [], sinceRunId),
+
+  runAnnotations: (owner: string, runId: number) =>
+    [...githubKeys.all, "run-annotations", owner, runId] as const,
 
   skeletonDrift: (owner: string) =>
     [...githubKeys.all, "skeletonDrift", owner] as const,
@@ -223,6 +273,35 @@ export function invalidateClassroomTeam(
   queryClient.invalidateQueries({
     queryKey: githubKeys.teamInvitations(org, teamSlug),
   })
+}
+
+// Refresh everything derived from one assignment's group teams after a team
+// mutation (create/delete/membership/snapshot): the teacher listing, the
+// viewer's own-team resolution, the raw /user/teams cache behind it, the
+// per-team member lists, and the members fan-out. Single-sourced so a new
+// team mutation can't silently miss a cache.
+export function invalidateGroupTeams(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+  assignment: string,
+  teamSlug?: string,
+) {
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.groupTeams(org, classroom, assignment),
+  })
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.myGroupTeam(org, classroom, assignment),
+  })
+  void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
+  void queryClient.invalidateQueries({
+    queryKey: [...githubKeys.all, "group-team-members", org],
+  })
+  if (teamSlug) {
+    void queryClient.invalidateQueries({
+      queryKey: githubKeys.teamMembers(org, teamSlug),
+    })
+  }
 }
 
 // Refresh roster invite-status lists after enroll/resend/unenroll: invites move

@@ -12,6 +12,7 @@ import {
 } from "@/components/modals/ReuseModalShell"
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import { useBulkReuseAssignments } from "@/hooks/mutations/useBulkAssignmentActions"
 import {
   planBulkReuseSlugs,
@@ -20,31 +21,24 @@ import {
 import { slugify } from "@/util/slug"
 import type { Assignment } from "@/types/classroom"
 
-// Copy a selection of assignments into another classroom in the same org — the
-// plural form of ReuseAssignmentModal, and deliberately its twin: same shell,
-// same header, same Cancel/Reuse footer, same editable slug field, so the bulk
-// flow reads as the same operation rather than a second one that happens to
-// copy.
+// Copy a selection of assignments into another classroom in the same org: the
+// plural form of ReuseAssignmentModal, and deliberately its twin (same shell,
+// header, footer and editable slug field) so the bulk flow reads as the same
+// operation rather than a second one that happens to copy.
 //
 // Picking the target reveals one slug field per selected assignment, prefilled
 // with the slug the copy would take (auto-suffixed where the source slug is
 // already used in the target, or by an earlier row in this same run). The
-// teacher can overwrite any of them before starting — the same field the
-// single-assignment reuse offers, once per selection, so copying into a
+// teacher can overwrite any of them before starting, so copying into a
 // classroom that already holds these assignments is a visible decision rather
 // than a report after the fact. See util/bulkReuseSlugs.
 //
-// The shell already models the three states this needs. `isPending` disables
-// the close button and Cancel, which matters more here than in the single
-// case: the copies are sequential writes, and dismissing mid-run would leave a
-// half-populated classroom with no report of what landed. Setting `warning`
-// after the run flips the footer to a single "Done" — the shell's existing
-// acknowledgement state — so the result stays on screen until dismissed.
-//
-// Sequential by necessity: every copy is a read-modify-write of the TARGET
-// classroom's assignments.json on the config repo's default branch, so two at
-// once would collide on the same git ref. That is why the per-assignment report
-// exists — a single "done" would hide which of twelve copies actually landed.
+// The copies run sequentially (see bulkCopyAssignments), so the shell's
+// `isPending` state matters more here than in the single case: dismissing
+// mid-run would leave a half-populated classroom with no report of what
+// landed. Setting `warning` after the run flips the footer to a single "Done",
+// so the per-assignment result stays on screen until dismissed.
+
 // No target picked yet: nothing to resolve, and nothing valid to submit.
 const EMPTY_PLAN: BulkReuseSlugPlan = { rows: [], budget: 0, valid: false }
 
@@ -69,6 +63,9 @@ export function BulkReuseAssignmentsModal({
   // the target's assignments load or a neighbouring row is retyped.
   const [slugEdits, setSlugEdits] = useState<Record<string, string>>({})
   const reuse = useBulkReuseAssignments(org)
+  // A component-run fan-out holds the tab itself (see hooks/mutations/README.md):
+  // closing mid-run would leave the target half-populated with no report.
+  useBeforeUnloadGuard(reuse.running)
 
   const {
     data: targetData,
@@ -270,11 +267,7 @@ export function BulkReuseAssignmentsModal({
         // slow one, and a bar pinned at 0% looks stuck.
         <BulkProgressBlock
           workingLabel={t("assignments.bulk.reuseWorking")}
-          progress={{
-            processed: reuse.processed,
-            total: reuse.total,
-            message: "",
-          }}
+          progress={{ processed: reuse.processed, total: reuse.total }}
           indeterminateUntilFirst
           caption={`${t("assignments.bulk.reuseProgress", {
             processed: reuse.processed,

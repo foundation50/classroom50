@@ -5,9 +5,33 @@ import { getErrorMessage } from "../errorMessage"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
+import {
+  localizedError,
+  type LocalizedMessage,
+  type LocalizedParam,
+} from "@/types/localizedMessage"
 import type { GitHubClient } from "../client"
+import type { GitHubRepo } from "../types"
 
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
+
+// The token-validation copy, one en.json key per rejection so the view renders
+// it translated (errorText) instead of assembled text. Literal keys, so the
+// i18n audit can see each one is referenced.
+const VALIDATE_KEYS = {
+  empty: "orgSettings.serviceToken.validate.empty",
+  scopeHint: "orgSettings.serviceToken.validate.scopeHint",
+  invalid: "orgSettings.serviceToken.validate.invalid",
+  noAccess: "orgSettings.serviceToken.validate.noAccess",
+  configRepoMissing: "orgSettings.serviceToken.validate.configRepoMissing",
+  unreachable: "orgSettings.serviceToken.validate.unreachable",
+  unverified: "orgSettings.serviceToken.validate.unverified",
+  readOnly: "orgSettings.serviceToken.validate.readOnly",
+  noAdmin: "orgSettings.serviceToken.validate.noAdmin",
+  noMembersRead: "orgSettings.serviceToken.validate.noMembersRead",
+  selectedRepos: "orgSettings.serviceToken.validate.selectedRepos",
+} as const
+type ValidateKey = keyof typeof VALIDATE_KEYS
 
 export async function encryptSecret(publicKey: string, secret: string) {
   await sodium.ready
@@ -38,33 +62,41 @@ export async function encryptSecret(publicKey: string, secret: string) {
  *
  * Caveat: GET /repos/{org}/classroom50 proves access to the config repo, not the
  * student repos the workflows touch (fine-grained PATs don't expose their repo
- * selection via the API). Hence the UI requires "All repositories".
+ * selection via the API). Hence the UI requires "All repositories", and when
+ * `teacherClient` is supplied the token is also made to read one other private
+ * org repo (see assertTokenReachesOtherRepos).
  */
 export async function validateServiceToken(
   token: string,
   org: string | undefined,
+  teacherClient?: GitHubClient,
 ) {
   if (!org) throw new Error("org must be specified to validate a service token")
 
   const trimmed = token.trim()
-  if (!trimmed) throw new Error("Enter a token before saving.")
+  if (!trimmed) throw localizedError({ key: VALIDATE_KEYS.empty })
 
   // NEVER log the token value — only the action + org.
   logSetup.info("validating service token", { org })
 
   const tokenClient = createGitHubClient({ token: trimmed })
 
-  const scopeHint =
-    `Create a fine-grained PAT with Resource owner = ${org}, Repository access = ` +
-    "All repositories, Repository permissions → Contents: Read and write " +
-    "AND Actions: Read and write AND Administration: Read and write (collecting " +
-    "scores reads and grants staff teams repo access; regrading re-runs " +
-    "student autograde workflows and may push submit/* tags, which need write), " +
-    "AND Organization permissions → Members: Read (collection is team-driven and " +
-    "lists the classroom team — a separate section shown once the org is the " +
-    "resource owner; not implied by any repository scope). " +
-    "If your org requires PAT approval and you are not an org owner, an owner " +
-    "must approve it first (owners' tokens are auto-approved)."
+  const hint: LocalizedMessage = {
+    key: VALIDATE_KEYS.scopeHint,
+    params: { org },
+  }
+  const fail = (
+    key: ValidateKey,
+    params: Record<string, LocalizedParam> = {},
+    cause?: unknown,
+  ): Error => {
+    const err = localizedError({
+      key: VALIDATE_KEYS[key],
+      params: { org, repo: CONFIG_REPO, ...params },
+    })
+    if (cause !== undefined) err.cause = cause
+    return err
+  }
 
   let repo: { permissions?: { push?: boolean; admin?: boolean } }
   try {
@@ -77,57 +109,26 @@ export async function validateServiceToken(
     }>(`/repos/${org}/${CONFIG_REPO}`)
   } catch (err) {
     if (err instanceof GitHubAPIError) {
-      if (err.status === 401) {
-        throw new Error(
-          "This token is invalid, expired, or revoked (401). Create a fresh fine-grained PAT and try again.",
-          { cause: err },
-        )
-      }
-      if (err.status === 403) {
-        throw new Error(
-          `This token can't access ${org}/${CONFIG_REPO} (403). ${scopeHint}`,
-          { cause: err },
-        )
-      }
-      if (err.status === 404) {
-        throw new Error(
-          `Couldn't find a ${CONFIG_REPO} repository in ${org} (404). Check that the organization is correct and that setup has been run for it — this isn't necessarily a problem with the token itself.`,
-          { cause: err },
-        )
-      }
+      if (err.status === 401) throw fail("invalid", {}, err)
+      if (err.status === 403) throw fail("noAccess", { hint }, err)
+      if (err.status === 404) throw fail("configRepoMissing", {}, err)
     }
     // A fetch that never reached GitHub (network/CORS) throws a TypeError, not a
     // GitHubAPIError — don't blame the token for that.
     if (err instanceof TypeError) {
-      throw new Error(
-        `Couldn't reach GitHub to verify the token (network or CORS issue). Check your connection and try again. (${err.message})`,
-        { cause: err },
-      )
+      throw fail("unreachable", { reason: err.message }, err)
     }
-    throw new Error(
-      `Couldn't verify the token against ${org}/${CONFIG_REPO}: ${getErrorMessage(
-        err,
-      )}`,
-      { cause: err },
-    )
+    throw fail("unverified", { reason: getErrorMessage(err) }, err)
   }
 
   // The token can read the repo, but regrade needs to write (re-run runs / push
   // submit/* tags). A read-only PAT reports permissions.push === false; reject
   // it with the same actionable scope hint.
-  if (!repo.permissions?.push) {
-    throw new Error(
-      `This token can read ${org}/${CONFIG_REPO} but lacks write access — collecting scores needs read, but regrading needs write. ${scopeHint}`,
-    )
-  }
+  if (!repo.permissions?.push) throw fail("readOnly", { hint })
 
   // Contents is proven, but collect grants staff teams repo access, needing
   // Administration (not implied by Contents); reject an admin-less token here.
-  if (!repo.permissions?.admin) {
-    throw new Error(
-      `This token can read and write ${org}/${CONFIG_REPO} but lacks admin access — collecting scores grants staff teams (e.g., TAs) read access to student repos, which needs Administration: write. ${scopeHint}`,
-    )
-  }
+  if (!repo.permissions?.admin) throw fail("noAdmin", { hint })
 
   // Contents/Actions are proven, but collection is team-driven: it lists the
   // classroom team's members, which needs the org-level Members: Read permission
@@ -151,13 +152,55 @@ export async function validateServiceToken(
       err instanceof GitHubAPIError &&
       (err.status === 403 || err.status === 404)
     ) {
-      throw new Error(
-        `This token can read ${org}/${CONFIG_REPO} but can't read the org's members — collecting scores is team-driven and lists the classroom team, which needs Organization permissions → Members: Read. ${scopeHint}`,
-        { cause: err },
-      )
+      throw fail("noMembersRead", { hint }, err)
     }
     // Inconclusive (401/5xx/network) — proceed; the repo read already proved the
     // token valid.
+  }
+
+  if (teacherClient) {
+    await assertTokenReachesOtherRepos(tokenClient, teacherClient, org)
+  }
+}
+
+// The config-repo read proves nothing about the student repos: a token scoped
+// to "Only select repositories" (with classroom50 selected) passes every check
+// above, then 404s on every student repo, which surfaces weeks later as a
+// collect-time 403 on the first staff-team grant. The teacher's own client
+// picks a private org repo other than classroom50 (one they can see, so a token
+// they own with All repositories sees it too) and the token reads it. Only a
+// 404 is a verdict; no other private repo means nothing to prove, and any other
+// failure is inconclusive (the probe-token workflow is the exhaustive check).
+async function assertTokenReachesOtherRepos(
+  tokenClient: GitHubClient,
+  teacherClient: GitHubClient,
+  org: string,
+) {
+  let repos: Pick<GitHubRepo, "name">[]
+  try {
+    repos = await teacherClient.request<Pick<GitHubRepo, "name">[]>(
+      `/orgs/${encodeURIComponent(org)}/repos?type=private&sort=created&direction=asc&per_page=10`,
+    )
+  } catch {
+    return
+  }
+  const probe = repos.find(
+    (r) => r.name.toLowerCase() !== CONFIG_REPO.toLowerCase(),
+  )
+  if (!probe) return
+  try {
+    await tokenClient.request(
+      `/repos/${encodeURIComponent(org)}/${encodeURIComponent(probe.name)}`,
+    )
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) {
+      const failure = localizedError({
+        key: VALIDATE_KEYS.selectedRepos,
+        params: { org, repo: CONFIG_REPO, probe: probe.name },
+      })
+      failure.cause = err
+      throw failure
+    }
   }
 }
 

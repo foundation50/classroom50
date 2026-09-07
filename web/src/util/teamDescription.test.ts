@@ -37,6 +37,27 @@ describe("parseTeamDescription", () => {
     expect(parsed.secret).toBeUndefined()
   })
 
+  it("parses a valid pages_base_url and drops a malformed one", () => {
+    const valid = parseTeamDescription(
+      JSON.stringify({
+        schema: "classroom50/team/v1",
+        name: "CS",
+        pages_base_url: "https://cs.example.edu/classroom50",
+      }),
+    )
+    expect(valid.pages_base_url).toBe("https://cs.example.edu/classroom50")
+
+    const invalid = parseTeamDescription(
+      JSON.stringify({
+        schema: "classroom50/team/v1",
+        name: "CS",
+        pages_base_url: "http://cs.example.edu/",
+      }),
+    )
+    expect(invalid.name).toBe("CS")
+    expect(invalid.pages_base_url).toBeUndefined()
+  })
+
   it("ignores unknown future fields (additive evolution)", () => {
     const desc = JSON.stringify({
       schema: "classroom50/team/v1",
@@ -103,6 +124,33 @@ describe("marshalTeamDescription", () => {
     expect(JSON.parse(out).active).toBe(false)
   })
 
+  it("includes a valid pages_base_url", () => {
+    const out = marshalTeamDescription({
+      name: "CS",
+      pagesBaseUrl: "https://cs.example.edu/classroom50",
+      active: true,
+    })
+    expect(JSON.parse(out).pages_base_url).toBe(
+      "https://cs.example.edu/classroom50",
+    )
+  })
+
+  it("drops a malformed pages_base_url rather than persisting it", () => {
+    for (const bad of [
+      "http://cs.example.edu",
+      "https://cs.example.edu/",
+      "https://cs.example.edu/x?y=1",
+      "cs.example.edu",
+    ]) {
+      const out = marshalTeamDescription({
+        name: "CS",
+        pagesBaseUrl: bad,
+        active: true,
+      })
+      expect(JSON.parse(out).pages_base_url).toBeUndefined()
+    }
+  })
+
   it("round-trips through parseTeamDescription", () => {
     const out = marshalTeamDescription({
       name: "Intro CS",
@@ -154,7 +202,13 @@ describe("marshalTeamDescription — shared fixture parity", () => {
   )
   const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
     cases: {
-      input: { name?: string; term?: string; secret?: string; active: boolean }
+      input: {
+        name?: string
+        term?: string
+        secret?: string
+        pages_base_url?: string
+        active: boolean
+      }
       encoded: string
     }[]
   }
@@ -165,7 +219,15 @@ describe("marshalTeamDescription — shared fixture parity", () => {
 
   for (const [i, c] of doc.cases.entries()) {
     it(`case ${i} encodes byte-identically to the Go writer`, () => {
-      expect(marshalTeamDescription(c.input)).toBe(c.encoded)
+      expect(
+        marshalTeamDescription({
+          name: c.input.name,
+          term: c.input.term,
+          secret: c.input.secret,
+          pagesBaseUrl: c.input.pages_base_url,
+          active: c.input.active,
+        }),
+      ).toBe(c.encoded)
     })
   }
 })

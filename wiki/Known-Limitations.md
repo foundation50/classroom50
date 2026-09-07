@@ -1,4 +1,4 @@
-# Known limitations
+# Known Limitations
 
 Classroom 50 has no server: state lives in GitHub, and work runs as you or
 as GitHub Actions in your organization. That design keeps your data in your
@@ -12,9 +12,12 @@ workaround where one exists.
 find an account from an email address, so an emailed invitation can't be
 matched to a student until they accept it. Classroom 50 records the address
 on the roster as a pending row and fills in the account at the next sync,
-from either tool. To have usernames from the start, collect them up front; a
-signup form works well. See [Add students](Web-Teacher-Guide#add-students)
-and [What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
+from either tool. The one shortcut is your own data: an address that a
+previous classroom's roster in the same organization already links to an
+account is enrolled directly instead of invited. To have usernames from the
+start, collect them up front; a signup form works well. See
+[Add students](Web-Teacher-Guide#add-students) and
+[What triggers a sync](How-Classroom-50-Works#what-triggers-a-sync).
 
 **A retained address is the one you invited.** When you invite by email, the
 address stored on the roster is what you typed, which is not necessarily the
@@ -39,7 +42,7 @@ waiting to be claimed.
 as a Release on each student's repository, and the browser can't read
 Release assets across origins (GitHub redirects them to storage that lacks
 CORS headers). Point students at their repository's Releases page or the
-feedback pull request; the student view's **View grade** link opens the
+feedback pull request; the student view's **View score** link opens the
 right Release. In-app scores are on the wish list; see
 [#567](https://github.com/foundation50/classroom50/issues/567).
 
@@ -51,9 +54,9 @@ requests).
 
 **State refreshes only when a page loads.** With no server polling in the
 background, the app reads GitHub's current state when you open or reload a
-page, and scores update only when collection runs (**Collect now**, or a manual
-`collect-scores` run).
-If a view looks stale, reload it. See
+page, and scores update only when collection runs (**Collect now** on the
+submissions page, **Collect all** on the assignments page, or a manual
+`collect-scores` run). If a view looks stale, reload it. See
 [When state refreshes](How-Classroom-50-Works#when-state-refreshes).
 
 ## Templates and student repositories
@@ -62,7 +65,20 @@ If a view looks stale, reload it. See
 by giving the classroom's team read access to the template, so a curious
 student can browse it, including its history. Never commit solutions (or
 their history) to a template: develop privately and copy or squash the clean
-state into the template repository you register.
+state into the template repository you register. A **locked** assignment is
+the exception: the team has no read access to its private template until you
+unlock. Create a timed assessment locked and unlock it when the session
+starts. See [Timed assessments](Course-Lifecycle-and-End-of-Term#timed-assessments).
+
+**Grading files are tamper-proof, not secret.** Test scripts and fixtures
+kept in `CLASSROOM/autograders/ASSIGNMENT/` never enter a student's
+repository, and the runner fetches them fresh on every grading run, so a
+student can't alter them. But your organization's GitHub Pages site serves the
+bundle publicly (an unlisted classroom only makes the URL hard to guess), so a
+student who finds the URL can read it. Keep full solutions and private data
+out of the bundle, and use `failure-details` to limit what a failing run
+reveals. See
+[Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
 **Student repositories are not forks.** Accept generates a copy of the
 template; there is no upstream link, so template updates can't be pushed or
@@ -75,7 +91,7 @@ by the repository name (`<classroom>-<assignment>-<username>`). A renamed
 repository disappears from the submissions view. Tell students not to rename
 their repositories; if one already did, rename it back. The one supported
 rename is the slug update for an assignment whose repository names can exceed
-GitHub's 100-character limit — it renames every student repository
+GitHub's 100-character limit: it renames every student repository
 consistently, and only once per assignment. See
 [Updating an over-budget assignment slug](Web-Teacher-Guide#updating-an-over-budget-assignment-slug).
 
@@ -85,10 +101,36 @@ their repositories, which includes the Actions tab, so **Pause autograding**
 re-enable the workflow. Treat grading controls as cost management, and use
 **Close submission** when you need actual enforcement.
 
-**Group repositories have no names.** A group repository is named after the
-founder (the first student to accept); there's no group-name concept and no
-pre-assigned teams. See
+**Legacy group repositories have no names.** A **Group (legacy)** assignment's
+repository is named after the founder (the first student to accept); that mode
+has no group-name concept and no pre-assigned groups. The current **Group**
+mode has both: each group is a GitHub team with a display name, and its
+repository is numbered. See
 [How group assignments work](FAQ#how-do-group-assignments-work).
+
+## Group assignments
+
+**Join requests happen on GitHub, not in the app.** GitHub's API exposes no
+endpoints for team join requests, so a student who wants to join an existing
+group requests it on the group team's GitHub page (the accept page's **Ask to
+join** opens it), and the group reviews and cancels requests there too.
+Classroom 50 can't list or approve join requests itself.
+
+**A group founder can change membership on GitHub.** In student formation the
+founding student maintains the group's team, and GitHub can't stop a
+maintainer from adding or removing members directly on GitHub. Classroom 50
+contains this instead of preventing it:
+
+- The teacher's group views flag the change as **Members changed since the
+  last refresh**, against the recorded group info.
+- A group with more members than the maximum group size shows an
+  **Over the limit** error on the submissions page and the Manage groups
+  page, and the group's own members see a warning on their group page. The
+  teacher decides whether to remove members or grade the group as it is.
+- Grading credits only team members who are on the classroom roster, so an
+  outside account is never credited.
+- The maximum group size is re-checked whenever a Classroom 50 client adds a
+  member.
 
 ## Timing
 
@@ -109,14 +151,21 @@ briefly fail or show stale data; wait a minute and retry.
   claims.
 - **Per-organization sign-in access** isn't possible with a classic OAuth
   sign-in: GitHub's `repo` scope is all-or-nothing, so the grant covers all
-  your repositories, not just the classroom org's. The tighter path is a
+  your repositories, not only the classroom org's. The tighter path is a
   fine-grained personal access token scoped to one organization; see
   [Reducing what you grant](GitHub-Integration#reducing-what-you-grant).
 - **Separate teacher and student sign-in profiles** would require choosing a
-  role at sign-in, which the design avoids — one person can be both a teacher
+  role at sign-in, which the design avoids: one person can be both a teacher
   and a student in the same organization. What you can do is gated by your
   org and classroom role after sign-in, not by your token's scopes; see
   [Permissions and access](GitHub-Integration#permissions-and-access).
+- **Fully proxy-free web app.** Two GitHub endpoints refuse cross-origin
+  requests from a browser (the OAuth token exchange and repository archive
+  downloads), so those two operations pass through a small stateless proxy
+  until GitHub lifts the limits
+  ([#877](https://github.com/foundation50/classroom50/issues/877) tracks
+  the upstream work). Everything else already goes straight to GitHub; see
+  [The GitHub proxy](GitHub-Integration#the-github-proxy).
 
 Classroom 50 is open source and actively developed; if one of these matters
 to your course, share your use case in

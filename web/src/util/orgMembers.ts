@@ -41,7 +41,11 @@ export type OrgMemberRow = {
   username: string
   github_id: string
   name: string
+  // The primary email (first seen across rosters) — identity keys fall back
+  // to it. `emails` is every distinct address the rosters (or, for a
+  // roster-less member, the GitHub profile) know.
   email: string
+  emails: string[]
   isMember: boolean
   classrooms: ClassroomAccess[]
   classification: MemberClassification
@@ -97,9 +101,20 @@ export function aggregateOrgMembers(
     github_id: string
     name: string
     email: string
+    emails: string[]
     classrooms: RawAccess[]
   }
   const byKey = new Map<string, Acc>()
+
+  // Every distinct address (case-insensitive; first-seen casing and order) —
+  // rosters may hold different emails for one person.
+  const addEmail = (acc: Acc, email: string | undefined) => {
+    const trimmed = email?.trim()
+    if (!trimmed) return
+    if (!acc.emails.some((e) => e.toLowerCase() === trimmed.toLowerCase())) {
+      acc.emails.push(trimmed)
+    }
+  }
 
   for (const roster of rosters) {
     for (const student of roster.students) {
@@ -118,17 +133,21 @@ export function aggregateOrgMembers(
         if (!existing.github_id && student.github_id)
           existing.github_id = student.github_id
         if (!existing.email && student.email) existing.email = student.email
+        addEmail(existing, student.email)
         const name = fullName(student)
         if (!existing.name && name) existing.name = name
       } else {
-        byKey.set(key, {
+        const acc: Acc = {
           key,
           username: student.username ?? "",
           github_id: student.github_id ?? "",
           name: fullName(student),
           email: student.email ?? "",
+          emails: [],
           classrooms: [access],
-        })
+        }
+        addEmail(acc, student.email)
+        byKey.set(key, acc)
       }
     }
   }
@@ -177,6 +196,7 @@ export function aggregateOrgMembers(
       github_id: matchedId || acc.github_id,
       name: acc.name,
       email: acc.email,
+      emails: acc.emails,
       isMember,
       classrooms,
       // An identity-less roster row is an unaccepted email invite, not a person
@@ -201,6 +221,9 @@ export function aggregateOrgMembers(
       github_id: id,
       name: member.name ?? "",
       email: member.email ?? "",
+      // No roster rows to collect from; the GitHub profile's public email is
+      // all we know.
+      emails: member.email ? [member.email] : [],
       isMember: true,
       classrooms: [],
       classification: "member-no-roster",
@@ -211,19 +234,108 @@ export function aggregateOrgMembers(
   // Discrepancies first (the actionable rows), then members, then by login/name.
   // A pending invitation sorts after healthy members: it is informational, and
   // putting it above them would bury the rows a teacher can act on.
-  const order: Record<MemberClassification, number> = {
-    "on-roster-not-member": 0,
-    "member-on-roster": 1,
-    "invitation-pending": 2,
-    "member-no-roster": 3,
-  }
   rows.sort((a, b) => {
-    const byClass = order[a.classification] - order[b.classification]
+    const byClass =
+      CLASSIFICATION_ORDER[a.classification] -
+      CLASSIFICATION_ORDER[b.classification]
     if (byClass !== 0) return byClass
-    return (a.username || a.name || a.email).localeCompare(
-      b.username || b.name || b.email,
-    )
+    return displayName(a).localeCompare(displayName(b))
   })
 
   return rows
+}
+
+const CLASSIFICATION_ORDER: Record<MemberClassification, number> = {
+  "on-roster-not-member": 0,
+  "member-on-roster": 1,
+  "invitation-pending": 2,
+  "member-no-roster": 3,
+}
+
+const displayName = (row: OrgMemberRow) => row.username || row.name || row.email
+
+// What the Name cell shows: the name when known, else the avatar's fallbacks.
+const nameFirst = (row: OrgMemberRow) => row.name || row.username || row.email
+
+// Header-driven column sort for the Members table (mirroring
+// sortTeamRosterRowsBy). `desc` flips only the column comparison; ties fall
+// back to ascending display identity so a reversed column stays scannable.
+// `isOwner` backs the role column — ownership lives outside the row (the
+// admins read), so the caller supplies the predicate.
+export type OrgMembersSortColumn =
+  "name" | "username" | "classrooms" | "role" | "status"
+export function sortOrgMemberRowsBy(
+  rows: OrgMemberRow[],
+  column: OrgMembersSortColumn,
+  direction: "asc" | "desc",
+  isOwner: (row: OrgMemberRow) => boolean = () => false,
+): OrgMemberRow[] {
+  const flip = direction === "desc" ? -1 : 1
+  const byName = (a: OrgMemberRow, b: OrgMemberRow) =>
+    displayName(a).localeCompare(displayName(b), undefined, {
+      sensitivity: "base",
+      numeric: true,
+    })
+  // Blank-last compare regardless of direction: the inner flip cancels the
+  // outer one, so "no data" never leads a reversed column.
+  const blankLast = (va: string, vb: string): number => {
+    if (!va || !vb) return flip * (va === vb ? 0 : va ? -1 : 1)
+    return va.localeCompare(vb, undefined, { numeric: true })
+  }
+  const roleRank = (row: OrgMemberRow) =>
+    isOwner(row) ? 2 : row.isMember ? 1 : 0
+  const byColumn = (a: OrgMemberRow, b: OrgMemberRow): number => {
+    switch (column) {
+      case "name":
+        return nameFirst(a).localeCompare(nameFirst(b), undefined, {
+          sensitivity: "base",
+          numeric: true,
+        })
+      case "username":
+        return blankLast(
+          a.username.trim().toLowerCase(),
+          b.username.trim().toLowerCase(),
+        )
+      case "classrooms":
+        return a.classrooms.length - b.classrooms.length
+      case "role":
+        return roleRank(b) - roleRank(a)
+      case "status":
+        return (
+          CLASSIFICATION_ORDER[a.classification] -
+          CLASSIFICATION_ORDER[b.classification]
+        )
+    }
+  }
+  return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
+}
+
+// The Members toolbar's "Show" facets (the roster's combined select). Status
+// keys off classification/health; role off org role — a non-member matches
+// neither role.
+export type OrgMembersStatusFilter =
+  "all" | "not-in-org" | "invitation-pending" | "not-enrolled"
+export type OrgMembersRoleFilter = "all" | "owner" | "member"
+
+export function filterOrgMemberRows(
+  rows: OrgMemberRow[],
+  facets: {
+    statusFilter: OrgMembersStatusFilter
+    roleFilter: OrgMembersRoleFilter
+    isOwner: (row: OrgMemberRow) => boolean
+  },
+): OrgMemberRow[] {
+  const { statusFilter, roleFilter, isOwner } = facets
+  return rows.filter((row) => {
+    if (statusFilter === "not-in-org") {
+      if (row.classification !== "on-roster-not-member") return false
+    } else if (statusFilter === "invitation-pending") {
+      if (row.classification !== "invitation-pending") return false
+    } else if (statusFilter === "not-enrolled") {
+      if (row.unprovisionedClassrooms.length === 0) return false
+    }
+    if (roleFilter === "owner") return isOwner(row)
+    if (roleFilter === "member") return row.isMember && !isOwner(row)
+    return true
+  })
 }

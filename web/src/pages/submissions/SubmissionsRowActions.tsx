@@ -2,6 +2,8 @@ import {
   DownloadIcon,
   GitBranchIcon,
   GitCommitIcon,
+  GlobeIcon,
+  LockIcon,
   LogIcon,
   PauseIcon,
   PlayIcon,
@@ -10,7 +12,7 @@ import {
   SlidersIcon,
   SyncIcon,
 } from "@/components/ui/icons"
-import { useState } from "react"
+import { createContext, useCallback, useContext, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { safeHttpUrl } from "@/util/url"
@@ -23,11 +25,41 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
 import useSetAutogradeState from "@/hooks/mutations/useSetAutogradeState"
+import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import type { ToastTone } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
 import type { AssignmentMode, SubmissionMode } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
+
+// Feedback channel for actions running inside the submission hub: outcomes
+// render as a banner at the top of the hub dialog (Primer: feedback for a
+// dialog action stays in the dialog) rather than as page-corner toasts.
+// Outside a provider the hook falls back to a toast, so the action rows keep
+// working if ever rendered standalone. The hub's sink is itself unmount-safe
+// (falls back to a toast once the hub closes) — see ManageSubmissionModal.
+export type SubmissionHubFeedback = {
+  tone: ToastTone
+  message: string
+}
+
+export const SubmissionHubFeedbackContext = createContext<
+  ((feedback: SubmissionHubFeedback) => void) | null
+>(null)
+
+const useSubmissionFeedback = () => {
+  const inHub = useContext(SubmissionHubFeedbackContext)
+  const { notify } = useToast()
+  return useCallback(
+    (feedback: SubmissionHubFeedback) => {
+      if (inHub) inHub(feedback)
+      else notify(feedback)
+    },
+    [inHub, notify],
+  )
+}
 
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
@@ -81,13 +113,12 @@ const ActiveRegradeButton = ({
   displayName?: string
 }) => {
   const { t } = useTranslation()
-  const { regrade, phase, anyRegrading } = useTriggerRegrade({
+  const { regrade, phase, anyRegrading, inFlight } = useTriggerRegrade({
     org,
     classroom,
     assignment,
     owner,
   })
-  const inFlight = phase === "dispatching" || phase === "running"
   // Disable while ANY regrade (this row, another, or "Regrade all") is in flight:
   // trackers share one regrade.yaml run list and bind by monotonic id, so a
   // single outstanding dispatch keeps the binding unambiguous.
@@ -161,7 +192,7 @@ const ActiveRegradeButton = ({
         confirmText="regrade"
         confirmLabel={t("submissions.rowRegrade.confirmLabel")}
         cancelLabel={t("common.cancel")}
-        dangerous={false}
+        tone="warning"
         needsConfirm={false}
         onConfirm={async () => {
           regrade()
@@ -188,7 +219,7 @@ export const DownloadButton = ({
   noRepo?: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const download = useDownloadSubmission()
 
   const start = () => {
@@ -201,7 +232,7 @@ export const DownloadButton = ({
           // not an error.
           const nothing =
             err instanceof Error && err.message === "no-submission"
-          notify({
+          feedback({
             tone: nothing ? "info" : "error",
             message: nothing
               ? t("submissions.rowDownload.nothingToDownload", { owner })
@@ -343,6 +374,17 @@ export type SubmissionActionListProps = {
   // hides the action — a non-owner can't disable workflows, and there's no
   // autograde workflow to pause on empty_repo/no_autograder/custom assignments.
   canPauseAutograding?: boolean
+  // Whether the Change-visibility action applies: owner-only (org policy
+  // blocks members from flipping visibility; GitHub 403s them regardless).
+  // Applies to every repo shape — a bare or group repo is still a repo whose
+  // work a teacher may showcase (issue #766).
+  canChangeVisibility?: boolean
+  // The repo's live private flag (from the hub's repo read), driving the
+  // Change-visibility action's label/direction. undefined = still loading.
+  repoPrivate?: boolean
+  // Whether the per-row Regrade action applies: config-repo write (teacher and
+  // head TA). A pull-only TA can't dispatch regrade.yaml, so it is omitted.
+  canRegrade?: boolean
 }
 
 export const SubmissionActionList = ({
@@ -363,6 +405,9 @@ export const SubmissionActionList = ({
   submissionMode,
   submissionTags,
   canPauseAutograding = false,
+  canChangeVisibility = false,
+  repoPrivate,
+  canRegrade = true,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -416,14 +461,16 @@ export const SubmissionActionList = ({
             disabled={!releaseHref}
             external
           />
-          <RegradeButton
-            org={org}
-            classroom={classroom}
-            assignment={assignment}
-            owner={owner}
-            displayName={displayName}
-            noRepo={!hasRepo}
-          />
+          {canRegrade && (
+            <RegradeButton
+              org={org}
+              classroom={classroom}
+              assignment={assignment}
+              owner={owner}
+              displayName={displayName}
+              noRepo={!hasRepo}
+            />
+          )}
           {submissionMode && (
             <UpdateTriggerButton
               org={org}
@@ -437,6 +484,15 @@ export const SubmissionActionList = ({
             <PauseAutogradingButton org={org} repo={repo} noRepo={!hasRepo} />
           )}
         </>
+      )}
+      {canChangeVisibility && (
+        <ChangeVisibilityButton
+          org={org}
+          repo={repo}
+          isPrivate={repoPrivate}
+          displayName={displayName || owner}
+          noRepo={!hasRepo}
+        />
       )}
       <DownloadButton
         org={org}
@@ -467,7 +523,7 @@ const UpdateTriggerButton = ({
   noRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const client = useGitHubClient()
   // `pending` drives the disabled state; the synchronous useSafeSubmit latch is
   // the real re-entrancy guard (React state updates a render tick late, so two
@@ -487,7 +543,7 @@ const UpdateTriggerButton = ({
         mode: submissionMode,
         tags: submissionTags,
       })
-      notify({
+      feedback({
         tone:
           outcome.status === "updated" || outcome.status === "current"
             ? "success"
@@ -495,12 +551,9 @@ const UpdateTriggerButton = ({
         message: t(`submissions.rowTrigger.outcome.${outcome.status}`),
       })
     } catch (err) {
-      notify({
+      feedback({
         tone: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : t("submissions.rowTrigger.outcome.failed"),
+        message: errorText(t, err),
       })
     } finally {
       setPending(false)
@@ -516,6 +569,117 @@ const UpdateTriggerButton = ({
       disabled={noRepo || pending}
       ariaLabel={t("submissions.rowTrigger.aria", { repo })}
     />
+  )
+}
+
+// Per-row Change visibility (issue #766): flip this one repo between private
+// and public — e.g. showcase a stand-out final project, or revert one. The
+// direction follows the repo's live private flag; going PUBLIC confirms first
+// (student work can carry names/emails not meant to be public), while going
+// back private applies immediately (strictly less exposure).
+const ChangeVisibilityButton = ({
+  org,
+  repo,
+  isPrivate,
+  displayName,
+  noRepo,
+}: {
+  org: string
+  repo: string
+  // The repo's live private flag; undefined while the read is pending, which
+  // disables the action (never fire against a guessed direction).
+  isPrivate?: boolean
+  displayName: string
+  noRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  const feedback = useSubmissionFeedback()
+  const run = useSafeSubmit()
+  const mutation = useSetRepoVisibility()
+  const [confirmOpen, setConfirmOpen] = useState(false)
+
+  const stateUnknown = !noRepo && isPrivate === undefined
+  const makePublic = isPrivate !== false
+
+  const apply = async () => {
+    try {
+      await mutation.mutateAsync({
+        org,
+        repo,
+        visibility: makePublic ? "public" : "private",
+      })
+      feedback({
+        tone: "success",
+        message: t(
+          makePublic
+            ? "submissions.rowVisibility.outcome.public"
+            : "submissions.rowVisibility.outcome.private",
+          { repo },
+        ),
+      })
+    } catch (err) {
+      feedback({
+        tone: "error",
+        message: errorText(t, err),
+      })
+    }
+  }
+
+  const handleClick = () => {
+    if (noRepo || stateUnknown || mutation.isPending) return
+    if (makePublic) {
+      setConfirmOpen(true)
+      return
+    }
+    void run(apply)
+  }
+
+  return (
+    <>
+      <ActionListRow
+        icon={makePublic ? GlobeIcon : LockIcon}
+        title={t(
+          makePublic
+            ? "submissions.rowVisibility.makePublicTitle"
+            : "submissions.rowVisibility.makePrivateTitle",
+        )}
+        description={t(
+          makePublic
+            ? "submissions.rowVisibility.makePublicDescription"
+            : "submissions.rowVisibility.makePrivateDescription",
+        )}
+        onClick={handleClick}
+        disabled={noRepo || stateUnknown || mutation.isPending}
+        loading={stateUnknown || mutation.isPending}
+        loadingLabel={t("submissions.rowVisibility.makePublicTitle")}
+        ariaLabel={t(
+          makePublic
+            ? "submissions.rowVisibility.makePublicAria"
+            : "submissions.rowVisibility.makePrivateAria",
+          { repo },
+        )}
+      />
+      <ConfirmModal
+        open={confirmOpen}
+        title={t("submissions.rowVisibility.confirmTitle", {
+          name: displayName,
+        })}
+        description={
+          <Trans
+            i18nKey="submissions.rowVisibility.confirmBody"
+            values={{ repo }}
+            components={{ repo: <EmphasisLtr className="font-normal" /> }}
+          />
+        }
+        confirmLabel={t("submissions.rowVisibility.confirmLabel")}
+        cancelLabel={t("common.cancel")}
+        tone="warning"
+        warning={t("submissions.rowVisibility.confirmWarning")}
+        needsConfirm={false}
+        onConfirm={apply}
+        onClose={() => setConfirmOpen(false)}
+      />
+    </>
   )
 }
 
@@ -535,7 +699,7 @@ const PauseAutogradingButton = ({
   noRepo: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const feedback = useSubmissionFeedback()
   const run = useSafeSubmit()
   const {
     data: state,
@@ -562,7 +726,7 @@ const PauseAutogradingButton = ({
     if (noRepo) return
     try {
       const result = await mutation.mutateAsync({ org, repo, action })
-      notify({
+      feedback({
         tone: result.status === "notGradable" ? "warning" : "success",
         message: t(
           result.status === "notGradable"
@@ -573,12 +737,9 @@ const PauseAutogradingButton = ({
         ),
       })
     } catch (err) {
-      notify({
+      feedback({
         tone: "error",
-        message:
-          err instanceof Error
-            ? err.message
-            : t("submissions.rowAutograde.outcome.failed"),
+        message: errorText(t, err),
       })
     }
   }

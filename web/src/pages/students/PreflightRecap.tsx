@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert } from "@/components/ui"
+import { Alert, Checkbox } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
 
@@ -78,9 +78,8 @@ export const PreflightRecap = ({
             ))}
           </ul>
           <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm mt-0.5"
+            <Checkbox
+              className="mt-0.5"
               checked={mismatchConfirmed}
               onChange={(e) =>
                 onMismatchConfirmedChange(e.currentTarget.checked)
@@ -150,9 +149,8 @@ export const PreflightRecap = ({
             </p>
           ) : null}
           <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm mt-0.5"
+            <Checkbox
+              className="mt-0.5"
               checked={roleChangesConfirmed}
               onChange={(e) =>
                 onRoleChangesConfirmedChange(e.currentTarget.checked)
@@ -185,9 +183,8 @@ export const PreflightRecap = ({
             })}
           </p>
           <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="checkbox checkbox-sm mt-0.5"
+            <Checkbox
+              className="mt-0.5"
               checked={metadataConfirmed}
               onChange={(e) =>
                 onMetadataConfirmedChange(e.currentTarget.checked)

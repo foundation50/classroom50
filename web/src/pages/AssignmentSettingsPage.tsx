@@ -14,9 +14,13 @@ import { can } from "@/authz"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
+import { GroupTeamMembersPanel } from "@/components/assignments/GroupTeamMembersPanel"
+import useMyGroupTeam from "@/hooks/useMyGroupTeam"
+import { GROUP_REPO_SEGMENT } from "@/util/studentRepo"
 import EditAssignmentForm from "./assignments/EditAssignmentForm"
 import RenameSlugSection from "./assignments/RenameSlugSection"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -37,14 +41,50 @@ const EditAssignmentFormStudent = ({
 }) => {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
+  // Custom Pages base URL + capability secret from the team-description
+  // bootstrap record; the read waits for it so a custom-domain org never
+  // fires a doomed github.io fetch.
+  const {
+    secret: teamSecret,
+    pagesBaseUrl,
+    isLoading: loadingBootstrap,
+  } = useClassroomSecret(org, classroom)
+  // Mode first (public manifest), then the repo: team mode resolves the shared
+  // group repo through the viewer's team membership, not the username formula.
+  const { data: preAssignments } = usePagesAssignments(
+    org,
+    classroom,
+    teamSecret,
+    {
+      pagesBaseUrl,
+      enabled: !loadingBootstrap,
+    },
+  )
+  const preMode = preAssignments?.find((a) => a.slug === assignment)?.mode
+  const isTeamMode = preMode === "team"
+  const { data: myTeam, isLoading: loadingMyTeam } = useMyGroupTeam(
+    org,
+    classroom,
+    assignment,
+    { enabled: isTeamMode && Boolean(user?.login) },
+  )
+  const repoOwnerSegment = isTeamMode
+    ? myTeam
+      ? `${GROUP_REPO_SEGMENT}${myTeam.n}`
+      : undefined
+    : user?.login
   const { isLoading: loadingRepo, assignment: assignmentRepo } =
-    useGetAssignmentRepo(org, classroom, assignment, user?.login)
+    useGetAssignmentRepo(org, classroom, assignment, repoOwnerSegment)
   // Post-accept, so the capability-URL secret (protected classroom) lives in
   // the student's repo .classroom50.yaml — the source they can read (not the
   // private classroom.json). Empty for unprotected -> plain path.
   const { secret } = useDotClassroom50(org, assignmentRepo?.name ?? "")
   const { isLoading: loadingPublic, assignment: assignmentData } =
-    usePagesAssignments(org, classroom, secret, { assignmentSlug: assignment })
+    usePagesAssignments(org, classroom, secret, {
+      assignmentSlug: assignment,
+      pagesBaseUrl,
+      enabled: !loadingBootstrap,
+    })
 
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
 
@@ -55,7 +95,12 @@ const EditAssignmentFormStudent = ({
   )
   const assignmentMode = assignmentData?.mode
 
-  if (loadingPublic || loadingRepo) {
+  if (
+    loadingPublic ||
+    loadingRepo ||
+    loadingBootstrap ||
+    (isTeamMode && loadingMyTeam)
+  ) {
     return <FormSkeleton fields={3} label={t("assignmentSettings.loading")} />
   }
 
@@ -102,6 +147,49 @@ const EditAssignmentFormStudent = ({
           </div>
         </Alert>
       </div>
+    )
+  }
+
+  // Team mode: members flow through the group's GitHub Team, so the legacy
+  // direct-collaborators modal doesn't apply — render the live member panel.
+  if (assignmentMode === "team" && myTeam) {
+    return (
+      <Card bordered={false} className="mb-6 w-full border border-base-200">
+        <Card.Body className="gap-6">
+          <div className="flex items-start gap-4">
+            <div className="flex size-12 shrink-0 items-center justify-center rounded-box bg-primary/10 text-primary">
+              <PeopleIcon aria-hidden="true" className="size-6" />
+            </div>
+            <div>
+              <Heading as="h1" variant="title-medium">
+                {assignmentData?.name}
+              </Heading>
+              <p className="text-sm font-medium text-base-content/70">
+                {t("assignmentSettings.groupMembers")}
+              </p>
+              <a
+                className="link mt-1 inline-flex items-center gap-1.5 text-sm"
+                href={assignmentRepo.html_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MarkGithubIcon aria-hidden="true" className="size-4" />
+                {t("assignmentSettings.viewRepository")}
+              </a>
+            </div>
+          </div>
+          <GroupTeamMembersPanel
+            org={org}
+            classroom={classroom}
+            assignment={assignment}
+            teamSlug={myTeam.slug}
+            teamName={myTeam.name}
+            maxGroupSize={assignmentData?.max_group_size}
+            viewerLogin={user?.login}
+            formation={assignmentData?.team_formation}
+          />
+        </Card.Body>
+      </Card>
     )
   }
 
@@ -199,7 +287,10 @@ const AssignmentSettingsPage = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
+      <Breadcrumb
+        endpoint={t("documentTitle.assignmentSettings")}
+        assignmentName={assignmentData?.name}
+      />
       <AnimatedAlert tone="error" show={!!editError}>
         {editError}
       </AnimatedAlert>
@@ -261,13 +352,16 @@ const AssignmentSettingsPage = () => {
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}
             onSuccess={(result) => {
-              // Surface a non-fatal template-grant warning inline; else show
-              // the success banner.
-              if (result?.templateGrantWarning) {
-                setEditWarning(result.templateGrantWarning)
+              // Surface a non-fatal template-grant or lock-revoke warning
+              // inline; else show the success banner. It persists until the
+              // next save clears it via onMutate (Primer: don't auto-dismiss
+              // status messages).
+              const warning =
+                result?.templateGrantWarning ?? result?.templateAccessWarning
+              if (warning) {
+                setEditWarning(warning)
               } else {
                 setEditSuccess(true)
-                setTimeout(() => setEditSuccess(false), 3000)
               }
               window.scrollTo({ top: 0, behavior: "smooth" })
             }}

@@ -7,12 +7,25 @@ name: Collect Scores
 # enrollment; roster.csv is optional display metadata). The polled
 # members are the union of the STUDENT team and the STAFF teams
 # (teacher/hta/ta), so a staff member who accepted an assignment to test
-# the autograde flow is collected like a student — staff who never
+# the autograde flow is collected like a student; staff who never
 # accepted have no repo, hence no releases, hence no entry. It pages
 # through each expected `<classroom>-<assignment>-<username>` repo's
 # `submit/*` releases and downloads `result.json` from each. Single-writer
-# by design — no concurrent ingest, no per-student dispatch event, no broad
+# by design: no concurrent ingest, no per-student dispatch event, no broad
 # cross-repo write secret.
+
+# The run list shows only the workflow name by default, so a scoped collect
+# and an org-wide sweep look identical there. Spell the scope out in the run
+# title (and the job name below). Display names come from the optional
+# *_name inputs the web app sends alongside the slugs; a manual dispatch from
+# the Actions tab leaves them blank and gets the slugs. This can't be looked up
+# here: run-name is evaluated before any step, so there is no checkout to read
+# classroom.json / assignments.json from.
+run-name: >-
+  Collect scores:
+  ${{ github.event.inputs.assignment && format('{0} in {1}', github.event.inputs.assignment_name || github.event.inputs.assignment, github.event.inputs.classroom_name || github.event.inputs.classroom)
+  || github.event.inputs.classroom && format('every assignment in {0}', github.event.inputs.classroom_name || github.event.inputs.classroom)
+  || 'all classrooms' }}
 
 on:
   workflow_dispatch:
@@ -22,6 +35,13 @@ on:
         required: false
       assignment:
         description: "Assignment slug (leave blank to collect the whole classroom; requires classroom to be meaningful)"
+        required: false
+      # Label-only: used in run-name and the job name, never by the collector.
+      classroom_name:
+        description: "Classroom display name for the run title (optional)"
+        required: false
+      assignment_name:
+        description: "Assignment display name for the run title (optional)"
         required: false
 
 permissions:
@@ -39,6 +59,13 @@ concurrency:
 
 jobs:
   collect:
+    # Same scope as run-name, so the run's sidebar and the checks list say
+    # what this job walked, not just "collect".
+    name: >-
+      Collect
+      ${{ github.event.inputs.assignment && format('{0} in {1}', github.event.inputs.assignment_name || github.event.inputs.assignment, github.event.inputs.classroom_name || github.event.inputs.classroom)
+      || github.event.inputs.classroom && format('every assignment in {0}', github.event.inputs.classroom_name || github.event.inputs.classroom)
+      || 'all classrooms' }}
     runs-on: ubuntu-latest
     # Bound the job: the commit/push retry below can loop, and with
     # cancel-in-progress: false a wedged git operation would otherwise hold the
@@ -59,7 +86,7 @@ jobs:
           # members), Repository -> Contents: Read and write on
           # <classroom>-* student repos, and Repository ->
           # Administration: Read and write (collection grants staff teams
-          # — e.g., TAs — read access to student repos and private
+          # (e.g., TAs) read access to student repos and private
           # templates via PUT teams/.../repos/...). Collection READS
           # (team members, releases + result.json) and grants team access;
           # the contents-write scope is shared with regrade.yaml, which
@@ -118,7 +145,7 @@ jobs:
             git pull --ff-only
             python3 .github/scripts/collect_scores.py
             if ! commit_scores; then
-              # An idempotent re-collect produced no diff — the remote already
+              # An idempotent re-collect produced no diff: the remote already
               # carries equivalent data, so there is nothing left to push.
               echo "re-collect produced no changes; remote already current"
               exit 0

@@ -17,7 +17,7 @@ export function QueryErrorAlert({
 }) {
   const { t } = useTranslation()
   return (
-    <Alert tone="error" className={className}>
+    <Alert tone="unavailable" className={className}>
       <div>
         {message}
         <Button variant="ghost" size="sm" className="ms-2" onClick={onRetry}>

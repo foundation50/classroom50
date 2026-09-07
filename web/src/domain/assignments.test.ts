@@ -8,6 +8,7 @@ import {
   assertAssignmentModeCoherent,
   buildReusedEntry,
   copyAssignmentToClassroom,
+  createAssignment,
   createAssignmentRepo,
   editAssignment,
   formatTemplateRef,
@@ -33,9 +34,21 @@ import { localizedError, localizedMessageOf } from "@/types/localizedMessage"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
-import { REPO_PERMISSIONS, SUBMISSION_MODES } from "@/types/classroom"
+import {
+  REPO_PERMISSIONS,
+  REPO_VISIBILITIES,
+  SUBMISSION_MODES,
+} from "@/types/classroom"
 import { TEST_FAILURE_DETAILS_LEVELS } from "@/types/classroom"
 import type { SubmissionMode } from "@/types/classroom"
+
+// An untouched row, so a test can assert the edited row keeps its position.
+const neighborRow = (slug: string): Assignment => ({
+  slug,
+  name: `Homework ${slug}`,
+  mode: "individual",
+  autograder: "default",
+})
 
 const fullSource: Assignment = {
   slug: "hw1",
@@ -376,9 +389,11 @@ describe("preserveUnmanagedAssignmentKeys", () => {
     expect(merged.due).toBeUndefined()
   })
 
-  it("preserves closed (and locked) across an edit that never carries them", () => {
-    // Both flags are owned by their own actions, not the edit form; a rebuilt
-    // entry omits them, so the merge must carry them forward verbatim.
+  it("preserves closed across an edit that never carries it, but not locked", () => {
+    // closed is owned by its own action, not the edit form; a rebuilt entry
+    // omits it, so the merge must carry it forward verbatim. locked is now a
+    // form-owned key: the merge leaves it to the rebuilt entry (editAssignment
+    // carries the stored value forward itself when the input has no decision).
     const existing: Assignment = { ...fullSource, closed: true, locked: true }
     const edited: Assignment = {
       slug: "hw1",
@@ -388,7 +403,7 @@ describe("preserveUnmanagedAssignmentKeys", () => {
     }
     const merged = preserveUnmanagedAssignmentKeys(existing, edited)
     expect(merged.closed).toBe(true)
-    expect(merged.locked).toBe(true)
+    expect(merged.locked).toBeUndefined()
   })
 })
 
@@ -492,13 +507,16 @@ describe("editAssignment (preserved-entry integration)", () => {
   // on the template-less path: ref read, commit read, assignments.json contents
   // read, then tree/commit/ref writes. classroom.json is absent (404) so the
   // archive guard reads the classroom as active.
-  function makeClient(entry: Assignment = existingEntry): {
+  function makeClient(
+    entry: Assignment = existingEntry,
+    ...neighbors: Assignment[]
+  ): {
     client: GitHubClient
     committedContent: () => string
   } {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
-      assignments: [entry],
+      assignments: [entry, ...neighbors],
     }
     const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
@@ -626,6 +644,37 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(written.assignments).toHaveLength(1)
     expect(written.assignments[0].slug).toBe(SLUG)
     expect(written.assignments[0].name).toBe("Homework 1 (edited)")
+  })
+
+  it("edits the entry in place instead of moving it to the end", async () => {
+    const { client, committedContent } = makeClient(
+      existingEntry,
+      neighborRow("hw2"),
+    )
+
+    await editAssignment(client, editInput())
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect(written.assignments.map((a) => a.slug)).toEqual([SLUG, "hw2"])
+  })
+
+  it("rewrites only the first row when a manifest holds a duplicate slug", async () => {
+    // A hand-edited manifest can hold two rows for one slug. The edit is built
+    // from the first (`find`), so the second must survive untouched.
+    const duplicate: Assignment = { ...existingEntry, name: "Homework 1 (dup)" }
+    const { client, committedContent } = makeClient(existingEntry, duplicate)
+
+    await editAssignment(client, editInput())
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect(written.assignments.map((a) => a.name)).toEqual([
+      "Homework 1 (edited)",
+      "Homework 1 (dup)",
+    ])
   })
 
   it.each([
@@ -1224,6 +1273,41 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/submission_mode: must be one of every-push, tag/)
   })
 
+  // repo_visibility (issue #766) mirrors submission_mode's wire form: "public"
+  // lands verbatim, while private — explicit or absent — collapses to no field
+  // at all, so a form save can't add a key `gh teacher assignment add` would
+  // have omitted. The field is classroom50-owned, so an edit rebuilds it: a
+  // public -> private downgrade must not silently keep public.
+  it.each([
+    [undefined, "public", "public"],
+    [undefined, "private", undefined],
+    [undefined, undefined, undefined],
+    ["private", "private", undefined],
+    ["public", "private", undefined],
+    ["public", "public", "public"],
+  ] as const)(
+    "writes stored=%s + input=%s as repo_visibility=%s",
+    async (stored, input, want) => {
+      const { client, committedContent } = makeClient({
+        ...existingEntry,
+        repo_visibility: stored,
+      })
+      await editAssignment(client, editInput({ repo_visibility: input }))
+      const written = JSON.parse(committedContent()) as {
+        assignments: Assignment[]
+      }
+      const edited = written.assignments.find((a) => a.slug === SLUG)!
+      expect(edited.repo_visibility).toBe(want)
+    },
+  )
+
+  it("rejects an out-of-enum repo_visibility before writing", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ repo_visibility: "internal" })),
+    ).rejects.toThrow(/repo_visibility: must be one of private, public/)
+  })
+
   // copy_about / copy_topics (issue #569): template-required guard + omitempty.
   it("rejects copy_about / copy_topics without a template", async () => {
     const { client } = makeClient()
@@ -1609,8 +1693,9 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
   const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
   // Drives editAssignment down the in-org-private-template grant path and
-  // records every team-repo PUT so a test can assert which teams got read on
-  // the template. classroomJson controls the recorded team/teams block.
+  // records every team-repo PUT (and DELETE) so a test can assert which teams
+  // got or lost read on the template. classroomJson controls the recorded
+  // team/teams block; storedLocked seeds the stored entry's lock flag.
   function makeGrantClient(opts: {
     classroomJson: Record<string, unknown>
     taGrantThrows?: boolean
@@ -1619,8 +1704,16 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     // a public template (no grant), or isTemplate:false to model a non-template.
     templatePrivate?: boolean
     templateIsTemplate?: boolean
-  }): { client: GitHubClient; grants: () => string[] } {
+    storedLocked?: boolean
+  }): {
+    client: GitHubClient
+    grants: () => string[]
+    revokes: () => string[]
+    committed: () => string | undefined
+  } {
     const grants: string[] = []
+    const revokes: string[] = []
+    let committed: string | undefined
     const templatePrivate = opts.templatePrivate ?? true
     const templateIsTemplate = opts.templateIsTemplate ?? true
     // Serve a repo read for BOTH the changed ref (tmpl-v2) and the stored ref
@@ -1643,53 +1736,65 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
           autograder: "default",
           feedback_pr: true,
           template: { owner: ORG, repo: "tmpl", branch: "main" },
+          ...(opts.storedLocked ? { locked: true } : {}),
         },
       ],
     }
 
-    const request = vi.fn(async (url: string, init?: { method?: string }) => {
-      const method = init?.method ?? "GET"
-      // Team-repo grant PUT: /orgs/{org}/teams/{slug}/repos/{owner}/{repo}
-      const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
-      if (method === "PUT" && grantMatch) {
-        if (grantMatch[1].endsWith("-ta") && opts.taGrantThrows) {
-          throw new GitHubAPIError({
-            status: 500,
-            url,
-            message: "boom",
-            body: null,
-            rateLimit: {
-              limit: null,
-              remaining: null,
-              used: null,
-              reset: null,
-              resource: null,
-              retryAfter: null,
-            },
-          })
+    const request = vi.fn(
+      async (url: string, init?: { method?: string; body?: unknown }) => {
+        const method = init?.method ?? "GET"
+        // Team-repo grant PUT / revoke DELETE:
+        // /orgs/{org}/teams/{slug}/repos/{owner}/{repo}
+        const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
+        if (method === "PUT" && grantMatch) {
+          if (grantMatch[1].endsWith("-ta") && opts.taGrantThrows) {
+            throw new GitHubAPIError({
+              status: 500,
+              url,
+              message: "boom",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            })
+          }
+          grants.push(grantMatch[1])
+          return {}
         }
-        grants.push(grantMatch[1])
-        return {}
-      }
-      if (/\/repos\/[^/]+\/classroom50$/.test(url))
-        return { default_branch: "main" }
-      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
-      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
-      if (url.includes("/contents/cs50/assignments.json")) {
-        return {
-          type: "file",
-          encoding: "base64",
-          content: b64(JSON.stringify(assignmentsFile)),
+        if (method === "DELETE" && grantMatch) {
+          revokes.push(grantMatch[1])
+          return {}
         }
-      }
-      if (url.includes(`/repos/${ORG}/tmpl-v2`)) return makeRepo("tmpl-v2")
-      if (/\/repos\/[^/]+\/tmpl(\?|$)/.test(url)) return makeRepo("tmpl")
-      if (url.endsWith("/git/trees")) return { sha: "newtree" }
-      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
-      if (method === "PATCH" && url.includes("/git/refs/heads/main"))
-        return { object: { sha: "newcommit" } }
-      throw new Error(`unexpected request: ${method} ${url}`)
-    })
+        if (/\/repos\/[^/]+\/classroom50$/.test(url))
+          return { default_branch: "main" }
+        if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+        if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+        if (url.includes("/contents/cs50/assignments.json")) {
+          return {
+            type: "file",
+            encoding: "base64",
+            content: b64(JSON.stringify(assignmentsFile)),
+          }
+        }
+        if (url.includes(`/repos/${ORG}/tmpl-v2`)) return makeRepo("tmpl-v2")
+        if (/\/repos\/[^/]+\/tmpl(\?|$)/.test(url)) return makeRepo("tmpl")
+        if (url.endsWith("/git/trees")) {
+          const body = init?.body as { tree?: { content?: string }[] }
+          committed = body?.tree?.[0]?.content
+          return { sha: "newtree" }
+        }
+        if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+        if (method === "PATCH" && url.includes("/git/refs/heads/main"))
+          return { object: { sha: "newcommit" } }
+        throw new Error(`unexpected request: ${method} ${url}`)
+      },
+    )
 
     // getClassroomJson (requestRaw) returns the recorded team block; the
     // archive guard reads the same body (active by default).
@@ -1698,6 +1803,8 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     return {
       client: { request, requestRaw } as unknown as GitHubClient,
       grants: () => grants,
+      revokes: () => revokes,
+      committed: () => committed,
     }
   }
 
@@ -1919,6 +2026,152 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
     expect(grants()).toEqual([])
     expect(result.templateGrantWarning).toBeDefined()
     expect(result.templateGrantWarning).toContain("organization owner")
+  })
+
+  // The form's "Lock assignment" toggle rides the create/edit write paths and
+  // must have the same access effect as setAssignmentLock: a locked create or
+  // a false-to-true edit hands students no template read; a true-to-false edit
+  // restores it; a locked entry that stays locked is left alone.
+  describe("lock from the form (create/edit share the lock action's effect)", () => {
+    const studentOnly = {
+      schema: "classroom50/classroom/v1",
+      short_name: CLASSROOM,
+      team: { id: 7, slug: "classroom50-cs50" },
+      teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+    }
+
+    function createInput(locked: boolean) {
+      return {
+        org: ORG,
+        classroom: CLASSROOM,
+        slug: "hw2",
+        name: "Homework 2",
+        description: "",
+        template_repo: "tmpl",
+        due_date: "",
+        available_from_date: "",
+        mode: "individual",
+        max_group_size: 0,
+        release_assets: "",
+        tests: [],
+        canGrantTemplateAccess: true,
+        locked,
+      } as unknown as Parameters<typeof createAssignment>[1]
+    }
+
+    it("create locked: writes locked and grants NO team read", async () => {
+      const { client, grants, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      const result = await createAssignment(client, createInput(true))
+
+      expect(result.templateGrantWarning).toBeUndefined()
+      const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+      expect(written.assignments.find((a) => a.slug === "hw2")?.locked).toBe(
+        true,
+      )
+      expect(grants()).toEqual([])
+    })
+
+    it("create unlocked (control): omits the key and grants as before", async () => {
+      const { client, grants, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      await createAssignment(client, createInput(false))
+
+      const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+      expect(
+        written.assignments.find((a) => a.slug === "hw2"),
+      ).not.toHaveProperty("locked")
+      expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+    })
+
+    it("edit false-to-true: writes locked, revokes ONLY the student team, grants nothing", async () => {
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateGrantWarning).toBeUndefined()
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(committed()).toContain(`"locked": true`)
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual(["classroom50-cs50"])
+    })
+
+    it("edit true-to-false: drops the key and re-grants (student + staff)", async () => {
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: false,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(committed()).not.toContain(`"locked"`)
+      expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+      expect(revokes()).toEqual([])
+    })
+
+    it("edit that stays locked: no grant, no revoke", async () => {
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      await editAssignment(client, input)
+
+      expect(committed()).toContain(`"locked": true`)
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual([])
+    })
+
+    it("edit with no lock decision carries the stored lock forward", async () => {
+      // A caller that renders no lock control (input.locked undefined) must not
+      // unlock as a side effect of saving other fields.
+      const { client, grants, revokes, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+        storedLocked: true,
+      })
+
+      await editAssignment(client, editInput("tmpl"))
+
+      expect(committed()).toContain(`"locked": true`)
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual([])
+    })
+
+    it("edit false-to-true on a PUBLIC template is UX-gate only (no revoke)", async () => {
+      const { client, grants, revokes } = makeGrantClient({
+        classroomJson: studentOnly,
+        templatePrivate: false,
+      })
+
+      const input = {
+        ...(editInput("tmpl") as object),
+        locked: true,
+      } as Parameters<typeof editAssignment>[1]
+      const result = await editAssignment(client, input)
+
+      expect(result.templateAccessWarning).toBeUndefined()
+      expect(grants()).toEqual([])
+      expect(revokes()).toEqual([])
+    })
   })
 
   // resolveTemplateGrant is the single grant-decision recipe shared verbatim by
@@ -3308,6 +3561,29 @@ describe("SUBMISSION_MODES parity with assignments-v1 schema", () => {
   })
 })
 
+// The web half of the repo_visibility enum lockstep guard: REPO_VISIBILITIES
+// must equal the schema's repo_visibility enum (the declared source of truth).
+// The Go half (contract.RepoVisibilities vs the same enum) is pinned by
+// TestRepoVisibilityEnumParity.
+describe("REPO_VISIBILITIES parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      assignment: {
+        properties: { repo_visibility: { enum: string[] } }
+      }
+    }
+  }
+
+  it("matches the schema repo_visibility enum exactly and in order", () => {
+    const schemaEnum = schema.$defs.assignment.properties.repo_visibility.enum
+    expect(schemaEnum).toEqual([...REPO_VISIBILITIES])
+  })
+})
+
 describe("TEST_FAILURE_DETAILS_LEVELS parity with assignments-v1 schema", () => {
   const schemaPath = path.resolve(
     path.dirname(fileURLToPath(import.meta.url)),
@@ -3498,6 +3774,161 @@ describe("createAssignmentRepo", () => {
 
     expect(result.kind).toBe("already-accepted")
     expect(result.repo.default_branch).toBe("master")
+  })
+})
+
+// repo_visibility at accept (issue #766): the create body carries the
+// assignment's visibility, and a refused PUBLIC create falls back to a private
+// one (fail-private — accept never fails on visibility alone) with the flag
+// the caller uses to tell the student.
+describe("createAssignmentRepo repo_visibility", () => {
+  const rateLimit = {
+    limit: null,
+    remaining: null,
+    used: null,
+    reset: null,
+    resource: null,
+    retryAfter: null,
+  }
+
+  it.each([
+    [undefined, true],
+    [false, true],
+    [true, false],
+  ] as const)(
+    "publicVisibility=%s sends private=%s on both create paths",
+    async (publicVisibility, wantPrivate) => {
+      const bodies: Array<{ path: string; private?: boolean }> = []
+      const client: GitHubClient = {
+        request: <T>(
+          path: string,
+          opts?: { method?: string; body?: unknown },
+        ) => {
+          if (opts?.method === "POST") {
+            bodies.push({
+              path,
+              private: (opts.body as { private?: boolean }).private,
+            })
+            return Promise.resolve({
+              name: "hw1-alice",
+              default_branch: "main",
+            } as T)
+          }
+          return Promise.reject(new Error(`unexpected: ${path}`))
+        },
+        requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        fetchArchive: () =>
+          Promise.reject(new Error("unexpected fetchArchive")),
+      }
+
+      const templated = await createAssignmentRepo({
+        client,
+        templateOwner: "acme",
+        templateRepo: "starter",
+        owner: "acme",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        publicVisibility,
+      })
+      const templateless = await createAssignmentRepo({
+        client,
+        owner: "acme",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        publicVisibility,
+      })
+
+      expect(templated.visibilityFellBackToPrivate).toBeUndefined()
+      expect(templateless.visibilityFellBackToPrivate).toBeUndefined()
+      expect(bodies).toEqual([
+        { path: "/repos/acme/starter/generate", private: wantPrivate },
+        { path: "/orgs/acme/repos", private: wantPrivate },
+      ])
+    },
+  )
+
+  it("retries a refused public create as private and flags the fallback", async () => {
+    const sentPrivate: Array<boolean | undefined> = []
+    const client: GitHubClient = {
+      request: <T>(
+        path: string,
+        opts?: { method?: string; body?: unknown },
+      ) => {
+        if (opts?.method !== "POST") {
+          return Promise.reject(new Error(`unexpected: ${path}`))
+        }
+        const isPrivate = (opts.body as { private?: boolean }).private
+        sentPrivate.push(isPrivate)
+        if (isPrivate === false) {
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 422,
+              url: path,
+              message:
+                "Visibility level of public is not allowed for this organization.",
+              body: null,
+              rateLimit,
+            }),
+          ) as Promise<T>
+        }
+        return Promise.resolve({
+          name: "hw1-alice",
+          default_branch: "main",
+        } as T)
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    }
+
+    const result = await createAssignmentRepo({
+      client,
+      templateOwner: "acme",
+      templateRepo: "starter",
+      owner: "acme",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+      publicVisibility: true,
+    })
+
+    expect(sentPrivate).toEqual([false, true])
+    expect(result.kind).toBe("generated")
+    expect(result.visibilityFellBackToPrivate).toBe(true)
+  })
+
+  it("does not misread an unrelated failure as a visibility refusal", async () => {
+    // A SAML-gated 403 on a public create must surface as the real failure,
+    // never a silent private retry.
+    let posts = 0
+    const client: GitHubClient = {
+      request: <T>(path: string, opts?: { method?: string }) => {
+        if (opts?.method === "POST") {
+          posts += 1
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 403,
+              url: path,
+              message: "Resource protected by organization SAML enforcement.",
+              body: null,
+              rateLimit,
+            }),
+          ) as Promise<T>
+        }
+        return Promise.reject(new Error(`unexpected: ${path}`))
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
+    }
+
+    await expect(
+      createAssignmentRepo({
+        client,
+        owner: "acme",
+        name: "hw1-alice",
+        fallbackBranch: "main",
+        publicVisibility: true,
+      }),
+    ).rejects.toThrow(/SAML/)
+    expect(posts).toBe(1)
   })
 })
 
@@ -4234,6 +4665,7 @@ describe("setAssignmentLock", () => {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
       assignments: [
+        neighborRow("hw0"),
         {
           slug: SLUG,
           name: "Homework 1",
@@ -4242,6 +4674,7 @@ describe("setAssignmentLock", () => {
           ...(opts.locked ? { locked: true } : {}),
           ...(template ? { template } : {}),
         },
+        neighborRow("hw2"),
       ],
     }
     const classroomJson: Record<string, unknown> = {
@@ -4384,6 +4817,19 @@ describe("setAssignmentLock", () => {
     expect(grants()).toContain("classroom50-cs50")
   })
 
+  it("flips the flag in place instead of moving the row to the end", async () => {
+    const { client, committed } = makeLockClient({ locked: false })
+    await setAssignmentLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      locked: true,
+    })
+    const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+    // Matches the CLI's lock, which assigns back into the same index.
+    expect(written.assignments.map((a) => a.slug)).toEqual(["hw0", SLUG, "hw2"])
+  })
+
   it("makes a public template a UX-gate-only lock (no access change)", async () => {
     const { client, revokes } = makeLockClient({
       locked: false,
@@ -4452,6 +4898,7 @@ describe("setAssignmentClosed", () => {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
       assignments: [
+        neighborRow("hw0"),
         {
           slug: SLUG,
           name: "Homework 1",
@@ -4460,6 +4907,7 @@ describe("setAssignmentClosed", () => {
           template: { owner: ORG, repo: "tmpl", branch: "main" },
           ...(opts.closed ? { closed: true } : {}),
         },
+        neighborRow("hw2"),
       ],
     }
     const classroomJson: Record<string, unknown> = {
@@ -4539,6 +4987,18 @@ describe("setAssignmentClosed", () => {
     })
     expect(result.closed).toBe(false)
     expect(committed()).not.toContain(`"closed"`)
+  })
+
+  it("flips the flag in place instead of moving the row to the end", async () => {
+    const { client, committed } = makeClosedClient({ closed: false })
+    await setAssignmentClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      closed: true,
+    })
+    const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+    expect(written.assignments.map((a) => a.slug)).toEqual(["hw0", SLUG, "hw2"])
   })
 
   it("no-ops when already in the requested state (no commit)", async () => {

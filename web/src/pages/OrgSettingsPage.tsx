@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
+  AnimatedAlert,
   Button,
   FormField,
   HelpTooltip,
@@ -16,6 +17,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import { useRenameServiceToken } from "@/hooks/mutations/useRenameServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
+import useTestServiceToken from "@/hooks/useTestServiceToken"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {
   useHashSectionHighlight,
@@ -28,9 +30,12 @@ import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
 import OrgActionsSection from "@/pages/orgSettings/OrgActionsSection"
 import RerunOrgSetup from "@/pages/orgSettings/RerunOrgSetup"
 import TeardownSection from "@/pages/orgSettings/TeardownSection"
+import TeamCreationSection from "@/pages/orgSettings/TeamCreationSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
+import ServiceTokenTestResult from "@/pages/orgSettings/ServiceTokenTestResult"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { WIKI_URL } from "@/version"
+import { errorText } from "@/types/localizedMessage"
 import {
   AlertIcon,
   CalendarIcon,
@@ -167,9 +172,7 @@ function TokenNameRow({
       </Button>
       {renameMutation.isError && (
         <span className="text-xs text-error">
-          {renameMutation.error instanceof Error
-            ? renameMutation.error.message
-            : t("orgSettings.serviceToken.saveError")}
+          {errorText(t, renameMutation.error)}
         </span>
       )}
     </form>
@@ -373,9 +376,7 @@ function SetTokenModal({
             hint={t("orgSettings.serviceToken.pasteHelp")}
             error={
               saveMutation.isError
-                ? saveMutation.error instanceof Error
-                  ? saveMutation.error.message
-                  : t("orgSettings.serviceToken.saveError")
+                ? errorText(t, saveMutation.error)
                 : undefined
             }
           >
@@ -431,7 +432,7 @@ function SetTokenModal({
 export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
   const { t } = useTranslation()
   const { org } = useParams({ strict: false })
-  const { notify } = useToast()
+  const { announce } = useToast()
 
   const { data: tokenStatus, isLoading: tokenStatusLoading } =
     useGetServiceTokenStatus(org ?? "")
@@ -458,11 +459,19 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
 
   const saveMutation = useSaveServiceToken(org)
   const renameMutation = useRenameServiceToken(org)
+  // The full-scope check runs in the org's Actions, since the save-time
+  // validation can only prove what the config repo reveals about the token.
+  const tokenTest = useTestServiceToken(org)
 
   const [modalOpen, setModalOpen] = useState(false)
+  // Advisory-metadata warning from the last save, shown as a banner in this
+  // section (the save dialog is closed by then, and a chip alone can't
+  // explain "expiry not tracked").
+  const [metadataWarning, setMetadataWarning] = useState(false)
 
   const openModal = () => {
     saveMutation.reset()
+    setMetadataWarning(false)
     setModalOpen(true)
   }
 
@@ -474,15 +483,10 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
       // clean "saved", so the teacher isn't misled by a later "expiry not
       // tracked" chip.
       if (saveMutation.data && saveMutation.data.metadataRecorded === false) {
-        notify({
-          tone: "warning",
-          message: t("orgSettings.serviceToken.savedNoMetadata"),
-        })
+        setMetadataWarning(true)
       } else {
-        notify({
-          tone: "success",
-          message: t("orgSettings.serviceToken.saved"),
-        })
+        // The status chip flips to "present" — SR announcement only.
+        announce(t("orgSettings.serviceToken.saved"))
       }
     }
   }
@@ -494,6 +498,14 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
       titleAdornment={<HelpTooltip help={t("orgSettings.serviceToken.help")} />}
       className={sectionHighlightClass(highlighted ?? false)}
     >
+      <AnimatedAlert
+        tone="warning"
+        show={metadataWarning}
+        className="mb-3 text-sm"
+        onDismiss={() => setMetadataWarning(false)}
+      >
+        {t("orgSettings.serviceToken.savedNoMetadata")}
+      </AnimatedAlert>
       {tokenStatusLoading ? (
         <div
           className="flex flex-wrap items-center justify-between gap-3"
@@ -541,10 +553,24 @@ export const OrgSettingsPane = ({ highlighted }: { highlighted?: boolean }) => {
                 </span>
               )}
             </span>
-            <Button variant="outline" size="sm" onClick={openModal}>
-              {t("orgSettings.serviceToken.rotateButton")}
-            </Button>
+            <span className="inline-flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                loading={tokenTest.inFlight}
+                busyLabel={t("orgSettings.serviceToken.test.running")}
+                title={t("orgSettings.serviceToken.test.help")}
+                onClick={tokenTest.test}
+              >
+                {t("orgSettings.serviceToken.test.button")}
+              </Button>
+              <Button variant="outline" size="sm" onClick={openModal}>
+                {t("orgSettings.serviceToken.rotateButton")}
+              </Button>
+            </span>
           </div>
+
+          <ServiceTokenTestResult state={tokenTest} />
 
           {!expiresDate && (
             <span className="inline-flex items-center gap-2 text-sm text-warning">
@@ -612,6 +638,13 @@ const OrgSettingsPage = () => {
               key={`actions-${org}`}
               org={org}
               highlighted={highlightedId === "github-actions"}
+            />
+          )}
+          {org && (
+            <TeamCreationSection
+              key={`team-creation-${org}`}
+              org={org}
+              highlighted={highlightedId === "member-team-creation"}
             />
           )}
           {org && (

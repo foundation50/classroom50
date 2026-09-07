@@ -2,7 +2,8 @@ import { useEffect } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { FileZipIcon } from "@/components/ui/icons"
 
-import { Alert, Button, Modal, ModalIcon, Spinner } from "@/components/ui"
+import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
+import { BulkProgressInline } from "@/components/bulk/resultView"
 import useDownloadAllSubmissions from "@/hooks/mutations/useDownloadAllSubmissions"
 import {
   BULK_DOWNLOAD_WARN_THRESHOLD,
@@ -204,20 +205,16 @@ export function DownloadAllSubmissionsModal({
           )}
         </div>
       ) : running ? (
-        <div className="mt-4 space-y-3">
-          <p className="flex items-center gap-2 text-sm text-base-content/70">
-            <Spinner size="xs" />
-            {t("submissions.downloadAll.running", {
-              done: progress?.done ?? 0,
-              total: progress?.total ?? count,
-            })}
-          </p>
-          <progress
-            className="progress progress-primary w-full"
-            value={progress?.done ?? 0}
-            max={progress?.total ?? count}
-          />
-        </div>
+        <BulkProgressInline
+          label={t("submissions.downloadAll.running", {
+            done: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          })}
+          progress={{
+            processed: progress?.done ?? 0,
+            total: progress?.total ?? count,
+          }}
+        />
       ) : (
         <div className="mt-3 space-y-2 text-sm leading-6 text-base-content/70">
           <p>

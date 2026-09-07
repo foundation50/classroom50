@@ -30,7 +30,9 @@ import {
   StudentAlreadyEnrolledError,
 } from "./students"
 import { removeEmailInviteRow } from "./students/rosterPrimitives"
+import { inviteTeamName, marshalInviteDescription } from "@/util/inviteTeam"
 import { GitHubAPIError } from "@/github-core/errors"
+import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import type { GitHubClient } from "@/github-core/client"
 
 // An already-org-member must land `enrolled` (not stuck "awaiting"), the per-row
@@ -231,7 +233,7 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
 
   it("throws StudentAlreadyEnrolledError when the login is already on the roster", async () => {
     const { client } = makeClient({
-      startingCsv: `${HEADER}alice,,,,,42\n`,
+      startingCsv: `${HEADER}alice,,,,,42,\n`,
       membershipState: "active",
       user: { login: "alice", id: 42 },
     })
@@ -249,7 +251,7 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
     // The CSV stores a stale login but the same github_id; the current account
     // resolves to a different login. Dedupe by id must still catch it.
     const { client } = makeClient({
-      startingCsv: `${HEADER}old-alice,,,,,42\n`,
+      startingCsv: `${HEADER}old-alice,,,,,42,\n`,
       membershipState: "active",
       user: { login: "new-alice", id: 42 },
     })
@@ -599,11 +601,22 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // 500 every per-invite metadata team create — the invite must then be
     // reported as failed rather than sent without email retention.
     failInviteTeams?: boolean
+    // Park every successful POST /invitations until a macrotask after the
+    // first rateLimitEmails 429 was issued. By then the throttled rejection has
+    // fully unwound (flag flipped, idle worker drained the queue as deferred),
+    // so the peers in flight when it hit are exactly the ones that get sent.
+    // Without it the count depends on how the libuv threadpool orders each
+    // target's inviteTeamName digest, which drifts with machine load.
+    holdInvitesUntilThrottled?: boolean
   }) => {
     const memberEmails = new Set(opts?.memberEmails ?? [])
     const rateLimitEmails = new Set(opts?.rateLimitEmails ?? [])
     const failEmails = new Set(opts?.failEmails ?? [])
     let inviteAttempts = 0
+    let releaseHeldInvites = () => {}
+    const heldInvites = new Promise<void>((resolve) => {
+      releaseHeldInvites = resolve
+    })
     const state = {
       // roster.csv content committed by the batch pending-row write (null =
       // no roster write happened).
@@ -737,10 +750,17 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
               return Promise.reject(apiError(422, "already a member"))
             }
             if (rateLimitEmails.has(body.email)) {
+              setTimeout(releaseHeldInvites, 0)
               return Promise.reject(apiError(429, "rate limited"))
             }
             if (failEmails.has(body.email)) {
               return Promise.reject(apiError(500, "server error"))
+            }
+            if (opts?.holdInvitesUntilThrottled) {
+              return heldInvites.then(() => {
+                state.inviteBodies.push(body)
+                return {}
+              })
             }
             state.inviteBodies.push(body)
             return Promise.resolve({})
@@ -906,15 +926,19 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
   })
 
   it("defers the rest once a mid-batch rate limit hits, sending no new invites", async () => {
-    // More targets than REPO_READ_CONCURRENCY (=8): once the throttled invite
-    // sets the rateLimited flag, every not-yet-started target short-circuits to
+    // More targets than REPO_READ_CONCURRENCY: once the throttled invite sets
+    // the rateLimited flag, every not-yet-started target short-circuits to
     // `deferred` (never `failed`), and no invite body is recorded for them.
     const total = 20
     const targets = Array.from({ length: total }, (_, i) => ({
       email: `u${i}@x.edu`,
     }))
-    // Throttle the very first target so the flag flips as early as possible.
-    const { client, state } = makeClient({ rateLimitEmails: ["u0@x.edu"] })
+    // Throttle the very first target so the flag flips as early as possible;
+    // hold the peers so the flip lands before any worker can pick up more.
+    const { client, state } = makeClient({
+      rateLimitEmails: ["u0@x.edu"],
+      holdInvitesUntilThrottled: true,
+    })
 
     const result = await bulkInviteByEmail(client, {
       org: "acme",
@@ -927,17 +951,12 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // The throttled email is deferred; nothing is misrouted to `failed`.
     expect(result.deferred).toContain("u0@x.edu")
     expect(result.failed).toEqual([])
-    // Every target is accounted for exactly once across the buckets.
-    expect(
-      result.invited.length +
-        result.skipped.length +
-        result.failed.length +
-        result.deferred.length,
-    ).toBe(total)
-    // The short-circuit actually fired: with the flag set early, most targets
-    // are deferred rather than sent (bounded by the concurrency window that was
-    // already in flight when the flag flipped).
-    expect(result.deferred.length).toBeGreaterThan(total / 2)
+    expect(result.skipped).toEqual([])
+    // Only the peers already past the flag check when u0 was throttled (the
+    // rest of the concurrency window) were sent; every later target deferred.
+    const peersInFlight = REPO_READ_CONCURRENCY - 1
+    expect(result.invited).toHaveLength(peersInFlight)
+    expect(result.deferred).toHaveLength(total - peersInFlight)
     // No invite was sent for a deferred email.
     const sentEmails = new Set(state.inviteBodies.map((b) => b.email))
     for (const email of result.deferred) {
@@ -1164,7 +1183,8 @@ describe("updateClassroomMetadata — merge changed non-empty metadata into exis
 
   it("throws RosterCsvMalformedError and does not commit on an unparseable roster", async () => {
     // A data row with too many columns is a structural problem parseRosterCsv flags.
-    const malformed = HEADER + "alice,Alice,A,alice@x.edu,P1,42,student,EXTRA\n"
+    const malformed =
+      HEADER + "alice,Alice,A,alice@x.edu,P1,42,student,,EXTRA\n"
     const { client, committed } = makeClient({ startingCsv: malformed })
 
     await expect(
@@ -1180,8 +1200,8 @@ describe("updateClassroomMetadata — merge changed non-empty metadata into exis
 
 describe("updateStudent — edit a roster row's teacher-facing fields in place", () => {
   // alice: enrolled github row (identity by github_id 42); bob: email-only.
-  const aliceRow = "alice,Alice,A,alice@x.edu,Period 1,42\n"
-  const bobRow = ",Bob,B,bob@x.edu,,\n"
+  const aliceRow = "alice,Alice,A,alice@x.edu,Period 1,42,\n"
+  const bobRow = ",Bob,B,bob@x.edu,,,\n"
 
   it("rewrites only first/last/section and preserves identity columns", async () => {
     const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
@@ -1260,7 +1280,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     // buildTeamRoster stamps an enrolled row's id from the live member). The
     // upsert must match by the identity claim (username) and UPDATE that row,
     // not append a second row for the same person.
-    const carolRow = "carol,,,,,\n" // username only, no github_id
+    const carolRow = "carol,,,,,,\n" // username only, no github_id
     const { client, committed } = makeClient({
       startingCsv: HEADER + aliceRow + carolRow,
     })
@@ -1370,7 +1390,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
   })
 
   it("allows editing name/section (email unchanged) on an unenrolled row", async () => {
-    const daveRow = "dave,Dave,D,dave@x.edu,,77\n"
+    const daveRow = "dave,Dave,D,dave@x.edu,,77,\n"
     const { client, committed } = makeClient({ startingCsv: HEADER + daveRow })
 
     await updateStudent(client, {
@@ -1418,7 +1438,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
 
   it("matches a username-only row by its username key (no github_id)", async () => {
     // carol: a row with a username but no github_id (key falls through to username).
-    const carolRow = "carol,Carol,C,carol@x.edu,,\n"
+    const carolRow = "carol,Carol,C,carol@x.edu,,,\n"
     const { client, committed } = makeClient({ startingCsv: HEADER + carolRow })
 
     await updateStudent(client, {
@@ -1783,8 +1803,8 @@ describe("resolveClassroomPendingInvite — sole-classroom detection", () => {
 })
 
 describe("unenrollStudent — classroom-scoped, no active-member org removal", () => {
-  const aliceEnrolled = "alice,Alice,A,alice@x.edu,,42\n"
-  const bobInvited = "bob,Bob,B,bob@x.edu,,43\n"
+  const aliceEnrolled = "alice,Alice,A,alice@x.edu,,42,\n"
+  const bobInvited = "bob,Bob,B,bob@x.edu,,43,\n"
 
   const makeUnenrollClient = (opts: {
     startingCsv: string
@@ -2139,7 +2159,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
 describe("bulkUnenrollStudents — single-commit batch removal", () => {
   const rosterWith = (usernames: string[]) =>
     HEADER +
-    usernames.map((u, i) => `${u},,,${u}@x.edu,,${100 + i}`).join("\n") +
+    usernames.map((u, i) => `${u},,,${u}@x.edu,,${100 + i},`).join("\n") +
     "\n"
 
   const student = (username: string, github_id: string) => ({
@@ -2246,7 +2266,7 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     // never match a row. Reporting it as notFound would read as "already
     // removed" while both the row and its live invitation survived — cancel the
     // invitation instead (retireEmailInvite).
-    const startingCsv = HEADER + "sam,,,sam@x.edu,,100\n"
+    const startingCsv = HEADER + "sam,,,sam@x.edu,,100,\n"
     const { client, committed } = makeClient({ startingCsv })
 
     const result = await bulkUnenrollStudents(client, {
@@ -2273,7 +2293,7 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
   })
 
   it("unenrollStudent rejects an email-only target without implying email works", async () => {
-    const startingCsv = HEADER + "sam,,,sam@x.edu,,100\n"
+    const startingCsv = HEADER + "sam,,,sam@x.edu,,100,\n"
     const { client, committed } = makeClient({ startingCsv })
 
     await expect(
@@ -2300,7 +2320,7 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
   // canonical header and round-trip through parseStudentsCsv to [].
   it("commits a header-only CSV that parses to [] when the last student is removed", async () => {
     const { client, committed } = makeClient({
-      startingCsv: HEADER + "alice,,,alice@x.edu,,100\n",
+      startingCsv: HEADER + "alice,,,alice@x.edu,,100,\n",
     })
 
     const result = await bulkUnenrollStudents(client, {
@@ -2497,6 +2517,17 @@ const makeTeamClient = (opts: {
   orgInviteEmails?: string[]
   // When set, the org-invitations read rejects, so removal fails closed.
   orgInvitesReject?: boolean
+  // Invite metadata teams served through the REAL collect seam (the sync's
+  // decision-time re-collect): listed on the org team list, point-read with
+  // description/created_at, members listed by exact slug.
+  inviteTeams?: {
+    slug: string
+    description: string
+    members: TeamMemberSeed[]
+  }[]
+  // How many ref updates fail 409 first (drives withGitConflictRetry); the
+  // retried closure then re-reads the CSV the losing attempt staged.
+  refConflicts?: number
   // When set, a members read for the teacher/ta team rejects with this
   // non-404 status (to exercise the best-effort staff-read degradation).
   staffReadRejects?: { role: "teacher" | "ta"; status: number }
@@ -2504,6 +2535,7 @@ const makeTeamClient = (opts: {
   const committed: { content: string | null } = { content: null }
   const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
   const teamAdds: string[] = []
+  const refConflictsSeen = { count: 0 }
 
   const requestRaw = vi.fn().mockImplementation((path: string) => {
     if (path.includes("/contents/") && path.includes("classroom.json")) {
@@ -2530,6 +2562,17 @@ const makeTeamClient = (opts: {
         const u = opts.users[login]
         if (!u) return Promise.reject(new Error(`404 no such user: ${login}`))
         return Promise.resolve({ login, name: null, email: null, ...u })
+      }
+      // Org team list (GET /orgs/{org}/teams?page=..) — enumerated by the
+      // sync's decision-time invite re-collect when a team member has no
+      // roster row.
+      if (/\/orgs\/[^/]+\/teams\?/.test(path)) {
+        return Promise.resolve(
+          (opts.inviteTeams ?? []).map((t, i) => ({
+            id: 700 + i,
+            slug: t.slug,
+          })),
+        )
       }
       // Team-add: PUT .../teams/{slug}/memberships/{login}
       if (path.includes("/teams/") && path.includes("/memberships/")) {
@@ -2578,6 +2621,13 @@ const makeTeamClient = (opts: {
         const slug = decodeURIComponent(
           path.split("/teams/")[1].split("/members")[0],
         )
+        // An invite metadata team's members, by exact slug.
+        const invite = (opts.inviteTeams ?? []).find((t) => t.slug === slug)
+        if (invite) {
+          return Promise.resolve(
+            invite.members.map((m) => ({ login: m.login, id: m.id })),
+          )
+        }
         const rejects = opts.staffReadRejects
         const rejectsTeacher =
           rejects &&
@@ -2615,6 +2665,21 @@ const makeTeamClient = (opts: {
           name: m.name ?? null,
         }))
         return Promise.resolve(members)
+      }
+      // Invite metadata team point read (readInviteTeam): GET
+      // /orgs/{org}/teams/{slug} — description + created_at.
+      {
+        const m = path.match(/\/orgs\/[^/]+\/teams\/([^/?]+)$/)
+        const slug = m ? decodeURIComponent(m[1]) : null
+        const invite = (opts.inviteTeams ?? []).find((t) => t.slug === slug)
+        if (invite) {
+          return Promise.resolve({
+            id: 700,
+            slug: invite.slug,
+            description: invite.description,
+            created_at: new Date().toISOString(),
+          })
+        }
       }
       // Org membership state: GET /orgs/{org}/memberships/{login}
       if (path.includes("/memberships/") && !path.includes("/teams/")) {
@@ -2660,6 +2725,27 @@ const makeTeamClient = (opts: {
         return Promise.resolve({ sha: "new-commit-sha" })
       }
       if (path.endsWith("/git/refs/heads/main")) {
+        if ((opts.refConflicts ?? 0) > refConflictsSeen.count) {
+          refConflictsSeen.count++
+          // The losing attempt's staged CSV stands in for the concurrent
+          // writer's commit: the retry re-reads it as the current file.
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 409,
+              url: path,
+              message: "conflict",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
         return Promise.resolve({})
       }
       return Promise.reject(new Error(`unexpected request: ${path}`))
@@ -2672,6 +2758,94 @@ const makeTeamClient = (opts: {
     request,
   }
 }
+
+describe("syncRosterFromTeam — real invite-team seam (#756)", () => {
+  const email = "ada@uni.edu"
+  const inviteTeamFor = async () => ({
+    slug: await inviteTeamName("cs101", email),
+    description: marshalInviteDescription({ email, classroom: "cs101" }),
+    members: [{ login: "ada", id: 42 }],
+  })
+
+  it("folds a mid-pass acceptor via the UN-mocked re-collect; mapping reported recorded", async () => {
+    // Ada accepted between the caller's collect (nothing recovered, her email
+    // live) and this sync's team read. The re-collect runs the REAL
+    // collectInviteRecoveries against a real invite team served over the wire:
+    // slug hashed from (classroom, email), v1 description, one member.
+    const team = await inviteTeamFor()
+    const { client, committed, request } = makeTeamClient({
+      startingCsv: HEADER + `,Ada,Lovelace,${email},,,student\n`,
+      users: {},
+      teamHas: [{ login: "ada", id: 42 }],
+      inviteTeams: [team],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: {
+        recovered: [],
+        liveInviteEmails: new Set([email]),
+        trusted: true,
+        deletedStale: 0,
+      },
+    })
+
+    // Identity folded onto the invite-time row — no appended duplicate.
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "ada",
+      github_id: "42",
+      email,
+      first_name: "Ada",
+      last_name: "Lovelace",
+    })
+    // The landed fold makes the mapping finalizable.
+    expect(result.recordedRecoveries).toEqual([
+      { email, invitee: { id: 42, login: "ada" }, slug: team.slug },
+    ])
+    // The in-closure re-collect is read-only: nothing was deleted.
+    const deletes = request.mock.calls.filter(
+      ([, options]) => (options as { method?: string })?.method === "DELETE",
+    )
+    expect(deletes).toEqual([])
+  })
+
+  it("re-derives the fold on a 409 retry: no duplicate row, teardown deferred safely", async () => {
+    const team = await inviteTeamFor()
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + `,Ada,Lovelace,${email},,,student\n`,
+      users: {},
+      teamHas: [{ login: "ada", id: 42 }],
+      inviteTeams: [team],
+      refConflicts: 1,
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: {
+        recovered: [],
+        liveInviteEmails: new Set([email]),
+        trusted: true,
+        deletedStale: 0,
+      },
+    })
+
+    // Attempt 1 folded and lost the ref race; attempt 2 re-read the folded
+    // file and recognized the work as done — ONE row, never a duplicate.
+    const rows = rowsFromCsv(committed.content!)
+    expect(
+      rows.filter((r) => r.username === "ada" || r.email === email),
+    ).toHaveLength(1)
+    expect(result.noop).toBe(true)
+    // The retry attempt never re-collected (the folded row leaves no unknown
+    // member), so the caller's empty state proves no mapping recorded THIS
+    // pass: teardown fails closed and defers to the next pass's re-recovery.
+    expect(result.recordedRecoveries).toEqual([])
+  })
+})
 
 describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-members", () => {
   it("adds active org members to the team and skips non-members", async () => {
@@ -2703,7 +2877,7 @@ describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-memb
   it("dedupes an incoming username against an existing row by github_id, not stale login", async () => {
     // The CSV already has ada under a stale login; re-importing her current
     // login must be skipped as a github_id duplicate, not written twice.
-    const startingCsv = HEADER + "ada-old,,,,,101\n"
+    const startingCsv = HEADER + "ada-old,,,,,101,\n"
     const { client, committed } = makeTeamClient({
       startingCsv,
       users: { ada: { id: 101 } },
@@ -3104,7 +3278,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   // in place (a role-only convergence), even though no member is missing.
   it("refreshes a missing/stale role on an existing row without adding rows", async () => {
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "grace,,,,,707\n", // role column empty
+      startingCsv: HEADER + "grace,,,,,707,\n", // role column empty
       users: {},
       teamHas: [{ login: "grace", id: 707 }],
     })
@@ -3127,7 +3301,8 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   // trailing columns) has rows with the empty trailing column omitted, e.g.
   // `octocat,Grace,Hopper,g@x.edu,Section A,1` (the trailing `role` dropped).
   // Papa flags TooFewFields, but the row is benign (missing trailing field ->
-  // ""), so the parse must NOT throw and sync must still see the row's identity.
+  // ""), so the parse must NOT throw and sync must still see the row's
+  // identity.
   it("tolerates short rows missing the trailing role column", async () => {
     const shortRows =
       "octocat,Grace,Hopper,grace@example.edu,Section A,1\n" +
@@ -3335,16 +3510,14 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     expect(rows.filter((r) => r.email === "alice@x.edu")).toHaveLength(1)
   })
 
-  it("removes a dead email-only row and keeps one a live invite team backs", async () => {
+  it("keeps an email-only row nothing backs (the sync never removes rows)", async () => {
     const { client, committed } = makeTeamClient({
-      startingCsv:
-        HEADER + ",,,dead@x.edu,,,student\n" + ",,,live@x.edu,,,student\n",
+      startingCsv: HEADER + ",,,dead@x.edu,,,\n" + ",,,live@x.edu,,,student\n",
       users: {},
       teamHas: [],
-      // The live invitee's pending invitation preserves their recorded role...
+      // The live invitee's pending invitation preserves their recorded role;
+      // the dead row has nothing backing it and simply stays.
       teamInvites: [{ email: "live@x.edu" }],
-      // ...and the org-level pending list is what removal confirms against.
-      orgInviteEmails: ["live@x.edu"],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -3353,37 +3526,16 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState({ liveInviteEmails: new Set(["live@x.edu"]) }),
     })
 
-    expect(result.removedEmails).toEqual(["dead@x.edu"])
-    const rows = rowsFromCsv(committed.content!)
-    expect(rows).toHaveLength(1)
-    expect(rows[0].email).toBe("live@x.edu")
-  })
-
-  it("keeps a row whose invite was sent after the invite snapshot was taken", async () => {
-    // The race: collect enumerated teams BEFORE this CSV read, so a brand-new
-    // invite's row is present but absent from liveInviteEmails. GitHub's current
-    // pending list still shows it, so the row must survive.
-    const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + ",,,fresh@x.edu,,,student\n",
-      users: {},
-      teamHas: [],
-      teamInvites: [{ email: "fresh@x.edu" }],
-      orgInviteEmails: ["fresh@x.edu"],
-    })
-
-    const result = await syncRosterFromTeam(client, {
-      org: "acme",
-      classroom: "cs101",
-      // Snapshot predates the invite: nothing live, nothing recovered.
-      invites: inviteState(),
-    })
-
-    expect(result.removedEmails).toEqual([])
+    // Both rows survive; nothing else changed, so the pass is a no-op — an
+    // unbacked email row never forces a commit by itself.
     expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 
-  it("keeps every email row when the pending-invitation read fails (fail closed)", async () => {
+  it("never reads org invitations: a failing invitations endpoint is invisible to the sync", async () => {
+    // The removal pass (and its liveness confirmation) is gone: even with the
+    // org-invitations endpoint rejecting, the sync completes and the unbacked
+    // email row stays.
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER + ",,,dead@x.edu,,,student\n",
       users: {},
@@ -3398,11 +3550,11 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState(),
     })
 
-    expect(result.removedEmails).toEqual([])
+    expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 
-  it("never removes an email row when the reconcile state is untrusted", async () => {
+  it("keeps an email row even when the reconcile state is untrusted", async () => {
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER + ",,,dead@x.edu,,,student\n",
       users: {},
@@ -3416,15 +3568,14 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState({ trusted: false }),
     })
 
-    expect(result.removedEmails).toEqual([])
     expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 
-  it("never removes an identity row, even with no live invite team", async () => {
+  it("keeps identity rows untouched, even with no live invite team", async () => {
     const { client, committed } = makeTeamClient({
-      // A username row and an id-only row: both are identity rows, not
-      // email-only, so the removal pass must not touch them.
+      // A username row and an id-only row: like every other row, they are
+      // never removed by the sync.
       startingCsv: HEADER + "carol,,,c@x.edu,,,\n" + ",,,d@x.edu,,55,\n",
       users: {},
       teamHas: [],
@@ -3437,7 +3588,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       invites: inviteState(),
     })
 
-    expect(result.removedEmails).toEqual([])
+    expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
 })

@@ -37,18 +37,21 @@ func NewCmd() *cobra.Command {
 			"  add     register or upsert an assignment\n" +
 			"  remove  drop an assignment entry (does not touch existing student repos)\n" +
 			"  list    print every assignment slug registered in a classroom\n\n" +
-			"Writes use a single Tree commit on <org>/classroom50's default\n" +
-			"branch with the same optimistic-update-with-rebase loop the roster\n" +
-			"commands use, so concurrent edits don't silently lose each other's\n" +
-			"work. Each entry carries an immutable `slug` (the same name used in\n" +
-			"student repo names like `<classroom>-<slug>-<username>`), a\n" +
-			"template ref pointing at the starter-code repo, and the autograder\n" +
-			"name that picks which shim YAML (`<classroom>/autograders/<name>.yaml`)\n" +
-			"— and thus which reusable runner — handles submissions for this\n" +
-			"assignment. Per-assignment grading lives separately at\n" +
-			"`<classroom>/autograders/<slug>/autograder.py` (entrypoint),\n" +
-			"with optional sibling fixtures alongside (see the\n" +
-			"Advanced-Autograding wiki page).",
+			"Writes use a single commit on <org>/classroom50's default branch\n" +
+			"with the same optimistic-update-with-rebase loop the roster\n" +
+			"commands use, so concurrent edits don't silently lose each\n" +
+			"other's work.\n\n" +
+			"Each entry carries:\n" +
+			"  - an immutable `slug`, the same name used in student repo names\n" +
+			"    like `<classroom>-<slug>-<username>`\n" +
+			"  - a template ref pointing at the starter-code repository\n" +
+			"  - the autograder name, which picks the shim YAML\n" +
+			"    (`<classroom>/autograders/<name>.yaml`) and thus the reusable\n" +
+			"    runner that handles submissions for this assignment\n\n" +
+			"Per-assignment grading lives separately at\n" +
+			"`<classroom>/autograders/<slug>/autograder.py` (entrypoint), with\n" +
+			"optional sibling fixtures alongside (see the Advanced-Autograding\n" +
+			"wiki page).",
 	}
 	cmd.AddCommand(assignmentAddCmd())
 	cmd.AddCommand(assignmentReuseCmd())
@@ -74,6 +77,7 @@ func assignmentAddCmd() *cobra.Command {
 		availableFrom  string
 		mode           string
 		maxGroupSize   int
+		teamFormation  string
 		autograder     string
 		runtimeFile    string
 		testsFile      string
@@ -84,68 +88,83 @@ func assignmentAddCmd() *cobra.Command {
 		studentPerm    string
 		submissionMd   string
 		submissionTags []string
+		repoVisibility string
+		locked         bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "add <org> <classroom> <slug>",
 		Short: "Add or upsert an assignment in assignments.json",
-		Long: "Register an assignment — its template repo and the autograder it\n" +
-			"runs against — in <org>/classroom50/<classroom>/assignments.json.\n\n" +
-			"`<slug>` must match ^[a-z0-9][a-z0-9-]{1,99}$ (the same shape as\n" +
-			"classroom short-names) because student repos are named\n" +
-			"`<classroom>-<slug>-<username>`. Only --name is required;\n" +
-			"--template is optional (omit it for a template-less assignment).\n" +
-			"If the assignment slug already exists in assignments.json, this\n" +
-			"command replaces the entry in place (idempotent for repeated\n" +
-			"edits to the same assignment).\n\n" +
-			"--empty-repo creates truly bare student repos: no README, no\n" +
-			".classroom50.yaml marker, no autograde workflow — for assignments\n" +
-			"where students build everything (including their own GitHub\n" +
-			"Actions) from scratch. Autograding and the Feedback PR are\n" +
-			"disabled. The setting can be changed on a same-slug re-add, but\n" +
-			"repositories students already accepted are not retrofitted, so the\n" +
-			"change applies only to accepts from now on (a warning is printed).\n" +
-			"Mutually exclusive with --template, --tests, --feedback-pr,\n" +
-			"--allowed-files, --pass-threshold, --submission-mode, and\n" +
-			"--submission-tag.\n\n" +
-			"--template parses `<owner>/<repo>` (or `<owner>/<repo>@<branch>`).\n" +
-			"A custom source branch is tolerated but IGNORED — the assignment\n" +
-			"uses the template repo's default branch. To use a different branch,\n" +
-			"change the template repository's default branch first. The template\n" +
-			"repo must be marked `is_template: true` (set in Settings →\n" +
-			"\"Template repository\"); if your account can't see the repo, the CLI\n" +
-			"returns the cross-org visibility message.\n\n" +
-			"--runtime points at a JSON file describing the runtime\n" +
-			"environment for this assignment's autograde job: which\n" +
-			"runner label(s), optional language toolchains\n" +
-			"(python/node/java/go/rust), optional apt packages, or a custom\n" +
-			"container image. `runs-on` mirrors GitHub Actions itself —\n" +
-			"a single label (\"ubuntu-latest\") or an array of labels\n" +
-			"([\"self-hosted\", \"gpu\"]) for a custom / self-hosted runner.\n" +
-			"Pass `-` to read the JSON from stdin instead of a file\n" +
-			"(one-shot agent flows).\n" +
-			"Omit for the defaults (ubuntu-latest + Python 3.14).\n" +
-			"See the Advanced-Autograding wiki page for the JSON schema and\n" +
-			"worked examples.\n\n" +
-			"--autograder is reserved for the rare case where you need to\n" +
-			"call a *different reusable workflow* entirely (not just\n" +
-			"different language toolchains — for that, use --runtime). The\n" +
-			"name resolves to <classroom>/autograders/<name>.yaml; the\n" +
-			"referenced file must exist at write time. The default is\n" +
-			"`default`, which uses the universal shim embedded in\n" +
-			"gh-student — that shim `uses:` the autograde-runner workflow\n" +
-			"in the classroom50 repository.\n\n" +
-			"There are three ways to grade. (1) Declarative tests: pass\n" +
-			"--tests <file.json> here (or use `gh teacher assignment test\n" +
-			"add`) to describe io/run/python checks that the runner grades\n" +
-			"with no autograder.py. (2) A per-assignment autograder.py: drop\n" +
-			"an entrypoint plus any sibling fixtures at\n" +
-			"<classroom>/autograders/<slug>/ in the classroom50 repository (mutually\n" +
-			"exclusive with --tests). (3) A classroom default: run\n" +
-			"`gh teacher autograder set-default <org> <classroom>` to install\n" +
-			"<classroom>/autograder.py for every assignment. See the\n" +
-			"Advanced-Autograding wiki page for the result.json contract and\n" +
-			"templates (pytest, custom).",
+		Long: "Register an assignment (its template repository and the autograder\n" +
+			"it runs against) in <org>/classroom50/<classroom>/assignments.json.\n\n" +
+			"  - `<slug>` must match ^[a-z0-9][a-z0-9-]{1,99}$ (the same shape\n" +
+			"    as classroom short-names) because student repos are named\n" +
+			"    `<classroom>-<slug>-<username>`.\n" +
+			"  - Only --name is required; --template is optional (omit it for\n" +
+			"    a template-less assignment).\n" +
+			"  - If the slug already exists in assignments.json, the entry is\n" +
+			"    replaced in place (idempotent for repeated edits to the same\n" +
+			"    assignment).\n\n" +
+			"--locked registers the assignment locked, the same as\n" +
+			"`gh teacher assignment lock`:\n" +
+			"  - Students can't see or accept it.\n" +
+			"  - A private template in the org stays unreadable to the\n" +
+			"    classroom team until you unlock.\n" +
+			"  - Use it to stage a timed assessment, then unlock when the\n" +
+			"    session starts.\n\n" +
+			"--empty-repo creates truly bare student repos:\n" +
+			"  - No README, no .classroom50.yaml marker, no autograde workflow:\n" +
+			"    for assignments where students build everything (including\n" +
+			"    their own GitHub Actions) from scratch.\n" +
+			"  - Autograding and the Feedback PR are disabled.\n" +
+			"  - Changing this on a same-slug re-add applies only to accepts\n" +
+			"    from now on; repositories students already accepted are not\n" +
+			"    retrofitted (a warning is printed).\n" +
+			"  - Mutually exclusive with --template, --tests, --feedback-pr,\n" +
+			"    --allowed-files, --pass-threshold, --submission-mode, and\n" +
+			"    --submission-tag.\n\n" +
+			"--template parses `<owner>/<repo>` (or `<owner>/<repo>@<branch>`):\n" +
+			"  - A custom source branch is tolerated but ignored; the\n" +
+			"    assignment uses the template repository's default branch. To\n" +
+			"    use a different branch, change the template repository's\n" +
+			"    default branch first.\n" +
+			"  - The template repository must be marked `is_template: true`\n" +
+			"    (set in Settings -> \"Template repository\").\n" +
+			"  - If your account can't see the repository, the CLI returns the\n" +
+			"    cross-org visibility message.\n\n" +
+			"--runtime points at a JSON file describing the runtime environment\n" +
+			"for this assignment's autograde job:\n" +
+			"  - Which runner label(s), optional language toolchains\n" +
+			"    (python/node/java/go/rust), optional apt packages, or a custom\n" +
+			"    container image.\n" +
+			"  - `runs-on` mirrors GitHub Actions itself: a single label\n" +
+			"    (\"ubuntu-latest\") or an array of labels\n" +
+			"    ([\"self-hosted\", \"gpu\"]) for a custom or self-hosted runner.\n" +
+			"  - Pass `-` to read the JSON from stdin instead of a file\n" +
+			"    (one-shot agent flows).\n" +
+			"  - Omit for the defaults (ubuntu-latest and Python 3.14). See the\n" +
+			"    Advanced-Autograding wiki page for the JSON schema and worked\n" +
+			"    examples.\n\n" +
+			"--autograder is reserved for the rare case where you need to call\n" +
+			"a different reusable workflow entirely (for different language\n" +
+			"toolchains, use --runtime instead):\n" +
+			"  - The name resolves to <classroom>/autograders/<name>.yaml; the\n" +
+			"    referenced file must exist at write time.\n" +
+			"  - The default is `default`, the universal shim embedded in\n" +
+			"    gh-student, which `uses:` the autograde-runner workflow in the\n" +
+			"    classroom50 repository.\n\n" +
+			"There are three ways to grade:\n" +
+			"  1. Declarative tests: pass --tests <file.json> here (or use\n" +
+			"     `gh teacher assignment test add`) to describe io/run/python\n" +
+			"     checks that the runner grades with no autograder script.\n" +
+			"  2. A per-assignment autograder: drop an entrypoint plus any\n" +
+			"     sibling fixtures at <classroom>/autograders/<slug>/ in the\n" +
+			"     classroom50 repository (mutually exclusive with --tests).\n" +
+			"  3. A classroom default: run\n" +
+			"     `gh teacher autograder set-default <org> <classroom>` to\n" +
+			"     install <classroom>/autograder.py for every assignment.\n\n" +
+			"See the Advanced-Autograding wiki page for the result.json\n" +
+			"contract and templates (pytest, custom).",
 		Example: "  gh teacher assignment add cs50-fall-2026 cs-principles hello \\\n" +
 			"      --name \"Hello\" --template cs50/hello-template \\\n" +
 			"      --due 2026-09-15T23:59:00-04:00\n" +
@@ -153,7 +172,10 @@ func assignmentAddCmd() *cobra.Command {
 			"      --name \"Intro\" --template cs50/intro-template\n" +
 			"  gh teacher assignment add cs50-fall-2026 cs-principles greet \\\n" +
 			"      --name \"Greet\" --template cs50/greet-template \\\n" +
-			"      --runtime ./runtime-c.json",
+			"      --runtime ./runtime-c.json\n" +
+			"  gh teacher assignment add cs50-fall-2026 cs-principles midterm \\\n" +
+			"      --name \"Midterm\" --template cs50-fall-2026/midterm-template \\\n" +
+			"      --locked",
 		Args: cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cmd.SilenceUsage = true
@@ -191,7 +213,13 @@ func assignmentAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			modeVal, err := validateModeAndSizeFlags(mode, maxGroupSize, cmd.Flags().Changed("max-group-size"))
+			modeVal, formationVal, err := validateModeAndSizeFlags(modeSizeFlagState{
+				Mode:              mode,
+				MaxGroupSize:      maxGroupSize,
+				SizeProvided:      cmd.Flags().Changed("max-group-size"),
+				TeamFormation:     teamFormation,
+				FormationProvided: cmd.Flags().Changed("team-formation"),
+			})
 			if err != nil {
 				return err
 			}
@@ -230,6 +258,15 @@ func assignmentAddCmd() *cobra.Command {
 					return errors.New("--empty-repo is mutually exclusive with --submission-tag: a bare repo has no autograde shim to trigger")
 				}
 			}
+			// Normalize the wire default away so a private assignment's entry
+			// stays byte-identical to one written before the field existed.
+			repoVisibilityVal := strings.TrimSpace(repoVisibility)
+			if repoVisibilityVal == contract.RepoVisibilityPrivate {
+				repoVisibilityVal = ""
+			}
+			if err := assignment.ValidateRepoVisibility(repoVisibilityVal); err != nil {
+				return err
+			}
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
 			}
@@ -255,7 +292,7 @@ func assignmentAddCmd() *cobra.Command {
 				// surprised the branch had no effect.
 				if parsed.IgnoredBranch != "" {
 					_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
-						"warning: --template branch %q is ignored — the assignment uses %s/%s's default branch. To use a different branch, change the template repository's default branch.\n",
+						"warning: --template branch %q is ignored; the assignment uses %s/%s's default branch. To use a different branch, change the template repository's default branch.\n",
 						parsed.IgnoredBranch, parsed.Owner, parsed.Repo)
 				}
 				tmplArg = &parsed
@@ -264,9 +301,16 @@ func assignmentAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			tests, err := assignment.ParseTestsFile(strings.TrimSpace(testsFile))
+			parsedTests, err := assignment.ParseTestsFile(strings.TrimSpace(testsFile))
 			if err != nil {
 				return err
+			}
+			var (
+				tests        []assignment.TestSpec
+				testDefaults *assignment.TestDefaults
+			)
+			if parsedTests != nil {
+				tests, testDefaults = parsedTests.Tests, parsedTests.Defaults
 			}
 
 			client, err := githubapi.RequireAuthClient(cmd)
@@ -287,9 +331,11 @@ func assignmentAddCmd() *cobra.Command {
 					AvailableFromMeta:     availableFromMetaVal,
 					Mode:                  modeVal,
 					MaxGroupSize:          maxGroupSize,
+					TeamFormation:         formationVal,
 					Autograder:            autograderVal,
 					Runtime:               runtime,
 					Tests:                 tests,
+					TestDefaults:          testDefaults,
 					FeedbackPR:            feedbackPRVal,
 					EmptyRepo:             emptyRepo,
 					AllowedFiles:          allowedFiles,
@@ -299,27 +345,34 @@ func assignmentAddCmd() *cobra.Command {
 					SubmissionModeChanged: cmd.Flags().Changed("submission-mode"),
 					SubmissionTags:        submissionTags,
 					SubmissionTagsChanged: cmd.Flags().Changed("submission-tag"),
+					RepoVisibility:        repoVisibilityVal,
+					RepoVisibilityChanged: cmd.Flags().Changed("repo-visibility"),
+					Locked:                locked,
+					LockedChanged:         cmd.Flags().Changed("locked"),
 				})
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry (e.g., "Hello") (required)`)
-	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> (or <owner>/<repo>@<branch>). Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup). A custom source branch (@<branch>) is tolerated but ignored — the assignment uses the template's default branch; change the template repo's default branch to use a different one.")
+	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry, for example "Hello" (required)`)
+	cmd.Flags().StringVar(&template, "template", "", "Optional template repository as <owner>/<repo> (or <owner>/<repo>@<branch>). Omit for a template-less assignment (students get an initialized repo: a README plus the autograding setup). A custom source branch (@<branch>) is tolerated but ignored; the assignment uses the template's default branch, so change that to use a different one")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
-	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g., 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
-	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date (e.g., 2026-09-15T00:00:00-04:00); stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it (listing-only, not access control). Omit the offset to use the machine's local timezone.")
-	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default) or `group`. Group mode requires --max-group-size.")
-	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum collaborators on a group repo (>= 2; required with --mode group). Enforced within the CLI when students join; direct GitHub-UI invites can bypass it.")
+	cmd.Flags().StringVar(&due, "due", "", "Optional due date, for example 2026-09-15T23:59:00-04:00; stored as UTC. Omit the offset to use the machine's local timezone")
+	cmd.Flags().StringVar(&availableFrom, "available-from", "", "Optional release date, for example 2026-09-15T00:00:00-04:00; stored as UTC. Assignments are hidden from the student list by default (invite-link accept only); set this to list it for everyone once the date passes. Students who already accepted always see it. Listing only, not access control: a private in-org template stays readable to the classroom team, so pair it with --locked to hide the template until release. Omit the offset to use the machine's local timezone")
+	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default), `group` (legacy shared repo through collaborators), or `team` (shared repo owned by a GitHub Team). Group and team modes require --max-group-size; team mode also requires --team-formation")
+	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum group size (>= 2; required with --mode group or --mode team). Enforced within Classroom 50 clients when groups form; direct GitHub-UI changes can bypass it")
+	cmd.Flags().StringVar(&teamFormation, "team-formation", "", "Who forms the groups of a team assignment: `teacher` (you create the teams) or `student` (the first student founds a team and adds teammates). Required with --mode team")
 	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the classroom50 repository")
-	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest + Python 3.14.")
-	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file with a bare array of declarative test specs (io/run/python), or `-` to read from stdin. Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder.py. See `gh teacher assignment test --help`.")
-	cmd.Flags().BoolVar(&feedbackPR, "feedback-pr", true, "Open one long-lived Feedback pull request per student repo so you can leave inline review comments on the full starter→submission diff. Accept freezes a base branch at the baseline commit and opens the PR right away, so it exists even with GitHub Actions disabled; the autograde runner then adopts and maintains it (and opens it on the first submission if accept could not). Default on; pass --feedback-pr=false to disable. Requires `gh teacher init` to have set up the org prerequisites.")
-	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled. Changing this on a same-slug re-add applies only to accepts from now on (repositories students already accepted are not retrofitted; a warning is printed). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag.")
-	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
-	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it the submissions page shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
-	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their OWN assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin lets the student manage the repo's settings and collaborators; the org lockdown from `gh teacher init` still blocks members from changing repo visibility (verify with `gh teacher audit`).")
-	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade — `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo.")
-	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that ALSO triggers grading — e.g. --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo.")
+	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest and Python 3.14")
+	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file of declarative test specs (io/run/python), or `-` to read from stdin: either a bare array or the generated tests.json envelope ({\"schema\": \"classroom50/tests/v1\", \"tests\": [...]}). Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder. To change only the tests on an existing assignment, use `gh teacher assignment test set`")
+	cmd.Flags().BoolVar(&feedbackPR, "feedback-pr", true, "Open one long-lived Feedback pull request per student repo so you can leave inline review comments on the full starter-to-submission diff. Accept freezes a base branch at the baseline commit and opens the PR right away, so it exists even with GitHub Actions disabled; the autograde runner then adopts and maintains it (and opens it on the first submission if accept could not). Default on; pass --feedback-pr=false to disable. Requires `gh teacher init` to have set up the org prerequisites")
+	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos (no README or initial commit, no .classroom50.yaml marker, no autograde workflow) for assignments where students build the repo, including their own GitHub Actions, from scratch. Autograding and the Feedback PR are disabled. Changing this on a same-slug re-add applies only to accepts from now on (repositories students already accepted are not retrofitted; a warning is printed). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, --pass-threshold, --submission-mode, and --submission-tag")
+	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file")
+	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0-100): at or above it the submissions page shows a submission as passing. Advisory and display-only: it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%")
+	cmd.Flags().StringVar(&studentPerm, "student-permission", "", "Optional collaborator role each student gets on their own assignment repo at accept time: one of pull, triage, push, maintain, admin. Omit for the default (push for individual, admin for group). Choose admin to let students manage repo settings and enable GitHub Pages. Applies to students who accept from now on; existing repos are unchanged. Caution: admin lets the student manage the repo's settings and collaborators; the org lockdown from `gh teacher init` still blocks members from changing repo visibility (verify with `gh teacher audit`)")
+	cmd.Flags().StringVar(&submissionMd, "submission-mode", contract.SubmissionModeEveryPush, "When the autograder fires: `every-push` (default; every push to the default branch grades) or `tag` (only submit/* tag pushes grade: `gh student submit` pushes the tag, or push any submit/* tag by hand; plain `git push` costs no Actions minutes). Baked into each student repo's shim at accept time; change it later with `gh teacher assignment submission-mode`, which also retrofits existing repos. Mutually exclusive with --empty-repo")
+	cmd.Flags().StringArrayVar(&submissionTags, "submission-tag", nil, "Milestone tag pattern (repeatable) that also triggers grading, for example --submission-tag phase1 --submission-tag phase2, or a glob like 'v*'. A student pushing a matching tag (`git tag phase1 && git push origin phase1`) gets that commit graded; the grading record still lives at the canonical submit/* tag the runner mints, so history and collection are unchanged. The canonical submit/* namespace always triggers too. Baked into the shim at accept time like --submission-mode (same retrofit to change later). Caution: a broad glob like 'v*' grades every matching tag a student pushes. Mutually exclusive with --empty-repo")
+	cmd.Flags().StringVar(&repoVisibility, "repo-visibility", contract.RepoVisibilityPrivate, "Visibility each student repo is created with at accept time: `private` (default) or `public` (for peer-review, portfolio, or showcase assignments; students are told upfront their work will be publicly visible). Applies to students who accept from now on; existing repos are unchanged (flip those from the gradebook's visibility actions). Caution with public: student work (names, emails, commit history) is visible to anyone on the internet from the moment the repo is created. If org policy blocks members from creating public repos, accept falls back to a private repo and tells the student")
+	cmd.Flags().BoolVar(&locked, "locked", false, "Lock the assignment so students can't see or accept it, including students who already accepted. For a private template in the org, the classroom team gets no read access until you unlock. Same effect as `gh teacher assignment lock`. On a same-slug re-add, --locked=false unlocks and omitting the flag keeps the stored lock")
 	return cmd
 }
 
@@ -333,15 +386,14 @@ func assignmentRemoveCmd() *cobra.Command {
 		Long: "Drop the assignment entry with matching slug from\n" +
 			"<org>/classroom50/<classroom>/assignments.json. Idempotent:\n" +
 			"if the slug is already absent, exits 0 with a note.\n\n" +
-			"Does NOT touch any existing student repos that were created\n" +
-			"against this assignment. The starter code and submission\n" +
-			"history stay intact; only new `gh student accept` invocations\n" +
-			"stop finding the slug.\n\n" +
-			"Because the repos survive, re-adding the SAME slug is not a\n" +
+			"Existing student repos created against this assignment are not\n" +
+			"touched. The starter code and submission history stay intact;\n" +
+			"only new `gh student accept` invocations stop finding the slug.\n\n" +
+			"Because the repos survive, re-adding the same slug is not a\n" +
 			"clean reset: an --empty-repo flag that differs from the removed\n" +
-			"entry leaves already-accepted repos on the old behavior — the\n" +
-			"change applies only to accepts from now on (a warning is printed;\n" +
-			"update existing repositories yourself).",
+			"entry leaves already-accepted repos on the old behavior. The\n" +
+			"change applies only to accepts from now on (a warning is\n" +
+			"printed; update existing repositories yourself).",
 		Example: "  gh teacher assignment remove cs50-fall-2026 cs-principles hello",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -381,17 +433,17 @@ func assignmentListCmd() *cobra.Command {
 		Short: "Print every assignment slug registered in a classroom",
 		Long: "List the slugs of every assignment registered in\n" +
 			"<org>/classroom50/<classroom>/assignments.json.\n\n" +
-			"Default output is one slug per line on stdout — pipeable\n" +
-			"directly into `xargs gh teacher download`, `grep`, or an\n" +
-			"agent loop. Pass --json to emit the full JSON array of\n" +
-			"assignment entries instead; that form preserves every field\n" +
-			"(template ref, due, mode, tests) so an agent can introspect\n" +
-			"the manifest without a second API call.\n\n" +
-			"A one-line summary (`<repo-path>: N assignment(s)`) is\n" +
-			"printed to stderr by default; pass --quiet to suppress it\n" +
-			"so stdout is the only output stream a capturing script has\n" +
-			"to parse.\n\n" +
-			"This is a read-only command; no commit lands on the repo.",
+			"  - Default output is one slug per line on stdout, pipeable\n" +
+			"    directly into `xargs gh teacher download`, `grep`, or an\n" +
+			"    agent loop.\n" +
+			"  - Pass --json to emit the full JSON array of assignment entries\n" +
+			"    instead; that form preserves every field (template ref, due,\n" +
+			"    mode, tests) so an agent can introspect the manifest without\n" +
+			"    a second API call.\n" +
+			"  - A one-line summary (`<repo-path>: N assignment(s)`) is printed\n" +
+			"    to stderr by default; pass --quiet to suppress it so stdout is\n" +
+			"    the only output stream a capturing script has to parse.\n\n" +
+			"This is a read-only command; no commit lands on the repository.",
 		Example: "  gh teacher assignment list cs50-fall-2026 cs-principles\n" +
 			"  gh teacher assignment list cs50-fall-2026 cs-principles --json\n" +
 			"  gh teacher assignment list -q cs50-fall-2026 cs-principles | xargs -I{} gh teacher download cs50-fall-2026 cs-principles {}",
@@ -472,7 +524,7 @@ func summarizeAssignmentList(org, classroom string, count int) string {
 	path := fmt.Sprintf("%s/%s/%s", org, configrepo.ConfigRepoName, assignmentsFilePath(classroom))
 	switch count {
 	case 0:
-		return fmt.Sprintf("%s: no assignments registered yet — use `gh teacher assignment add %s %s <slug>` to create one", path, org, classroom)
+		return fmt.Sprintf("%s: no assignments registered yet. Create one with `gh teacher assignment add %s %s <slug>`", path, org, classroom)
 	case 1:
 		return fmt.Sprintf("%s: 1 assignment", path)
 	default:
@@ -485,32 +537,57 @@ func assignmentsFilePath(classroom string) string {
 	return assignment.AssignmentsFilePath(classroom)
 }
 
-// validateModeAndSizeFlags normalizes/validates the --mode and --max-group-size
-// pair for `assignment add`. Group mode requires --max-group-size (2..cap);
-// individual mode must not set it. Extracted as a pure function so the flag
+// modeSizeFlagState carries the --mode / --max-group-size / --team-formation
+// values plus "was this flag passed" booleans, mirroring emptyRepoFlagState.
+type modeSizeFlagState struct {
+	Mode              string
+	MaxGroupSize      int
+	SizeProvided      bool
+	TeamFormation     string
+	FormationProvided bool
+}
+
+// validateModeAndSizeFlags normalizes/validates the --mode, --max-group-size,
+// and --team-formation flags for `assignment add`. Group and team modes
+// require --max-group-size (2..cap); team mode also requires --team-formation;
+// individual mode must set neither. Extracted as a pure function so the flag
 // contract is unit-testable.
-func validateModeAndSizeFlags(mode string, maxGroupSize int, sizeProvided bool) (string, error) {
-	modeVal := strings.TrimSpace(mode)
+func validateModeAndSizeFlags(s modeSizeFlagState) (mode, formation string, err error) {
+	modeVal := strings.TrimSpace(s.Mode)
 	if modeVal == "" {
 		modeVal = assignment.ModeIndividual
 	}
 	if !assignment.IsValidAssignmentMode(modeVal) {
-		return "", fmt.Errorf("invalid --mode %q: expected one of %s", modeVal, strings.Join(assignment.AssignmentModes, ", "))
+		return "", "", fmt.Errorf("invalid --mode %q: expected one of %s", modeVal, strings.Join(assignment.AssignmentModes, ", "))
 	}
+	formationVal := strings.TrimSpace(s.TeamFormation)
 	switch modeVal {
-	case assignment.ModeGroup:
-		if maxGroupSize < 2 {
-			return "", fmt.Errorf("--max-group-size must be >= 2 for a group assignment (got %d)", maxGroupSize)
+	case assignment.ModeGroup, assignment.ModeTeam:
+		if s.MaxGroupSize < 2 {
+			return "", "", fmt.Errorf("--max-group-size must be >= 2 for a %s assignment (got %d)", modeVal, s.MaxGroupSize)
 		}
-		if err := assignment.ValidateMaxGroupSize(maxGroupSize); err != nil {
-			return "", err
+		if err := assignment.ValidateMaxGroupSize(s.MaxGroupSize); err != nil {
+			return "", "", err
 		}
 	default:
-		if sizeProvided {
-			return "", errors.New("--max-group-size is only valid with --mode group")
+		if s.SizeProvided {
+			return "", "", errors.New("--max-group-size is only valid with --mode group or --mode team")
 		}
 	}
-	return modeVal, nil
+	if modeVal == assignment.ModeTeam {
+		if formationVal == "" {
+			return "", "", fmt.Errorf("--team-formation is required for a team assignment: pass one of %s", strings.Join(contract.TeamFormations, ", "))
+		}
+		if err := assignment.ValidateTeamFormation(formationVal); err != nil {
+			return "", "", err
+		}
+	} else if s.FormationProvided {
+		return "", "", errors.New("--team-formation is only valid with --mode team")
+	}
+	if modeVal != assignment.ModeTeam {
+		formationVal = ""
+	}
+	return modeVal, formationVal, nil
 }
 
 // emptyRepoFlagState is the flag-layer view validateEmptyRepoFlags checks:
@@ -585,9 +662,13 @@ type addAssignmentParams struct {
 	AvailableFromMeta *assignment.DueMeta
 	Mode              string
 	MaxGroupSize      int
+	TeamFormation     string
 	Autograder        string
 	Runtime           *assignment.RuntimeRef
 	Tests             []assignment.TestSpec
+	// TestDefaults comes only from a `--tests` envelope; a bare array leaves
+	// it nil.
+	TestDefaults      *assignment.TestDefaults
 	FeedbackPR        bool
 	EmptyRepo         bool
 	AllowedFiles      []string
@@ -606,6 +687,17 @@ type addAssignmentParams struct {
 	// flag carries a prior entry's patterns forward (deployed shims were
 	// rendered with them); passing the flag replaces the set.
 	SubmissionTagsChanged bool
+	RepoVisibility        string
+	// Same omitted-vs-explicit distinction for --repo-visibility: an omitted
+	// flag carries a prior entry's visibility forward (often GUI-authored);
+	// an explicit --repo-visibility private is a deliberate reset.
+	RepoVisibilityChanged bool
+	Locked                bool
+	// Same omitted-vs-explicit distinction for --locked: an omitted flag
+	// carries a prior entry's lock forward (it may have been set by
+	// `assignment lock` or the web app); an explicit --locked / --locked=false
+	// is the lock action itself, including the template read revoke/re-grant.
+	LockedChanged bool
 }
 
 // runAssignmentAdd validates template visibility and entry shape before the
@@ -647,7 +739,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// than letting every `student accept` 404 later.
 		inOrg = templateInOrg(ref.Owner, org)
 		if templatePrivate && !inOrg {
-			return fmt.Errorf("template `%s/%s` is private and outside the org %s — students can't be granted access to it, so `gh student accept` would fail. Copy it into %s and reference the copy, or make the template public",
+			return fmt.Errorf("template `%s/%s` is private and outside the org %s, so students can't be granted access to it and `gh student accept` would fail. Copy it into %s and reference the copy, or make the template public",
 				ref.Owner, ref.Repo, org, org)
 		}
 		// A cross-org fork works only while its upstream org keeps Classroom 50
@@ -680,9 +772,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		AvailableFromMeta: availableFromMetaVal,
 		Mode:              mode,
 		MaxGroupSize:      maxGroupSize,
+		TeamFormation:     p.TeamFormation,
 		Autograder:        autograder,
 		Runtime:           runtime,
 		Tests:             tests,
+		TestDefaults:      p.TestDefaults,
 		FeedbackPR:        feedbackPR,
 		EmptyRepo:         p.EmptyRepo,
 		AllowedFiles:      allowedFiles,
@@ -690,6 +784,8 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		StudentPermission: p.StudentPermission,
 		SubmissionMode:    p.SubmissionMode,
 		SubmissionTags:    p.SubmissionTags,
+		RepoVisibility:    p.RepoVisibility,
+		Locked:            p.Locked,
 	}
 	if err := assignment.ValidateAssignmentEntry(entry); err != nil {
 		return err
@@ -710,10 +806,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// and are carried forward from the prior entry below, so `add` can never
 		// change them — only empty_repo is detectable here.)
 		changedEmptyRepo bool
-		// The locked state that actually landed (carried forward from a prior
-		// same-slug entry). Read after the commit to decide the template grant,
-		// since `entry` (rebuilt from flags) never carries Locked.
+		// The locked state that actually landed, and the one it replaced. Read
+		// after the commit to decide the template grant (or, on a false-to-true
+		// transition, the revoke): with --locked omitted the prior entry's lock
+		// is carried forward, so `entry` (rebuilt from flags) isn't authoritative.
 		committedLocked bool
+		previousLocked  bool
 	)
 	build := func(parentSHA string) (map[string]string, error) {
 		droppedTests = 0
@@ -722,6 +820,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedPassThreshold = nil
 		droppedStudentPerm = ""
 		changedEmptyRepo = false
+		previousLocked = false
 		attemptEntry := entry
 		// Refuse on an archived classroom (active:false), mirroring the web.
 		// Checked at parentSHA so a concurrent unarchive is observed on retry.
@@ -739,7 +838,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 					org, configrepo.ConfigRepoName, autograderseam.FilePath(classroom, entry.Autograder), err)
 			}
 			if !exists {
-				return nil, fmt.Errorf("autograder %q does not exist at %s/%s/%s — create it (or pass --autograder default) before registering this assignment",
+				return nil, fmt.Errorf("autograder %q does not exist at %s/%s/%s: create it (or pass --autograder default) before registering this assignment",
 					entry.Autograder, org, configrepo.ConfigRepoName, autograderseam.FilePath(classroom, entry.Autograder))
 			}
 		}
@@ -778,7 +877,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			// there would mint repos at renamed student repos' old names,
 			// permanently severing GitHub's redirects for every student clone.
 			if current, reserved := assignment.SlugReservedFold(file.Assignments, slug); reserved {
-				return nil, fmt.Errorf("slug %q is reserved: it is the pre-rename slug of assignment %q, and reusing it would permanently break GitHub's redirects for that assignment's renamed student repos — choose a different slug",
+				return nil, fmt.Errorf("slug %q is reserved: it is the pre-rename slug of assignment %q, and reusing it would permanently break GitHub's redirects for that assignment's renamed student repos. Choose a different slug",
 					slug, current)
 			}
 		}
@@ -858,21 +957,26 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// unknown Extra keys when a same-slug add rebuilds the rest from flags. This
 		// stays inside the retry callback so a rebase observes the latest parent.
 		//
-		// Locked is likewise preserved: it's owned by `assignment lock`, not `add`,
-		// and `locked` is a known key (so it decodes onto the struct, not Extra).
-		// Without this carry-forward a same-slug re-add would clear the lock AND
-		// re-grant the student-team template read (the !entry.Locked guard below
-		// would see false), silently re-opening a locked assignment.
+		// Locked is carried forward when --locked was omitted: it may have been
+		// set by `assignment lock` or the web app, and `locked` is a known key
+		// (so it decodes onto the struct, not Extra). Without this carry-forward
+		// a same-slug re-add would clear the lock AND re-grant the student-team
+		// template read (the !committedLocked guard below would see false),
+		// silently re-opening a locked assignment. An explicit --locked or
+		// --locked=false is the lock action itself and wins.
 		if hasPrev {
 			previous := file.Assignments[prevIdx]
 			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
 			attemptEntry.Extra = previous.Extra
-			attemptEntry.Locked = previous.Locked
+			previousLocked = previous.Locked
+			if !p.LockedChanged {
+				attemptEntry.Locked = previous.Locked
+			}
 			// renamed_from and migrated_from are provenance owned by the slug
-			// rename and `classroom migrate` respectively — `add` has no flags
-			// for them, and both are known keys (they decode onto the struct,
-			// not Extra), so a same-slug re-add must carry them or it silently
-			// erases the rename reservation / migration record.
+			// rename and the retired `classroom migrate` respectively — `add`
+			// has no flags for them, and both are known keys (they decode onto
+			// the struct, not Extra), so a same-slug re-add must carry them or
+			// it silently erases the rename reservation / migration record.
 			attemptEntry.RenamedFrom = previous.RenamedFrom
 			attemptEntry.MigratedFrom = previous.MigratedFrom
 			// Closed is likewise preserved: it's owned out of band by the web
@@ -909,6 +1013,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			// silently drop them (milestone tags would stop grading).
 			if !p.SubmissionTagsChanged {
 				attemptEntry.SubmissionTags = append([]string(nil), previous.SubmissionTags...)
+			}
+			// repo_visibility is carried forward when --repo-visibility was
+			// omitted: it's often GUI-authored, and a silent reset to private
+			// would surprise a showcase assignment's future accepters.
+			if !p.RepoVisibilityChanged {
+				attemptEntry.RepoVisibility = previous.RepoVisibility
 			}
 		}
 		committedLocked = attemptEntry.Locked
@@ -951,6 +1061,12 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	if resolved != nil {
 		templateDesc = fmt.Sprintf("template %s/%s@%s", resolved.Owner, resolved.Repo, resolved.Branch)
 	}
+	// Said on the summary line for every template kind: the stderr note below
+	// only fires for a private in-org template, and a public or absent one is
+	// still UX-locked for every student.
+	if committedLocked {
+		templateDesc += ", locked"
+	}
 	_, _ = fmt.Fprintf(out, "%s/%s/%s: %s %s (%s, autograder %s)\n",
 		org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), action, slug,
 		templateDesc, entry.Autograder)
@@ -962,43 +1078,59 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// skip the grant here — otherwise re-running add would silently re-open it
 	// (the lock command removed it on purpose). Staff grants aren't reached
 	// because grantStaffTeamTemplateRead runs inside the student grant path.
-	// committedLocked (not entry.Locked) is authoritative: `entry` is rebuilt
-	// from flags and never carries a prior lock, so the closure captures the
-	// value that actually landed.
+	// committedLocked (not entry.Locked) is authoritative: with --locked omitted
+	// the prior lock is carried forward inside the closure, so only the value
+	// that actually landed decides. A same-slug re-add that flips unlocked to
+	// locked (--locked) is the lock action itself: revoke the student team's
+	// read exactly like `assignment lock`. A locked-to-unlocked flip
+	// (--locked=false) re-grants through the ordinary grant below.
 	if resolved != nil && templatePrivate && inOrg && !committedLocked {
 		if err := grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
 			return err
 		}
+		// A future release date reads like an access control but only gates
+		// the student list; the grant above already opened the template. Say
+		// so now, with the lock as the fix (issue #884).
+		if releaseIsFuture(availableFrom) {
+			_, _ = fmt.Fprintf(errOut,
+				"Note: %q has a release date (%s) but isn't locked, so the classroom student team can read the private template %s/%s now. The release date controls listing only, not access. To keep the template hidden until then, lock the assignment with `gh teacher assignment lock %s %s %s` and unlock it on the release date with `--unlock`.\n",
+				slug, availableFrom, resolved.Owner, resolved.Repo, org, classroom, slug)
+		}
 	}
 	if resolved != nil && templatePrivate && inOrg && committedLocked {
-		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was NOT granted read on the private template %s/%s — unlock it with `gh teacher assignment lock %s %s %s --unlock` when you want students to accept again.\n",
+		if action == "updated" && !previousLocked && p.LockedChanged {
+			if err := revokeClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo); err != nil {
+				return err
+			}
+		}
+		_, _ = fmt.Fprintf(errOut, "Note: %q is locked, so the classroom student team was not granted read on the private template %s/%s. Unlock it with `gh teacher assignment lock %s %s %s --unlock` when you want students to accept again.\n",
 			slug, resolved.Owner, resolved.Repo, org, classroom, slug)
 	}
 	if droppedTests > 0 {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its %d declarative test(s) — `assignment add` rewrites the whole entry. Pass --tests to keep them, or re-add with `gh teacher assignment test add`.\n",
+			"Warning: replacing %q dropped its %d declarative test(s): `assignment add` rewrites the whole entry. Pass --tests to keep them, or restore them with `gh teacher assignment test set`.\n",
 			slug, droppedTests)
 	}
 	if droppedTemplate != nil {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its template %s/%s@%s — `assignment add` rewrites the whole entry, and you re-ran it without --template. The assignment is now template-less (students get an empty shim-only repo). Pass --template %s/%s@%s to keep it.\n",
+			"Warning: replacing %q dropped its template %s/%s@%s: `assignment add` rewrites the whole entry, and you re-ran it without --template. The assignment is now template-less (students get an empty shim-only repo). Pass --template %s/%s@%s to keep it.\n",
 			slug, droppedTemplate.Owner, droppedTemplate.Repo, droppedTemplate.Branch,
 			droppedTemplate.Owner, droppedTemplate.Repo, droppedTemplate.Branch)
 	}
 	if droppedAllowedCnt > 0 {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its %d allowed_files pattern(s) — `assignment add` rewrites the whole entry, and you re-ran it without --allowed-files. Submissions are now unrestricted. Pass --allowed-files to keep the allowlist.\n",
+			"Warning: replacing %q dropped its %d allowed_files pattern(s): `assignment add` rewrites the whole entry, and you re-ran it without --allowed-files. Submissions are now unrestricted. Pass --allowed-files to keep the allowlist.\n",
 			slug, droppedAllowedCnt)
 	}
 	if droppedPassThreshold != nil {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its pass_threshold (%d%%) — `assignment add` rewrites the whole entry, and you re-ran it without --pass-threshold. The passing bar (often set in the web app) is now off. Pass --pass-threshold %d to keep it.\n",
+			"Warning: replacing %q dropped its pass_threshold (%d%%): `assignment add` rewrites the whole entry, and you re-ran it without --pass-threshold. The passing bar (often set in the web app) is now off. Pass --pass-threshold %d to keep it.\n",
 			slug, *droppedPassThreshold, *droppedPassThreshold)
 	}
 	if droppedStudentPerm != "" {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q dropped its student_permission (%s) — `assignment add` rewrites the whole entry, and you re-ran it without --student-permission. New accepters revert to the mode default. Pass --student-permission %s to keep it.\n",
+			"Warning: replacing %q dropped its student_permission (%s): `assignment add` rewrites the whole entry, and you re-ran it without --student-permission. New accepters revert to the mode default. Pass --student-permission %s to keep it.\n",
 			slug, droppedStudentPerm, droppedStudentPerm)
 	}
 	// Provisioning-class changes only affect repos accepted from now on;
@@ -1007,7 +1139,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// reconciling any resulting inconsistency (mirrors the web app's confirm).
 	if changedEmptyRepo {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted — they keep their original setup, and if autograding is now off their autograde runs start failing and drop out of the collected scores. The new setting applies only to accepts from now on; update existing repositories yourself.\n",
+			"Warning: replacing %q changed its empty_repo setting. Repositories students already accepted are not retrofitted: they keep their original setup, and if autograding is now off their autograde runs start failing and drop out of the collected scores. The new setting applies only to accepts from now on; update existing repositories yourself.\n",
 			slug)
 	}
 	// Heads-up if the encoded file nears GitHub's ~1 MiB contents-API limit
@@ -1015,7 +1147,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// Diagnostic only. See assignment.LargeAssignmentsWarnBytes.
 	if lastEncodedSize > assignment.LargeAssignmentsWarnBytes {
 		_, _ = fmt.Fprintf(errOut,
-			"Warning: %s/%s/%s is %d bytes — approaching GitHub's ~1 MiB contents-API ceiling. Past that, the API returns encoding:\"none\" and future `gh teacher assignment add/remove` calls will fail to read the file. Consider splitting the classroom or shrinking per-entry fields.\n",
+			"Warning: %s/%s/%s is %d bytes, approaching GitHub's ~1 MiB contents-API ceiling. Past that, the API returns encoding:\"none\" and future `gh teacher assignment add/remove` calls will fail to read the file. Consider splitting the classroom or shrinking per-entry fields.\n",
 			org, configrepo.ConfigRepoName, assignmentsFilePath(classroom), lastEncodedSize)
 	}
 	// #691: a NEW over-budget slug is blocked in the build above, so reaching
@@ -1089,7 +1221,7 @@ func ensureClassroomActive(client githubapi.Client, org, classroom, ref string) 
 		return err
 	}
 	if ok && c.IsArchived() {
-		return fmt.Errorf("classroom %q is archived (classroom.json active:false) — new assignments are refused; run `gh teacher classroom unarchive %s %s` to re-activate it first",
+		return fmt.Errorf("classroom %q is archived (classroom.json active:false), so new assignments are refused. Run `gh teacher classroom unarchive %s %s` to re-activate it first",
 			classroom, org, classroom)
 	}
 	return nil
@@ -1148,6 +1280,16 @@ func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
 // normalizeDueDate; both share normalizeLocalDate and reuse the DueMeta pair.
 func normalizeAvailableFrom(raw string) (string, *assignment.DueMeta, error) {
 	return normalizeLocalDate("--available-from", raw)
+}
+
+// releaseIsFuture reports whether a stored (RFC 3339 UTC) release date is still
+// ahead. Empty or unparseable values are never "future".
+func releaseIsFuture(availableFrom string) bool {
+	if availableFrom == "" {
+		return false
+	}
+	t, err := time.Parse(time.RFC3339, availableFrom)
+	return err == nil && t.After(time.Now())
 }
 
 // normalizeLocalDate normalizes a wall-clock date flag value to a stored UTC
@@ -1233,7 +1375,7 @@ func validateTemplateRepo(client githubapi.Client, t templateArg, org string) (r
 	}
 	if err := client.Get(path, &resp); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return assignment.TemplateRef{}, false, "", fmt.Errorf("template `%s/%s` is not visible to your account — either make it public, or copy it into your org and reference the copy",
+			return assignment.TemplateRef{}, false, "", fmt.Errorf("template `%s/%s` is not visible to your account: either make it public, or copy it into your org and reference the copy",
 				t.Owner, t.Repo)
 		}
 		return assignment.TemplateRef{}, false, "", fmt.Errorf("GET %s: %w", path, err)
@@ -1277,7 +1419,7 @@ func templateInOrg(templateOwner, org string) bool {
 // branches probe) so this stays a pure, unit-testable function.
 func resolveTemplateBranch(t templateArg, isTemplate, hasCommits bool, defaultBranch string) (assignment.TemplateRef, error) {
 	if !isTemplate {
-		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository — toggle Settings → \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
+		return assignment.TemplateRef{}, fmt.Errorf("`%s/%s` is not a template repository: toggle Settings -> \"Template repository\" on the repo, then re-run", t.Owner, t.Repo)
 	}
 	// Caught before the empty-branch guard below (which a commitless repo's
 	// phantom default_branch would slip past). `hasCommits` is resolved by the
@@ -1286,13 +1428,13 @@ func resolveTemplateBranch(t templateArg, isTemplate, hasCommits bool, defaultBr
 	// when size is 0 (size is async and lags a fresh repo's real commits —
 	// issue #544).
 	if !hasCommits {
-		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits — add at least one commit (e.g. a README) so students can generate from it, then re-run", t.Owner, t.Repo)
+		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no commits: add at least one commit (a README is enough) so students can generate from it, then re-run", t.Owner, t.Repo)
 	}
 	branch := defaultBranch
 	if branch == "" {
 		// Not expected once size > 0, but a blank on-disk Branch would trip
 		// `student accept`, so guard it anyway.
-		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — push a commit to it, then re-run", t.Owner, t.Repo)
+		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch: push a commit to it, then re-run", t.Owner, t.Repo)
 	}
 	return assignment.TemplateRef{Owner: t.Owner, Repo: t.Repo, Branch: branch}, nil
 }

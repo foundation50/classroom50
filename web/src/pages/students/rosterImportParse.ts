@@ -14,6 +14,20 @@ import {
   type OptionalImportHeader,
 } from "@/pages/students/rosterImportHeaders"
 
+// A five-row starter roster: no github_id column (teachers rarely have it),
+// every common identity shape — username-only, email-only, and both — and a
+// section-less row so the column reads as optional.
+// Addresses use reserved example domains so none can ever be deliverable.
+export const ROSTER_TEMPLATE_CSV =
+  [
+    "username,first_name,last_name,email,section",
+    "student1,Mario,Mario,student1@example.com,A",
+    "student2,Luigi,Mario,,A",
+    ",Peach,Toadstool,student3@example.net,B",
+    "student4,Bowser,Koopa,,B",
+    "student5,Yoshi,Yoshi,student5@example.edu,",
+  ].join("\n") + "\n"
+
 // Coerce a raw string to a ClassroomRole, or undefined when absent/unknown.
 // Case-insensitive; the upload defaults undefined to "student" and lets the
 // teacher override, so an unrecognized value degrades to student rather than
@@ -86,6 +100,19 @@ export type BlockingDropReason =
 export type ParsedImportFile = {
   rows: ParsedImportRow[]
   dropped: DroppedRow[]
+  // Name-only rows (no identity cell at all) the import KEEPS as unlinked
+  // roster rows for manual reconciliation — a student without a GitHub account
+  // yet is normal in an SIS export, and silently dropping their row loses the
+  // teacher's data. Only the columnar (header) shape can produce these; the
+  // flat-list shapes have no name columns.
+  unlinked: UnlinkedImportRow[]
+}
+
+export type UnlinkedImportRow = {
+  line: number
+  first_name: string
+  last_name: string
+  section: string
 }
 
 const PAPA_OPTIONS = {
@@ -261,7 +288,7 @@ const parseAddressList = (text: string): ParsedImportFile => {
     const email = normalizeEmail(bare)
     rows.push({ line, identity: { email }, email })
   })
-  return { rows, dropped }
+  return { rows, dropped, unlinked: [] }
 }
 
 // Read a header-less file one value per line, detecting each line's shape. Used
@@ -302,7 +329,7 @@ const parseFlatList = (text: string, kind: UploadKind): ParsedImportFile => {
     rows.push({ line, identity: { username } })
   })
 
-  return { rows, dropped }
+  return { rows, dropped, unlinked: [] }
 }
 
 // Parse an uploaded roster into rows carrying an UNRESOLVED identity plus
@@ -333,7 +360,7 @@ export const parseRosterImportFile = (
   // the same +1), which is a coincidence worth not depending on — Excel's
   // "CSV UTF-8" export writes a BOM, so this is a common file.
   const text = rawText.replace(/^\uFEFF/, "")
-  if (!text.trim()) return { rows: [], dropped: [] }
+  if (!text.trim()) return { rows: [], dropped: [], unlinked: [] }
 
   // Before any CSV reading: an override is the teacher asserting what EVERY line
   // is, so a header row is data too. Papa.parse would otherwise consume the first
@@ -348,7 +375,7 @@ export const parseRosterImportFile = (
   const structural = structuralErrorOf(errors)
   // A structural error means the columns can't be trusted, so don't quietly
   // re-read the file as a bare list — the caller surfaces `malformed` instead.
-  if (structural) return { rows: [], dropped: [] }
+  if (structural) return { rows: [], dropped: [], unlinked: [] }
 
   const hasIdentityColumn = IDENTITY_IMPORT_HEADERS.some((header) =>
     fields.includes(header),
@@ -356,6 +383,7 @@ export const parseRosterImportFile = (
 
   const rows: ParsedImportRow[] = []
   const dropped: DroppedRow[] = []
+  const unlinked: UnlinkedImportRow[] = []
 
   // A file with a header row but no identity column has a SHAPE problem, not a
   // row-content problem: re-reading it one value per line would blame the header
@@ -363,7 +391,7 @@ export const parseRosterImportFile = (
   // helps ("add a github_id, username, or email column"). Yield nothing and let
   // detectImportHeaderIssue explain it.
   if (!hasIdentityColumn && looksLikeHeaderRow(fields)) {
-    return { rows: [], dropped: [] }
+    return { rows: [], dropped: [], unlinked: [] }
   }
 
   if (hasIdentityColumn) {
@@ -372,10 +400,24 @@ export const parseRosterImportFile = (
       // Every unusable cell is reported, whether or not the row survives.
       dropped.push(...rejected)
       if (!hasAnyIdentity(identity)) {
-        // A row with nothing usable AND nothing to blame is merely incomplete —
-        // no identity cell was filled in at all. Anything blameable was already
-        // pushed above, so don't double-report it.
-        if (rejected.length === 0) dropped.push({ line, reason: "incomplete" })
+        if (rejected.length > 0) return
+        // No identity cell was filled in at all. A row that still carries a
+        // NAME is kept as an unlinked roster row (a student without a GitHub
+        // account yet is normal in an SIS export); one with nothing at all is
+        // merely incomplete.
+        const fromName = splitName(raw.name ?? null)
+        const first = (raw.first_name ?? fromName.first_name).trim()
+        const last = (raw.last_name ?? fromName.last_name).trim()
+        if (first || last) {
+          unlinked.push({
+            line,
+            first_name: first,
+            last_name: last,
+            section: (raw.section ?? "").trim(),
+          })
+        } else {
+          dropped.push({ line, reason: "incomplete" })
+        }
         return
       }
       const cell = (header: OptionalImportHeader): string =>
@@ -398,7 +440,7 @@ export const parseRosterImportFile = (
         role: coerceImportRole(cell("role")),
       })
     })
-    return { rows, dropped }
+    return { rows, dropped, unlinked }
   }
 
   return parseFlatList(text, kind)

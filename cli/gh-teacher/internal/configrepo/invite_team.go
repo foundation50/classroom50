@@ -259,7 +259,7 @@ func EnsureInviteTeam(client githubapi.Client, org, classroom, email, actor stri
 	}
 	if team.Privacy != "secret" {
 		return TeamRef{ID: team.ID, Slug: team.Slug}, created,
-			fmt.Errorf("%w: %q at %s is %s — refusing to store an invited email on a team other org members could read; make it secret or delete it by hand", ErrInviteTeamNotSecret, team.Slug, org, team.Privacy)
+			fmt.Errorf("%w: %q at %s is %s: refusing to store an invited email on a team other org members could read; make it secret or delete it by hand", ErrInviteTeamNotSecret, team.Slug, org, team.Privacy)
 	}
 
 	if err := requireTeacherFreeInviteTeam(client, org, team.Slug, actor); err != nil {
@@ -277,7 +277,7 @@ func EnsureInviteTeam(client githubapi.Client, org, classroom, email, actor stri
 	}
 	if patched.Privacy != "secret" {
 		return TeamRef{ID: patched.ID, Slug: patched.Slug}, created,
-			fmt.Errorf("%w: %q at %s came back %s after the record write — delete the team by hand, it holds an invited email", ErrInviteTeamNotSecret, patched.Slug, org, patched.Privacy)
+			fmt.Errorf("%w: %q at %s came back %s after the record write; delete the team by hand, it holds an invited email", ErrInviteTeamNotSecret, patched.Slug, org, patched.Privacy)
 	}
 	return TeamRef{ID: patched.ID, Slug: patched.Slug}, created, nil
 }
@@ -344,7 +344,7 @@ func requireTeacherFreeInviteTeam(client githubapi.Client, org, slug, actor stri
 		return err
 	}
 	if len(members) > 0 {
-		return fmt.Errorf("%w: %q at %s still has %d member(s) after dropping %s — a sync would misread them as the invitee; remove them from the team and retry",
+		return fmt.Errorf("%w: %q at %s still has %d member(s) after dropping %s, and a sync would misread them as the invitee; remove them from the team and retry",
 			ErrInviteTeamNotEmpty, slug, org, len(members), actor)
 	}
 	return nil

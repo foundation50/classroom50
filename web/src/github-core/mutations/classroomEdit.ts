@@ -7,12 +7,20 @@ import {
 } from "../configRepoReads"
 import { isClassroomArchived } from "@/types/classroom"
 import { prefixCommit } from "@/util/commit"
+import { logger } from "@/lib/logger"
 import {
   createBlob,
   createTreeFromEntries,
   createCommit,
   updateRef,
 } from "./gitObjects"
+import {
+  projectTeamDescriptionFromRecord,
+  type TeamDescriptionReconcileResult,
+  type TeamDescriptionSource,
+} from "./teamDescription"
+
+const log = logger.scope("mutations:classroomEdit")
 
 export type UpdateClassroomMetadataInput = {
   org: string
@@ -47,6 +55,10 @@ export type EditClassroomInput = {
   // Archive lifecycle: false = archive, true = unarchive. Omitted leaves the
   // current value (or its absence) intact. See isClassroomArchived.
   active?: boolean
+  // Custom Pages base URL (normalized; see normalizePagesBaseUrl). Omitted
+  // leaves the persisted value intact; "" clears it (the key is deleted, not
+  // written empty, so old readers never see an empty string).
+  pages_base_url?: string
 }
 
 export type EditClassroomResult = Awaited<ReturnType<typeof editClassroom>>
@@ -57,28 +69,36 @@ export type EditClassroomResult = Awaited<ReturnType<typeof editClassroom>>
 // - writes name/term/active ONLY when provided, so a pure archive toggle
 //   preserves the persisted name/term. `active` is a meaningful boolean (false =
 //   archived), so unarchive writes `true` rather than deleting the key.
+// - pages_base_url set when non-empty; "" deletes the key (clearing the custom
+//   domain must not leave an empty string an old reader would trip on).
 export function buildClassroomUpdate(
   current: Record<string, unknown>,
   fields: {
     name?: string
     term?: string
     active?: boolean
+    pages_base_url?: string
   },
 ): Record<string, unknown> {
-  const { name, term, active } = fields
-  return {
+  const { name, term, active, pages_base_url } = fields
+  const next = {
     ...current,
     ...(name !== undefined ? { name } : {}),
     ...(term !== undefined ? { term } : {}),
     ...(active !== undefined ? { active } : {}),
+    ...(pages_base_url ? { pages_base_url } : {}),
   }
+  if (pages_base_url === "") {
+    delete next.pages_base_url
+  }
+  return next
 }
 
 export async function editClassroom(
   client: GitHubClient,
   input: EditClassroomInput,
 ) {
-  const { org, slug, term, name, active } = input
+  const { org, slug, term, name, active, pages_base_url } = input
 
   // Org policy can seed the config repo on a non-`main` branch, so both the ref
   // read and the write must target the real branch.
@@ -106,7 +126,8 @@ export async function editClassroom(
   // `active === undefined`, so a payload bundling a settings change with
   // `active: false` (a stale tab, direct API call, or CLI/agent) can't slip an
   // edit past the guard by re-asserting the archived state.
-  const editsSettings = name !== undefined || term !== undefined
+  const editsSettings =
+    name !== undefined || term !== undefined || pages_base_url !== undefined
   if (editsSettings && active !== true && isClassroomArchived(current)) {
     throw new Error(
       `Classroom "${slug}" is archived — settings are read-only. Unarchive it first to make changes.`,
@@ -117,6 +138,7 @@ export async function editClassroom(
     name,
     term,
     active,
+    pages_base_url,
   })
 
   const blob = await createBlob(client, {
@@ -147,6 +169,29 @@ export async function editClassroom(
 
   const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
+  // Students never read classroom.json — they render the classroom50/team/v1
+  // record projected onto the student team's description (GET /user/teams). So
+  // a rename/re-term/archive must re-project here, or existing students keep
+  // seeing the old name forever (mirrors the CLI edit's reconcile). Derived
+  // from the record just committed, not a re-read. Best-effort: the edit is
+  // already committed, and a failure (e.g. a non-owner teacher's 403 on the
+  // team PATCH) is healed by a later classroom-entry reconcile.
+  let teamDescription: TeamDescriptionReconcileResult = { changed: false }
+  try {
+    teamDescription = await projectTeamDescriptionFromRecord(
+      client,
+      org,
+      slug,
+      next as TeamDescriptionSource,
+    )
+  } catch (err) {
+    log.warn("edit classroom: team-description re-projection failed", {
+      org,
+      classroom: slug,
+      err,
+    })
+  }
+
   return {
     previousCommitSha: ref.object.sha,
     baseTreeSha: commit.tree.sha,
@@ -154,5 +199,6 @@ export async function editClassroom(
     newCommitSha: newCommit.sha,
     updatedRef,
     classroom: next,
+    teamDescription,
   }
 }

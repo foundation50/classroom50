@@ -13,14 +13,10 @@ export {
   createCommitForAssignment,
   updateRef,
   updateRefForRepo,
-  createTagRefForRepo,
-  findSubmitTagAtSha,
   createGitTree,
   createGitCommit,
   createBlob,
-  createBlobForRepo,
   createTreeFromEntries,
-  createTreeFromFullEntries,
   getRepoTreeRecursive,
   type GitTreeFileMode,
   type GitTreeEntry,
@@ -105,13 +101,16 @@ export {
 export {
   triggerScoreCollection,
   triggerRegrade,
+  triggerProbeToken,
   rerunFailedRun,
   CollectInputsUnsupportedError,
+  ProbeWorkflowMissingError,
 } from "./mutations/workflowDispatch"
 export {
   addRepoCollaborator,
   removeRepoCollaborator,
   setRepoFeatures,
+  setRepoVisibility,
   replaceRepoTopics,
   type RepoFeaturePatch,
 } from "./mutations/collaborators"
@@ -138,8 +137,10 @@ export {
 } from "./mutations/classroomEdit"
 export {
   reconcileStudentTeamDescription,
+  projectTeamDescriptionFromRecord,
   ClassroomSourceReadError,
   type TeamDescriptionReconcileResult,
+  type TeamDescriptionSource,
 } from "./mutations/teamDescription"
 export {
   ensureInviteTeam,
@@ -154,3 +155,4 @@ export {
   type InviteTeamState,
 } from "./mutations/inviteTeams"
 export { updateOrgProfile, type OrgProfileUpdate } from "./mutations/orgProfile"
+export { updateOrgTeamCreation } from "./mutations/orgTeamCreation"

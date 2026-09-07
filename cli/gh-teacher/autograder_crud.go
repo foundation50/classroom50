@@ -30,7 +30,7 @@ func requireClassroomExists(client githubapi.Client, org, classroom, branch stri
 		return err
 	}
 	if !exists {
-		return fmt.Errorf("classroom %q not found in %s/%s (no %s) -- run `gh teacher classroom add %s %s` first",
+		return fmt.Errorf("classroom %q not found in %s/%s (no %s): run `gh teacher classroom add %s %s` first",
 			classroom, org, configrepo.ConfigRepoName, marker, org, classroom)
 	}
 	return nil
@@ -65,20 +65,21 @@ func autograderShowCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "show <org> <classroom>",
-		Short: "Print the classroom's default autograder.py (or report none)",
+		Short: "Print the classroom's default autograder",
 		Long: "Print the current default autograder at\n" +
 			"<org>/classroom50/<classroom>/autograder.py.\n\n" +
-			"Default output writes the file body to stdout -- pipe it to a\n" +
-			"file or a pager. A one-line summary (whether it's the shipped\n" +
-			"diagnostic stub or a custom autograder, plus its size) goes to\n" +
-			"stderr unless --quiet.\n\n" +
-			"Pass --json for metadata only -- {path, exists, is_stub, size,\n" +
-			"sha} -- without the body, so a script can branch on whether a\n" +
-			"real autograder is installed.\n\n" +
-			"When the classroom has no default autograder.py, stdout stays\n" +
-			"empty and stderr says so; the command still exits 0 (an unset\n" +
-			"default is a valid mid-setup state, graded as a vacuous pass).\n" +
-			"This is a read-only command; no commit lands on the repo.",
+			"  - Default output writes the file body to stdout; pipe it to a\n" +
+			"    file or a pager.\n" +
+			"  - A one-line summary (whether it's the shipped diagnostic stub\n" +
+			"    or a custom autograder, plus its size) goes to stderr unless\n" +
+			"    --quiet.\n" +
+			"  - Pass --json for metadata only ({path, exists, is_stub, size,\n" +
+			"    sha}) without the body, so a script can branch on whether a\n" +
+			"    real autograder is installed.\n" +
+			"  - When the classroom has no default autograder, stdout stays\n" +
+			"    empty and stderr says so; the command still exits 0 (an unset\n" +
+			"    default is a valid mid-setup state, graded as a vacuous pass).\n\n" +
+			"This is a read-only command; no commit lands on the repository.",
 		Example: "  gh teacher autograder show cs50-fall-2026 cs-principles\n" +
 			"  gh teacher autograder show cs50-fall-2026 cs-principles --json\n" +
 			"  gh teacher autograder show cs50-fall-2026 cs-principles > autograder.py",
@@ -136,7 +137,7 @@ func runAutograderShow(client githubapi.Client, out, errOut io.Writer, org, clas
 
 	if !ok {
 		if !quiet {
-			_, _ = fmt.Fprintf(errOut, "%s/%s/%s: no default autograder set — use `gh teacher autograder set-default %s %s` to install one\n",
+			_, _ = fmt.Fprintf(errOut, "%s/%s/%s: no default autograder set. Install one with `gh teacher autograder set-default %s %s`\n",
 				org, configrepo.ConfigRepoName, repoPath, org, classroom)
 		}
 		return nil
@@ -181,7 +182,7 @@ func autograderListCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "list <org> <classroom>",
-		Short: "List named and per-assignment autograders under <classroom>/autograders/",
+		Short: "List named and per-assignment autograders",
 		Long: "List every entry under\n" +
 			"<org>/classroom50/<classroom>/autograders/:\n\n" +
 			"  - named shims (`<name>.yaml`) opted into with\n" +
@@ -193,10 +194,10 @@ func autograderListCmd() *cobra.Command {
 			"A one-line `<path>: N autograder(s)` summary goes to stderr\n" +
 			"unless --quiet. Pass --json for the full array of\n" +
 			"{name, kind, path} objects.\n\n" +
-			"The classroom DEFAULT autograder (<classroom>/autograder.py)\n" +
-			"is not listed here -- inspect it with `gh teacher autograder\n" +
-			"show`. Named shims and per-assignment overrides are authored\n" +
-			"via ordinary git operations against the classroom50 repository; this\n" +
+			"The classroom default autograder (<classroom>/autograder.py) is\n" +
+			"not listed here; inspect it with `gh teacher autograder show`.\n" +
+			"Named shims and per-assignment overrides are authored via\n" +
+			"ordinary git operations against the classroom50 repository; this\n" +
 			"command is read-only and lists what is present.",
 		Example: "  gh teacher autograder list cs50-fall-2026 cs-principles\n" +
 			"  gh teacher autograder list cs50-fall-2026 cs-principles --json",
@@ -290,7 +291,7 @@ func runAutograderList(client githubapi.Client, out, errOut io.Writer, org, clas
 func summarizeAutograderList(org, classroom string, entries []autograderListEntry) string {
 	path := fmt.Sprintf("%s/%s/%s/autograders", org, configrepo.ConfigRepoName, classroom)
 	if len(entries) == 0 {
-		return fmt.Sprintf("%s: no named or per-assignment autograders — the classroom default (autograder.py) covers every assignment", path)
+		return fmt.Sprintf("%s: no named or per-assignment autograders; the classroom default (autograder.py) covers every assignment", path)
 	}
 	var named, perAssignment int
 	for _, e := range entries {
@@ -309,17 +310,17 @@ func autograderRemoveCmd() *cobra.Command {
 	var skipConfirm bool
 	cmd := &cobra.Command{
 		Use:   "remove <org> <classroom>",
-		Short: "Delete the classroom's default autograder.py",
+		Short: "Delete the classroom's default autograder",
 		Long: "Delete <classroom>/autograder.py from <org>/classroom50 in a\n" +
 			"single commit. This is distinct from `set-default` with no\n" +
-			"--from, which OVERWRITES the file with the diagnostic stub --\n" +
+			"--from, which overwrites the file with the diagnostic stub;\n" +
 			"remove deletes it outright.\n\n" +
-			"Grading impact: once removed, any assignment in the classroom\n" +
-			"that has no per-assignment override\n" +
-			"(<classroom>/autograders/<slug>/autograder.py) and no\n" +
-			"declarative tests falls back to a vacuous pass (0/0) on the\n" +
-			"next submission, until you set a new default. Per-assignment\n" +
-			"overrides and named shims are NOT touched.\n\n" +
+			"Grading impact:\n" +
+			"  - Once removed, any assignment with no per-assignment override\n" +
+			"    (<classroom>/autograders/<slug>/autograder.py) and no\n" +
+			"    declarative tests falls back to a vacuous pass (0/0) on the\n" +
+			"    next submission, until you set a new default.\n" +
+			"  - Per-assignment overrides and named shims are not touched.\n\n" +
 			"You'll be asked to confirm; pass --yes to skip the prompt\n" +
 			"(scripted runs only). Idempotent: removing a classroom that\n" +
 			"has no default autograder is a no-op.",
@@ -373,7 +374,7 @@ func removeClassroomDefaultAutograder(client githubapi.Client, in io.Reader, out
 			return err
 		}
 		if !proceed {
-			return errors.New("aborted — default autograder not removed")
+			return errors.New("aborted: default autograder not removed")
 		}
 	}
 

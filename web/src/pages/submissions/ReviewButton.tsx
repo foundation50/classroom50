@@ -7,6 +7,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
 import { ActionListRow } from "@/pages/submissions/actionLayout"
+import { errorText } from "@/types/localizedMessage"
 import type { AssignmentMode } from "@/types/classroom"
 
 // The Feedback-PR action: links to the open Feedback PR (opened at accept
@@ -57,7 +58,7 @@ export const FeedbackPrAction = ({
       // `error`; show it rather than the misleading "no PR yet" message.
       const { data: pr, error } = await refetch()
       if (error) {
-        setErrorMsg(error instanceof Error ? error.message : String(error))
+        setErrorMsg(errorText(t, error))
         setModalOpen(true)
       } else if (pr) {
         window.open(pr.html_url, "_blank", "noopener,noreferrer")
@@ -71,10 +72,11 @@ export const FeedbackPrAction = ({
   }
 
   // Map the domain's failure to friendly copy. Structural verdicts
-  // (`no-baseline` / `repo-not-found` — no Feedback PR is possible for this
-  // repo) and the blocked `base-mismatch` (only an org admin can fix it) are
-  // terminal messages shown in the modal, not retryable toasts. Everything else
-  // is a transient failure the teacher can retry.
+  // (`no-baseline` — the accept never wrote the marker, so the student must
+  // re-run setup — / `repo-not-found`) and the blocked `base-mismatch` (only
+  // an org admin can fix it) are terminal messages shown in the modal, not
+  // retryable toasts. Everything else is a transient failure the teacher can
+  // retry.
   const repairReasonMessage = (
     result: Extract<
       ReturnType<typeof useRepairFeedbackPr>["data"],
@@ -98,6 +100,8 @@ export const FeedbackPrAction = ({
       {
         onSuccess: async (result) => {
           if (result.ok) {
+            // Kept as a toast: the repaired PR opens in another tab and this
+            // dialog closes, so nothing on the page evidences the outcome.
             notify({
               tone: "success",
               durationMs: 5000,
@@ -114,7 +118,7 @@ export const FeedbackPrAction = ({
           setErrorMsg(repairReasonMessage(result))
         },
         onError: (err) => {
-          setErrorMsg(err instanceof Error ? err.message : String(err))
+          setErrorMsg(errorText(t, err))
         },
       },
     )

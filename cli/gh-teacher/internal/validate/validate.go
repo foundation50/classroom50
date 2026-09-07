@@ -98,7 +98,7 @@ func ComposedRepoNameOverflows(classroom, slug string) (worstCase int, overflows
 // ShortNamePattern's 100 stay fully operable.
 func ClassroomShortNameBudget(shortName string) error {
 	if len(shortName) > contract.ClassroomShortNameMaxLen {
-		return fmt.Errorf("classroom short-name %q is %d characters; new classrooms are capped at %d because student repos are named `<short-name>-<assignment>-<username>` and GitHub caps repo names at %d characters — a shorter short-name keeps room for assignment slugs and any username",
+		return fmt.Errorf("classroom short-name %q is %d characters; new classrooms are capped at %d because student repos are named `<short-name>-<assignment>-<username>` and GitHub caps repo names at %d characters. A shorter short-name keeps room for assignment slugs and any username",
 			shortName, len(shortName), contract.ClassroomShortNameMaxLen, contract.GitHubRepoNameMaxLen)
 	}
 	return nil
@@ -117,10 +117,10 @@ func ComposedRepoNameBudget(classroom, slug string) error {
 	}
 	budget := contract.AssignmentSlugBudget(classroom)
 	if budget < 2 {
-		return fmt.Errorf("student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a %d-char username, over GitHub's %d-char repo-name limit — classroom %q leaves no room for any slug, so create a classroom with a shorter short-name (at most %d characters) and add the assignment there",
+		return fmt.Errorf("student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a %d-char username, over GitHub's %d-char repo-name limit. Classroom %q leaves no room for any slug, so create a classroom with a shorter short-name (at most %d characters) and add the assignment there",
 			classroom, slug, worst, contract.GitHubLoginMaxLen, contract.GitHubRepoNameMaxLen, classroom, contract.ClassroomShortNameMaxLen)
 	}
-	return fmt.Errorf("student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a %d-char username, over GitHub's %d-char repo-name limit — use a slug of at most %d characters, or create a classroom with a shorter short-name",
+	return fmt.Errorf("student repos are named `<classroom>-<assignment>-<username>`; %q + %q reaches %d characters with a %d-char username, over GitHub's %d-char repo-name limit. Use a slug of at most %d characters, or create a classroom with a shorter short-name",
 		classroom, slug, worst, contract.GitHubLoginMaxLen, contract.GitHubRepoNameMaxLen, budget)
 }
 

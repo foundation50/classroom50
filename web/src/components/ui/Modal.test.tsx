@@ -4,6 +4,7 @@ import { render, screen, cleanup } from "@testing-library/react"
 import { createRef } from "react"
 
 import { Modal, ModalFooterPortal } from "./Modal"
+import { logger } from "@/lib/logger"
 
 // happy-dom doesn't implement <dialog> showModal/close; stub them so the
 // open-sync effect can run without throwing.
@@ -262,6 +263,24 @@ describe("Modal", () => {
     expect(actions).toHaveLength(1)
     expect(actions[0].textContent).toContain("Close")
     expect(actions[0].textContent).toContain("Apply")
+    // Portal content appends AFTER the footer prop: the rightmost (primary)
+    // slot belongs to the portal when a host combines both.
+    expect(actions[0].textContent).toBe("CloseApply")
+  })
+
+  it("renders nothing and warns when used outside a Modal", () => {
+    const warn = vi.spyOn(logger, "warn").mockImplementation(() => {})
+    const { container } = render(
+      <ModalFooterPortal>
+        <button type="button">Orphan</button>
+      </ModalFooterPortal>,
+    )
+    expect(container.childNodes).toHaveLength(0)
+    expect(screen.queryByText("Orphan")).toBeNull()
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining("outside a Modal"),
+    )
+    warn.mockRestore()
   })
 
   it("keeps the empty footer row hidden when neither prop nor portal fills it", () => {

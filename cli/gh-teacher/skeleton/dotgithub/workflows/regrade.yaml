@@ -2,14 +2,14 @@ name: Regrade
 
 # Teacher-triggered regrade fan-out. For each targeted student repo it
 # RE-RUNS the repo's latest autograde workflow run (re-fetching the current
-# autograder from Pages), so an existing commit is graded again — e.g., after
+# autograder from Pages), so an existing commit is graded again, e.g., after
 # the teacher fixed a buggy test or changed the autograder. Re-running the
 # same run grades the SAME commit and does NOT create a new submission, so
 # the student's submission time and `late` flag don't change (the runner
-# stamps `datetime` from the commit's committer date — see runner.py).
+# stamps `datetime` from the commit's committer date; see runner.py).
 #
 # WHICH COMMIT GETS GRADED: a re-run replays the run at ITS ORIGINAL
-# submit/* commit — NOT the current `main` HEAD. So if a student pushed a
+# submit/* commit, NOT the current `main` HEAD. So if a student pushed a
 # new commit to main after the run being re-run, regrade still grades the
 # earlier (already-submitted) commit, by design: regrade refreshes the score
 # for an existing submission, it does not grade newer un-submitted work. Only
@@ -21,17 +21,17 @@ name: Regrade
 #
 # Re-run/tag only by design: grading then runs ASYNCHRONOUSLY inside each
 # student repo (it can take minutes), so this workflow does NOT collect
-# scores itself — collecting immediately would race the still-running grade
+# scores itself: collecting immediately would race the still-running grade
 # jobs. The refreshed releases are ingested by `collect-scores.yaml`
 # ("Collect now" from the web app, or a manual dispatch). EVENTUAL CONSISTENCY: until
-# that next collect runs, the gradebook still shows the PRE-regrade scores —
+# that next collect runs, the gradebook still shows the PRE-regrade scores;
 # a "Collect now" fired while grading is still in flight will read the old
 # result.json and only pick up the new score on a later collect. This is
 # expected; the regrade summary log says so too.
 #
 # LATENESS IS ADVISORY: `datetime` (and the derived `late` flag) come from the
 # graded commit's committer date, which a student can set freely. The schema
-# documents `late` as advisory and nothing enforces it — keep it that way; do
+# documents `late` as advisory and nothing enforces it. Keep it that way; do
 # NOT wire `late` into anything that gates grades or eligibility.
 
 on:
@@ -51,7 +51,7 @@ permissions:
   contents: read        # reads roster/manifest from this repo's checkout
   # The cross-repo work (re-running a student repo's run, or pushing a
   # submit/* tag) is authenticated by CLASSROOM50_SERVICE_TOKEN on the student
-  # repos, NOT this job's GITHUB_TOKEN — so no extra job permissions are needed.
+  # repos, NOT this job's GITHUB_TOKEN, so no extra job permissions are needed.
 
 concurrency:
   # One regrade in flight per (classroom, assignment) so two dispatches don't
@@ -64,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     # A whole-assignment regrade is a sequential fan-out: up to ~5 GitHub API
     # calls per student repo (plus retries). A large classroom can run long, so
-    # raise the ceiling above the 6h default's worst case is unnecessary — but
+    # raise the ceiling above the 6h default's worst case is unnecessary, but
     # set an explicit, generous bound so a stuck run fails on a predictable
     # boundary instead of the implicit default. The script logs incremental
     # progress, and re-dispatching is safe (rerun is idempotent and the tag

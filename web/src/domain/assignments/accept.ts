@@ -55,6 +55,12 @@ import {
 import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { createAssignmentRepo } from "./repoCreation"
 import type { LocalizedMessage } from "@/types/localizedMessage"
+import {
+  findMyGroupTeam,
+  attachRepoToGroupTeam,
+} from "@/domain/teams/groupTeams"
+import type { GroupTeamRef } from "@/domain/teams/groupTeams"
+import { groupRepoName } from "@/util/studentRepo"
 
 // Land .classroom50.yaml + the autograde workflow as one Tree commit, riding out
 // GitHub's git-data lag after POST .../generate (reads 404, the first write 409s
@@ -62,6 +68,23 @@ import type { LocalizedMessage } from "@/types/localizedMessage"
 // withFreshRepoRetry, re-reading the ref + parent commit each attempt and
 // requiring non-empty SHAs before writing. Safe because the student's
 // just-accepted repo has no concurrent writers.
+//
+// The budget is deliberately generous (~50s, polling every 8s once warmed up):
+// the accept flow can't resume itself, so giving up here strands the student
+// on a repo without its setup files (issue #502). The CLI waits a comparable
+// span (WaitForStableBranch + CommitWithFreshRepoRetry).
+const ACCEPT_SETUP_RETRY = {
+  attempts: 10,
+  baseDelayMs: 500,
+  backoffFactor: 2,
+  maxDelayMs: 8_000,
+} as const
+
+// Retries before the step message switches from "Setting up" to "still
+// initializing": ~3.5s in, long enough that silence would start to read as a
+// hang.
+const SETUP_WAITING_AFTER_RETRIES = 2
+
 async function commitAcceptFilesWithFreshRepoRetry(params: {
   client: GitHubClient
   owner: string
@@ -72,15 +95,18 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   // An init_shim accept creates the repo with auto_init (GitHub needs an
   // initial commit to write against), which seeds a README the assignment
   // contract says must not exist — remove it in the same accept commit so the
-  // repo's initial shape lands atomically. The base tree is inspected first:
-  // the Trees API rejects deleting a path absent from base_tree (possible on
-  // a heal re-run), and an absent README just means nothing to remove.
+  // repo's initial shape lands atomically. Only while the branch is still at
+  // that seed (a root commit): on a heal re-run after the student has pushed,
+  // README.md is theirs to keep (issue #502). The base tree is inspected first
+  // because the Trees API rejects deleting a path absent from base_tree.
   removeSeededReadme?: boolean
   // Rebuild the autograde shim for the branch that actually materialized. The
   // default shim's push-trigger branch must match the generated repo's real
   // default branch, which is only known after GitHub's async template copy
   // settles (see below). Omitted for branch-agnostic (teacher-authored) shims.
   rerenderShimForBranch?: (branch: string) => string
+  // Called once the wait has gone on long enough to be worth explaining.
+  onStillInitializing?: () => void
 }): Promise<{ commitSha: string; branch: string }> {
   const {
     client,
@@ -91,80 +117,95 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
     autogradeYaml,
     removeSeededReadme = false,
     rerenderShimForBranch,
+    onStillInitializing,
   } = params
 
-  return await withFreshRepoRetry(async () => {
-    // A freshly template-generated repo's real branch (copied from the template,
-    // e.g., `master`) only materializes after GitHub finishes the async copy —
-    // until then `default_branch` transiently reports the org default (`main`)
-    // and no ref exists. Re-resolve the live default branch each attempt so we
-    // commit to the branch that actually appears, not a pre-guessed `main` that
-    // may never exist. Fall back to the caller's branch while it's still empty.
-    const live = await getRepo(client, owner, repo)
-    const targetBranch = live?.default_branch || branch
-    const ref = await getBranchRefRepo(client, owner, repo, targetBranch)
-    const parentSha = ref.object.sha
-    const currentCommit = await getCommitByRepo(client, owner, repo, parentSha)
-    const baseTreeSha = currentCommit.tree?.sha
-
-    if (!parentSha || !baseTreeSha) {
-      throw freshRepoNotReadyError(owner, repo)
-    }
-
-    // Re-render the default shim's push trigger for the branch that actually
-    // materialized (targetBranch), so autograde fires on the repo's real
-    // default branch rather than a transiently-reported `main`.
-    const shim = rerenderShimForBranch
-      ? rerenderShimForBranch(targetBranch)
-      : autogradeYaml
-
-    let deletePaths: string[] = []
-    if (removeSeededReadme) {
-      const baseTree = await getRepoTreeRecursive({
+  return await withFreshRepoRetry(
+    async () => {
+      // A freshly template-generated repo's real branch (copied from the template,
+      // e.g., `master`) only materializes after GitHub finishes the async copy —
+      // until then `default_branch` transiently reports the org default (`main`)
+      // and no ref exists. Re-resolve the live default branch each attempt so we
+      // commit to the branch that actually appears, not a pre-guessed `main` that
+      // may never exist. Fall back to the caller's branch while it's still empty.
+      const live = await getRepo(client, owner, repo)
+      const targetBranch = live?.default_branch || branch
+      const ref = await getBranchRefRepo(client, owner, repo, targetBranch)
+      const parentSha = ref.object.sha
+      const currentCommit = await getCommitByRepo(
         client,
         owner,
         repo,
-        treeSha: baseTreeSha,
+        parentSha,
+      )
+      const baseTreeSha = currentCommit.tree?.sha
+
+      if (!parentSha || !baseTreeSha) {
+        throw freshRepoNotReadyError(owner, repo)
+      }
+
+      // Re-render the default shim's push trigger for the branch that actually
+      // materialized (targetBranch), so autograde fires on the repo's real
+      // default branch rather than a transiently-reported `main`.
+      const shim = rerenderShimForBranch
+        ? rerenderShimForBranch(targetBranch)
+        : autogradeYaml
+
+      let deletePaths: string[] = []
+      const atSeedCommit = (currentCommit.parents?.length ?? 0) === 0
+      if (removeSeededReadme && atSeedCommit) {
+        const baseTree = await getRepoTreeRecursive({
+          client,
+          owner,
+          repo,
+          treeSha: baseTreeSha,
+        })
+        deletePaths = baseTree.tree.some((e) => e.path === "README.md")
+          ? ["README.md"]
+          : []
+      }
+
+      const tree = await createTreeForAssignment({
+        client,
+        owner,
+        repo,
+        baseTreeSha,
+        metadataYaml,
+        autogradeYaml: shim,
+        deletePaths,
       })
-      deletePaths = baseTree.tree.some((e) => e.path === "README.md")
-        ? ["README.md"]
-        : []
-    }
 
-    const tree = await createTreeForAssignment({
-      client,
-      owner,
-      repo,
-      baseTreeSha,
-      metadataYaml,
-      autogradeYaml: shim,
-      deletePaths,
-    })
+      const commit = await createCommitForAssignment({
+        client,
+        owner,
+        repo,
+        // The accept commit that lands `.classroom50.yaml` — the marker the
+        // runner uses to resolve the Feedback-PR baseline (see the constant).
+        message: ACCEPT_COMMIT_SUBJECT,
+        treeSha: tree.sha,
+        parentSha,
+      })
 
-    const commit = await createCommitForAssignment({
-      client,
-      owner,
-      repo,
-      // The accept commit that lands `.classroom50.yaml` — the marker the
-      // runner uses to resolve the Feedback-PR baseline (see the constant).
-      message: ACCEPT_COMMIT_SUBJECT,
-      treeSha: tree.sha,
-      parentSha,
-    })
+      await updateRefForRepo({
+        client,
+        owner,
+        repo,
+        branch: targetBranch,
+        commitSha: commit.sha,
+      })
 
-    await updateRefForRepo({
-      client,
-      owner,
-      repo,
-      branch: targetBranch,
-      commitSha: commit.sha,
-    })
-
-    // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
-    // branch it actually landed on — the caller's pre-guessed branch may be a
-    // transient `main` on a `master` template.
-    return { commitSha: commit.sha, branch: targetBranch }
-  })
+      // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
+      // branch it actually landed on — the caller's pre-guessed branch may be a
+      // transient `main` on a `master` template.
+      return { commitSha: commit.sha, branch: targetBranch }
+    },
+    {
+      ...ACCEPT_SETUP_RETRY,
+      onRetry: (attempt) => {
+        if (attempt === SETUP_WAITING_AFTER_RETRIES) onStillInitializing?.()
+      },
+    },
+  )
 }
 
 type AcceptAssignmentResult = {
@@ -190,6 +231,9 @@ function grantFounderAccessStep(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
+  // Team mode: the group team to attach to the repo with push — the
+  // authoritative repo<->team link, asserted before the founder grant.
+  groupTeamSlug?: string
   // Resolved repo-feature PATCH to apply before the founder grant. `full` is
   // every resolved key; `explicit` is the teacher-forced subset used as the
   // fail-open retry body. Empty `full` ({}) skips the request (templated +
@@ -207,6 +251,7 @@ function grantFounderAccessStep(params: {
     username,
     mode,
     studentPermission,
+    groupTeamSlug,
     repoFeatures,
     repoAboutTopics,
     onStepUpdate,
@@ -231,6 +276,12 @@ function grantFounderAccessStep(params: {
         repoFeatures.explicit,
       )
       await applyRepoAboutTopics(client, org, repo, repoAboutTopics)
+      // The team attachment is the load-bearing access grant for team mode
+      // (each member's push flows through it), so it lands before the
+      // (narrower) per-student founder grant. Idempotent PUT.
+      if (groupTeamSlug) {
+        await attachRepoToGroupTeam(client, org, groupTeamSlug, repo)
+      }
       await addFounderCollaborator({
         client,
         owner: org,
@@ -252,6 +303,9 @@ async function provisionAcceptedRepo(params: {
   username: string
   mode: AssignmentMode
   studentPermission?: RepoPermission
+  // Team mode: attach this group team to the repo with push (see
+  // grantFounderAccessStep).
+  groupTeamSlug?: string
   // Resolved repo-feature PATCH, forwarded to the founder-access step.
   repoFeatures: RepoFeatureApply
   // Template About/Topics to copy, forwarded to the founder-access step.
@@ -276,6 +330,7 @@ async function provisionAcceptedRepo(params: {
     username,
     mode,
     studentPermission,
+    groupTeamSlug,
     repoFeatures,
     repoAboutTopics,
     branch,
@@ -311,6 +366,12 @@ async function provisionAcceptedRepo(params: {
         autogradeYaml,
         removeSeededReadme,
         rerenderShimForBranch,
+        onStillInitializing: () =>
+          onStepUpdate?.({
+            id: "setup",
+            status: "running",
+            message: { key: "accept.steps.setupWaiting" },
+          }),
       }),
   )
 
@@ -348,6 +409,7 @@ async function provisionAcceptedRepo(params: {
     username,
     mode,
     studentPermission,
+    groupTeamSlug,
     repoFeatures,
     repoAboutTopics,
     onStepUpdate,
@@ -520,10 +582,20 @@ export async function acceptAssignment(params: {
   // Undefined for an unprotected classroom (plain path). Not read from
   // classroom.json — students can't access the private config repo.
   secret?: string
+  // Custom Pages base URL for an org off the github.io default, from the
+  // team-description bootstrap record. Undefined = the default host.
+  pagesBaseUrl?: string
   onStepUpdate?: OnAcceptStepUpdate
 }): Promise<AcceptAssignmentResult> {
-  const { client, org, classroom, assignmentSlug, secret, onStepUpdate } =
-    params
+  const {
+    client,
+    org,
+    classroom,
+    assignmentSlug,
+    secret,
+    pagesBaseUrl,
+    onStepUpdate,
+  } = params
 
   log.info("accept assignment: started", { org, classroom, assignmentSlug })
 
@@ -582,7 +654,14 @@ export async function acceptAssignment(params: {
       },
       onStepUpdate,
     },
-    () => fetchAssignmentFromPages(org, classroom, assignmentSlug, secret),
+    () =>
+      fetchAssignmentFromPages(
+        org,
+        classroom,
+        assignmentSlug,
+        secret,
+        pagesBaseUrl,
+      ),
   )
 
   const sourceOwner = assignment.template?.owner
@@ -766,6 +845,7 @@ export async function acceptAssignment(params: {
             classroom,
             autograder: assignment.autograder,
             secret,
+            pagesBaseUrl,
             // Preliminary branch; the default shim is re-rendered post-create
             // with the assignment repo's actual default branch (below).
             branch: sourceBranch || "main",
@@ -781,11 +861,63 @@ export async function acceptAssignment(params: {
     })
   }
 
-  const studentRepoNameValue = studentRepoName(
-    classroom,
-    assignment.slug,
-    username,
-  )
+  // Team mode: resolve MY group team BEFORE any repo creation — the repo is
+  // named after the team's counter, and a student on no team must never mint a
+  // username-named repo. The page pre-resolves this too (blocked / create-a-
+  // group states); this guard is the authoritative one.
+  let groupTeam: GroupTeamRef | null = null
+  if (assignment.mode === "team") {
+    groupTeam = await withAcceptStep(
+      {
+        id: "team",
+        label: { key: "accept.steps.team" },
+        actions: { key: "accept.stepActions.team" },
+        doneMessage: { key: "accept.stepDone.team" },
+        onStepUpdate,
+      },
+      async () => {
+        const team = await findMyGroupTeam(
+          client,
+          org,
+          classroom,
+          assignment.slug,
+        )
+        if (!team) {
+          throw new AcceptStepError(
+            (assignment.team_formation ?? "teacher") === "teacher"
+              ? { key: "accept.errors.teamTeacherAssigns" }
+              : { key: "accept.errors.teamRequired" },
+          )
+        }
+        // Teacher formation never makes a student a maintainer (the teacher
+        // creates the team and drops out; students are added as members), so
+        // a maintainer membership marks a self-created team: the group-team
+        // name is derivable from public data, and accepting through it would
+        // bypass "your teacher assigns the groups" entirely. Fail closed on
+        // the role read too — an unverifiable membership must not become the
+        // bypass.
+        if ((assignment.team_formation ?? "teacher") === "teacher") {
+          const membership = await client.request<{ role?: string }>(
+            `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+              team.slug,
+            )}/memberships/${encodeURIComponent(username)}`,
+          )
+          if (membership.role === "maintainer") {
+            throw new AcceptStepError({
+              key: "accept.errors.teamSelfCreated",
+              params: { n: team.n },
+            })
+          }
+        }
+        return team
+      },
+    )
+  }
+
+  const studentRepoNameValue =
+    assignment.mode === "team" && groupTeam
+      ? groupRepoName(classroom, assignment.slug, groupTeam.n)
+      : studentRepoName(classroom, assignment.slug, username)
 
   const metadataYaml = createClassroom50Yaml({
     classroom,
@@ -824,8 +956,24 @@ export async function acceptAssignment(params: {
         fallbackBranch: sourceBranch || "main",
         bare: isEmptyRepo,
         includeAllBranches: assignment.include_all_branches === true,
+        publicVisibility: assignment.repo_visibility === "public",
       }),
   )
+
+  // The org refused the public create and the repo was created private
+  // instead (fail-private, never fail the accept on visibility alone).
+  // Overwrite the step's done message so the student learns the actual
+  // visibility that landed and who can change it.
+  if (created.visibilityFellBackToPrivate) {
+    onStepUpdate?.({
+      id: "repo",
+      status: "complete",
+      message: {
+        key: "accept.stepDone.repoVisibilityFellBack",
+        params: { org, repo: studentRepoNameValue },
+      },
+    })
+  }
 
   // Bare (empty_repo) path: no control files exist or are ever committed, so
   // the marker probe below is meaningless — an existing repo IS an accepted
@@ -863,6 +1011,14 @@ export async function acceptAssignment(params: {
       // create), so we deliberately do NOT re-PATCH them here — re-asserting
       // would silently revert a student's own later toggle.
       try {
+        if (groupTeam) {
+          await attachRepoToGroupTeam(
+            client,
+            org,
+            groupTeam.slug,
+            created.repo.name,
+          )
+        }
         await addFounderCollaborator({
           client,
           owner: org,
@@ -901,6 +1057,7 @@ export async function acceptAssignment(params: {
         username,
         mode: assignment.mode,
         studentPermission: assignment.student_permission,
+        groupTeamSlug: groupTeam?.slug,
         repoFeatures,
         repoAboutTopics,
         onStepUpdate,
@@ -1013,8 +1170,18 @@ export async function acceptAssignment(params: {
       })
       // Reconcile the founder role LAST (best-effort): a transient failure must
       // not fail a re-run that previously succeeded, and running it after setup
-      // + feedback keeps the access step last on every path.
+      // + feedback keeps the access step last on every path. Team mode also
+      // re-asserts the team attachment (idempotent PUT), healing a prior accept
+      // that died between create and attach.
       try {
+        if (groupTeam) {
+          await attachRepoToGroupTeam(
+            client,
+            org,
+            groupTeam.slug,
+            created.repo.name,
+          )
+        }
         await addFounderCollaborator({
           client,
           owner: org,
@@ -1064,6 +1231,7 @@ export async function acceptAssignment(params: {
       username,
       mode: assignment.mode,
       studentPermission: assignment.student_permission,
+      groupTeamSlug: groupTeam?.slug,
       // Accept-time only: features are applied on the FRESH create below, never
       // re-asserted when repairing an already-existing repo (this branch runs on
       // a re-accept). Re-PATCHing here would silently revert a student's own
@@ -1114,6 +1282,7 @@ export async function acceptAssignment(params: {
     username,
     mode: assignment.mode,
     studentPermission: assignment.student_permission,
+    groupTeamSlug: groupTeam?.slug,
     repoFeatures,
     repoAboutTopics,
     branch: targetBranch,

@@ -19,8 +19,8 @@ describe("modal opened from a table header", () => {
               <ConfirmModal
                 open
                 title="Delete 65 assignments?"
-                description="This removes the selected assignments from the classroom's assignments.json in a single commit. Student repositories and their submissions are NOT deleted."
-                dangerous
+                description="This removes the selected assignments from the classroom's assignments.json in a single commit. Student repositories and their submissions are not deleted."
+                tone="error"
                 needsConfirm
                 confirmText="delete"
                 onConfirm={async () => {}}

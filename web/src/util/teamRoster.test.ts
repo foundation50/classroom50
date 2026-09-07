@@ -2,10 +2,12 @@ import { describe, expect, it } from "vitest"
 import {
   buildTeamRoster,
   countByState,
+  csvRowsForHiddenTeams,
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
   rowToStudent,
   sortTeamRosterRows,
+  sortTeamRosterRowsBy,
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
   type TeamRosterRow,
@@ -209,14 +211,6 @@ describe("buildTeamRoster", () => {
     expect(rows.filter((r) => r.username === "ada")).toHaveLength(1)
   })
 
-  it("ignores legacy username-less CSV rows (no row emitted)", () => {
-    const rows = buildTeamRoster({
-      members: [],
-      students: [csvRow({ email: "legacy@uni.edu", first_name: "Legacy" })],
-    })
-    expect(rows).toHaveLength(0)
-  })
-
   it("enriches an enrolled row from its matching CSV row", () => {
     // roster.csv only enriches — the row exists because ada is on the team; the
     // CSV lends her name/section.
@@ -262,6 +256,7 @@ describe("buildTeamRoster", () => {
       pending: 1,
       needs_attention_in_org: 0,
       needs_attention_not_in_org: 0,
+      unlinked: 0,
     })
   })
 
@@ -386,6 +381,7 @@ describe("buildTeamRoster — needs-attention (CSV row on no team)", () => {
       pending: 1,
       needs_attention_in_org: 1,
       needs_attention_not_in_org: 0,
+      unlinked: 0,
     })
   })
 
@@ -791,5 +787,344 @@ describe("sortTeamRosterRows — first- vs last-name ordering", () => {
     const copy = [...input]
     sortTeamRosterRows(input)
     expect(input).toEqual(copy)
+  })
+})
+
+describe("sortTeamRosterRowsBy — table-header column sorts", () => {
+  const enrolledRow = (over: Partial<TeamRosterRow>): TeamRosterRow => ({
+    key: over.username ?? "u",
+    state: "enrolled",
+    roles: ["student"],
+    username: "u",
+    github_id: "",
+    first_name: "",
+    last_name: "",
+    section: "",
+    email: "",
+    avatar_url: "",
+    ...over,
+  })
+
+  it("member: name asc/desc ignores the enrollment-state buckets", () => {
+    const rows = [
+      {
+        ...enrolledRow({ username: "z", first_name: "Zed" }),
+        state: "pending" as const,
+      },
+      enrolledRow({ username: "a", first_name: "Amy" }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "member", "asc").map((r) => r.username),
+    ).toEqual(["a", "z"])
+    expect(
+      sortTeamRosterRowsBy(rows, "member", "desc").map((r) => r.username),
+    ).toEqual(["z", "a"])
+  })
+
+  it("role: asc reads teacher-first by highest rank, ties by name", () => {
+    const rows = [
+      enrolledRow({ username: "s2", first_name: "Zoe" }),
+      enrolledRow({ username: "prof", roles: ["student", "teacher"] }),
+      enrolledRow({ username: "s1", first_name: "Amy" }),
+      enrolledRow({ username: "helper", roles: ["ta"] }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "role", "asc").map((r) => r.username),
+    ).toEqual(["prof", "helper", "s1", "s2"])
+    expect(
+      sortTeamRosterRowsBy(rows, "role", "desc").map((r) => r.username),
+    ).toEqual(["s1", "s2", "helper", "prof"])
+  })
+
+  it("username: handle compare with blank handles (pending invites) last", () => {
+    const rows = [
+      enrolledRow({ username: "zed", first_name: "Zed" }),
+      {
+        ...enrolledRow({ username: "", first_name: "Pending" }),
+        state: "pending" as const,
+      },
+      enrolledRow({ username: "amy", first_name: "Amy" }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "username", "asc").map((r) => r.first_name),
+    ).toEqual(["Amy", "Zed", "Pending"])
+    expect(
+      sortTeamRosterRowsBy(rows, "username", "desc").map((r) => r.first_name),
+    ).toEqual(["Zed", "Amy", "Pending"])
+  })
+
+  it("section: numeric collation with blank sections pinned last both ways", () => {
+    const rows = [
+      enrolledRow({ username: "none", first_name: "Amy" }),
+      enrolledRow({ username: "lab10", section: "Lab 10" }),
+      enrolledRow({ username: "lab2", section: "Lab 2" }),
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "section", "asc").map((r) => r.username),
+    ).toEqual(["lab2", "lab10", "none"])
+    expect(
+      sortTeamRosterRowsBy(rows, "section", "desc").map((r) => r.username),
+    ).toEqual(["lab10", "lab2", "none"])
+  })
+
+  it("status: enrollment-state precedence, flipped by direction", () => {
+    const rows = [
+      {
+        ...enrolledRow({ username: "drift" }),
+        state: "needs_attention_in_org" as const,
+      },
+      enrolledRow({ username: "ok" }),
+      { ...enrolledRow({ username: "inv" }), state: "pending" as const },
+    ]
+    expect(
+      sortTeamRosterRowsBy(rows, "status", "asc").map((r) => r.username),
+    ).toEqual(["ok", "inv", "drift"])
+    expect(
+      sortTeamRosterRowsBy(rows, "status", "desc").map((r) => r.username),
+    ).toEqual(["drift", "inv", "ok"])
+  })
+
+  it("does not mutate the input array", () => {
+    const input = [
+      enrolledRow({ username: "b", first_name: "Bob" }),
+      enrolledRow({ username: "a", first_name: "Amy" }),
+    ]
+    const copy = [...input]
+    sortTeamRosterRowsBy(input, "member", "desc")
+    expect(input).toEqual(copy)
+  })
+})
+
+describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () => {
+  it("emits a name-only row as unlinked", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [
+        csvRow({ first_name: "Grace", last_name: "Hopper", section: "s1" }),
+        csvRow({ first_name: "Alan", last_name: "T" }),
+      ],
+    })
+    expect(rows.map((r) => [r.state, r.first_name])).toEqual([
+      ["unlinked", "Alan"],
+      ["unlinked", "Grace"],
+    ])
+    expect(rows[0].username).toBe("")
+    expect(rows[0].github_id).toBe("")
+  })
+
+  it("emits an email row nothing backs as unlinked", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "kept@x.edu", first_name: "Ada" })],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: "unlinked",
+      email: "kept@x.edu",
+      first_name: "Ada",
+    })
+  })
+
+  it("does not double-render an email row a pending invite already borrows", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [invite({ id: 9, email: "kept@x.edu" })],
+      students: [csvRow({ email: "kept@x.edu", first_name: "Ada" })],
+    })
+    // One row: the pending invite, carrying the kept row's metadata.
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: "pending", first_name: "Ada" })
+  })
+
+  it("does not render an email row an enrolled row already claims", () => {
+    const rows = buildTeamRoster({
+      members: [member(101, "ada")],
+      students: [
+        csvRow({ github_id: "101", username: "ada", email: "ada@x.edu" }),
+        // A leftover identity-less twin sharing the enrolled row's address.
+        csvRow({ email: "ada@x.edu", first_name: "Ada" }),
+      ],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("enrolled")
+  })
+
+  it("suppresses an email-carrying unlinked row when invitations are hidden", () => {
+    // Without the pending lists, "unbacked" is unknowable for an email row —
+    // it may render through a now-hidden invite — so it is not rendered at all.
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "kept@x.edu", first_name: "Ada" })],
+      pendingHidden: true,
+    })
+    expect(rows).toEqual([])
+  })
+
+  it("renders a name-only row regardless of org-membership or invite visibility", () => {
+    // No email means nothing could ever back the row, so pendingHidden and
+    // orgMembersKnown play no part in the decision.
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ first_name: "Grace", last_name: "H" })],
+      orgMembersKnown: false,
+      pendingHidden: true,
+    })
+    expect(rows.map((r) => r.state)).toEqual(["unlinked"])
+  })
+
+  it("gives identical twins distinct keys and sorts unlinked last", () => {
+    const rows = buildTeamRoster({
+      members: [member(1, "ada")],
+      students: [
+        csvRow({ github_id: "1", username: "ada" }),
+        csvRow({ first_name: "Twin", last_name: "T" }),
+        csvRow({ first_name: "Twin", last_name: "T" }),
+      ],
+    })
+    expect(rows.map((r) => r.state)).toEqual([
+      "enrolled",
+      "unlinked",
+      "unlinked",
+    ])
+    const keys = rows.map((r) => r.key)
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(countByState(rows).unlinked).toBe(2)
+  })
+})
+
+// A non-owner off a `secret` classroom team reads it as 404 -> []. roster.csv
+// stands in for that team (discussion #677): its rows become enrolled rows for
+// the role the CSV records, without ever overriding a team the viewer CAN see.
+describe("csvRowsForHiddenTeams", () => {
+  const rows = [
+    csvRow({ github_id: "1", username: "ada", role: "student" }),
+    csvRow({ github_id: "2", username: "bob", role: "" }),
+    csvRow({ github_id: "3", username: "tia", role: "ta" }),
+    csvRow({ github_id: "4", username: "hal", role: "HTA" }),
+    csvRow({ github_id: "5", username: "prof", role: "teacher" }),
+    csvRow({ username: "who", role: "instructor" }),
+    csvRow({ email: "only@uni.edu", role: "student" }),
+  ]
+
+  it("buckets rows by recorded role, reading a blank role as student", () => {
+    const out = csvRowsForHiddenTeams(
+      rows,
+      new Set(["student", "ta", "hta", "teacher"]),
+    )
+    expect(out.student?.map((s) => s.username)).toEqual(["ada", "bob"])
+    expect(out.ta?.map((s) => s.username)).toEqual(["tia"])
+    expect(out.hta?.map((s) => s.username)).toEqual(["hal"])
+    expect(out.teacher?.map((s) => s.username)).toEqual(["prof"])
+  })
+
+  it("drops rows for a role whose team was readable, unknown roles, and identity-less rows", () => {
+    const out = csvRowsForHiddenTeams(rows, new Set(["student"]))
+    expect(Object.keys(out)).toEqual(["student"])
+    // "instructor" is not a role; the email-only row has no identity to enroll.
+    expect(out.student?.some((s) => s.username === "who")).toBe(false)
+    expect(out.student?.some((s) => s.email === "only@uni.edu")).toBe(false)
+  })
+
+  it("returns nothing when no team is hidden", () => {
+    expect(csvRowsForHiddenTeams(rows, new Set())).toEqual({})
+  })
+})
+
+describe("buildTeamRoster — fallbackRows (roster.csv standing in for a hidden team)", () => {
+  it("emits enrolled rows with the fallback role, keyed by id (else login), with a derived avatar", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [],
+      fallbackRows: {
+        student: [
+          csvRow({
+            github_id: "101",
+            username: "ada",
+            first_name: "Ada",
+            last_name: "Lovelace",
+            section: "A",
+          }),
+          csvRow({ username: "bob" }),
+        ],
+      },
+    })
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({
+      key: "101",
+      state: "enrolled",
+      roles: ["student"],
+      username: "ada",
+      github_id: "101",
+      first_name: "Ada",
+      section: "A",
+      avatar_url: "https://avatars.githubusercontent.com/u/101",
+    })
+    expect(rows[1]).toMatchObject({
+      key: "bob",
+      state: "enrolled",
+      roles: ["student"],
+      username: "bob",
+      github_id: "",
+      avatar_url: "",
+    })
+    expect(countByState(rows).enrolled).toBe(2)
+    expect(enrolledCountsByRole(rows).student).toBe(2)
+  })
+
+  it("unions a fallback role onto a person already on a visible team, never a second row", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      staffMembers: { ta: [member(7, "tia")] },
+      students: [],
+      fallbackRows: {
+        // By id, and by login with no id: both resolve to the visible TA row.
+        student: [
+          csvRow({ github_id: "7", username: "tia" }),
+          csvRow({ username: "TIA" }),
+        ],
+      },
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].roles).toEqual(["ta", "student"])
+  })
+
+  it("skips a stale pending invite for a CSV-listed member, like a team member's", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [invite({ id: 9, login: "ada" })],
+      students: [],
+      fallbackRows: { student: [csvRow({ github_id: "1", username: "ada" })] },
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("enrolled")
+  })
+
+  it("never duplicates a fallback row as needs-attention", () => {
+    const ada = csvRow({ github_id: "1", username: "ada", role: "student" })
+    const rows = buildTeamRoster({
+      members: [],
+      students: [ada],
+      orgMemberIds: new Set(["1"]),
+      orgMembersKnown: true,
+      fallbackRows: { student: [ada] },
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("enrolled")
+  })
+
+  it("orders staff fallback roles after student and keeps roles ranked", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [],
+      fallbackRows: {
+        student: [csvRow({ github_id: "1", username: "ada" })],
+        teacher: [csvRow({ github_id: "1", username: "ada" })],
+        ta: [csvRow({ github_id: "2", username: "tia" })],
+      },
+    })
+    expect(rows.map((r) => [r.username, r.roles])).toEqual([
+      ["ada", ["teacher", "student"]],
+      ["tia", ["ta"]],
+    ])
   })
 })

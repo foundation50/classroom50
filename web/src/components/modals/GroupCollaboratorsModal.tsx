@@ -25,6 +25,7 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborator"
+import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
   describeGitHubApiFailure,
@@ -74,7 +75,6 @@ export function GroupCollaboratorsModal({
   maxGroupSize,
   students = [],
 }: GroupCollaboratorsModalProps) {
-  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Synchronous re-entrancy guard: isSaving (mutation.isPending) updates a tick
   // late, so a rapid double-click could start two overlapping saves.
   const savingRef = useRef(false)
@@ -148,13 +148,6 @@ export function GroupCollaboratorsModal({
     setInvalidCollaborators(new Set())
   }, [open])
 
-  useEffect(
-    () => () => {
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-    },
-    [],
-  )
-
   const clearInvalidCollaborator = (username: string) => {
     const normalized = normalizeUsername(username)
     setInvalidCollaborators((current) => {
@@ -187,6 +180,7 @@ export function GroupCollaboratorsModal({
 
   const isSaving =
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
+  useBeforeUnloadGuard(isSaving)
 
   // Dropped from the draft but still a live collaborator: removed only on Save,
   // restorable via undo until then.
@@ -336,9 +330,9 @@ export function GroupCollaboratorsModal({
       }
 
       await refetchCollaborators()
+      // Persists until the next edit or save attempt (Primer: don't
+      // auto-dismiss status messages on a timer).
       setSaved(true)
-      if (savedTimerRef.current) clearTimeout(savedTimerRef.current)
-      savedTimerRef.current = setTimeout(() => setSaved(false), 3000)
     } finally {
       savingRef.current = false
     }

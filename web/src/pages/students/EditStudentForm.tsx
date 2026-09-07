@@ -2,6 +2,7 @@ import { MarkGithubIcon } from "@/components/ui/icons"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useCallback, useEffect, useId, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { focusFirstInvalidField } from "@/util/focusFirstInvalidField"
 import { useUpdateStudent } from "@/hooks/mutations/useUpdateStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -158,7 +159,8 @@ const EditStudentForm = ({
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
-        form.handleSubmit()
+        const formEl = e.currentTarget as HTMLFormElement
+        void form.handleSubmit().then(() => focusFirstInvalidField(formEl))
       }}
     >
       <div className="mt-4 flex flex-col gap-3">
@@ -289,17 +291,15 @@ const EditStudentForm = ({
         >
           {t("common.cancel")}
         </Button>
-        <form.Subscribe
-          selector={(state) => [state.canSubmit, state.isSubmitting]}
-        >
-          {([canSubmit, isSubmitting]) => (
+        <form.Subscribe selector={(state) => [state.isSubmitting]}>
+          {([isSubmitting]) => (
             <Button
               type="submit"
               form={formId}
               variant="primary"
               loading={isSubmitting}
               loadingLabel={t("students.saving")}
-              disabled={!canSubmit || isSubmitting}
+              disabled={isSubmitting}
             >
               {isSubmitting ? t("students.saving") : t("students.saveChanges")}
             </Button>

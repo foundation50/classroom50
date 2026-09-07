@@ -5,7 +5,7 @@ import {
   AlertIcon,
   CheckCircleIcon,
   CheckIcon,
-  ChevronDownIcon,
+  TriangleDownIcon,
   QuestionIcon,
   ServerIcon,
 } from "@/components/ui/icons"
@@ -121,7 +121,7 @@ export const LanguageVersionField = ({
                     language: meta.label,
                   })}
                 >
-                  <ChevronDownIcon aria-hidden="true" className="size-4" />
+                  <TriangleDownIcon aria-hidden="true" className="size-4" />
                 </Button>
               </div>
               {!disabled && (

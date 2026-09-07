@@ -27,6 +27,11 @@ export type Classroom = {
   // else the plain `<classroom>/...` path. Opt-in, off by default. In lockstep
   // with the CLI's classroom-v1 schema (`[a-z0-9]{4,64}`).
   secret?: string
+  // Optional custom Pages base URL for orgs whose Pages site is served off the
+  // github.io default (the github.io 301 fails the browser's CORS check —
+  // issue #776). Everything before `/<classroom>[/<secret>]/...`, normalized
+  // (https, no trailing slash). In lockstep with the CLI's classroom-v1 schema.
+  pages_base_url?: string
 }
 
 // A minimal GitHub team identity (slug is authoritative for ops; id is the
@@ -55,11 +60,18 @@ export const isClassroomArchived = (cl: { active?: boolean }): boolean =>
 export const GROUP_SIZE_MIN = 2
 export const GROUP_SIZE_MAX = 100
 
-// The two assignment modes (classroom50/assignments/v1). `individual` = one
-// repo per student; `group` = a shared repo (requires max_group_size).
-export type AssignmentMode = "individual" | "group"
+// The assignment modes (classroom50/assignments/v1). `individual` = one repo
+// per student; `group` = the LEGACY shared repo backed by direct collaborators
+// (requires max_group_size); `team` = a shared repo backed by a per-assignment
+// GitHub Team (requires max_group_size and team_formation). In lockstep with
+// the CLI's assignments-v1 schema enum and contract.AssignmentModes.
+export type AssignmentMode = "individual" | "group" | "team"
 
-const ASSIGNMENT_MODES: readonly AssignmentMode[] = ["individual", "group"]
+const ASSIGNMENT_MODES: readonly AssignmentMode[] = [
+  "individual",
+  "group",
+  "team",
+]
 
 // Narrow a form/string value to AssignmentMode, throwing on a value the CLI
 // schema would reject.
@@ -69,6 +81,26 @@ export function assertAssignmentMode(value: string): AssignmentMode {
   }
   throw new Error(
     `mode: must be one of ${ASSIGNMENT_MODES.join(", ")} (got "${value}").`,
+  )
+}
+
+// Who forms the groups of a `team` assignment: the teacher (org owner creates
+// teams and memberships — fully enforceable) or the students (the first
+// student founds a team and adds roster teammates — drift is detectable, not
+// preventable). Required for mode: team, forbidden otherwise. In lockstep with
+// the CLI's assignments-v1 schema enum and contract.TeamFormations.
+export type TeamFormation = "teacher" | "student"
+
+export const TEAM_FORMATIONS: readonly TeamFormation[] = ["teacher", "student"]
+
+// Narrow a form/string value to TeamFormation, throwing on a value the CLI
+// schema would reject.
+export function assertTeamFormation(value: string): TeamFormation {
+  if ((TEAM_FORMATIONS as readonly string[]).includes(value)) {
+    return value as TeamFormation
+  }
+  throw new Error(
+    `team_formation: must be one of ${TEAM_FORMATIONS.join(", ")} (got "${value}").`,
   )
 }
 
@@ -89,8 +121,10 @@ export const REPO_PERMISSIONS: readonly RepoPermission[] = [
 ]
 
 // The accept-time role a student gets on their own repo when an assignment sets
-// no student_permission: least-privilege push for individual, admin for group
-// (a group founder must manage collaborators). Mirrors the CLI default.
+// no student_permission: least-privilege push for individual, admin only for
+// the LEGACY group mode (its founder manages direct collaborators), and push
+// again for team mode (access flows through the GitHub Team attachment).
+// Mirrors the CLI default.
 export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
   return mode === "group" ? "admin" : "push"
 }
@@ -99,6 +133,12 @@ export function defaultStudentPermission(mode: AssignmentMode): RepoPermission {
 // assignments-v1 schema enum and contract.SubmissionModes (parity-tested).
 export const SUBMISSION_MODES = ["every-push", "tag"] as const
 export type SubmissionMode = (typeof SUBMISSION_MODES)[number]
+
+// The visibility each student repo is CREATED with at accept time. Absent =
+// "private" (today's behavior). In lockstep with the CLI's assignments-v1
+// schema enum and contract.RepoVisibilities (parity-tested).
+export const REPO_VISIBILITIES = ["private", "public"] as const
+export type RepoVisibility = (typeof REPO_VISIBILITIES)[number]
 
 // The teacher's grading intent. Absent reads as "auto" (today's behavior). In
 // lockstep with the CLI's assignments-v1 schema enum and contract.GradingModes
@@ -160,6 +200,9 @@ export type Assignment = {
   // Workflow-shim name (`default` for the universal shim), not the grading logic.
   autograder: string
   max_group_size?: number
+  // Who forms the groups of a `team` assignment (required there, absent
+  // otherwise). In lockstep with the CLI's assignments-v1 schema enum.
+  team_formation?: TeamFormation
   feedback_pr?: boolean
   // Use the TEMPLATE repo's native pull request template
   // (.github/pull_request_template.md -> pull_request_template.md ->
@@ -224,7 +267,9 @@ export type Assignment = {
   // The enforceable boundary applies only to a PRIVATE in-org template:
   // locking also removes the classroom STUDENT team's read on it (teacher/
   // head-TA/TA untouched); unlocking re-grants it. Existing student repos are
-  // not deleted. Omitted when false (CLI omitempty); absent reads as false.
+  // not deleted. Set at creation (form toggle / `--locked`) it withholds the
+  // grant until the first unlock; a create/edit flip has the same access
+  // effect as the lock action. Omitted when false (CLI omitempty).
   locked?: boolean
   // End the assignment's submission window. UNLIKE `locked`, `closed` is narrow:
   // its only effect is that the accept flow (web + `gh student accept`) refuses a
@@ -310,6 +355,16 @@ export type Assignment = {
   // page detection definition. In lockstep with the CLI's assignments-v1 schema
   // (`submission_tags`); validation in @/util/submissionTags.
   submission_tags?: string[]
+  // The visibility each student repo is CREATED with at accept time. Absent or
+  // "private" (the wire default — writers omit it): private repos, today's
+  // behavior. "public": accept creates the repo public (peer review, portfolio,
+  // showcase) and the accept surfaces tell the student upfront. Accept-time
+  // only, not retrofitted: changing it affects only repos created from then on
+  // (flip existing ones with the gradebook visibility actions). Best-effort
+  // fail-private on accept — org policy can block a member's public create, in
+  // which case accept retries private and tells the student. In lockstep with
+  // the CLI's assignments-v1 schema enum (`repo_visibility`).
+  repo_visibility?: RepoVisibility
   // The teacher's grading intent (off / auto / manual), a first-class GUI
   // choice. Absent reads as "auto" (today's behavior). Manual carries
   // max_points (>= 1). Orthogonal to the autograding tri-state and to
@@ -331,7 +386,9 @@ export type Assignment = {
   // meaningful alongside `tests`. In lockstep with the CLI's assignments-v1
   // schema (`test_defaults`) and the Go TestDefaults struct.
   test_defaults?: AssignmentTestDefaults
-  // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
+  // Provenance from the retired GitHub Classroom migrate feature. Nothing
+  // writes it anymore, but migrated classrooms carry it and readers must
+  // round-trip it.
   migrated_from?: MigratedFrom
   // The assignment's PREVIOUS slug, from the one-shot slug rename (a single
   // slug, never a chain — a renamed assignment can't be renamed again).

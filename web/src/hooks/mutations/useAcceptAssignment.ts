@@ -19,13 +19,16 @@ export function useAcceptAssignment(params: {
   classroom: string
   assignmentSlug: string
   secret?: string
+  pagesBaseUrl?: string
   onStepUpdate: OnAcceptStepUpdate
 }) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  const { org, classroom, assignmentSlug, secret, onStepUpdate } = params
+  const { org, classroom, assignmentSlug, secret, pagesBaseUrl, onStepUpdate } =
+    params
 
   return useMutation({
+    meta: { keepTabOpen: true },
     mutationFn: () =>
       acceptAssignment({
         client,
@@ -33,12 +36,14 @@ export function useAcceptAssignment(params: {
         classroom,
         assignmentSlug,
         secret,
+        pagesBaseUrl,
         onStepUpdate,
       }),
     onSuccess: () => {
+      // Prefix match on purpose: the submissions page keeps an
+      // assignment-scoped slice under this key too (githubKeys.assignmentRepos).
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgRepos(org),
-        exact: true,
         refetchType: "all",
       })
     },

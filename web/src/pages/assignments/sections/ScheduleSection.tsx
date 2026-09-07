@@ -2,13 +2,15 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui"
 import { ToggleField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
+import { ReleaseDateAccessNotice } from "./ReleaseDateAccessNotice"
 import { SectionCard } from "./SectionCard"
 
-// Schedule (IA overhaul U8): the opt-in release-date and due-date pickers. The
-// toggle state lives in the orchestrator so the pickers stay controlled across
-// the section split.
+// Schedule and access (IA overhaul U8): the opt-in release-date and due-date
+// pickers plus the lock toggle. The picker toggle state lives in the
+// orchestrator so the pickers stay controlled across the section split.
 export function ScheduleSection({
   form,
+  org,
   onReset,
   dueDateEnabled,
   setDueDateEnabled,
@@ -16,6 +18,9 @@ export function ScheduleSection({
   setAvailableFromEnabled,
 }: {
   form: AssignmentForm
+  // Org slug; the release-date notice uses it to tell a private in-org
+  // template (team read is granted on save) from one it can't affect.
+  org?: string
   onReset?: () => void
   dueDateEnabled: boolean
   setDueDateEnabled: (enabled: boolean) => void
@@ -70,6 +75,7 @@ export function ScheduleSection({
                   <p className="mt-1.5 text-sm text-base-content/70">
                     {t("assignments.form.availableFromTz", { tz: tzShort })}
                   </p>
+                  <ReleaseDateAccessNotice form={form} org={org} />
                 </div>
               ) : null}
             </div>
@@ -112,6 +118,18 @@ export function ScheduleSection({
                 </div>
               ) : null}
             </div>
+          )}
+        </form.Field>
+
+        <form.Field name="locked">
+          {(field) => (
+            <ToggleField
+              id={field.name}
+              checked={field.state.value}
+              onChange={(checked) => field.handleChange(checked)}
+              label={t("assignments.form.lockAssignment")}
+              help={t("assignments.form.lockAssignmentTip")}
+            />
           )}
         </form.Field>
       </div>

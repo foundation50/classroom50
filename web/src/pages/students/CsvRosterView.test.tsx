@@ -135,4 +135,23 @@ describe("CsvRosterView", () => {
     // Last-name order: Adams (Zed) before Brown (Amy).
     expect(names()).toEqual(["Zed Adams", "Amy Brown"])
   })
+
+  it("renders the load error with retry instead of the empty state", () => {
+    const onRetryLoad = vi.fn()
+    render(<CsvRosterView students={[]} loadError onRetryLoad={onRetryLoad} />)
+    // The anti-misinformation assertion: a failed read must never render the
+    // "empty roster" copy.
+    expect(screen.queryByText("students.csvRoster.empty")).toBeNull()
+    expect(screen.getByText("students.rosterLoadError")).toBeTruthy()
+    fireEvent.click(
+      screen.getByRole("button", { name: "students.rosterRetry" }),
+    )
+    expect(onRetryLoad).toHaveBeenCalledTimes(1)
+  })
+
+  it("still renders the genuine empty state when there is no error", () => {
+    render(<CsvRosterView students={[]} />)
+    expect(screen.getByText("students.csvRoster.empty")).toBeTruthy()
+    expect(screen.queryByText("students.rosterLoadError")).toBeNull()
+  })
 })

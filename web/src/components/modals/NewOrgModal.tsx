@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import PlanBadge from "@/components/PlanBadge"
 import MissingOrgNotice from "@/components/MissingOrgNotice"
 import FreePlanInfoModal from "@/components/modals/FreePlanInfoModal"
-import { Badge, Button, Modal, Spinner, cx } from "@/components/ui"
+import { Badge, Button, Modal, InlineSpinner, cx } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import { useLingeringOpen } from "@/hooks/useLingeringOpen"
@@ -127,12 +127,15 @@ function OrgPicker({
                     />
                   )}
                   {planLoading ? (
-                    <Spinner size="sm" className="shrink-0" />
+                    <InlineSpinner size="sm" className="shrink-0" />
                   ) : isFree ? (
                     <>
                       <Badge tone="warning" size="sm" className="shrink-0">
                         {t("orgs.newOrg.notSupportedBadge")}
                       </Badge>
+                      {/* Deliberately a span wearing the btn recipe: the whole
+                          row is a <button> (no nesting allowed), and these chips
+                          advertise that row's click affordance. */}
                       <span className="btn btn-outline btn-xs shrink-0">
                         {t("orgs.newOrg.details")}
                       </span>

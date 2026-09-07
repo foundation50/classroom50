@@ -45,4 +45,10 @@ export function Select({
   )
 }
 
+// The one visual group separator for native <option> lists (a native select
+// can't render a real divider), so the glyph run can't drift per caller.
+export function SelectSeparatorOption() {
+  return <option disabled>────────</option>
+}
+
 export default Select

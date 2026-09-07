@@ -79,6 +79,7 @@ describe("orgRowToMemberRow", () => {
       github_id: "9",
       name: "Hubot",
       email: "hubot@x.edu",
+      emails: ["hubot@x.edu"],
       isMember: true,
       classrooms: [],
       classification: "member-on-roster",

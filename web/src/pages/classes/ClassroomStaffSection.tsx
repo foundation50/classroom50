@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
@@ -28,6 +28,7 @@ import useCancelClassroomInvite from "@/hooks/mutations/useCancelClassroomInvite
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
+import { errorText } from "@/types/localizedMessage"
 import {
   ROLE_LABEL_KEY,
   ROLE_PLURAL_KEY,
@@ -40,6 +41,7 @@ import {
   Badge,
   Card,
   FormField,
+  InlineMessage,
   Input,
   Select,
   Heading,
@@ -120,8 +122,13 @@ const AddStaff = ({
   disabled: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const [username, setUsername] = useState("")
+  const [usernameError, setUsernameError] = useState(false)
+  // Server-side add failure, surfaced on the username field (it's almost
+  // always about that username: unknown user, already staff, no rights).
+  const [addError, setAddError] = useState<string | null>(null)
+  const usernameInputRef = useRef<HTMLInputElement>(null)
   const [role, setRole] = useState<StaffRole>("ta")
 
   const addMutation = useAddStaffMember(org, classroom, {
@@ -134,31 +141,34 @@ const AddStaff = ({
       onSubmit={(e) => {
         e.preventDefault()
         if (disabled) return
+        if (!username.trim()) {
+          // The button stays enabled (Primer); an empty submit surfaces the
+          // field error and returns focus to the input.
+          setUsernameError(true)
+          usernameInputRef.current?.focus()
+          return
+        }
+        setAddError(null)
         addMutation.mutate(
           { username, role },
           {
             onSuccess: ({ trimmed, role: addedRole }) => {
               setUsername("")
-              notify({
-                tone: "success",
-                durationMs: 5000,
-                message: t("toasts.staffAdded", {
+              // The new row appears in the list — SR announcement only.
+              announce(
+                t("toasts.staffAdded", {
                   username: trimmed,
                   role: t(ROLE_LABEL_KEY[addedRole]),
                 }),
-              })
+              )
             },
             onError: (err) => {
               const message =
                 err instanceof GitHubAPIError && err.status === 404
                   ? t("classes.staff.noSuchUser")
-                  : err instanceof Error
-                    ? err.message
-                    : t("classes.somethingWentWrong")
-              notify({
-                tone: "error",
-                message: t("classes.staff.addFailed", { message }),
-              })
+                  : errorText(t, err)
+              setAddError(t("classes.staff.addFailed", { message }))
+              usernameInputRef.current?.focus()
             },
           },
         )
@@ -168,16 +178,28 @@ const AddStaff = ({
         <FormField
           label={t("classes.staff.githubUsername")}
           htmlFor="staff-username"
+          error={
+            usernameError
+              ? t("classes.staff.enterUsername")
+              : (addError ?? undefined)
+          }
         >
-          {({ id }) => (
+          {({ id, describedById, invalid }) => (
             <Input
+              ref={usernameInputRef}
               id={id}
+              aria-describedby={describedById}
+              invalid={invalid}
               autoComplete="off"
               spellCheck={false}
               placeholder={t("classes.staff.usernamePlaceholder")}
               value={username}
               disabled={disabled || addMutation.isPending}
-              onChange={(e) => setUsername(e.target.value)}
+              onChange={(e) => {
+                setUsername(e.target.value)
+                setUsernameError(false)
+                setAddError(null)
+              }}
             />
           )}
         </FormField>
@@ -203,7 +225,7 @@ const AddStaff = ({
       <Button
         type="submit"
         variant="primary"
-        disabled={disabled || addMutation.isPending || !username.trim()}
+        disabled={disabled || addMutation.isPending}
       >
         {addMutation.isPending ? (
           <InlineSpinner />
@@ -341,7 +363,7 @@ const StaffMemberRow = ({
   disabled: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { announce } = useToast()
   const { data: viewer } = useGitHubViewer()
   const [confirmingRemove, setConfirmingRemove] = useState(false)
 
@@ -400,7 +422,7 @@ const StaffMemberRow = ({
       </div>
       <ConfirmModal
         open={confirmingRemove}
-        dangerous
+        tone="warning"
         needsConfirm={false}
         title={t("classes.staff.confirmRemoveTitle", {
           login: member.login,
@@ -412,31 +434,25 @@ const StaffMemberRow = ({
         })}
         confirmLabel={t("classes.staff.removeRole", { role: roleLabel })}
         onConfirm={async () => {
-          setConfirmingRemove(false)
-          await removeMutation.mutateAsync(member.login, {
-            onSuccess: () => {
-              notify({
-                tone: "success",
-                durationMs: 4000,
-                message: t("classes.staff.removedToast", {
-                  login: member.login,
-                  role: rolePlural,
-                }),
-              })
-            },
-            onError: (err) => {
-              notify({
-                tone: "error",
-                message: t("classes.staff.removeFailed", {
-                  login: member.login,
-                  error:
-                    err instanceof Error
-                      ? err.message
-                      : t("classes.somethingWentWrong"),
-                }),
-              })
-            },
-          })
+          try {
+            await removeMutation.mutateAsync(member.login)
+            // The row disappears from the list — SR announcement only.
+            announce(
+              t("classes.staff.removedToast", {
+                login: member.login,
+                role: rolePlural,
+              }),
+            )
+          } catch (err) {
+            // Surfaces inside the confirm dialog rather than a corner toast.
+            throw new Error(
+              t("classes.staff.removeFailed", {
+                login: member.login,
+                error: errorText(t, err),
+              }),
+              { cause: err },
+            )
+          }
         }}
         onClose={() => setConfirmingRemove(false)}
       />
@@ -463,8 +479,11 @@ const PendingStaffRow = ({
   disabled: boolean
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const who = invite.login || invite.email || String(invite.id)
+  // Per-row action failure, rendered inline under the row (Primer: feedback
+  // closest to the control that caused it).
+  const [rowError, setRowError] = useState<string | null>(null)
 
   const resendMutation = useResendClassroomInvite(
     org,
@@ -481,109 +500,111 @@ const PendingStaffRow = ({
   const busy = resendMutation.isPending || cancelMutation.isPending
 
   return (
-    <li className="flex items-center gap-2 rounded-selector px-2 py-1.5 transition-colors hover:bg-base-300/40">
-      <span className="flex min-w-0 grow items-center gap-2 text-sm">
-        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/50">
-          <PaperAirplaneIcon aria-hidden="true" className="size-3" />
+    <li className="flex flex-col gap-1 rounded-selector px-2 py-1.5 transition-colors hover:bg-base-300/40">
+      <div className="flex items-center gap-2">
+        <span className="flex min-w-0 grow items-center gap-2 text-sm">
+          <span className="grid size-6 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/50">
+            <PaperAirplaneIcon aria-hidden="true" className="size-3" />
+          </span>
+          <span className="truncate">
+            {invite.login ? `@${invite.login}` : invite.email}
+          </span>
+          <Badge size="xs" tone="warning" ghost className="shrink-0">
+            {t("classes.staff.pendingBadge")}
+          </Badge>
         </span>
-        <span className="truncate">
-          {invite.login ? `@${invite.login}` : invite.email}
-        </span>
-        <Badge size="xs" tone="warning" ghost className="shrink-0">
-          {t("classes.staff.pendingBadge")}
-        </Badge>
-      </span>
-      <div className="flex shrink-0 items-center">
-        {invite.login ? (
+        <div className="flex shrink-0 items-center">
+          {invite.login ? (
+            <Button
+              variant="ghost"
+              size="xs"
+              shape="square"
+              title={t("classes.staff.resend")}
+              disabled={disabled || busy}
+              onClick={() => {
+                setRowError(null)
+                void submit(() =>
+                  resendMutation.mutateAsync(
+                    {
+                      login: invite.login,
+                      invitationId: invite.id,
+                      emailOnlyMessage: t("classes.staff.resendEmailOnly"),
+                    },
+                    {
+                      // Kept as a toast: a resend changes nothing visible in
+                      // the row, so the outcome isn't otherwise evident.
+                      onSuccess: () =>
+                        notify({
+                          tone: "success",
+                          durationMs: 4000,
+                          message: t("classes.staff.resentToast", { who }),
+                        }),
+                      onError: (err) =>
+                        setRowError(
+                          t("classes.staff.resendFailed", {
+                            who,
+                            error: errorText(t, err),
+                          }),
+                        ),
+                    },
+                  ),
+                )
+              }}
+            >
+              {resendMutation.isPending ? (
+                <InlineSpinner />
+              ) : (
+                <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+              )}
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="xs"
             shape="square"
-            title={t("classes.staff.resend")}
+            className="text-error"
+            title={t("classes.staff.cancelInvite")}
             disabled={disabled || busy}
-            onClick={() =>
+            onClick={() => {
+              setRowError(null)
               void submit(() =>
-                resendMutation.mutateAsync(
+                cancelMutation.mutateAsync(
                   {
-                    login: invite.login,
                     invitationId: invite.id,
-                    emailOnlyMessage: t("classes.staff.resendEmailOnly"),
+                    // Only an email-only invite has a metadata team to tear down.
+                    inviteEmail: invite.login ? undefined : invite.email,
                   },
                   {
+                    // The pending row disappears — SR announcement only.
                     onSuccess: () =>
-                      notify({
-                        tone: "success",
-                        durationMs: 4000,
-                        message: t("classes.staff.resentToast", { who }),
-                      }),
+                      announce(t("classes.staff.cancelledToast", { who })),
                     onError: (err) =>
-                      notify({
-                        tone: "error",
-                        message: t("classes.staff.resendFailed", {
+                      setRowError(
+                        t("classes.staff.cancelFailed", {
                           who,
-                          error:
-                            err instanceof Error
-                              ? err.message
-                              : t("classes.somethingWentWrong"),
+                          error: errorText(t, err),
                         }),
-                      }),
+                      ),
                   },
                 ),
               )
-            }
+            }}
           >
-            {resendMutation.isPending ? (
+            {cancelMutation.isPending ? (
               <InlineSpinner />
             ) : (
-              <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+              <XCircleIcon aria-hidden="true" className="size-4" />
             )}
           </Button>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="xs"
-          shape="square"
-          className="text-error"
-          title={t("classes.staff.cancelInvite")}
-          disabled={disabled || busy}
-          onClick={() =>
-            void submit(() =>
-              cancelMutation.mutateAsync(
-                {
-                  invitationId: invite.id,
-                  // Only an email-only invite has a metadata team to tear down.
-                  inviteEmail: invite.login ? undefined : invite.email,
-                },
-                {
-                  onSuccess: () =>
-                    notify({
-                      tone: "success",
-                      durationMs: 4000,
-                      message: t("classes.staff.cancelledToast", { who }),
-                    }),
-                  onError: (err) =>
-                    notify({
-                      tone: "error",
-                      message: t("classes.staff.cancelFailed", {
-                        who,
-                        error:
-                          err instanceof Error
-                            ? err.message
-                            : t("classes.somethingWentWrong"),
-                      }),
-                    }),
-                },
-              ),
-            )
-          }
-        >
-          {cancelMutation.isPending ? (
-            <InlineSpinner />
-          ) : (
-            <XCircleIcon aria-hidden="true" className="size-4" />
-          )}
-        </Button>
+        </div>
       </div>
+      {rowError != null && (
+        // role="alert" so the insertion is announced — this replaced an
+        // error toast, and no focus move carries the message.
+        <InlineMessage tone="error" role="alert">
+          {rowError}
+        </InlineMessage>
+      )}
     </li>
   )
 }

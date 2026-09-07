@@ -132,7 +132,9 @@ const CreateAssignmentPage = () => {
                 description: values.description,
                 due_date: values.due_date,
                 available_from_date: values.available_from_date,
+                locked: values.locked,
                 max_group_size: values.max_group_size,
+                team_formation: values.team_formation,
                 feedback_pr: values.feedback_pr,
                 feedback_pr_template: values.feedback_pr_template,
                 empty_repo: values.empty_repo,
@@ -158,6 +160,7 @@ const CreateAssignmentPage = () => {
                   ? values.pass_threshold
                   : undefined,
                 student_permission: values.student_permission || undefined,
+                repo_visibility: values.repo_visibility,
                 submission_mode: values.submission_mode,
                 submission_tags: parseSubmissionTags(values.submission_tags),
                 grading:
@@ -200,7 +203,11 @@ const CreateAssignmentPage = () => {
                   notify({
                     tone: "success",
                     durationMs: 6000,
-                    message: t("toasts.assignmentCreated"),
+                    message: t(
+                      variables.locked
+                        ? "toasts.assignmentCreatedLocked"
+                        : "toasts.assignmentCreated",
+                    ),
                   })
                   navigate({
                     to: "/$org/$classroom/assignments/$assignment",

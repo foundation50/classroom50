@@ -54,33 +54,37 @@ func assignmentSubmissionModeCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "submission-mode <org> <classroom> <slug> (--every-push | --tag)",
-		Short: "Set when the autograder fires (every push vs. submit tags) and retrofit existing repos",
+		Short: "Set when the autograder fires and retrofit existing repos",
 		Long: "Set the assignment's submission mode and update the autograde shim in\n" +
 			"every existing student repo to match.\n\n" +
 			"Modes:\n" +
 			"  --every-push  every push to the default branch grades (the default\n" +
 			"                behavior); submit/* tag pushes grade too\n" +
-			"  --tag         ONLY submit/* tag pushes grade. `gh student submit`\n" +
+			"  --tag         only submit/* tag pushes grade. `gh student submit`\n" +
 			"                pushes the tag; a hand-pushed submit/* tag works too.\n" +
-			"                Plain `git push` costs no Actions minutes — the cost\n" +
-			"                lever for large cohorts.\n\n" +
+			"                Plain `git push` costs no Actions minutes, making\n" +
+			"                this the cost lever for large cohorts.\n\n" +
 			"The trigger lives in each student repo's shim (GitHub evaluates a\n" +
 			"workflow's `on:` block before any job runs), so changing the mode must\n" +
-			"rewrite `.github/workflows/autograde.yaml` across existing repos. That\n" +
-			"retrofit runs by default: enrollment comes from the classroom team, each\n" +
-			"member's <classroom>-<slug>-<user> repo is updated idempotently, and the\n" +
-			"commit carries `[skip ci]` so it never triggers grading. Repos whose shim\n" +
-			"doesn't match a known default-shim trigger shape (e.g., student-edited)\n" +
-			"are reported and left untouched. Students must `git pull` afterward —\n" +
-			"stale clones will conflict on their next push.\n\n" +
-			"Committing workflow files needs the `workflow` OAuth scope\n" +
-			"(`gh auth refresh -s workflow` if missing).\n\n" +
+			"rewrite `.github/workflows/autograde.yaml` across existing repos.\n\n" +
+			"The retrofit runs by default:\n" +
+			"  - Enrollment comes from the classroom team, and each member's\n" +
+			"    <classroom>-<slug>-<user> repo is updated idempotently.\n" +
+			"  - The commit carries `[skip ci]` so it never triggers grading.\n" +
+			"  - Repos whose shim doesn't match a known default-shim trigger\n" +
+			"    shape (student-edited, for example) are reported and left\n" +
+			"    untouched.\n" +
+			"  - Students must `git pull` afterward: stale clones will conflict\n" +
+			"    on their next push.\n" +
+			"  - Committing workflow files needs the `workflow` OAuth scope\n" +
+			"    (`gh auth refresh -s workflow` if missing).\n\n" +
 			"Custom-autograder assignments: the shim is teacher-authored, so this\n" +
 			"command refuses to rewrite it. Edit your autograder's `on:` block\n" +
 			"yourself, then re-run with --update-shims=false to flip only the field\n" +
 			"(which still controls whether submit clients push the tag).\n\n" +
-			"Pass --user to retrofit a single student's repo (e.g., one that was\n" +
-			"skipped or failed on a previous run); the field flip is idempotent.",
+			"Pass --user to retrofit a single student's repo (one that was\n" +
+			"skipped or failed on a previous run, say); the field flip is\n" +
+			"idempotent.",
 		Example: "  gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --tag\n" +
 			"  gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --every-push\n" +
 			"  gh teacher assignment submission-mode cs50-fall-2026 cs-principles hello --tag --user alice\n" +
@@ -194,13 +198,13 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 	}
 	customAutograder := preEntry.Autograder != "" && preEntry.Autograder != contract.DefaultAutograderName
 	if customAutograder && p.updateShims {
-		return fmt.Errorf("assignment %q uses the custom autograder %q — its shim is teacher-authored and this command never rewrites it. Edit that autograder's `on:` trigger yourself, then re-run with --update-shims=false to flip only the field (which controls whether submit clients push the tag)",
+		return fmt.Errorf("assignment %q uses the custom autograder %q, whose shim is teacher-authored, and this command never rewrites it. Edit that autograder's `on:` trigger yourself, then re-run with --update-shims=false to flip only the field (which controls whether submit clients push the tag)",
 			p.slug, preEntry.Autograder)
 	}
 
 	if p.dryRun {
 		if preEntry.SubmissionMode == wireMode {
-			_, _ = fmt.Fprintf(out, "dry run: %s already has submission_mode %s — no field change\n", p.slug, p.mode)
+			_, _ = fmt.Fprintf(out, "dry run: %s already has submission_mode %s, no field change\n", p.slug, p.mode)
 		} else {
 			_, _ = fmt.Fprintf(out, "dry run: would set submission_mode of %s to %s\n", p.slug, p.mode)
 		}
@@ -212,7 +216,7 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			}
 			idx, ok := assignment.FindAssignment(file.Assignments, p.slug)
 			if !ok {
-				return nil, fmt.Errorf("assignment %q disappeared from %s during the update — retry",
+				return nil, fmt.Errorf("assignment %q disappeared from %s during the update: retry",
 					p.slug, assignmentsFilePath(p.classroom))
 			}
 			entry := file.Assignments[idx]
@@ -260,7 +264,7 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 	}
 	if len(repos) == 0 {
 		if !p.quiet {
-			_, _ = fmt.Fprintf(out, "%s: no repos to process — the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", p.org)
+			_, _ = fmt.Fprintf(out, "%s: no repos to process: the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", p.org)
 		}
 		return nil
 	}
@@ -277,9 +281,9 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			// "0 repo(s)" — that looks like an enumeration failure).
 			notAccepted++
 			if p.user != "" {
-				_, _ = fmt.Fprintf(out, "%s does not exist — %s has not accepted %s yet\n", repo, p.user, p.slug)
+				_, _ = fmt.Fprintf(out, "%s does not exist: %s has not accepted %s yet\n", repo, p.user, p.slug)
 			} else if p.verbose && !p.quiet {
-				_, _ = fmt.Fprintf(out, "Skipped %s (no repo — not accepted yet?)\n", repo)
+				_, _ = fmt.Fprintf(out, "Skipped %s (no repo; not accepted yet?)\n", repo)
 			}
 			continue
 		}
@@ -343,7 +347,7 @@ func retrofitShim(client githubapi.Client, org, repo, mode string, tags []string
 			// Repo exists but the shim never landed (a mid-flow accept
 			// failure). Accept's self-heal owns that case; nothing safe to
 			// rewrite here.
-			unrecognized = errors.New("no " + autogradeShimPath + " — accept may not have completed; re-accept heals it")
+			unrecognized = errors.New("no " + autogradeShimPath + ": accept may not have completed; re-accept heals it")
 			return nil, nil
 		}
 		updated, changed, err := rewriteShimTrigger(string(current), mode, branch, tags)
@@ -375,7 +379,7 @@ func retrofitShim(client githubapi.Client, org, repo, mode string, tags []string
 	commitSHA, err := configwrite.CommitTree(client, org, repo, branch, contract.ShimUpdateCommitMessage(mode), build)
 	if err != nil {
 		if errors.Is(err, configwrite.ErrMissingWorkflowScope) {
-			return shimResult{repo: repo, outcome: shimFailed, reason: "token lacks the `workflow` OAuth scope — run `gh auth refresh -s workflow` and re-run"}
+			return shimResult{repo: repo, outcome: shimFailed, reason: "token lacks the `workflow` OAuth scope: run `gh auth refresh -s workflow` and re-run"}
 		}
 		return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
 	}
@@ -404,7 +408,7 @@ func retrofitShim(client githubapi.Client, org, repo, mode string, tags []string
 func rewriteShimTrigger(content, mode string, branch string, tags []string) (string, bool, error) {
 	loc := shimTriggerBlock.FindStringSubmatchIndex(content)
 	if loc == nil {
-		return "", false, errors.New("shim does not carry a recognizable default trigger block — left untouched (student-edited?)")
+		return "", false, errors.New("shim does not carry a recognizable default trigger block; left untouched (student-edited?)")
 	}
 	hasBranches := loc[2] != -1
 
@@ -502,15 +506,15 @@ func summarizeShimResults(out, errOut io.Writer, p submissionModeParams, results
 		_, _ = fmt.Fprintf(out, "%s: %d %s, %d already current, %d skipped, %d failed (of %d repo(s))\n",
 			p.org, updated, verb, current, len(unrecognized), len(failed), len(results)+notAccepted)
 		if notAccepted > 0 {
-			_, _ = fmt.Fprintf(out, "%d enrolled student(s) have not accepted %s yet — their repos will get the new trigger at accept time\n", notAccepted, p.slug)
+			_, _ = fmt.Fprintf(out, "%d enrolled student(s) have not accepted %s yet; their repos will get the new trigger at accept time\n", notAccepted, p.slug)
 		}
 		if updated > 0 && !p.dryRun {
-			_, _ = fmt.Fprintln(out, "Tell students to `git pull` — clones made before this change will conflict on their next push.")
+			_, _ = fmt.Fprintln(out, "Tell students to `git pull`: clones made before this change will conflict on their next push.")
 		}
 	}
 
 	if len(unrecognized) > 0 {
-		_, _ = fmt.Fprintln(errOut, "Skipped (shim content not recognized — review and update by hand if intended):")
+		_, _ = fmt.Fprintln(errOut, "Skipped (shim content not recognized; review and update by hand if intended):")
 		for _, r := range unrecognized {
 			_, _ = fmt.Fprintf(errOut, "  %s: %s\n", r.repo, r.reason)
 		}

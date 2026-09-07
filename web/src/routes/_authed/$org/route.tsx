@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-router"
 
 import { Spinner } from "@/components/Spinner"
+import { useTranslation } from "react-i18next"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
@@ -24,6 +25,7 @@ export const Route = createFileRoute("/_authed/$org")({
 // The org role provider now wraps the `_authed` shell above this route, so this
 // layout reads the role directly (no local provider needed).
 function OrgLayout() {
+  const { t } = useTranslation()
   const { org } = useParams({ from: "/_authed/$org" })
   // Match the setup route by matched-route id, not a pathname suffix: a suffix
   // check (endsWith("/setup")) both collides with any path segment named
@@ -48,7 +50,8 @@ function OrgLayout() {
   if (loadingMembership || loadingRepo) {
     return (
       <div className="min-h-screen grid place-items-center">
-        <Spinner size="lg" />
+        {/* Contextual label (Primer: name what is loading when known). */}
+        <Spinner size="lg" label={t("common.checkingOrgAccess")} />
       </div>
     )
   }

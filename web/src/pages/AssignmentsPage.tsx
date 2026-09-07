@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { ChevronDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
+import { TriangleDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
 import { useCallback, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -8,6 +8,7 @@ import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
 import AssignmentsBulkBar from "@/pages/assignments/AssignmentsBulkBar"
 import { resolveSelectedRows, toggleSelectAll } from "@/util/rowSelection"
 import { useRangeSelection } from "@/hooks/useRangeSelection"
+import { GitHubAPIError } from "@/github-core/errors"
 import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
   DEFAULT_FILTERS,
@@ -16,7 +17,13 @@ import {
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-import { Badge, Button, DropdownMenu, EmphasisLtr } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  DropdownMenu,
+  EmphasisLtr,
+  RouterButton,
+} from "@/components/ui"
 import {
   NoSearchResults,
   SkeletonRegion,
@@ -32,10 +39,14 @@ import { ClaimTeacherNotice } from "./classes/ClaimTeacherNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useStudentCount from "@/hooks/useStudentCount"
+import useFunnelRoster, { unionLogins } from "@/hooks/useFunnelRoster"
+import { IncludeStaffToggle } from "@/pages/assignments/IncludeStaffToggle"
+import { persistIncludeStaff, readIncludeStaff } from "@/lib/includeStaffPref"
+import type { FunnelRoster } from "@/pages/submissions/dashboard"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
 import { roleLabelKey, can } from "@/authz"
 import { isClassroomArchived, type Assignment } from "@/types/classroom"
 import StudentAssignmentList from "@/components/org/StudentAssignmentList"
@@ -55,14 +66,16 @@ const NewAssignmentButton = ({
   return (
     <>
       <div className="join">
-        <Link
+        <RouterButton
           to="/$org/$classroom/assignments/new"
           params={{ org, classroom }}
-          className="btn btn-primary btn-sm join-item"
+          variant="primary"
+          size="sm"
+          className="join-item"
         >
           <PlusIcon aria-hidden="true" className="size-4" />{" "}
           {t("assignments.newButton.assignment")}
-        </Link>
+        </RouterButton>
         {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
         <div className="dropdown dropdown-end -ms-px">
           <Button
@@ -72,7 +85,7 @@ const NewAssignmentButton = ({
             className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
           >
-            <ChevronDownIcon aria-hidden="true" className="size-4" />
+            <TriangleDownIcon aria-hidden="true" className="size-4" />
           </Button>
           <DropdownMenu className="w-max">
             <li>
@@ -112,16 +125,57 @@ export const TeacherAssignmentsView = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { data: classData, isLoading: assignmentsLoading } =
-    useGetClassroomAssignments(org, classroom)
-  // Authoritative student-role count for the header and the table denominator,
-  // so neither counts teachers/TAs. The count comes from team membership
-  // (one source); roster.csv identity is fetched by useStudentCount internally.
   const {
-    studentCount,
+    data: classData,
+    isLoading: assignmentsLoading,
+    error: assignmentsErrorObj,
+    refetch: refetchAssignments,
+  } = useGetClassroomAssignments(org, classroom)
+  // A missing assignments.json 404s — the legitimate zero for a brand-new
+  // classroom (same split as ClassroomCard). Only a non-404 failure must be
+  // surfaced as an error instead of the empty state.
+  const assignmentsNotFound =
+    assignmentsErrorObj instanceof GitHubAPIError &&
+    assignmentsErrorObj.status === 404
+  const assignmentsError = Boolean(assignmentsErrorObj) && !assignmentsNotFound
+  // Who the header and the table's funnel count. Team membership is the one
+  // source (roster.csv identity is fetched inside useFunnelRoster); the toggle
+  // widens the counted set from students to students plus teaching staff so a
+  // staff test run registers (#860).
+  const {
+    studentLogins,
+    staffLogins,
     isLoading: studentsLoading,
     isError: studentCountError,
-  } = useStudentCount(org, classroom)
+    isUnknown: studentCountUnknown,
+  } = useFunnelRoster(org, classroom)
+  const [includeStaff, setIncludeStaff] = useState(readIncludeStaff)
+  const toggleIncludeStaff = (on: boolean) => {
+    setIncludeStaff(on)
+    persistIncludeStaff(on)
+  }
+  // Staff who are not also students, so a TA on the student team is never
+  // counted twice (in the header or the union).
+  const staffOnly = useMemo(
+    () =>
+      staffLogins && studentLogins
+        ? new Set([...staffLogins].filter((l) => !studentLogins.has(l)))
+        : undefined,
+    [staffLogins, studentLogins],
+  )
+  const roster = useMemo<FunnelRoster | undefined>(() => {
+    if (!studentLogins || !staffOnly) return undefined
+    return includeStaff
+      ? {
+          counted: unionLogins(studentLogins, staffOnly),
+          excludedStaff: new Set(),
+        }
+      : { counted: studentLogins, excludedStaff: staffOnly }
+  }, [studentLogins, staffOnly, includeStaff])
+  const studentCount = studentLogins?.size
+  const staffOnlyCount = staffOnly?.size ?? 0
+  const countKnown =
+    !studentsLoading && !studentCountError && !studentCountUnknown
   const {
     data: classroomData,
     isLoading: classroomLoading,
@@ -134,6 +188,9 @@ export const TeacherAssignmentsView = ({
   // Author tier (teacher|hta) gates the mutating affordances; a TA sees the
   // list read-only. GitHub is the real enforcer (config-repo write), this is UX.
   const canAuthor = can("authorAssignments", { classroomRole: myRole })
+  // Only an org owner's repo list covers every repo; a non-owner sees the
+  // repos their staff team was granted, so the Accepted column is a lower bound.
+  const { acceptanceComplete } = useStaffCapabilities()
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
   const [query, setQuery] = useState("")
@@ -160,14 +217,10 @@ export const TeacherAssignmentsView = ({
   // Only an author on a live classroom has a bulk action to reach; a read-only
   // or archived view never shows the checkbox column.
   const canBulk = canAuthor && !archived && hasAssignments
-  // An assignment's key is its slug — handed to the shared helpers directly,
-  // so no `{ key }` adapter array is built on every filter change.
   const slugKey = useCallback((a: Assignment) => a.slug, [])
   // Shift-click ranges over the rendered order, through the same hook the
-  // roster and members tables use. It owns the subtlety a hand-rolled anchor
-  // misses: a shift-click's onClick fills the range and flags the follow-up
-  // onChange, which would otherwise toggle the endpoint straight back off.
-  // Every assignment is selectable, so the predicate is constant.
+  // roster and members tables use. Every assignment is selectable, so the
+  // predicate is constant.
   const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
     visible,
     () => true,
@@ -177,11 +230,11 @@ export const TeacherAssignmentsView = ({
   const toggleSelectAllRows = () =>
     setSelectedSlugs((prev) => toggleSelectAll(visible, prev, slugKey))
   const clearSelection = () => setSelectedSlugs(new Set())
-  // The selected assignments, resolved against the live list through the
-  // shared helper — one row per selected slug. A hand-edited assignments.json
-  // can carry two rows for the same slug; resolving would then return both,
-  // which would overstate the count in the bulk bar and send the slug twice to
-  // a batched write, reconciling its template twice for one flag flip.
+  // The selected assignments, resolved against the FULL list (a row the search
+  // hides stays selected and acted on), one row per slug. A hand-edited
+  // assignments.json can carry two rows for the same slug; without the dedupe
+  // the bulk bar would overstate its count and a batched write would receive
+  // the slug twice.
   const selectedAssignments = useMemo(() => {
     const seen = new Set<string>()
     return resolveSelectedRows(
@@ -196,26 +249,24 @@ export const TeacherAssignmentsView = ({
       return true
     })
   }, [sourceAssignments, selectedSlugs, slugKey])
-  // Prune slugs that left the list — deleted from their own row, by a bulk
-  // delete, or in another tab. Adjusted during render (not in an effect), the
-  // same shape useLingeringOpen uses. Filtering only for DISPLAY would leave
+  // Prune slugs that left the list (deleted from their own row, by a bulk
+  // delete, or in another tab). Adjusted during render, not in an effect, the
+  // same shape useLingeringOpen uses. Filtering only for display would leave
   // the dropped slugs in state, so recreating one later would bring it back
-  // pre-ticked, and an emptied selection would keep a count nothing can act on
-  // while Clear selection — which lives in the head-row takeover — is gone.
-  //
-  // Compared as a SET, never by length — see the dedupe above for why a count
-  // is not a safe proxy here.
+  // pre-ticked, and an emptied selection would keep a count nothing can act
+  // on. `liveSlugs` is a subset of `selectedSlugs`, so a size mismatch means
+  // exactly that something was pruned.
   const liveSlugs = useMemo(
     () => new Set(selectedAssignments.map(slugKey)),
     [selectedAssignments, slugKey],
   )
   if (liveSlugs.size !== selectedSlugs.size) setSelectedSlugs(liveSlugs)
 
-  // The toolbar owns the primary action now (New assignment / archived badge),
-  // so it renders whenever the list has loaded — with only the trailing action
-  // when there are no assignments yet (actionsOnly), and the full search/filter/
-  // sort bar once there are.
-  const showToolbar = !assignmentsLoading
+  // The toolbar renders only once assignments exist: on a first-use empty
+  // list the table's blankslate carries the New-assignment action instead
+  // (Primer: the empty state owns its resolving action, and a view gets one
+  // primary button — a toolbar copy would duplicate it).
+  const showToolbar = !assignmentsLoading && hasAssignments
   // The search/filter emptied the view. With no selection the panel replaces
   // the table outright; with one it goes INSIDE the table body instead, so the
   // head row keeps the count and Clear selection — same panel, same Clear
@@ -245,18 +296,35 @@ export const TeacherAssignmentsView = ({
 
   // Classroom-wide collect, left-aligned in the toolbar (the `leading` slot),
   // mirroring the submissions toolbar where the DataFreshness/Sync widget
-  // leads and search + filters sit on the right. Open to any staff viewer (a
-  // TA may collect, as on the submissions page — only authoring is
-  // author-gated). Hidden on an archived classroom and while the list is
-  // empty: there is no assignment to collect for.
+  // leads and search + filters sit on the right. Dispatching the collect
+  // workflow needs config-repo write, the same tier as authoring (teacher and
+  // head TA), so a pull-only TA sees no button rather than a 403. Hidden on an
+  // archived classroom and while the list is empty: there is no assignment to
+  // collect for.
   const collectAction =
-    !archived && hasAssignments ? (
+    canAuthor && !archived && hasAssignments ? (
       <ClassroomCollectButton
         org={org}
         classroom={classroom}
+        classroomName={classroomData?.name || classroomData?.short_name}
         emptyRoster={emptyRoster.show}
       />
     ) : null
+  // Beside Collect all: the two together are "what the counts measure".
+  // Available to every staff viewer (a TA testing an assignment is the case),
+  // but pointless on an archived classroom.
+  const leadingActions =
+    hasAssignments && !archived ? (
+      <>
+        {collectAction}
+        <IncludeStaffToggle
+          checked={includeStaff}
+          onChange={toggleIncludeStaff}
+        />
+      </>
+    ) : (
+      collectAction
+    )
 
   return (
     <div className="flex flex-col gap-6">
@@ -275,9 +343,18 @@ export const TeacherAssignmentsView = ({
         subtitle={
           <>
             {classroomData?.term ? `${classroomData?.term} • ` : ""}
-            {studentsLoading || studentCountError
+            {studentsLoading
               ? "…"
-              : t("assignments.studentCount", { count: studentCount ?? 0 })}
+              : // A failed or unknowable count is hidden entirely (never a
+                // wrong number); the perpetual "…" read as still-loading.
+                studentCountError || studentCountUnknown
+                ? null
+                : t("assignments.studentCount", { count: studentCount ?? 0 })}
+            {/* With staff counted, say how many so the table's denominator
+                adds up against the header. */}
+            {countKnown && includeStaff
+              ? ` • ${t("assignments.staffCount", { count: staffOnlyCount })}`
+              : null}
           </>
         }
       />
@@ -315,8 +392,7 @@ export const TeacherAssignmentsView = ({
           onFiltersChange={setFilters}
           sort={sort}
           onSortChange={setSort}
-          actionsOnly={!hasAssignments}
-          leading={collectAction}
+          leading={leadingActions}
           trailing={primaryAction}
         />
       )}
@@ -337,15 +413,27 @@ export const TeacherAssignmentsView = ({
           // whole table). "No assignments created." would be a false statement
           // about a classroom the filter merely emptied.
           empty={noResults ? noResultsPanel : undefined}
-          studentCount={studentCount}
+          roster={roster}
+          includeStaff={includeStaff}
           loading={assignmentsLoading}
+          loadError={assignmentsError}
+          onRetryLoad={() => void refetchAssignments()}
+          // The first-use blankslate's action — the same split button
+          // (create + reuse) the toolbar shows once assignments exist. A TA
+          // or an archived classroom gets no action (plain empty statement).
+          emptyAction={
+            canAuthor && !archived ? (
+              <NewAssignmentButton org={org} classroom={classroom} />
+            ) : undefined
+          }
           archived={archived}
           canAuthor={canAuthor}
+          acceptanceComplete={acceptanceComplete}
           sort={sort}
           onSortChange={setSort}
-          // Replay the row entrance on filter/sort changes; search is excluded
-          // so typing doesn't remount the rows on every keystroke.
-          viewSignature={`${JSON.stringify(filters)}|${sort}`}
+          // Replay the row entrance on filter/sort/toggle changes; search is
+          // excluded so typing doesn't remount the rows on every keystroke.
+          viewSignature={`${JSON.stringify(filters)}|${sort}|${includeStaff}`}
           selectedSlugs={canBulk ? selectedSlugs : undefined}
           onToggleRow={canBulk ? handleToggleRow : undefined}
           onRowCheckboxClick={canBulk ? handleRowCheckboxClick : undefined}
@@ -401,7 +489,7 @@ const AssignmentsPage = () => {
 
   return (
     <PageShell>
-      <Breadcrumb endpoint={t("nav.assignments")} />
+      <Breadcrumb switcher="classroom" />
       {org && classroom && (
         <ClaimTeacherNotice org={org} classroom={classroom} />
       )}

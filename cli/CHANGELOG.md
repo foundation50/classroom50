@@ -17,6 +17,143 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.46.1](https://github.com/foundation50/classroom50/compare/cli-v1.46.0...cli-v1.46.1) (2026-09-07)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
+## [1.46.0](https://github.com/foundation50/classroom50/compare/cli-v1.45.0...cli-v1.46.0) (2026-09-06)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
+## [1.45.0](https://github.com/foundation50/classroom50/compare/cli-v1.44.0...cli-v1.45.0) (2026-09-04)
+
+
+### Features
+
+* **cli:** accept the tests.json envelope in --tests and add assignment test set ([#882](https://github.com/foundation50/classroom50/issues/882)) ([6d12e07](https://github.com/foundation50/classroom50/commit/6d12e07286cb0daee980063c3197d3aca09fb003))
+
+
+### Bug Fixes
+
+* **cli:** document and check the tools self-hosted autograde runners need ([#883](https://github.com/foundation50/classroom50/issues/883)) ([947cdb6](https://github.com/foundation50/classroom50/commit/947cdb63dbfaffb0396cbeb92ae1906022891d38))
+* surface and repair accept runs that stopped before the setup commit ([#885](https://github.com/foundation50/classroom50/issues/885)) ([cad2e01](https://github.com/foundation50/classroom50/commit/cad2e01738717fc666d368e47a67cade59a1ac59))
+* **web:** warn when a release date leaves a private template readable ([#887](https://github.com/foundation50/classroom50/issues/887)) ([669bdd7](https://github.com/foundation50/classroom50/commit/669bdd7fef4ac87231a998c6a4b0a69aaeba671d))
+
+## [1.44.0](https://github.com/foundation50/classroom50/compare/cli-v1.43.0...cli-v1.44.0) (2026-09-03)
+
+
+### Bug Fixes
+
+* **cli:** stop blaming the service token when the Actions budget cap fails ([#865](https://github.com/foundation50/classroom50/issues/865)) ([eb4521f](https://github.com/foundation50/classroom50/commit/eb4521fa84275211222ab6cd7216378ca8cdb22f))
+* **cli:** stop grading the accept commit of a template-less assignment ([#876](https://github.com/foundation50/classroom50/issues/876)) ([7d84698](https://github.com/foundation50/classroom50/commit/7d84698fbe706e9dfbf09c559341d6e75b1cc37d))
+
+## [1.43.0](https://github.com/foundation50/classroom50/compare/cli-v1.42.0...cli-v1.43.0) (2026-09-03)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
+## [1.42.0](https://github.com/foundation50/classroom50/compare/cli-v1.41.0...cli-v1.42.0) (2026-09-02)
+
+
+### Features
+
+* expose the assignment bundle to declarative test commands ([#833](https://github.com/foundation50/classroom50/issues/833)) ([aeb154d](https://github.com/foundation50/classroom50/commit/aeb154dbed806b1a8311a2de66db72417ecaa47c))
+* label each collect by scope and make its button show progress ([#832](https://github.com/foundation50/classroom50/issues/832)) ([3765cf3](https://github.com/foundation50/classroom50/commit/3765cf3a363158d2c75dd37698c57cb0eedb2f91))
+* lock an assignment from the assignment form ([#839](https://github.com/foundation50/classroom50/issues/839)) ([7787456](https://github.com/foundation50/classroom50/commit/7787456251acb20ffd08687121e9fab0fa99264d))
+
+
+### Bug Fixes
+
+* **cli:** explain hand-written tests.json errors and where tests belong ([#834](https://github.com/foundation50/classroom50/issues/834)) ([6b0b83c](https://github.com/foundation50/classroom50/commit/6b0b83cfad6048af79a9705dc114d2b73fa786d9))
+* **cli:** hand the classroom default autograder the extracted bundle ([515d4b6](https://github.com/foundation50/classroom50/commit/515d4b6367b2418bd99b9666532b4df44ed9454b))
+* **cli:** make collect warnings reflect what the run found ([f89fc10](https://github.com/foundation50/classroom50/commit/f89fc1050cd2a480d052464f066e7c9fac7e78f9))
+* **cli:** name every required permission when the config repo read is refused ([#855](https://github.com/foundation50/classroom50/issues/855)) ([7acdcef](https://github.com/foundation50/classroom50/commit/7acdcefe5b7ad4513b99ce74d7b1cea4f967b18a))
+* **cli:** reuse the org listing when detecting pushes without a release ([63f36d4](https://github.com/foundation50/classroom50/commit/63f36d43d64d0c2be2fe3d57970d251d58b68c0f))
+* count pushes without a graded release in the assignments list ([#838](https://github.com/foundation50/classroom50/issues/838)) ([b5853e7](https://github.com/foundation50/classroom50/commit/b5853e7931e2df3de4704ff3a8615e6e36000de0))
+* fetch the org repo listing in parallel and probe known repo names ([#829](https://github.com/foundation50/classroom50/issues/829)) ([45f95e4](https://github.com/foundation50/classroom50/commit/45f95e40e0754393e6b8889c9eb3e258def11f03))
+* make staff access grants visible and catch repo-scoped service tokens ([#835](https://github.com/foundation50/classroom50/issues/835)) ([f27b4dc](https://github.com/foundation50/classroom50/commit/f27b4dc20f509b568f82014e4c024768be196eb0))
+
+## [1.41.0](https://github.com/foundation50/classroom50/compare/cli-v1.40.0...cli-v1.41.0) (2026-09-02)
+
+
+### Features
+
+* add team-based group assignments backed by GitHub Teams ([#827](https://github.com/foundation50/classroom50/issues/827)) ([63cb10f](https://github.com/foundation50/classroom50/commit/63cb10f6ab06ed76c7cbd69b366f61a65b3df5eb))
+
+## [1.40.0](https://github.com/foundation50/classroom50/compare/cli-v1.39.1...cli-v1.40.0) (2026-08-31)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
+## [1.39.1](https://github.com/foundation50/classroom50/compare/cli-v1.39.0...cli-v1.39.1) (2026-08-31)
+
+
+### Bug Fixes
+
+* **cli:** rewrite user-facing copy in GitHub's voice ([#818](https://github.com/foundation50/classroom50/issues/818)) ([f014a90](https://github.com/foundation50/classroom50/commit/f014a902fdbd3751f498b15d52ad1fe47ecbb3a0))
+
+## [1.39.0](https://github.com/foundation50/classroom50/compare/cli-v1.38.0...cli-v1.39.0) (2026-08-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811))
+
+### Features
+
+* remove GitHub Classroom migration (product retired) ([#811](https://github.com/foundation50/classroom50/issues/811)) ([319b7f6](https://github.com/foundation50/classroom50/commit/319b7f613db0f260ba619001eb4e93f345fdbc14))
+
+
+### Miscellaneous Chores
+
+* pin next release to 1.39.0 ([640736b](https://github.com/foundation50/classroom50/commit/640736b70c3ee865aef7a99eb78a212833391eb4))
+
+## [1.38.0](https://github.com/foundation50/classroom50/compare/cli-v1.37.0...cli-v1.38.0) (2026-08-30)
+
+
+### Features
+
+* non-blocking roster sync, kept unlinked rows, and batch editing ([#806](https://github.com/foundation50/classroom50/issues/806)) ([5a5bb25](https://github.com/foundation50/classroom50/commit/5a5bb25554ed3f75b7abd5395467701c717f33e5))
+
+## [1.37.0](https://github.com/foundation50/classroom50/compare/cli-v1.36.0...cli-v1.37.0) (2026-08-28)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
+## [1.36.0](https://github.com/foundation50/classroom50/compare/cli-v1.35.0...cli-v1.36.0) (2026-08-28)
+
+
+### Miscellaneous Chores
+
+* **cli:** Synchronize classroom50 versions
+
+## [1.35.0](https://github.com/foundation50/classroom50/compare/cli-v1.34.1...cli-v1.35.0) (2026-08-28)
+
+
+### Features
+
+* add autograder failure-details and show-output options ([#767](https://github.com/foundation50/classroom50/issues/767)) ([d1713bd](https://github.com/foundation50/classroom50/commit/d1713bd63be070a5321622a6b7f3d855a4c7e74a))
+* add repo_visibility control for generated assignment repos ([#771](https://github.com/foundation50/classroom50/issues/771)) ([d6ff58e](https://github.com/foundation50/classroom50/commit/d6ff58e53221a8193a8ed14808f2240337da39b6))
+* **web:** support a custom Pages domain for published classroom resources ([#782](https://github.com/foundation50/classroom50/issues/782)) ([807265c](https://github.com/foundation50/classroom50/commit/807265ce28de174f70f6fb51a197c209ca75c77f))
+
+
+### Bug Fixes
+
+* **cli:** use the student's git identity for submit commits ([#780](https://github.com/foundation50/classroom50/issues/780)) ([f96a82c](https://github.com/foundation50/classroom50/commit/f96a82c78f254864df841b82fc762409740931d5)), closes [#772](https://github.com/foundation50/classroom50/issues/772)
+* stop concurrent invite acceptance from corrupting roster.csv ([#773](https://github.com/foundation50/classroom50/issues/773)) ([14eae9c](https://github.com/foundation50/classroom50/commit/14eae9c8b12f8f76b9c44025f08855eeba4543b0))
+
 ## [1.34.1](https://github.com/foundation50/classroom50/compare/cli-v1.34.0...cli-v1.34.1) (2026-08-26)
 
 

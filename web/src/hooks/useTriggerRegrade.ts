@@ -55,7 +55,7 @@ const useTriggerRegrade = (target: RegradeTarget) => {
 
   const key = targetKey(target)
 
-  const { trigger, phase, run, error } = useGitHubOperation({
+  const { trigger, phase, run, error, inFlight } = useGitHubOperation({
     storageKey: isComplete(target) ? `cl50:regrade:${key}` : null,
     queryKey: (sinceRunId) =>
       githubKeys.regradeRun(
@@ -95,7 +95,6 @@ const useTriggerRegrade = (target: RegradeTarget) => {
 
   // Publish in-flight state to the page coordinator so "Regrade all", every
   // per-row tracker, and "Collect now" share one mutual-exclusion signal.
-  const inFlight = phase === "dispatching" || phase === "running"
   const { setInFlight } = coordinator
   useEffect(() => {
     setInFlight(key, inFlight)
@@ -112,6 +111,7 @@ const useTriggerRegrade = (target: RegradeTarget) => {
     phase,
     run,
     error,
+    inFlight,
     // True while ANY regrade (this one, another row, or "Regrade all") is in
     // flight — callers disable collect/regrade controls page-wide.
     anyRegrading: coordinator.anyInFlight,

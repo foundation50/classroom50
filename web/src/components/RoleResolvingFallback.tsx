@@ -1,15 +1,21 @@
+import { useTranslation } from "react-i18next"
+
 import { Spinner } from "@/components/Spinner"
 
 // Shared pending state for the role-gated surfaces (RequireRole, the
-// assignment index redirect, the SubmissionsPage self-guard).
+// assignment index redirect, the SubmissionsPage self-guard). Labeled with
+// what is actually resolving (Primer: name the load when known).
 const RoleResolvingFallback = ({
   className = "min-h-[60vh]",
 }: {
   className?: string
-}) => (
-  <div className={`flex items-center justify-center ${className}`}>
-    <Spinner size="lg" />
-  </div>
-)
+}) => {
+  const { t } = useTranslation()
+  return (
+    <div className={`flex items-center justify-center ${className}`}>
+      <Spinner size="lg" label={t("common.resolvingRole")} />
+    </div>
+  )
+}
 
 export default RoleResolvingFallback

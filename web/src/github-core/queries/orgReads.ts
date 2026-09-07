@@ -8,7 +8,7 @@ import type {
 } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
-import { paginateAll } from "../paginate"
+import { PAGE_FETCH_CONCURRENCY, paginateAll } from "../paginate"
 import type { OrgRunner, OrgRunnersResult } from "@/util/runners"
 import { githubKeys } from "./keys"
 
@@ -90,6 +90,7 @@ export function listAllOrgMembers(client: GitHubClient, org: string) {
   return paginateAll<GitHubUser>(
     client,
     (page) => `/orgs/${org}/members?per_page=100&page=${page}`,
+    { concurrency: PAGE_FETCH_CONCURRENCY },
   )
 }
 

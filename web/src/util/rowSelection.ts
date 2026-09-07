@@ -1,14 +1,12 @@
 // Pure selection logic for a table's multi-select, extracted so the tricky
-// invariants (select-all targets only filtered + selectable rows; the
-// non-selectable row — e.g., the signed-in owner/self — is never selectable; a
+// invariants (select-all targets only filtered + selectable rows; a
+// non-selectable row such as the signed-in self never enters the set; a
 // selection persists across filtering) are unit-testable without rendering.
 //
-// Shared by the Org Members list (OrgMemberRow), the classroom roster
-// (TeamRosterRow) and the assignments table (Assignment). The logic reads one
-// stable key per row, read through the caller's `keyOf` — so a row type keyed
-// on something other than `.key` (Assignment.slug) is passed straight through
+// Shared by the org members list, the classroom roster and the assignments
+// table. Rows are identified through the caller's `keyOf`, so a type keyed on
+// something other than `.key` (Assignment.slug) is passed straight through
 // instead of being mapped into a throwaway `{ key }` array on every render.
-// The caller supplies `keyOf` and the `selectable` predicate.
 export type KeyOf<T> = (row: T) => string
 
 // The rows in the current filtered view that MAY be selected — everything the

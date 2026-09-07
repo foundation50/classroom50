@@ -1,5 +1,12 @@
 import { ConfirmModal } from "@/components/modals"
-import { Button, Card, EmphasisLtr, Heading } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  EmphasisLtr,
+  Heading,
+  RouterButton,
+} from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
@@ -24,6 +31,7 @@ import {
 } from "@/components/ui/icons"
 import { useEffect, useId, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { errorText } from "@/types/localizedMessage"
 
 type ClassroomCardProps = {
   summary: ClassroomSummary
@@ -44,6 +52,7 @@ function useCardCounts(org: string, classroom: string) {
     studentCount,
     isLoading: studentsLoading,
     isError: studentsError,
+    isUnknown: studentsUnknown,
   } = useStudentCount(org, classroom)
   const assignmentsQuery = useGetClassroomAssignments(org, classroom)
   // A missing assignments.json 404s (a brand-new classroom has none), which is
@@ -56,6 +65,9 @@ function useCardCounts(org: string, classroom: string) {
     // shows "counts unavailable" rather than a misleading 0 (R6).
     studentCount: studentsLoading ? undefined : studentCount,
     studentsError,
+    // Settled but unknowable to this viewer (see useStudentCount.isUnknown):
+    // the stat is omitted, neither a spinner nor "0 students".
+    studentsUnknown,
     // Optional-chain `assignments` too: jsonFileQuery does no shape validation,
     // so a file that parses without an `assignments` array must not throw.
     assignmentCount: assignmentsQuery.isPending
@@ -108,7 +120,7 @@ function ClassroomMenu({
   onMenuOpenChange?: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const { notify } = useToast()
+  const { notify, announce } = useToast()
   const [open, setOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -318,36 +330,34 @@ function ClassroomMenu({
         confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
         cancelLabel={t("common.cancel")}
         needsConfirm={false}
-        dangerous={false}
+        tone="warning"
         onConfirm={async () => {
-          await archiveMutation.mutateAsync(archived, {
-            onSuccess: (_r, active) => {
-              notify({
-                tone: "success",
-                durationMs: 5000,
-                message: active
-                  ? t("classes.unarchivedToast", { classroom: slug })
-                  : t("classes.archivedToast", { classroom: slug }),
-              })
-            },
-            onError: (err) => {
-              notify({
-                tone: "error",
-                message: t(
-                  archived
-                    ? "classes.unarchiveFailed"
-                    : "classes.archiveFailed",
-                  {
-                    classroom: slug,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  },
-                ),
-              })
-            },
-          })
+          try {
+            await archiveMutation.mutateAsync(archived, {
+              onSuccess: (_r, active) => {
+                // The badge flips in place — SR announcement only (Primer:
+                // no visual success message for an evident outcome).
+                announce(
+                  active
+                    ? t("classes.unarchivedToast", { classroom: slug })
+                    : t("classes.archivedToast", { classroom: slug }),
+                )
+              },
+            })
+          } catch (err) {
+            // Rethrow with the localized copy so the failure surfaces inside
+            // the confirm dialog (Primer: dialog errors stay in the dialog).
+            throw new Error(
+              t(
+                archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
+                {
+                  classroom: slug,
+                  error: errorText(t, err),
+                },
+              ),
+              { cause: err },
+            )
+          }
         }}
         onClose={() => setArchiveOpen(false)}
       />
@@ -368,53 +378,50 @@ function ClassroomMenu({
         confirmText={`${org}/${slug}`}
         confirmLabel={t("classes.deleteClassroomConfirm")}
         cancelLabel={t("classes.deleteClassroomCancel")}
-        dangerous
+        tone="error"
+        warning={t("classes.deleteClassroomWarning")}
         onConfirm={async () => {
-          await deleteMutation.mutateAsync(
-            { org, classroom: slug },
-            {
-              onSuccess: (result) => {
-                // deleteClassroom returns { deleted: false } as a no-op (e.g.
-                // the dir was already gone). Don't claim success in that case.
-                if (!result.deleted) {
-                  notify({
-                    tone: "warning",
-                    message: t("classes.deleteNoop", { classroom: slug }),
-                  })
-                  return
-                }
-                // The list flow stays put (no navigate), so it is the natural
-                // place to surface the non-fatal team-cleanup warning that the
-                // edit page silently drops.
-                if (result.teamDeleteWarning) {
-                  notify({
-                    tone: "warning",
-                    message: t("classes.deleteTeamWarning", {
-                      classroom: slug,
-                    }),
-                  })
-                } else {
-                  notify({
-                    tone: "success",
-                    durationMs: 5000,
-                    message: t("classes.deletedToast", { classroom: slug }),
-                  })
-                }
+          try {
+            await deleteMutation.mutateAsync(
+              { org, classroom: slug },
+              {
+                onSuccess: (result) => {
+                  // deleteClassroom returns { deleted: false } as a no-op (e.g.
+                  // the dir was already gone). Don't claim success in that case.
+                  if (!result.deleted) {
+                    notify({
+                      tone: "warning",
+                      message: t("classes.deleteNoop", { classroom: slug }),
+                    })
+                    return
+                  }
+                  // The list flow stays put (no navigate), so it is the natural
+                  // place to surface the non-fatal team-cleanup warning that the
+                  // edit page silently drops.
+                  if (result.teamDeleteWarning) {
+                    notify({
+                      tone: "warning",
+                      message: t("classes.deleteTeamWarning", {
+                        classroom: slug,
+                      }),
+                    })
+                  } else {
+                    // The card disappears — SR announcement only.
+                    announce(t("classes.deletedToast", { classroom: slug }))
+                  }
+                },
               },
-              onError: (err) => {
-                notify({
-                  tone: "error",
-                  message: t("classes.deleteFailed", {
-                    classroom: slug,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
-                  }),
-                })
-              },
-            },
-          )
+            )
+          } catch (err) {
+            // Surfaces inside the confirm dialog rather than a corner toast.
+            throw new Error(
+              t("classes.deleteFailed", {
+                classroom: slug,
+                error: errorText(t, err),
+              }),
+              { cause: err },
+            )
+          }
         }}
         onClose={() => setDeleteOpen(false)}
       />
@@ -426,10 +433,12 @@ function ClassroomBadges({ summary }: { summary: ClassroomSummary }) {
   const { t } = useTranslation()
   return (
     <div className="flex items-center gap-2">
-      <span className="badge badge-soft badge-primary">
+      <Badge tone="primary" size="md">
         {summary.term || t("classes.noTermSpecified")}
-      </span>
+      </Badge>
       {summary.archived && (
+        // badge-neutral is deliberately not a Badge tone (Badge's neutral is
+        // the uncolored chip), so the archived chip keeps its inline recipe.
         <span className="badge badge-soft badge-neutral">
           {t("classes.archived")}
         </span>
@@ -440,22 +449,29 @@ function ClassroomBadges({ summary }: { summary: ClassroomSummary }) {
 
 export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
   const { t } = useTranslation()
-  const { studentCount, studentsError, assignmentCount, assignmentsError } =
-    useCardCounts(org, slug)
+  const {
+    studentCount,
+    studentsError,
+    studentsUnknown,
+    assignmentCount,
+    assignmentsError,
+  } = useCardCounts(org, slug)
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <CountStat
-        icon={<PeopleIcon aria-hidden="true" className="size-4" />}
-        loading={studentCount === undefined && !studentsError}
-        loadingLabel={t("classes.card.loadingStudents")}
-        label={
-          studentsError
-            ? t("classes.card.countsUnavailable")
-            : studentCount === 0
-              ? t("classes.noStudents")
-              : t("classes.studentCount", { count: studentCount ?? 0 })
-        }
-      />
+      {!studentsUnknown && (
+        <CountStat
+          icon={<PeopleIcon aria-hidden="true" className="size-4" />}
+          loading={studentCount === undefined && !studentsError}
+          loadingLabel={t("classes.card.loadingStudents")}
+          label={
+            studentsError
+              ? t("classes.card.countsUnavailable")
+              : studentCount === 0
+                ? t("classes.noStudents")
+                : t("classes.studentCount", { count: studentCount ?? 0 })
+          }
+        />
+      )}
       <CountStat
         icon={<BookIcon aria-hidden="true" className="size-4" />}
         loading={assignmentCount === undefined && !assignmentsError}
@@ -487,17 +503,18 @@ function ViewRosterButton({
 }) {
   const { t } = useTranslation()
   return (
-    <Link
-      type="button"
+    <RouterButton
       to="/$org/$classroom/roster"
       params={{ org, classroom: slug }}
       aria-label={t("classes.viewRosterAria", {
         classroom: classroomName,
       })}
-      className={`btn btn-outline btn-primary btn-sm ${block ? "flex-1" : ""}`}
+      variant="outline"
+      size="sm"
+      className={block ? "flex-1" : undefined}
     >
       {t("classes.viewRoster")}
-    </Link>
+    </RouterButton>
   )
 }
 
@@ -514,17 +531,18 @@ function ViewAssignmentsButton({
 }) {
   const { t } = useTranslation()
   return (
-    <Link
-      type="button"
+    <RouterButton
       to="/$org/$classroom/assignments"
       params={{ org, classroom: slug }}
       aria-label={t("classes.viewAssignmentsAria", {
         classroom: classroomName,
       })}
-      className={`btn btn-outline btn-primary btn-sm ${block ? "flex-1" : ""}`}
+      variant="outline"
+      size="sm"
+      className={block ? "flex-1" : undefined}
     >
       {t("classes.viewAssignments")}
-    </Link>
+    </RouterButton>
   )
 }
 

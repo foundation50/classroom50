@@ -50,6 +50,30 @@ function walk(dir: string): string[] {
 const T_CALL = /\bt\(\s*(["'`])((?:(?!\1)[^\\$]|\\.)*)\1/g
 
 describe("i18n key audit", () => {
+  it("no key segment in en.json contains a dot", () => {
+    // Every flattener in the pipeline (flattenBundle, verify_locale.py,
+    // audit_i18n.py, translate_locales.py) joins segments with "." and splits
+    // them back the same way, so a leaf named "2.1" flattens to a path that no
+    // longer resolves. i18next happens to tolerate it, which is why only the
+    // translation workflow noticed.
+    const dotted: string[] = []
+    const walkKeys = (node: unknown, path: string[]) => {
+      if (!node || typeof node !== "object") return
+      for (const [segment, value] of Object.entries(node)) {
+        const here = [...path, segment]
+        if (segment.includes(".")) dotted.push(here.join("/"))
+        walkKeys(value, here)
+      }
+    }
+    walkKeys(en, [])
+    expect(
+      dotted,
+      `en.json key segments must not contain "." (shown as nested paths):\n${dotted
+        .map((k) => `  ${k}`)
+        .join("\n")}`,
+    ).toEqual([])
+  })
+
   it('every static t("…") key exists in en.json', () => {
     const missing: { file: string; key: string }[] = []
     for (const file of walk(SRC_DIR)) {
