@@ -87,9 +87,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("AssignmentsBulkBar selection scope", () => {
-  // The contract OrgMembersPage documents: a selected row the search is hiding
-  // is still selected and still acted on. Counting only the visible rows would
-  // understate the selection and silently act on less than was picked.
+  // A selected row the search is hiding is still acted on.
   it("counts the whole selection, not only the visible rows", () => {
     renderBar({ selected: ["hw1", "hw2", "hw3"] })
 
@@ -112,9 +110,8 @@ describe("AssignmentsBulkBar selection scope", () => {
   })
 })
 
-// The row action is a toggle because one assignment has one state; a selection
-// can be mixed, so both verbs exist here — but a verb with nothing to do is
-// disabled rather than left to report "already in that state".
+// A selection can be mixed, so both verbs exist; one with nothing to do is
+// disabled.
 describe("AssignmentsBulkBar lock state", () => {
   const lockButton = () =>
     screen.getByLabelText("assignments.bulk.lock") as HTMLButtonElement
@@ -149,19 +146,13 @@ describe("AssignmentsBulkBar lock state", () => {
   })
 })
 
-// No bulk action clears the selection. It cannot: these dialogs are rendered
-// from the head cell the table only renders WHILE something is selected, so
-// clearing from inside one destroys that dialog mid-close. Clearing is the X
-// button's job, and a bulk delete empties itself once assignments.json
-// refetches and the page re-resolves the selection against the live list.
+// No bulk action clears the selection: the dialogs live in the head cell a
+// selection keeps mounted, so clearing from inside one would destroy it
+// mid-close.
 describe("AssignmentsBulkBar selection lifetime", () => {
   const openReuse = () =>
     fireEvent.click(screen.getByLabelText("assignments.bulk.reuse"))
 
-  // The defect this guards: these dialogs live in the table's head cell, which
-  // the table renders only WHILE something is selected. Clearing from inside a
-  // confirm handler destroys the dialog before ConfirmModal's own onClose and
-  // fade-out run.
   it("keeps the selection after a bulk lock lands", async () => {
     const onClearSelection = vi.fn()
     render(
@@ -192,8 +183,7 @@ describe("AssignmentsBulkBar selection lifetime", () => {
     )
 
     fireEvent.click(screen.getByLabelText("assignments.bulk.delete"))
-    // Delete is the one bulk action with no undo, so it acknowledges first and
-    // then wants the word typed.
+    // Delete acknowledges first, then wants the word typed.
     fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: "assignments.bulk.deleteConfirmWord" },
@@ -204,9 +194,8 @@ describe("AssignmentsBulkBar selection lifetime", () => {
     expect(onClearSelection).not.toHaveBeenCalled()
   })
 
-  // An all-missing selection commits nothing, but "already in that state" is
-  // a false statement about assignments that no longer exist — notifyMissing
-  // is what reports them.
+  // "Already in that state" would be false for assignments that no longer
+  // exist; notifyMissing reports them instead.
   it("does not claim no-change when the whole selection was already gone", async () => {
     lockMutate.mockResolvedValue({
       changed: [],

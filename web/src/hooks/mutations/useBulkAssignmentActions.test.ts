@@ -5,9 +5,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
-// Held open so a second run() can be attempted while the first is in flight —
-// the double-click the latch exists for. The loop itself is the domain's, and
-// tested there (domain/assignments/bulkActions.test.ts).
+// Held open so a second run() can be attempted while the first is in flight.
+// The loop itself is tested in domain/assignments/bulkActions.test.ts.
 let release: (() => void) | null = null
 const bulkCopy = vi.fn(
   () =>
@@ -44,8 +43,8 @@ describe("useBulkReuseAssignments", () => {
   it("ignores a second run while one is in flight", async () => {
     const { result } = setup()
 
-    // Both calls happen before `running` can reach a re-render, exactly as a
-    // double-click on the modal's Reuse button would.
+    // Both calls land before `running` can reach a re-render, like a
+    // double-click.
     const first = result.current.run(items, "cs101")
     const second = result.current.run(items, "cs101")
 
@@ -56,7 +55,6 @@ describe("useBulkReuseAssignments", () => {
     await first
     await waitFor(() => expect(result.current.running).toBe(false))
 
-    // The latch releases with the run: a later click still works.
     const third = result.current.run(items, "cs101")
     release?.()
     await third

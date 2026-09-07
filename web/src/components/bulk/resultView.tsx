@@ -42,9 +42,7 @@ export const BulkResultSection = ({
       <tbody>
         {rows.map((row) => (
           <tr key={row.key}>
-            {/* align-top keeps a one-line label level with a detail that
-                wrapped. Breaking long slugs and error sentences is the modal
-                box's job: `overflow-wrap` is inherited from it. */}
+            {/* align-top keeps a one-line label level with a wrapped detail. */}
             <td className="align-top">
               <code>{row.label}</code>
             </td>

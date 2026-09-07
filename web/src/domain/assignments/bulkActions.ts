@@ -22,50 +22,37 @@ import { copyAssignmentWithConflictRetry } from "./copyReuse"
 import { log } from "./accessPrimitives"
 import { reconcileLockTemplateAccess } from "./createEdit"
 
-// Batched counterparts of setAssignmentLock and deleteAssignment, for the
-// assignments page's bulk bar.
-//
-// The single-assignment functions each do a full read-modify-write of
-// <classroom>/assignments.json. Looping them over a selection would be N
-// commits to ONE file, strictly serialized on the ref each previous write just
-// moved, and every one a conflict-retry candidate. These collapse the selection
-// into a single tree and commit instead, so the classroom's history gets one
-// entry per user action and a partial write is impossible.
-//
-// The lock's template reconciliation deliberately does NOT batch: each private
-// in-org template is its own grant/revoke call, and reconcile already degrades
-// to a non-fatal warning rather than failing a committed flip, so it runs per
-// assignment AFTER the commit and the warnings come back per slug.
+// Batched counterparts of setAssignmentLock and deleteAssignment. Looping the
+// single-assignment writers over a selection would be N commits to one file,
+// each serialized on the ref the previous one just moved and each a
+// conflict-retry candidate; one tree and one commit make a partial write
+// impossible. The lock's template reconciliation stays per assignment: each
+// template is its own grant/revoke, and it already degrades to a warning.
 
-// One assignment's outcome within a bulk run.
 export type BulkAssignmentOutcome = {
   slug: string
-  // Non-fatal: the flag was committed, but the template's student-team read
-  // could not be reconciled. Never set for deletes.
+  // Non-fatal: the flag was committed but the template read could not be
+  // reconciled. Never set for deletes.
   templateAccessWarning?: string
 }
 
 export type BulkLockResult = {
-  // Slugs whose `locked` flag actually changed. A slug already in the requested
-  // state is skipped (a stale tab, a double-click), mirroring the single-
-  // assignment no-op. Empty means nothing was committed.
+  // Slugs whose flag actually changed; one already in the requested state is
+  // skipped, like the single-assignment no-op. Empty means nothing committed.
   changed: string[]
-  // Selected slugs no longer present in assignments.json — deleted from another
-  // tab or session between render and submit. Reported, never fatal.
+  // Selected slugs no longer in assignments.json (deleted elsewhere between
+  // render and submit). Reported, never fatal.
   missing: string[]
   outcomes: BulkAssignmentOutcome[]
   newCommitSha: string | null
 }
 
-// Deliberately below REPO_READ_CONCURRENCY (8), which the read-only domain
-// walks use: each reconcile is a repo probe plus a team permission WRITE, and
-// GitHub's secondary rate limits bite on concurrent writes rather than reads.
+// Below REPO_READ_CONCURRENCY (8): each reconcile is a team permission write,
+// and GitHub's secondary rate limits bite on concurrent writes.
 const RECONCILE_CONCURRENCY = 4
 
-// The read half of the config-repo write both functions below perform: the
-// archived guard, the branch, the ref, the commit the tree will be based on,
-// and the classroom's current assignments.json. Written once here rather than
-// twice, so the two batched writes cannot drift in what they read.
+// The read half of the config-repo write, shared so the two batched writers
+// cannot drift in what they read.
 type AssignmentsWriteContext = {
   configBranch: string
   headSha: string
@@ -100,8 +87,7 @@ async function readAssignmentsForWrite(
   }
 }
 
-// The write half: one tree, one commit, one ref move. Returns the new commit's
-// sha.
+// The write half: one tree, one commit, one ref move.
 async function commitAssignments(
   client: GitHubClient,
   org: string,
@@ -131,7 +117,6 @@ async function commitAssignments(
   return newCommit.sha
 }
 
-// "1 assignment" / "3 assignments", for the commit subjects below.
 const assignmentCount = (n: number) => `${n} assignment${n === 1 ? "" : "s"}`
 
 export type SetAssignmentsLockInput = {
@@ -172,9 +157,7 @@ export async function setAssignmentsLock(
       assignments: ctx.current.assignments.map((a) => {
         if (!changing.has(a.slug)) return a
         const updated: Assignment = { ...a, locked }
-        // Collapse to the wire's absent-is-false shape (matches the CLI's
-        // omitempty), so unlocking drops the key rather than writing
-        // `locked: false`.
+        // Match the CLI's omitempty: unlocking drops the key.
         if (!locked) delete updated.locked
         return updated
       }),
@@ -191,16 +174,10 @@ export async function setAssignmentsLock(
     )
   }
 
-  // Reconcile every SELECTED assignment that exists, not only the ones whose
-  // flag moved: a previous run may have committed the flag and then failed the
-  // grant/revoke, which is exactly the state the single-assignment path
-  // re-reconciles on a repeat click.
-  //
-  // Bounded concurrency rather than one after another: each is a repo probe
-  // plus an idempotent team grant/revoke against a DIFFERENT template repo and
-  // never touches the config repo's ref, so nothing here serializes on shared
-  // state the way the commit above does. mapWithConcurrency preserves input
-  // order, so `outcomes` still lines up with the selection.
+  // Reconcile every present assignment, not only the changed ones: a previous
+  // run may have committed the flag and then failed the grant/revoke. Safe to
+  // run concurrently, since each targets a different template repo and never
+  // touches the config repo's ref.
   const outcomes = await mapWithConcurrency(
     present,
     RECONCILE_CONCURRENCY,
@@ -229,8 +206,7 @@ export function setAssignmentsLockWithConflictRetry(
 
 export type BulkDeleteResult = {
   deleted: string[]
-  // Selected slugs already absent from assignments.json — nothing to remove,
-  // reported so the caller doesn't claim a delete that never happened.
+  // Selected slugs already absent from assignments.json.
   missing: string[]
   newCommitSha: string | null
 }
@@ -285,20 +261,16 @@ export function deleteAssignmentsWithConflictRetry(
   return withGitConflictRetry(() => deleteAssignments(client, input))
 }
 
-// One planned copy in a bulk reuse run. The target slugs are resolved and
-// validated in the view (util/bulkReuseSlugs) so the teacher confirms every one
-// before the run starts; this executes what was confirmed.
+// A copy the teacher already confirmed; slugs are resolved and validated in
+// util/bulkReuseSlugs before the run starts.
 export type BulkCopyItem = { source: Assignment; targetSlug: string }
 
-// One source assignment's fate in that run.
 export type BulkCopyOutcome = {
   slug: string
   targetSlug?: string
   error?: string
-  // The copy landed, but the target classroom's student team could not be
-  // granted read on the private template — so students cannot accept it yet.
-  // Non-fatal, and never a reason to fail the run, but silence here would
-  // report a copy that no student can use as a plain success.
+  // Non-fatal: the copy landed, but students can't accept it until the target
+  // team is granted read on the private template.
   templateAccessWarning?: string
 }
 
@@ -307,21 +279,13 @@ export type BulkCopyAssignmentsInput = {
   targetClassroom: string
   items: BulkCopyItem[]
   canGrantTemplateAccess: boolean
-  // Called after every item, with the outcomes so far — the caller renders
-  // progress from it. Sequential by necessity (see below), so a bulk run of
-  // twelve is long enough that a silent wait would read as a hang.
+  // Called after every item with the outcomes so far.
   onProgress?: (outcomes: BulkCopyOutcome[]) => void
 }
 
-// Copy a selection of assignments into another classroom, one after another.
-//
-// The one bulk action here that does NOT batch: every copy is a read-modify-
-// write of the TARGET classroom's assignments.json on the same git ref, and may
-// create a repo besides, so two at once would collide on the ref the other just
-// moved. Hence a per-assignment outcome rather than a single verdict, and one
-// failed copy never abandons the rest: the remaining sources are independent
-// writes, and stopping would leave the teacher unable to tell which ones were
-// even attempted.
+// Sequential, unlike lock and delete: every copy is a read-modify-write of the
+// target's assignments.json on the same ref and may create a repo. One failed
+// copy doesn't abandon the rest; each source gets its own outcome.
 export async function bulkCopyAssignments(
   client: GitHubClient,
   input: BulkCopyAssignmentsInput,

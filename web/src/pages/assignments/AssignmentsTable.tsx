@@ -103,9 +103,7 @@ const SKELETON_BARS = [
   "ms-auto h-8 w-16",
 ]
 
-// Data columns excluding the selection checkbox: assignment, type, release,
-// due, accepted, submitted, actions. Kept as one constant so the head's
-// takeover colSpan and the empty row's colSpan can't drift apart.
+// Data columns excluding the selection checkbox, shared by every colSpan.
 const DATA_COLUMNS = 7
 
 const AssignmentsTable = ({
@@ -155,11 +153,9 @@ const AssignmentsTable = ({
   // siblings from it would drop a hidden slug-extending sibling and
   // mis-attribute its repos. Falls back to `assignments` when omitted.
   allAssignments?: Assignment[]
-  // What the empty row renders when there is nothing to show. The page passes
-  // its no-results panel here when a live selection keeps the table mounted
-  // over a filtered-to-zero view — same panel, same Clear filters button as
-  // when it replaces the table outright. Defaults to the "nothing created yet"
-  // state, which would be a false statement about a merely filtered view.
+  // Replaces the "nothing created yet" empty row, e.g. with the no-results
+  // panel when a live selection keeps the table mounted over a filtered-to-zero
+  // view.
   empty?: ReactNode
   // Who the funnel counts (from useFunnelRoster): `counted` is the denominator
   // and the numerators are joined to it. undefined while the roster resolves
@@ -187,20 +183,17 @@ const AssignmentsTable = ({
   // shape as the archived case. GitHub also 403s a TA's config-repo write, so
   // this is the UX guard, not the enforcer.
   canAuthor?: boolean
-  // Bulk selection, owned by the page. Absent (undefined) turns the whole
-  // column off — a read-only viewer has no bulk action to reach.
+  // Bulk selection, owned by the page. Absent turns the whole column off.
   selectedSlugs?: ReadonlySet<string>
   onToggleRow?: (slug: string) => void
-  // Shift-click fills the range; see useRangeSelection for why this is a
-  // separate onClick and not read off the change event.
+  // Shift-click range fill; see useRangeSelection for why it's a separate
+  // onClick.
   onRowCheckboxClick?: (
     event: React.MouseEvent<HTMLInputElement>,
     slug: string,
   ) => void
   onToggleSelectAll?: () => void
-  // Rendered in the head row beside the select-all box once something is
-  // selected, replacing the column titles — one row owns the selection, its
-  // count, and what can be done with it.
+  // Replaces the column titles in the head row once something is selected.
   bulkActions?: ReactNode
   // Column-header sorting (Assignment toggles name asc/desc, Due date toggles
   // due asc/desc), sharing the toolbar select's sort state. Omitted, headers
@@ -278,24 +271,19 @@ const AssignmentsTable = ({
   const navigate = useNavigate()
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
-  // The column renders only when the page handed in selection state; a viewer
-  // who cannot author has no bulk action to reach, so it stays off for them.
-  // `bulkActions` counts: a selection hands the head row over to it, so
-  // wiring the checkboxes without it would trade the column titles for an
-  // empty cell the moment a row is ticked.
+  // `bulkActions` is required too: a selection hands the head row over to it,
+  // so checkboxes without it would trade the column titles for an empty cell.
   const selectable = Boolean(
     selectedSlugs && onToggleRow && onToggleSelectAll && bulkActions,
   )
-  // The header box describes the VIEW ("is everything I can see ticked"),
-  // through the same helper the roster and members tables use.
+  // The header box describes the view: "is everything I can see ticked".
   const { allSelected, someSelected } = selectAllState(
     selectable ? (assignments ?? []) : [],
     selectedSlugs ?? new Set<string>(),
     (a) => a.slug,
   )
-  // The takeover follows the SELECTION, not the view: a row hidden by the
-  // search is still selected and still acted on, so the row that says so — and
-  // offers Clear selection — must not vanish with it.
+  // The takeover follows the selection, not the view: a row hidden by the
+  // search is still selected and acted on.
   const hasSelection = selectable && (selectedSlugs?.size ?? 0) > 0
   // The row whose assignment hub (ManageAssignmentModal) is open. Stored as a
   // slug and re-resolved against the live list on every render, so the hub
@@ -324,16 +312,14 @@ const AssignmentsTable = ({
         <thead>
           <tr>
             {selectable && (
-              // w-0 for the same reason as the actions column: a fixed-width
-              // control must not be handed the table's surplus width.
+              // w-0 for the same reason as the actions column.
               <th scope="col" className="w-0">
                 <input
                   type="checkbox"
                   className="checkbox checkbox-sm align-middle"
                   aria-label={t("assignments.bulk.selectAll")}
-                  // Nothing in view to select or deselect — a live selection
-                  // from outside the filter is the bar's business, not this
-                  // box's, so it would otherwise sit unchecked and inert.
+                  // Nothing in view to select; a selection from outside the
+                  // filter is the bar's business.
                   disabled={!assignments?.length}
                   checked={allSelected}
                   ref={(el) => {
@@ -343,17 +329,12 @@ const AssignmentsTable = ({
                 />
               </th>
             )}
-            {/* Selection takes over the REST of the head row — the checkbox
-                above stays put, so there is exactly one select-all control
-                either way. The column titles say nothing useful while the
-                question is "what do I do with these four?".
-                normal-case/font-normal because the head cell's own type
-                styling is for column titles and would otherwise reshape the
-                buttons sitting in it. */}
+            {/* A selection takes over the rest of the head row; the checkbox
+                stays put so there is one select-all control either way.
+                normal-case/font-normal undo the head cell's title styling. */}
             {hasSelection ? (
-              // A td, not a th: this cell carries the selection's actions, so
-              // announcing it as the column header for all seven data columns
-              // would make every cell below it "headed" by a toolbar.
+              // A td, not a th: a toolbar must not become the column header
+              // for every cell below it.
               <td
                 colSpan={DATA_COLUMNS}
                 className="py-2 font-normal normal-case"
@@ -461,8 +442,7 @@ const AssignmentsTable = ({
                 {selectable && (
                   <td
                     className="w-0"
-                    // The row navigates on click; the checkbox cell must not,
-                    // or ticking a box would leave the page.
+                    // The row navigates on click; ticking a box must not.
                     onClick={(event) => event.stopPropagation()}
                   >
                     <input

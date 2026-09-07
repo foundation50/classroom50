@@ -825,8 +825,6 @@ describe("AssignmentsTable selection head", () => {
     expect(screen.queryByTestId("bulk-actions")).toBeNull()
   })
 
-  // One row owns the selection, its count and its actions — a separate bar
-  // above the table would carry a second select-all box for the same state.
   it("hands the head row over to the bulk actions once a row is selected", () => {
     wrap(
       <AssignmentsTable
@@ -840,13 +838,11 @@ describe("AssignmentsTable selection head", () => {
 
     expect(screen.getByTestId("bulk-actions")).toBeTruthy()
     expect(screen.queryByText("assignments.table.colType")).toBeNull()
-    // The select-all box survives the takeover — it is the one control the
-    // head row must keep.
+    // The select-all box survives the takeover.
     expect(screen.getByLabelText("assignments.bulk.selectAll")).toBeTruthy()
   })
 
-  // A selection made before the search narrowed the view keeps the head row
-  // (and its count) alive over zero rows.
+  // A selection hidden by the search keeps the head row alive over zero rows.
   it("disables select-all when the view holds no rows to select", () => {
     wrap(
       <AssignmentsTable

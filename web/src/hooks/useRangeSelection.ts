@@ -3,9 +3,8 @@ import { useRef } from "react"
 import { selectRange, toggleRow, type KeyOf } from "@/util/rowSelection"
 
 // Checkbox multi-select wiring shared by OrgMembersPage, EnrolledStudents and
-// the assignments table. Owns the shift-click bookkeeping so every table (and
-// the regression test) exercises one implementation instead of hand-copied
-// handlers that can drift.
+// the assignments table. Owns the shift-click bookkeeping so the tables can't
+// drift apart.
 //
 // The subtle bit: a shift-click's onClick fills the range, but the checkbox's
 // onChange still fires and would toggle the just-selected endpoint back off
@@ -56,10 +55,8 @@ export function useRangeSelection<T>(
   ) => {
     const anchor = rangeAnchorKey.current
     if (!e.shiftKey || !anchor || anchor === key) return
-    // Only swallow the follow-up onChange when the range can actually be
-    // filled. An anchor that the filter has since removed from `order` makes
-    // selectRange a no-op, and swallowing the toggle as well would turn the
-    // click into nothing at all.
+    // An anchor the filter removed makes selectRange a no-op; swallowing the
+    // onChange too would turn the click into nothing at all.
     const anchorPresent = order.some((row) => keyOf(row) === anchor)
     if (!anchorPresent) {
       rangeAnchorKey.current = key

@@ -55,8 +55,7 @@ const setup = (onClose = vi.fn()) => {
   )
   return {
     onClose,
-    // The shell's left footer button: "Cancel" while idle, "Done" once the run
-    // has something to acknowledge.
+    // The shell's footer: "Cancel" while idle, "Done" once finished.
     dismiss: () =>
       screen.getByRole("button", { name: /common\.(cancel|done)/ }),
     pickTarget: () =>
@@ -130,8 +129,8 @@ describe("BulkReuseAssignmentsModal", () => {
   it("leaves an untouched row free to re-resolve after a blur", () => {
     const { pickTarget, slugInputs, submit } = setup()
     pickTarget()
-    // Merely visiting hw2's field must not freeze its auto slug — hw1 taking
-    // "hw2" below has to push hw2 along, not collide with it.
+    // Blurring hw2's untouched field must not freeze its auto slug: hw1 taking
+    // "hw2" below has to push hw2 along.
     fireEvent.blur(slugInputs()[1])
     fireEvent.change(slugInputs()[0], { target: { value: "hw2" } })
     expect(slugInputs().map((i) => i.value)).toEqual(["hw2", "hw2-2"])
@@ -145,9 +144,6 @@ describe("BulkReuseAssignmentsModal", () => {
     expect(onClose).toHaveBeenCalledWith()
   })
 
-  // Cannot be checked in the browser without actually copying into a real
-  // org, so the evidence is here: a run in flight shows the shared bulk
-  // progress block, not a bare line of text.
   it("shows the shared progress block while copying", () => {
     reuseState.running = true
     reuseState.processed = 1

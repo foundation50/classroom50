@@ -86,9 +86,8 @@ vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
 // Stub the heavy children so the test targets only the page's own wiring. The
 // toolbar mock exposes its slots so the collect-action gating is observable;
 // the collect button itself is covered in ClassroomCollectButton.test.tsx.
-// The table mock echoes the funnel props so the toggle's effect is observable,
-// and renders a hidden toggle per row so a test can drive the page's selection
-// without mounting the real table.
+// The table mock echoes the funnel props and renders a toggle per row so a
+// test can drive the page's selection.
 vi.mock("@/pages/assignments/AssignmentsTable", () => ({
   default: (props: {
     assignments?: { slug: string }[]
@@ -118,8 +117,7 @@ vi.mock("@/pages/assignments/AssignmentsTable", () => ({
     </>
   ),
 }))
-// Same treatment as the other children: the bar reaches for the toast
-// context, which this page test does not mount.
+// The bar reaches for the toast context, which this test does not mount.
 vi.mock("@/pages/assignments/AssignmentsBulkBar", () => ({
   default: (props: { selected: { slug: string }[] }) => {
     barSelected = props.selected
@@ -359,9 +357,7 @@ describe("Classroom-wide collect visibility", () => {
   })
 })
 
-// A hand-edited assignments.json can hold two rows for one slug. Resolving the
-// selection against it would then return both, overstating the bulk bar's
-// count and sending the slug twice to a batched write.
+// A hand-edited assignments.json can hold two rows for one slug.
 describe("TeacherAssignmentsView selection", () => {
   it("resolves one row per selected slug even when the file repeats one", () => {
     getAssignments.mockReturnValue({

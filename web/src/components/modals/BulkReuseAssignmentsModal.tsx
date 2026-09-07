@@ -21,25 +21,13 @@ import {
 import { slugify } from "@/util/slug"
 import type { Assignment } from "@/types/classroom"
 
-// Copy a selection of assignments into another classroom in the same org: the
-// plural form of ReuseAssignmentModal, and deliberately its twin (same shell,
-// header, footer and editable slug field) so the bulk flow reads as the same
-// operation rather than a second one that happens to copy.
-//
-// Picking the target reveals one slug field per selected assignment, prefilled
-// with the slug the copy would take (auto-suffixed where the source slug is
-// already used in the target, or by an earlier row in this same run). The
-// teacher can overwrite any of them before starting, so copying into a
-// classroom that already holds these assignments is a visible decision rather
-// than a report after the fact. See util/bulkReuseSlugs.
-//
-// The copies run sequentially (see bulkCopyAssignments), so the shell's
-// `isPending` state matters more here than in the single case: dismissing
-// mid-run would leave a half-populated classroom with no report of what
-// landed. Setting `warning` after the run flips the footer to a single "Done",
-// so the per-assignment result stays on screen until dismissed.
+// The plural ReuseAssignmentModal, on the same shell so it reads as the same
+// operation. Picking the target reveals one editable slug field per selected
+// assignment, prefilled with the slug the copy would take (util/bulkReuseSlugs),
+// so a collision is a decision up front rather than a report afterwards.
+// Setting the shell's `warning` after the run flips the footer to a single
+// "Done" and keeps the per-assignment result on screen.
 
-// No target picked yet: nothing to resolve, and nothing valid to submit.
 const EMPTY_PLAN: BulkReuseSlugPlan = { rows: [], budget: 0, valid: false }
 
 export function BulkReuseAssignmentsModal({
@@ -49,22 +37,19 @@ export function BulkReuseAssignmentsModal({
 }: {
   org: string
   sources: Assignment[]
-  // Called when the dialog is dismissed. The caller does NOT clear the
-  // selection on it: the sources are untouched by a copy, and clearing would
-  // unmount this modal from the table head cell that hosts it.
+  // The caller must not clear the selection here: that would unmount this
+  // modal from the table head cell that hosts it.
   onClose: () => void
 }) {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { classes, isLoading: classesLoading } = useGetClasses(org)
   const [target, setTarget] = useState("")
-  // Raw input text by source slug, for the rows the teacher has edited. Rows
-  // absent here follow the auto-resolved slug, so they keep re-resolving as
-  // the target's assignments load or a neighbouring row is retyped.
+  // Raw input text by source slug for edited rows; the rest keep re-resolving
+  // as the target loads or a neighbouring row is retyped.
   const [slugEdits, setSlugEdits] = useState<Record<string, string>>({})
   const reuse = useBulkReuseAssignments(org)
-  // A component-run fan-out holds the tab itself (see hooks/mutations/README.md):
-  // closing mid-run would leave the target half-populated with no report.
+  // Component-run fan-out (see hooks/mutations/README.md).
   useBeforeUnloadGuard(reuse.running)
 
   const {
@@ -79,8 +64,6 @@ export function BulkReuseAssignmentsModal({
     [targetData],
   )
 
-  // Only once a target exists: without one there is no budget and no taken-set
-  // to resolve against, and the form the rows feed is not rendered.
   const plan = useMemo(
     () =>
       target
@@ -97,14 +80,9 @@ export function BulkReuseAssignmentsModal({
   const finished = !reuse.running && reuse.outcomes.length > 0
   const copied = reuse.outcomes.filter((o) => !o.error)
   const failed = reuse.outcomes.filter((o) => o.error)
-  // Only the ones whose slug had to move: the teacher confirmed it in the
-  // form, but a run of twelve is worth restating.
   const renamed = copied.filter((o) => o.targetSlug !== o.slug)
-  // Landed, but students cannot accept it until the template read is granted.
   const templateWarned = copied.filter((o) => o.templateAccessWarning)
 
-  // A finished run becomes the shell's acknowledgement state, so the footer is
-  // one "Done" and the report below stays put.
   const summary = finished
     ? `${t("assignments.bulk.reuseDone", { count: copied.length })}${
         failed.length > 0
@@ -113,8 +91,7 @@ export function BulkReuseAssignmentsModal({
       }`
     : null
 
-  // Re-arm every auto-resolved slug: the previous target's collisions say
-  // nothing about the new one's.
+  // A new target has its own collisions, so drop the edits.
   const pickTarget = (value: string) => {
     setTarget(value)
     setSlugEdits({})
@@ -129,12 +106,10 @@ export function BulkReuseAssignmentsModal({
       description={t("assignments.bulk.reuseBody")}
       isPending={reuse.running}
       warning={summary}
-      // A failed read of the target's assignments would leave the taken-slug
-      // set empty, so a colliding copy would fail server-side instead of
-      // showing up as a collision in the form. Say so and block the run.
+      // Without the target's assignments the taken-slug set is empty, so a
+      // collision would only surface server-side. Block the run instead.
       errorMessage={targetError ? t("assignments.bulk.reuseTargetError") : null}
       showSubmit={classesLoading || classes.length > 0}
-      // EMPTY_PLAN is invalid, so "no target picked" is already covered.
       canSubmit={!targetLoading && !targetError && plan.valid}
       onSubmit={() =>
         void reuse.run(
@@ -148,8 +123,6 @@ export function BulkReuseAssignmentsModal({
       onClose={onClose}
     >
       {!classesLoading && classes.length === 0 ? (
-        // Nothing to copy into. The shell already hides its submit button in
-        // this state; say why rather than leaving a lone Cancel.
         <p className="mt-4 text-sm text-base-content/70">
           {t("assignments.bulk.reuseNoTargets", { org })}
         </p>
@@ -179,8 +152,6 @@ export function BulkReuseAssignmentsModal({
       )}
 
       {target && !targetError && !finished && (
-        // Scrolls rather than growing: a selection of twenty would otherwise
-        // push the footer off the viewport.
         <div className="mt-4 max-h-64 space-y-3 overflow-y-auto pe-1">
           {plan.rows.map((row) => {
             const status =
@@ -194,9 +165,6 @@ export function BulkReuseAssignmentsModal({
                       error: false,
                       slugTaken: row.issue === "taken",
                       slugReserved: row.issue === "reserved",
-                      // reuseSlugStatus picks the "no slug fits at all"
-                      // wording itself once the budget is below the 2-char
-                      // minimum.
                       slugOverBudget: row.issue === "overBudget",
                       slugBudget: plan.budget,
                       slugTouched: row.edited,
@@ -210,12 +178,8 @@ export function BulkReuseAssignmentsModal({
             return (
               <FormField
                 key={row.source.slug}
-                // daisyUI puts `white-space: nowrap` ON `.label`, which the
-                // modal box's inherited reset cannot override — and this is
-                // the one label in the app carrying a teacher-authored name,
-                // so a long one runs past the dialog's edge. The span
-                // overrides it for its own text; `break-words` is inherited
-                // from the box and covers an unbroken name.
+                // daisyUI sets nowrap on `.label` itself, and this label
+                // carries a teacher-authored name that may be long.
                 label={
                   <span className="whitespace-normal">
                     {t("assignments.bulk.reuseSlugLabel", {
@@ -240,11 +204,9 @@ export function BulkReuseAssignmentsModal({
                         [row.source.slug]: event.target.value,
                       }))
                     }
-                    // Show what will actually be written, the same commit the
-                    // single-assignment field makes on blur. Only for a row
-                    // the teacher typed in: committing an untouched one would
-                    // freeze its auto-resolved slug, so a later row could no
-                    // longer resolve around it.
+                    // Normalize on blur like the single-assignment field, but
+                    // only for edited rows: committing an untouched one would
+                    // freeze its auto-resolved slug.
                     onBlur={() => {
                       if (!row.edited) return
                       setSlugEdits((prev) => ({
@@ -261,8 +223,6 @@ export function BulkReuseAssignmentsModal({
       )}
 
       {reuse.running && (
-        // The shared bulk progress block (spinner + bar + caption), so a
-        // sequential reuse reads like every other bulk run in the app.
         // Indeterminate until the first copy lands: the first write is the
         // slow one, and a bar pinned at 0% looks stuck.
         <BulkProgressBlock

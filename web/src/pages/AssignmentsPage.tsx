@@ -210,17 +210,12 @@ export const TeacherAssignmentsView = ({
 
   const hasAssignments = (sourceAssignments?.length ?? 0) > 0
 
-  // Bulk selection. Held here rather than in the table because the toolbar and
-  // the rows are siblings, and the actions (lock/delete/reuse) need the
-  // selected Assignment records, not just their slugs.
+  // Bulk selection lives here because the actions need the selected Assignment
+  // records, not just their slugs.
   const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set())
-  // Only an author on a live classroom has a bulk action to reach; a read-only
-  // or archived view never shows the checkbox column.
   const canBulk = canAuthor && !archived && hasAssignments
   const slugKey = useCallback((a: Assignment) => a.slug, [])
-  // Shift-click ranges over the rendered order, through the same hook the
-  // roster and members tables use. Every assignment is selectable, so the
-  // predicate is constant.
+  // Every assignment is selectable, so the predicate is constant.
   const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
     visible,
     () => true,
@@ -230,11 +225,8 @@ export const TeacherAssignmentsView = ({
   const toggleSelectAllRows = () =>
     setSelectedSlugs((prev) => toggleSelectAll(visible, prev, slugKey))
   const clearSelection = () => setSelectedSlugs(new Set())
-  // The selected assignments, resolved against the FULL list (a row the search
-  // hides stays selected and acted on), one row per slug. A hand-edited
-  // assignments.json can carry two rows for the same slug; without the dedupe
-  // the bulk bar would overstate its count and a batched write would receive
-  // the slug twice.
+  // Resolved against the full list (a row the search hides stays acted on) and
+  // deduped: a hand-edited assignments.json can repeat a slug.
   const selectedAssignments = useMemo(() => {
     const seen = new Set<string>()
     return resolveSelectedRows(
@@ -249,13 +241,9 @@ export const TeacherAssignmentsView = ({
       return true
     })
   }, [sourceAssignments, selectedSlugs, slugKey])
-  // Prune slugs that left the list (deleted from their own row, by a bulk
-  // delete, or in another tab). Adjusted during render, not in an effect, the
-  // same shape useLingeringOpen uses. Filtering only for display would leave
-  // the dropped slugs in state, so recreating one later would bring it back
-  // pre-ticked, and an emptied selection would keep a count nothing can act
-  // on. `liveSlugs` is a subset of `selectedSlugs`, so a size mismatch means
-  // exactly that something was pruned.
+  // Prune slugs that left the list, during render like useLingeringOpen.
+  // Filtering only for display would bring a recreated slug back pre-ticked.
+  // `liveSlugs` is a subset of `selectedSlugs`, so sizes suffice.
   const liveSlugs = useMemo(
     () => new Set(selectedAssignments.map(slugKey)),
     [selectedAssignments, slugKey],
@@ -267,10 +255,9 @@ export const TeacherAssignmentsView = ({
   // (Primer: the empty state owns its resolving action, and a view gets one
   // primary button — a toolbar copy would duplicate it).
   const showToolbar = !assignmentsLoading && hasAssignments
-  // The search/filter emptied the view. With no selection the panel replaces
-  // the table outright; with one it goes INSIDE the table body instead, so the
-  // head row keeps the count and Clear selection — same panel, same Clear
-  // filters button, either way.
+  // With no selection the no-results panel replaces the table; with one it
+  // goes inside the table body so the head row keeps the count and Clear
+  // selection.
   const noResults = hasAssignments && visible.length === 0
   const noResultsPanel = (
     <NoSearchResults
@@ -409,9 +396,7 @@ export const TeacherAssignmentsView = ({
           secretPending={classroomLoading || classroomError}
           assignments={hasAssignments ? visible : sourceAssignments}
           allAssignments={sourceAssignments}
-          // Only read with a live selection (else the panel above takes the
-          // whole table). "No assignments created." would be a false statement
-          // about a classroom the filter merely emptied.
+          // "No assignments created." would be false for a filtered-out view.
           empty={noResults ? noResultsPanel : undefined}
           roster={roster}
           includeStaff={includeStaff}

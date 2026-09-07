@@ -13,8 +13,7 @@ vi.mock("../classrooms", () => ({
 }))
 
 type TreeWrite = { tree: { path: string; content: string }[] }
-// Typed by signature rather than by named parameters, so the recorded call
-// args stay indexable without declaring bindings the linter counts as unused.
+// Typed by signature so the recorded call args stay indexable.
 const createGitTree =
   vi.fn<(client: unknown, opts: TreeWrite) => Promise<{ sha: string }>>()
 const createGitCommit =
@@ -97,8 +96,7 @@ beforeEach(() => {
 })
 
 describe("setAssignmentsLock", () => {
-  // The point of the batched form: N assignments, one commit — not N commits
-  // racing each other on the same file's ref.
+  // N assignments, one commit.
   it("writes one tree and one commit for the whole selection", async () => {
     await setAssignmentsLock(client, {
       org: ORG,
@@ -143,8 +141,7 @@ describe("setAssignmentsLock", () => {
     expect(result.newCommitSha).toBeNull()
   })
 
-  // Unlock drops the key rather than writing `locked: false`, matching the
-  // CLI's omitempty wire shape.
+  // Matches the CLI's omitempty: unlock drops the key.
   it("drops the key on unlock instead of writing false", async () => {
     await setAssignmentsLock(client, {
       org: ORG,
@@ -171,9 +168,8 @@ describe("setAssignmentsLock", () => {
     expect(result.changed).toEqual(["hw1"])
   })
 
-  // Reconcile runs for every SELECTED assignment that exists, not only the
-  // ones whose flag moved: a prior run may have committed the flip and then
-  // failed the grant/revoke.
+  // Reconcile runs for every present assignment, not only the changed ones: a
+  // prior run may have committed the flip and then failed the grant/revoke.
   it("reconciles template access per selected assignment, including no-ops", async () => {
     await setAssignmentsLock(client, {
       org: ORG,
@@ -270,7 +266,6 @@ describe("bulkCopyAssignments", () => {
     ])
   })
 
-  // The whole reason the run reports per assignment instead of one verdict.
   it("keeps going after a failed copy and reports which one failed", async () => {
     copyAssignment.mockRejectedValueOnce(new Error("repo already exists"))
 
@@ -289,8 +284,6 @@ describe("bulkCopyAssignments", () => {
     expect(outcomes[1]).toEqual({ slug: "hw2", targetSlug: "hw2" })
   })
 
-  // A copy can land and still leave students unable to accept it, when the
-  // target classroom's team could not be granted read on a private template.
   it("carries a template-grant warning through to the outcome", async () => {
     copyAssignment.mockResolvedValueOnce({
       templateGrantWarning: "could not grant read",

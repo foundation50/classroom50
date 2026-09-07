@@ -4,9 +4,7 @@
 // selection persists across filtering) are unit-testable without rendering.
 //
 // Shared by the org members list, the classroom roster and the assignments
-// table. Rows are identified through the caller's `keyOf`, so a type keyed on
-// something other than `.key` (Assignment.slug) is passed straight through
-// instead of being mapped into a throwaway `{ key }` array on every render.
+// table; rows are identified through the caller's `keyOf`.
 export type KeyOf<T> = (row: T) => string
 
 // The rows in the current filtered view that MAY be selected — everything the

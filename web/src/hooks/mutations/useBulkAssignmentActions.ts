@@ -15,10 +15,7 @@ import {
   type BulkLockResult,
 } from "@/domain/assignments"
 
-// Write boundary for the assignments page's bulk bar. Lock and delete are
-// ordinary mutations over the batched domain functions; reuse cannot batch
-// (see bulkCopyAssignments), so it runs the domain loop and exposes its
-// progress and per-assignment outcomes as state.
+// Write boundary for the assignments page's bulk bar.
 
 function invalidateAssignments(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -61,8 +58,7 @@ export function useBulkDeleteAssignments(org: string, classroom: string) {
   const queryClient = useQueryClient()
 
   return useMutation<BulkDeleteResult, Error, { slugs: string[] }>({
-    // Not flagged keepTabOpen: one git-data commit, dangling until the ref
-    // moves, so a closed tab strands nothing.
+    // No keepTabOpen: a single git-data commit strands nothing.
     mutationFn: ({ slugs }) =>
       deleteAssignmentsWithConflictRetry(client, { org, classroom, slugs }),
     onSuccess: () => invalidateAssignments(queryClient, org, classroom),
@@ -83,22 +79,18 @@ const IDLE: BulkReuseState = {
   outcomes: [],
 }
 
-// React shell around bulkCopyAssignments: the run's progress as state, the
-// re-entrancy latch, and the target classroom's query invalidation.
+// bulkCopyAssignments with its progress as state.
 export function useBulkReuseAssignments(org: string) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const canGrantTemplateAccess = useCanAttemptTemplateGrant()
   const [state, setState] = useState<BulkReuseState>(IDLE)
-  // Synchronous re-entrancy latch, the same one useReuseAssignment carries:
-  // `running` reaches the button a render later, so a double-click would
-  // otherwise start two loops writing the same assignments.json and
-  // interleaving their progress into one state.
+  // `running` reaches the button a render late; a double-click would start two
+  // loops writing the same assignments.json.
   const runningRef = useRef(false)
 
   const run = useCallback(
     async (items: BulkCopyItem[], targetClassroom: string) => {
-      // Outcomes are read off `state`; the caller awaits nothing.
       if (runningRef.current) return
       runningRef.current = true
       setState({

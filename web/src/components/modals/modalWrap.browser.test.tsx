@@ -6,8 +6,7 @@ import { setupBrowserA11y } from "@/test/browserA11y"
 
 setupBrowserA11y()
 
-// Regression for the real-world case: a dialog opened from a table header
-// inherits daisyUI's `.table :where(thead,tfoot){white-space:nowrap}`, which
+// A dialog opened from a table header inherits daisyUI's thead nowrap, which
 // put every paragraph on one line and let the modal box clip it.
 describe("modal opened from a table header", () => {
   it("wraps its prose despite the inherited nowrap", async () => {
@@ -35,7 +34,6 @@ describe("modal opened from a table header", () => {
 
     const box = document.querySelector(".modal-box") as HTMLElement
     const boxWidth = box.getBoundingClientRect().width
-    // Every block inside the box must fit it — no horizontal overflow.
     for (const el of box.querySelectorAll<HTMLElement>("div,p")) {
       expect(el.scrollWidth).toBeLessThanOrEqual(Math.ceil(boxWidth))
       expect(getComputedStyle(el).whiteSpace).not.toBe("nowrap")

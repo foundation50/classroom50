@@ -30,11 +30,9 @@ setupBrowserA11y()
 
 const selected = [{ slug: "hw1", name: "Homework 1" }] as Assignment[]
 
-// The bar lives in a `<td colSpan>` inside a table that scrolls horizontally
-// once its columns outgrow the window. Measured in Chromium before the sticky
-// pins existed: at a 1200-1300px scrollport the right-aligned actions sat
-// past the visible edge, so the selection announced a count with every button
-// unreachable. happy-dom cannot see this — it does not lay out.
+// The bar spans a table that scrolls horizontally once its columns outgrow the
+// window; without the sticky pins the right-aligned actions sat past the
+// visible edge at 1200-1300px. happy-dom does not lay out, hence browser mode.
 describe("bulk bar inside a horizontally scrolling table", () => {
   it("keeps the count and the actions inside the scrollport", async () => {
     const { container } = render(
@@ -75,9 +73,7 @@ describe("bulk bar inside a horizontally scrolling table", () => {
       const r = el.getBoundingClientRect()
       return r.left >= f.left - 1 && r.right <= f.right + 1
     }
-    // Found by role and content, never by the utility classes that implement
-    // the pinning — otherwise a rename would fail the test while the layout
-    // stayed correct, and the measurement below would never run.
+    // Found by role and content, not by the utility classes that pin them.
     const count = [...container.querySelectorAll("span")].find((el) =>
       el.textContent?.startsWith("assignments.bulk.selectedCount"),
     )!
@@ -86,8 +82,6 @@ describe("bulk bar inside a horizontally scrolling table", () => {
     )!
     const actions = lock.parentElement!
 
-    // Scrolled hard right — the far end of the table, where the un-pinned
-    // version left the buttons behind.
     frame.scrollLeft = frame.scrollWidth
     await new Promise((r) => requestAnimationFrame(() => r(null)))
 
