@@ -134,6 +134,17 @@ describe("buildReusedEntry", () => {
     expect("renamed_from" in entry).toBe(false)
   })
 
+  it("clears closed but carries locked (mirrors the CLI)", () => {
+    // closed is the source cohort's submission window; a copy starts open.
+    // locked travels because it decides whether the copy gets a template grant.
+    const entry = buildReusedEntry(
+      { ...fullSource, closed: true, locked: true },
+      { slug: "hw1-fall", name: "Homework 1 (Fall)" },
+    )
+    expect("closed" in entry).toBe(false)
+    expect(entry.locked).toBe(true)
+  })
+
   it("defaults to the source slug/name when overrides match them", () => {
     const entry = buildReusedEntry(fullSource, {
       slug: fullSource.slug,

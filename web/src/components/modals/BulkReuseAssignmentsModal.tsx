@@ -42,10 +42,14 @@ export function BulkReuseAssignmentsModal({
 }) {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const { classes, isLoading: classesLoading } = useGetClasses(org)
-  const optionLabels = classroomOptionLabels(
-    useClassroomSummaries(org, classes),
+  const { classes: allClasses, isLoading: classesLoading } = useGetClasses(org)
+  const summaries = useClassroomSummaries(org, allClasses)
+  // An archived classroom refuses new assignments, so it is not a target.
+  const archived = new Set(
+    summaries.filter((s) => s.archived).map((s) => s.path),
   )
+  const classes = allClasses.filter((c) => !archived.has(c.path))
+  const optionLabels = classroomOptionLabels(summaries)
   const [target, setTarget] = useState("")
   // Raw input text by source slug for edited rows; the rest keep re-resolving
   // as the target loads or a neighbouring row is retyped.

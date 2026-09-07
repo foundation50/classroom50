@@ -59,7 +59,14 @@ vi.mock("@/github-core/repoReads", () => ({
     getRepo(...(args as Parameters<typeof getRepo>)),
 }))
 
-let file: { schema: string; assignments: { slug: string; locked?: boolean }[] }
+let file: {
+  schema: string
+  assignments: {
+    slug: string
+    locked?: boolean
+    template?: { owner: string; repo: string; branch: string }
+  }[]
+}
 vi.mock("../queries/assignments", () => ({
   getAssignmentsFile: vi.fn(async () => file),
 }))
@@ -181,6 +188,54 @@ describe("setAssignmentsLock", () => {
     })
 
     expect(reconcileLockTemplateAccess).toHaveBeenCalledTimes(2)
+  })
+
+  // The grant is a team permission on the template repo, so one write covers
+  // every assignment on that template; each of them still gets the warning.
+  it("reconciles a template shared by several assignments once", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    file.assignments = [
+      { slug: "hw1", template },
+      { slug: "hw2", template },
+      { slug: "hw3" },
+    ]
+    reconcileLockTemplateAccess.mockResolvedValue("could not revoke")
+
+    const result = await setAssignmentsLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1", "hw2", "hw3"],
+      locked: true,
+    })
+
+    expect(reconcileLockTemplateAccess).toHaveBeenCalledTimes(2)
+    expect(result.outcomes.map((o) => o.templateAccessWarning)).toEqual([
+      "could not revoke",
+      "could not revoke",
+      "could not revoke",
+    ])
+  })
+
+  // hw3 (unselected, unlocked) shares hw1's template, so revoking would lock
+  // hw3's students out too. Unlock has no such hazard: a grant is idempotent.
+  it("keeps the read while an unselected unlocked assignment shares the template", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    file.assignments = [
+      { slug: "hw1", template },
+      { slug: "hw2" },
+      { slug: "hw3", template },
+    ]
+
+    await setAssignmentsLock(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1", "hw2"],
+      locked: true,
+    })
+
+    expect(writtenAssignments().assignments[0].locked).toBe(true)
+    expect(reconcileLockTemplateAccess).toHaveBeenCalledTimes(1)
+    expect(reconcileLockTemplateAccess.mock.calls[0][3]).toBe("hw2")
   })
 
   it("surfaces a template warning against its own slug", async () => {
@@ -351,6 +406,44 @@ describe("copyAssignments", () => {
     await copy([item("a1", "a1", { template, locked: true })], true)
 
     expect(resolveTemplateGrant).not.toHaveBeenCalled()
+  })
+
+  it("grants a template shared by several copies once, warning each", async () => {
+    const template = { owner: ORG, repo: "tpl", branch: "main" }
+    repos.set(`${ORG}/tpl`, { private: true })
+    resolveTemplateGrant.mockResolvedValue("owner required")
+
+    const result = await copy(
+      [item("a1", "a1", { template }), item("a2", "a2", { template })],
+      false,
+    )
+
+    expect(resolveTemplateGrant).toHaveBeenCalledTimes(1)
+    expect(result.outcomes.map((o) => o.templateAccessWarning)).toEqual([
+      "owner required",
+      "owner required",
+    ])
+  })
+
+  // A transient probe failure is that template's problem, not the batch's.
+  it("fails only the copies whose template probe failed", async () => {
+    const flaky = { owner: ORG, repo: "flaky", branch: "main" }
+    getRepo.mockImplementation(async (_c, _owner, repo) => {
+      if (repo === "flaky") throw new Error("502 from GitHub")
+      return repos.get(`${ORG}/${repo}`) ?? null
+    })
+
+    const result = await copy([
+      item("a1", "a1", { template: flaky }),
+      item("a2", "a2"),
+    ])
+
+    expect(createGitCommit).toHaveBeenCalledTimes(1)
+    expect(result.outcomes[0].error).toBe("502 from GitHub")
+    expect(result.outcomes[1]).toEqual({ slug: "a2", targetSlug: "a2" })
+    getRepo.mockImplementation(
+      async (_c, owner, repo) => repos.get(`${owner}/${repo}`) ?? null,
+    )
   })
 
   it("probes a template shared by several copies once", async () => {

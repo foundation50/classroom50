@@ -8,10 +8,9 @@ import { createElement } from "react"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 
-const copyAssignments = vi.fn(async (_input: unknown) => ({
-  outcomes: [],
-  newCommitSha: "c",
-}))
+const copyAssignments = vi.fn<(input: unknown) => Promise<unknown>>(
+  async () => ({ outcomes: [], newCommitSha: "c" }),
+)
 vi.mock("@/domain/assignments", () => ({
   copyAssignmentsWithConflictRetry: (_client: unknown, input: unknown) =>
     copyAssignments(input),

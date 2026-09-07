@@ -87,6 +87,10 @@ export function buildReusedEntry(
   // and wrongly grandfather old-slug submissions there. Mirrors the CLI's
   // reuse (which clears RenamedFrom).
   delete entry.renamed_from
+  // closed describes the SOURCE cohort's submission window; a copy always
+  // starts open. locked is carried: it gates the template grant. Mirrors the
+  // CLI's reuse.
+  delete entry.closed
   if (!entry.template) delete entry.template
   if (!entry.due_meta) delete entry.due_meta
   if (entry.runtime && !entry.runtime.container) delete entry.runtime.container

@@ -182,26 +182,71 @@ export async function setAssignmentsLock(
   }
 
   // Reconcile every present assignment, not only the changed ones: a previous
-  // run may have committed the flag and then failed the grant/revoke. Safe to
-  // run concurrently, since each targets a different template repo and never
-  // touches the config repo's ref.
-  const outcomes = await mapWithConcurrency(
-    present,
-    RECONCILE_CONCURRENCY,
-    async (slug) => ({
-      slug,
-      templateAccessWarning: await reconcileLockTemplateAccess(
+  // run may have committed the flag and then failed the grant/revoke. Once per
+  // distinct template: the grant is a team permission on the template repo, so
+  // twelve assignments on one template are one write, not twelve. A revoke is
+  // skipped while an unselected, still-unlocked assignment uses the same
+  // template: its students still need the read. Safe to run concurrently,
+  // since each targets a different repo and never touches the config repo's ref.
+  const stillOpen = new Set(
+    ctx.current.assignments
+      .filter((a) => a.template && !a.locked && !present.includes(a.slug))
+      .map((a) => templateKey(a.template!)),
+  )
+  const reconciling = present.filter((slug) => {
+    const template = bySlug.get(slug)?.template
+    return !(locked && template && stillOpen.has(templateKey(template)))
+  })
+  const warnings = await reconcilePerTemplate(
+    reconciling.map((slug) => ({ slug, template: bySlug.get(slug)?.template })),
+    (slug, template) =>
+      reconcileLockTemplateAccess(
         client,
         org,
         classroom,
         slug,
-        bySlug.get(slug)?.template,
+        template,
         locked,
       ),
-    }),
   )
+  const outcomes = present.map((slug) => ({
+    slug,
+    templateAccessWarning: warnings.get(slug),
+  }))
 
   return { changed, missing, outcomes, newCommitSha }
+}
+
+const templateKey = (template: NonNullable<Assignment["template"]>) =>
+  `${template.owner}/${template.repo}`.toLowerCase()
+
+// Run one template-access write per distinct template and hand its warning to
+// every slug sharing that template. The warning text names the first slug; the
+// team and repo it points at are the same for all of them.
+async function reconcilePerTemplate(
+  items: { slug: string; template: Assignment["template"] }[],
+  reconcile: (
+    slug: string,
+    template: Assignment["template"],
+  ) => Promise<string | undefined>,
+): Promise<Map<string, string | undefined>> {
+  const groups = new Map<string, string[]>()
+  for (const { slug, template } of items) {
+    const key = template ? templateKey(template) : `slug:${slug}`
+    groups.set(key, [...(groups.get(key) ?? []), slug])
+  }
+  const byTemplate = new Map(items.map((i) => [i.slug, i.template]))
+  const results = await mapWithConcurrency(
+    [...groups.values()],
+    RECONCILE_CONCURRENCY,
+    async (slugs) =>
+      [slugs, await reconcile(slugs[0], byTemplate.get(slugs[0]))] as const,
+  )
+  const warnings = new Map<string, string | undefined>()
+  for (const [slugs, warning] of results) {
+    for (const slug of slugs) warnings.set(slug, warning)
+  }
+  return warnings
 }
 
 export function setAssignmentsLockWithConflictRetry(
@@ -298,7 +343,8 @@ export type CopyAssignmentsInput = {
 // Batched counterpart of copyAssignmentToClassroom: every valid copy lands in
 // one commit to the target's assignments.json. A copy that fails its own
 // checks (template, slug) is reported and left out; it never blocks the
-// others. Grants follow the commit, per copy, like the lock's reconcile.
+// others. Grants follow the commit, once per template, like the lock's
+// reconcile.
 export async function copyAssignments(
   client: GitHubClient,
   input: CopyAssignmentsInput,
@@ -313,22 +359,29 @@ export async function copyAssignments(
   const ctx = await readAssignmentsForWrite(client, org, targetClassroom)
 
   // Same live template re-check as the single copy, one probe per distinct
-  // template so twelve assignments on one template cost one read.
-  const templateKeys = new Map<string, NonNullable<Assignment["template"]>>()
+  // template. A probe that fails (5xx, rate limit) fails only the copies on
+  // that template, not the batch.
+  const templates = new Map<string, NonNullable<Assignment["template"]>>()
   for (const { source } of items) {
-    if (source.template) {
-      templateKeys.set(
-        `${source.template.owner}/${source.template.repo}`.toLowerCase(),
-        source.template,
-      )
-    }
+    if (source.template)
+      templates.set(templateKey(source.template), source.template)
   }
-  const repos = new Map(
+  type Probe =
+    { repo: Awaited<ReturnType<typeof getRepo>> } | { error: unknown }
+  const probes = new Map(
     await mapWithConcurrency(
-      [...templateKeys],
+      [...templates],
       REPO_READ_CONCURRENCY,
-      async ([key, template]) =>
-        [key, await getRepo(client, template.owner, template.repo)] as const,
+      async ([key, template]): Promise<readonly [string, Probe]> => {
+        try {
+          return [
+            key,
+            { repo: await getRepo(client, template.owner, template.repo) },
+          ]
+        } catch (error) {
+          return [key, { error }]
+        }
+      },
     ),
   )
 
@@ -346,16 +399,15 @@ export async function copyAssignments(
         slug: targetSlug,
         name: source.name,
       })
-      const repo = entry.template
-        ? (repos.get(
-            `${entry.template.owner}/${entry.template.repo}`.toLowerCase(),
-          ) ?? null)
-        : null
+      const probe = entry.template
+        ? probes.get(templateKey(entry.template))
+        : undefined
+      if (probe && "error" in probe) throw probe.error
       const needsGrant = reuseTemplateNeedsGrant(
         org,
         targetClassroom,
         entry,
-        repo,
+        probe?.repo ?? null,
       )
       assertSlugFreeInTarget(entry.slug, claimed, targetClassroom)
       claimed.assignments.push(entry)
@@ -377,29 +429,31 @@ export async function copyAssignments(
   )
 
   // A locked source copies as locked, so withhold the grant like create and
-  // the CLI's reuse do; unlocking the copy grants it.
-  const warnings = await mapWithConcurrency(
-    entries,
-    RECONCILE_CONCURRENCY,
-    async ({ entry, needsGrant }) =>
-      needsGrant && entry.template && !entry.locked
+  // the CLI's reuse do; unlocking the copy grants it. One grant per template.
+  const granting = entries.filter(
+    ({ entry, needsGrant }) => needsGrant && entry.template && !entry.locked,
+  )
+  const warnings = await reconcilePerTemplate(
+    granting.map(({ entry }) => ({
+      slug: entry.slug,
+      template: entry.template,
+    })),
+    (slug, template) =>
+      template
         ? resolveTemplateGrant(
             client,
             org,
             targetClassroom,
-            entry.slug,
-            entry.template,
+            slug,
+            template,
             canGrantTemplateAccess,
           )
-        : undefined,
+        : Promise.resolve(undefined),
   )
-  entries.forEach(({ entry }, i) => {
-    if (!warnings[i]) return
-    const outcome = outcomes.find(
-      (o) => o.targetSlug === entry.slug && !o.error,
-    )
-    if (outcome) outcome.templateAccessWarning = warnings[i]
-  })
+  for (const outcome of outcomes) {
+    const warning = outcome.targetSlug && warnings.get(outcome.targetSlug)
+    if (warning) outcome.templateAccessWarning = warning
+  }
 
   return { outcomes, newCommitSha }
 }

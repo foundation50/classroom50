@@ -33,15 +33,18 @@ export const ReuseAssignmentModal = ({
   onClose: () => void
 }) => {
   const { classes } = useGetClasses(org)
-  const optionLabels = classroomOptionLabels(
-    useClassroomSummaries(org, classes),
-  )
+  const summaries = useClassroomSummaries(org, classes)
+  const optionLabels = classroomOptionLabels(summaries)
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
 
-  // Any classroom in the org, including this assignment's own — reusing into
-  // the same classroom is a valid way to duplicate an assignment.
-  const targets = useMemo(() => classes, [classes])
+  // Any unarchived classroom in the org, including this assignment's own:
+  // reusing into the same classroom is a valid way to duplicate an assignment.
+  // An archived one refuses new assignments, so it is not offered.
+  const archived = new Set(
+    summaries.filter((s) => s.archived).map((s) => s.path),
+  )
+  const targets = classes.filter((c) => !archived.has(c.path))
 
   const [targetClassroom, setTargetClassroom] = useState("")
 
