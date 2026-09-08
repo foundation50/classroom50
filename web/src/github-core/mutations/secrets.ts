@@ -109,9 +109,9 @@ export async function validateServiceToken(
     }>(`/repos/${org}/${CONFIG_REPO}`)
   } catch (err) {
     if (err instanceof GitHubAPIError) {
-      if (err.status === 401) throw fail("invalid", {}, err)
-      if (err.status === 403) throw fail("noAccess", { hint }, err)
-      if (err.status === 404) throw fail("configRepoMissing", {}, err)
+      if (err.isUnauthorized) throw fail("invalid", {}, err)
+      if (err.isForbidden) throw fail("noAccess", { hint }, err)
+      if (err.isNotFound) throw fail("configRepoMissing", {}, err)
     }
     // A fetch that never reached GitHub (network/CORS) throws a TypeError, not a
     // GitHubAPIError — don't blame the token for that.
@@ -148,10 +148,7 @@ export async function validateServiceToken(
       `/orgs/${encodeURIComponent(org)}/members?per_page=1`,
     )
   } catch (err) {
-    if (
-      err instanceof GitHubAPIError &&
-      (err.status === 403 || err.status === 404)
-    ) {
+    if (err instanceof GitHubAPIError && err.isDefinitiveAccessDenied) {
       throw fail("noMembersRead", { hint }, err)
     }
     // Inconclusive (401/5xx/network) — proceed; the repo read already proved the
@@ -193,7 +190,7 @@ async function assertTokenReachesOtherRepos(
       `/repos/${encodeURIComponent(org)}/${encodeURIComponent(probe.name)}`,
     )
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
+    if (err instanceof GitHubAPIError && err.isNotFound) {
       const failure = localizedError({
         key: VALIDATE_KEYS.selectedRepos,
         params: { org, repo: CONFIG_REPO, probe: probe.name },
@@ -256,7 +253,7 @@ export async function putRepoVariable(
       body: { name, value },
     })
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
+    if (err instanceof GitHubAPIError && err.isNotFound) {
       await client.request(`/repos/${owner}/${repo}/actions/variables`, {
         method: "POST",
         body: { name, value },

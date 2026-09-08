@@ -167,7 +167,7 @@ function isNotFoundError(error: unknown) {
 // non-fast-forward updateRef), so the 409 branch is gated on the message.
 export function isFreshRepoLagError(error: unknown) {
   if (error instanceof GitHubAPIError) {
-    if (error.status === 404) {
+    if (error.isNotFound) {
       return true
     }
     if (error.status === 409) {

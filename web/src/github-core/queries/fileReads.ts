@@ -208,25 +208,52 @@ export function rosterRawFileQuery(
   })
 }
 
-export async function getRawFile(
+export function getRawFile(
   client: GitHubClient,
   input: GetAssignmentsFileInput,
 ): Promise<string> {
-  const { org, path, ref } = input
+  return readConfigFileText(client, input.org, input.path, input.ref)
+}
 
+// The contents-API read behind every config-repo file: base64 body decoded to
+// text, pinned to `ref` when given. A directory at the path is an error, not
+// a file.
+async function readConfigFileText(
+  client: GitHubClient,
+  org: string,
+  path: string,
+  ref?: string,
+): Promise<string> {
   const file = await client.request<{
     type: "file"
     encoding: "base64"
     content: string
   }>(
-    `/repos/${org}/${CONFIG_REPO}/contents/${path}?ref=${encodeURIComponent(ref)}`,
+    `/repos/${org}/${CONFIG_REPO}/contents/${path}${
+      ref ? `?ref=${encodeURIComponent(ref)}` : ""
+    }`,
   )
-
   if (file.type !== "file") {
     throw new Error(`${path} is not a file`)
   }
-
   return decodeBase64Utf8(file.content)
+}
+
+// A config-repo JSON file at a pinned ref, parsed. `onMissing` makes a 404
+// return a scaffold instead of throwing (a classroom has no teams.json or
+// scores.json until the first write). The decode and parse run OUTSIDE the
+// tolerated region on purpose: a truncated or malformed body must fail the
+// caller, not scaffold an empty file over real data. Every other error
+// propagates so a transient failure is never misread as "missing".
+export async function readConfigJson<T>(
+  client: GitHubClient,
+  input: { org: string; path: string; ref?: string; onMissing?: () => T },
+): Promise<T> {
+  const { org, path, ref, onMissing } = input
+  const read = () => readConfigFileText(client, org, path, ref)
+  const text = onMissing ? await tolerateGitHubError(read, null) : await read()
+  if (text === null) return onMissing!()
+  return JSON.parse(text) as T
 }
 
 export async function getClassroom50Yaml(

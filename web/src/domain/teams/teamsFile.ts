@@ -1,17 +1,14 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { TeamFormation } from "@/types/classroom"
-import { GitHubAPIError } from "@/github-core/errors"
 import { getConfigRepoBranch } from "@/github-core/configRepoReads"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { teamsFilePath } from "@/util/configRepoPaths"
-import { decodeBase64Utf8 } from "@/util/github"
 import { withGitConflictRetry } from "../classrooms"
 import {
   commitConfigRepoFiles,
   jsonFileEntry,
   readConfigRepoHeadAt,
 } from "../configRepoWrite"
-import { listTeamMembers } from "@/github-core/queries"
+import { listTeamMembers, readConfigJson } from "@/github-core/queries"
 import { listAssignmentGroupTeams } from "./groupTeams"
 
 // Schema sentinel for <classroom>/teams.json (classroom50/teams/v1) — the
@@ -55,24 +52,12 @@ export async function getTeamsFile(
   input: { org: string; classroom: string; ref?: string },
 ): Promise<TeamsFile> {
   const { org, classroom, ref } = input
-  const path = teamsFilePath(classroom)
-  let file: { type: string; content: string }
-  try {
-    file = await client.request<{ type: string; content: string }>(
-      `/repos/${org}/${CONFIG_REPO}/contents/${path}${
-        ref ? `?ref=${encodeURIComponent(ref)}` : ""
-      }`,
-    )
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return emptyTeamsFile()
-    }
-    throw err
-  }
-  if (file.type !== "file") {
-    throw new Error(`${path} is not a file`)
-  }
-  const parsed = JSON.parse(decodeBase64Utf8(file.content)) as TeamsFile
+  const parsed = await readConfigJson<TeamsFile>(client, {
+    org,
+    path: teamsFilePath(classroom),
+    ref,
+    onMissing: emptyTeamsFile,
+  })
   // A hand-edited file may lack the map; normalize so callers can index it.
   if (!parsed.assignments || typeof parsed.assignments !== "object") {
     return { ...parsed, schema: TEAMS_SCHEMA_V1, assignments: {} }

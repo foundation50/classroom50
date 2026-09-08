@@ -779,7 +779,7 @@ export async function ensureReusableWorkflowAccess(
   } catch (err) {
     const message = getErrorMessage(err)
     if (err instanceof GitHubAPIError) {
-      if (err.status === 403) {
+      if (err.isForbidden) {
         return {
           status: "warning",
           repo: `${owner}/${repo}`,
@@ -896,7 +896,7 @@ export async function ensureBranchProtection(
     const message = getErrorMessage(err)
 
     if (err instanceof GitHubAPIError) {
-      if (err.status === 403) {
+      if (err.isForbidden) {
         return {
           status: "warning",
           repo: `${owner}/${repo}`,
@@ -907,7 +907,7 @@ export async function ensureBranchProtection(
         }
       }
 
-      if (err.status === 404) {
+      if (err.isNotFound) {
         return {
           status: "warning",
           repo: `${owner}/${repo}`,
@@ -1083,7 +1083,7 @@ export async function ensureOrgActionsEnabled(
         }
       }
 
-      if (err.status === 403) {
+      if (err.isForbidden) {
         return {
           status: "warning",
           org,
@@ -1202,7 +1202,7 @@ function setOrgActionsModeWarning(
   const settingsUrl = githubOrgActionsSettingsUrl(org)
   const message = getErrorMessage(err)
   if (err instanceof GitHubAPIError) {
-    if (err.status === 403)
+    if (err.isForbidden)
       return {
         status: "warning",
         org,
@@ -1473,7 +1473,7 @@ export async function ensureOrgActionsBudgetCap(
       },
     })
   } catch (err) {
-    const permission = err instanceof GitHubAPIError && err.status === 403
+    const permission = err instanceof GitHubAPIError && err.isForbidden
     return {
       status: "warning",
       org,
@@ -1567,12 +1567,12 @@ export async function ensureOrgCanCreatePullRequests(
   } catch (err) {
     if (
       err instanceof GitHubAPIError &&
-      (err.status === 403 || err.status === 409)
+      (err.isForbidden || err.status === 409)
     ) {
       return {
         status: "warning",
         org,
-        reason: err.status === 403 ? "permission_denied" : "policy_conflict",
+        reason: err.isForbidden ? "permission_denied" : "policy_conflict",
         settingsUrl,
         message: `${org}: couldn't enable Actions-created pull requests (${getErrorMessage(
           err,

@@ -35,37 +35,21 @@ export function orgRunnersQuery(client: GitHubClient, org: string) {
     queryKey: githubKeys.orgRunners(org),
     queryFn: async ({ signal }) => {
       try {
-        const runners: OrgRunner[] = []
-        let page = 1
-
-        while (true) {
-          const data = await client.request<{
-            total_count: number
-            runners: OrgRunner[]
-          }>(
+        const runners = await paginateAll<OrgRunner>(
+          client,
+          (page) =>
             `/orgs/${encodeURIComponent(
               org,
             )}/actions/runners?per_page=100&page=${page}`,
-            { method: "GET", signal },
-          )
-
-          const batch = data.runners ?? []
-          runners.push(...batch)
-
-          if (batch.length < 100) break
-          page++
-        }
-
+          { signal, pick: "runners" },
+        )
         return { available: true, runners }
       } catch (error) {
         // Let cancellations propagate; don't cache them as a verdict.
         if (signal?.aborted) throw error
         // 403 (no admin:org) / 404 (no access) mean "can't read the list",
         // not "the runner doesn't exist".
-        if (
-          error instanceof GitHubAPIError &&
-          (error.status === 403 || error.status === 404)
-        ) {
+        if (error instanceof GitHubAPIError && error.isDefinitiveAccessDenied) {
           return { available: false, reason: "no-access" }
         }
         return { available: false, reason: "error" }

@@ -1,8 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
-import { fetchPagesAssignments } from "@/github-core/queries"
+import { fetchPagesAssignments, readConfigJson } from "@/github-core/queries"
 import type { Assignment } from "@/types/classroom"
-import { decodeBase64Utf8 } from "@/util/github"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { localizedError, type LocalizedMessage } from "@/types/localizedMessage"
 
 export type GetAssignmentsFileInput = {
@@ -18,23 +16,7 @@ export async function getAssignmentsFile(
   client: GitHubClient,
   input: GetAssignmentsFileInput,
 ): Promise<AssignmentsFile> {
-  const { org, path, ref } = input
-
-  const file = await client.request<{
-    type: "file"
-    encoding: "base64"
-    content: string
-  }>(
-    `/repos/${org}/${CONFIG_REPO}/contents/${path}?ref=${encodeURIComponent(ref)}`,
-  )
-
-  if (file.type !== "file") {
-    throw new Error(`${path} is not a file`)
-  }
-
-  const json = decodeBase64Utf8(file.content)
-
-  return JSON.parse(json) as AssignmentsFile
+  return readConfigJson<AssignmentsFile>(client, input)
 }
 
 // `label` names what failed for the reader (e.g. the autograder). It is a

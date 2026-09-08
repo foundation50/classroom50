@@ -98,6 +98,22 @@ export class GitHubAPIError extends Error {
     )
   }
 
+  get isServerError() {
+    return this.status >= 500
+  }
+
+  // GitHub 404s a private resource the token can't see exactly like a missing
+  // one, so for "can this viewer read it" the two answers are one verdict.
+  get isDefinitiveAccessDenied() {
+    return this.status === 403 || this.status === 404
+  }
+
+  // A blip worth one more attempt: throttled, or GitHub's side failed. A 4xx
+  // other than a rate limit is an answer, not a blip.
+  get isTransient() {
+    return this.isRateLimited || this.isServerError
+  }
+
   // The org/enterprise enforces SAML SSO and this token has no live SSO session
   // for it. GitHub signals this via X-GitHub-SSO (a 403 carrying `required;
   // url=…`, or `partial-results; organizations=…` on multi-org reads). Scoped to

@@ -232,7 +232,7 @@ export async function getServiceTokenStatus(
     }
   } catch (err) {
     if (err instanceof GitHubAPIError) {
-      if (err.status === 404) {
+      if (err.isNotFound) {
         return {
           status: "missing",
           secretName: SERVICE_TOKEN_SECRET_NAME,
@@ -240,7 +240,7 @@ export async function getServiceTokenStatus(
         }
       }
 
-      if (err.status === 403) {
+      if (err.isForbidden) {
         return {
           status: "unknown",
           secretName: SERVICE_TOKEN_SECRET_NAME,

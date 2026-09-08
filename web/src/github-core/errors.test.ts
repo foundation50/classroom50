@@ -375,3 +375,32 @@ describe("githubValidationReasons", () => {
     expect(githubValidationReasons("nope")).toBeUndefined()
   })
 })
+
+describe("GitHubAPIError verdict predicates", () => {
+  const make = (status: number) =>
+    new GitHubAPIError({
+      status,
+      url: "/x",
+      message: `HTTP ${status}`,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+  it("isTransient is a rate limit or a 5xx, never another 4xx", () => {
+    expect(make(429).isTransient).toBe(true)
+    expect(make(502).isTransient).toBe(true)
+    expect(make(404).isTransient).toBe(false)
+    expect(make(422).isTransient).toBe(false)
+  })
+  it("isDefinitiveAccessDenied is 403 or 404, the two answers a private read gives", () => {
+    expect(make(403).isDefinitiveAccessDenied).toBe(true)
+    expect(make(404).isDefinitiveAccessDenied).toBe(true)
+    expect(make(401).isDefinitiveAccessDenied).toBe(false)
+  })
+})

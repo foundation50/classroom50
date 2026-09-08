@@ -72,7 +72,7 @@ export function readFailedDetail(err: unknown): CheckDetail {
 }
 
 function unreadableFrom(err: unknown): CheckVerdict {
-  if (err instanceof GitHubAPIError && err.status === 404) {
+  if (err instanceof GitHubAPIError && err.isNotFound) {
     return {
       state: "unenforced",
       detail: { key: "orgSettings.audit.detail.notConfigured" },
@@ -508,7 +508,7 @@ export async function repairOrgDefaults(
     }
     if (
       err instanceof GitHubAPIError &&
-      (err.status === 403 || err.status === 422)
+      (err.isForbidden || err.status === 422)
     ) {
       const fallback = await repairOrgDefaultsPerField(client, org, settings)
       rejected = fallback.rejected

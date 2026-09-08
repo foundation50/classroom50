@@ -8,7 +8,7 @@ import {
   getCommit,
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
-import { sleep } from "@/github-core/queries"
+import { withRetry } from "@/github-core/queries"
 import { isClassroomArchived } from "@/types/classroom"
 import {
   createCommit,
@@ -227,26 +227,21 @@ export async function withGitConflictRetry<T>(
   // loses the race. fn re-reads the ref + file each attempt, so retrying either
   // is safe; jittered backoff lets the winning write land and avoids lock-step
   // collisions between racing clients.
-  const attempts = 4
-  let lastError: unknown
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      return await fn()
-    } catch (err) {
-      lastError = err
-      const isConflict =
-        (err instanceof GitHubAPIError && err.status === 409) ||
-        isNonFastForward(err)
-      if (!isConflict || attempt === attempts) {
-        throw err
-      }
-      log.debug("git conflict, retrying commit", { attempt })
-      await sleep(300 * attempt + Math.random() * 400)
-    }
-  }
-
-  throw lastError
+  return withRetry(fn, {
+    attempts: 4,
+    shouldRetry: (err) =>
+      (err instanceof GitHubAPIError && err.status === 409) ||
+      isNonFastForward(err),
+    waitMs: conflictBackoffMs,
+    onRetry: (attempt) =>
+      log.debug("git conflict, retrying commit", { attempt: attempt + 1 }),
+  })
 }
+
+// 300ms, 600ms, 900ms plus up to 400ms of jitter: enough for a racing write to
+// land, spread so two clients don't collide again on the same beat.
+const conflictBackoffMs = (_err: unknown, attempt: number) =>
+  300 * (attempt + 1) + Math.random() * 400
 
 export type CreateClassroomInput = {
   org: string
@@ -306,29 +301,23 @@ export async function assertClassroomNotArchived(
 // A transient read can't determine archive state and shouldn't fail-closed on
 // the first blip; retry once before giving up so a single rate-limit/5xx/network
 // hiccup doesn't block an otherwise-valid mutation.
-async function readClassroomJsonForGuard(
+function readClassroomJsonForGuard(
   client: GitHubClient,
   org: string,
   classroom: string,
 ) {
-  try {
-    return await getClassroomJson(client, { org, classroom })
-  } catch (err) {
-    if (isTransientReadError(err)) {
-      await sleep(300)
-      return await getClassroomJson(client, { org, classroom })
-    }
-    throw err
-  }
+  return withRetry(() => getClassroomJson(client, { org, classroom }), {
+    attempts: 2,
+    shouldRetry: isTransientReadError,
+    waitMs: () => 300,
+  })
 }
 
 // Errors that don't prove the classroom's state: rate limiting, 5xx, and
 // non-HTTP (network) failures. A 404 is determinate (handled by the caller as
 // legacy/active) and is therefore NOT transient.
 function isTransientReadError(err: unknown): boolean {
-  if (err instanceof GitHubAPIError) {
-    return err.isRateLimited || err.status >= 500
-  }
+  if (err instanceof GitHubAPIError) return err.isTransient
   // A thrown non-GitHubAPIError here is a network/parse failure, not a
   // determinate API answer — treat as transient.
   return err instanceof Error
@@ -350,39 +339,28 @@ export type DeleteClassroomInput = {
 // Whether a failed team delete is worth retrying: a rate limit or 5xx is a
 // transient blip; everything else is permanent and recorded without retrying.
 function isTransientDeleteError(err: unknown): boolean {
-  return (
-    err instanceof GitHubAPIError && (err.isRateLimited || err.status >= 500)
-  )
+  return err instanceof GitHubAPIError && err.isTransient
 }
 
 // Delete one classroom team, retrying a transient failure a few times with
 // jittered backoff so a single hiccup doesn't strand a team. A permanent
 // refusal throws immediately (the caller records it as a non-fatal warning).
-async function deleteClassroomTeamWithRetry(
+function deleteClassroomTeamWithRetry(
   client: GitHubClient,
   org: string,
   team: ClassroomTeamRef,
 ): Promise<void> {
-  const attempts = 4
-  let lastError: unknown
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      await deleteClassroomTeam(client, org, team)
-      return
-    } catch (err) {
-      lastError = err
-      if (!isTransientDeleteError(err) || attempt === attempts) {
-        throw err
-      }
+  return withRetry(() => deleteClassroomTeam(client, org, team), {
+    attempts: 4,
+    shouldRetry: isTransientDeleteError,
+    waitMs: conflictBackoffMs,
+    onRetry: (attempt) =>
       log.debug("team delete transient failure, retrying", {
         org,
         teamSlug: team.slug,
-        attempt,
-      })
-      await sleep(300 * attempt + Math.random() * 400)
-    }
-  }
-  throw lastError
+        attempt: attempt + 1,
+      }),
+  })
 }
 
 export async function deleteClassroom(

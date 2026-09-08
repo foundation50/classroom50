@@ -31,6 +31,9 @@ export type PaginateOptions = {
   // and let the user retry; a long walk opts in so one late page out of ninety
   // doesn't send the whole listing back to page 1.
   retryPages?: boolean
+  // For endpoints that wrap the page in an envelope (`{ total_count, runners }`)
+  // instead of returning the array: the field holding the items.
+  pick?: string
 }
 
 // Page 1 of a list endpoint plus the page count its `Link: rel="last"` names
@@ -141,9 +144,17 @@ function fetchPage<T>(
   options: PaginateOptions,
   onHeaders?: (headers: Headers) => void,
 ): Promise<T[]> {
-  const { signal, retryPages = false } = options
-  const read = () =>
-    client.request<T[]>(path, { method: "GET", signal, onHeaders })
+  const { signal, retryPages = false, pick } = options
+  const read = async () => {
+    const body = await client.request<T[] | Record<string, unknown>>(path, {
+      method: "GET",
+      signal,
+      onHeaders,
+    })
+    if (pick === undefined) return body as T[]
+    const items = (body as Record<string, unknown>)[pick]
+    return Array.isArray(items) ? (items as T[]) : []
+  }
   return retryPages ? withTransientRetry(read, signal) : read()
 }
 
@@ -194,9 +205,7 @@ function retryWaitMs(err: unknown, attempt: number): number | null {
 }
 
 function isTransientPageError(err: unknown): boolean {
-  if (err instanceof GitHubAPIError) {
-    return err.isRateLimited || err.status >= 500
-  }
+  if (err instanceof GitHubAPIError) return err.isTransient
   // A timeout (`TimeoutError` DOMException) or network failure.
   return !(err instanceof DOMException && err.name === "AbortError")
 }

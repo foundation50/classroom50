@@ -296,7 +296,7 @@ export async function deleteClassroomTeam(
       })
     }
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
+    if (err instanceof GitHubAPIError && err.isNotFound) {
       return
     }
     throw err

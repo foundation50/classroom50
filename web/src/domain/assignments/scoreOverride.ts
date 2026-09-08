@@ -1,14 +1,12 @@
 import type { GitHubClient } from "@/github-core/client"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { scoresFilePath } from "@/util/configRepoPaths"
-import { decodeBase64Utf8 } from "@/util/github"
-import { GitHubAPIError } from "@/github-core/errors"
 import { withGitConflictRetry } from "../classrooms"
 import {
   commitConfigRepoFiles,
   jsonFileEntry,
   readConfigRepoHead,
 } from "../configRepoWrite"
+import { readConfigJson } from "@/github-core/queries"
 
 // A stored submission record inside scores.json (classroom50/result/v1 payload
 // minus the bucket-key `assignment`). We only type the fields the override path
@@ -134,32 +132,17 @@ async function readScoresFile(
   classroom: string,
   ref: string,
 ): Promise<ScoresFile> {
-  let file: { type: "file"; encoding: "base64"; content: string }
-  try {
-    file = await client.request<{
-      type: "file"
-      encoding: "base64"
-      content: string
-    }>(
-      `/repos/${org}/${CONFIG_REPO}/contents/${scoresFilePath(
-        classroom,
-      )}?ref=${encodeURIComponent(ref)}`,
-    )
-  } catch (err) {
-    // ONLY a genuine 404 means the file is absent (never collected) — scaffold
-    // so an override can seed it. Any other error (5xx / rate-limit / network)
-    // is NOT proof of absence: swallowing it here would let the caller commit a
-    // full-content blob that replaces the whole gradebook with this scaffold.
-    // Rethrow so the write fails loudly and the caller can retry, mirroring
-    // assertClassroomNotArchived's non-404 rethrow.
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return { schema: SCORES_SCHEMA, assignments: {} }
-    }
-    throw err
-  }
-  // Decode/parse OUTSIDE the 404-tolerated region: a truncated or malformed
-  // body must fail the save, not scaffold an empty gradebook over real scores.
-  const parsed = JSON.parse(decodeBase64Utf8(file.content)) as ScoresFile
+  // ONLY a genuine 404 means the file is absent (never collected), so an
+  // override can seed it. Any other error (5xx / rate-limit / network) is NOT
+  // proof of absence: swallowing it would let the caller commit a scaffold over
+  // the whole gradebook. readConfigJson rethrows those and parses outside the
+  // tolerated region, so a malformed body fails the save too.
+  const parsed = await readConfigJson<ScoresFile>(client, {
+    org,
+    path: scoresFilePath(classroom),
+    ref,
+    onMissing: () => ({ schema: SCORES_SCHEMA, assignments: {} }),
+  })
   if (!parsed.assignments) parsed.assignments = {}
   return parsed
 }

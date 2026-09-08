@@ -255,7 +255,7 @@ export async function verifyClassroom50ConfigRepo(
     )
     return true
   } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) {
+    if (error instanceof GitHubAPIError && error.isNotFound) {
       return false
     }
     log.warn("config-repo marker read failed, failing open", { org, error })
@@ -294,7 +294,7 @@ export async function getClassroom50OrgSummary(
     // checked only when a specific org is opened (teacher preflight on
     // ClassesPage).
   } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) {
+    if (error instanceof GitHubAPIError && error.isNotFound) {
       canAccessRepo = false
 
       if (isActiveAdmin) {

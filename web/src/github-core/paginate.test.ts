@@ -70,6 +70,28 @@ const apiError = (status: number, retryAfter: number | null = null) =>
     },
   })
 
+describe("paginateAll with an envelope", () => {
+  // The runners endpoint wraps each page in `{ total_count, runners }`.
+  it("picks the items field off every page and tolerates a missing one", async () => {
+    const full = Array.from({ length: 100 }, (_, i) => i)
+    const request = vi.fn(async (path: string) => {
+      const page = Number(/[?&]page=(\d+)/.exec(path)?.[1] ?? 1)
+      if (page === 1) return { total_count: 101, runners: full }
+      if (page === 2) return { total_count: 101, runners: [100] }
+      return { total_count: 101 }
+    })
+    const client = { request } as unknown as GitHubClient
+    const items = await paginateAll<number>(
+      client,
+      (page) => `${BASE}&page=${page}`,
+      { pick: "runners" },
+    )
+    // No Link header: one page at a time, stopping on the first short page.
+    expect(items).toEqual([...full, 100])
+    expect(request).toHaveBeenCalledTimes(2)
+  })
+})
+
 describe("paginateAll", () => {
   const makePath = (page: number) => `${BASE}&page=${page}`
 

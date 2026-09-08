@@ -45,7 +45,7 @@ export async function hasAnyCommits(
     // A malformed non-array 200 body is inconclusive, not "has commits".
     return Array.isArray(branches) ? branches.length > 0 : null
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
+    if (err instanceof GitHubAPIError && err.isNotFound) {
       return false
     }
     return null

@@ -14,6 +14,8 @@ export {
 } from "./queries/keys"
 export {
   sleep,
+  withRetry,
+  type RetryOptions,
   isFreshRepoLagError,
   withFreshRepoRetry,
   REPO_READ_CONCURRENCY,
@@ -75,6 +77,7 @@ export {
   csvFileQuery,
   rosterRawFileQuery,
   getRawFile,
+  readConfigJson,
   getClassroom50Yaml,
   getRepoFileAtRef,
 } from "./queries/fileReads"
