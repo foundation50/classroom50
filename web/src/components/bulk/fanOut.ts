@@ -3,7 +3,11 @@ import type { TFunction } from "i18next"
 import { describeWriteFailure } from "@/components/modals/collaboratorHelpers"
 import { GitHubAPIError } from "@/github-core/errors"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import type { Student } from "@/types/classroom"
 import { mapWithConcurrency } from "@/util/concurrency"
+import { getName } from "@/util/students"
+
+import type { BulkResultView } from "./resultView"
 
 // The three outcomes every fan-out can produce. A caller may widen the union
 // with its own statuses by returning them from `perOwner`; the widened type
@@ -102,4 +106,55 @@ export function partitionOutcomes<O extends AnyOutcome>(outcomes: O[]) {
         o.status === "failed",
     ),
   }
+}
+
+// How a bulk result names an owner: roster name when known, else the login.
+export const ownerDisplayName =
+  (students: Student[]) =>
+  (login: string): string =>
+    getName(login, students) || login
+
+// One result section from a group of outcomes, or none when the group is
+// empty. `titleKey` takes `count`; a row's own `detail` wins over the fallback
+// (a failure carries its reason, a deferral gets the shared explanation).
+export function outcomeSection<O extends AnyOutcome & { detail?: string }>(
+  t: TFunction,
+  titleKey: string,
+  rows: O[],
+  displayFor: (login: string) => string,
+  detailFallback?: string,
+): BulkResultView["sections"] {
+  if (rows.length === 0) return []
+  return [
+    {
+      title: t(titleKey, { count: rows.length }),
+      rows: rows.map((o) => ({
+        key: o.owner,
+        label: displayFor(o.owner),
+        detail: o.detail ?? detailFallback,
+      })),
+    },
+  ]
+}
+
+// The two sections every fan-out result carries, from a `partitionOutcomes`
+// result and the modal's i18n prefix: `<prefix>.failedSection` with each
+// failure's reason, then `<prefix>.deferredSection` with
+// `<prefix>.deferredDetail` on every row.
+export function failedAndDeferredSections<O extends AnyOutcome>(
+  t: TFunction,
+  prefix: string,
+  groups: Pick<ReturnType<typeof partitionOutcomes<O>>, "failed" | "deferred">,
+  displayFor: (login: string) => string,
+): BulkResultView["sections"] {
+  return [
+    ...outcomeSection(t, `${prefix}.failedSection`, groups.failed, displayFor),
+    ...outcomeSection(
+      t,
+      `${prefix}.deferredSection`,
+      groups.deferred,
+      displayFor,
+      t(`${prefix}.deferredDetail`),
+    ),
+  ]
 }

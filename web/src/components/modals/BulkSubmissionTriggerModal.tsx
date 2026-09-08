@@ -7,7 +7,12 @@ import {
   BulkProgressBlock,
   BulkResultBody,
 } from "@/components/bulk/resultView"
-import { runBulkFanOut, type FanOutOutcome } from "@/components/bulk/fanOut"
+import {
+  outcomeSection,
+  ownerDisplayName,
+  runBulkFanOut,
+  type FanOutOutcome,
+} from "@/components/bulk/fanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import {
   updateShimSubmissionMode,
@@ -16,7 +21,6 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { REPO_WRITE_CONCURRENCY } from "@/github-core/queries"
 import { studentRepoName } from "@/util/studentRepo"
-import { getName } from "@/util/students"
 import type { Student, SubmissionMode } from "@/types/classroom"
 
 type BulkSubmissionTriggerModalProps = {
@@ -63,7 +67,7 @@ export function BulkSubmissionTriggerModal({
   const { phase, progress, result, busy } = bulk
 
   const total = owners.length
-  const displayFor = (login: string) => getName(login, students) || login
+  const displayFor = ownerDisplayName(students)
   const modeLabel = t(
     submissionMode === "tag"
       ? "assignments.form.submissionMode.choices.tag"
@@ -118,24 +122,8 @@ export function BulkSubmissionTriggerModal({
     const scope = outcomes.filter((o) => o.status === "missingWorkflowScope")
     const failed = outcomes.filter((o) => o.status === "failed")
 
-    const section = (
-      titleKey: string,
-      rows: Outcome[],
-      detailFallback?: string,
-    ) =>
-      rows.length
-        ? [
-            {
-              title: t(titleKey, { count: rows.length }),
-              rows: rows.map((o) => ({
-                key: o.owner,
-                label: displayFor(o.owner),
-                detail:
-                  ("detail" in o ? o.detail : undefined) ?? detailFallback,
-              })),
-            },
-          ]
-        : []
+    const section = (titleKey: string, rows: Outcome[], detail?: string) =>
+      outcomeSection(t, titleKey, rows, displayFor, detail)
 
     bulk.complete(
       {

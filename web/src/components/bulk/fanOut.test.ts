@@ -2,7 +2,13 @@ import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError } from "@/github-core/errors"
 
-import { partitionOutcomes, runBulkFanOut } from "./fanOut"
+import {
+  failedAndDeferredSections,
+  outcomeSection,
+  ownerDisplayName,
+  partitionOutcomes,
+  runBulkFanOut,
+} from "./fanOut"
 
 const t = ((key: string) => key) as never
 
@@ -138,5 +144,74 @@ describe("partitionOutcomes", () => {
     expect(succeeded.map((o) => o.owner)).toEqual(["a"])
     expect(deferred.map((o) => o.owner)).toEqual(["b"])
     expect(failed[0].detail).toBe("x")
+  })
+})
+
+// Mirrors t(key, { count }) closely enough to assert the count is threaded.
+const tCount = ((key: string, opts?: { count?: number }) =>
+  opts?.count === undefined ? key : `${key}:${opts.count}`) as never
+
+describe("outcomeSection", () => {
+  it("yields no section for an empty group", () => {
+    expect(outcomeSection(tCount, "x.failedSection", [], (l) => l)).toEqual([])
+  })
+
+  it("titles with the row count and prefers a row's own detail", () => {
+    const rows = [
+      { owner: "ann", status: "failed", detail: "403" },
+      { owner: "bob", status: "failed" },
+    ]
+    expect(
+      outcomeSection(tCount, "x.failedSection", rows, (l) => l, "fallback"),
+    ).toEqual([
+      {
+        title: "x.failedSection:2",
+        rows: [
+          { key: "ann", label: "ann", detail: "403" },
+          { key: "bob", label: "bob", detail: "fallback" },
+        ],
+      },
+    ])
+  })
+})
+
+describe("failedAndDeferredSections", () => {
+  it("emits failed then deferred under the prefix, skipping empty groups", () => {
+    const groups = partitionOutcomes([
+      { owner: "ann", status: "ok" },
+      { owner: "bob", status: "deferred" },
+    ])
+    expect(
+      failedAndDeferredSections(tCount, "submissions.bulkX", groups, (l) => l),
+    ).toEqual([
+      {
+        title: "submissions.bulkX.deferredSection:1",
+        rows: [
+          {
+            key: "bob",
+            label: "bob",
+            detail: "submissions.bulkX.deferredDetail",
+          },
+        ],
+      },
+    ])
+  })
+})
+
+describe("ownerDisplayName", () => {
+  it("uses the roster name when known and falls back to the login", () => {
+    const displayFor = ownerDisplayName([
+      {
+        username: "ann",
+        first_name: "Ann",
+        last_name: "Lee",
+        email: "",
+        section: "",
+        github_id: "",
+        role: "",
+      },
+    ])
+    expect(displayFor("ann")).toBe("Ann Lee")
+    expect(displayFor("zed")).toBe("zed")
   })
 })

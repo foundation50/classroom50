@@ -4,12 +4,15 @@ import { CalendarIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
 import { BulkProgressBlock, BulkResultBody } from "@/components/bulk/resultView"
-import { partitionOutcomes } from "@/components/bulk/fanOut"
+import {
+  failedAndDeferredSections,
+  ownerDisplayName,
+  partitionOutcomes,
+} from "@/components/bulk/fanOut"
 import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
-import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
 
 type CloseSubmissionModalProps = {
@@ -67,7 +70,7 @@ export function CloseSubmissionModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = (login: string) => getName(login, students) || login
+  const displayFor = ownerDisplayName(students)
 
   // Set every accepted student's role on their own repo. `flipFlag` runs the
   // full close/reopen (flag flip first, then fan-out); `finishOnly` skips the
@@ -131,36 +134,12 @@ export function CloseSubmissionModal({
     bulk.complete(
       {
         headline: t(headlineKey, { count: succeeded.length, total }),
-        sections: [
-          ...(failed.length
-            ? [
-                {
-                  title: t("submissions.closeSubmission.failedSection", {
-                    count: failed.length,
-                  }),
-                  rows: failed.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: o.detail,
-                  })),
-                },
-              ]
-            : []),
-          ...(deferred.length
-            ? [
-                {
-                  title: t("submissions.closeSubmission.deferredSection", {
-                    count: deferred.length,
-                  }),
-                  rows: deferred.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: t("submissions.closeSubmission.deferredDetail"),
-                  })),
-                },
-              ]
-            : []),
-        ],
+        sections: failedAndDeferredSections(
+          t,
+          "submissions.closeSubmission",
+          { failed, deferred },
+          displayFor,
+        ),
       },
       failed.length || deferred.length ? "error" : "complete",
     )

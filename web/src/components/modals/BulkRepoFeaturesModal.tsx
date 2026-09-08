@@ -14,12 +14,16 @@ import {
   BulkProgressBlock,
   BulkResultBody,
 } from "@/components/bulk/resultView"
-import { partitionOutcomes, runBulkFanOut } from "@/components/bulk/fanOut"
+import {
+  failedAndDeferredSections,
+  ownerDisplayName,
+  partitionOutcomes,
+  runBulkFanOut,
+} from "@/components/bulk/fanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useSetRepoFeatures from "@/hooks/mutations/useSetRepoFeatures"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
 import { studentRepoName } from "@/util/studentRepo"
-import { getName } from "@/util/students"
 import type { Student } from "@/types/classroom"
 
 type BulkRepoFeaturesModalProps = {
@@ -91,7 +95,7 @@ export function BulkRepoFeaturesModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = (login: string) => getName(login, students) || login
+  const displayFor = ownerDisplayName(students)
   const patch = useMemo(() => choicesToPatch(choices), [choices])
   const nothingSelected = Object.keys(patch).length === 0
 
@@ -125,36 +129,12 @@ export function BulkRepoFeaturesModal({
               count: succeeded.length,
               total,
             }),
-        sections: [
-          ...(failed.length
-            ? [
-                {
-                  title: t("submissions.bulkFeatures.failedSection", {
-                    count: failed.length,
-                  }),
-                  rows: failed.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: o.detail,
-                  })),
-                },
-              ]
-            : []),
-          ...(deferred.length
-            ? [
-                {
-                  title: t("submissions.bulkFeatures.deferredSection", {
-                    count: deferred.length,
-                  }),
-                  rows: deferred.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: t("submissions.bulkFeatures.deferredDetail"),
-                  })),
-                },
-              ]
-            : []),
-        ],
+        sections: failedAndDeferredSections(
+          t,
+          "submissions.bulkFeatures",
+          { failed, deferred },
+          displayFor,
+        ),
       },
       failed.length || deferred.length ? "error" : "complete",
     )

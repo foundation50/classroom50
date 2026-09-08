@@ -14,11 +14,15 @@ import {
   BulkProgressBlock,
   BulkResultBody,
 } from "@/components/bulk/resultView"
-import { partitionOutcomes, runBulkFanOut } from "@/components/bulk/fanOut"
+import {
+  failedAndDeferredSections,
+  ownerDisplayName,
+  partitionOutcomes,
+  runBulkFanOut,
+} from "@/components/bulk/fanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
 import { studentRepoName } from "@/util/studentRepo"
-import { getName } from "@/util/students"
 import type { RepoVisibility, Student } from "@/types/classroom"
 
 type BulkRepoVisibilityModalProps = {
@@ -62,7 +66,7 @@ export function BulkRepoVisibilityModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = (login: string) => getName(login, students) || login
+  const displayFor = ownerDisplayName(students)
   const nothingSelected = choice === "keep"
 
   const run = async () => {
@@ -96,36 +100,12 @@ export function BulkRepoVisibilityModal({
               count: succeeded.length,
               total,
             }),
-        sections: [
-          ...(failed.length
-            ? [
-                {
-                  title: t("submissions.bulkVisibility.failedSection", {
-                    count: failed.length,
-                  }),
-                  rows: failed.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: o.detail,
-                  })),
-                },
-              ]
-            : []),
-          ...(deferred.length
-            ? [
-                {
-                  title: t("submissions.bulkVisibility.deferredSection", {
-                    count: deferred.length,
-                  }),
-                  rows: deferred.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: t("submissions.bulkVisibility.deferredDetail"),
-                  })),
-                },
-              ]
-            : []),
-        ],
+        sections: failedAndDeferredSections(
+          t,
+          "submissions.bulkVisibility",
+          { failed, deferred },
+          displayFor,
+        ),
       },
       failed.length || deferred.length ? "error" : "complete",
     )

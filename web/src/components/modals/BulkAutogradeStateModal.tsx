@@ -7,12 +7,16 @@ import {
   BulkProgressBlock,
   BulkResultBody,
 } from "@/components/bulk/resultView"
-import { runBulkFanOut, type FanOutOutcome } from "@/components/bulk/fanOut"
+import {
+  outcomeSection,
+  ownerDisplayName,
+  runBulkFanOut,
+  type FanOutOutcome,
+} from "@/components/bulk/fanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import { setAutogradeState } from "@/github-core/mutations"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { studentRepoName } from "@/util/studentRepo"
-import { getName } from "@/util/students"
 import type { Student } from "@/types/classroom"
 
 type BulkAutogradeStateModalProps = {
@@ -53,7 +57,7 @@ export function BulkAutogradeStateModal({
   const { phase, progress, result, busy } = bulk
 
   const total = owners.length
-  const displayFor = (login: string) => getName(login, students) || login
+  const displayFor = ownerDisplayName(students)
   const isPause = action === "pause"
 
   const run = async () => {
@@ -79,24 +83,8 @@ export function BulkAutogradeStateModal({
     const deferred = outcomes.filter((o) => o.status === "deferred")
     const failed = outcomes.filter((o) => o.status === "failed")
 
-    const section = (
-      titleKey: string,
-      rows: Outcome[],
-      detailFallback?: string,
-    ) =>
-      rows.length
-        ? [
-            {
-              title: t(titleKey, { count: rows.length }),
-              rows: rows.map((o) => ({
-                key: o.owner,
-                label: displayFor(o.owner),
-                detail:
-                  ("detail" in o ? o.detail : undefined) ?? detailFallback,
-              })),
-            },
-          ]
-        : []
+    const section = (titleKey: string, rows: Outcome[], detail?: string) =>
+      outcomeSection(t, titleKey, rows, displayFor, detail)
 
     bulk.complete(
       {

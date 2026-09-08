@@ -14,11 +14,14 @@ import {
   BulkProgressBlock,
   BulkResultBody,
 } from "@/components/bulk/resultView"
-import { partitionOutcomes } from "@/components/bulk/fanOut"
+import {
+  failedAndDeferredSections,
+  ownerDisplayName,
+  partitionOutcomes,
+} from "@/components/bulk/fanOut"
 import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
-import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
 
@@ -58,7 +61,7 @@ export function BulkRepoAccessModal({
   }, [open])
 
   const total = owners.length
-  const displayFor = (login: string) => getName(login, students) || login
+  const displayFor = ownerDisplayName(students)
 
   const permissionLabel = (level: RepoPermission) =>
     t(`assignments.form.studentPermission.levels.${level}`)
@@ -100,36 +103,12 @@ export function BulkRepoAccessModal({
               total,
               level: permissionLabel(permission),
             }),
-        sections: [
-          ...(failed.length
-            ? [
-                {
-                  title: t("submissions.bulkAccess.failedSection", {
-                    count: failed.length,
-                  }),
-                  rows: failed.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: o.detail,
-                  })),
-                },
-              ]
-            : []),
-          ...(deferred.length
-            ? [
-                {
-                  title: t("submissions.bulkAccess.deferredSection", {
-                    count: deferred.length,
-                  }),
-                  rows: deferred.map((o) => ({
-                    key: o.owner,
-                    label: displayFor(o.owner),
-                    detail: t("submissions.bulkAccess.deferredDetail"),
-                  })),
-                },
-              ]
-            : []),
-        ],
+        sections: failedAndDeferredSections(
+          t,
+          "submissions.bulkAccess",
+          { failed, deferred },
+          displayFor,
+        ),
       },
       failed.length || deferred.length ? "error" : "complete",
     )
