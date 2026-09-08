@@ -247,6 +247,47 @@ describe("BulkCloseSubmissionModal", () => {
     expect(addMutateAsync).toHaveBeenCalledTimes(2)
   })
 
+  // The recovery must not re-spend the request budget on repos already set to
+  // read, nor on an assignment the commit reported as gone.
+  it("finish closing re-runs only the repositories the first run left", async () => {
+    setClosedMutateAsync.mockResolvedValue(committed(["hw1"], ["hw3"]))
+    // alice succeeds; bob fails, so only bob is left to finish.
+    addMutateAsync.mockImplementation((params: { username: string }) =>
+      params.username === "bob"
+        ? Promise.reject(apiError(500))
+        : Promise.resolve({ effective: undefined }),
+    )
+    renderModal("close", [
+      { slug: "hw1", owners: ["alice", "bob"] },
+      { slug: "hw3", owners: ["cara"] },
+    ])
+
+    fireEvent.click(screen.getByText("assignments.bulk.closeSubmission.apply"))
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.closeSubmission.finishApply"),
+      ).toBeTruthy(),
+    )
+
+    addMutateAsync.mockReset()
+    addMutateAsync.mockResolvedValue({ effective: undefined })
+    fireEvent.click(screen.getByText("submissions.closeSubmission.finishApply"))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("assignments.bulk.closeSubmission.resultHeadline"),
+      ).toBeTruthy(),
+    )
+    expect(addMutateAsync).toHaveBeenCalledTimes(1)
+    expect(addMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ repo: "cs-hw1-bob" }),
+    )
+    // The gone assignment stays gone across the re-run.
+    expect(
+      screen.getByText("assignments.bulk.closeSubmission.missingSection"),
+    ).toBeTruthy()
+  })
+
   it("names the selected assignments the action leaves alone", () => {
     renderModal(
       "close",

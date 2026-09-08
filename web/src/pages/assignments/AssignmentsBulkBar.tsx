@@ -96,19 +96,40 @@ export function AssignmentsBulkBar({
     () => selected.filter((a) => !closable.includes(a)).map((a) => a.slug),
     [selected, closable],
   )
+
   const allClosed = closable.length > 0 && closable.every((a) => a.closed)
   const noneClosed = closable.every((a) => !a.closed)
   // Both reads are already in the page's cache (the table's Accepted column
   // and the funnel roster), so resolving who accepted costs no extra request.
-  const { data: orgRepos } = useGetOrgRepos(org)
-  const { students } = useGetStudents(org, classroom)
+  const {
+    data: orgRepos,
+    isPending: reposPending,
+    isError: reposError,
+  } = useGetOrgRepos(org)
+  const {
+    students,
+    isLoading: studentsLoading,
+    isError: studentsError,
+  } = useGetStudents(org, classroom)
+  // Without both, every assignment resolves to zero accepted owners: the run
+  // would commit the flag and report "0 of 0 repositories" while every student
+  // kept write. Fail closed — the entries wait rather than under-apply.
+  const ownersResolvable =
+    !reposPending && !reposError && !studentsLoading && !studentsError
+  // Reopen restores write, so it may only touch assignments that are actually
+  // closed: fanning out over the whole selection would re-grant push on repos
+  // a teacher downgraded per student in the gradebook, and overwrite a
+  // non-push student_permission. Close can cover every eligible assignment —
+  // re-asserting pull on an already-closed one changes nothing.
   const closeTargets = useMemo<CloseSubmissionTarget[]>(
     () =>
-      closable.map((a) => ({
-        slug: a.slug,
-        owners: [...acceptedUsernames(orgRepos, classroom, a.slug, students)],
-      })),
-    [closable, orgRepos, classroom, students],
+      closable
+        .filter((a) => lastCloseMode !== "reopen" || a.closed)
+        .map((a) => ({
+          slug: a.slug,
+          owners: [...acceptedUsernames(orgRepos, classroom, a.slug, students)],
+        })),
+    [closable, lastCloseMode, orgRepos, classroom, students],
   )
   // The per-repo collaborator write needs repo admin, which only an org owner
   // has — the same gate the single-assignment action carries.
@@ -231,26 +252,40 @@ export function AssignmentsBulkBar({
               <DropdownMenu.Item
                 icon={CalendarIcon}
                 label={t("assignments.bulk.closeSubmission.menuLabel")}
-                disabled={busy || closable.length === 0 || allClosed}
+                disabled={
+                  busy ||
+                  closable.length === 0 ||
+                  allClosed ||
+                  !ownersResolvable
+                }
                 title={
                   closable.length === 0
                     ? t("assignments.bulk.closeSubmission.noneEligible")
                     : allClosed
                       ? t("assignments.bulk.closeSubmission.allClosed")
-                      : t("assignments.bulk.closeSubmission.menuTitle")
+                      : !ownersResolvable
+                        ? t("assignments.bulk.closeSubmission.ownersUnknown")
+                        : t("assignments.bulk.closeSubmission.menuTitle")
                 }
                 onSelect={() => setCloseMode("close")}
               />
               <DropdownMenu.Item
                 icon={CalendarIcon}
                 label={t("assignments.bulk.closeSubmission.reopenMenuLabel")}
-                disabled={busy || closable.length === 0 || noneClosed}
+                disabled={
+                  busy ||
+                  closable.length === 0 ||
+                  noneClosed ||
+                  !ownersResolvable
+                }
                 title={
                   closable.length === 0
                     ? t("assignments.bulk.closeSubmission.noneEligible")
                     : noneClosed
                       ? t("assignments.bulk.closeSubmission.noneClosed")
-                      : t("assignments.bulk.closeSubmission.reopenMenuTitle")
+                      : !ownersResolvable
+                        ? t("assignments.bulk.closeSubmission.ownersUnknown")
+                        : t("assignments.bulk.closeSubmission.reopenMenuTitle")
                 }
                 onSelect={() => setCloseMode("reopen")}
               />
