@@ -102,9 +102,11 @@ export {
 } from "./assignments/downloadSubmissions"
 export {
   setAssignmentsLockWithConflictRetry,
+  setAssignmentsClosedWithConflictRetry,
   deleteAssignmentsWithConflictRetry,
   copyAssignmentsWithConflictRetry,
   type BulkLockResult,
+  type BulkClosedResult,
   type BulkDeleteResult,
   type BulkCopyItem,
   type BulkCopyOutcome,
