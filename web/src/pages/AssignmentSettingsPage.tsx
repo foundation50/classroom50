@@ -7,7 +7,14 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
-import { Alert, AnimatedAlert, Button, Card, Heading } from "@/components/ui"
+import {
+  Alert,
+  AnimatedAlert,
+  Button,
+  Card,
+  ExternalLink,
+  Heading,
+} from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
@@ -167,15 +174,14 @@ const EditAssignmentFormStudent = ({
               <p className="text-sm font-medium text-base-content/70">
                 {t("assignmentSettings.groupMembers")}
               </p>
-              <a
-                className="link mt-1 inline-flex items-center gap-1.5 text-sm"
+              <ExternalLink
+                className="mt-1 gap-1.5 text-sm"
                 href={assignmentRepo.html_url}
-                target="_blank"
-                rel="noreferrer"
+                icon={false}
               >
                 <MarkGithubIcon aria-hidden="true" className="size-4" />
                 {t("assignmentSettings.viewRepository")}
-              </a>
+              </ExternalLink>
             </div>
           </div>
           <GroupTeamMembersPanel
@@ -209,15 +215,14 @@ const EditAssignmentFormStudent = ({
               <p className="text-sm font-medium text-base-content/70">
                 {t("assignmentSettings.groupMembers")}
               </p>
-              <a
-                className="link mt-1 inline-flex items-center gap-1.5 text-sm"
+              <ExternalLink
+                className="mt-1 gap-1.5 text-sm"
                 href={assignmentRepo.html_url}
-                target="_blank"
-                rel="noreferrer"
+                icon={false}
               >
                 <MarkGithubIcon aria-hidden="true" className="size-4" />
                 {t("assignmentSettings.viewRepository")}
-              </a>
+              </ExternalLink>
               <p className="mt-2 text-sm text-base-content/70">
                 <Trans
                   i18nKey="assignmentSettings.collaboratorsHint"

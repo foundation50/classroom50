@@ -1,3 +1,4 @@
+import { ExternalLink } from "@/components/ui"
 import type { ReactNode } from "react"
 
 import { MarkGithubIcon } from "@/components/ui/icons"
@@ -15,14 +16,13 @@ export function ViewRepositoryLink({
   children: ReactNode
 }) {
   return (
-    <a
-      className="link mt-3 inline-flex w-fit items-center gap-1.5 text-sm"
+    <ExternalLink
+      className="mt-3 w-fit gap-1.5 text-sm"
       href={href}
-      target="_blank"
-      rel="noreferrer"
+      icon={false}
     >
       <MarkGithubIcon aria-hidden="true" className="size-4" />
       {children}
-    </a>
+    </ExternalLink>
   )
 }

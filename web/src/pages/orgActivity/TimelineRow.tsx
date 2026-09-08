@@ -10,7 +10,7 @@ import {
   ZapIcon,
 } from "@/components/ui/icons"
 
-import { Badge, type BadgeTone, cx } from "@/components/ui"
+import { Badge, cx, ExternalLink, type BadgeTone } from "@/components/ui"
 import type { TimelineItem, TimelineStatus } from "@/lib/activity/timeline"
 import type { TFunction } from "i18next"
 
@@ -91,18 +91,18 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-medium break-words text-base-content">
           {item.href ? (
-            <a
+            <ExternalLink
               href={item.href}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 hover:underline"
+              variant="plain"
+              className="hover:underline"
+              icon={false}
             >
               {item.label}
               <LinkExternalIcon
                 aria-hidden="true"
                 className="size-4 opacity-60"
               />
-            </a>
+            </ExternalLink>
           ) : (
             item.label
           )}

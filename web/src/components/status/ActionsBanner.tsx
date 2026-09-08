@@ -1,3 +1,4 @@
+import { ExternalLink } from "@/components/ui"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import { AnimatePresence, motion } from "motion/react"
@@ -5,7 +6,6 @@ import {
   AlertIcon,
   CheckCircleIcon,
   ChevronDownIcon,
-  LinkExternalIcon,
   SyncIcon,
   XIcon,
 } from "@/components/ui/icons"
@@ -109,15 +109,13 @@ const TrackerRow = ({
       </span>
       <ElapsedLabel tracker={tracker} now={now} />
       {tracker.htmlUrl && (
-        <a
+        <ExternalLink
           href={tracker.htmlUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium opacity-80 hover:opacity-100"
+          variant="plain"
+          className="shrink-0 cursor-pointer text-xs font-medium opacity-80 hover:opacity-100"
         >
           {t("actionsBanner.viewRun")}
-          <LinkExternalIcon aria-hidden="true" className="size-4" />
-        </a>
+        </ExternalLink>
       )}
       {tracker.retriable && (
         <button

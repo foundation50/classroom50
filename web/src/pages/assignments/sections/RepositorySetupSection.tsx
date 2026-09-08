@@ -2,8 +2,16 @@ import { useQuery } from "@tanstack/react-query"
 import { InlineSpinner } from "@/components/Spinner"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
-import { LinkExternalIcon, SyncIcon } from "@/components/ui/icons"
-import { Alert, Button, cx, FormField, Radio, Select } from "@/components/ui"
+import { SyncIcon } from "@/components/ui/icons"
+import {
+  Alert,
+  Button,
+  cx,
+  ExternalLink,
+  FormField,
+  Radio,
+  Select,
+} from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { repoContentsPathExists } from "@/domain/assignments"
 import {
@@ -345,15 +353,12 @@ function StudentPermissionField({ form }: { form: AssignmentForm }) {
                     : "assignments.form.studentPermission.help",
                 )}
                 labelExtra={
-                  <a
-                    className="link inline-flex items-center gap-1 text-sm font-normal text-base-content/60 hover:text-base-content"
+                  <ExternalLink
+                    className="text-sm font-normal text-base-content/60 hover:text-base-content"
                     href={REPO_ROLES_DOCS_URL}
-                    target="_blank"
-                    rel="noreferrer"
                   >
                     {t("assignments.form.studentPermission.learnMore")}
-                    <LinkExternalIcon aria-hidden="true" className="size-4" />
-                  </a>
+                  </ExternalLink>
                 }
               >
                 {({ id, describedById }) => (

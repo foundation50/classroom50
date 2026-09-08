@@ -3,14 +3,13 @@ import { useTranslation } from "react-i18next"
 import { useQuery } from "@tanstack/react-query"
 
 import {
-  LinkExternalIcon,
   MarkGithubIcon,
   PeopleIcon,
   PlusIcon,
   SignOutIcon,
   TrashIcon,
 } from "@/components/ui/icons"
-import { Alert, Badge, Button, Input, cx } from "@/components/ui"
+import { Alert, Badge, Button, cx, ExternalLink, Input } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { Spinner } from "@/components/Spinner"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -297,15 +296,12 @@ export function GroupTeamMembersPanel({
               it — so both requesting and reviewing deep-link there. Reviewing
               is a maintainer power, so only managers get the link. */}
           {canManage ? (
-            <a
-              className="link link-hover inline-flex items-center gap-1.5 text-sm"
+            <ExternalLink
+              className="link-hover gap-1.5 text-sm"
               href={groupTeamUrl(org, teamSlug)}
-              target="_blank"
-              rel="noreferrer"
             >
               {t("components.groupTeamMembers.reviewJoinRequests")}
-              <LinkExternalIcon aria-hidden="true" className="size-3.5" />
-            </a>
+            </ExternalLink>
           ) : (
             <span />
           )}

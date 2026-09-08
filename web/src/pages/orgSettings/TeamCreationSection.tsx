@@ -1,9 +1,14 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Badge, InlineSpinner, OutcomeAlert, Toggle } from "@/components/ui"
+import {
+  Badge,
+  ExternalLink,
+  InlineSpinner,
+  OutcomeAlert,
+  Toggle,
+} from "@/components/ui"
 import type { AlertOutcome } from "@/components/ui"
-import { LinkExternalIcon } from "@/components/ui/icons"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import useUpdateOrgTeamCreation from "@/hooks/mutations/useUpdateOrgTeamCreation"
@@ -55,15 +60,13 @@ const TeamCreationSection = ({
         )
       }
       action={
-        <a
+        <ExternalLink
           href={memberPrivilegesUrl(org)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+          variant="muted"
+          className="text-xs"
         >
           {t("orgSettings.teamCreation.openSettings")}
-          <LinkExternalIcon aria-hidden="true" className="size-4" />
-        </a>
+        </ExternalLink>
       }
     >
       {isLoading ? (

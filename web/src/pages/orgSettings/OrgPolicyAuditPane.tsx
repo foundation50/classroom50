@@ -5,7 +5,6 @@ import {
   CheckCircleIcon,
   ChevronRightIcon,
   ChevronUpIcon,
-  LinkExternalIcon,
   XCircleIcon,
 } from "@/components/ui/icons"
 
@@ -15,6 +14,7 @@ import useRepairOrgPolicyConcern from "@/hooks/mutations/useRepairOrgPolicyConce
 import {
   Badge,
   Button,
+  ExternalLink,
   InlineSpinner,
   rtlFlip,
   type BadgeTone,
@@ -169,15 +169,13 @@ export function ConcernRow({
               {t("orgSettings.audit.couldntAutoConfigure")}
             </p>
           )}
-          <a
+          <ExternalLink
             href={concern.settingsUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+            variant="muted"
+            className="mt-1 text-xs"
           >
             {t("orgSettings.audit.viewOnGitHub")}
-            <LinkExternalIcon aria-hidden="true" className="size-4" />
-          </a>
+          </ExternalLink>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {showFix && (
@@ -215,15 +213,9 @@ export function ConcernRow({
             {t("orgSettings.audit.changeThemOn", {
               count: driftedDetails.length,
             })}{" "}
-            <a
-              href={concern.settingsUrl}
-              target="_blank"
-              rel="noreferrer"
-              className="link inline-flex items-center gap-0.5"
-            >
+            <ExternalLink href={concern.settingsUrl} className="gap-0.5">
               {t("orgSettings.audit.gitHub")}
-              <LinkExternalIcon aria-hidden="true" className="size-4" />
-            </a>
+            </ExternalLink>
             {showFix ? t("orgSettings.audit.orUseFixIt") : ""}:
           </p>
           <UnenforcedDefaultsList items={driftedDetails} />
@@ -261,15 +253,13 @@ function RecommendationRow({
             ? t("orgSettings.audit.configBranchRec", { current: rec.detail })
             : t("orgSettings.audit.defaultBranchRec", { current: rec.detail })}
         </p>
-        <a
+        <ExternalLink
           href={rec.settingsUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+          variant="muted"
+          className="mt-1 text-xs"
         >
           {t("orgSettings.audit.viewOnGitHub")}
-          <LinkExternalIcon aria-hidden="true" className="size-4" />
-        </a>
+        </ExternalLink>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         {isConfigRepo && canFix && (
@@ -393,15 +383,13 @@ function AuditBody({
                   <div className="text-sm text-base-content/80">
                     {step.setting}
                   </div>
-                  <a
+                  <ExternalLink
                     href={step.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+                    variant="muted"
+                    className="mt-1 text-xs"
                   >
                     {t("orgSettings.audit.viewOnGitHub")}
-                    <LinkExternalIcon aria-hidden="true" className="size-4" />
-                  </a>
+                  </ExternalLink>
                 </div>
                 <Badge tone="warning" className="shrink-0">
                   {t("orgSettings.audit.confirmManually")}

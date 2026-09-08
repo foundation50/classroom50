@@ -44,12 +44,13 @@ import {
   Badge,
   Button,
   Card,
+  closeDropdownMenu,
+  cx,
   DropdownMenu,
+  Heading,
   InlineMessage,
   RouterButton,
   Toolbar,
-  cx,
-  Heading,
 } from "@/components/ui"
 import {
   CardGridSkeleton,
@@ -256,14 +257,6 @@ function HideOrgMenu({
     })
   }
 
-  // daisyUI keeps a focus-driven dropdown open until blur; blur the active item
-  // so the menu closes when opening the modal.
-  const closeMenu = () => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-  }
-
   return (
     <>
       <div className={cx("dropdown dropdown-end", className)}>
@@ -282,31 +275,23 @@ function HideOrgMenu({
                 to="/$org/settings"
                 params={{ org: org.login }}
                 hash="service-token"
-                onClick={closeMenu}
+                onClick={closeDropdownMenu}
               >
                 <KeyIcon aria-hidden="true" className="size-4" />
                 {t("orgs.card.manageToken")}
               </Link>
             </li>
           )}
-          <li>
-            <button
-              type="button"
-              onClick={() => {
-                closeMenu()
-                setDetailsOpen(true)
-              }}
-            >
-              <InfoIcon aria-hidden="true" className="size-4" />
-              {t("orgs.card.details")}
-            </button>
-          </li>
-          <li>
-            <button type="button" onClick={handleHide}>
-              <EyeClosedIcon aria-hidden="true" className="size-4" />
-              {t("orgs.card.hide")}
-            </button>
-          </li>
+          <DropdownMenu.Item
+            icon={InfoIcon}
+            label={t("orgs.card.details")}
+            onSelect={() => setDetailsOpen(true)}
+          />
+          <DropdownMenu.Item
+            icon={EyeClosedIcon}
+            label={t("orgs.card.hide")}
+            onSelect={handleHide}
+          />
         </DropdownMenu>
       </div>
 

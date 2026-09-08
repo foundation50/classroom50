@@ -5,7 +5,7 @@ import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
-import { Button } from "@/components/ui"
+import { Button, ExternalLink } from "@/components/ui"
 import { orgBudgetsUrl } from "@/orgPolicy/budget"
 import {
   BUDGET_NOTICE_EVENT,
@@ -91,14 +91,13 @@ export function BudgetCreatedBanner() {
         >
           <p className="text-base-content/70">{t("budgetCreated.body")}</p>
           <div className="flex flex-wrap items-center gap-2">
-            <a
+            <ExternalLink
               href={orgBudgetsUrl(org)}
-              target="_blank"
-              rel="noreferrer"
-              className="link link-primary text-sm"
+              className="link-primary text-sm"
+              icon={false}
             >
               {t("budgetCreated.manage")}
-            </a>
+            </ExternalLink>
           </div>
           <Button
             variant="success"

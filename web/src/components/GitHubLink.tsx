@@ -1,7 +1,9 @@
-import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
+import { ExternalLink } from "@/components/ui"
+import { MarkGithubIcon } from "@/components/ui/icons"
 
-// Shared "open on GitHub" deep-link, so the section headers that use it can't
-// drift in markup. `className` tunes layout per call site (e.g., `shrink-0`).
+// Shared "open on GitHub" deep-link for section headers: the muted ExternalLink
+// with the GitHub mark in front. `className` tunes layout per call site (e.g.,
+// `shrink-0`).
 export const GitHubLink = ({
   href,
   label,
@@ -15,17 +17,15 @@ export const GitHubLink = ({
   className?: string
   showLogo?: boolean
 }) => (
-  <a
+  <ExternalLink
     href={href}
-    target="_blank"
-    rel="noreferrer"
     title={title}
-    className={`inline-flex cursor-pointer items-center gap-1.5 text-sm text-base-content/70 hover:text-primary ${className}`}
+    variant="muted"
+    className={`cursor-pointer gap-1.5 text-sm ${className}`}
   >
     {showLogo && <MarkGithubIcon className="size-4" aria-hidden="true" />}
     {label}
-    <LinkExternalIcon className="size-4" aria-hidden="true" />
-  </a>
+  </ExternalLink>
 )
 
 export default GitHubLink

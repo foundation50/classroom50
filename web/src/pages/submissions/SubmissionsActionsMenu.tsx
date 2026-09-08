@@ -132,12 +132,6 @@ export function SubmissionsActionsMenu({
   const busy = collecting || regrading
   const disabledActions = busy || emptyRoster
 
-  const closeMenu = () => {
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-  }
-
   const collectTitle = emptyRoster
     ? t("submissions.collect.titleEmptyRoster")
     : regrading
@@ -171,56 +165,35 @@ export function SubmissionsActionsMenu({
         )}
       </Button>
       <DropdownMenu className="w-64">
-        {/* Metrics — graded-snapshot stats; hidden in live view (onMetrics
+        {/* Metrics: graded-snapshot stats; hidden in live view (onMetrics
             omitted there). */}
         {onMetrics && (
-          <li>
-            <button
-              type="button"
-              onClick={() => {
-                closeMenu()
-                onMetrics()
-              }}
-            >
-              <GraphIcon aria-hidden="true" className="size-4" />
-              {t("submissions.menu.metrics")}
-            </button>
-          </li>
+          <>
+            <DropdownMenu.Item
+              icon={GraphIcon}
+              label={t("submissions.menu.metrics")}
+              onSelect={onMetrics}
+            />
+            <DropdownMenu.Separator />
+          </>
         )}
-        {onMetrics && (
-          <div
-            className="my-1 border-t border-base-content/10"
-            role="separator"
-          />
-        )}
-        {/* Open all Feedback PRs — the bulk PR action leads the menu. The page
-            owns the gate (owner-only, non-empty_repo): a no_autograder repo is
-            templated and PERMITS the PR, so no skipsGrading re-gate here. */}
+        {/* Open all Feedback PRs leads the menu. The page owns the gate
+            (owner-only, non-empty_repo): a no_autograder repo is templated and
+            PERMITS the PR, so no skipsGrading re-gate here. */}
         {onOpenAllPrs && (
           <>
-            <li>
-              <button
-                type="button"
-                disabled={disabledActions}
-                title={
-                  emptyRoster
-                    ? t("submissions.openAllPrs.titleEmptyRoster")
-                    : t("submissions.openAllPrs.title")
-                }
-                onClick={() => {
-                  closeMenu()
-                  if (disabledActions) return
-                  onOpenAllPrs()
-                }}
-              >
-                <GitPullRequestIcon aria-hidden="true" className="size-4" />
-                {t("submissions.openAllPrs.menuLabel")}
-              </button>
-            </li>
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
+            <DropdownMenu.Item
+              icon={GitPullRequestIcon}
+              label={t("submissions.openAllPrs.menuLabel")}
+              disabled={disabledActions}
+              title={
+                emptyRoster
+                  ? t("submissions.openAllPrs.titleEmptyRoster")
+                  : t("submissions.openAllPrs.title")
+              }
+              onSelect={onOpenAllPrs}
             />
+            <DropdownMenu.Separator />
           </>
         )}
         {/* Collect stays for non-autograding assignments: it's org-wide and
@@ -228,337 +201,214 @@ export function SubmissionsActionsMenu({
             SubmissionsPage comment). Only grading actions hide. Omitted for a
             viewer who can't dispatch the workflow (a pull-only TA). */}
         {onCollect && (
-          <li>
-            <button
-              type="button"
-              disabled={disabledActions}
-              title={collectTitle}
-              onClick={() => {
-                closeMenu()
-                if (disabledActions) return
-                onCollect()
-              }}
-            >
-              <DownloadIcon aria-hidden="true" className="size-4" />
-              {collecting
+          <DropdownMenu.Item
+            icon={DownloadIcon}
+            label={
+              collecting
                 ? t("submissions.collect.active")
-                : t("submissions.collect.label")}
-            </button>
-          </li>
+                : t("submissions.collect.label")
+            }
+            disabled={disabledActions}
+            title={collectTitle}
+            onSelect={onCollect}
+          />
         )}
         {!skipsGrading && (
           <>
             {canRegradeAll && (
-              <li>
-                <button
-                  type="button"
-                  disabled={disabledActions}
-                  title={regradeTitle}
-                  onClick={() => {
-                    closeMenu()
-                    if (disabledActions) return
-                    onRegradeAll()
-                  }}
-                >
-                  <SyncIcon
-                    aria-hidden="true"
-                    className={`size-4 ${regradeAllActive ? "animate-spin" : ""}`}
-                  />
-                  {regradeAllActive
+              <DropdownMenu.Item
+                icon={SyncIcon}
+                iconClassName={regradeAllActive ? "animate-spin" : undefined}
+                label={
+                  regradeAllActive
                     ? t("submissions.regradeAll.active")
-                    : t("submissions.regradeAll.label")}
-                </button>
-              </li>
-            )}
-            <li>
-              <a href={viewHref} target="_blank" rel="noreferrer">
-                <LinkExternalIcon aria-hidden="true" className="size-4" />
-                {viewLabel}
-              </a>
-            </li>
-          </>
-        )}
-        <div
-          className="my-1 border-t border-base-content/10"
-          role="separator"
-        />
-        {/* Update student repo access — an authoring-tier action, grouped with
-            Lock/Unlock above the CSV export. */}
-        {onBulkAccess && (
-          <>
-            <li>
-              <button
-                type="button"
-                disabled={disabledActions}
-                title={
-                  emptyRoster
-                    ? t("submissions.bulkAccess.titleEmptyRoster")
-                    : t("submissions.bulkAccess.menuTitle")
+                    : t("submissions.regradeAll.label")
                 }
-                onClick={() => {
-                  closeMenu()
-                  if (disabledActions) return
-                  onBulkAccess()
-                }}
-              >
-                <ShieldCheckIcon aria-hidden="true" className="size-4" />
-                {t("submissions.bulkAccess.menuLabel")}
-              </button>
-            </li>
-            {onBulkFeatures && (
-              <li>
-                <button
-                  type="button"
-                  disabled={disabledActions}
-                  title={
-                    emptyRoster
-                      ? t("submissions.bulkFeatures.titleEmptyRoster")
-                      : t("submissions.bulkFeatures.menuTitle")
-                  }
-                  onClick={() => {
-                    closeMenu()
-                    if (disabledActions) return
-                    onBulkFeatures()
-                  }}
-                >
-                  <SlidersIcon aria-hidden="true" className="size-4" />
-                  {t("submissions.bulkFeatures.menuLabel")}
-                </button>
-              </li>
+                disabled={disabledActions}
+                title={regradeTitle}
+                onSelect={onRegradeAll}
+              />
             )}
-            {onBulkVisibility && (
-              <li>
-                <button
-                  type="button"
-                  disabled={disabledActions}
-                  title={
-                    emptyRoster
-                      ? t("submissions.bulkVisibility.titleEmptyRoster")
-                      : t("submissions.bulkVisibility.menuTitle")
-                  }
-                  onClick={() => {
-                    closeMenu()
-                    if (disabledActions) return
-                    onBulkVisibility()
-                  }}
-                >
-                  <GlobeIcon aria-hidden="true" className="size-4" />
-                  {t("submissions.bulkVisibility.menuLabel")}
-                </button>
-              </li>
-            )}
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
+            <DropdownMenu.LinkItem
+              icon={LinkExternalIcon}
+              label={viewLabel}
+              href={viewHref}
             />
           </>
         )}
-        {/* Update autograding triggers — retrofits each repo's shim to the
+        <DropdownMenu.Separator />
+        {/* Update student repo access: an authoring-tier action, grouped with
+            Lock/Unlock above the CSV export. */}
+        {onBulkAccess && (
+          <>
+            <DropdownMenu.Item
+              icon={ShieldCheckIcon}
+              label={t("submissions.bulkAccess.menuLabel")}
+              disabled={disabledActions}
+              title={
+                emptyRoster
+                  ? t("submissions.bulkAccess.titleEmptyRoster")
+                  : t("submissions.bulkAccess.menuTitle")
+              }
+              onSelect={onBulkAccess}
+            />
+            {onBulkFeatures && (
+              <DropdownMenu.Item
+                icon={SlidersIcon}
+                label={t("submissions.bulkFeatures.menuLabel")}
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkFeatures.titleEmptyRoster")
+                    : t("submissions.bulkFeatures.menuTitle")
+                }
+                onSelect={onBulkFeatures}
+              />
+            )}
+            {onBulkVisibility && (
+              <DropdownMenu.Item
+                icon={GlobeIcon}
+                label={t("submissions.bulkVisibility.menuLabel")}
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkVisibility.titleEmptyRoster")
+                    : t("submissions.bulkVisibility.menuTitle")
+                }
+                onSelect={onBulkVisibility}
+              />
+            )}
+            <DropdownMenu.Separator />
+          </>
+        )}
+        {/* Update autograding triggers: retrofits each repo's shim to the
             assignment's submission_mode. Gated independently of bulk access
             (also requires the default autograder), but same authoring tier. */}
         {onBulkTrigger && (
           <>
-            <li>
-              <button
-                type="button"
-                disabled={disabledActions}
-                title={
-                  emptyRoster
-                    ? t("submissions.bulkTrigger.titleEmptyRoster")
-                    : t("submissions.bulkTrigger.menuTitle")
-                }
-                onClick={() => {
-                  closeMenu()
-                  if (disabledActions) return
-                  onBulkTrigger()
-                }}
-              >
-                <GitBranchIcon aria-hidden="true" className="size-4" />
-                {t("submissions.bulkTrigger.menuLabel")}
-              </button>
-            </li>
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
+            <DropdownMenu.Item
+              icon={GitBranchIcon}
+              label={t("submissions.bulkTrigger.menuLabel")}
+              disabled={disabledActions}
+              title={
+                emptyRoster
+                  ? t("submissions.bulkTrigger.titleEmptyRoster")
+                  : t("submissions.bulkTrigger.menuTitle")
+              }
+              onSelect={onBulkTrigger}
             />
+            <DropdownMenu.Separator />
           </>
         )}
-        {/* Pause / Resume autograding — disables/enables each repo's autograde
+        {/* Pause / Resume autograding: disables/enables each repo's autograde
             workflow via the GitHub Actions state (no file edit). Same authoring
             tier + default-autograder gate as the trigger retrofit. */}
         {(onBulkPause || onBulkResume) && (
           <>
             {onBulkPause && (
-              <li>
-                <button
-                  type="button"
-                  disabled={disabledActions}
-                  title={
-                    emptyRoster
-                      ? t("submissions.bulkAutograde.pauseTitleEmptyRoster")
-                      : t("submissions.bulkAutograde.pauseMenuTitle")
-                  }
-                  onClick={() => {
-                    closeMenu()
-                    if (disabledActions) return
-                    onBulkPause()
-                  }}
-                >
-                  <PauseIcon aria-hidden="true" className="size-4" />
-                  {t("submissions.bulkAutograde.pauseMenuLabel")}
-                </button>
-              </li>
+              <DropdownMenu.Item
+                icon={PauseIcon}
+                label={t("submissions.bulkAutograde.pauseMenuLabel")}
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkAutograde.pauseTitleEmptyRoster")
+                    : t("submissions.bulkAutograde.pauseMenuTitle")
+                }
+                onSelect={onBulkPause}
+              />
             )}
             {onBulkResume && (
-              <li>
-                <button
-                  type="button"
-                  disabled={disabledActions}
-                  title={
-                    emptyRoster
-                      ? t("submissions.bulkAutograde.resumeTitleEmptyRoster")
-                      : t("submissions.bulkAutograde.resumeMenuTitle")
-                  }
-                  onClick={() => {
-                    closeMenu()
-                    if (disabledActions) return
-                    onBulkResume()
-                  }}
-                >
-                  <PlayIcon aria-hidden="true" className="size-4" />
-                  {t("submissions.bulkAutograde.resumeMenuLabel")}
-                </button>
-              </li>
+              <DropdownMenu.Item
+                icon={PlayIcon}
+                label={t("submissions.bulkAutograde.resumeMenuLabel")}
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkAutograde.resumeTitleEmptyRoster")
+                    : t("submissions.bulkAutograde.resumeMenuTitle")
+                }
+                onSelect={onBulkResume}
+              />
             )}
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
-            />
+            <DropdownMenu.Separator />
           </>
         )}
-        {/* Close / Reopen submission — ends or reopens the submission window
+        {/* Close / Reopen submission: ends or reopens the submission window
             (blocks new accepts + sets repos read-only on close). Same
             authoring tier + per-repo bulk-access gate; independent of Lock. */}
         {onCloseToggle && (
           <>
-            <li>
-              <button
-                type="button"
-                disabled={disabledActions}
-                title={
-                  closed
-                    ? t("submissions.closeSubmission.reopenMenuTitle")
-                    : t("submissions.closeSubmission.menuTitle")
-                }
-                onClick={() => {
-                  closeMenu()
-                  if (disabledActions) return
-                  onCloseToggle()
-                }}
-              >
-                <CalendarIcon aria-hidden="true" className="size-4" />
-                {closed
+            <DropdownMenu.Item
+              icon={CalendarIcon}
+              label={
+                closed
                   ? t("submissions.closeSubmission.reopenLabel")
-                  : t("submissions.closeSubmission.menuLabel")}
-              </button>
-            </li>
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
+                  : t("submissions.closeSubmission.menuLabel")
+              }
+              disabled={disabledActions}
+              title={
+                closed
+                  ? t("submissions.closeSubmission.reopenMenuTitle")
+                  : t("submissions.closeSubmission.menuTitle")
+              }
+              onSelect={onCloseToggle}
             />
+            <DropdownMenu.Separator />
           </>
         )}
-        {/* Lock / Unlock — an assignment-lifecycle action (teacher|hta), so the
+        {/* Lock / Unlock: an assignment-lifecycle action (teacher|hta), so the
             page omits onLockToggle for a viewer who can't author. Its own group,
             above the CSV export. */}
         {onLockToggle && (
           <>
-            <li>
-              <button
-                type="button"
-                disabled={lockPending}
-                title={
-                  locked
-                    ? t("submissions.lock.unlockTitle")
-                    : t("submissions.lock.lockTitle")
-                }
-                onClick={() => {
-                  closeMenu()
-                  if (lockPending) return
-                  onLockToggle()
-                }}
-              >
-                {locked ? (
-                  <UnlockIcon aria-hidden="true" className="size-4" />
-                ) : (
-                  <LockIcon aria-hidden="true" className="size-4" />
-                )}
-                {locked
+            <DropdownMenu.Item
+              icon={locked ? UnlockIcon : LockIcon}
+              label={
+                locked
                   ? t("submissions.lock.unlockLabel")
-                  : t("submissions.lock.lockLabel")}
-              </button>
-            </li>
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
+                  : t("submissions.lock.lockLabel")
+              }
+              disabled={lockPending}
+              title={
+                locked
+                  ? t("submissions.lock.unlockTitle")
+                  : t("submissions.lock.lockTitle")
+              }
+              onSelect={onLockToggle}
             />
+            <DropdownMenu.Separator />
           </>
         )}
-        <li>
-          <button
-            type="button"
-            disabled={downloadDisabled}
-            onClick={() => {
-              closeMenu()
-              if (downloadDisabled) return
-              onDownloadCsv()
-            }}
-          >
-            <DownloadIcon aria-hidden="true" className="size-4" />
-            {t("submissions.downloadCsv")}
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            disabled={downloadAllDisabled}
-            title={
-              downloadAllDisabled
-                ? t("submissions.downloadAll.titleDisabled")
-                : t("submissions.downloadAll.title")
-            }
-            onClick={() => {
-              closeMenu()
-              if (downloadAllDisabled) return
-              onDownloadAll()
-            }}
-          >
-            <FileZipIcon aria-hidden="true" className="size-4" />
-            {t("submissions.downloadAll.menuLabel")}
-          </button>
-        </li>
-        {/* Delete assignment — destructive, so deliberately last and in its
+        <DropdownMenu.Item
+          icon={DownloadIcon}
+          label={t("submissions.downloadCsv")}
+          disabled={downloadDisabled}
+          onSelect={onDownloadCsv}
+        />
+        <DropdownMenu.Item
+          icon={FileZipIcon}
+          label={t("submissions.downloadAll.menuLabel")}
+          disabled={downloadAllDisabled}
+          title={
+            downloadAllDisabled
+              ? t("submissions.downloadAll.titleDisabled")
+              : t("submissions.downloadAll.title")
+          }
+          onSelect={onDownloadAll}
+        />
+        {/* Delete assignment: destructive, so deliberately last and in its
             own group. */}
         {onDelete && (
           <>
-            <div
-              className="my-1 border-t border-base-content/10"
-              role="separator"
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item
+              icon={TrashIcon}
+              label={t("submissions.deleteAssignment.menuLabel")}
+              title={t("submissions.deleteAssignment.menuTitle")}
+              destructive
+              onSelect={onDelete}
             />
-            <li>
-              <button
-                type="button"
-                className="text-error"
-                title={t("submissions.deleteAssignment.menuTitle")}
-                onClick={() => {
-                  closeMenu()
-                  onDelete()
-                }}
-              >
-                <TrashIcon aria-hidden="true" className="size-4" />
-                {t("submissions.deleteAssignment.menuLabel")}
-              </button>
-            </li>
           </>
         )}
       </DropdownMenu>

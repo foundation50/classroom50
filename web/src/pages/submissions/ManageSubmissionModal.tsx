@@ -2,7 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr, OutcomeAlert } from "@/components/ui"
+import {
+  Badge,
+  ExternalLink,
+  Modal,
+  MonoLtr,
+  OutcomeAlert,
+} from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -106,14 +112,13 @@ const SubmissionDetails = ({
       // Hyperlink to the latest commit when we can resolve it (somewhat
       // redundant with the commit action, but a convenient jump from the time).
       value: latestCommitHref ? (
-        <a
-          className="link link-hover"
+        <ExternalLink
+          className="link-hover"
           href={latestCommitHref}
-          target="_blank"
-          rel="noreferrer"
+          icon={false}
         >
           {pushed}
-        </a>
+        </ExternalLink>
       ) : (
         pushed
       ),
@@ -389,16 +394,15 @@ export const ManageSubmissionModal = ({
         onDismiss={() => setFeedback(null)}
       />
       {repoHref ? (
-        <a
-          className="link link-hover mt-2 inline-flex w-fit max-w-full items-center gap-1.5"
+        <ExternalLink
+          className="link-hover mt-2 w-fit max-w-full gap-1.5"
           href={repoHref}
-          target="_blank"
-          rel="noreferrer"
           title={t("submissions.table.viewRepo")}
+          icon={false}
         >
           <RepoIcon aria-hidden="true" className="size-4 shrink-0" />
           <MonoLtr className="truncate text-sm">{repo}</MonoLtr>
-        </a>
+        </ExternalLink>
       ) : (
         <p className="mt-2 inline-flex w-fit max-w-full items-center gap-1.5 text-base-content/50">
           <RepoIcon aria-hidden="true" className="size-4 shrink-0" />

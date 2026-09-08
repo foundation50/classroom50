@@ -1,8 +1,13 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { Badge, OutcomeAlert, InlineSpinner, Toggle } from "@/components/ui"
+import {
+  Badge,
+  ExternalLink,
+  InlineSpinner,
+  OutcomeAlert,
+  Toggle,
+} from "@/components/ui"
 import type { AlertOutcome } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
@@ -102,15 +107,13 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
                     amount: budget.amount.toFixed(2),
                   })}
           </span>
-          <a
+          <ExternalLink
             href={orgBudgetsUrl(org)}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-0.5 text-base-content/60 hover:text-primary"
+            variant="plain"
+            className="gap-0.5 text-base-content/60 hover:text-primary"
           >
             {t("orgSettings.actions.budgetManage")}
-            <LinkExternalIcon aria-hidden="true" className="size-4" />
-          </a>
+          </ExternalLink>
         </p>
       )}
     </div>
@@ -190,15 +193,13 @@ const OrgActionsSection = ({
         )
       }
       action={
-        <a
+        <ExternalLink
           href={githubOrgActionsSettingsUrl(org)}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+          variant="muted"
+          className="text-xs"
         >
           {t("orgSettings.actions.openSettings")}
-          <LinkExternalIcon aria-hidden="true" className="size-4" />
-        </a>
+        </ExternalLink>
       }
     >
       {isLoading ? (

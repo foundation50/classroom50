@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { getName, getDisplayName, getInitials } from "@/util/students"
 import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
-import { Badge, Button } from "@/components/ui"
+import { Badge, Button, ExternalLink } from "@/components/ui"
 import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
 import {
   groupTeamUrl,
@@ -290,20 +290,19 @@ export const GroupMembers = ({
 
   return (
     <div className="flex flex-col gap-2">
-      <a
-        className="flex items-center gap-1.5 link link-hover w-fit font-medium"
+      <ExternalLink
+        className="link-hover w-fit gap-1.5 font-medium"
         href={repoHref}
-        target="_blank"
-        rel="noreferrer"
         title={
           labelIsRepoName ? t("submissions.table.openGroupRepo") : repoName
         }
+        icon={false}
       >
         <LabelIcon aria-hidden="true" className="size-4 shrink-0" />
         <span className={labelIsRepoName ? "font-mono text-sm" : "text-sm"}>
           {repoLabel}
         </span>
-      </a>
+      </ExternalLink>
 
       {showAvatars && (
         <div className="avatar-group -space-x-3">
@@ -683,16 +682,15 @@ export const TeamWithoutRepoRow = ({
   const cells = (
     <>
       <td>
-        <a
-          className="flex items-center gap-1.5 link link-hover w-fit font-medium"
+        <ExternalLink
+          className="link-hover w-fit gap-1.5 font-medium"
           href={groupTeamUrl(org, team.slug)}
-          target="_blank"
-          rel="noreferrer"
           title={t("submissions.table.openGroupTeam")}
+          icon={false}
         >
           <PeopleIcon aria-hidden="true" className="size-4 shrink-0" />
           <span className="text-sm">{label}</span>
-        </a>
+        </ExternalLink>
       </td>
       {/* Quarantined from the row's manage click like the other team rows. */}
       <td onClick={(event) => event.stopPropagation()}>{membersCell}</td>

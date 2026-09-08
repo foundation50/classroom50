@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 import { LinkExternalIcon, MarkGithubIcon } from "@/components/ui/icons"
 
-import { Badge, Button, Modal } from "@/components/ui"
+import { Badge, Button, ExternalLink, Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 import { getName, getInitials, firstGrapheme } from "@/util/students"
 
@@ -44,15 +44,14 @@ export const StudentProfileModal = ({
     {
       label: t("components.modals.studentProfile.github"),
       value: student.username ? (
-        <a
-          className="link link-hover inline-flex items-center gap-1"
+        <ExternalLink
+          className="link-hover"
           href={`https://github.com/${student.username}`}
-          target="_blank"
-          rel="noreferrer"
+          icon={false}
         >
           <MarkGithubIcon aria-hidden="true" className="size-4" />@
           {student.username}
-        </a>
+        </ExternalLink>
       ) : (
         <span className="text-base-content/70">
           {t("components.modals.studentProfile.notLinkedYet")}

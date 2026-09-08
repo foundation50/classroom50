@@ -3,11 +3,12 @@ import { Trans, useTranslation } from "react-i18next"
 import {
   AnimatedAlert,
   Button,
+  cx,
+  ExternalLink,
   FormField,
   HelpTooltip,
   Input,
   Modal,
-  cx,
 } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
@@ -400,15 +401,12 @@ function SetTokenModal({
         </Step>
 
         <div className="flex items-center justify-between gap-2 border-t border-base-content/10 pt-4">
-          <a
-            className="link inline-flex items-center gap-1 text-sm text-base-content/60 hover:text-base-content"
+          <ExternalLink
+            className="text-sm text-base-content/60 hover:text-base-content"
             href={`${WIKI_URL}/GitHub-Integration#4-fine-grained-pat-for-score-collection`}
-            target="_blank"
-            rel="noreferrer"
           >
             {t("orgSettings.serviceToken.learnMore")}
-            <LinkExternalIcon aria-hidden="true" className="size-4" />
-          </a>
+          </ExternalLink>
           <div className="flex gap-2">
             <Button variant="ghost" type="button" onClick={onClose}>
               {t("common.cancel")}

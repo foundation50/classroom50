@@ -3,7 +3,6 @@ import {
   CheckCircleFillIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  LinkExternalIcon,
   XCircleFillIcon,
 } from "@/components/ui/icons"
 import { useEffect, useRef, useState, type ReactNode } from "react"
@@ -19,7 +18,13 @@ import {
   isOrgDefaultsStepData,
   unenforcedDefaultItems,
 } from "./orgDefaultsStepData"
-import { Badge, InlineSpinner, rtlFlip, type BadgeTone } from "@/components/ui"
+import {
+  Badge,
+  ExternalLink,
+  InlineSpinner,
+  rtlFlip,
+  type BadgeTone,
+} from "@/components/ui"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
@@ -318,15 +323,13 @@ export const InitStep = ({
               </p>
               <p className="mt-1 text-base-content/70">{t(meta.remediation)}</p>
               {settingsUrl && (
-                <a
+                <ExternalLink
                   href={settingsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 inline-flex items-center gap-1 text-base-content/70 hover:text-primary"
+                  variant="muted"
+                  className="mt-2"
                 >
                   {t("orgSettings.steps.openGitHubSettings")}
-                  <LinkExternalIcon aria-hidden="true" className="size-4" />
-                </a>
+                </ExternalLink>
               )}
               {id === "orgDefaults" && isOrgDefaultsStepData(data) && (
                 <UnenforcedDefaultsList items={unenforcedDefaultItems(data)} />

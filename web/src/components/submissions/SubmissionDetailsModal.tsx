@@ -8,7 +8,7 @@ import {
   TagIcon,
 } from "@/components/ui/icons"
 
-import { Button, Modal, MonoLtr, cx } from "@/components/ui"
+import { Button, cx, ExternalLink, Modal, MonoLtr } from "@/components/ui"
 
 // One row in the submission-details list. `kind` picks the icon and action
 // label ("View tag" vs "View commit"); `href` is the already-built, safe GitHub
@@ -218,28 +218,26 @@ export function SubmissionDetailsModal({
                 </span>
                 <span className="ms-auto flex shrink-0 items-center">
                   {item.href ? (
-                    <a
-                      className="link link-hover inline-flex items-center gap-1"
+                    <ExternalLink
+                      className="link-hover"
                       href={item.href}
-                      target="_blank"
-                      rel="noreferrer"
+                      icon={false}
                     >
                       {actionLabel}
-                    </a>
+                    </ExternalLink>
                   ) : (
                     <span className="text-base-content/50">
                       {t("submissions.details.unavailable")}
                     </span>
                   )}
                   {item.releaseHref ? (
-                    <a
-                      className="link link-hover ms-3 inline-flex items-center gap-1 text-base-content/70 before:me-1 before:text-base-content/30 before:content-['·']"
+                    <ExternalLink
+                      className="link-hover ms-3 text-base-content/70 before:me-1 before:text-base-content/30 before:content-['·']"
                       href={item.releaseHref}
-                      target="_blank"
-                      rel="noreferrer"
+                      icon={false}
                     >
                       {t("submissions.details.viewGrade")}
-                    </a>
+                    </ExternalLink>
                   ) : null}
                 </span>
               </li>

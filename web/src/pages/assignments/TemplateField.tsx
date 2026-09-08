@@ -7,7 +7,6 @@ import {
   AlertIcon,
   CheckCircleIcon,
   InfoIcon,
-  LinkExternalIcon,
   MarkGithubIcon,
   QuestionIcon,
   SyncIcon,
@@ -31,7 +30,7 @@ import {
   InlineCode as Code,
   AutoLinkText,
 } from "@/components/InlineNote"
-import { Button, FormField } from "@/components/ui"
+import { Button, ExternalLink, FormField } from "@/components/ui"
 import { TemplateRepoPicker } from "./TemplateRepoPicker"
 import { canonicalTemplateRef, templateVerifyKey } from "./templateRefNormalize"
 import { templateForkNoteView } from "./templateNoteView"
@@ -490,18 +489,16 @@ function renderTemplateVerdict({
             }}
             components={{ branch: <Code />, important: <strong /> }}
           />
-          <a
+          <ExternalLink
             href={`https://github.com/${verification.owner}/${verification.repo}`}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-1 flex items-center gap-1 font-semibold underline"
+            variant="plain"
+            className="mt-1 font-semibold underline"
           >
             {t("assignments.template.viewTemplateRepo", {
               owner: verification.owner,
               repo: verification.repo,
             })}
-            <LinkExternalIcon aria-hidden="true" className="size-4 shrink-0" />
-          </a>
+          </ExternalLink>
         </Note>
       )
     }
@@ -575,21 +572,16 @@ function renderTemplateVerdict({
                 </li>
                 <li>{t("assignments.template.restrictedItemOther")}</li>
               </ul>
-              <a
+              <ExternalLink
                 href={`https://github.com/${verification.owner}/${verification.repo}`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 flex items-center gap-1 font-semibold underline"
+                variant="plain"
+                className="mt-1 font-semibold underline"
               >
                 {t("assignments.template.viewTemplateRepo", {
                   owner: verification.owner,
                   repo: verification.repo,
                 })}
-                <LinkExternalIcon
-                  aria-hidden="true"
-                  className="size-4 shrink-0"
-                />
-              </a>
+              </ExternalLink>
             </>
           )}
           <span className="mt-1 block text-xs text-base-content/70">
@@ -671,15 +663,13 @@ const Note = ({
     <InlineNote tone={tone} icon={icon} className="mt-1.5">
       <span>{children}</span>
       {policy && (
-        <a
+        <ExternalLink
           href={policy.href}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-1 flex items-center gap-1 font-semibold underline"
+          variant="plain"
+          className="mt-1 font-semibold underline"
         >
           {t("assignments.template.policyLink", { owner: policy.owner })}
-          <LinkExternalIcon aria-hidden="true" className="size-4 shrink-0" />
-        </a>
+        </ExternalLink>
       )}
     </InlineNote>
   )

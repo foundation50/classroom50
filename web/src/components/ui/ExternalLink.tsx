@@ -1,25 +1,46 @@
 import type { AnchorHTMLAttributes, ReactNode } from "react"
 
 import { LinkExternalIcon } from "./icons"
-import { cx } from "./cx"
+import { cx, hasUtility } from "./cx"
 
-// A text link that opens off-site in a new tab: the daisyUI `link` recipe, the
-// `target`/`rel` pair that a new tab needs, and the trailing external-link
-// glyph, so the ~20 hand-written `<a className="link" target="_blank">` sites
-// can converge on one shape. In-app navigation is the router's `Link`, not this.
+// The three text-link recipes an off-site anchor takes in this app. Anything
+// else (a card, an avatar, a badge, a menu item) is not a text link and stays a
+// bare <a>.
+export type ExternalLinkVariant =
+  // The daisyUI `link` (underlined) text link.
+  | "link"
+  // The quiet "open on GitHub" affordance beside a settings section: muted
+  // until hovered, no underline.
+  | "muted"
+  // Only the layout, target/rel and glyph; the caller styles the text.
+  | "plain"
+
+const variantClass: Record<ExternalLinkVariant, string> = {
+  link: "link inline-flex items-center",
+  muted: "inline-flex items-center text-base-content/70 hover:text-primary",
+  plain: "inline-flex items-center",
+}
+
+// A text link that opens off-site in a new tab: the `target`/`rel` pair a new
+// tab needs, the inline-flex row, and the trailing external-link glyph, so the
+// hand-written `<a target="_blank" rel="noreferrer">` sites converge on one
+// shape. In-app navigation is the router's `Link`, not this.
 export type ExternalLinkProps = Omit<
   AnchorHTMLAttributes<HTMLAnchorElement>,
   "target" | "rel" | "children"
 > & {
   href: string
   children: ReactNode
-  // Drop the glyph where the surrounding text already says it opens elsewhere.
+  variant?: ExternalLinkVariant
+  // Drop the glyph where the surrounding text already says it opens elsewhere,
+  // or where a leading icon (the GitHub mark) carries that meaning.
   icon?: boolean
 }
 
 export function ExternalLink({
   href,
   children,
+  variant = "link",
   icon = true,
   className,
   ...rest
@@ -29,7 +50,11 @@ export function ExternalLink({
       href={href}
       target="_blank"
       rel="noreferrer"
-      className={cx("link inline-flex items-center gap-1", className)}
+      className={cx(
+        variantClass[variant],
+        !hasUtility("gap-", className) && "gap-1",
+        className,
+      )}
       {...rest}
     >
       {children}

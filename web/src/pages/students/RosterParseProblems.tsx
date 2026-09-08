@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Alert, Button } from "@/components/ui"
+import { Alert, Button, ExternalLink } from "@/components/ui"
 import type { RosterCsvProblem } from "@/domain/students"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { rosterPath } from "@/util/configRepoPaths"
@@ -35,19 +35,19 @@ export const RosterParseProblems = ({
             </li>
           ))}
         </ul>
-        <a
+        <ExternalLink
           href={`https://github.com/${encodeURIComponent(org)}/${CONFIG_REPO}/edit/${DEFAULT_BRANCH}/${rosterPath(
             classroom,
           )
             .split("/")
             .map(encodeURIComponent)
             .join("/")}`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          variant="plain"
+          className="text-sm font-medium text-primary hover:underline"
+          icon={false}
         >
           {t("students.rosterEditOnGitHub")}
-        </a>
+        </ExternalLink>
         {onRecheckRoster ? (
           <div>
             <Button

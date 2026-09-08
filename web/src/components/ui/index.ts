@@ -13,7 +13,7 @@ export type {
 export { RouterButton } from "./RouterButton"
 
 export { ExternalLink } from "./ExternalLink"
-export type { ExternalLinkProps } from "./ExternalLink"
+export type { ExternalLinkProps, ExternalLinkVariant } from "./ExternalLink"
 
 export { SectionAnchorHeading } from "./SectionAnchorHeading"
 

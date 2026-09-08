@@ -1,3 +1,4 @@
+import { ExternalLink } from "@/components/ui"
 import { appVersion, commitUrl, shortCommit } from "@/version"
 
 // Small, unobtrusive build identifier. The version is a build-time constant
@@ -12,14 +13,9 @@ export function AppVersionBadge({ className }: { className?: string }) {
       data-testid="app-version"
     >
       v{appVersion.version} ·{" "}
-      <a
-        className="link link-hover"
-        href={commitUrl()}
-        target="_blank"
-        rel="noreferrer"
-      >
+      <ExternalLink className="link-hover" href={commitUrl()} icon={false}>
         {shortCommit()}
-      </a>
+      </ExternalLink>
     </span>
   )
 }

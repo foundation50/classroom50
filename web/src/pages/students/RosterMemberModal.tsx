@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import {
-  LinkExternalIcon,
   MarkGithubIcon,
   PaperAirplaneIcon,
   PersonAddIcon,
@@ -52,6 +51,7 @@ import {
   Button,
   Checkbox,
   EmphasisLtr,
+  ExternalLink,
   Modal,
   Select,
 } from "@/components/ui"
@@ -566,19 +566,17 @@ const RosterMemberModal = ({
             initials={displayInitials}
             subtitle={
               row.username ? (
-                <a
+                <ExternalLink
                   href={`https://github.com/${row.username}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  variant="plain"
+                  className="gap-1.5 text-sm text-primary hover:underline"
                 >
                   <MarkGithubIcon
                     aria-hidden="true"
                     className="size-4 opacity-70"
                   />
                   <span className="font-mono">@{row.username}</span>
-                  <LinkExternalIcon aria-hidden="true" className="size-4" />
-                </a>
+                </ExternalLink>
               ) : row.email ? (
                 <span className="text-sm text-base-content/70">
                   {row.email}
@@ -837,16 +835,14 @@ const RosterMemberModal = ({
               {row.state === "enrolled" ? (
                 <div className="flex flex-col items-end gap-1">
                   {sortRolesByRank(row.roles).map((r) => (
-                    <a
+                    <ExternalLink
                       key={r}
                       href={`https://github.com/orgs/${org}/teams/${teamSlugByRole[r]}`}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
+                      variant="plain"
+                      className="font-mono text-sm text-primary hover:underline"
                     >
                       {teamSlugByRole[r]}
-                      <LinkExternalIcon aria-hidden="true" className="size-4" />
-                    </a>
+                    </ExternalLink>
                   ))}
                 </div>
               ) : (

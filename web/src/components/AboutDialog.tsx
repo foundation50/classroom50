@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import { LinkExternalIcon } from "@/components/ui/icons"
 
-import { CopyableDetails, Modal } from "@/components/ui"
+import { CopyableDetails, ExternalLink, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import {
@@ -96,15 +96,9 @@ export const AboutDialog = forwardRef<
         <dt className="text-base-content/60">{t("nav.aboutVersion")}</dt>
         <dd className="font-mono tabular-nums">
           {release ? (
-            <a
-              className="link link-info link-hover inline-flex items-center gap-1"
-              href={release}
-              target="_blank"
-              rel="noreferrer"
-            >
+            <ExternalLink className="link-info link-hover" href={release}>
               v{appVersion.version}
-              <LinkExternalIcon aria-hidden="true" className="size-4" />
-            </a>
+            </ExternalLink>
           ) : (
             <>v{appVersion.version}</>
           )}
@@ -112,15 +106,9 @@ export const AboutDialog = forwardRef<
 
         <dt className="text-base-content/60">{t("nav.aboutCommit")}</dt>
         <dd className="font-mono">
-          <a
-            className="link link-info link-hover inline-flex items-center gap-1"
-            href={commitUrl()}
-            target="_blank"
-            rel="noreferrer"
-          >
+          <ExternalLink className="link-info link-hover" href={commitUrl()}>
             {shortCommit()}
-            <LinkExternalIcon aria-hidden="true" className="size-4" />
-          </a>
+          </ExternalLink>
           <span className="ms-1 text-base-content/60">
             ({formatBuildDate()})
           </span>
