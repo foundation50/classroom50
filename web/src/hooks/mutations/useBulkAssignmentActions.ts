@@ -2,8 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
-import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { invalidateAssignments } from "@/github-core/queries"
 import {
   copyAssignmentsWithConflictRetry,
   deleteAssignmentsWithConflictRetry,
@@ -15,20 +14,6 @@ import {
 } from "@/domain/assignments"
 
 // Write boundary for the assignments page's bulk bar.
-
-function invalidateAssignments(
-  queryClient: ReturnType<typeof useQueryClient>,
-  org: string,
-  classroom: string,
-) {
-  void queryClient.invalidateQueries({
-    queryKey: githubKeys.jsonFile(
-      org,
-      CONFIG_REPO,
-      `${classroom}/assignments.json`,
-    ),
-  })
-}
 
 export function useBulkSetAssignmentLock(org: string, classroom: string) {
   const client = useGitHubClient()

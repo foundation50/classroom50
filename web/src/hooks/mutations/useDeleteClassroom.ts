@@ -38,11 +38,7 @@ export function useDeleteClassroom(org: string, classroom: string) {
         // Evict the deleted classroom's own config read (now a 404) so a later
         // view can't serve its stale body. Distinct from the listing key above.
         void queryClient.removeQueries({
-          queryKey: githubKeys.jsonFile(
-            org,
-            CONFIG_REPO,
-            `${classroom}/classroom.json`,
-          ),
+          queryKey: githubKeys.classroomFile(org, classroom),
         })
         return
       }

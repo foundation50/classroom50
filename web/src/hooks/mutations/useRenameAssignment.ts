@@ -8,8 +8,7 @@ import type {
   RenameProgress,
 } from "@/domain/assignments"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { githubKeys, invalidateAssignments } from "@/github-core/queries"
 
 // One-shot assignment slug rename (#691): config commit, then the per-repo
 // fan-out. Wraps the domain orchestration and exposes live `progress` (a plain
@@ -38,19 +37,9 @@ export function useRenameAssignment() {
       return renameAssignment(client, input, { onProgress: setProgress })
     },
     onSettled: (_data, _error, { org, classroom }) => {
+      invalidateAssignments(queryClient, org, classroom)
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(
-          org,
-          CONFIG_REPO,
-          `${classroom}/assignments.json`,
-        ),
-      })
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(
-          org,
-          CONFIG_REPO,
-          `${classroom}/scores.json`,
-        ),
+        queryKey: githubKeys.scoresFile(org, classroom),
       })
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgRepos(org),

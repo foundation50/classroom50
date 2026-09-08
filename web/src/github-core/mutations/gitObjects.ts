@@ -8,6 +8,12 @@ import {
 import type { CreateClassroomInput } from "@/domain/classrooms"
 import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import {
+  assignmentsFilePath,
+  classroomFilePath,
+  rosterPath,
+  scoresFilePath,
+} from "@/util/configRepoPaths"
 import { prefixCommit } from "@/util/commit"
 import type { ClassroomTeamRef, StaffTeamRefs } from "./teams"
 
@@ -68,19 +74,19 @@ export const createClassroomBody = (
     base_tree,
     tree: [
       {
-        path: `${classroom}/assignments.json`,
+        path: assignmentsFilePath(classroom),
         mode,
         type,
         content: JSON.stringify(ASSIGNMENTS_TEMPLATE, null, 2),
       },
       {
-        path: `${classroom}/roster.csv`,
+        path: rosterPath(classroom),
         mode,
         type,
         content: STUDENTS_CSV_HEADER,
       },
       {
-        path: `${classroom}/scores.json`,
+        path: scoresFilePath(classroom),
         mode,
         type,
         content: JSON.stringify(
@@ -93,7 +99,7 @@ export const createClassroomBody = (
         ),
       },
       {
-        path: `${classroom}/classroom.json`,
+        path: classroomFilePath(classroom),
         mode,
         type,
         content: JSON.stringify(

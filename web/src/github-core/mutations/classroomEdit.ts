@@ -7,6 +7,7 @@ import {
 } from "../configRepoReads"
 import { isClassroomArchived } from "@/types/classroom"
 import { prefixCommit } from "@/util/commit"
+import { classroomFilePath } from "@/util/configRepoPaths"
 import { logger } from "@/lib/logger"
 import {
   createBlob,
@@ -151,7 +152,7 @@ export async function editClassroom(
     base_tree: commit.tree.sha,
     tree: [
       {
-        path: `${slug}/classroom.json`,
+        path: classroomFilePath(slug),
         mode: "100644",
         type: "blob",
         sha: blob.sha,

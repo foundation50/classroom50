@@ -4,11 +4,10 @@ import {
   type CreateAssignmentInput,
   type CreateAssignmentResult,
 } from "@/domain/assignments"
-import { githubKeys } from "@/github-core/queries"
+import { invalidateAssignments } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
-import { CONFIG_REPO } from "@/util/configRepo"
 
 // Save an assignment's settings. The hook owns the assignments.json listing
 // invalidate (unmount-safe — the persistent app shell no longer remounts the
@@ -45,13 +44,7 @@ export function useEditAssignment(opts?: {
       }),
     onMutate,
     onSuccess: (result, input) => {
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(
-          input.org,
-          CONFIG_REPO,
-          `${input.classroom}/assignments.json`,
-        ),
-      })
+      invalidateAssignments(queryClient, input.org, input.classroom)
       onWrite?.(result, input)
     },
   })

@@ -32,7 +32,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { resolveGitHubId } from "@/util/students"
 import {
   appendEmailInviteRows,

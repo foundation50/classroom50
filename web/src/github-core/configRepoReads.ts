@@ -6,6 +6,7 @@ import type {
 } from "@/github-core/types"
 import type { Classroom } from "@/types/classroom"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { classroomFilePath } from "@/util/configRepoPaths"
 
 // Low-level config-repo read primitives, consumed downward by the domain
 // operations in domain/ (framework-free engines above github-core).
@@ -49,7 +50,7 @@ export async function getClassroomJson(
     ref?: string
   },
 ): Promise<Classroom> {
-  const path = `${input.classroom}/classroom.json`
+  const path = classroomFilePath(input.classroom)
   const query = input.ref ? `?ref=${encodeURIComponent(input.ref)}` : ""
 
   const raw = await client.requestRaw(

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { jsonFileQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { classroomFilePath } from "@/util/configRepoPaths"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Classroom } from "@/types/classroom"
 
@@ -15,7 +16,7 @@ const useGetClassroom = (
       client,
       org ?? "",
       CONFIG_REPO,
-      `${classroom ?? ""}/classroom.json`,
+      classroomFilePath(classroom ?? ""),
     ),
     // classroom.json lives in the private config repo, so a student fetch is a
     // guaranteed 404. Student-reachable callers pass enabled:false (or gate on

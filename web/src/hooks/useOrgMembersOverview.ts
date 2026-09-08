@@ -10,10 +10,10 @@ import {
   teamMembersQuery,
 } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { classroomFilePath, rosterPath } from "@/util/configRepoPaths"
 import useGetClasses from "@/hooks/useGetClasses"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { toStudent } from "@/util/roster"
-import { rosterPath } from "@/util/rosterPath"
 import {
   isClassroomArchived,
   type Classroom,
@@ -76,7 +76,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
         client,
         org ?? "",
         CONFIG_REPO,
-        `${name}/classroom.json`,
+        classroomFilePath(name),
       ),
       enabled: Boolean(org),
     })),

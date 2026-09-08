@@ -17,7 +17,7 @@ import { mapWithConcurrency } from "@/util/concurrency"
 import { parseGitHubId } from "@/util/identity"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
 import { parseRosterCsv } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { resolveClassroomTeamSlugs } from "./rosterPrimitives"
 
 export type DirectoryMember = {

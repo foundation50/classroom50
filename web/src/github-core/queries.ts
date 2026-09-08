@@ -6,6 +6,7 @@
 // here.
 export {
   githubKeys,
+  invalidateAssignments,
   invalidateInviteQueries,
   invalidateClassroomTeam,
   invalidateGroupTeams,

@@ -80,7 +80,7 @@ describe("layered-architecture boundary guard is live", () => {
         // components -> util: a legal downward import. Must NOT be flagged.
         writeFileSync(
           `${compDir}/compDownward.ts`,
-          `import { rosterPath } from "@/util/rosterPath"\nexport const b = rosterPath\n`,
+          `import { rosterPath } from "@/util/configRepoPaths"\nexport const b = rosterPath\n`,
         )
         // github-core -> domain (value): the lowest layer reaching up. Must fire.
         writeFileSync(

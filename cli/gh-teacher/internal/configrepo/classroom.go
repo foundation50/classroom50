@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
 
@@ -150,7 +151,7 @@ type MigratedFromRef struct {
 
 // ClassroomFilePath: on-repo path to a classroom's classroom.json.
 func ClassroomFilePath(shortName string) string {
-	return shortName + "/classroom.json"
+	return shortName + "/" + contract.ClassroomFilename
 }
 
 // LoadClassroom reads + parses <short-name>/classroom.json at ref.

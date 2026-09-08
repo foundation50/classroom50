@@ -2,8 +2,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { purgeInviteTeams } from "@/domain/students"
 import { githubKeys } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { CONFIG_REPO } from "@/util/configRepo"
-import { rosterPath } from "@/util/rosterPath"
 
 // Teacher-triggered invite-data cleanup: recover what the backfill still can
 // into roster.csv, then delete every remaining stored invite email (hidden
@@ -19,7 +17,7 @@ export function usePurgeInviteTeams(org: string, classroom: string) {
     mutationFn: () => purgeInviteTeams(client, { org, classroom }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+        queryKey: githubKeys.rosterFile(org, classroom),
       })
     },
   })

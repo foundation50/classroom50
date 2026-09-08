@@ -100,9 +100,14 @@ func TestContractLiterals(t *testing.T) {
 		{"ResultFilename", ResultFilename, "result.json"},
 		{"ReleaseBodyFilename", ReleaseBodyFilename, "release-body.md"},
 		// RosterFilename is mirrored, with NO compile-time link, in the web GUI
-		// (web/src/util/rosterPath.ts) and the Python collect-scores script
-		// (collect_scores.py). Update every copy in lockstep on change.
+		// (web/src/util/configRepoPaths.ts) and the Python collect-scores
+		// script (collect_scores.py). Update every copy in lockstep on change.
 		{"RosterFilename", RosterFilename, "roster.csv"},
+		// The other per-classroom config-repo filenames, mirrored in the same
+		// web module. Update every copy in lockstep on change.
+		{"AssignmentsFilename", AssignmentsFilename, "assignments.json"},
+		{"ClassroomFilename", ClassroomFilename, "classroom.json"},
+		{"ScoresFilename", ScoresFilename, "scores.json"},
 		// ServiceTokenSecretName / ServiceTokenExpiresAtVar / ServiceTokenNameVar
 		// are mirrored, with NO compile-time link, in the collect-scores /
 		// regrade workflow YAML, the gh-teacher servicetoken package

@@ -27,11 +27,7 @@ export function useEditClassroom(
     mutationFn: (input) => editClassroomWithConflictRetry(client, input),
     onSuccess: (result) => {
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(
-          org,
-          CONFIG_REPO,
-          `${classroom}/classroom.json`,
-        ),
+        queryKey: githubKeys.classroomFile(org, classroom),
       })
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org, CONFIG_REPO),

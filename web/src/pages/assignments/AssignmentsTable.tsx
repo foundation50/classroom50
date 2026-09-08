@@ -23,7 +23,6 @@ import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"
 import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   assignmentName as name,
@@ -282,11 +281,7 @@ const AssignmentsTable = ({
     : null
   const invalidateAssignments = () =>
     queryClient.invalidateQueries({
-      queryKey: githubKeys.jsonFile(
-        org,
-        CONFIG_REPO,
-        `${classroom}/assignments.json`,
-      ),
+      queryKey: githubKeys.assignmentsFile(org, classroom),
     })
 
   return (

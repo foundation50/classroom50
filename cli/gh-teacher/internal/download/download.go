@@ -672,7 +672,7 @@ func loadScores(client githubapi.Client, org, classroom, ref string) (scoressche
 
 // scoresFilePath: classroom-relative path to scores.json.
 func scoresFilePath(classroom string) string {
-	return classroom + "/scores.json"
+	return classroom + "/" + contract.ScoresFilename
 }
 
 // parseScores enforces the schema sentinel before trusting other fields, then

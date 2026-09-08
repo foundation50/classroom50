@@ -6,6 +6,7 @@ import {
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { prefixCommit } from "@/util/commit"
+import { assignmentsFilePath as assignmentsFile } from "@/util/configRepoPaths"
 import { nextAvailableSlug } from "@/util/slug"
 import { validateReleaseAssets } from "@/util/releaseAssets"
 import {
@@ -218,7 +219,7 @@ export async function copyAssignmentToClassroom(
 
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const assignmentsFilePath = `${targetClassroom}/assignments.json`
+  const assignmentsFilePath = assignmentsFile(targetClassroom)
   const currentAssignments = await getAssignmentsFile(client, {
     org,
     path: assignmentsFilePath,

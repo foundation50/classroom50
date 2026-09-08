@@ -82,7 +82,7 @@ describe("dependency-cruiser architecture guard is live", () => {
         // components -> util: a legal downward edge. Must NOT trip any rule.
         writeFileSync(
           `${compDir}/compDownward.ts`,
-          `import { rosterPath } from "@/util/rosterPath"\nexport const b = rosterPath\n`,
+          `import { rosterPath } from "@/util/configRepoPaths"\nexport const b = rosterPath\n`,
         )
         // domain -> pages: must trip domain-not-to-view.
         writeFileSync(

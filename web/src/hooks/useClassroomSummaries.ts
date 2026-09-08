@@ -3,6 +3,7 @@ import { useQueries } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { classroomFilePath } from "@/util/configRepoPaths"
 import type { GitHubFileListing } from "@/github-core/types"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
 
@@ -46,7 +47,7 @@ const useClassroomSummaries = (
         client,
         org ?? "",
         CONFIG_REPO,
-        `${dir.path}/classroom.json`,
+        classroomFilePath(dir.path),
       ),
     ),
   })

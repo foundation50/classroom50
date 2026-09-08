@@ -4,8 +4,6 @@ import { githubKeys, invalidateClassroomTeam } from "@/github-core/queries"
 import { addClassroomStaffMember, syncRosterFromTeam } from "@/domain/students"
 import { resolveClassroomRoleSlug } from "@/util/teamSlug"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import { rosterPath } from "@/util/rosterPath"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 import type { StaffRole } from "@/types/classroom"
 
@@ -24,7 +22,7 @@ export async function syncRosterAfterStaffChange(
   try {
     await syncRosterFromTeam(client, { org, classroom })
     await queryClient.invalidateQueries({
-      queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+      queryKey: githubKeys.rosterFile(org, classroom),
     })
   } catch (err) {
     log.debug("roster sync after staff change failed (non-fatal)", {

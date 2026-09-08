@@ -9,8 +9,6 @@ import {
 import { enrollStudentInClassroom, inviteByEmail } from "@/domain/students"
 import { useResolveEmailRows } from "@/hooks/useIdentityDirectory"
 import { toStudent } from "@/util/roster"
-import { CONFIG_REPO } from "@/util/configRepo"
-import { rosterPath } from "@/util/rosterPath"
 
 export type EnrollOrInviteFormValues = {
   first_name: string
@@ -150,7 +148,7 @@ export function useEnrollOrInviteStudent(
         // file (the invite retains the email as a pending email-only row).
         invalidateTeamRoster()
         void queryClient.invalidateQueries({
-          queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+          queryKey: githubKeys.rosterFile(org, classroom),
         })
       }
     },

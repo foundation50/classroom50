@@ -23,7 +23,7 @@ import {
 } from "@/github-core/configRepoReads"
 import { isSameGitHubUser } from "@/util/students"
 import { parseRosterCsv } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
 import { type ClassroomRole } from "@/util/teamRoster"
 import { isTeacherRole } from "@/authz"

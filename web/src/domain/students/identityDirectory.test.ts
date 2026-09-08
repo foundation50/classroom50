@@ -26,7 +26,7 @@ import {
   buildIdentityDirectory,
   mergeOrgMembersIntoPool,
 } from "./identityDirectory"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
 const client = {} as never

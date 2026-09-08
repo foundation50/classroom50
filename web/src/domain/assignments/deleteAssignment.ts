@@ -5,6 +5,7 @@ import {
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { prefixCommit } from "@/util/commit"
+import { assignmentsFilePath as assignmentsFile } from "@/util/configRepoPaths"
 import {
   createGitCommit,
   createGitTree,
@@ -36,7 +37,7 @@ export async function deleteAssignment(
   const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const assignmentsFilePath = `${classroom}/assignments.json`
+  const assignmentsFilePath = assignmentsFile(classroom)
   const currentAssignments = await getAssignmentsFile(client, {
     org,
     path: assignmentsFilePath,

@@ -28,7 +28,7 @@ import {
   isDefinitiveGitHubStatus,
   tolerateGitHubError,
 } from "@/github-core/errors"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { prefixCommit } from "@/util/commit"
 import {
   formatRosterProblems,

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { latestConfigFileCommitQuery } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 
 // When roster.csv was last committed — the timestamp behind the roster
 // toolbar's "Updated x ago" caption. Committer date (not author date) is the

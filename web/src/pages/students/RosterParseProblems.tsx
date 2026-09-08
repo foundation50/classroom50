@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next"
 import { Alert, Button } from "@/components/ui"
 import type { RosterCsvProblem } from "@/domain/students"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 
 // Malformed roster.csv: name every bad line so the teacher can fix the file on
 // GitHub. Distinct from a network load error — this is a bad file, and

@@ -2,7 +2,6 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useEffect } from "react"
 
 import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
 import type { CollectScoresPhase } from "./useTriggerScoreCollection"
 
 // Drops the reads a finished classroom sweep invalidated, so the page
@@ -26,11 +25,7 @@ const useInvalidateAfterCollect = (
   useEffect(() => {
     if (phase !== "completed" && phase !== "timeout") return
     queryClient.invalidateQueries({
-      queryKey: githubKeys.jsonFile(
-        org,
-        CONFIG_REPO,
-        `${classroom}/scores.json`,
-      ),
+      queryKey: githubKeys.scoresFile(org, classroom),
     })
     queryClient.invalidateQueries({
       queryKey: githubKeys.lastCollectScoresRun(org),

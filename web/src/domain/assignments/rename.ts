@@ -45,6 +45,7 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
 import { prefixCommit } from "@/util/commit"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { assignmentsFilePath, scoresFilePath } from "@/util/configRepoPaths"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { studentRepoName } from "@/util/studentRepo"
 import { isValidShortName } from "@/util/shortName"
@@ -233,8 +234,8 @@ async function commitRenameConfig(
   branch: string,
 ): Promise<void> {
   const { org, classroom, oldSlug, newSlug } = input
-  const assignmentsPath = `${classroom}/assignments.json`
-  const scoresPath = `${classroom}/scores.json`
+  const assignmentsPath = assignmentsFilePath(classroom)
+  const scoresPath = scoresFilePath(classroom)
 
   await withGitConflictRetry(async () => {
     const ref = await getBranchRef(client, org, branch)
@@ -373,7 +374,7 @@ async function setRenamedEntryLocked(
   locked: boolean,
 ): Promise<void> {
   const { org, classroom, newSlug } = input
-  const assignmentsPath = `${classroom}/assignments.json`
+  const assignmentsPath = assignmentsFilePath(classroom)
 
   await withGitConflictRetry(async () => {
     const ref = await getBranchRef(client, org, branch)
@@ -644,7 +645,7 @@ export async function renameAssignment(
   // race without half-applying.
   const preFile = await getAssignmentsFile(client, {
     org,
-    path: `${classroom}/assignments.json`,
+    path: assignmentsFilePath(classroom),
     ref: branch,
   })
   let mode: "fresh" | "resume"

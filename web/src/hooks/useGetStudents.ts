@@ -10,12 +10,12 @@ import {
 import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { parseRosterCsv, type RosterCsvProblem } from "@/domain/students"
 import type { Student } from "@/types/classroom"
 
 const rosterKey = (org: string, classroom: string) =>
-  githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom))
+  githubKeys.rosterFile(org, classroom)
 
 // Module-level so the reference is stable: react-query memoizes a `select`
 // result only while the selector identity is unchanged. An inline arrow would

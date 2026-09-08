@@ -33,7 +33,6 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import { githubKeys, invalidateInviteQueries } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import {
@@ -70,7 +69,6 @@ import {
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
 import useGetClasses from "@/hooks/useGetClasses"
-import { rosterPath } from "@/util/rosterPath"
 
 // Delay before reconciling an optimistically-updated roster.csv cache with
 // the authoritative GitHub read: the contents API lags a fresh commit, so an
@@ -214,15 +212,11 @@ const OrgMembersPage = () => {
     if (!org) return
     if (!opts?.skipCsv) {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+        queryKey: githubKeys.rosterFile(org, classroom),
       })
     }
     queryClient.invalidateQueries({
-      queryKey: githubKeys.jsonFile(
-        org,
-        CONFIG_REPO,
-        `${classroom}/classroom.json`,
-      ),
+      queryKey: githubKeys.classroomFile(org, classroom),
     })
   }
 
@@ -270,7 +264,7 @@ const OrgMembersPage = () => {
     if (!org || removed.length === 0) return
     const { ids, logins } = identitySets(removed)
     queryClient.setQueryData<StudentCsvRow[]>(
-      githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+      githubKeys.rosterFile(org, classroom),
       (current) =>
         current?.filter(
           (s) =>
@@ -294,7 +288,7 @@ const OrgMembersPage = () => {
     if (!org) return
     window.setTimeout(() => {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+        queryKey: githubKeys.rosterFile(org, classroom),
       })
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(org, teamSlugFor(classroom)),
@@ -346,7 +340,7 @@ const OrgMembersPage = () => {
 
     if (input.action === "add" && input.addedStudents.length > 0) {
       const addedStudents = input.addedStudents
-      const csvKey = githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom))
+      const csvKey = githubKeys.rosterFile(org, classroom)
       queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
         const list = current ?? []
         const seen = new Set(

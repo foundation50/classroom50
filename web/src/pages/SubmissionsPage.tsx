@@ -1945,11 +1945,7 @@ const SubmissionsPageContent = () => {
           // Refresh the assignments list we're about to land on (not awaited —
           // this page is going away anyway).
           void queryClient.invalidateQueries({
-            queryKey: githubKeys.jsonFile(
-              org,
-              CONFIG_REPO,
-              `${classroom}/assignments.json`,
-            ),
+            queryKey: githubKeys.assignmentsFile(org, classroom),
           })
           await navigate({
             to: "/$org/$classroom/assignments",

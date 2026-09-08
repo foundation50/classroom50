@@ -693,7 +693,7 @@ type ContainerSpec struct {
 // AssignmentsFilePath is the config-repo-relative path to a classroom's
 // assignments.json. Single-sourced so read and write paths agree.
 func AssignmentsFilePath(classroom string) string {
-	return classroom + "/assignments.json"
+	return classroom + "/" + contract.AssignmentsFilename
 }
 
 // ParseAssignments decodes assignments.json in two passes: a lenient pass

@@ -1,6 +1,12 @@
 import type { QueryClient } from "@tanstack/react-query"
 
 import { CONFIG_REPO } from "@/util/configRepo"
+import {
+  assignmentsFilePath,
+  classroomFilePath,
+  rosterPath,
+  scoresFilePath,
+} from "@/util/configRepoPaths"
 
 // The tracker key for one workflow dispatch. `scope` narrows it to the surface
 // that dispatched (a regrade is per classroom/assignment/owner so one
@@ -169,6 +175,19 @@ export const githubKeys = {
   csvFile: (owner: string, repo: string, path: string, ref?: string) =>
     [...githubKeys.all, "csv-file", owner, repo, path, ref ?? null] as const,
 
+  // The per-classroom config-repo files, as the jsonFile/csvFile keys their
+  // readers already use. Delegating (rather than minting new tuples) keeps the
+  // cache entries and every prefix invalidation identical; these exist so a
+  // writer's invalidation and the reader's key can't drift on the path string.
+  assignmentsFile: (org: string, classroom: string) =>
+    githubKeys.jsonFile(org, CONFIG_REPO, assignmentsFilePath(classroom)),
+  classroomFile: (org: string, classroom: string) =>
+    githubKeys.jsonFile(org, CONFIG_REPO, classroomFilePath(classroom)),
+  scoresFile: (org: string, classroom: string) =>
+    githubKeys.jsonFile(org, CONFIG_REPO, scoresFilePath(classroom)),
+  rosterFile: (org: string, classroom: string) =>
+    githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+
   collectScoresRun: (owner: string, sinceRunId: number | null) =>
     dispatchRun("collect-scores", owner, [], sinceRunId),
 
@@ -315,4 +334,15 @@ export function invalidateInviteQueries(queryClient: QueryClient, org: string) {
     queryKey: [...githubKeys.all, "team-failed-invitations", org],
   })
   queryClient.invalidateQueries({ queryKey: githubKeys.orgMembers(org) })
+}
+
+// Refresh a classroom's assignments list after any assignments.json write.
+export function invalidateAssignments(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+) {
+  void queryClient.invalidateQueries({
+    queryKey: githubKeys.assignmentsFile(org, classroom),
+  })
 }

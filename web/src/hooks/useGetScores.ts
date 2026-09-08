@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { scoresFilePath } from "@/util/configRepoPaths"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
@@ -310,7 +311,7 @@ const useGetScores = (
       client,
       org ?? "",
       CONFIG_REPO,
-      `${classroom ?? ""}/scores.json`,
+      scoresFilePath(classroom ?? ""),
     ),
     select: normalizeScores,
     // Freshness is surfaced explicitly (the DataFreshness widget + manual

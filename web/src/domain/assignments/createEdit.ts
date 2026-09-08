@@ -30,6 +30,7 @@ import {
 } from "@/util/assignmentTests"
 import { buildDueFields } from "@/util/formatDate"
 import { prefixCommit } from "@/util/commit"
+import { assignmentsFilePath as assignmentsFile } from "@/util/configRepoPaths"
 import {
   parseRunnerLabels,
   isRunnerLabelShapeValid,
@@ -234,7 +235,7 @@ export async function editAssignment(
   const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const assignmentsFilePath = `${classroom}/assignments.json`
+  const assignmentsFilePath = assignmentsFile(classroom)
   const currentAssignments = await getAssignmentsFile(client, {
     org,
     path: assignmentsFilePath,
@@ -1169,7 +1170,7 @@ export async function createAssignment(
 
   const commit = await getCommit(client, input.org, ref.object.sha)
 
-  const assignmentsFilePath = `${input.classroom}/assignments.json`
+  const assignmentsFilePath = assignmentsFile(input.classroom)
   const currentAssignments = await getAssignmentsFile(client, {
     org: input.org,
     path: assignmentsFilePath,
@@ -1393,7 +1394,7 @@ export async function setAssignmentLock(
   const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const assignmentsFilePath = `${classroom}/assignments.json`
+  const assignmentsFilePath = assignmentsFile(classroom)
   const currentAssignments = await getAssignmentsFile(client, {
     org,
     path: assignmentsFilePath,
@@ -1566,7 +1567,7 @@ export async function setAssignmentClosed(
   const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const assignmentsFilePath = `${classroom}/assignments.json`
+  const assignmentsFilePath = assignmentsFile(classroom)
   const currentAssignments = await getAssignmentsFile(client, {
     org,
     path: assignmentsFilePath,

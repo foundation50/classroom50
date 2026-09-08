@@ -3,6 +3,7 @@ import type { GitHubOrgMembership } from "../types"
 import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { ASSIGNMENTS_FILENAME } from "@/util/configRepoPaths"
 import { GitHubAPIError } from "../errors"
 import { classroomPagesSegment } from "@/util/secret"
 import { log } from "./shared"
@@ -47,7 +48,7 @@ export function pagesAssignmentUrl(
   pagesBaseUrl?: string,
 ) {
   const segment = classroomPagesSegment(classroom, secret)
-  return `${pagesBaseUrl || defaultPagesBaseUrl(org)}/${segment}/assignments.json`
+  return `${pagesBaseUrl || defaultPagesBaseUrl(org)}/${segment}/${ASSIGNMENTS_FILENAME}`
 }
 
 // Public, unauthenticated signal that an org is a real Classroom50 org: the
@@ -157,7 +158,7 @@ export function attemptedPagesAssignmentUrls(
 ): string[] {
   return attemptedPagesUrls(
     org,
-    `${classroomPagesSegment(classroom, secret)}/assignments.json`,
+    `${classroomPagesSegment(classroom, secret)}/${ASSIGNMENTS_FILENAME}`,
     pagesBaseUrl,
   )
 }

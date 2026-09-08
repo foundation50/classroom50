@@ -10,6 +10,7 @@ import {
   updateRef,
 } from "@/github-core/mutations"
 import { prefixCommit } from "@/util/commit"
+import { assignmentsFilePath } from "@/util/configRepoPaths"
 import type { Assignment } from "@/types/classroom"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
@@ -79,7 +80,7 @@ async function readAssignmentsForWrite(
   ])
   const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
-  const path = `${classroom}/assignments.json`
+  const path = assignmentsFilePath(classroom)
   const current = await getAssignmentsFile(client, {
     org,
     path,

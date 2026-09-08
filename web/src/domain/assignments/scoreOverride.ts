@@ -10,6 +10,7 @@ import {
   updateRef,
 } from "@/github-core/mutations"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { scoresFilePath } from "@/util/configRepoPaths"
 import { decodeBase64Utf8 } from "@/util/github"
 import { GitHubAPIError } from "@/github-core/errors"
 import { prefixCommit } from "@/util/commit"
@@ -58,12 +59,6 @@ type ScoresFile = {
 
 const SCORES_SCHEMA = "classroom50/scores/v1"
 const RESULT_SCHEMA = "classroom50/result/v1"
-
-// scores.json is the classroom gradebook (written by the CLI collector). The
-// web is otherwise a pure reader; this is the one write path.
-function scoresFilePath(classroom: string): string {
-  return `${classroom}/scores.json`
-}
 
 export type SetScoreOverrideInput = {
   org: string

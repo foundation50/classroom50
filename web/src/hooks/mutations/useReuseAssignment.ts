@@ -3,8 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
-import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { invalidateAssignments } from "@/github-core/queries"
 import {
   copyAssignmentWithConflictRetry,
   type CopyAssignmentInput,
@@ -97,13 +96,7 @@ export function useReuseAssignment({
     mutationFn: (input: CopyAssignmentInput) =>
       copyAssignmentWithConflictRetry(client, input),
     onSuccess: (result) => {
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(
-          org,
-          CONFIG_REPO,
-          `${targetClassroom}/assignments.json`,
-        ),
-      })
+      invalidateAssignments(queryClient, org, targetClassroom)
       // A template-grant failure doesn't fail the copy — surface it and keep
       // the modal open; otherwise close.
       if (result.templateGrantWarning) {

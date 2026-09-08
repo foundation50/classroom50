@@ -9,8 +9,6 @@ import {
 import { suppressedLoginsFor } from "@/hooks/useSuppressedLogins"
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
-import { CONFIG_REPO } from "@/util/configRepo"
-import { rosterPath } from "@/util/rosterPath"
 import { logger } from "@/lib/logger"
 import { useBestEffortOwnerReconcile } from "@/hooks/useBestEffortOwnerReconcile"
 
@@ -60,11 +58,7 @@ export function useClassroomReconcile(
     onSettled: (result, { org, classroom }) => {
       if (result.staffCreated.length > 0) {
         void queryClient.invalidateQueries({
-          queryKey: githubKeys.jsonFile(
-            org,
-            CONFIG_REPO,
-            `${classroom}/classroom.json`,
-          ),
+          queryKey: githubKeys.classroomFile(org, classroom),
         })
       }
       if (result.description.changed) {
@@ -77,7 +71,7 @@ export function useClassroomReconcile(
         // removed dead rows, appended members, or refreshed roles) — refresh
         // the view.
         void queryClient.invalidateQueries({
-          queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+          queryKey: githubKeys.rosterFile(org, classroom),
         })
       }
     },

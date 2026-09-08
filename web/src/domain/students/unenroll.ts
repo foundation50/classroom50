@@ -22,7 +22,7 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 import { type Student } from "@/types/classroom"
 import {
   log,

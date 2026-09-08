@@ -12,6 +12,7 @@ import {
   updateRef,
 } from "@/github-core/mutations"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { teamsFilePath } from "@/util/configRepoPaths"
 import { decodeBase64Utf8 } from "@/util/github"
 import { prefixCommit } from "@/util/commit"
 import { withGitConflictRetry } from "../classrooms"
@@ -48,10 +49,6 @@ export type TeamsFile = {
 
 export function emptyTeamsFile(): TeamsFile {
   return { schema: TEAMS_SCHEMA_V1, assignments: {} }
-}
-
-export function teamsFilePath(classroom: string): string {
-  return `${classroom}/teams.json`
 }
 
 // Read <classroom>/teams.json from the config repo. Tolerates an absent file

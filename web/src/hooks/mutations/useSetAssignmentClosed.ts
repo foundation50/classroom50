@@ -4,10 +4,9 @@ import {
   type SetAssignmentClosedInput,
   type SetAssignmentClosedResult,
 } from "@/domain/assignments"
-import { githubKeys } from "@/github-core/queries"
+import { invalidateAssignments } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { CONFIG_REPO } from "@/util/configRepo"
 
 // Close or reopen an assignment's submission window. The hook owns the
 // assignments.json listing invalidate (unmount-safe — the status badge must
@@ -32,13 +31,7 @@ export function useSetAssignmentClosed(
   >({
     mutationFn: (input) => setAssignmentClosedWithConflictRetry(client, input),
     onSuccess: (result, input) => {
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(
-          org,
-          CONFIG_REPO,
-          `${classroom}/assignments.json`,
-        ),
-      })
+      invalidateAssignments(queryClient, org, classroom)
       onWrite?.(result, input)
     },
   })

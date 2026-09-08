@@ -220,10 +220,18 @@ const (
 
 	// RosterFilename is the per-classroom roster file
 	// (<classroom>/roster.csv). Hand-mirrored with NO compile-time link in the
-	// web GUI (web/src/util/rosterPath.ts) and the Python collect-scores script
-	// (collect_scores.py ROSTER_FILENAME) — keep all copies byte-identical;
-	// contract_test.go pins the Go half.
+	// web GUI (web/src/util/configRepoPaths.ts) and the Python collect-scores
+	// script (collect_scores.py ROSTER_FILENAME) — keep all copies
+	// byte-identical; contract_test.go pins the Go half.
 	RosterFilename = "roster.csv"
+
+	// AssignmentsFilename, ClassroomFilename and ScoresFilename are the other
+	// per-classroom config-repo files (<classroom>/<name>). Hand-mirrored with
+	// NO compile-time link in the web GUI (web/src/util/configRepoPaths.ts);
+	// contract_test.go pins the Go half.
+	AssignmentsFilename = "assignments.json"
+	ClassroomFilename   = "classroom.json"
+	ScoresFilename      = "scores.json"
 
 	// ServiceTokenSecretName is the repo-level Actions secret on the classroom50 repository
 	// holding the fine-grained PAT that collect-scores.yaml / regrade.yaml

@@ -19,11 +19,7 @@ export function useArchiveClassroom(org: string, classroom: string) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
-  const classroomKey = githubKeys.jsonFile(
-    org,
-    CONFIG_REPO,
-    `${classroom}/classroom.json`,
-  )
+  const classroomKey = githubKeys.classroomFile(org, classroom)
 
   return useMutation({
     // Serialize toggles on this classroom: without a scope, two rapid

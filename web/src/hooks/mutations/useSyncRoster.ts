@@ -2,8 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { reconcileRoster } from "@/domain/students"
 import { githubKeys } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { CONFIG_REPO } from "@/util/configRepo"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath } from "@/util/configRepoPaths"
 
 // The teacher-triggered (and auto-run on open) roster reconciliation: one
 // consolidated pass that recovers accepted email invites and syncs
@@ -30,7 +29,7 @@ export function useSyncRoster(
       reconcileRoster(client, { org, classroom, excludeLogins }),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
+        queryKey: githubKeys.rosterFile(org, classroom),
       })
       // The pass may have committed — refresh the "Updated x ago" caption.
       void queryClient.invalidateQueries({
