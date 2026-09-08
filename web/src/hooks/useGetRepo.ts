@@ -1,6 +1,7 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
 import { getRepo } from "@/github-core/repoReads"
+import { githubKeys } from "@/github-core/queries"
 
 const useGetRepo = (
   org: string | undefined,
@@ -10,7 +11,7 @@ const useGetRepo = (
   const client = useGitHubClient()
 
   return useQuery({
-    queryKey: ["github", "repo", org, path],
+    queryKey: githubKeys.repo(org, path),
     queryFn: () => getRepo(client, org ?? "", path),
     enabled: Boolean(org && path) && (options?.enabled ?? true),
     // Existence check that gates the accept flow; the accept mutation invalidates

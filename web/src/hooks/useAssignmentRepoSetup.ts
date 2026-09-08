@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { repoContentsPathExists } from "@/domain/assignments"
+import { githubKeys } from "@/github-core/queries"
 
 // Whether an existing assignment repo finished its accept: "incomplete" means
 // the repo exists but `.classroom50.yaml` never landed, so the accept died
@@ -17,7 +18,7 @@ export function useAssignmentRepoSetup(
   const enabled = Boolean(org && repo) && (options?.enabled ?? true)
 
   const query = useQuery({
-    queryKey: ["github", "repos", org, repo, "setup-marker"],
+    queryKey: githubKeys.repoSetupMarker(org, repo),
     queryFn: () =>
       repoContentsPathExists(client, org ?? "", repo, ".classroom50.yaml"),
     enabled,

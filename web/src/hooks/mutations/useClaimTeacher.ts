@@ -53,12 +53,11 @@ export function useClaimTeacher(
       // Re-resolve the viewer's classroom role: their teacher-team membership
       // is what the role context reads.
       queryClient.invalidateQueries({
-        queryKey: [
-          "team-membership",
+        queryKey: githubKeys.teamMembership(
           org,
           classroomTeamSlug(classroom, "teacher"),
           username,
-        ],
+        ),
       })
     },
   })

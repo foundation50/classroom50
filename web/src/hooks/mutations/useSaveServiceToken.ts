@@ -5,10 +5,10 @@ import {
   validateServiceToken,
 } from "@/github-core/mutations"
 import {
-  githubKeys,
-  SERVICE_TOKEN_SECRET_NAME,
   SERVICE_TOKEN_EXPIRES_AT_VAR,
   SERVICE_TOKEN_NAME_VAR,
+  SERVICE_TOKEN_SECRET_NAME,
+  githubKeys,
   type ServiceTokenStatus,
 } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -95,7 +95,7 @@ export function useSaveServiceToken(org: string | undefined) {
       return { metadataRecorded }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
       // Seed the status to "present" before the refetch so a UI deriving its
       // state from token presence (the setup wizard) advances even if the
       // invalidation refetch fails (offline / transient GitHub error) — the

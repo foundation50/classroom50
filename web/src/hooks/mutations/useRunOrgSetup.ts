@@ -57,7 +57,7 @@ function invalidateAfterSetup(
 ) {
   if (mode === "first-run") {
     // Also refetch the config-repo probe so the derived stage advances to 2.
-    void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+    void queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
     void queryClient.invalidateQueries({
       queryKey: orgClassroom50StatusKey(org),
     })
@@ -74,7 +74,7 @@ function invalidateAfterSetup(
   void queryClient.invalidateQueries({
     queryKey: githubKeys.orgActionsMode(org),
   })
-  void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+  void queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
   // Setup applies the member-default lockdown, so refresh the shared org query
   // the teacher pre-flight warnings read (the `["orgs"]` key above is a
   // different, non-github-prefixed list).

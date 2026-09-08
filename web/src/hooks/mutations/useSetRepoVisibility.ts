@@ -24,9 +24,8 @@ export function useSetRepoVisibility() {
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgRepos(org),
       })
-      // useGetRepo's ad-hoc key.
       void queryClient.invalidateQueries({
-        queryKey: ["github", "repo", org, repo],
+        queryKey: githubKeys.repo(org, repo),
       })
     },
   })

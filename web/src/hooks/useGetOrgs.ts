@@ -8,6 +8,7 @@ import type { GitHubClient } from "@/github-core/client"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import {
   getClassroom50OrgSummary,
+  githubKeys,
   listAuthedOrgMemberships,
 } from "@/github-core/queries"
 
@@ -43,7 +44,7 @@ const useGetOrgs = () => {
   const memberships = useOrgMemberships(client)
 
   const summaries = useQuery({
-    queryKey: ["orgs", "active-summaries"],
+    queryKey: githubKeys.orgActiveSummaries(),
     // Pull the membership list through the cache instead of deriving it from a
     // render: keying on the list meant one invalidation refetched the old key
     // against the pre-refresh list, running the whole fan-out twice and

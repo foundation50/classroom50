@@ -11,6 +11,7 @@ import {
   type ResolvedRole,
 } from "@/authz"
 import type { GitHubClient } from "@/github-core/client"
+import { githubKeys } from "@/github-core/queries"
 
 // Team-membership query: 2xx + active => member, 404 => definitive non-member,
 // anything else throws so React Query can retry and the verdict stays
@@ -22,7 +23,7 @@ export function teamMembershipQuery(
   username: string,
 ) {
   return {
-    queryKey: ["team-membership", org, teamSlug, username] as const,
+    queryKey: githubKeys.teamMembership(org, teamSlug, username),
     queryFn: async () => {
       const path = `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
         teamSlug,

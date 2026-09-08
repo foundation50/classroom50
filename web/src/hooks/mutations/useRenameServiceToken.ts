@@ -29,7 +29,7 @@ export function useRenameServiceToken(org: string | undefined) {
       queryClient.invalidateQueries({
         queryKey: githubKeys.serviceToken(org ?? ""),
       })
-      queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
     },
   })
 }

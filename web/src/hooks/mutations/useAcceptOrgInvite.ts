@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { acceptAndVerifyOrgMembership } from "@/domain/users"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { orgMembershipsQueryKey } from "@/hooks/useGetOrgs"
+import { githubKeys } from "@/github-core/queries"
 
 // Accept a pending org invitation and verify membership landed. Hook owns the
 // membership + orgs-list invalidation (data-consistency that must run even if
@@ -15,7 +16,7 @@ export function useAcceptOrgInvite(org: string) {
     mutationFn: () => acceptAndVerifyOrgMembership(client, org),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: orgMembershipsQueryKey })
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      void queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
     },
   })
 }

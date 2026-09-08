@@ -36,7 +36,7 @@ export function useExecuteTeardown(plan: TeardownPlan | null) {
   const queryClient = useQueryClient()
 
   const refreshOrgs = () =>
-    void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+    void queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
 
   return useMutation({
     meta: { keepTabOpen: true },

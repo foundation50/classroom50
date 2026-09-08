@@ -17,7 +17,7 @@ export function useAcceptPendingOrgInvite(org: string) {
       void queryClient.invalidateQueries({
         queryKey: githubKeys.ownOrgMembership(org),
       })
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      void queryClient.invalidateQueries({ queryKey: githubKeys.orgsPrefix() })
     },
   })
 }

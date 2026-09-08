@@ -54,6 +54,15 @@ export const githubKeys = {
 
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
 
+  // Two per-repo reads under the `repos` segment (distinct from `repo`, the
+  // repo object itself): the accept marker file and the setup-marker probe.
+  // `owner` may be undefined while the route param resolves; the query is
+  // disabled then, and the tuple keeps the undefined so the key is unchanged.
+  repoMarkerFile: (owner: string | undefined, repo: string) =>
+    [...githubKeys.all, "repos", owner, repo, ".classroom50.yaml"] as const,
+  repoSetupMarker: (owner: string | undefined, repo: string) =>
+    [...githubKeys.all, "repos", owner, repo, "setup-marker"] as const,
+
   // One assignment's slice of the org repo list, resolved for a known set of
   // candidate logins (see getAssignmentRepos). The logins are part of the key
   // because the result depends on them: a roster change must re-resolve.
@@ -90,6 +99,17 @@ export const githubKeys = {
   orgAdmins: (org: string) =>
     ["orgs", "list", "members", "admins", org] as const,
 
+  // The viewer's org list caches live under a bare `orgs` prefix, outside the
+  // `github` root (see invalidateViewerOrgs for why they are named there).
+  // `orgsPrefix` is the broad sweep the setup and invite mutations use.
+  orgsPrefix: () => ["orgs"] as const,
+  orgActiveSummaries: () => ["orgs", "active-summaries"] as const,
+
+  // The viewer's membership in one classroom team, by role slug. Not under the
+  // `github` root: it predates the factory and is invalidated by name.
+  teamMembership: (org: string, teamSlug: string, username: string) =>
+    ["team-membership", org, teamSlug, username] as const,
+
   orgRunners: (org: string) => [...githubKeys.all, "org-runners", org] as const,
 
   teamMembers: (org: string, teamSlug: string) =>
@@ -124,7 +144,7 @@ export const githubKeys = {
   teamsFile: (org: string, classroom: string) =>
     [...githubKeys.all, "teams-file", org, classroom] as const,
 
-  repo: (owner: string, repo: string) =>
+  repo: (owner: string | undefined, repo: string) =>
     [...githubKeys.all, "repo", owner, repo] as const,
 
   collaborators: (org: string, repo: string) =>
@@ -268,7 +288,7 @@ export const githubKeys = {
 // lists (orgMembers/orgMembersAll/orgAdmins) the list doesn't derive from.
 export function invalidateViewerOrgs(queryClient: QueryClient) {
   queryClient.invalidateQueries({ queryKey: ["orgs", "memberships"] })
-  queryClient.invalidateQueries({ queryKey: ["orgs", "active-summaries"] })
+  queryClient.invalidateQueries({ queryKey: githubKeys.orgActiveSummaries() })
   queryClient.invalidateQueries({ queryKey: [...githubKeys.all, "orgs"] })
   queryClient.invalidateQueries({
     queryKey: [...githubKeys.all, "repo"],
