@@ -1395,7 +1395,8 @@ func studentRepo(t *testing.T) (origin, student string) {
 	root := t.TempDir()
 	origin = filepath.Join(root, "origin.git")
 	student = filepath.Join(root, "student")
-	git(t, root, "init", "-q", "--bare", "-b", "main", origin)
+	// -c init.defaultBranch rather than `init -b`: works on git older than 2.28.
+	git(t, root, "-c", "init.defaultBranch=main", "init", "-q", "--bare", origin)
 	git(t, root, "clone", "-q", origin, student)
 	git(t, student, "checkout", "-q", "-b", "main")
 	commitFile(t, student, "hello.py")

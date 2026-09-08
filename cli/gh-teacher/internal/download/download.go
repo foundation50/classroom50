@@ -1298,10 +1298,16 @@ func cloneOrgRepo(out, errOut io.Writer, org, repo, target string, quiet, verbos
 // inert for an SSH remote. GIT_TERMINAL_PROMPT=0 keeps a missing credential
 // from hanging the batch on a password prompt.
 func pullRepo(out, errOut io.Writer, target string, quiet, verbose bool) error {
+	// Resolve gh's path and quote it the way gh does for its own helper line,
+	// so the shell git spawns finds it even with a different PATH or spaces.
+	gh := "gh"
+	if p, err := exec.LookPath("gh"); err == nil {
+		gh = p
+	}
 	args := []string{
 		"-C", target,
 		"-c", "credential.helper=",
-		"-c", "credential.helper=!gh auth git-credential",
+		"-c", fmt.Sprintf("credential.helper=!%q auth git-credential", gh),
 		"pull", "--ff-only",
 	}
 	if quiet {
