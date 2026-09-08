@@ -1,11 +1,10 @@
-import { ChevronRightIcon, LinkExternalIcon } from "@/components/ui/icons"
+import { ChevronRightIcon, LinkExternalIcon, rtlFlip } from "./icons"
 
-import { Button } from "@/components/ui"
-import { rtlFlip } from "@/components/ui"
+import { Button } from "./Button"
 
 type IconComponent = React.ComponentType<{ className?: string }>
 
-// A labeled action row for the submission hub: leading icon, title + optional
+// A labeled action row for a hub modal (submission, assignment): leading icon, title + optional
 // description, trailing affordance (an external-link glyph for links, else a
 // chevron). Renders as an <a> when `href` is set, otherwise a <button> driving
 // `onClick`. Disabled state dims and inerts it.

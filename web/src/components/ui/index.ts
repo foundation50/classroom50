@@ -129,3 +129,4 @@ export { cx } from "./cx"
 export { hasUtility } from "./cx"
 
 export { rtlFlip } from "./icons"
+export { ActionListRow } from "./ActionListRow"

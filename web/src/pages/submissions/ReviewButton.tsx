@@ -2,11 +2,10 @@ import { CodeReviewIcon } from "@/components/ui/icons"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { Button, Modal, MonoLtr } from "@/components/ui"
+import { ActionListRow, Button, Modal, MonoLtr } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
 import useRepairFeedbackPr from "@/hooks/mutations/useRepairFeedbackPr"
-import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { errorText } from "@/types/localizedMessage"
 import type { AssignmentMode } from "@/types/classroom"
 

@@ -27,8 +27,8 @@ import {
   TablePagination,
   TableShell,
 } from "@/components/ui"
-import type { GroupRepo } from "@/pages/submissions/dashboard"
-import type { SubmissionSort } from "@/pages/submissions/dashboard"
+import type { GroupRepo } from "@/domain/submissions/dashboard"
+import type { SubmissionSort } from "@/domain/submissions/dashboard"
 import {
   buildRosterDisplayItems,
   buildGroupDisplayItems,
@@ -42,7 +42,7 @@ import {
   sortNameMode,
   teamMissingForOwner,
   PAGE_SIZE_OPTIONS,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 import {
   GroupActionControls,
   GroupMembers,

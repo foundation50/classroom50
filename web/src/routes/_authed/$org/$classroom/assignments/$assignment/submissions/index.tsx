@@ -5,7 +5,7 @@ import {
   PAGE_SIZE_OPTIONS,
   STATUS_SELECT_VALUES,
   type StatusSelectValue,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 
 // `status` optionally deep-links the dashboard to a pre-filtered cohort
 // (e.g. ?status=not-accepted from the assignments table's Accepted cell).

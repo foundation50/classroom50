@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next"
 import { useNavigate } from "@tanstack/react-router"
 import { EyeIcon, LockIcon, PencilIcon } from "@/components/ui/icons"
 
-import { Badge, Modal, MonoLtr } from "@/components/ui"
-import { ActionListRow } from "@/pages/submissions/actionLayout"
+import { ActionListRow, Badge, Modal, MonoLtr } from "@/components/ui"
 import {
   assignmentName,
   CloneSubmissionsAction,

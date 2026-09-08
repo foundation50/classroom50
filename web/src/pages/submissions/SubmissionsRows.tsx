@@ -5,7 +5,7 @@ import { getName, getDisplayName, getInitials } from "@/util/students"
 import { studentRepoUrl } from "@/util/studentRepo"
 import Avatar from "@/components/avatar"
 import { Badge, Button, ExternalLink } from "@/components/ui"
-import { nonSubmitterStatus } from "@/pages/submissions/dashboard"
+import { nonSubmitterStatus } from "@/domain/submissions/dashboard"
 import {
   groupTeamUrl,
   isGroupOverCapacity,

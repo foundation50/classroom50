@@ -16,7 +16,7 @@ import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import {
   classroomSnapshotIsStale,
   latestCollectedAt,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 import { formatRelativeToNow } from "@/util/formatDate"
 import { errorText } from "@/types/localizedMessage"
 

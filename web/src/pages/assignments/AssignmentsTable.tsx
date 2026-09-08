@@ -18,7 +18,7 @@ import {
   assignmentFunnelCounts,
   type AssignmentFunnelCounts,
   type FunnelRoster,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"

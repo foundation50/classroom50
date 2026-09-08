@@ -11,12 +11,11 @@ import {
   UnlockIcon,
 } from "@/components/ui/icons"
 
-import { Button, EmphasisLtr } from "@/components/ui"
+import { ActionListRow, Button, EmphasisLtr } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
 import { TemplateAccessModal } from "@/components/modals/TemplateAccessModal"
 import { CloneSubmissionsModal } from "@/pages/submissions/CloneSubmissionsModal"
-import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { acceptLinkUrl } from "@/util/acceptLink"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"

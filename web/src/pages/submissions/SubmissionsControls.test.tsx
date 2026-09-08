@@ -7,7 +7,7 @@ vi.mock("react-i18next", () => ({
 }))
 
 import SubmissionsControls from "./SubmissionsControls"
-import { DEFAULT_FILTERS } from "./dashboard"
+import { DEFAULT_FILTERS } from "@/domain/submissions/dashboard"
 
 const baseProps = {
   query: "",

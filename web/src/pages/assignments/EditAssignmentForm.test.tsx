@@ -25,7 +25,7 @@ vi.mock("@/hooks/useAssignmentRepos", () => ({
 vi.mock("@/hooks/useGetStudents", () => ({
   default: () => ({ students: [], isLoading: false }),
 }))
-vi.mock("@/pages/submissions/dashboard", () => ({
+vi.mock("@/domain/submissions/dashboard", () => ({
   assignmentRepoNames: () => acceptedRepoNames,
 }))
 vi.mock("react-i18next", async (importOriginal) => {

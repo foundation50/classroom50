@@ -11,12 +11,12 @@ import type {
   StatusSelectValue,
   SubmissionFilters,
   SubmissionSort,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 import {
   DEFAULT_FILTERS,
   applyStatusSelection,
   statusSelectValue,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 
 // Search + sort + filter controls for the assignment overview dashboard.
 // Controlled by SubmissionsPage; emits filter/sort/query changes. The

@@ -98,7 +98,7 @@ import {
   teamsWithoutRepos,
   type SubmissionFilters,
   type SubmissionSort,
-} from "@/pages/submissions/dashboard"
+} from "@/domain/submissions/dashboard"
 import useGetScores from "@/hooks/useGetScores"
 import useLiveSubmissions from "@/hooks/useLiveSubmissions"
 import useDetectedSubmissions from "@/hooks/useDetectedSubmissions"

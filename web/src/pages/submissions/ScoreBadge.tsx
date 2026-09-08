@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui"
-import { scoreTone } from "@/pages/submissions/dashboard"
+import { scoreTone } from "@/domain/submissions/dashboard"
 
 // Score chip via the shared scoreTone recipe — the single source for the
 // score→tone→Badge mapping (AGENTS.md "one recipe, one source"). Used by the

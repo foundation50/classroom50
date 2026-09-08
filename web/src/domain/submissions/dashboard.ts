@@ -2,7 +2,7 @@
 // over already-loaded scores/roster data — no fetches, no React, so the
 // classification is reusable and testable.
 
-import type { NormalizedScores, SubmissionRow } from "@/hooks/useGetScores"
+import type { NormalizedScores, SubmissionRow } from "./scores"
 import type { GitHubRepo } from "@/github-core/types"
 import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
@@ -10,7 +10,7 @@ import { isNoAutograderAssignment } from "@/domain/assignments/autogradingState"
 import type { DetectedSubmission } from "@/domain/assignments/submissionDetection"
 import type { Assignment, Student } from "@/types/classroom"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
-import type { BadgeTone } from "@/components/ui"
+import type { BadgeTone } from "@/types/badgeTone"
 import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"

@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { PeopleIcon, RepoIcon } from "@/components/ui/icons"
 
 import {
+  ActionListRow,
   Badge,
   ExternalLink,
   Modal,
@@ -25,7 +26,6 @@ import {
   type SubmissionActionListProps,
   type SubmissionHubFeedback,
 } from "@/pages/submissions/SubmissionsRowActions"
-import { ActionListRow } from "@/pages/submissions/actionLayout"
 import { formatSubmissionDateTime as formatDateTime } from "@/util/formatDate"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
