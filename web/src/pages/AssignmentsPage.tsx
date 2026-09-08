@@ -1,13 +1,12 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { TriangleDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
-import { useCallback, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
 import AssignmentsBulkBar from "@/pages/assignments/AssignmentsBulkBar"
-import { resolveSelectedRows, toggleSelectAll } from "@/util/rowSelection"
-import { useRangeSelection } from "@/hooks/useRangeSelection"
+import { useRowSelection } from "@/hooks/useRowSelection"
 import { GitHubAPIError } from "@/github-core/errors"
 import { ClassroomCollectButton } from "@/pages/assignments/ClassroomCollectButton"
 import {
@@ -50,6 +49,10 @@ import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
 import { roleLabelKey, can } from "@/authz"
 import { isClassroomArchived, type Assignment } from "@/types/classroom"
 import StudentAssignmentList from "@/components/org/StudentAssignmentList"
+
+const EMPTY_ASSIGNMENTS: Assignment[] = []
+const slugKey = (a: Assignment) => a.slug
+const alwaysSelectable = () => true
 
 // Split button: primary "Assignment" creates; the caret reveals "Reuse
 // assignment", pulling one from another classroom into this one.
@@ -211,44 +214,24 @@ export const TeacherAssignmentsView = ({
   const hasAssignments = (sourceAssignments?.length ?? 0) > 0
 
   // Bulk selection lives here because the actions need the selected Assignment
-  // records, not just their slugs.
-  const [selectedSlugs, setSelectedSlugs] = useState<Set<string>>(new Set())
+  // records, not just their slugs. Every assignment is selectable, so the
+  // predicate is constant; pruning is on because a deleted slug must not come
+  // back pre-ticked if it is recreated.
   const canBulk = canAuthor && !archived && hasAssignments
-  const slugKey = useCallback((a: Assignment) => a.slug, [])
-  // Every assignment is selectable, so the predicate is constant.
-  const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
-    visible,
-    () => true,
-    setSelectedSlugs,
-    slugKey,
-  )
-  const toggleSelectAllRows = () =>
-    setSelectedSlugs((prev) => toggleSelectAll(visible, prev, slugKey))
-  const clearSelection = () => setSelectedSlugs(new Set())
-  // Resolved against the full list (a row the search hides stays acted on) and
-  // deduped: a hand-edited assignments.json can repeat a slug.
-  const selectedAssignments = useMemo(() => {
-    const seen = new Set<string>()
-    return resolveSelectedRows(
-      sourceAssignments ?? [],
-      selectedSlugs,
-      () => true,
-      slugKey,
-    ).filter((a) => {
-      const key = slugKey(a)
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-  }, [sourceAssignments, selectedSlugs, slugKey])
-  // Prune slugs that left the list, during render like useLingeringOpen.
-  // Filtering only for display would bring a recreated slug back pre-ticked.
-  // `liveSlugs` is a subset of `selectedSlugs`, so sizes suffice.
-  const liveSlugs = useMemo(
-    () => new Set(selectedAssignments.map(slugKey)),
-    [selectedAssignments, slugKey],
-  )
-  if (liveSlugs.size !== selectedSlugs.size) setSelectedSlugs(liveSlugs)
+  const {
+    selectedKeys: selectedSlugs,
+    selectedRows: selectedAssignments,
+    toggleSelectAll: toggleSelectAllRows,
+    clear: clearSelection,
+    handleToggleRow,
+    handleRowCheckboxClick,
+  } = useRowSelection({
+    rows: sourceAssignments ?? EMPTY_ASSIGNMENTS,
+    filtered: visible,
+    isSelectable: alwaysSelectable,
+    keyOf: slugKey,
+    pruneMissing: true,
+  })
 
   // The toolbar renders only once assignments exist: on a first-use empty
   // list the table's blankslate carries the New-assignment action instead

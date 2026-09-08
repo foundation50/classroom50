@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
@@ -54,13 +54,7 @@ import BulkActionsBar, {
   type BulkDoneInput,
 } from "@/pages/orgMembers/BulkActionsBar"
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
-import {
-  resolveSelectedRows,
-  selectableRows,
-  selectAllState,
-  toggleSelectAll,
-} from "@/util/rowSelection"
-import { useRangeSelection } from "@/hooks/useRangeSelection"
+import { useRowSelection } from "@/hooks/useRowSelection"
 import {
   GitHubIdentity,
   MemberStatusBadge,
@@ -92,6 +86,8 @@ const SKELETON_BARS = [
 ]
 
 const MEMBERS_COL_COUNT = SKELETON_BARS.length
+
+const rowKey = (row: OrgMemberRow) => row.key
 
 // Trimmed-id + lowercased-login sets for matching rows against cached GitHub
 // identities — the one matching recipe every optimistic cache drop uses.
@@ -140,10 +136,6 @@ const OrgMembersPage = () => {
   const [tableSort, setTableSort] = useState<MembersTableSortValue | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [invitingKey, setInvitingKey] = useState<string | null>(null)
-  // Multi-select for bulk classroom actions. Selection is by row key and
-  // persists across search filtering (a hidden-but-selected row is still acted
-  // on); "select all" targets the currently-filtered rows.
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // True while a delayed members reconcile is scheduled — the window where an
   // eager orgMembersAll refetch would resurrect an optimistically-removed row.
   const membersReconcilePending = useRef(false)
@@ -165,12 +157,7 @@ const OrgMembersPage = () => {
       scheduleMembersReconcile()
       // Drop the stale selection key, or the vanished row keeps the toolbar
       // stuck at "N selected" with no visible checkbox to clear.
-      setSelectedKeys((prev) => {
-        if (!prev.has(affected.key)) return prev
-        const next = new Set(prev)
-        next.delete(affected.key)
-        return next
-      })
+      deselectRow(affected.key)
     } else {
       invalidateMembers()
     }
@@ -332,7 +319,7 @@ const OrgMembersPage = () => {
       optimisticRemoveFromMembers(removedRows)
       scheduleMembersReconcile()
       invalidateInviteQueries(queryClient, org)
-      setSelectedKeys(new Set())
+      clearSelection()
       return
     }
 
@@ -398,7 +385,7 @@ const OrgMembersPage = () => {
     invalidateMembers()
     invalidateInviteQueries(queryClient, org)
     invalidateClassroom(classroom, { skipCsv: true })
-    setSelectedKeys(new Set())
+    clearSelection()
     scheduleClassroomReconcile(classroom)
   }
 
@@ -427,11 +414,14 @@ const OrgMembersPage = () => {
     }
   }
 
-  const isSelf = (row: OrgMemberRow) =>
-    isSameGitHubUser(viewer ?? null, {
-      github_id: row.github_id,
-      username: row.username,
-    })
+  const isSelf = useCallback(
+    (row: OrgMemberRow) =>
+      isSameGitHubUser(viewer ?? null, {
+        github_id: row.github_id,
+        username: row.username,
+      }),
+    [viewer],
+  )
 
   // An org owner/admin: in the fetched admin-id set, or the signed-in account
   // (always an owner here — page is owner-gated — even if the admin list
@@ -518,42 +508,32 @@ const OrgMembersPage = () => {
   )
 
   // The signed-in owner can't be bulk-added/removed — a row is selectable only
-  // when it isn't self.
-  const isSelectable = (row: OrgMemberRow) => !isSelf(row)
-
-  // Rows backing the current selection, across the full set (a selected row
-  // hidden by search is still acted on), self always excluded.
-  const selectedRows = useMemo(
-    () => resolveSelectedRows(rows, selectedKeys, isSelectable, (r) => r.key),
-    // isSelf/isSelectable depend on viewer; recompute when it changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, selectedKeys, viewer],
+  // when it isn't self. Stable per viewer so the selection memos key on it.
+  const isSelectable = useCallback(
+    (row: OrgMemberRow) => !isSelf(row),
+    [isSelf],
   )
 
-  // Shift-click range selection over the rendered order. OrgMembersPage renders
-  // `filtered` flat (no grouping), so the filtered list IS the rendered order.
-  const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
-    filtered,
-    isSelectable,
-    setSelectedKeys,
-    (r) => r.key,
-  )
-
-  // Select-all targets the currently-filtered SELECTABLE rows (self excluded),
-  // without disturbing selected rows outside the current filter.
-  const selectableFiltered = useMemo(
-    () => selectableRows(filtered, isSelectable),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filtered, viewer],
-  )
+  // Multi-select for bulk classroom actions. Selection is by row key and
+  // persists across search filtering (a hidden-but-selected row is still acted
+  // on); "select all" targets the currently-filtered rows. OrgMembersPage
+  // renders `filtered` flat (no grouping), so it is also the rendered order.
   const {
+    selectedKeys,
+    selectedRows,
     allSelected: allFilteredSelected,
     someSelected: someFilteredSelected,
-  } = selectAllState(selectableFiltered, selectedKeys, (r) => r.key)
-  const handleToggleSelectAll = () =>
-    setSelectedKeys((prev) =>
-      toggleSelectAll(selectableFiltered, prev, (r) => r.key),
-    )
+    toggleSelectAll: handleToggleSelectAll,
+    deselect: deselectRow,
+    clear: clearSelection,
+    handleToggleRow,
+    handleRowCheckboxClick,
+  } = useRowSelection({
+    rows,
+    filtered,
+    isSelectable,
+    keyOf: rowKey,
+  })
 
   // Picker/filter options: the display name from classroom.json when its
   // metadata has loaded, else the directory slug.
@@ -645,7 +625,7 @@ const OrgMembersPage = () => {
                 members={members}
                 classrooms={classroomOptions}
                 isOwner={isOwner}
-                onClearSelection={() => setSelectedKeys(new Set())}
+                onClearSelection={clearSelection}
                 onDone={handleBulkDone}
               />
             ) : null}

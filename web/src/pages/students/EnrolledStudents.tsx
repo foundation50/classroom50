@@ -60,14 +60,8 @@ import {
 } from "@/pages/students/rosterFilter"
 import { studentKey, toStudent } from "@/util/roster"
 import { isSameGitHubUser } from "@/util/students"
-import {
-  resolveSelectedRows,
-  selectableRows,
-  selectAllState,
-  shouldWarnNoneSelectable,
-  toggleSelectAll,
-} from "@/util/rowSelection"
-import { useRangeSelection } from "@/hooks/useRangeSelection"
+import { shouldWarnNoneSelectable } from "@/util/rowSelection"
+import { useRowSelection } from "@/hooks/useRowSelection"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import AddStudentButtons from "@/pages/students/AddStudentButtons"
 import RosterEditMode from "@/pages/students/RosterEditMode"
@@ -84,7 +78,7 @@ import {
 } from "@/domain/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   groupStudentsBySection,
@@ -120,6 +114,8 @@ const EDIT_MISS_REASON_KEY: Record<string, string> = {
   "identity-claimed": "students.editRoster.reasonIdentityClaimed",
   "member-not-active": "students.editRoster.reasonMemberNotActive",
 }
+
+const teamRosterRowKey = (row: TeamRosterRow) => row.key
 
 const EnrolledStudents = ({
   students = [],
@@ -187,7 +183,6 @@ const EnrolledStudents = ({
   // then name — see sortTeamRosterRows).
   const [tableSort, setTableSort] = useState<RosterTableSortValue | null>(null)
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
-  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // Session-only banner dismissal — a page refresh re-derives roster state and
   // shows them again.
   const [pendingDismissed, setPendingDismissed] = useState(false)
@@ -263,11 +258,14 @@ const EnrolledStudents = ({
   // their student side and leaves the staff role intact — matching the row modal
   // in requiring hasStudentEnrollment, so a student+teacher is never silently
   // skipped by select-all.
-  const isSelf = (row: TeamRosterRow) =>
-    isSameGitHubUser(viewer ?? null, {
-      github_id: row.github_id,
-      username: row.username,
-    })
+  const isSelf = useCallback(
+    (row: TeamRosterRow) =>
+      isSameGitHubUser(viewer ?? null, {
+        github_id: row.github_id,
+        username: row.username,
+      }),
+    [viewer],
+  )
   // Selectable for the bulk actions bar. The bar offers THREE actions (resend
   // invite, cancel invite, unenroll), so eligibility is per-action rather than
   // one unenroll-shaped gate: a pending email invite can't be unenrolled (the
@@ -276,14 +274,18 @@ const EnrolledStudents = ({
   // invitation is exactly the right bulk action. Gating selection on unenroll
   // alone made that path unreachable — and a class-sized email invite
   // un-bulk-cancellable.
-  const isSelectable = (row: TeamRosterRow) =>
-    !isSelf(row) &&
-    // An unlinked row has no enrollment or invitation to act on, but it IS the
-    // bulk remove-rows target — selection admits it and the bar's per-action
-    // eligibility filters keep it out of the other three actions.
-    (row.state === "unlinked" ||
-      (hasStudentEnrollment(row) &&
-        (canTargetForUnenroll(row) || canCancelInviteFor(row))))
+  // Stable so the selection memos key on it; isSelf is the only closure.
+  const isSelectable = useCallback(
+    (row: TeamRosterRow) =>
+      !isSelf(row) &&
+      // An unlinked row has no enrollment or invitation to act on, but it IS
+      // the bulk remove-rows target — selection admits it and the bar's
+      // per-action eligibility filters keep it out of the other three actions.
+      (row.state === "unlinked" ||
+        (hasStudentEnrollment(row) &&
+          (canTargetForUnenroll(row) || canCancelInviteFor(row)))),
+    [isSelf],
+  )
 
   // Distinct sections present across all rows (status-independent so switching
   // status never empties the section dropdown), sorted with "No section" last.
@@ -392,37 +394,6 @@ const EnrolledStudents = ({
     [rows, selectedKey],
   )
 
-  const selectedRows = useMemo(
-    () => resolveSelectedRows(rows, selectedKeys, isSelectable, (r) => r.key),
-    // isSelectable depends on viewer; recompute when it changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [rows, selectedKeys, viewer],
-  )
-  const selectableFiltered = useMemo(
-    () => selectableRows(filtered, isSelectable),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [filtered, viewer],
-  )
-  const { allSelected, someSelected } = selectAllState(
-    selectableFiltered,
-    selectedKeys,
-    (r) => r.key,
-  )
-  const handleToggleSelectAll = () => {
-    // Select-all only ever targets selectable (student-only) rows. When the
-    // current view has rows but none are selectable — e.g., filtered to staff —
-    // the click would silently no-op, so explain why instead.
-    if (shouldWarnNoneSelectable(filtered.length, selectableFiltered.length)) {
-      setNoneSelectableNotice(true)
-      return
-    }
-    setNoneSelectableNotice(false)
-    if (selectableFiltered.length === 0) return
-    setSelectedKeys((prev) =>
-      toggleSelectAll(selectableFiltered, prev, (r) => r.key),
-    )
-  }
-
   // Grouping reorders rows into buckets, so a shift-range must span that
   // rendered order, not the flat filtered list.
   const renderedOrder = useMemo(
@@ -430,14 +401,30 @@ const EnrolledStudents = ({
     [groupedRows, filtered],
   )
 
-  // Shift-click range selection over the rendered order (grouping-aware), so a
-  // shift-range fills the span the user actually sees.
-  const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
-    renderedOrder,
+  const {
+    selectedKeys,
+    selectedRows,
+    selectableFiltered,
+    allSelected,
+    someSelected,
+    toggleSelectAll,
+    deselect: deselectRow,
+    clear: clearSelection,
+    handleToggleRow,
+    handleRowCheckboxClick,
+  } = useRowSelection({
+    rows,
+    filtered,
+    rendered: renderedOrder,
     isSelectable,
-    setSelectedKeys,
-    (r) => r.key,
-  )
+    keyOf: teamRosterRowKey,
+  })
+  const handleToggleSelectAll = () => {
+    // Select-all only ever targets selectable (student-only) rows. When the
+    // current view has rows but none are selectable — e.g., filtered to staff —
+    // the click would silently no-op, so explain why instead.
+    setNoneSelectableNotice(toggleSelectAll() === "none-selectable")
+  }
 
   // Status-filter options; hide "Pending" when invites are owner-only and this
   // viewer can't read them (avoids a dead, always-empty filter). The two
@@ -595,11 +582,7 @@ const EnrolledStudents = ({
     updateRosterCache((current) =>
       current.filter((s) => studentKey(s) !== rowKey),
     )
-    setSelectedKeys((prev) => {
-      const nextSet = new Set(prev)
-      nextSet.delete(rowKey)
-      return nextSet
-    })
+    deselectRow(rowKey)
     invalidateInviteQueries()
     invalidateTeamRoster()
   }
@@ -611,7 +594,7 @@ const EnrolledStudents = ({
     action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => {
-    setSelectedKeys(new Set())
+    clearSelection()
     invalidateInviteQueries()
     if (action === "removeRows") {
       onRecheckRoster?.()
@@ -909,7 +892,7 @@ const EnrolledStudents = ({
               : undefined
           }
           selectedRows={selectedRows}
-          onClearSelection={() => setSelectedKeys(new Set())}
+          onClearSelection={clearSelection}
           onBulkDone={onBulkDone}
           query={query}
           onQueryChange={setQuery}
