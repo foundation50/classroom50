@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.47.0](https://github.com/foundation50/classroom50/compare/cli-v1.46.1...cli-v1.47.0) (2026-09-08)
+
+
+### Features
+
+* **cli:** add --pull to gh teacher download to update existing clones ([#902](https://github.com/foundation50/classroom50/issues/902)) ([d318e25](https://github.com/foundation50/classroom50/commit/d318e259243a0d0751b1114ac138d9ce4c5a614a))
+
 ## [1.46.1](https://github.com/foundation50/classroom50/compare/cli-v1.46.0...cli-v1.46.1) (2026-09-07)
 
 

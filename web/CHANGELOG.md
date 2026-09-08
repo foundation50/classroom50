@@ -17,6 +17,18 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.47.0](https://github.com/foundation50/classroom50/compare/web-v1.46.1...web-v1.47.0) (2026-09-08)
+
+
+### Features
+
+* **web:** select assignments and act on them in bulk ([#769](https://github.com/foundation50/classroom50/issues/769)) ([a441663](https://github.com/foundation50/classroom50/commit/a441663ea9594562327a9efa93e1e2e51d0519cd))
+
+
+### Bug Fixes
+
+* **web:** keep an assignment's row in place on write ([#755](https://github.com/foundation50/classroom50/issues/755)) ([b50b7e0](https://github.com/foundation50/classroom50/commit/b50b7e008e2cc666e0971358c5b95b7a759c7135))
+
 ## [1.46.1](https://github.com/foundation50/classroom50/compare/web-v1.46.0...web-v1.46.1) (2026-09-07)
 
 
