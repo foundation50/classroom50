@@ -1,0 +1,142 @@
+import { describe, expect, it, vi } from "vitest"
+
+import { GitHubAPIError } from "@/github-core/errors"
+
+import { partitionOutcomes, runBulkFanOut } from "./fanOut"
+
+const t = ((key: string) => key) as never
+
+function apiError(status: number): GitHubAPIError {
+  return new GitHubAPIError({
+    status,
+    url: "/repos/o/r",
+    message: `HTTP ${status}`,
+    body: null,
+    rateLimit: {
+      limit: null,
+      remaining: null,
+      used: null,
+      reset: null,
+      resource: null,
+      retryAfter: null,
+    },
+  })
+}
+
+describe("runBulkFanOut", () => {
+  it("records ok, failed and progress in input order", async () => {
+    const seen: [number, string][] = []
+    const { outcomes, rateLimited } = await runBulkFanOut({
+      owners: ["a", "b", "c"],
+      isMounted: () => true,
+      onProgress: (n, owner) => seen.push([n, owner]),
+      t,
+      perOwner: async (owner) => {
+        if (owner === "b") throw new Error("nope")
+      },
+    })
+    expect(rateLimited).toBe(false)
+    expect(outcomes).toEqual([
+      { owner: "a", status: "ok" },
+      { owner: "b", status: "failed", detail: "nope" },
+      { owner: "c", status: "ok" },
+    ])
+    expect(seen.map(([n]) => n).sort()).toEqual([1, 2, 3])
+  })
+
+  it("stops launching after a rate limit and defers the rest", async () => {
+    const perOwner = vi.fn(async (owner: string) => {
+      if (owner === "a") throw apiError(429)
+    })
+    const { outcomes, rateLimited } = await runBulkFanOut({
+      owners: ["a", "b", "c"],
+      concurrency: 1,
+      isMounted: () => true,
+      onProgress: () => {},
+      t,
+      perOwner,
+    })
+    expect(rateLimited).toBe(true)
+    expect(outcomes.map((o) => o.status)).toEqual([
+      "deferred",
+      "deferred",
+      "deferred",
+    ])
+    // Only the first write was ever attempted.
+    expect(perOwner).toHaveBeenCalledTimes(1)
+  })
+
+  it("honours a caller stop condition and unmount without calling perOwner", async () => {
+    let stop = false
+    const perOwner = vi.fn(async (owner: string) => {
+      if (owner === "a") stop = true
+    })
+    const { outcomes } = await runBulkFanOut({
+      owners: ["a", "b"],
+      concurrency: 1,
+      shouldStop: () => stop,
+      isMounted: () => true,
+      onProgress: () => {},
+      t,
+      perOwner,
+    })
+    expect(outcomes.map((o) => o.status)).toEqual(["ok", "deferred"])
+    expect(perOwner).toHaveBeenCalledTimes(1)
+
+    const onProgress = vi.fn()
+    const { outcomes: unmounted } = await runBulkFanOut({
+      owners: ["a"],
+      isMounted: () => false,
+      onProgress,
+      t,
+      perOwner,
+    })
+    expect(unmounted[0].status).toBe("deferred")
+    // No progress reported to a component that is gone.
+    expect(onProgress).not.toHaveBeenCalled()
+  })
+
+  it("lets perOwner return a custom outcome", async () => {
+    type O =
+      | { owner: string; status: "ok" | "deferred" | "failed"; detail?: string }
+      | { owner: string; status: "skipped" }
+    const { outcomes } = await runBulkFanOut<O>({
+      owners: ["a"],
+      isMounted: () => true,
+      onProgress: () => {},
+      t,
+      perOwner: async (owner) => ({ owner, status: "skipped" }),
+    })
+    expect(outcomes).toEqual([{ owner: "a", status: "skipped" }])
+  })
+
+  it("describes a non-rate-limit GitHub error by status", async () => {
+    const { outcomes } = await runBulkFanOut({
+      owners: ["a"],
+      isMounted: () => true,
+      onProgress: () => {},
+      t,
+      perOwner: async () => {
+        throw apiError(500)
+      },
+    })
+    expect(outcomes[0]).toEqual({
+      owner: "a",
+      status: "failed",
+      detail: "components.modals.groupCollaborators.failure.httpStatus",
+    })
+  })
+})
+
+describe("partitionOutcomes", () => {
+  it("splits into the three result sections and keeps failure details typed", () => {
+    const { succeeded, deferred, failed } = partitionOutcomes([
+      { owner: "a", status: "ok" as const },
+      { owner: "b", status: "deferred" as const },
+      { owner: "c", status: "failed" as const, detail: "x" },
+    ])
+    expect(succeeded.map((o) => o.owner)).toEqual(["a"])
+    expect(deferred.map((o) => o.owner)).toEqual(["b"])
+    expect(failed[0].detail).toBe("x")
+  })
+})

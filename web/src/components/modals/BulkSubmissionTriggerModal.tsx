@@ -1,30 +1,23 @@
-import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { TFunction } from "i18next"
 import { GitBranchIcon } from "@/components/ui/icons"
 
 import { Alert, Modal, ModalIcon } from "@/components/ui"
 import {
   BulkPhaseFooter,
   BulkProgressBlock,
-  BulkResultSection,
-  type BulkPhase,
-  type BulkProgress,
-  type BulkResultView,
+  BulkResultBody,
 } from "@/components/bulk/resultView"
+import { runBulkFanOut, type FanOutOutcome } from "@/components/bulk/fanOut"
+import { useBulkRun } from "@/components/bulk/useBulkRun"
 import {
   updateShimSubmissionMode,
   type ShimUpdateOutcome,
 } from "@/domain/assignments/submissionTrigger"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { REPO_WRITE_CONCURRENCY } from "@/github-core/queries"
-import { mapWithConcurrency } from "@/util/concurrency"
 import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
-import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { Student, SubmissionMode } from "@/types/classroom"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkSubmissionTriggerModalProps = {
   open: boolean
@@ -43,16 +36,10 @@ type BulkSubmissionTriggerModalProps = {
   students?: Student[]
 }
 
-const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    return t("components.modals.groupCollaborators.failure.httpStatus", {
-      status: reason.status,
-    })
-  }
-  return reason instanceof Error ? reason.message : undefined
-}
+// The shared outcomes plus the shim writer's own verdicts.
+type Outcome =
+  | FanOutOutcome
+  | { owner: string; status: ShimUpdateOutcome["status"]; detail?: string }
 
 // Whole-assignment autograding-trigger retrofit: rewrite each accepted
 // student repo's shim to match the assignment's stored submission_mode, in
@@ -72,32 +59,8 @@ export function BulkSubmissionTriggerModal({
 }: BulkSubmissionTriggerModalProps) {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  const runningRef = useRef(false)
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      runningRef.current = false
-    }
-  }, [])
-
-  const [phase, setPhase] = useState<BulkPhase>("idle")
-  const [progress, setProgress] = useState<BulkProgress>({
-    processed: 0,
-    total: 0,
-    message: "",
-  })
-  const [result, setResult] = useState<BulkResultView | null>(null)
-
-  // Reset on open, never at close — see the close-animation note in ui/Modal.
-  useEffect(() => {
-    if (!open) return
-    runningRef.current = false
-    setPhase("idle")
-    setResult(null)
-    setProgress({ processed: 0, total: 0, message: "" })
-  }, [open])
+  const bulk = useBulkRun(open)
+  const { phase, progress, result, busy } = bulk
 
   const total = owners.length
   const displayFor = (login: string) => getName(login, students) || login
@@ -107,76 +70,45 @@ export function BulkSubmissionTriggerModal({
       : "assignments.form.submissionMode.choices.everyPush",
   )
 
-  type Outcome = { owner: string } & (
-    | { status: ShimUpdateOutcome["status"]; detail?: string }
-    | { status: "deferred" }
-    | { status: "failed"; detail?: string }
-  )
-
   const run = async () => {
-    if (runningRef.current || total === 0) return
-    runningRef.current = true
-    setPhase("working")
-    setResult(null)
-    let processed = 0
-    setProgress({ processed: 0, total, message: "" })
-    // Stop launching NEW writes on a secondary-rate-limit or a confirmed
-    // missing workflow scope (every remaining repo would fail identically).
-    let rateLimited = false
+    if (total === 0) return
+    if (!bulk.begin(total)) return
+    // A confirmed missing workflow scope stops the rest: every remaining repo
+    // would fail identically.
     let missingScope = false
 
-    const outcomes = await mapWithConcurrency(
+    const { outcomes } = await runBulkFanOut<Outcome>({
       owners,
       // Each iteration is a 3-step git-data WRITE (tree + commit + ref) into
-      // a different repo — GitHub's secondary-rate-limit guidance is to avoid
+      // a different repo. GitHub's secondary-rate-limit guidance is to avoid
       // concurrent content writes (the CLI retrofit loop is serial for the
       // same reason), unlike the sibling bulk modals' single PATCH/PUT calls,
-      // which safely share REPO_READ_CONCURRENCY.
-      REPO_WRITE_CONCURRENCY,
-      async (owner): Promise<Outcome> => {
-        if (rateLimited || missingScope || !mountedRef.current) {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
-          return { owner, status: "deferred" }
-        }
+      // which safely share the read limit.
+      concurrency: REPO_WRITE_CONCURRENCY,
+      shouldStop: () => missingScope,
+      isMounted: bulk.isMounted,
+      onProgress: (processed, owner) =>
+        bulk.setProgress({ processed, total, message: displayFor(owner) }),
+      t,
+      perOwner: async (owner) => {
         const repo = studentRepoName(classroom, assignment, owner)
-        try {
-          const outcome = await updateShimSubmissionMode({
-            client,
-            org,
-            repo,
-            mode: submissionMode,
-            tags: submissionTags,
-          })
-          if (outcome.status === "missingWorkflowScope") {
-            missingScope = true
-            return { owner, status: "missingWorkflowScope" }
-          }
-          if (outcome.status === "unrecognized") {
-            return { owner, status: "unrecognized", detail: outcome.reason }
-          }
-          return { owner, status: outcome.status }
-        } catch (err) {
-          if (err instanceof GitHubAPIError && err.isRateLimited) {
-            rateLimited = true
-            return { owner, status: "deferred" }
-          }
-          return { owner, status: "failed", detail: describeFailure(err, t) }
-        } finally {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
+        const outcome = await updateShimSubmissionMode({
+          client,
+          org,
+          repo,
+          mode: submissionMode,
+          tags: submissionTags,
+        })
+        if (outcome.status === "missingWorkflowScope") missingScope = true
+        return {
+          owner,
+          status: outcome.status,
+          detail:
+            outcome.status === "unrecognized" ? outcome.reason : undefined,
         }
       },
-    )
-
-    if (!mountedRef.current) {
-      runningRef.current = false
-      return
-    }
+    })
+    if (!bulk.isMounted()) return
 
     const updated = outcomes.filter((o) => o.status === "updated")
     const current = outcomes.filter((o) => o.status === "current")
@@ -205,40 +137,39 @@ export function BulkSubmissionTriggerModal({
           ]
         : []
 
-    setResult({
-      headline: t("submissions.bulkTrigger.resultHeadline", {
-        updated: updated.length,
-        current: current.length,
-        total,
-      }),
-      sections: [
-        ...section(
-          "submissions.bulkTrigger.scopeSection",
-          scope,
-          t("submissions.bulkTrigger.scopeDetail"),
-        ),
-        ...section("submissions.bulkTrigger.failedSection", failed),
-        ...section("submissions.bulkTrigger.unrecognizedSection", unrecognized),
-        ...section(
-          "submissions.bulkTrigger.deferredSection",
-          deferred,
-          t("submissions.bulkTrigger.deferredDetail"),
-        ),
-        ...section(
-          "submissions.bulkTrigger.notAcceptedSection",
-          notAccepted,
-          t("submissions.bulkTrigger.notAcceptedDetail"),
-        ),
-      ],
-    })
-    setPhase(
+    bulk.complete(
+      {
+        headline: t("submissions.bulkTrigger.resultHeadline", {
+          updated: updated.length,
+          current: current.length,
+          total,
+        }),
+        sections: [
+          ...section(
+            "submissions.bulkTrigger.scopeSection",
+            scope,
+            t("submissions.bulkTrigger.scopeDetail"),
+          ),
+          ...section("submissions.bulkTrigger.failedSection", failed),
+          ...section(
+            "submissions.bulkTrigger.unrecognizedSection",
+            unrecognized,
+          ),
+          ...section(
+            "submissions.bulkTrigger.deferredSection",
+            deferred,
+            t("submissions.bulkTrigger.deferredDetail"),
+          ),
+          ...section(
+            "submissions.bulkTrigger.notAcceptedSection",
+            notAccepted,
+            t("submissions.bulkTrigger.notAcceptedDetail"),
+          ),
+        ],
+      },
       failed.length || scope.length || deferred.length ? "error" : "complete",
     )
-    runningRef.current = false
   }
-
-  const busy = phase === "working"
-  useBeforeUnloadGuard(busy)
 
   return (
     <Modal
@@ -301,26 +232,11 @@ export function BulkSubmissionTriggerModal({
         />
       )}
 
-      {(phase === "complete" || phase === "error") && result && (
-        <div className="mt-4 flex flex-col gap-4">
-          <Alert
-            tone={phase === "error" ? "warning" : "success"}
-            className="text-sm"
-          >
-            {result.headline}
-          </Alert>
-          <Alert tone="info" className="text-sm">
-            {t("submissions.bulkTrigger.repullReminder")}
-          </Alert>
-          {result.sections.map((section) => (
-            <BulkResultSection
-              key={section.title}
-              title={section.title}
-              rows={section.rows}
-            />
-          ))}
-        </div>
-      )}
+      <BulkResultBody phase={phase} result={result}>
+        <Alert tone="info" className="text-sm">
+          {t("submissions.bulkTrigger.repullReminder")}
+        </Alert>
+      </BulkResultBody>
     </Modal>
   )
 }

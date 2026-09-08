@@ -6,7 +6,16 @@
 
 import { useTranslation } from "react-i18next"
 
-import { Button, InlineSpinner, Spinner, TableShell } from "@/components/ui"
+import {
+  Alert,
+  Button,
+  InlineSpinner,
+  Modal,
+  Spinner,
+  TableShell,
+} from "@/components/ui"
+
+import type { BulkRun } from "./useBulkRun"
 
 // The lifecycle of a bulk run's modal: idle (closed) -> working (progress) ->
 // complete/error (results).
@@ -192,3 +201,125 @@ export const BulkProgressInline = ({
     <progress {...bulkProgressBarProps(progress, label)} />
   </div>
 )
+
+// The finished-run body every bulk modal renders: the headline as a success or
+// warning alert, then one section per outcome group. Rendered only once the
+// run has left "working".
+export const BulkResultBody = ({
+  phase,
+  result,
+  className = "mt-4 flex flex-col gap-4",
+  children,
+  after,
+}: {
+  phase: BulkPhase
+  result: BulkResultView | null
+  className?: string
+  // Rendered between the headline and the sections (a follow-up reminder).
+  children?: React.ReactNode
+  // Rendered after the sections (a recovery hint).
+  after?: React.ReactNode
+}) => {
+  if ((phase !== "complete" && phase !== "error") || !result) return null
+  return (
+    <div className={className}>
+      <Alert
+        tone={phase === "error" ? "warning" : "success"}
+        className="text-sm"
+      >
+        {result.headline}
+      </Alert>
+      {children}
+      {result.sections.map((section) => (
+        <BulkResultSection
+          key={section.title}
+          title={section.title}
+          rows={section.rows}
+        />
+      ))}
+      {after}
+    </div>
+  )
+}
+
+// The action bars' run modal (roster and org members): opened by the bar when
+// a run starts, it shows the progress row while working, the results when
+// complete, or the whole-run error. Closing is refused while working. The
+// modal stays mounted across runs; the bar owns `open` so a close does not
+// reset the last result mid-animation.
+export const BulkRunModal = ({
+  open,
+  onClose,
+  title,
+  run,
+  processedCaption,
+  keepTabOpenMessage,
+  fallbackError,
+  doneLabel,
+}: {
+  open: boolean
+  onClose: () => void
+  title: string
+  run: Pick<BulkRun, "phase" | "progress" | "result" | "error">
+  processedCaption: React.ReactNode
+  keepTabOpenMessage: string
+  fallbackError: string
+  doneLabel: string
+}) => {
+  const { t } = useTranslation()
+  const { phase, progress, result, error } = run
+  const busy = phase === "working"
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      closeDisabled={busy}
+      size="2xl"
+      title={title}
+      footer={
+        phase === "complete" ? (
+          <Button variant="primary" onClick={onClose}>
+            {doneLabel}
+          </Button>
+        ) : phase === "error" ? (
+          <Button variant="primary" onClick={onClose}>
+            {t("common.done")}
+          </Button>
+        ) : undefined
+      }
+    >
+      {busy && (
+        <BulkProgressRow
+          progress={progress}
+          processedCaption={processedCaption}
+          percentCaption={`${bulkProgressPct(progress)}%`}
+        >
+          <Alert tone="info" className="mt-6">
+            <span>{keepTabOpenMessage}</span>
+          </Alert>
+        </BulkProgressRow>
+      )}
+      {phase === "complete" && result && (
+        <div className="mt-6 space-y-4">
+          <Alert tone="success">
+            <span>{result.headline}</span>
+          </Alert>
+          {result.sections.map((section) => (
+            <BulkResultSection
+              key={section.title}
+              title={section.title}
+              rows={section.rows}
+            />
+          ))}
+        </div>
+      )}
+      {phase === "error" && (
+        <div className="mt-6">
+          <Alert tone="error">
+            <span>{error ?? fallbackError}</span>
+          </Alert>
+        </div>
+      )}
+    </Modal>
+  )
+}

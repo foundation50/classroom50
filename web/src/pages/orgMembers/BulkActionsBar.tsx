@@ -2,14 +2,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { PlusIcon, SignOutIcon, XCircleIcon } from "@/components/ui/icons"
 
-import {
-  Alert,
-  Button,
-  DropdownMenu,
-  FormField,
-  Modal,
-  Select,
-} from "@/components/ui"
+import { DropdownMenu, FormField, Select } from "@/components/ui"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import type { GitHubUser } from "@/github-core/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
@@ -20,14 +13,8 @@ import { useBulkRemoveFromOrg } from "@/hooks/mutations/useBulkRemoveFromOrg"
 import { ConfirmModal } from "@/components/modals"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
 import { logger } from "@/lib/logger"
-import {
-  BulkProgressRow,
-  BulkResultSection,
-  bulkProgressPct,
-  type BulkPhase,
-  type BulkProgress,
-  type BulkResultView,
-} from "@/components/bulk/resultView"
+import { BulkRunModal, type BulkResultView } from "@/components/bulk/resultView"
+import { useBulkRun } from "@/components/bulk/useBulkRun"
 import {
   buildAddResult,
   buildOrgRemoveResult,
@@ -80,14 +67,8 @@ const BulkActionsBar = ({
   const [action, setAction] = useState<"add" | "remove" | "remove-org" | null>(
     null,
   )
-  const [phase, setPhase] = useState<BulkPhase>("idle")
-  const [progress, setProgress] = useState<BulkProgress>({
-    processed: 0,
-    total: 0,
-    message: "",
-  })
-  const [result, setResult] = useState<BulkResultView | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const bulk = useBulkRun()
+  const { progress } = bulk
   // Gates the destructive remove behind a confirmation. Scope is the menu
   // route: classroom-scoped (which the #664 checkbox can escalate) or the
   // direct org removal (no checkbox — the escalation IS the action).
@@ -135,33 +116,27 @@ const BulkActionsBar = ({
   const deferRun = useDeferredRun()
 
   const closeModal = () => {
-    if (phase === "working") return
+    if (bulk.busy) return
     setModalOpen(false)
   }
 
   const run = async (which: "add" | "remove" | "remove-org") => {
     if (selectedRows.length === 0) return
     if (which !== "remove-org" && !target) return
+    if (!bulk.begin(selectedRows.length, t("orgMembers.bulk.starting"))) return
     setAction(which)
-    setPhase("working")
     setModalOpen(true)
-    setError(null)
-    setResult(null)
-    setProgress({
-      processed: 0,
-      total: selectedRows.length,
-      message: t("orgMembers.bulk.starting"),
-    })
 
     try {
+      let result: BulkResultView
       if (which === "add") {
         const res = await bulkAdd.mutateAsync({
           classroom: target,
           rows: selectedRows,
           members,
-          onProgress: setProgress,
+          onProgress: bulk.setProgress,
         })
-        setResult(buildAddResult(res, targetName, t))
+        result = buildAddResult(res, targetName, t)
         onDone({
           classroom: target,
           action: "add",
@@ -172,9 +147,9 @@ const BulkActionsBar = ({
         const res = await bulkRemove.mutateAsync({
           classroom: target,
           rows: selectedRows,
-          onProgress: setProgress,
+          onProgress: bulk.setProgress,
         })
-        setResult(buildRemoveResult(res, targetName, t))
+        result = buildRemoveResult(res, targetName, t)
         onDone({
           classroom: target,
           action: "remove",
@@ -185,9 +160,9 @@ const BulkActionsBar = ({
       } else {
         const res = await bulkRemoveOrg.mutateAsync({
           rows: selectedRows,
-          onProgress: setProgress,
+          onProgress: bulk.setProgress,
         })
-        setResult(buildOrgRemoveResult(res, org, t))
+        result = buildOrgRemoveResult(res, org, t)
         onDone({
           action: "remove-org",
           affectedKeys: res.outcomes
@@ -198,11 +173,10 @@ const BulkActionsBar = ({
             .map((o) => ({ key: o.key, classrooms: o.unenrolledClassrooms })),
         })
       }
-      setPhase("complete")
+      bulk.complete(result, "complete")
     } catch (err) {
       log.error("bulk action failed", { err, record: true })
-      setError(errorText(t, err))
-      setPhase("error")
+      bulk.fail(errorText(t, err))
     }
   }
 
@@ -346,11 +320,10 @@ const BulkActionsBar = ({
         </div>
       </ConfirmModal>
 
-      <Modal
+      <BulkRunModal
         open={isOpen}
         onClose={closeModal}
-        closeDisabled={phase === "working"}
-        size="2xl"
+        run={bulk}
         title={
           action === "remove-org"
             ? t("orgMembers.bulk.removeOrgTitle", { org })
@@ -362,56 +335,14 @@ const BulkActionsBar = ({
                   classroom: targetName,
                 })
         }
-        footer={
-          phase === "complete" ? (
-            <Button variant="primary" onClick={closeModal}>
-              {t("orgMembers.bulk.done")}
-            </Button>
-          ) : phase === "error" ? (
-            <Button variant="primary" onClick={closeModal}>
-              {t("common.done")}
-            </Button>
-          ) : undefined
-        }
-      >
-        {phase === "working" && (
-          <BulkProgressRow
-            progress={progress}
-            processedCaption={t("orgMembers.bulk.progressProcessed", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
-            percentCaption={`${bulkProgressPct(progress)}%`}
-          >
-            <Alert tone="info" className="mt-6">
-              <span>{t("orgMembers.bulk.keepTabOpen")}</span>
-            </Alert>
-          </BulkProgressRow>
-        )}
-
-        {phase === "complete" && result && (
-          <div className="mt-6 space-y-4">
-            <Alert tone="success">
-              <span>{result.headline}</span>
-            </Alert>
-            {result.sections.map((section) => (
-              <BulkResultSection
-                key={section.title}
-                title={section.title}
-                rows={section.rows}
-              />
-            ))}
-          </div>
-        )}
-
-        {phase === "error" && (
-          <div className="mt-6">
-            <Alert tone="error">
-              <span>{error ?? t("orgMembers.somethingWrong")}</span>
-            </Alert>
-          </div>
-        )}
-      </Modal>
+        processedCaption={t("orgMembers.bulk.progressProcessed", {
+          processed: progress.processed,
+          total: progress.total,
+        })}
+        keepTabOpenMessage={t("orgMembers.bulk.keepTabOpen")}
+        fallbackError={t("orgMembers.somethingWrong")}
+        doneLabel={t("orgMembers.bulk.done")}
+      />
     </>
   )
 }

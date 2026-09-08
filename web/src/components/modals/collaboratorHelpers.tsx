@@ -49,6 +49,39 @@ export const describeGitHubApiFailure = (
   return undefined
 }
 
+// The shared reasons plus the fallbacks every bulk result table wants: the
+// HTTP status for any other GitHub error, else the thrown message.
+export const describeWriteFailure = (
+  reason: unknown,
+  t: TFunction,
+): string | undefined => {
+  const shared = describeGitHubApiFailure(reason, t)
+  if (shared) return shared
+  if (reason instanceof GitHubAPIError) {
+    return t("components.modals.groupCollaborators.failure.httpStatus", {
+      status: reason.status,
+    })
+  }
+  return reason instanceof Error ? reason.message : undefined
+}
+
+// The per-repo collaborator dialogs' variant: a 422 is a conflict (the user is
+// already a collaborator, or can't be one), and any other GitHub error shows its
+// own message rather than a bare status.
+export const describeCollaboratorFailure = (
+  reason: unknown,
+  t: TFunction,
+): string | null => {
+  const shared = describeGitHubApiFailure(reason, t)
+  if (shared) return shared
+  if (reason instanceof GitHubAPIError) {
+    if (reason.status === 422)
+      return t("components.modals.groupCollaborators.failure.conflict")
+    return reason.message
+  }
+  return reason instanceof Error ? reason.message : null
+}
+
 // Two-line identity when we have a roster name (name + @handle), else just the
 // @handle. Shared by owner, member, and marked-for-removal rows.
 export const CollaboratorIdentity = ({

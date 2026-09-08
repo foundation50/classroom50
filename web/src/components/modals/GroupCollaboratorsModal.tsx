@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import type { TFunction } from "i18next"
 import {
   MarkGithubIcon,
   PeopleIcon,
@@ -28,26 +27,12 @@ import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborat
 import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
-  describeGitHubApiFailure,
+  describeCollaboratorFailure,
   normalizeUsername,
   rejectedItems,
 } from "@/components/modals/collaboratorHelpers"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
 import { GROUP_SIZE_MIN } from "@/types/classroom"
-
-// Map a rejected add/remove to a human-readable reason. Collapsing every status
-// into "bad username" would hide real causes like a 429 or a 403.
-const describeFailure = (reason: unknown, t: TFunction): string | null => {
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    if (reason.status === 422)
-      return t("components.modals.groupCollaborators.failure.conflict")
-    return reason.message
-  }
-  return reason instanceof Error ? reason.message : null
-}
 
 type GroupCollaboratorsModalProps = {
   open: boolean
@@ -293,7 +278,7 @@ export function GroupCollaboratorsModal({
           ) ?? null
         const detail =
           firstReason && firstReason.status === "rejected"
-            ? describeFailure(firstReason.reason, t)
+            ? describeCollaboratorFailure(firstReason.reason, t)
             : null
         const suffix = detail ? ` ${detail}` : ""
 

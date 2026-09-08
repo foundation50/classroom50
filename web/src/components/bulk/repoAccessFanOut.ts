@@ -1,12 +1,11 @@
 import type { TFunction } from "i18next"
 
-import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
-import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import { describeWriteFailure } from "@/components/modals/collaboratorHelpers"
 import { permissionSatisfies } from "@/domain/assignments/permissions"
-import { mapWithConcurrency } from "@/util/concurrency"
 import { studentRepoName } from "@/util/studentRepo"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { RepoPermission } from "@/types/classroom"
+
+import { runBulkFanOut, type FanOutOutcome, type FanOutResult } from "./fanOut"
 
 // A verified write GitHub silently ignored: the PUT returned 204 but the
 // student's effective role didn't land on the target. Reported distinctly from
@@ -20,9 +19,7 @@ export class AccessNotAppliedError extends Error {
   }
 }
 
-// Map a rejected write to a localized reason for the result table. Reuses the
-// groupCollaborators failure vocabulary so every bulk-access dialog stays
-// consistent instead of assembling raw English.
+// The shared write-failure reasons plus the one this fan-out adds.
 export const describeAccessFailure = (
   reason: unknown,
   t: TFunction,
@@ -32,27 +29,11 @@ export const describeAccessFailure = (
       effective: reason.effective ?? "unknown",
     })
   }
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    return t("components.modals.groupCollaborators.failure.httpStatus", {
-      status: reason.status,
-    })
-  }
-  return reason instanceof Error ? reason.message : undefined
+  return describeWriteFailure(reason, t)
 }
 
-export type BulkAccessOutcome =
-  | { owner: string; status: "ok" }
-  | { owner: string; status: "deferred" }
-  | { owner: string; status: "failed"; detail?: string }
-
-export type BulkAccessResult = {
-  outcomes: BulkAccessOutcome[]
-  // True once a secondary rate-limit tripped: the remaining owners were marked
-  // deferred rather than launched, so the caller should offer a re-run.
-  rateLimited: boolean
-}
+export type BulkAccessOutcome = FanOutOutcome
+export type BulkAccessResult = FanOutResult<BulkAccessOutcome>
 
 type RunBulkRepoAccessParams = {
   owners: string[]
@@ -102,23 +83,12 @@ export async function runBulkRepoAccess({
   isMounted,
   onProgress,
 }: RunBulkRepoAccessParams): Promise<BulkAccessResult> {
-  let processed = 0
-  // Set once we hit a secondary rate-limit: stop launching NEW writes and
-  // report the untouched remainder as deferred rather than hammering GitHub
-  // into a deeper throttle.
-  let rateLimited = false
-
-  const outcomes = await mapWithConcurrency(
+  return runBulkFanOut<BulkAccessOutcome>({
     owners,
-    REPO_READ_CONCURRENCY,
-    async (owner): Promise<BulkAccessOutcome> => {
-      // The caller unmounted, or an earlier task tripped the rate limit: don't
-      // start another write; mark the rest deferred.
-      if (rateLimited || !isMounted()) {
-        processed += 1
-        if (isMounted()) onProgress(processed, owner)
-        return { owner, status: "deferred" }
-      }
+    isMounted,
+    onProgress,
+    t,
+    perOwner: async (owner) => {
       const repo = studentRepoName(classroom, assignment, owner)
       try {
         const { effective } = await setCollaborator({
@@ -141,23 +111,18 @@ export async function runBulkRepoAccess({
             effective.role_name || effective.permission,
           )
         }
-        return { owner, status: "ok" }
       } catch (err) {
-        if (err instanceof GitHubAPIError && err.isRateLimited) {
-          rateLimited = true
-          return { owner, status: "deferred" }
+        // The generic fan-out only knows the shared vocabulary; give the
+        // not-applied case its own line before it becomes a plain failure.
+        if (err instanceof AccessNotAppliedError) {
+          return {
+            owner,
+            status: "failed",
+            detail: describeAccessFailure(err, t),
+          }
         }
-        return {
-          owner,
-          status: "failed",
-          detail: describeAccessFailure(err, t),
-        }
-      } finally {
-        processed += 1
-        if (isMounted()) onProgress(processed, owner)
+        throw err
       }
     },
-  )
-
-  return { outcomes, rateLimited }
+  })
 }

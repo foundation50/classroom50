@@ -1,27 +1,20 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { TFunction } from "i18next"
 import { SlidersIcon } from "@/components/ui/icons"
 
 import { Alert, Modal, ModalIcon, Select } from "@/components/ui"
 import {
   BulkPhaseFooter,
   BulkProgressBlock,
-  BulkResultSection,
-  type BulkPhase,
-  type BulkProgress,
-  type BulkResultView,
+  BulkResultBody,
 } from "@/components/bulk/resultView"
+import { partitionOutcomes, runBulkFanOut } from "@/components/bulk/fanOut"
+import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useSetRepoFeatures from "@/hooks/mutations/useSetRepoFeatures"
 import type { RepoFeaturePatch } from "@/github-core/mutations"
-import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
-import { mapWithConcurrency } from "@/util/concurrency"
 import { studentRepoName } from "@/util/studentRepo"
 import { getName } from "@/util/students"
-import { describeGitHubApiFailure } from "@/components/modals/collaboratorHelpers"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type BulkRepoFeaturesModalProps = {
   open: boolean
@@ -59,20 +52,6 @@ function choicesToPatch(
   return patch
 }
 
-// Map a rejected write to a localized reason for the result table. Reuses the
-// shared groupCollaborators failure vocabulary (rate-limit/403/404) like the
-// sibling BulkRepoAccessModal, then falls back to the HTTP status / raw message.
-const describeFailure = (reason: unknown, t: TFunction): string | undefined => {
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    return t("components.modals.groupCollaborators.failure.httpStatus", {
-      status: reason.status,
-    })
-  }
-  return reason instanceof Error ? reason.message : undefined
-}
-
 // Whole-assignment repo-feature editor: set Issues/Wiki/Projects/Pull-requests
 // across every accepted student's repo in one bounded fan-out. The way to
 // reconcile existing repos with an assignment's settings, since repo_features
@@ -88,40 +67,21 @@ export function BulkRepoFeaturesModal({
 }: BulkRepoFeaturesModalProps) {
   const { t } = useTranslation()
   const setFeaturesMutation = useSetRepoFeatures()
-  const runningRef = useRef(false)
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      runningRef.current = false
-    }
-  }, [])
+  const bulk = useBulkRun(open)
+  const { phase, progress, result, busy } = bulk
 
   const [choices, setChoices] = useState<
     Record<(typeof FEATURES)[number]["key"], FeatureChoice>
   >({ issues: "keep", wiki: "keep", projects: "keep", pull_requests: "keep" })
-  const [phase, setPhase] = useState<BulkPhase>("idle")
-  const [progress, setProgress] = useState<BulkProgress>({
-    processed: 0,
-    total: 0,
-    message: "",
-  })
-  const [result, setResult] = useState<BulkResultView | null>(null)
-
-  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  // The form state resets with the run state, on open (see useBulkRun).
   useEffect(() => {
     if (!open) return
-    runningRef.current = false
     setChoices({
       issues: "keep",
       wiki: "keep",
       projects: "keep",
       pull_requests: "keep",
     })
-    setPhase("idle")
-    setResult(null)
-    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length
@@ -129,108 +89,70 @@ export function BulkRepoFeaturesModal({
   const patch = useMemo(() => choicesToPatch(choices), [choices])
   const nothingSelected = Object.keys(patch).length === 0
 
-  type Outcome =
-    | { owner: string; status: "ok" }
-    | { owner: string; status: "deferred" }
-    | { owner: string; status: "failed"; detail?: string }
-
   const run = async () => {
-    if (runningRef.current || total === 0 || nothingSelected) return
-    runningRef.current = true
-    setPhase("working")
-    setResult(null)
-    let processed = 0
-    setProgress({ processed: 0, total, message: "" })
-    // Stop launching NEW writes on a secondary-rate-limit; report the rest as
-    // deferred (mirrors BulkRepoAccessModal).
-    let rateLimited = false
+    if (total === 0 || nothingSelected) return
+    if (!bulk.begin(total)) return
 
-    const outcomes = await mapWithConcurrency(
+    const { outcomes, rateLimited } = await runBulkFanOut({
       owners,
-      REPO_READ_CONCURRENCY,
-      async (owner): Promise<Outcome> => {
-        if (rateLimited || !mountedRef.current) {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
-          return { owner, status: "deferred" }
-        }
+      isMounted: bulk.isMounted,
+      onProgress: (processed, owner) =>
+        bulk.setProgress({ processed, total, message: displayFor(owner) }),
+      t,
+      perOwner: async (owner) => {
         const repo = studentRepoName(classroom, assignment, owner)
-        try {
-          await setFeaturesMutation.mutateAsync({ org, repo, features: patch })
-          return { owner, status: "ok" }
-        } catch (err) {
-          if (err instanceof GitHubAPIError && err.isRateLimited) {
-            rateLimited = true
-            return { owner, status: "deferred" }
-          }
-          return { owner, status: "failed", detail: describeFailure(err, t) }
-        } finally {
-          processed += 1
-          if (mountedRef.current) {
-            setProgress({ processed, total, message: displayFor(owner) })
-          }
-        }
+        await setFeaturesMutation.mutateAsync({ org, repo, features: patch })
       },
-    )
-
-    if (!mountedRef.current) {
-      runningRef.current = false
-      return
-    }
-
-    const succeeded = outcomes.filter((o) => o.status === "ok")
-    const deferred = outcomes.filter((o) => o.status === "deferred")
-    const failed = outcomes.filter((o) => o.status === "failed")
-
-    setResult({
-      headline: rateLimited
-        ? t("submissions.bulkFeatures.resultHeadlineThrottled", {
-            count: succeeded.length,
-            total,
-          })
-        : t("submissions.bulkFeatures.resultHeadline", {
-            count: succeeded.length,
-            total,
-          }),
-      sections: [
-        ...(failed.length
-          ? [
-              {
-                title: t("submissions.bulkFeatures.failedSection", {
-                  count: failed.length,
-                }),
-                rows: failed.map((o) => ({
-                  key: o.owner,
-                  label: displayFor(o.owner),
-                  detail: "detail" in o ? o.detail : undefined,
-                })),
-              },
-            ]
-          : []),
-        ...(deferred.length
-          ? [
-              {
-                title: t("submissions.bulkFeatures.deferredSection", {
-                  count: deferred.length,
-                }),
-                rows: deferred.map((o) => ({
-                  key: o.owner,
-                  label: displayFor(o.owner),
-                  detail: t("submissions.bulkFeatures.deferredDetail"),
-                })),
-              },
-            ]
-          : []),
-      ],
     })
-    setPhase(failed.length || deferred.length ? "error" : "complete")
-    runningRef.current = false
-  }
+    if (!bulk.isMounted()) return
 
-  const busy = phase === "working"
-  useBeforeUnloadGuard(busy)
+    const { succeeded, deferred, failed } = partitionOutcomes(outcomes)
+
+    bulk.complete(
+      {
+        headline: rateLimited
+          ? t("submissions.bulkFeatures.resultHeadlineThrottled", {
+              count: succeeded.length,
+              total,
+            })
+          : t("submissions.bulkFeatures.resultHeadline", {
+              count: succeeded.length,
+              total,
+            }),
+        sections: [
+          ...(failed.length
+            ? [
+                {
+                  title: t("submissions.bulkFeatures.failedSection", {
+                    count: failed.length,
+                  }),
+                  rows: failed.map((o) => ({
+                    key: o.owner,
+                    label: displayFor(o.owner),
+                    detail: o.detail,
+                  })),
+                },
+              ]
+            : []),
+          ...(deferred.length
+            ? [
+                {
+                  title: t("submissions.bulkFeatures.deferredSection", {
+                    count: deferred.length,
+                  }),
+                  rows: deferred.map((o) => ({
+                    key: o.owner,
+                    label: displayFor(o.owner),
+                    detail: t("submissions.bulkFeatures.deferredDetail"),
+                  })),
+                },
+              ]
+            : []),
+        ],
+      },
+      failed.length || deferred.length ? "error" : "complete",
+    )
+  }
 
   return (
     <Modal
@@ -313,23 +235,7 @@ export function BulkRepoFeaturesModal({
         />
       )}
 
-      {(phase === "complete" || phase === "error") && result && (
-        <div className="mt-4 flex flex-col gap-4">
-          <Alert
-            tone={phase === "error" ? "warning" : "success"}
-            className="text-sm"
-          >
-            {result.headline}
-          </Alert>
-          {result.sections.map((section) => (
-            <BulkResultSection
-              key={section.title}
-              title={section.title}
-              rows={section.rows}
-            />
-          ))}
-        </div>
-      )}
+      <BulkResultBody phase={phase} result={result} />
     </Modal>
   )
 }

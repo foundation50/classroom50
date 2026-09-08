@@ -11,8 +11,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import { useDeferredRun } from "@/hooks/useDeferredRun"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
-import { Alert, Button, DropdownMenu, Modal } from "@/components/ui"
+import { DropdownMenu } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -28,14 +27,8 @@ import {
 } from "@/domain/students"
 import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import { sortRolesByRank } from "@/util/teamRoster"
-import {
-  BulkProgressRow,
-  BulkResultSection,
-  bulkProgressPct,
-  type BulkPhase,
-  type BulkProgress,
-  type BulkResultView,
-} from "@/components/bulk/resultView"
+import { BulkRunModal, type BulkResultView } from "@/components/bulk/resultView"
+import { useBulkRun } from "@/components/bulk/useBulkRun"
 import type { TeamRosterRow } from "@/util/teamRoster"
 import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import { logger } from "@/lib/logger"
@@ -136,15 +129,8 @@ const RosterBulkActionsBar = ({
   const [action, setAction] = useState<
     "unenroll" | "invite" | "cancel" | "removeRows" | null
   >(null)
-  const [phase, setPhase] = useState<BulkPhase>("idle")
-  const [progress, setProgress] = useState<BulkProgress>({
-    processed: 0,
-    total: 0,
-    message: "",
-  })
-  useBeforeUnloadGuard(phase === "working")
-  const [result, setResult] = useState<BulkResultView | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const bulk = useBulkRun()
+  const { progress } = bulk
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [confirmingCancel, setConfirmingCancel] = useState(false)
@@ -176,7 +162,7 @@ const RosterBulkActionsBar = ({
   const deferRun = useDeferredRun()
 
   const closeModal = () => {
-    if (phase === "working") return
+    if (bulk.busy) return
     setModalOpen(false)
   }
 
@@ -186,25 +172,18 @@ const RosterBulkActionsBar = ({
     // dialog opened before a sync armed could otherwise fire mid-sync.
     if (disabled) return
     if (unenrollableSelected.length === 0) return
+    if (!bulk.begin(unenrollableSelected.length, t("students.bulk.starting")))
+      return
     setAction("unenroll")
-    setPhase("working")
     setModalOpen(true)
-    setError(null)
-    setResult(null)
-    setProgress({
-      processed: 0,
-      total: unenrollableSelected.length,
-      message: t("students.bulk.starting"),
-    })
     try {
       const res = await bulkUnenrollRoster(client, {
         org,
         classroom,
         rows: unenrollableSelected,
-        onProgress: setProgress,
+        onProgress: bulk.setProgress,
       })
-      setResult(buildUnenrollResult(res, t))
-      setPhase("complete")
+      bulk.complete(buildUnenrollResult(res, t), "complete")
       // Pass only the CONFIRMED-removed rows so the page suppresses the
       // automatic backfills for exactly those (a still-active org member left by
       // a classroom-scoped unenroll would otherwise be team-added back). Rows
@@ -220,24 +199,16 @@ const RosterBulkActionsBar = ({
       )
     } catch (err) {
       log.error("bulk unenroll failed", { err, record: true })
-      setError(getErrorMessage(err))
-      setPhase("error")
+      bulk.fail(getErrorMessage(err))
     }
   }
 
   const runInvite = async () => {
     if (disabled) return
     if (invitableSelected === 0) return
+    if (!bulk.begin(invitableSelected, t("students.bulk.starting"))) return
     setAction("invite")
-    setPhase("working")
     setModalOpen(true)
-    setError(null)
-    setResult(null)
-    setProgress({
-      processed: 0,
-      total: invitableSelected,
-      message: t("students.bulk.starting"),
-    })
 
     const invited: { key: string; label: string; detail?: string }[] = []
     const skipped: { key: string; label: string; detail?: string }[] = []
@@ -247,7 +218,7 @@ const RosterBulkActionsBar = ({
     let processed = 0
     const tick = (label: string) => {
       processed += 1
-      setProgress({ processed, total: invitableSelected, message: label })
+      bulk.setProgress({ processed, total: invitableSelected, message: label })
     }
 
     // Pending rows: cancel + re-send the existing invite (resendOrgInvitation).
@@ -317,24 +288,23 @@ const RosterBulkActionsBar = ({
           ...deferred,
         ],
       })
-    setResult({
-      headline: t("students.bulk.invitedHeadline", { count: invited.length }),
-      sections,
-    })
-    setPhase("complete")
+    bulk.complete(
+      {
+        headline: t("students.bulk.invitedHeadline", { count: invited.length }),
+        sections,
+      },
+      "complete",
+    )
     onDone("invite")
   }
 
   const runCancel = async () => {
     if (disabled) return
     if (cancellableSelected.length === 0) return
-    setAction("cancel")
-    setPhase("working")
-    setModalOpen(true)
-    setError(null)
-    setResult(null)
     const total = cancellableSelected.length
-    setProgress({ processed: 0, total, message: t("students.bulk.starting") })
+    if (!bulk.begin(total, t("students.bulk.starting"))) return
+    setAction("cancel")
+    setModalOpen(true)
 
     const cancelled: { key: string; label: string }[] = []
     const alreadyGone: { key: string; label: string }[] = []
@@ -368,7 +338,7 @@ const RosterBulkActionsBar = ({
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })
       }
       processed += 1
-      setProgress({ processed, total, message: label })
+      bulk.setProgress({ processed, total, message: label })
     }
 
     // An email-only invite leaves a metadata team holding the address and a
@@ -389,29 +359,25 @@ const RosterBulkActionsBar = ({
       })
     if (failed.length > 0)
       sections.push({ title: t("students.bulk.resultFailed"), rows: failed })
-    setResult({
-      headline: t("students.bulk.cancelledHeadline", {
-        count: cancelled.length,
-      }),
-      sections,
-    })
-    setPhase("complete")
+    bulk.complete(
+      {
+        headline: t("students.bulk.cancelledHeadline", {
+          count: cancelled.length,
+        }),
+        sections,
+      },
+      "complete",
+    )
     onDone("cancel")
   }
 
   const runRemoveRows = async () => {
     if (disabled) return
     if (unlinkedSelected.length === 0) return
+    if (!bulk.begin(unlinkedSelected.length, t("students.bulk.starting")))
+      return
     setAction("removeRows")
-    setPhase("working")
     setModalOpen(true)
-    setError(null)
-    setResult(null)
-    setProgress({
-      processed: 0,
-      total: unlinkedSelected.length,
-      message: t("students.bulk.starting"),
-    })
     try {
       // One commit for the whole batch; rows that gained an identity since the
       // selection are skipped server-side and reported as missed.
@@ -420,7 +386,7 @@ const RosterBulkActionsBar = ({
         classroom,
         rowRefs: unlinkedSelected.map((r) => unlinkedRowRef(r)),
       })
-      setProgress({
+      bulk.setProgress({
         processed: unlinkedSelected.length,
         total: unlinkedSelected.length,
         message: "",
@@ -439,18 +405,19 @@ const RosterBulkActionsBar = ({
           ],
         })
       }
-      setResult({
-        headline: t("students.bulk.removedRowsHeadline", {
-          count: res.removed,
-        }),
-        sections,
-      })
-      setPhase("complete")
+      bulk.complete(
+        {
+          headline: t("students.bulk.removedRowsHeadline", {
+            count: res.removed,
+          }),
+          sections,
+        },
+        "complete",
+      )
       onDone("removeRows")
     } catch (err) {
       log.error("bulk remove unlinked rows failed", { err, record: true })
-      setError(getErrorMessage(err))
-      setPhase("error")
+      bulk.fail(getErrorMessage(err))
     }
   }
 
@@ -599,11 +566,10 @@ const RosterBulkActionsBar = ({
         onClose={() => setConfirmingCancel(false)}
       />
 
-      <Modal
+      <BulkRunModal
         open={isOpen}
         onClose={closeModal}
-        closeDisabled={phase === "working"}
-        size="2xl"
+        run={bulk}
         title={
           action === "invite"
             ? t("students.bulk.inviteTitle")
@@ -613,56 +579,14 @@ const RosterBulkActionsBar = ({
                 ? t("students.bulk.removeRowsTitle")
                 : t("students.bulk.unenrollTitle")
         }
-        footer={
-          phase === "complete" ? (
-            <Button variant="primary" onClick={closeModal}>
-              {t("students.bulk.done")}
-            </Button>
-          ) : phase === "error" ? (
-            <Button variant="primary" onClick={closeModal}>
-              {t("common.done")}
-            </Button>
-          ) : undefined
-        }
-      >
-        {phase === "working" && (
-          <BulkProgressRow
-            progress={progress}
-            processedCaption={t("students.bulk.progressProcessed", {
-              processed: progress.processed,
-              total: progress.total,
-            })}
-            percentCaption={`${bulkProgressPct(progress)}%`}
-          >
-            <Alert tone="info" className="mt-6">
-              <span>{t("students.bulk.keepTabOpen")}</span>
-            </Alert>
-          </BulkProgressRow>
-        )}
-
-        {phase === "complete" && result && (
-          <div className="mt-6 space-y-4">
-            <Alert tone="success">
-              <span>{result.headline}</span>
-            </Alert>
-            {result.sections.map((section) => (
-              <BulkResultSection
-                key={section.title}
-                title={section.title}
-                rows={section.rows}
-              />
-            ))}
-          </div>
-        )}
-
-        {phase === "error" && (
-          <div className="mt-6">
-            <Alert tone="error">
-              <span>{error ?? t("students.somethingWentWrong")}</span>
-            </Alert>
-          </div>
-        )}
-      </Modal>
+        processedCaption={t("students.bulk.progressProcessed", {
+          processed: progress.processed,
+          total: progress.total,
+        })}
+        keepTabOpenMessage={t("students.bulk.keepTabOpen")}
+        fallbackError={t("students.somethingWentWrong")}
+        doneLabel={t("students.bulk.done")}
+      />
     </>
   )
 }

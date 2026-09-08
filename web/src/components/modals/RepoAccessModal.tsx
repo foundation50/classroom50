@@ -28,13 +28,12 @@ import useRemoveRepoCollaborator from "@/hooks/mutations/useRemoveRepoCollaborat
 import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   CollaboratorIdentity,
-  describeGitHubApiFailure,
+  describeCollaboratorFailure,
   normalizeUsername,
   permissionFromFlags,
   rejectedItems,
 } from "@/components/modals/collaboratorHelpers"
 import { permissionSatisfies } from "@/domain/assignments/permissions"
-import { GitHubAPIError } from "@/github-core/errors"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
 
@@ -59,22 +58,14 @@ class RepoAccessNotAppliedError extends Error {
   }
 }
 
-// Map a rejected write to a human reason; reuses the groupCollaborators failure
-// vocabulary so the two dialogs stay consistent.
+// The shared collaborator reasons plus this dialog's verified-write miss.
 const describeFailure = (reason: unknown, t: TFunction): string | null => {
   if (reason instanceof RepoAccessNotAppliedError) {
     return t("components.modals.repoAccess.notApplied", {
       effective: reason.effective ?? "unknown",
     })
   }
-  const shared = describeGitHubApiFailure(reason, t)
-  if (shared) return shared
-  if (reason instanceof GitHubAPIError) {
-    if (reason.status === 422)
-      return t("components.modals.groupCollaborators.failure.conflict")
-    return reason.message
-  }
-  return reason instanceof Error ? reason.message : null
+  return describeCollaboratorFailure(reason, t)
 }
 
 // One row's draft state: its target role, and whether it's staged for removal.

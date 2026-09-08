@@ -1,21 +1,16 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { CalendarIcon } from "@/components/ui/icons"
 
 import { Alert, Button, Modal, ModalIcon } from "@/components/ui"
-import {
-  BulkProgressBlock,
-  BulkResultSection,
-  type BulkPhase,
-  type BulkProgress,
-  type BulkResultView,
-} from "@/components/bulk/resultView"
+import { BulkProgressBlock, BulkResultBody } from "@/components/bulk/resultView"
+import { partitionOutcomes } from "@/components/bulk/fanOut"
 import { runBulkRepoAccess } from "@/components/bulk/repoAccessFanOut"
+import { useBulkRun } from "@/components/bulk/useBulkRun"
 import useAddRepoCollaborator from "@/hooks/mutations/useAddRepoCollaborator"
 import useSetAssignmentClosed from "@/hooks/mutations/useSetAssignmentClosed"
 import { getName } from "@/util/students"
 import type { RepoPermission, Student } from "@/types/classroom"
-import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 
 type CloseSubmissionModalProps = {
   open: boolean
@@ -52,23 +47,10 @@ export function CloseSubmissionModal({
   const permission: RepoPermission = closing ? "pull" : "push"
   const addCollaboratorMutation = useAddRepoCollaborator()
   const setClosed = useSetAssignmentClosed(org, classroom)
-  const runningRef = useRef(false)
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-      runningRef.current = false
-    }
-  }, [])
-
-  const [phase, setPhase] = useState<BulkPhase>("idle")
-  const [progress, setProgress] = useState<BulkProgress>({
-    processed: 0,
-    total: 0,
-    message: "",
-  })
-  const [result, setResult] = useState<BulkResultView | null>(null)
+  const bulk = useBulkRun(open)
+  const { phase, progress, result, busy } = bulk
+  // The flag write failed before any repo was touched; `bulk.error` carries
+  // the phase, this carries which alert to show.
   const [flagError, setFlagError] = useState(false)
   // True after a close run that flipped the flag but left some repos not
   // read-only (deferred/failed). The flag is committed (new accepts are
@@ -77,15 +59,11 @@ export function CloseSubmissionModal({
   // closing" affordance so a throttled close isn't stuck offering only Reopen.
   const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
 
-  // Reset on open, never at close — see the close-animation note in ui/Modal.
+  // The modal's own flags reset with the run state, on open (see useBulkRun).
   useEffect(() => {
     if (!open) return
-    runningRef.current = false
-    setPhase("idle")
-    setResult(null)
     setFlagError(false)
     setFanOutIncomplete(false)
-    setProgress({ processed: 0, total: 0, message: "" })
   }, [open])
 
   const total = owners.length
@@ -95,10 +73,7 @@ export function CloseSubmissionModal({
   // full close/reopen (flag flip first, then fan-out); `finishOnly` skips the
   // flag flip and re-runs just the fan-out to finish an interrupted close.
   const run = async ({ flipFlag }: { flipFlag: boolean }) => {
-    if (runningRef.current) return
-    runningRef.current = true
-    setPhase("working")
-    setResult(null)
+    if (!bulk.begin(total)) return
     setFlagError(false)
     setFanOutIncomplete(false)
 
@@ -114,16 +89,11 @@ export function CloseSubmissionModal({
           closed: closing,
         })
       } catch {
-        if (mountedRef.current) {
-          setFlagError(true)
-          setPhase("error")
-        }
-        runningRef.current = false
+        if (bulk.isMounted()) setFlagError(true)
+        bulk.fail(t("submissions.closeSubmission.flagError"))
         return
       }
     }
-
-    setProgress({ processed: 0, total, message: "" })
 
     const { outcomes, rateLimited } = await runBulkRepoAccess({
       owners,
@@ -139,22 +109,13 @@ export function CloseSubmissionModal({
       // than push isn't a false failure.
       treatRequestedAsFloor: !closing,
       t,
-      isMounted: () => mountedRef.current,
-      onProgress: (processed) => {
-        if (mountedRef.current) {
-          setProgress({ processed, total, message: "" })
-        }
-      },
+      isMounted: bulk.isMounted,
+      onProgress: (processed) =>
+        bulk.setProgress({ processed, total, message: "" }),
     })
+    if (!bulk.isMounted()) return
 
-    if (!mountedRef.current) {
-      runningRef.current = false
-      return
-    }
-
-    const succeeded = outcomes.filter((o) => o.status === "ok")
-    const deferred = outcomes.filter((o) => o.status === "deferred")
-    const failed = outcomes.filter((o) => o.status === "failed")
+    const { succeeded, deferred, failed } = partitionOutcomes(outcomes)
 
     const headlineKey = rateLimited
       ? closing
@@ -164,48 +125,46 @@ export function CloseSubmissionModal({
         ? "submissions.closeSubmission.resultHeadline"
         : "submissions.closeSubmission.reopenResultHeadline"
 
-    setResult({
-      headline: t(headlineKey, { count: succeeded.length, total }),
-      sections: [
-        ...(failed.length
-          ? [
-              {
-                title: t("submissions.closeSubmission.failedSection", {
-                  count: failed.length,
-                }),
-                rows: failed.map((o) => ({
-                  key: o.owner,
-                  label: displayFor(o.owner),
-                  detail: "detail" in o ? o.detail : undefined,
-                })),
-              },
-            ]
-          : []),
-        ...(deferred.length
-          ? [
-              {
-                title: t("submissions.closeSubmission.deferredSection", {
-                  count: deferred.length,
-                }),
-                rows: deferred.map((o) => ({
-                  key: o.owner,
-                  label: displayFor(o.owner),
-                  detail: t("submissions.closeSubmission.deferredDetail"),
-                })),
-              },
-            ]
-          : []),
-      ],
-    })
     // Closing left some repos not read-only: the flag is committed, so offer a
     // finish-only re-run (no reopen) instead of stranding the teacher.
     setFanOutIncomplete(closing && (failed.length > 0 || deferred.length > 0))
-    setPhase(failed.length || deferred.length ? "error" : "complete")
-    runningRef.current = false
+    bulk.complete(
+      {
+        headline: t(headlineKey, { count: succeeded.length, total }),
+        sections: [
+          ...(failed.length
+            ? [
+                {
+                  title: t("submissions.closeSubmission.failedSection", {
+                    count: failed.length,
+                  }),
+                  rows: failed.map((o) => ({
+                    key: o.owner,
+                    label: displayFor(o.owner),
+                    detail: o.detail,
+                  })),
+                },
+              ]
+            : []),
+          ...(deferred.length
+            ? [
+                {
+                  title: t("submissions.closeSubmission.deferredSection", {
+                    count: deferred.length,
+                  }),
+                  rows: deferred.map((o) => ({
+                    key: o.owner,
+                    label: displayFor(o.owner),
+                    detail: t("submissions.closeSubmission.deferredDetail"),
+                  })),
+                },
+              ]
+            : []),
+        ],
+      },
+      failed.length || deferred.length ? "error" : "complete",
+    )
   }
-
-  const busy = phase === "working"
-  useBeforeUnloadGuard(busy)
 
   return (
     <Modal
@@ -310,28 +269,17 @@ export function CloseSubmissionModal({
         </div>
       )}
 
-      {(phase === "complete" || phase === "error") && result && (
-        <div className="mt-4 flex flex-col gap-4">
-          <Alert
-            tone={phase === "error" ? "warning" : "success"}
-            className="text-sm"
-          >
-            {result.headline}
-          </Alert>
-          {result.sections.map((section) => (
-            <BulkResultSection
-              key={section.title}
-              title={section.title}
-              rows={section.rows}
-            />
-          ))}
-          {fanOutIncomplete && (
+      <BulkResultBody
+        phase={phase}
+        result={result}
+        after={
+          fanOutIncomplete ? (
             <Alert tone="info" className="text-sm">
               {t("submissions.closeSubmission.finishHint")}
             </Alert>
-          )}
-        </div>
-      )}
+          ) : null
+        }
+      />
     </Modal>
   )
 }
