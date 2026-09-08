@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { GitHubClient } from "./client"
-import { GitHubAPIError } from "./errors"
+import { GitHubAPIError, type GitHubRateLimit } from "./errors"
 import {
   ensureBranchProtection,
   ensureOrgActionsBudgetCap,
@@ -17,7 +17,7 @@ import {
 // reproduce each result byte for byte.
 
 const org = "acme"
-const rateLimit = {
+const rateLimit: GitHubRateLimit = {
   limit: null,
   remaining: null,
   used: null,
@@ -25,7 +25,7 @@ const rateLimit = {
   resource: null,
   retryAfter: null,
 }
-const apiError = (status: number, overrides?: Partial<typeof rateLimit>) =>
+const apiError = (status: number, overrides?: Partial<GitHubRateLimit>) =>
   new GitHubAPIError({
     status,
     url: "/x",

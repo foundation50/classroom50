@@ -29,6 +29,13 @@ import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 import { CONFIG_REPO_BRANCH } from "./gitObjects"
 import { commitRepoFiles, readRepoHead } from "./repoCommit"
+import {
+  classifyApiError,
+  forbidden,
+  notFound,
+  rateLimited,
+  status,
+} from "./classifyApiError"
 
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
@@ -755,37 +762,26 @@ export async function ensureReusableWorkflowAccess(
       message: `${owner}/${repo}: reusable-workflow access enabled for the organization.`,
     }
   } catch (err) {
-    const message = getErrorMessage(err)
-    if (err instanceof GitHubAPIError) {
-      if (err.isForbidden) {
-        return {
-          status: "warning",
-          repo: `${owner}/${repo}`,
-          accessLevel: "unknown",
-          reason: "permission_denied",
-          settingsUrl,
-          message: `${owner}/${repo}: couldn't enable reusable-workflow access for the organization. Student autograde workflows may fail with a 403 when resolving the reusable workflow. Retry with an org-admin token or toggle it manually at ${settingsUrl} → Access.`,
-        }
-      }
-
-      if (err.status === 409) {
-        return {
-          status: "warning",
-          repo: `${owner}/${repo}`,
-          accessLevel: "unknown",
-          reason: "policy_conflict",
-          settingsUrl,
-          message: `${owner}/${repo}: reusable-workflow access appears to be controlled by an organization or enterprise policy. Student autograde workflows may fail resolving the reusable workflow unless org-level access allows it. Review ${settingsUrl} → Access.`,
-        }
-      }
+    const reason = classifyApiError(
+      err,
+      [
+        [forbidden, "permission_denied"],
+        [status(409), "policy_conflict"],
+      ],
+      "unknown",
+    )
+    const messages: Record<typeof reason, string> = {
+      permission_denied: `${owner}/${repo}: couldn't enable reusable-workflow access for the organization. Student autograde workflows may fail with a 403 when resolving the reusable workflow. Retry with an org-admin token or toggle it manually at ${settingsUrl} → Access.`,
+      policy_conflict: `${owner}/${repo}: reusable-workflow access appears to be controlled by an organization or enterprise policy. Student autograde workflows may fail resolving the reusable workflow unless org-level access allows it. Review ${settingsUrl} → Access.`,
+      unknown: `${owner}/${repo}: couldn't enable reusable-workflow access: ${getErrorMessage(err)}. Student autograde workflows may fail resolving the reusable workflow. Review ${settingsUrl} → Access.`,
     }
     return {
       status: "warning",
       repo: `${owner}/${repo}`,
       accessLevel: "unknown",
-      reason: "unknown",
+      reason,
       settingsUrl,
-      message: `${owner}/${repo}: couldn't enable reusable-workflow access: ${message}. Student autograde workflows may fail resolving the reusable workflow. Review ${settingsUrl} → Access.`,
+      message: messages[reason],
     }
   }
 }
@@ -871,50 +867,28 @@ export async function ensureBranchProtection(
       message: `${owner}/${repo}: branch protection applied to ${targetBranch}; force-pushes and deletions are disabled.`,
     }
   } catch (err) {
-    const message = getErrorMessage(err)
-
-    if (err instanceof GitHubAPIError) {
-      if (err.isForbidden) {
-        return {
-          status: "warning",
-          repo: `${owner}/${repo}`,
-          branch: targetBranch,
-          reason: "permission_denied",
-          settingsUrl,
-          message: `${owner}/${repo}: branch protection could not be applied because the authenticated user lacks permission. Review branch protection manually at ${settingsUrl}.`,
-        }
-      }
-
-      if (err.isNotFound) {
-        return {
-          status: "warning",
-          repo: `${owner}/${repo}`,
-          branch: targetBranch,
-          reason: "branch_not_found",
-          settingsUrl,
-          message: `${owner}/${repo}: branch protection could not be applied because the target branch was not found. The repository may still be initializing. Retry setup or review ${settingsUrl}.`,
-        }
-      }
-
-      if (err.status === 422) {
-        return {
-          status: "warning",
-          repo: `${owner}/${repo}`,
-          branch: targetBranch,
-          reason: "unsupported",
-          settingsUrl,
-          message: `${owner}/${repo}: GitHub rejected the branch protection request. This may be due to repository plan, ruleset, or policy constraints. Review ${settingsUrl}.`,
-        }
-      }
+    const reason = classifyApiError(
+      err,
+      [
+        [forbidden, "permission_denied"],
+        [notFound, "branch_not_found"],
+        [status(422), "unsupported"],
+      ],
+      "unexpected",
+    )
+    const messages: Record<typeof reason, string> = {
+      permission_denied: `${owner}/${repo}: branch protection could not be applied because the authenticated user lacks permission. Review branch protection manually at ${settingsUrl}.`,
+      branch_not_found: `${owner}/${repo}: branch protection could not be applied because the target branch was not found. The repository may still be initializing. Retry setup or review ${settingsUrl}.`,
+      unsupported: `${owner}/${repo}: GitHub rejected the branch protection request. This may be due to repository plan, ruleset, or policy constraints. Review ${settingsUrl}.`,
+      unexpected: `${owner}/${repo}: branch protection could not be applied: ${getErrorMessage(err)}. Review ${settingsUrl}.`,
     }
-
     return {
       status: "warning",
       repo: `${owner}/${repo}`,
       branch: targetBranch,
-      reason: "unexpected",
+      reason,
       settingsUrl,
-      message: `${owner}/${repo}: branch protection could not be applied: ${message}. Review ${settingsUrl}.`,
+      message: messages[reason],
     }
   }
 }
@@ -1032,92 +1006,60 @@ export async function ensureOrgActionsEnabled(
       message: `${org}: GitHub Actions enabled for all repositories.`,
     }
   } catch (err) {
-    const message = getErrorMessage(err)
-
+    // Re-read so the warning can quote the effective policy; an unreadable
+    // policy is itself the fallback reason.
     let current: OrgActionsPermissions | null = null
-
     try {
       current = await getOrgActionsPermissions(client, org)
     } catch {
       // nothing for now, still want good warning info
     }
-
     const enabledRepositories = current?.enabled_repositories ?? "unknown"
     const allowedActions = current?.allowed_actions ?? "unknown"
+    const currentSetting = `Current setting: enabled_repositories="${enabledRepositories}", allowed_actions="${allowedActions}". `
 
-    if (err instanceof GitHubAPIError) {
-      // A secondary rate limit also surfaces as 403, so classify it before the
-      // permission wall — it's retryable, and callers key their retry-vs-manual
-      // messaging off the reason.
-      if (err.isRateLimited) {
-        return {
-          status: "warning",
-          org,
-          enabledRepositories,
-          allowedActions,
-          reason: "rate_limited",
-          settingsUrl,
-          message: `${org}: hit a rate limit enabling GitHub Actions; retry shortly.`,
-        }
-      }
-
-      if (err.isForbidden) {
-        return {
-          status: "warning",
-          org,
-          enabledRepositories,
-          allowedActions,
-          reason: "permission_denied",
-          settingsUrl,
-          message:
-            `${org}: couldn't enable GitHub Actions at the organization level. ` +
-            `The authenticated user may lack org-owner/admin permissions, or an enterprise policy may block this change. ` +
-            `Open ${settingsUrl} and set Actions permissions to allow repositories in this organization to run workflows.`,
-        }
-      }
-
-      if (err.status === 409) {
-        return {
-          status: "warning",
-          org,
-          enabledRepositories,
-          allowedActions,
-          reason: "enterprise_policy",
-          settingsUrl,
-          message:
-            `${org}: GitHub Actions permissions appear to be controlled by an organization or enterprise policy. ` +
-            `Current setting: enabled_repositories="${enabledRepositories}", allowed_actions="${allowedActions}". ` +
-            `Classroom50 workflows may not run until Actions are enabled. Review ${settingsUrl}.`,
-        }
-      }
-
-      if (err.status === 422) {
-        return {
-          status: "warning",
-          org,
-          enabledRepositories,
-          allowedActions,
-          reason: "validation_failed",
-          settingsUrl,
-          message:
-            `${org}: GitHub rejected the Actions permissions update. ` +
-            `Current setting: enabled_repositories="${enabledRepositories}", allowed_actions="${allowedActions}". ` +
-            `Review ${settingsUrl}. Original error: ${message}`,
-        }
-      }
+    // A secondary rate limit also surfaces as 403, so it precedes the
+    // permission wall: it's retryable, and callers key their retry-vs-manual
+    // messaging off the reason.
+    const reason = classifyApiError(
+      err,
+      [
+        [rateLimited, "rate_limited"],
+        [forbidden, "permission_denied"],
+        [status(409), "enterprise_policy"],
+        [status(422), "validation_failed"],
+      ],
+      current ? ("unknown" as const) : ("readback_failed" as const),
+    )
+    const couldNotEnable =
+      `${org}: couldn't enable GitHub Actions. ` +
+      currentSetting +
+      `Review ${settingsUrl}. Original error: ${getErrorMessage(err)}`
+    const messages: Record<typeof reason, string> = {
+      rate_limited: `${org}: hit a rate limit enabling GitHub Actions; retry shortly.`,
+      permission_denied:
+        `${org}: couldn't enable GitHub Actions at the organization level. ` +
+        `The authenticated user may lack org-owner/admin permissions, or an enterprise policy may block this change. ` +
+        `Open ${settingsUrl} and set Actions permissions to allow repositories in this organization to run workflows.`,
+      enterprise_policy:
+        `${org}: GitHub Actions permissions appear to be controlled by an organization or enterprise policy. ` +
+        currentSetting +
+        `Classroom50 workflows may not run until Actions are enabled. Review ${settingsUrl}.`,
+      validation_failed:
+        `${org}: GitHub rejected the Actions permissions update. ` +
+        currentSetting +
+        `Review ${settingsUrl}. Original error: ${getErrorMessage(err)}`,
+      unknown: couldNotEnable,
+      readback_failed: couldNotEnable,
     }
-
     return {
       status: "warning",
       org,
       enabledRepositories,
       allowedActions,
-      reason: current ? "unknown" : "readback_failed",
+      reason,
       settingsUrl,
-      message:
-        `${org}: couldn't enable GitHub Actions. ` +
-        `Current setting: enabled_repositories="${enabledRepositories}", allowed_actions="${allowedActions}". ` +
-        `Review ${settingsUrl}. Original error: ${message}`,
+      message: messages[reason],
     }
   }
 }
@@ -1178,39 +1120,27 @@ function setOrgActionsModeWarning(
   err: unknown,
 ): SetOrgActionsModeResult {
   const settingsUrl = githubOrgActionsSettingsUrl(org)
-  const message = getErrorMessage(err)
-  if (err instanceof GitHubAPIError) {
-    if (err.isForbidden)
-      return {
-        status: "warning",
-        org,
-        reason: "permission_denied",
-        settingsUrl,
-        message: `${org}: couldn't change GitHub Actions permissions — the token may lack org-owner rights. Review ${settingsUrl}.`,
-      }
-    if (err.status === 409)
-      return {
-        status: "warning",
-        org,
-        reason: "enterprise_policy",
-        settingsUrl,
-        message: `${org}: GitHub Actions permissions appear controlled by an org or enterprise policy. Review ${settingsUrl}.`,
-      }
-    if (err.status === 422)
-      return {
-        status: "warning",
-        org,
-        reason: "validation_failed",
-        settingsUrl,
-        message: `${org}: GitHub rejected the Actions permissions update (${message}). Review ${settingsUrl}.`,
-      }
+  const reason = classifyApiError(
+    err,
+    [
+      [forbidden, "permission_denied"],
+      [status(409), "enterprise_policy"],
+      [status(422), "validation_failed"],
+    ],
+    "failed",
+  )
+  const messages: Record<typeof reason, string> = {
+    permission_denied: `${org}: couldn't change GitHub Actions permissions — the token may lack org-owner rights. Review ${settingsUrl}.`,
+    enterprise_policy: `${org}: GitHub Actions permissions appear controlled by an org or enterprise policy. Review ${settingsUrl}.`,
+    validation_failed: `${org}: GitHub rejected the Actions permissions update (${getErrorMessage(err)}). Review ${settingsUrl}.`,
+    failed: `${org}: couldn't change GitHub Actions permissions (${getErrorMessage(err)}). Review ${settingsUrl}.`,
   }
   return {
     status: "warning",
     org,
-    reason: "failed",
+    reason,
     settingsUrl,
-    message: `${org}: couldn't change GitHub Actions permissions (${message}). Review ${settingsUrl}.`,
+    message: messages[reason],
   }
 }
 
@@ -1451,15 +1381,21 @@ export async function ensureOrgActionsBudgetCap(
       },
     })
   } catch (err) {
-    const permission = err instanceof GitHubAPIError && err.isForbidden
+    const reason = classifyApiError(
+      err,
+      [[forbidden, "permission_denied"]],
+      "create_failed",
+    )
+    const messages: Record<typeof reason, string> = {
+      permission_denied: `${org}: couldn't create the $0 Actions budget cap — add Organization Administration: Read and write to your token, or create it by hand at ${settingsUrl}.`,
+      create_failed: `${org}: couldn't create the $0 Actions budget cap (${getErrorMessage(err)}); create it by hand at ${settingsUrl}.`,
+    }
     return {
       status: "warning",
       org,
-      reason: permission ? "permission_denied" : "create_failed",
+      reason,
       settingsUrl,
-      message: permission
-        ? `${org}: couldn't create the $0 Actions budget cap — add Organization Administration: Read and write to your token, or create it by hand at ${settingsUrl}.`
-        : `${org}: couldn't create the $0 Actions budget cap (${getErrorMessage(err)}); create it by hand at ${settingsUrl}.`,
+      message: messages[reason],
     }
   }
 
@@ -1543,22 +1479,26 @@ export async function ensureOrgCanCreatePullRequests(
       message: `${org}: enabled GitHub Actions to create pull requests (required for opt-in Feedback PRs).`,
     }
   } catch (err) {
-    if (
-      err instanceof GitHubAPIError &&
-      (err.isForbidden || err.status === 409)
-    ) {
-      return {
-        status: "warning",
-        org,
-        reason: err.isForbidden ? "permission_denied" : "policy_conflict",
-        settingsUrl,
-        message: `${org}: couldn't enable Actions-created pull requests (${getErrorMessage(
-          err,
-        )}); the opt-in Feedback PR won't open until an org admin turns on "Allow GitHub Actions to create and approve pull requests" at ${settingsUrl}.`,
-      }
+    // Only the two policy-shaped refusals degrade to a warning; anything else
+    // is a real failure and propagates.
+    const reason = classifyApiError(
+      err,
+      [
+        [forbidden, "permission_denied"],
+        [status(409), "policy_conflict"],
+      ],
+      null,
+    )
+    if (reason === null) throw err
+    return {
+      status: "warning",
+      org,
+      reason,
+      settingsUrl,
+      message: `${org}: couldn't enable Actions-created pull requests (${getErrorMessage(
+        err,
+      )}); the opt-in Feedback PR won't open until an org admin turns on "Allow GitHub Actions to create and approve pull requests" at ${settingsUrl}.`,
     }
-
-    throw err
   }
 }
 
