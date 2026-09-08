@@ -18,13 +18,13 @@ import {
   type AssignmentsFile,
 } from "../queries/assignments"
 import {
-  createCommitRepo,
-  createTreeRepo,
-  updateRefForRepo,
-  renameRepo,
+  createRepoCommit,
+  createRepoTree,
   getRepoTreeRecursive,
   type GitTreeEntry,
   type GitTreeFileMode,
+  renameRepo,
+  updateRepoRef,
 } from "@/github-core/mutations"
 import {
   getOrgRepos,
@@ -472,10 +472,10 @@ async function renameOneRepo(params: {
       }
 
       const headCommit = await getCommitByRepo(client, org, repo, headSha)
-      const tree = await createTreeRepo(client, {
-        base_tree: headCommit.tree.sha,
-        org,
+      const tree = await createRepoTree(client, {
+        owner: org,
         repo,
+        baseTreeSha: headCommit.tree.sha,
         tree: [
           {
             path: ".classroom50.yaml",
@@ -487,17 +487,16 @@ async function renameOneRepo(params: {
       })
       // [skip ci]: the marker touch must not burn an autograde run on every
       // student repo.
-      const commit = await createCommitRepo(client, {
-        org,
+      const commit = await createRepoCommit(client, {
+        owner: org,
         repo,
-        parents: [headSha],
-        tree: tree.sha,
+        parentSha: headSha,
+        treeSha: tree.sha,
         message:
           prefixCommit(`Update assignment slug to ${newSlug} (rename)`) +
           "\n\n[skip ci]",
       })
-      await updateRefForRepo({
-        client,
+      await updateRepoRef(client, {
         owner: org,
         repo,
         branch,

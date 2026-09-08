@@ -33,9 +33,9 @@ import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 import {
   CONFIG_REPO_BRANCH,
-  createTreeRepo,
-  createCommitRepo,
-  updateRefForRepo,
+  createRepoCommit,
+  createRepoTree,
+  updateRepoRef,
 } from "./gitObjects"
 
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
@@ -392,7 +392,7 @@ export async function ensureSkeletonFiles(
 
   // Commit the stale files. The confirm modal can park this for an arbitrarily
   // long time, so the branch tip may have advanced (another tab/owner, any push)
-  // by the time we write; updateRefForRepo uses force:false and rejects a
+  // by the time we write; updateRepoRef uses force:false and rejects a
   // non-fast-forward rather than clobbering. On such a rejection we re-diff
   // against the new parent and retry, mirroring the CLI's refreshSkeleton
   // (init_skeleton.go): the retry sees the new parent and never re-commits an
@@ -422,10 +422,10 @@ export async function ensureSkeletonFiles(
     const branch = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, branch.object.sha)
 
-    const tree = await createTreeRepo(client, {
-      org,
+    const tree = await createRepoTree(client, {
+      owner: org,
       repo: CONFIG_REPO,
-      base_tree: commit.tree.sha,
+      baseTreeSha: commit.tree.sha,
       tree: stillStale.map((file) => ({
         path: file.path,
         mode: "100644",
@@ -434,17 +434,16 @@ export async function ensureSkeletonFiles(
       })),
     })
 
-    const newCommit = await createCommitRepo(client, {
-      org,
+    const newCommit = await createRepoCommit(client, {
+      owner: org,
       repo: CONFIG_REPO,
       message: prefixCommit("Bootstrap or refresh Classroom 50 skeleton"),
-      tree: tree.sha,
-      parents: [commit.sha],
+      treeSha: tree.sha,
+      parentSha: commit.sha,
     })
 
     try {
-      await updateRefForRepo({
-        client,
+      await updateRepoRef(client, {
         owner: org,
         repo: CONFIG_REPO,
         branch: configBranch,

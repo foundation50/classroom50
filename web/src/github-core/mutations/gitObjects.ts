@@ -120,6 +120,126 @@ export const createClassroomBody = (
   }
 }
 
+// One entry in a git tree write. GitHub accepts either inline `content` or a
+// `sha` (an existing blob, or `null` to remove the path from base_tree, which
+// mirrors the CLI's gittree.DeletionEntries).
+export type GitTreeFileMode = "100644" | "100755" | "120000"
+export type GitTreeEntry = {
+  path: string
+  mode: GitTreeFileMode
+  type: "blob"
+} & ({ content: string } | { sha: string | null })
+
+// The three git-data writes, for any repo. Every config-repo and student-repo
+// commit in the app is these three calls in order; the named wrappers below
+// only fix the repo or the message.
+export type CreateRepoTreeInput = {
+  owner: string
+  repo: string
+  baseTreeSha: string
+  tree: GitTreeEntry[]
+}
+export function createRepoTree(
+  client: GitHubClient,
+  input: CreateRepoTreeInput,
+) {
+  const { owner, repo, baseTreeSha, tree } = input
+  return client.request<GitHubCreateTree>(`/repos/${owner}/${repo}/git/trees`, {
+    method: "POST",
+    body: { base_tree: baseTreeSha, tree },
+  })
+}
+
+export type CreateRepoCommitInput = {
+  owner: string
+  repo: string
+  message: string
+  treeSha: string
+  parentSha: string
+}
+export function createRepoCommit(
+  client: GitHubClient,
+  input: CreateRepoCommitInput,
+) {
+  const { owner, repo, message, treeSha, parentSha } = input
+  return client.request<GitHubCreateCommit>(
+    `/repos/${owner}/${repo}/git/commits`,
+    {
+      method: "POST",
+      body: { message, tree: treeSha, parents: [parentSha] },
+    },
+  )
+}
+
+export type UpdateRepoRefInput = {
+  owner: string
+  repo: string
+  branch: string
+  commitSha: string
+}
+// Fast-forward only (`force: false`): a concurrent write to the same branch
+// surfaces as a 409 the callers' conflict-retry re-reads and retries on.
+export function updateRepoRef(client: GitHubClient, input: UpdateRepoRefInput) {
+  const { owner, repo, branch, commitSha } = input
+  return client.request<GitHubMoveBranch>(
+    `/repos/${owner}/${repo}/git/refs/heads/${encodeURIComponent(branch)}`,
+    {
+      method: "PATCH",
+      body: { sha: commitSha, force: false },
+    },
+  )
+}
+
+// The config-repo partials. Kept under their long-standing names and
+// signatures because the domain writers are their callers.
+export type CreateGitTreeInput = {
+  org: string
+  base_tree: string
+  tree: GitTreeEntry[]
+}
+export function createGitTree(client: GitHubClient, input: CreateGitTreeInput) {
+  return createRepoTree(client, {
+    owner: input.org,
+    repo: CONFIG_REPO,
+    baseTreeSha: input.base_tree,
+    tree: input.tree,
+  })
+}
+
+export type CreateGitCommitInput = {
+  org: string
+  message: string
+  tree_sha: string
+  parents: [string]
+}
+export function createGitCommit(
+  client: GitHubClient,
+  input: CreateGitCommitInput,
+) {
+  return createRepoCommit(client, {
+    owner: input.org,
+    repo: CONFIG_REPO,
+    message: input.message,
+    treeSha: input.tree_sha,
+    parentSha: input.parents[0],
+  })
+}
+
+export function updateRef(
+  client: GitHubClient,
+  org: string,
+  sha: string,
+  branch = DEFAULT_BRANCH,
+) {
+  return updateRepoRef(client, {
+    owner: org,
+    repo: CONFIG_REPO,
+    branch,
+    commitSha: sha,
+  })
+}
+
+// The classroom-seed tree: the four files a new classroom starts with.
 export function createTree(
   client: GitHubClient,
   input: CreateClassroomInput & {
@@ -130,63 +250,49 @@ export function createTree(
   },
 ) {
   const { base_tree, org, classroom, name, term, team, teams } = input
-  return client.request<GitHubCreateTree>(
-    `/repos/${org}/${CONFIG_REPO}/git/trees`,
-    {
-      method: "POST",
-      body: createClassroomBody(
-        base_tree,
-        org,
-        classroom,
-        name,
-        term,
-        team,
-        input.secret,
-        teams,
-      ),
-    },
+  const body = createClassroomBody(
+    base_tree,
+    org,
+    classroom,
+    name,
+    term,
+    team,
+    input.secret,
+    teams,
   )
-}
-
-export function createTreeRepo(
-  client: GitHubClient,
-  input: {
-    base_tree: string
-    org: string
-    repo: string
-    tree: { path: string; mode: string; type: string; content: string }[]
-  },
-) {
-  const { base_tree, org, repo, tree } = input
-
-  return client.request<GitHubTree>(`/repos/${org}/${repo}/git/trees`, {
-    method: "POST",
-    body: {
-      base_tree,
-      tree,
-    },
+  return createRepoTree(client, {
+    owner: org,
+    repo: CONFIG_REPO,
+    baseTreeSha: base_tree,
+    tree: body.tree as GitTreeEntry[],
   })
 }
 
-type GitHubTree = {
-  sha: string
+// The classroom-seed commit; the message defaults to the seed subject.
+export function createCommit(
+  client: GitHubClient,
+  input: {
+    org: string
+    classroom: string
+    parents: [string]
+    tree_sha: string
+    message?: string
+  },
+) {
+  const { classroom, tree_sha, org, parents, message } = input
+  return createRepoCommit(client, {
+    owner: org,
+    repo: CONFIG_REPO,
+    message:
+      message ||
+      prefixCommit(`Create init files for new classroom: ${classroom}`),
+    treeSha: tree_sha,
+    parentSha: parents[0],
+  })
 }
 
-type GitHubTreeUpsertEntry = {
-  path: string
-  mode: "100644"
-  type: "blob"
-  content: string
-}
-// `sha: null` is the Trees API's "remove this path from base_tree". Mirrors
-// the CLI's gittree.DeletionEntries.
-type GitHubTreeDeleteEntry = {
-  path: string
-  mode: "100644"
-  type: "blob"
-  sha: null
-}
-type GitHubTreeEntry = GitHubTreeUpsertEntry | GitHubTreeDeleteEntry
+// The accept-time tree for a student repo: the marker, the autograde shim
+// unless the assignment has none, and any paths the accept removes.
 export function createTreeForAssignment(params: {
   client: GitHubClient
   owner: string
@@ -208,7 +314,7 @@ export function createTreeForAssignment(params: {
     deletePaths = [],
   } = params
 
-  const tree: GitHubTreeEntry[] = [
+  const tree: GitTreeEntry[] = [
     {
       path: ".classroom50.yaml",
       mode: "100644",
@@ -232,187 +338,7 @@ export function createTreeForAssignment(params: {
     tree.push({ path, mode: "100644", type: "blob", sha: null })
   }
 
-  return client.request<GitHubTree>(`/repos/${owner}/${repo}/git/trees`, {
-    method: "POST",
-    body: {
-      base_tree: baseTreeSha,
-      tree,
-    },
-  })
-}
-
-export function createCommit(
-  client: GitHubClient,
-  input: {
-    org: string
-    classroom: string
-    parents: [string]
-    tree_sha: string
-    message?: string
-  },
-) {
-  const { classroom, tree_sha, org, parents, message } = input
-  return client.request<GitHubCreateCommit>(
-    `/repos/${org}/${CONFIG_REPO}/git/commits`,
-    {
-      method: "POST",
-      body: {
-        message:
-          message ||
-          prefixCommit(`Create init files for new classroom: ${classroom}`),
-        tree: tree_sha,
-        parents,
-      },
-    },
-  )
-}
-
-export function createCommitRepo(
-  client: GitHubClient,
-  input: {
-    org: string
-    repo: string
-    parents: [string]
-    tree: string
-    message: string
-  },
-) {
-  const { org, repo, parents, tree, message } = input
-
-  return client.request<GitHubCreateCommit>(
-    `/repos/${org}/${repo}/git/commits`,
-    {
-      method: "POST",
-      body: {
-        message,
-        tree,
-        parents,
-      },
-    },
-  )
-}
-
-export function createCommitForAssignment(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  message: string
-  treeSha: string
-  parentSha: string
-}) {
-  const { client, owner, repo, message, treeSha, parentSha } = params
-
-  return client.request<GitHubCreateCommit>(
-    `/repos/${owner}/${repo}/git/commits`,
-    {
-      method: "POST",
-      body: {
-        message,
-        tree: treeSha,
-        parents: [parentSha],
-      },
-    },
-  )
-}
-
-export function updateRef(
-  client: GitHubClient,
-  org: string,
-  sha: string,
-  branch = DEFAULT_BRANCH,
-) {
-  return client.request<GitHubMoveBranch>(
-    `/repos/${org}/${CONFIG_REPO}/git/refs/heads/${encodeURIComponent(branch)}`,
-    {
-      method: "PATCH",
-      body: {
-        sha,
-        force: false,
-      },
-    },
-  )
-}
-
-type GitHubRef = {
-  ref: string
-  object: {
-    sha: string
-    type: string
-    url: string
-  }
-}
-export function updateRefForRepo(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  branch: string
-  commitSha: string
-}) {
-  const { client, owner, repo, branch, commitSha } = params
-
-  return client.request<GitHubRef>(
-    `/repos/${owner}/${repo}/git/refs/heads/${branch}`,
-    {
-      method: "PATCH",
-      body: {
-        sha: commitSha,
-        force: false,
-      },
-    },
-  )
-}
-
-// One entry in a git tree write. GitHub accepts either inline `content` or a
-// `sha` (existing blob, or `null` to delete the path).
-export type GitTreeFileMode = "100644" | "100755" | "120000"
-export type GitTreeEntry = {
-  path: string
-  mode: GitTreeFileMode
-  type: "blob"
-} & ({ content: string } | { sha: string | null })
-export type CreateGitTreeInput = {
-  org: string
-  base_tree: string
-  tree: GitTreeEntry[]
-}
-export function createGitTree(client: GitHubClient, input: CreateGitTreeInput) {
-  const { org, base_tree, tree } = input
-
-  return client.request<GitHubCreateTree>(
-    `/repos/${org}/${CONFIG_REPO}/git/trees`,
-    {
-      method: "POST",
-      body: {
-        base_tree,
-        tree,
-      },
-    },
-  )
-}
-
-export type CreateGitCommitInput = {
-  org: string
-  message: string
-  tree_sha: string
-  parents: [string]
-}
-export function createGitCommit(
-  client: GitHubClient,
-  input: CreateGitCommitInput,
-) {
-  const { org, message, tree_sha, parents } = input
-
-  return client.request<GitHubCreateCommit>(
-    `/repos/${org}/${CONFIG_REPO}/git/commits`,
-    {
-      method: "POST",
-      body: {
-        message,
-        tree: tree_sha,
-        parents,
-      },
-    },
-  )
+  return createRepoTree(client, { owner, repo, baseTreeSha, tree })
 }
 
 export async function createBlob(
@@ -454,30 +380,5 @@ export async function getRepoTreeRecursive(params: {
   const { client, owner, repo, treeSha } = params
   return client.request<{ tree: GitHubTreeEntryFull[]; truncated: boolean }>(
     `/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`,
-  )
-}
-
-export async function createTreeFromEntries(
-  client: GitHubClient,
-  input: {
-    org: string
-    base_tree: string
-    tree: Array<{
-      path: string
-      mode: "100644"
-      type: "blob"
-      sha: string
-    }>
-  },
-) {
-  return client.request<GitHubTree>(
-    `/repos/${input.org}/${CONFIG_REPO}/git/trees`,
-    {
-      method: "POST",
-      body: {
-        base_tree: input.base_tree,
-        tree: input.tree,
-      },
-    },
   )
 }

@@ -13,9 +13,9 @@
 // (cli/gh-teacher/internal/assignmentcmd/submissionmode.go shimTriggerBlock).
 import type { GitHubClient } from "@/github-core/client"
 import {
-  createCommitForAssignment,
-  createTreeRepo,
-  updateRefForRepo,
+  createRepoCommit,
+  createRepoTree,
+  updateRepoRef,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
 import { getBranchRefRepo, getCommitByRepo } from "@/github-core/queries"
@@ -174,10 +174,10 @@ export async function updateShimSubmissionMode(params: {
 
   let tree: { sha: string }
   try {
-    tree = await createTreeRepo(client, {
-      base_tree: baseTreeSha,
-      org,
+    tree = await createRepoTree(client, {
+      owner: org,
       repo,
+      baseTreeSha,
       tree: [
         {
           path: AUTOGRADE_SHIM_PATH,
@@ -197,16 +197,14 @@ export async function updateShimSubmissionMode(params: {
     }
     throw err
   }
-  const commit = await createCommitForAssignment({
-    client,
+  const commit = await createRepoCommit(client, {
     owner: org,
     repo,
     message: shimUpdateCommitMessage(mode),
     treeSha: tree.sha,
     parentSha,
   })
-  await updateRefForRepo({
-    client,
+  await updateRepoRef(client, {
     owner: org,
     repo,
     branch,

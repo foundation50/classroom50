@@ -11,8 +11,8 @@ import { classroomFilePath } from "@/util/configRepoPaths"
 import { logger } from "@/lib/logger"
 import {
   createBlob,
-  createTreeFromEntries,
-  createCommit,
+  createGitCommit,
+  createGitTree,
   updateRef,
 } from "./gitObjects"
 import {
@@ -147,7 +147,7 @@ export async function editClassroom(
     content: JSON.stringify(next, null, 2) + "\n",
   })
 
-  const tree = await createTreeFromEntries(client, {
+  const tree = await createGitTree(client, {
     org,
     base_tree: commit.tree.sha,
     tree: [
@@ -160,12 +160,11 @@ export async function editClassroom(
     ],
   })
 
-  const newCommit = await createCommit(client, {
+  const newCommit = await createGitCommit(client, {
     org,
     message: prefixCommit(`Update classroom ${slug}`),
     tree_sha: tree.sha,
     parents: [ref.object.sha],
-    classroom: slug,
   })
 
   const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)

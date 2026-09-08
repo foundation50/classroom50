@@ -3,10 +3,10 @@ import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import { getUser } from "@/github-core/queries"
 import { studentRepoName } from "@/util/studentRepo"
 import {
-  createCommitForAssignment,
+  createRepoCommit,
   createTreeForAssignment,
   getRepoTreeRecursive,
-  updateRefForRepo,
+  updateRepoRef,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
 import type { GitHubRepo } from "@/github-core/types"
@@ -175,8 +175,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
         deletePaths,
       })
 
-      const commit = await createCommitForAssignment({
-        client,
+      const commit = await createRepoCommit(client, {
         owner,
         repo,
         // The accept commit that lands `.classroom50.yaml` — the marker the
@@ -186,8 +185,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
         parentSha,
       })
 
-      await updateRefForRepo({
-        client,
+      await updateRepoRef(client, {
         owner,
         repo,
         branch: targetBranch,

@@ -128,7 +128,7 @@ describe("buildClassroomUpdate", () => {
 // settings edit (name/term) on an archived classroom even when a crafted payload
 // bundles `active: false` to re-assert the archived state, and (b) let a genuine
 // unarchive (active: true) through. editClassroom does I/O via getBranchRef/
-// getCommit/getClassroomJson/createBlob/createTreeFromEntries/createCommit/
+// getCommit/getClassroomJson/createBlob/createGitTree/createGitCommit/
 // updateRef, all on the GitHubClient, so we stub a path-routing fake client.
 describe("editClassroom archived read-only guard", () => {
   // A fake client routing each git/contents path to a canned response. The

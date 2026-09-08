@@ -1,11 +1,11 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
-  createPullRequest,
-  createBranchRef,
-  ensureRepoLabel,
   addIssueLabels,
-  createCommitForAssignment,
-  updateRefForRepo,
+  createBranchRef,
+  createPullRequest,
+  createRepoCommit,
+  ensureRepoLabel,
+  updateRepoRef,
 } from "@/github-core/mutations"
 import { is422NoCommitsBetween } from "@/github-core/errors"
 import {
@@ -402,16 +402,14 @@ async function pushEmptyCommit(params: {
   const ref = await getBranchRefRepo(client, owner, repo, branch)
   const headSha = ref.object.sha
   const head = await getCommitByRepo(client, owner, repo, headSha)
-  const commit = await createCommitForAssignment({
-    client,
+  const commit = await createRepoCommit(client, {
     owner,
     repo,
     message: FEEDBACK_OPEN_COMMIT_MESSAGE,
     treeSha: head.tree.sha,
     parentSha: headSha,
   })
-  await updateRefForRepo({
-    client,
+  await updateRepoRef(client, {
     owner,
     repo,
     branch,
