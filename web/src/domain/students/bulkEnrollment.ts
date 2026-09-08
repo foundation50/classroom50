@@ -23,7 +23,8 @@ import {
   isLikelyGithubUsername,
   NoNewStudentsError,
 } from "./rosterPrimitives"
-import { commitRoster, readRosterForWrite } from "./rosterWrite"
+import { getConfigRepoBranch } from "@/github-core/configRepoReads"
+import { commitRoster, readRosterForWriteAt } from "./rosterWrite"
 
 type BulkImportProgress = {
   processed: number
@@ -102,13 +103,21 @@ export async function addStudentsToClassroom(
     total: normalizedRows.length,
   })
 
+  await assertClassroomNotArchived(client, input.org, input.classroom)
+
   input.onProgress?.({
     processed: 0,
     total: normalizedRows.length,
     message: "Reading current roster.csv...",
   })
 
-  const ctx = await readRosterForWrite(client, input.org, input.classroom)
+  const configBranch = await getConfigRepoBranch(client, input.org)
+  const ctx = await readRosterForWriteAt(
+    client,
+    input.org,
+    input.classroom,
+    configBranch,
+  )
   const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
   const existingUsernameKeys = new Set(
