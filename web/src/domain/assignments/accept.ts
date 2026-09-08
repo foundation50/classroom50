@@ -3,18 +3,14 @@ import type { AssignmentMode, RepoPermission } from "@/types/classroom"
 import { getUser } from "@/github-core/queries"
 import { studentRepoName } from "@/util/studentRepo"
 import {
-  createRepoCommit,
-  createTreeForAssignment,
+  assignmentAcceptTree,
+  commitRepoFiles,
+  readRepoHead,
   getRepoTreeRecursive,
-  updateRepoRef,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
 import type { GitHubRepo } from "@/github-core/types"
-import {
-  getBranchRefRepo,
-  getCommitByRepo,
-  withFreshRepoRetry,
-} from "@/github-core/queries"
+import { withFreshRepoRetry } from "@/github-core/queries"
 import {
   ensureFeedbackPullRequest,
   resolveFeedbackBaselineSha,
@@ -130,19 +126,12 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       // may never exist. Fall back to the caller's branch while it's still empty.
       const live = await getRepo(client, owner, repo)
       const targetBranch = live?.default_branch || branch
-      const ref = await getBranchRefRepo(client, owner, repo, targetBranch)
-      const parentSha = ref.object.sha
-      const currentCommit = await getCommitByRepo(
+      const head = await readRepoHead(
         client,
-        owner,
-        repo,
-        parentSha,
+        { owner, repo },
+        targetBranch,
+        () => freshRepoNotReadyError(owner, repo),
       )
-      const baseTreeSha = currentCommit.tree?.sha
-
-      if (!parentSha || !baseTreeSha) {
-        throw freshRepoNotReadyError(owner, repo)
-      }
 
       // Re-render the default shim's push trigger for the branch that actually
       // materialized (targetBranch), so autograde fires on the repo's real
@@ -152,50 +141,37 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
         : autogradeYaml
 
       let deletePaths: string[] = []
-      const atSeedCommit = (currentCommit.parents?.length ?? 0) === 0
+      const atSeedCommit = (head.commit.parents?.length ?? 0) === 0
       if (removeSeededReadme && atSeedCommit) {
         const baseTree = await getRepoTreeRecursive({
           client,
           owner,
           repo,
-          treeSha: baseTreeSha,
+          treeSha: head.baseTreeSha,
         })
         deletePaths = baseTree.tree.some((e) => e.path === "README.md")
           ? ["README.md"]
           : []
       }
 
-      const tree = await createTreeForAssignment({
+      // The accept commit that lands `.classroom50.yaml`, the marker the runner
+      // uses to resolve the Feedback-PR baseline (see the constant).
+      const { commitSha } = await commitRepoFiles(
         client,
-        owner,
-        repo,
-        baseTreeSha,
-        metadataYaml,
-        autogradeYaml: shim,
-        deletePaths,
-      })
-
-      const commit = await createRepoCommit(client, {
-        owner,
-        repo,
-        // The accept commit that lands `.classroom50.yaml` — the marker the
-        // runner uses to resolve the Feedback-PR baseline (see the constant).
-        message: ACCEPT_COMMIT_SUBJECT,
-        treeSha: tree.sha,
-        parentSha,
-      })
-
-      await updateRepoRef(client, {
-        owner,
-        repo,
-        branch: targetBranch,
-        commitSha: commit.sha,
-      })
+        { owner, repo },
+        head,
+        assignmentAcceptTree({
+          metadataYaml,
+          autogradeYaml: shim,
+          deletePaths,
+        }),
+        ACCEPT_COMMIT_SUBJECT,
+      )
 
       // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
       // branch it actually landed on — the caller's pre-guessed branch may be a
       // transient `main` on a `master` template.
-      return { commitSha: commit.sha, branch: targetBranch }
+      return { commitSha, branch: targetBranch }
     },
     {
       ...ACCEPT_SETUP_RETRY,

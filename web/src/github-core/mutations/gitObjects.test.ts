@@ -8,7 +8,7 @@ import {
   createGitTree,
   createRepoCommit,
   createRepoTree,
-  createTreeForAssignment,
+  assignmentAcceptTree,
   updateRef,
   updateRepoRef,
 } from "./gitObjects"
@@ -151,55 +151,38 @@ describe("createClassroomMetadata teams persistence", () => {
 // `sha: null` deletion entry (the Trees API's "remove from base_tree") so the
 // auto_init README is removed in the same commit. Mirrors the CLI's
 // classroomcfg.DropFiles tests.
-describe("createTreeForAssignment tree entries", () => {
-  const capture = () => {
-    const request = vi.fn(async () => ({ sha: "tree-sha" }))
-    const client = { request } as unknown as GitHubClient
-    const treeOf = () => {
-      const call = request.mock.calls[0] as unknown as [
-        string,
-        { body: { tree: { path: string; content?: string; sha?: null }[] } },
-      ]
-      return call[1].body.tree
-    }
-    return { client, treeOf }
-  }
+describe("assignmentAcceptTree entries", () => {
+  const metadataYaml = "classroom: cs"
 
-  const base = {
-    owner: "org",
-    repo: "hw-alice",
-    baseTreeSha: "base",
-    metadataYaml: "classroom: cs",
-  }
-
-  it("commits marker + shim, no deletions, by default", async () => {
-    const { client, treeOf } = capture()
-    await createTreeForAssignment({ client, ...base, autogradeYaml: "name: a" })
-    const paths = treeOf().map((e) => e.path)
-    expect(paths).toEqual([
+  it("commits marker + shim, no deletions, by default", () => {
+    const tree = assignmentAcceptTree({
+      metadataYaml,
+      autogradeYaml: "name: a",
+    })
+    expect(tree.map((e) => e.path)).toEqual([
       ".classroom50.yaml",
       ".github/workflows/autograde.yaml",
     ])
-    expect(treeOf().every((e) => e.sha === undefined)).toBe(true)
+    expect(tree.every((e) => !("sha" in e))).toBe(true)
   })
 
-  it("an empty shim commits only the marker", async () => {
-    const { client, treeOf } = capture()
-    await createTreeForAssignment({ client, ...base, autogradeYaml: "" })
-    expect(treeOf().map((e) => e.path)).toEqual([".classroom50.yaml"])
+  it("an empty shim commits only the marker", () => {
+    const tree = assignmentAcceptTree({ metadataYaml, autogradeYaml: "" })
+    expect(tree.map((e) => e.path)).toEqual([".classroom50.yaml"])
   })
 
-  it("deletePaths posts sha:null deletion entries (init_shim README removal)", async () => {
-    const { client, treeOf } = capture()
-    await createTreeForAssignment({
-      client,
-      ...base,
+  it("deletePaths posts sha:null deletion entries (init_shim README removal)", () => {
+    const tree = assignmentAcceptTree({
+      metadataYaml,
       autogradeYaml: "name: a",
       deletePaths: ["README.md"],
     })
-    const readme = treeOf().find((e) => e.path === "README.md")
-    expect(readme).toBeDefined()
-    expect(readme?.sha).toBeNull()
-    expect(readme?.content).toBeUndefined()
+    const readme = tree.find((e) => e.path === "README.md")
+    expect(readme).toEqual({
+      path: "README.md",
+      mode: "100644",
+      type: "blob",
+      sha: null,
+    })
   })
 })

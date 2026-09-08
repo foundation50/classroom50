@@ -236,28 +236,16 @@ export function updateRef(
   })
 }
 
-// The accept-time tree for a student repo: the marker, the autograde shim
-// unless the assignment has none, and any paths the accept removes.
-export function createTreeForAssignment(params: {
-  client: GitHubClient
-  owner: string
-  repo: string
-  baseTreeSha: string
+// The accept-time tree entries for a student repo: the marker, the autograde
+// shim unless the assignment has none, and any paths the accept removes.
+export function assignmentAcceptTree(params: {
   metadataYaml: string
   autogradeYaml: string
   // Paths to remove from base_tree in the same commit (the init_shim accept
   // deletes the auto_init README this way).
   deletePaths?: string[]
-}) {
-  const {
-    client,
-    owner,
-    repo,
-    baseTreeSha,
-    metadataYaml,
-    autogradeYaml,
-    deletePaths = [],
-  } = params
+}): GitTreeEntry[] {
+  const { metadataYaml, autogradeYaml, deletePaths = [] } = params
 
   const tree: GitTreeEntry[] = [
     {
@@ -282,8 +270,7 @@ export function createTreeForAssignment(params: {
   for (const path of deletePaths) {
     tree.push({ path, mode: "100644", type: "blob", sha: null })
   }
-
-  return createRepoTree(client, { owner, repo, baseTreeSha, tree })
+  return tree
 }
 
 export async function createBlob(

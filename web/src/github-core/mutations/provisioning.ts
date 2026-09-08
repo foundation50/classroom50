@@ -1,11 +1,7 @@
 import type { GitHubClient } from "../client"
 import { type GitHubRepo, type GitHubTreeResponse } from "../types"
 import { GitHubAPIError } from "../errors"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "../configRepoReads"
+import { getConfigRepoBranch } from "../configRepoReads"
 import { getRepo } from "../repoReads"
 import { getErrorMessage } from "../errorMessage"
 import { checkPages, repairOrgDefaults } from "../orgChecks"
@@ -31,12 +27,8 @@ import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
 import { bytesToHex } from "@/util/hex"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
-import {
-  CONFIG_REPO_BRANCH,
-  createRepoCommit,
-  createRepoTree,
-  updateRepoRef,
-} from "./gitObjects"
+import { CONFIG_REPO_BRANCH } from "./gitObjects"
+import { commitRepoFiles, readRepoHead } from "./repoCommit"
 
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
@@ -419,36 +411,22 @@ export async function ensureSkeletonFiles(
     }
     changed = stillStale.map((f) => f.path)
 
-    const branch = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, branch.object.sha)
-
-    const tree = await createRepoTree(client, {
-      owner: org,
-      repo: CONFIG_REPO,
-      baseTreeSha: commit.tree.sha,
-      tree: stillStale.map((file) => ({
-        path: file.path,
-        mode: "100644",
-        type: "blob",
-        content: file.content,
-      })),
-    })
-
-    const newCommit = await createRepoCommit(client, {
-      owner: org,
-      repo: CONFIG_REPO,
-      message: prefixCommit("Bootstrap or refresh Classroom 50 skeleton"),
-      treeSha: tree.sha,
-      parentSha: commit.sha,
-    })
+    const configRepo = { owner: org, repo: CONFIG_REPO }
+    const head = await readRepoHead(client, configRepo, configBranch)
 
     try {
-      await updateRepoRef(client, {
-        owner: org,
-        repo: CONFIG_REPO,
-        branch: configBranch,
-        commitSha: newCommit.sha,
-      })
+      await commitRepoFiles(
+        client,
+        configRepo,
+        head,
+        stillStale.map((file) => ({
+          path: file.path,
+          mode: "100644",
+          type: "blob",
+          content: file.content,
+        })),
+        prefixCommit("Bootstrap or refresh Classroom 50 skeleton"),
+      )
       break
     } catch (err) {
       // A non-fast-forward rejection means the tip moved between our read and

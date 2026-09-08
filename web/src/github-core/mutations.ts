@@ -6,7 +6,7 @@
 // matching sub-module, not here.
 export {
   classroomSeedTree,
-  createTreeForAssignment,
+  assignmentAcceptTree,
   updateRef,
   createGitTree,
   createGitCommit,
@@ -24,6 +24,13 @@ export {
   type CreateRepoCommitInput,
   type UpdateRepoRefInput,
 } from "./mutations/gitObjects"
+export {
+  readRepoHead,
+  commitRepoTree,
+  commitRepoFiles,
+  type RepoRef,
+  type RepoHead,
+} from "./mutations/repoCommit"
 export {
   isDeletableClassroomTeamRef,
   ensureClassroomTeam,

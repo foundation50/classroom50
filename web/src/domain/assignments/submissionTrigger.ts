@@ -13,12 +13,11 @@
 // (cli/gh-teacher/internal/assignmentcmd/submissionmode.go shimTriggerBlock).
 import type { GitHubClient } from "@/github-core/client"
 import {
-  createRepoCommit,
+  commitRepoTree,
   createRepoTree,
-  updateRepoRef,
+  readRepoHead,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
-import { getBranchRefRepo, getCommitByRepo } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { decodeBase64Utf8 } from "@/util/github"
 import { shimUpdateCommitMessage } from "@/util/commit"
@@ -134,18 +133,12 @@ export async function updateShimSubmissionMode(params: {
   // live 2026-08-05), which would rewrite from stale content or misreport
   // "current"; reading at the same SHA the commit builds on keeps the no-op
   // check and the write consistent.
-  const ref = await getBranchRefRepo(client, org, repo, branch)
-  const parentSha = ref.object.sha
-  const parentCommit = await getCommitByRepo(client, org, repo, parentSha)
-  const baseTreeSha = parentCommit.tree?.sha
-  if (!parentSha || !baseTreeSha) {
-    throw new Error(`${org}/${repo}: could not resolve the branch tip`)
-  }
+  const head = await readRepoHead(client, { owner: org, repo }, branch)
 
   let current: string
   try {
     const resp = await client.request<{ content?: string; encoding?: string }>(
-      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(parentSha)}`,
+      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(head.headSha)}`,
     )
     if (!resp?.content || resp.encoding !== "base64") {
       return {
@@ -172,12 +165,15 @@ export async function updateShimSubmissionMode(params: {
     return { status: "unrecognized", reason: rewrite.reason }
   }
 
+  // Only the tree POST is classified: it is the call GitHub rejects with a
+  // 404 when the token lacks the `workflow` scope needed to touch a workflow
+  // file.
   let tree: { sha: string }
   try {
     tree = await createRepoTree(client, {
       owner: org,
       repo,
-      baseTreeSha,
+      baseTreeSha: head.baseTreeSha,
       tree: [
         {
           path: AUTOGRADE_SHIM_PATH,
@@ -197,19 +193,13 @@ export async function updateShimSubmissionMode(params: {
     }
     throw err
   }
-  const commit = await createRepoCommit(client, {
-    owner: org,
-    repo,
-    message: shimUpdateCommitMessage(mode),
-    treeSha: tree.sha,
-    parentSha,
-  })
-  await updateRepoRef(client, {
-    owner: org,
-    repo,
-    branch,
-    commitSha: commit.sha,
-  })
+  await commitRepoTree(
+    client,
+    { owner: org, repo },
+    head,
+    tree.sha,
+    shimUpdateCommitMessage(mode),
+  )
   return { status: "updated" }
 }
 

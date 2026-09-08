@@ -3,14 +3,13 @@ import {
   addIssueLabels,
   createBranchRef,
   createPullRequest,
-  createRepoCommit,
   ensureRepoLabel,
-  updateRepoRef,
+  commitRepoTree,
+  readRepoHead,
 } from "@/github-core/mutations"
 import { is422NoCommitsBetween } from "@/github-core/errors"
 import {
   getBranchRefRepo,
-  getCommitByRepo,
   getOldestCommitShaForPath,
   isFreshRepoLagError,
   listPullRequestsByBaseHead,
@@ -399,22 +398,14 @@ async function pushEmptyCommit(params: {
   branch: string
 }) {
   const { client, owner, repo, branch } = params
-  const ref = await getBranchRefRepo(client, owner, repo, branch)
-  const headSha = ref.object.sha
-  const head = await getCommitByRepo(client, owner, repo, headSha)
-  const commit = await createRepoCommit(client, {
-    owner,
-    repo,
-    message: FEEDBACK_OPEN_COMMIT_MESSAGE,
-    treeSha: head.tree.sha,
-    parentSha: headSha,
-  })
-  await updateRepoRef(client, {
-    owner,
-    repo,
-    branch,
-    commitSha: commit.sha,
-  })
+  const head = await readRepoHead(client, { owner, repo }, branch)
+  await commitRepoTree(
+    client,
+    { owner, repo },
+    head,
+    head.baseTreeSha,
+    FEEDBACK_OPEN_COMMIT_MESSAGE,
+  )
 }
 
 // The baseline commit to freeze `feedback` at: the OLDEST commit touching the

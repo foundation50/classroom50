@@ -18,20 +18,17 @@ import {
   type AssignmentsFile,
 } from "../queries/assignments"
 import {
-  createRepoCommit,
-  createRepoTree,
   getRepoTreeRecursive,
   type GitTreeEntry,
   type GitTreeFileMode,
   renameRepo,
-  updateRepoRef,
+  commitRepoFiles,
+  readRepoHead,
 } from "@/github-core/mutations"
 import {
   getOrgRepos,
   getRawFile,
   getRepoFileAtRef,
-  getBranchRefRepo,
-  getCommitByRepo,
 } from "@/github-core/queries"
 import { GitHubAPIError, tolerateGitHubError } from "@/github-core/errors"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -431,13 +428,12 @@ async function renameOneRepo(params: {
   let step: MarkerStep
   try {
     step = await withGitConflictRetry(async (): Promise<MarkerStep> => {
-      const headRef = await getBranchRefRepo(client, org, repo, branch)
-      const headSha = headRef.object.sha
+      const head = await readRepoHead(client, { owner: org, repo }, branch)
       const raw = await getRepoFileAtRef(client, {
         owner: org,
         repo,
         path: ".classroom50.yaml",
-        ref: headSha,
+        ref: head.headSha,
       })
       if (raw === null) {
         return {
@@ -471,12 +467,13 @@ async function renameOneRepo(params: {
         return { kind: "done", rewroteMarker: false }
       }
 
-      const headCommit = await getCommitByRepo(client, org, repo, headSha)
-      const tree = await createRepoTree(client, {
-        owner: org,
-        repo,
-        baseTreeSha: headCommit.tree.sha,
-        tree: [
+      // [skip ci]: the marker touch must not burn an autograde run on every
+      // student repo.
+      await commitRepoFiles(
+        client,
+        { owner: org, repo },
+        head,
+        [
           {
             path: ".classroom50.yaml",
             mode: "100644",
@@ -484,24 +481,9 @@ async function renameOneRepo(params: {
             content: rewrite.content ?? "",
           },
         ],
-      })
-      // [skip ci]: the marker touch must not burn an autograde run on every
-      // student repo.
-      const commit = await createRepoCommit(client, {
-        owner: org,
-        repo,
-        parentSha: headSha,
-        treeSha: tree.sha,
-        message:
-          prefixCommit(`Update assignment slug to ${newSlug} (rename)`) +
+        prefixCommit(`Update assignment slug to ${newSlug} (rename)`) +
           "\n\n[skip ci]",
-      })
-      await updateRepoRef(client, {
-        owner: org,
-        repo,
-        branch,
-        commitSha: commit.sha,
-      })
+      )
       return { kind: "done", rewroteMarker: true }
     })
   } catch (err) {
