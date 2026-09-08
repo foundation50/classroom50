@@ -1,0 +1,530 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ensureBranchProtection > succeeds 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection applied to main; force-pushes and deletions are disabled.",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "complete",
+}
+`;
+
+exports[`ensureBranchProtection > warns on 403 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection could not be applied because the authenticated user lacks permission. Review branch protection manually at https://github.com/acme/classroom50/settings/branches.",
+  "reason": "permission_denied",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureBranchProtection > warns on 403 rate limited 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection could not be applied because the authenticated user lacks permission. Review branch protection manually at https://github.com/acme/classroom50/settings/branches.",
+  "reason": "permission_denied",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureBranchProtection > warns on 404 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection could not be applied because the target branch was not found. The repository may still be initializing. Retry setup or review https://github.com/acme/classroom50/settings/branches.",
+  "reason": "branch_not_found",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureBranchProtection > warns on 409 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection could not be applied: http 409. Review https://github.com/acme/classroom50/settings/branches.",
+  "reason": "unexpected",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureBranchProtection > warns on 422 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: GitHub rejected the branch protection request. This may be due to repository plan, ruleset, or policy constraints. Review https://github.com/acme/classroom50/settings/branches.",
+  "reason": "unsupported",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureBranchProtection > warns on 500 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection could not be applied: http 500. Review https://github.com/acme/classroom50/settings/branches.",
+  "reason": "unexpected",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureBranchProtection > warns on non-API error 1`] = `
+{
+  "branch": "main",
+  "message": "acme/classroom50: branch protection could not be applied: boom. Review https://github.com/acme/classroom50/settings/branches.",
+  "reason": "unexpected",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/branches",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > creates the cap 1`] = `
+{
+  "budgetCreated": true,
+  "message": "acme: created a $0 GitHub Actions budget cap (blocks paid Actions minutes).",
+  "org": "acme",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "complete",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on 403 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap — add Organization Administration: Read and write to your token, or create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "permission_denied",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on 403 rate limited 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap — add Organization Administration: Read and write to your token, or create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "permission_denied",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on 404 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap (http 404); create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "create_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on 409 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap (http 409); create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "create_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on 422 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap (http 422); create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "create_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on 500 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap (http 500); create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "create_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns on non-API error 1`] = `
+{
+  "message": "acme: couldn't create the $0 Actions budget cap (boom); create it by hand at https://github.com/organizations/acme/settings/billing/budgets.",
+  "org": "acme",
+  "reason": "create_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsBudgetCap > warns when the readback fails 1`] = `
+{
+  "message": "acme: couldn't read org billing budgets (boom). Your token may lack Organization Administration: Read, or the plan may not expose budgets. Set a $0 GitHub Actions budget by hand at https://github.com/organizations/acme/settings/billing/budgets to hard-stop paid Actions minutes.",
+  "org": "acme",
+  "reason": "readback_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > succeeds 1`] = `
+{
+  "allowedActions": "all",
+  "enabledRepositories": "all",
+  "message": "acme: GitHub Actions enabled for all repositories.",
+  "org": "acme",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "complete",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 403 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: couldn't enable GitHub Actions at the organization level. The authenticated user may lack org-owner/admin permissions, or an enterprise policy may block this change. Open https://github.com/organizations/acme/settings/actions and set Actions permissions to allow repositories in this organization to run workflows.",
+  "org": "acme",
+  "reason": "permission_denied",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 403 rate limited 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: hit a rate limit enabling GitHub Actions; retry shortly.",
+  "org": "acme",
+  "reason": "rate_limited",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 404 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: couldn't enable GitHub Actions. Current setting: enabled_repositories="none", allowed_actions="local_only". Review https://github.com/organizations/acme/settings/actions. Original error: http 404",
+  "org": "acme",
+  "reason": "unknown",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 409 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: GitHub Actions permissions appear to be controlled by an organization or enterprise policy. Current setting: enabled_repositories="none", allowed_actions="local_only". Classroom50 workflows may not run until Actions are enabled. Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "enterprise_policy",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 422 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: GitHub rejected the Actions permissions update. Current setting: enabled_repositories="none", allowed_actions="local_only". Review https://github.com/organizations/acme/settings/actions. Original error: http 422",
+  "org": "acme",
+  "reason": "validation_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 500 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: couldn't enable GitHub Actions. Current setting: enabled_repositories="none", allowed_actions="local_only". Review https://github.com/organizations/acme/settings/actions. Original error: http 500",
+  "org": "acme",
+  "reason": "unknown",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on 500 when the readback also fails 1`] = `
+{
+  "allowedActions": "unknown",
+  "enabledRepositories": "unknown",
+  "message": "acme: couldn't enable GitHub Actions. Current setting: enabled_repositories="unknown", allowed_actions="unknown". Review https://github.com/organizations/acme/settings/actions. Original error: http 500",
+  "org": "acme",
+  "reason": "readback_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgActionsEnabled > warns on non-API error 1`] = `
+{
+  "allowedActions": "local_only",
+  "enabledRepositories": "none",
+  "message": "acme: couldn't enable GitHub Actions. Current setting: enabled_repositories="none", allowed_actions="local_only". Review https://github.com/organizations/acme/settings/actions. Original error: boom",
+  "org": "acme",
+  "reason": "unknown",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles 403 1`] = `
+{
+  "resolved": {
+    "message": "acme: couldn't enable Actions-created pull requests (http 403); the opt-in Feedback PR won't open until an org admin turns on "Allow GitHub Actions to create and approve pull requests" at https://github.com/organizations/acme/settings/actions.",
+    "org": "acme",
+    "reason": "permission_denied",
+    "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+    "status": "warning",
+  },
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles 403 rate limited 1`] = `
+{
+  "resolved": {
+    "message": "acme: couldn't enable Actions-created pull requests (http 403); the opt-in Feedback PR won't open until an org admin turns on "Allow GitHub Actions to create and approve pull requests" at https://github.com/organizations/acme/settings/actions.",
+    "org": "acme",
+    "reason": "permission_denied",
+    "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+    "status": "warning",
+  },
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles 404 1`] = `
+{
+  "rejected": "GitHubAPIError: http 404",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles 409 1`] = `
+{
+  "resolved": {
+    "message": "acme: couldn't enable Actions-created pull requests (http 409); the opt-in Feedback PR won't open until an org admin turns on "Allow GitHub Actions to create and approve pull requests" at https://github.com/organizations/acme/settings/actions.",
+    "org": "acme",
+    "reason": "policy_conflict",
+    "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+    "status": "warning",
+  },
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles 422 1`] = `
+{
+  "rejected": "GitHubAPIError: http 422",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles 500 1`] = `
+{
+  "rejected": "GitHubAPIError: http 500",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > handles non-API error 1`] = `
+{
+  "rejected": "Error: boom",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > is already complete 1`] = `
+{
+  "message": "acme: GitHub Actions is already allowed to create pull requests (Feedback PRs can open).",
+  "org": "acme",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "complete",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > succeeds 1`] = `
+{
+  "message": "acme: enabled GitHub Actions to create pull requests (required for opt-in Feedback PRs).",
+  "org": "acme",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "complete",
+}
+`;
+
+exports[`ensureOrgCanCreatePullRequests > warns when the readback fails 1`] = `
+{
+  "message": "acme: couldn't read organization workflow permissions (boom); GitHub Actions may be blocked from opening Feedback PRs. Enable "Allow GitHub Actions to create and approve pull requests" at https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "readback_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > succeeds 1`] = `
+{
+  "accessLevel": "organization",
+  "message": "acme/classroom50: reusable-workflow access enabled for the organization.",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "complete",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on 403 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: couldn't enable reusable-workflow access for the organization. Student autograde workflows may fail with a 403 when resolving the reusable workflow. Retry with an org-admin token or toggle it manually at https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "permission_denied",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on 403 rate limited 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: couldn't enable reusable-workflow access for the organization. Student autograde workflows may fail with a 403 when resolving the reusable workflow. Retry with an org-admin token or toggle it manually at https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "permission_denied",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on 404 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: couldn't enable reusable-workflow access: http 404. Student autograde workflows may fail resolving the reusable workflow. Review https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "unknown",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on 409 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: reusable-workflow access appears to be controlled by an organization or enterprise policy. Student autograde workflows may fail resolving the reusable workflow unless org-level access allows it. Review https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "policy_conflict",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on 422 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: couldn't enable reusable-workflow access: http 422. Student autograde workflows may fail resolving the reusable workflow. Review https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "unknown",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on 500 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: couldn't enable reusable-workflow access: http 500. Student autograde workflows may fail resolving the reusable workflow. Review https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "unknown",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`ensureReusableWorkflowAccess > warns on non-API error 1`] = `
+{
+  "accessLevel": "unknown",
+  "message": "acme/classroom50: couldn't enable reusable-workflow access: boom. Student autograde workflows may fail resolving the reusable workflow. Review https://github.com/acme/classroom50/settings/actions → Access.",
+  "reason": "unknown",
+  "repo": "acme/classroom50",
+  "settingsUrl": "https://github.com/acme/classroom50/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on 403 rate limited when resuming 1`] = `
+{
+  "message": "acme: couldn't change GitHub Actions permissions — the token may lack org-owner rights. Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "permission_denied",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on 403 when resuming 1`] = `
+{
+  "message": "acme: couldn't change GitHub Actions permissions — the token may lack org-owner rights. Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "permission_denied",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on 404 when resuming 1`] = `
+{
+  "message": "acme: couldn't change GitHub Actions permissions (http 404). Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on 409 when resuming 1`] = `
+{
+  "message": "acme: GitHub Actions permissions appear controlled by an org or enterprise policy. Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "enterprise_policy",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on 422 when resuming 1`] = `
+{
+  "message": "acme: GitHub rejected the Actions permissions update (http 422). Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "validation_failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on 500 when resuming 1`] = `
+{
+  "message": "acme: couldn't change GitHub Actions permissions (http 500). Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
+
+exports[`setOrgActionsMode > warns on non-API error when resuming 1`] = `
+{
+  "message": "acme: couldn't change GitHub Actions permissions (boom). Review https://github.com/organizations/acme/settings/actions.",
+  "org": "acme",
+  "reason": "failed",
+  "settingsUrl": "https://github.com/organizations/acme/settings/actions",
+  "status": "warning",
+}
+`;
