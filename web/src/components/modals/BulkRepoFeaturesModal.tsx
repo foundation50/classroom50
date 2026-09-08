@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { SlidersIcon } from "@/components/ui/icons"
 
-import { Alert, Modal, ModalIcon, Select } from "@/components/ui"
+import {
+  Alert,
+  fieldLabelClass,
+  Modal,
+  ModalIcon,
+  Select,
+} from "@/components/ui"
 import {
   BulkPhaseFooter,
   BulkProgressBlock,
@@ -190,7 +196,7 @@ export function BulkRepoFeaturesModal({
               <div className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
                 {FEATURES.map(({ key }) => (
                   <label key={key} className="flex flex-col gap-1.5">
-                    <span className="label font-bold">
+                    <span className={fieldLabelClass}>
                       {t(`assignments.form.repoFeatures.${key}.label`)}
                     </span>
                     <Select

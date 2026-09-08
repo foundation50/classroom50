@@ -1,4 +1,4 @@
-import { HelpTooltip } from "./FormField"
+import { fieldLabelClass, HelpTooltip } from "./FormField"
 import { Toggle } from "./Toggle"
 
 // A boolean toggle rendered as a DaisyUI switch with a bold label and an
@@ -31,7 +31,7 @@ export function ToggleField({
         onBlur={onBlur}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span className="label font-bold">{label}</span>
+      <span className={fieldLabelClass}>{label}</span>
       {help ? <HelpTooltip help={help} /> : null}
     </label>
   )

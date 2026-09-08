@@ -5,6 +5,7 @@ import {
   validateSubmissionTags,
 } from "@/util/submissionTags"
 import type { AssignmentForm } from "../assignmentFormModel"
+import { fieldControlProps, fieldError } from "../formFieldHelpers"
 
 // Submissions: the single source of truth for what counts as a submission.
 //
@@ -134,7 +135,7 @@ function SubmissionTagsField({
   return (
     <form.Field name="submission_tags">
       {(field) => {
-        const error = field.state.meta.errors[0] as string | undefined
+        const error = fieldError(field)
         return (
           <div>
             <FormField
@@ -145,16 +146,11 @@ function SubmissionTagsField({
             >
               {({ id, describedById, invalid }) => (
                 <Textarea
-                  id={id}
-                  name={field.name}
+                  {...fieldControlProps(field, { id, describedById, invalid })}
                   className="font-mono w-full sm:max-w-xs"
                   rows={3}
                   spellCheck={false}
                   placeholder={"phase1\nphase2\ncomplete"}
-                  aria-describedby={describedById}
-                  invalid={invalid}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
               )}

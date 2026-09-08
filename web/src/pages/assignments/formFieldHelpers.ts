@@ -10,6 +10,32 @@ export type StringField = {
   handleChange: (value: string) => void
 }
 
+// The first validation error, as the string FormField renders. TanStack types
+// errors as unknown[] because a validator may return anything; every validator
+// in this form returns a translated string.
+export const fieldError = (field: {
+  state: { meta: { errors: unknown[] } }
+}): string | undefined => {
+  const [first] = field.state.meta.errors
+  return first === undefined ? undefined : String(first)
+}
+
+// The props every control inside a FormField repeats: the ids FormField
+// minted, the field's name and value, and the blur that marks it touched.
+// Spread first so a caller can still override any of them (a normalizing
+// onBlur, a different value mapping).
+export const fieldControlProps = <V>(
+  field: { name: string; state: { value: V }; handleBlur: () => void },
+  args: { id: string; describedById: string | undefined; invalid: boolean },
+) => ({
+  id: args.id,
+  name: field.name,
+  "aria-describedby": args.describedById,
+  invalid: args.invalid,
+  value: field.state.value,
+  onBlur: field.handleBlur,
+})
+
 // onBlur handler that normalizes (default: trim), writing back only on change.
 export const normalizeOnBlur = (
   field: StringField,

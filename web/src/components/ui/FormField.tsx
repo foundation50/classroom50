@@ -75,6 +75,10 @@ type FieldRenderArgs = {
 // the `aria-describedby` target (error/help), and `invalid` so the control can
 // wire its a11y attributes; pass the field's error into `error` (a truthy value
 // switches the field into the invalid state).
+// The one bold field-label recipe, for the label FormField renders and for the
+// legends and composite-control labels that sit outside a FormField.
+export const fieldLabelClass = "label font-bold"
+
 export function FormField({
   label,
   htmlFor,
@@ -113,7 +117,7 @@ export function FormField({
   return (
     <div className={cx("flex flex-col gap-1.5", className)}>
       <div className="flex items-center gap-1.5">
-        <label htmlFor={id} className="label font-bold">
+        <label htmlFor={id} className={fieldLabelClass}>
           {label}
           {required ? (
             <span className="text-error" aria-hidden="true">

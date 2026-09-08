@@ -14,12 +14,13 @@ import type { AssignmentForm } from "./assignmentFormModel"
 import { TeacherFilesModal } from "./TeacherFilesModal"
 
 import {
-  FormField,
-  HelpTooltip,
   Badge,
   Button,
   Collapse,
   cx,
+  fieldLabelClass,
+  FormField,
+  HelpTooltip,
   Input,
   Modal,
   Select,
@@ -189,7 +190,7 @@ const AutogradingTestModal = ({
         </FormField>
 
         <fieldset>
-          <legend className="label font-bold">
+          <legend className={fieldLabelClass}>
             {t("assignments.autograder.testType")}
           </legend>
           <div className="join w-full">
@@ -420,7 +421,7 @@ const AutogradingTestModal = ({
             {t("assignments.autograder.reportOptions")}
           </legend>
           <div className="flex items-center gap-1.5">
-            <span className="label font-bold" aria-hidden="true">
+            <span className={fieldLabelClass} aria-hidden="true">
               {t("assignments.autograder.reportOptions")}
             </span>
             <HelpTooltip
@@ -773,7 +774,7 @@ const AutogradingTestsPane = ({
                   materialized tests.json as `defaults`). Framed like the
                   table above so the two read as one tests unit. */}
               <div className="mt-4 rounded-box border border-base-300 p-4">
-                <span className="label font-bold">
+                <span className={fieldLabelClass}>
                   {t("assignments.autograder.defaults.heading")}
                 </span>
                 <p className="mt-0.5 text-sm text-base-content/70">

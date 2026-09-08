@@ -2,7 +2,13 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GlobeIcon } from "@/components/ui/icons"
 
-import { Alert, Modal, ModalIcon, Select } from "@/components/ui"
+import {
+  Alert,
+  fieldLabelClass,
+  Modal,
+  ModalIcon,
+  Select,
+} from "@/components/ui"
 import {
   BulkPhaseFooter,
   BulkProgressBlock,
@@ -159,7 +165,7 @@ export function BulkRepoVisibilityModal({
           ) : (
             <>
               <label className="flex flex-col gap-1.5 sm:max-w-xs">
-                <span className="label font-bold">
+                <span className={fieldLabelClass}>
                   {t("submissions.bulkVisibility.choiceLabel")}
                 </span>
                 <Select

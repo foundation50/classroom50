@@ -4,6 +4,8 @@ import { assignmentSlugBudget } from "@/util/repoNameBudget"
 import {
   Alert,
   Badge,
+  cx,
+  fieldLabelClass,
   FormField,
   HelpTooltip,
   Input,
@@ -19,6 +21,7 @@ import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
 import useOrgTeamCreationAllowed from "@/hooks/useOrgTeamCreationAllowed"
+import { fieldControlProps, fieldError } from "../formFieldHelpers"
 
 // Assignment Details (IA overhaul U4): the assignment's identity — name, slug,
 // description, and type. Repository source, autograding, features, and schedule
@@ -74,10 +77,7 @@ export function DetailsSection({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <form.Field name="name">
           {(field) => {
-            const nameError =
-              field.state.meta.errors.length > 0
-                ? String(field.state.meta.errors[0])
-                : undefined
+            const nameError = fieldError(field)
             return (
               <FormField
                 htmlFor={field.name}
@@ -87,15 +87,14 @@ export function DetailsSection({
               >
                 {({ id, describedById, invalid }) => (
                   <Input
-                    id={id}
-                    name={field.name}
+                    {...fieldControlProps(field, {
+                      id,
+                      describedById,
+                      invalid,
+                    })}
                     required
                     aria-required="true"
-                    invalid={invalid}
-                    aria-describedby={describedById}
                     placeholder={t("assignments.form.namePlaceholder")}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
                     onChange={(e) => {
                       field.handleChange(e.target.value)
                       if (!edit && !slugTouched) {
@@ -120,10 +119,7 @@ export function DetailsSection({
 
         <form.Field name="slug">
           {(field) => {
-            const submitError =
-              !edit && field.state.meta.errors.length > 0
-                ? String(field.state.meta.errors[0])
-                : undefined
+            const submitError = !edit && fieldError(field)
             // Live budget + collision checks (#691) so a manual override warns
             // as-you-type rather than only at submit (which stays
             // authoritative). The auto-fill is already budget-bounded and
@@ -171,16 +167,16 @@ export function DetailsSection({
               >
                 {({ id, describedById, invalid }) => (
                   <Input
-                    id={id}
-                    name={field.name}
+                    {...fieldControlProps(field, {
+                      id,
+                      describedById,
+                      invalid,
+                    })}
                     aria-required={!edit}
                     // The slug is the assignment's repo-path identity; renaming
                     // isn't supported, so it's read-only on edit.
                     disabled={edit}
-                    invalid={invalid}
-                    aria-describedby={describedById}
                     placeholder={t("assignments.form.slugPlaceholder")}
-                    value={field.state.value}
                     onBlur={(e) => {
                       // Normalize on blur so what the teacher sees is what's
                       // saved (the repo path segment). An emptied slug falls
@@ -249,7 +245,7 @@ export function DetailsSection({
       <form.Field name="mode">
         {(field) => (
           <fieldset className="mt-4">
-            <legend className="label font-bold mb-2">
+            <legend className={cx(fieldLabelClass, "mb-2")}>
               {t("assignments.form.type")}
             </legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -310,13 +306,10 @@ export function DetailsSection({
           showTeamFormation ? (
             <form.Field name="team_formation">
               {(field) => {
-                const formationError =
-                  field.state.meta.errors.length > 0
-                    ? String(field.state.meta.errors[0])
-                    : undefined
+                const formationError = fieldError(field)
                 return (
                   <fieldset className="mt-4 border-s-2 border-base-300 ps-4">
-                    <legend className="label font-bold mb-2">
+                    <legend className={cx(fieldLabelClass, "mb-2")}>
                       {t("assignments.form.teamFormation")}
                     </legend>
                     <div className="flex flex-col gap-2">

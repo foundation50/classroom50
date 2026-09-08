@@ -11,7 +11,13 @@ import {
 } from "@/components/ui/icons"
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { Button, DropdownMenu, HelpTooltip, Input } from "@/components/ui"
+import {
+  Button,
+  DropdownMenu,
+  fieldLabelClass,
+  HelpTooltip,
+  Input,
+} from "@/components/ui"
 import type { HelpTooltipPosition } from "@/components/ui"
 import {
   isKnownHostedRunnerLabel,
@@ -28,9 +34,10 @@ import {
   type RuntimeLanguage,
 } from "@/util/runtime"
 import {
+  fieldError,
   normalizeOnBlur,
-  useDebouncedValue,
   type StringField,
+  useDebouncedValue,
 } from "./formFieldHelpers"
 import type { AssignmentForm } from "./assignmentFormModel"
 
@@ -54,7 +61,7 @@ export const FieldLabel = ({
   helpPosition?: HelpTooltipPosition
 }) => (
   <div className="mb-1.5 flex items-center gap-1.5">
-    <label htmlFor={htmlFor} className="label font-bold">
+    <label htmlFor={htmlFor} className={fieldLabelClass}>
       {label}
     </label>
     {help ? <HelpTooltip help={help} position={helpPosition} /> : null}
@@ -82,7 +89,7 @@ export const LanguageVersionField = ({
   return (
     <form.Field name={fieldName}>
       {(field) => {
-        const error = field.state.meta.errors[0] as string | undefined
+        const error = fieldError(field)
         const current = field.state.value.trim()
         return (
           <div>
@@ -320,7 +327,7 @@ export const AptField = ({
     <form.Field name="runtime_apt">
       {(field) => {
         const packages = parseAptPackages(field.state.value)
-        const error = field.state.meta.errors[0] as string | undefined
+        const error = fieldError(field)
         return (
           <div className="mt-4">
             <FieldLabel

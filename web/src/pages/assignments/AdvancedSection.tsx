@@ -1,5 +1,13 @@
 import { useTranslation } from "react-i18next"
-import { FormField, Input, Radio, Textarea, Toggle } from "@/components/ui"
+import {
+  cx,
+  fieldLabelClass,
+  FormField,
+  Input,
+  Radio,
+  Textarea,
+  Toggle,
+} from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets } from "@/util/releaseAssets"
 import { RUNTIME_LANGUAGES } from "@/util/runtime"
@@ -15,7 +23,11 @@ import {
   ContainerFields,
   AptField,
 } from "./AdvancedRuntimeFields"
-import { normalizeOnBlur } from "./formFieldHelpers"
+import {
+  fieldControlProps,
+  fieldError,
+  normalizeOnBlur,
+} from "./formFieldHelpers"
 import { deriveFormShape } from "./formShape"
 import { CollapsibleAdvanced } from "./sections/CollapsibleAdvanced"
 import { PASS_THRESHOLD_MAX, PASS_THRESHOLD_MIN } from "@/types/classroom"
@@ -37,7 +49,7 @@ export const AdvancedSection = ({
       <form.Field name="runtime_env">
         {(field) => (
           <fieldset className="mb-4">
-            <legend className="label font-bold mb-2">
+            <legend className={cx(fieldLabelClass, "mb-2")}>
               {t("assignments.form.runtime.envLegend")}
             </legend>
             <div className="flex flex-wrap gap-x-6 gap-y-2">
@@ -98,7 +110,7 @@ export const AdvancedSection = ({
                 <div className="mb-1.5 flex items-center gap-1.5">
                   {/* Group heading, not a form label — it has no single
                       control to point at. */}
-                  <span className="label font-bold">
+                  <span className={fieldLabelClass}>
                     {t("assignments.form.runtime.languagesHeading")}
                   </span>
                   <HelpTooltip
@@ -160,14 +172,14 @@ export const AdvancedSection = ({
                         >
                           {({ id, describedById, invalid }) => (
                             <Input
-                              id={id}
-                              name={commandField.name}
+                              {...fieldControlProps(commandField, {
+                                id,
+                                describedById,
+                                invalid,
+                              })}
                               placeholder={t(
                                 "assignments.form.setupCommandPlaceholder",
                               )}
-                              aria-describedby={describedById}
-                              invalid={invalid}
-                              value={commandField.state.value}
                               onBlur={normalizeOnBlur(commandField)}
                               onChange={(e) =>
                                 commandField.handleChange(e.target.value)
@@ -178,8 +190,7 @@ export const AdvancedSection = ({
 
                         <form.Field name="setup_timeout">
                           {(field) => {
-                            const error = field.state.meta.errors[0] as
-                              string | undefined
+                            const error = fieldError(field)
                             return (
                               <FormField
                                 htmlFor={field.name}
@@ -230,7 +241,7 @@ export const AdvancedSection = ({
               <form.Field name="allowed_files">
                 {(field) => {
                   const patterns = parseAllowedFiles(field.state.value)
-                  const error = field.state.meta.errors[0] as string | undefined
+                  const error = fieldError(field)
                   return (
                     <FormField
                       className="mt-4"
@@ -254,16 +265,15 @@ export const AdvancedSection = ({
                     >
                       {({ id, describedById, invalid }) => (
                         <Textarea
-                          id={id}
-                          name={field.name}
+                          {...fieldControlProps(field, {
+                            id,
+                            describedById,
+                            invalid,
+                          })}
                           className="font-mono"
                           rows={4}
                           spellCheck={false}
                           placeholder={"*\n!hello.py"}
-                          aria-describedby={describedById}
-                          invalid={invalid}
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
                           onChange={(e) => field.handleChange(e.target.value)}
                         />
                       )}
@@ -275,7 +285,7 @@ export const AdvancedSection = ({
               <form.Field name="release_assets">
                 {(field) => {
                   const paths = parseReleaseAssets(field.state.value)
-                  const error = field.state.meta.errors[0] as string | undefined
+                  const error = fieldError(field)
                   return (
                     <FormField
                       className="mt-4"
@@ -293,18 +303,17 @@ export const AdvancedSection = ({
                     >
                       {({ id, describedById, invalid }) => (
                         <Textarea
-                          id={id}
-                          name={field.name}
+                          {...fieldControlProps(field, {
+                            id,
+                            describedById,
+                            invalid,
+                          })}
                           className="font-mono"
                           rows={3}
                           spellCheck={false}
                           placeholder={t(
                             "assignments.form.releaseAssetsPlaceholder",
                           )}
-                          aria-describedby={describedById}
-                          invalid={invalid}
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
                           onChange={(event) =>
                             field.handleChange(event.target.value)
                           }
@@ -338,8 +347,7 @@ export const AdvancedSection = ({
                     {toggle.state.value && (
                       <form.Field name="pass_threshold">
                         {(field) => {
-                          const error = field.state.meta.errors[0] as
-                            string | undefined
+                          const error = fieldError(field)
                           return (
                             <div className="mt-3">
                               <div className="flex items-center gap-2">

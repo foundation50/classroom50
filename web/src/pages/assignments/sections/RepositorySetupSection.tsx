@@ -8,6 +8,7 @@ import {
   Button,
   cx,
   ExternalLink,
+  fieldLabelClass,
   FormField,
   Radio,
   Select,
@@ -81,7 +82,7 @@ export function RepositorySetupSection({
           <form.Field name="repo_source">
             {(field) => (
               <fieldset>
-                <legend className="label font-bold mb-2">
+                <legend className={cx(fieldLabelClass, "mb-2")}>
                   {t("assignments.form.repoSource.label")}
                 </legend>
                 <div className="flex flex-col gap-2">

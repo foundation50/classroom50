@@ -41,7 +41,7 @@ export type { ComboboxProps } from "./Combobox"
 export { Textarea } from "./Textarea"
 export type { TextareaProps } from "./Textarea"
 
-export { FormField, HelpTooltip } from "./FormField"
+export { FormField, HelpTooltip, fieldLabelClass } from "./FormField"
 export { ToggleField } from "./ToggleField"
 export type { HelpTooltipPosition } from "./FormField"
 export { Heading, headingVariantClass } from "./Heading"
