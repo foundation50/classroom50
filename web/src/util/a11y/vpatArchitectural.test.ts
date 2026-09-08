@@ -1,8 +1,9 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 
 import { describe, expect, it } from "vitest"
+
+import { readSourceFile, walkSourceFiles } from "@/test/walkSource"
 
 import { CRITERIA } from "./vpatModel"
 
@@ -15,24 +16,15 @@ import { CRITERIA } from "./vpatModel"
 const here = path.dirname(fileURLToPath(import.meta.url))
 const srcRoot = path.resolve(here, "..", "..")
 
-function walk(dir: string, out: string[] = []): string[] {
-  for (const name of readdirSync(dir)) {
-    const full = path.join(dir, name)
-    if (statSync(full).isDirectory()) walk(full, out)
-    else if (/\.(tsx?|css|html)$/.test(name) && !/\.test\./.test(name))
-      out.push(full)
-  }
-  return out
-}
-
 // The a11y model itself and the /assess guidance name these tokens in prose.
-const files = walk(srcRoot).filter(
-  (f) => !f.includes(`${path.sep}a11y${path.sep}`),
-)
-const sources = files.map((f) => ({
-  file: path.relative(srcRoot, f),
-  text: readFileSync(f, "utf8"),
-}))
+const files = walkSourceFiles(
+  srcRoot,
+  (name) => /\.(tsx?|css|html)$/.test(name) && !/\.test\./.test(name),
+).filter((f) => !f.includes(`${path.sep}a11y${path.sep}`))
+const sources = files.flatMap((f) => {
+  const text = readSourceFile(f)
+  return text === null ? [] : [{ file: path.relative(srcRoot, f), text }]
+})
 
 const hits = (re: RegExp) =>
   sources.filter((s) => re.test(s.text)).map((s) => s.file)

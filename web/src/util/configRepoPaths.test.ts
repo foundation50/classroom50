@@ -1,6 +1,7 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
 import { join, relative } from "node:path"
 import { describe, expect, it } from "vitest"
+
+import { isSourceTs, readSourceFile, walkSourceFiles } from "@/test/walkSource"
 import {
   assignmentsFilePath,
   classroomFilePath,
@@ -31,21 +32,13 @@ describe("config-repo file paths", () => {
     const template =
       /`\$\{[^}]+\}\/(assignments\.json|classroom\.json|scores\.json|teams\.json|roster\.csv)`/
     const offenders: string[] = []
-    const walk = (dir: string) => {
-      for (const name of readdirSync(dir)) {
-        const full = join(dir, name)
-        if (statSync(full).isDirectory()) {
-          walk(full)
-          continue
-        }
-        if (!/\.(ts|tsx)$/.test(name) || /\.test\.tsx?$/.test(name)) continue
-        if (full.endsWith("configRepoPaths.ts")) continue
-        if (template.test(readFileSync(full, "utf8"))) {
-          offenders.push(relative(srcRoot, full))
-        }
+    for (const full of walkSourceFiles(srcRoot, isSourceTs)) {
+      if (full.endsWith("configRepoPaths.ts")) continue
+      const text = readSourceFile(full)
+      if (text !== null && template.test(text)) {
+        offenders.push(relative(srcRoot, full))
       }
     }
-    walk(srcRoot)
     expect(offenders).toEqual([])
   })
 })

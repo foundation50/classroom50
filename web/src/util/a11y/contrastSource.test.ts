@@ -1,8 +1,10 @@
-import { readdirSync, readFileSync, statSync } from "node:fs"
+import { readFileSync } from "node:fs"
 import { fileURLToPath } from "node:url"
 import path from "node:path"
 
 import { describe, expect, it } from "vitest"
+
+import { isSourceTs, readSourceFile, walkSourceFiles } from "@/test/walkSource"
 
 import {
   DARK,
@@ -117,20 +119,9 @@ function usedTiers(prefix: string): Set<number> {
   const out = new Set<number>()
   // Match `text-base-content/40` as written in JSX className strings.
   const re = new RegExp(`${prefix}/(\\d+)`, "g")
-  const srcDir = path.join(repoWeb, "src")
-  const walk = (dir: string): string[] => {
-    const entries = readdirSync(dir)
-    const files: string[] = []
-    for (const e of entries) {
-      const full = path.join(dir, e)
-      if (statSync(full).isDirectory()) files.push(...walk(full))
-      else if (e.endsWith(".tsx") || e.endsWith(".ts")) files.push(full)
-    }
-    return files
-  }
-  for (const file of walk(srcDir)) {
-    if (file.endsWith(".test.ts") || file.endsWith(".test.tsx")) continue
-    const text = readFileSync(file, "utf8")
+  for (const file of walkSourceFiles(path.join(repoWeb, "src"), isSourceTs)) {
+    const text = readSourceFile(file)
+    if (text === null) continue
     let m: RegExpExecArray | null
     while ((m = re.exec(text)) !== null) out.add(parseInt(m[1], 10))
   }
@@ -172,19 +163,9 @@ function usedTextSemantics(): Set<string> {
   // `text-error` / `text-primary`, but NOT `text-error-content`, `text-primary/40`,
   // or a longer word like `text-primaryish` (word-boundary the tail).
   const re = new RegExp(`text-(${names})(?![\\w/-])`, "g")
-  const srcDir = path.join(repoWeb, "src")
-  const walk = (dir: string): string[] => {
-    const files: string[] = []
-    for (const e of readdirSync(dir)) {
-      const full = path.join(dir, e)
-      if (statSync(full).isDirectory()) files.push(...walk(full))
-      else if (e.endsWith(".tsx") || e.endsWith(".ts")) files.push(full)
-    }
-    return files
-  }
-  for (const file of walk(srcDir)) {
-    if (file.endsWith(".test.ts") || file.endsWith(".test.tsx")) continue
-    const text = readFileSync(file, "utf8")
+  for (const file of walkSourceFiles(path.join(repoWeb, "src"), isSourceTs)) {
+    const text = readSourceFile(file)
+    if (text === null) continue
     let m: RegExpExecArray | null
     while ((m = re.exec(text)) !== null) out.add(m[1])
   }
