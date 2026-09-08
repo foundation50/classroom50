@@ -12,8 +12,8 @@ import {
 } from "@/components/ui"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import type { GitHubUser } from "@/github-core/types"
-import type { StudentCsvRow } from "@/domain/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import type { OrgMembersBulkOutcome } from "@/hooks/useOrgMembersCacheSync"
 import { useBulkAddToClassroom } from "@/hooks/mutations/useBulkAddToClassroom"
 import { useBulkRemoveFromClassroom } from "@/hooks/mutations/useBulkRemoveFromClassroom"
 import { useBulkRemoveFromOrg } from "@/hooks/mutations/useBulkRemoveFromOrg"
@@ -42,25 +42,9 @@ const log = logger.scope("orgMembers:BulkActionsBar")
 // A classroom option for the picker (the config-repo dir name/path).
 export type BulkClassroomOption = { name: string; path: string }
 
-// What a completed bulk run changed, so the page can seed/invalidate exactly
-// the caches that action touched.
-export type BulkDoneInput =
-  | {
-      action: "add"
-      classroom: string
-      // Rows the server actually enrolled, for optimistic seeding.
-      addedStudents: StudentCsvRow[]
-      affectedKeys: string[]
-    }
-  | { action: "remove"; classroom: string; affectedKeys: string[] }
-  // Org-wide removal: affectedKeys are the CONFIRMED-removed rows (they drive
-  // the members-cache drop); `unenrolled` is what each non-skipped row was
-  // ACTUALLY unenrolled from — a failed org DELETE still changed its rosters.
-  | {
-      action: "remove-org"
-      affectedKeys: string[]
-      unenrolled: Array<{ key: string; classrooms: string[] }>
-    }
+// What a completed bulk run changed; the page hands it to
+// useOrgMembersCacheSync, which owns the shape.
+export type BulkDoneInput = OrgMembersBulkOutcome
 
 // The members toolbar's selection cluster (count + Actions menu + Clear, the
 // roster recipe), shown only while rows are selected. Owns the confirm/run

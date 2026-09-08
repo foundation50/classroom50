@@ -283,12 +283,7 @@ export default defineConfig([
   // layering a second config that would replace them.
   {
     files: ["src/pages/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
-    ignores: [
-      "**/*.test.{ts,tsx}",
-      // A3b in docs/plans/2026-09-08-002: the roster/members cache orchestration
-      // moves into a hook next; until then this is the one documented exception.
-      "src/pages/OrgMembersPage.tsx",
-    ],
+    ignores: ["**/*.test.{ts,tsx}"],
     rules: {
       "no-restricted-imports": [
         "error",

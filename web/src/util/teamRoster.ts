@@ -714,3 +714,23 @@ export function rowsNeedingBackfill(
     return parseGitHubId(id ?? "") === null || csvRole(s) !== teamRole
   })
 }
+
+// The minimal GitHubUser a team-members cache entry needs for
+// buildTeamRoster/aggregateOrgMembers to read the member as enrolled (they read
+// id + login). Shared by every optimistic team-cache seed.
+export function teamMemberStub(
+  id: number,
+  login: string,
+  avatarUrl = "",
+): GitHubUser {
+  return {
+    id,
+    login,
+    avatar_url: avatarUrl,
+    html_url: "",
+    name: null,
+    email: null,
+    bio: null,
+    permissions: { admin: false, pull: true, maintain: false, push: false },
+  }
+}

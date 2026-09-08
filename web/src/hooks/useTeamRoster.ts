@@ -18,6 +18,7 @@ import {
   countByState,
   csvRowsForHiddenTeams,
   teamMembersMissingFromCsv,
+  teamMemberStub,
   rowsNeedingBackfill,
   type TeamRosterRow,
   type TeamRosterRowState,
@@ -499,22 +500,10 @@ export function useSeedTeamMember(
       queryClient.setQueryData<GitHubUser[]>(key, (current) => {
         const list = current ?? []
         if (list.some((m) => m.id === member.id)) return list
-        const stub = {
-          login: member.login,
-          id: member.id,
-          avatar_url: member.avatar_url ?? "",
-          html_url: "",
-          name: null,
-          email: null,
-          bio: null,
-          permissions: {
-            admin: false,
-            pull: true,
-            maintain: false,
-            push: false,
-          },
-        } satisfies GitHubUser
-        return [...list, stub]
+        return [
+          ...list,
+          teamMemberStub(member.id, member.login, member.avatar_url),
+        ]
       })
       void queryClient.invalidateQueries({ queryKey: key })
     },
