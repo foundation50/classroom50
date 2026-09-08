@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -10,7 +9,7 @@ import {
   XCircleIcon,
 } from "@/components/ui/icons"
 
-import { githubKeys } from "@/github-core/queries"
+import { useInvalidateOrgAudit } from "@/hooks/useCacheRefresh"
 import useRenameConfigRepoToMain from "@/hooks/mutations/useRenameConfigRepoToMain"
 import useRepairOrgPolicyConcern from "@/hooks/mutations/useRepairOrgPolicyConcern"
 import {
@@ -481,7 +480,7 @@ const OrgPolicyAuditPane = ({
   highlighted?: boolean
 }) => {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
+  const recheckAudit = useInvalidateOrgAudit(org)
   const runFix = useSafeSubmit()
   const { data: planDetails } = useGetOrgPlanDetails(org)
 
@@ -578,15 +577,7 @@ const OrgPolicyAuditPane = ({
       }
       description={t("orgSettings.audit.description")}
       action={
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => {
-            void queryClient.invalidateQueries({
-              queryKey: githubKeys.orgAuditPrefix(org),
-            })
-          }}
-        >
+        <Button variant="ghost" size="sm" onClick={recheckAudit}>
           {t("orgSettings.audit.recheck")}
         </Button>
       }

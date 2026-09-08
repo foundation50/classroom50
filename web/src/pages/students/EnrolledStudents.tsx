@@ -19,7 +19,6 @@ import {
 } from "@/components/ui"
 import { EmptyState } from "@/components/list"
 import type { Student } from "@/types/classroom"
-import { useQueryClient } from "@tanstack/react-query"
 import type { RosterCsvProblem } from "@/domain/students"
 import { useDismissFailedInvite } from "@/hooks/mutations/useDismissFailedInvite"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -29,7 +28,7 @@ import { useClassroomRoleContextOptional } from "@/context/classroomRole/Classro
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import type { GitHubOrgInvitation } from "@/github-core/types"
-import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/github-core/queries"
+import { useInvalidateInviteQueries } from "@/hooks/useCacheRefresh"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
@@ -149,7 +148,6 @@ const EnrolledStudents = ({
   suppressedLogins: SuppressedLogins
 }) => {
   const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const { t } = useTranslation()
   const { notify, announce } = useToast()
   const { data: viewer } = useGitHubViewer()
@@ -227,8 +225,7 @@ const EnrolledStudents = ({
       return next
     })
 
-  const invalidateInviteQueries = () =>
-    invalidateInviteQueriesForOrg(queryClient, org)
+  const invalidateInviteQueries = useInvalidateInviteQueries(org)
 
   // Dismiss a failed/expired invitation: cancel it on GitHub (removes it from
   // the failed list) and refresh. The hook owns the invite-query invalidation;

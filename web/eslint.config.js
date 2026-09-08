@@ -29,6 +29,35 @@ import {
   radiusClassMessage,
 } from "./src/eslint/radiusClassRule.ts"
 
+// Shared by every `no-restricted-imports` block below. The rule doesn't merge
+// across config objects, so a narrower block must carry these too or it would
+// silently drop them for its files.
+const restrictedImportPatterns = [
+  {
+    group: ["@/authz/*", "!@/authz/index"],
+    message:
+      "Import authz through the public barrel `@/authz`, not its internal files. The barrel is the module's only public API (see src/authz/index.ts).",
+  },
+  {
+    regex: "(^|/)authz/(roles|resolveRole|capabilities)$",
+    message:
+      "Import authz through the public barrel `@/authz`, not its internal files by relative path. The barrel is the module's only public API (see src/authz/index.ts).",
+  },
+  {
+    group: ["@primer/octicons-react"],
+    message:
+      "Import icons from `@/components/ui/icons` (the app's single icon seam), not the icon package directly.",
+  },
+  {
+    group: ["lucide-react"],
+    message:
+      "lucide-react was removed — the app's icons are Primer Octicons, imported from `@/components/ui/icons`.",
+  },
+]
+
+const cacheAccessMessage =
+  "Cache invalidation belongs in a hook under `hooks/` (see hooks/mutations/README.md), not in a page or component."
+
 export default defineConfig([
   globalIgnores(["dist"]),
   {
@@ -242,27 +271,39 @@ export default defineConfig([
     rules: {
       "no-restricted-imports": [
         "error",
+        { patterns: restrictedImportPatterns },
+      ],
+    },
+  },
+  // View layers don't touch the query cache directly. A page or component that
+  // needs an invalidation asks a hook in `hooks/` (or `hooks/mutations/`) for
+  // it, so the key it targets is single-sourced and the effect survives the
+  // component unmounting (see hooks/mutations/README.md). `no-restricted-imports`
+  // is one rule, so this block restates the shared patterns rather than
+  // layering a second config that would replace them.
+  {
+    files: ["src/pages/**/*.{ts,tsx}", "src/components/**/*.{ts,tsx}"],
+    ignores: [
+      "**/*.test.{ts,tsx}",
+      // A3b in docs/plans/2026-09-08-002: the roster/members cache orchestration
+      // moves into a hook next; until then this is the one documented exception.
+      "src/pages/OrgMembersPage.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
         {
-          patterns: [
+          patterns: restrictedImportPatterns,
+          paths: [
             {
-              group: ["@/authz/*", "!@/authz/index"],
-              message:
-                "Import authz through the public barrel `@/authz`, not its internal files. The barrel is the module's only public API (see src/authz/index.ts).",
+              name: "@tanstack/react-query",
+              importNames: ["useQueryClient"],
+              message: cacheAccessMessage,
             },
             {
-              regex: "(^|/)authz/(roles|resolveRole|capabilities)$",
-              message:
-                "Import authz through the public barrel `@/authz`, not its internal files by relative path. The barrel is the module's only public API (see src/authz/index.ts).",
-            },
-            {
-              group: ["@primer/octicons-react"],
-              message:
-                "Import icons from `@/components/ui/icons` (the app's single icon seam), not the icon package directly.",
-            },
-            {
-              group: ["lucide-react"],
-              message:
-                "lucide-react was removed — the app's icons are Primer Octicons, imported from `@/components/ui/icons`.",
+              name: "@/github-core/queries",
+              importNames: ["githubKeys"],
+              message: cacheAccessMessage,
             },
           ],
         },

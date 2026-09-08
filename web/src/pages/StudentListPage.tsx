@@ -11,14 +11,13 @@ import UploadRoster from "@/pages/students/UploadRoster"
 import InviteLinksModal from "@/pages/students/InviteLinksModal"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useParams } from "@tanstack/react-router"
-import { useQueryClient } from "@tanstack/react-query"
 import useGetStudents, {
   useUpdateRosterCache,
   useInvalidateRosterCache,
 } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSuppressedLogins } from "@/hooks/useSuppressedLogins"
-import { invalidateInviteQueries } from "@/github-core/queries"
+import { useInvalidateInviteQueries } from "@/hooks/useCacheRefresh"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireRole from "@/components/RequireRole"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
@@ -47,7 +46,7 @@ const TeamRosterContent = ({
     classroom,
   )
   const client = useGitHubClient()
-  const queryClient = useQueryClient()
+  const invalidateInviteQueries = useInvalidateInviteQueries(org)
   const updateRosterCache = useUpdateRosterCache(org, classroom)
   const invalidateRosterCache = useInvalidateRosterCache(org, classroom)
   const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
@@ -206,14 +205,14 @@ const TeamRosterContent = ({
                   result.addedStudents.map((s) => s.username),
                 )
               }
-              invalidateInviteQueries(queryClient, org)
+              invalidateInviteQueries()
             }}
             onEmailSuccess={() => {
               // Each invited address is retained as a pending email-only
               // roster.csv row, and surfaces as a `pending` row through the
               // classroom team's pending-invitation list. Refresh both, or the
               // rows just written render without their name and section.
-              invalidateInviteQueries(queryClient, org)
+              invalidateInviteQueries()
               invalidateTeamRoster()
               invalidateRosterCache()
             }}

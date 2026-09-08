@@ -5,7 +5,6 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { Button, cx } from "@/components/ui"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
 import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
-import { githubKeys } from "@/github-core/queries"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {
@@ -95,6 +94,7 @@ const RerunOrgSetup = ({
   const mutation = useRunOrgSetup({
     org,
     plan: planDetails?.plan?.name,
+    mode: "rerun",
     onStepUpdate: (update) => {
       // init fires onStepUpdate across ~10 sequential steps; the user can
       // navigate away mid-run. The work isn't cancelable (no AbortSignal), so
@@ -104,27 +104,6 @@ const RerunOrgSetup = ({
       setSteps((prev) => applyStepUpdate(prev, update))
     },
     confirmSkeletonOverwrite,
-    // Unmount-safe: runs in the hook's onSuccess so a mid-run navigation can't
-    // drop the post-setup refetch. Only on a non-error outcome (init resolves
-    // with status "error" on a prerequisite failure).
-    invalidate: (queryClient, result) => {
-      if (result && result.status === "error") return
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.orgAuditPrefix(org),
-      })
-      // Re-run can flip the Actions policy (or intentionally leave a pause), so
-      // refresh the kill-switch toggle's derived mode too.
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.orgActionsMode(org),
-      })
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      // Setup applies the member-default lockdown, so refresh the shared org
-      // query the teacher pre-flight warnings read (the `["orgs"]` key above is
-      // a different, non-github-prefixed list).
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.orgDetails(org),
-      })
-    },
   })
 
   // Reset the board before the init call (must run before mutateAsync), then

@@ -32,8 +32,12 @@ no → call site.
   shows the failure inline.
 
 Hooks stay `t()`-free: a caller passes pre-translated strings via a `messages`
-bag. The boundary is a convention, not yet lint-enforced (P7 earmarks
-`eslint-plugin-boundaries`).
+bag. That boundary is a convention, not yet lint-enforced (P7 earmarks
+`eslint-plugin-boundaries`). The other direction is enforced: `pages/` and
+`components/` may not import `useQueryClient` or `githubKeys`
+(`no-restricted-imports` in `eslint.config.js`). A page that needs a read-side
+refresh with no mutation of its own (a Refresh or Recheck button) asks
+`hooks/useCacheRefresh.ts` for it.
 
 ## Hold the tab on long-running work
 

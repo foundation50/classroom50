@@ -390,19 +390,15 @@ export const LockAssignmentAction = ({
   )
 }
 
-// Delete (hub only): typed-slug confirm, then invalidation via the caller's
-// `onDeleteAssignment` (cache keys stay at the table, per the mutation-hook
-// convention).
+// Delete (hub only): typed-slug confirm; the hook refreshes the listing.
 export const DeleteAssignmentAction = ({
   org,
   classroom,
   assignment,
-  onDeleteAssignment,
 }: {
   org: string
   classroom: string
   assignment: Assignment
-  onDeleteAssignment: () => void
 }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -447,7 +443,6 @@ export const DeleteAssignmentAction = ({
             classroom,
             assignment: assignment.slug,
           })
-          onDeleteAssignment()
         }}
         onClose={() => setOpen(false)}
       />

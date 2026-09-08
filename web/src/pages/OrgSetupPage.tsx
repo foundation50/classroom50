@@ -30,10 +30,7 @@ import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
 import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
-import {
-  useOrgClassroom50Status,
-  orgClassroom50StatusKey,
-} from "@/hooks/useOrgClassroom50Status"
+import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
 import { OrgSettingsPane } from "./OrgSettingsPage"
 import { EnterDiv } from "@/lib/motionComponents"
 import {
@@ -317,21 +314,12 @@ const OrgSetupPage = () => {
   const mutation = useRunOrgSetup({
     org,
     plan: orgPlanDetails?.plan?.name,
+    mode: "first-run",
     onStepUpdate: (update) => {
       if (org) recordBudgetNoticeFromStep(org, update.id, update.data)
       setSteps((steps) => applyStepUpdate(steps, update))
     },
     confirmSkeletonOverwrite,
-    // Unmount-safe: the org-list refetch runs in the hook's onSuccess (init is
-    // long-running and the user can navigate away). Always invalidate — even on
-    // a status-"error" outcome — matching the prior unconditional invalidate.
-    // Also refetch the config-repo probe so the derived stage advances to 2.
-    invalidate: (queryClient) => {
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      void queryClient.invalidateQueries({
-        queryKey: orgClassroom50StatusKey(org),
-      })
-    },
   })
 
   // Reset the board before the init call (must run before mutateAsync), then

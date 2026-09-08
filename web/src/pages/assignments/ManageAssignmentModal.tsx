@@ -34,7 +34,6 @@ export const ManageAssignmentModal = ({
   secret,
   secretPending,
   canMutate,
-  onDeleteAssignment,
 }: {
   onClose: () => void
   org: string
@@ -45,7 +44,6 @@ export const ManageAssignmentModal = ({
   // Author on an unarchived classroom: gates the mutating rows (edit label,
   // reuse, lock, delete), same tier as the table's quick actions.
   canMutate: boolean
-  onDeleteAssignment: () => void
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
@@ -144,7 +142,6 @@ export const ManageAssignmentModal = ({
               org={org}
               classroom={classroom}
               assignment={assignment}
-              onDeleteAssignment={onDeleteAssignment}
             />
           </>
         )}

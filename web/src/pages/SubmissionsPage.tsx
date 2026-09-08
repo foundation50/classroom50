@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/icons"
 import Papa from "papaparse"
 
-import { useQueryClient } from "@tanstack/react-query"
 import {
   useParams,
   useSearch,
@@ -139,7 +138,6 @@ import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
 } from "@/github-core/workflows"
-import { githubKeys } from "@/github-core/queries"
 import { CollectInputsUnsupportedError } from "@/github-core/mutations"
 import {
   formatDueDateTime,
@@ -163,7 +161,6 @@ const EMPTY_GROUP_REPOS: { owner: string; repoName: string }[] = []
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
   // Page entry is gated on viewClassroomStaffContent; what the viewer may DO
   // here (dispatch workflows, owner-only bulk actions) comes from one place.
@@ -1941,11 +1938,6 @@ const SubmissionsPageContent = () => {
             org,
             classroom,
             assignment,
-          })
-          // Refresh the assignments list we're about to land on (not awaited —
-          // this page is going away anyway).
-          void queryClient.invalidateQueries({
-            queryKey: githubKeys.assignmentsFile(org, classroom),
           })
           await navigate({
             to: "/$org/$classroom/assignments",

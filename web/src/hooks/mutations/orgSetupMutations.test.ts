@@ -76,6 +76,7 @@ import { useCancelClassroomInvite } from "./useCancelClassroomInvite"
 import { useResendClassroomInvite } from "./useResendClassroomInvite"
 import { useRepairOrgPolicyConcern } from "./useRepairOrgPolicyConcern"
 import { useRunOrgSetup } from "./useRunOrgSetup"
+import { orgClassroom50StatusKey } from "@/hooks/useOrgClassroom50Status"
 
 const ORG = "acme"
 const CLASSROOM = "cs101"
@@ -295,19 +296,19 @@ describe("useRepairOrgPolicyConcern", () => {
 })
 
 describe("useRunOrgSetup", () => {
-  it("delegates to initClassroom50 and runs the caller's invalidate in the hook (unmount-safe)", async () => {
+  it("delegates to initClassroom50 and refreshes the first-run caches in the hook (unmount-safe)", async () => {
     const queryClient = freshClient()
+    const doInvalidate = vi.spyOn(queryClient, "invalidateQueries")
     const onStepUpdate = vi.fn()
     const confirmSkeletonOverwrite = vi.fn()
-    const invalidate = vi.fn()
     const { result } = renderHook(
       () =>
         useRunOrgSetup({
           org: ORG,
           plan: "Team",
+          mode: "first-run",
           onStepUpdate,
           confirmSkeletonOverwrite,
-          invalidate,
         }),
       { wrapper: wrapperWith(queryClient) },
     )
@@ -317,53 +318,41 @@ describe("useRunOrgSetup", () => {
       expect.objectContaining({ org: ORG, plan: "Team", onStepUpdate }),
     )
     // Invalidation runs in the hook's onSuccess (fires regardless of caller
-    // unmount), receiving the queryClient + init result.
-    expect(invalidate).toHaveBeenCalledWith(queryClient, { status: "ok" })
+    // unmount): the org list and the config-repo probe.
+    expect(doInvalidate).toHaveBeenCalledWith({ queryKey: ["orgs"] })
+    expect(doInvalidate).toHaveBeenCalledWith({
+      queryKey: orgClassroom50StatusKey(ORG),
+    })
   })
 
-  it("skips initClassroom50 on the org-absent path but still runs invalidate", async () => {
+  it("skips initClassroom50 on the org-absent path but still refreshes the first-run caches", async () => {
     const queryClient = freshClient()
-    const invalidate = vi.fn()
+    const doInvalidate = vi.spyOn(queryClient, "invalidateQueries")
     const { result } = renderHook(
       () =>
         useRunOrgSetup({
           org: undefined,
           plan: "Team",
+          mode: "first-run",
           onStepUpdate: vi.fn(),
-          invalidate,
         }),
       { wrapper: wrapperWith(queryClient) },
     )
     result.current.mutate()
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    // Matches the pre-refactor early return: no init call, undefined result.
+    // Matches the pre-refactor early return: no init call, undefined result,
+    // and the first run still refreshes (its invalidate was unconditional).
     expect(initClassroom50).not.toHaveBeenCalled()
-    expect(invalidate).toHaveBeenCalledWith(queryClient, undefined)
+    expect(doInvalidate).toHaveBeenCalledWith({ queryKey: ["orgs"] })
   })
 
-  it("supports a caller invalidate that guards on result.status (RerunOrgSetup shape)", async () => {
-    // RerunOrgSetup passes an invalidate that skips on a status-"error"
-    // outcome; OrgSetupPage's is unconditional. Exercise the guarded shape's
-    // both branches directly against the callback the hook drives.
+  it("re-run refreshes the audit, Actions mode, org list and org details only on a non-error outcome", async () => {
     const queryClient = freshClient()
     const doInvalidate = vi.spyOn(queryClient, "invalidateQueries")
-    const guardedInvalidate = (
-      qc: typeof queryClient,
-      result: { status?: string } | undefined,
-    ) => {
-      if (result && result.status === "error") return
-      qc.invalidateQueries({ queryKey: githubKeys.orgAuditPrefix(ORG) })
-      qc.invalidateQueries({ queryKey: ["orgs"] })
-    }
 
     initClassroom50.mockResolvedValueOnce({ status: "error" })
     const errRun = renderHook(
-      () =>
-        useRunOrgSetup({
-          org: ORG,
-          onStepUpdate: vi.fn(),
-          invalidate: guardedInvalidate,
-        }),
+      () => useRunOrgSetup({ org: ORG, mode: "rerun", onStepUpdate: vi.fn() }),
       { wrapper: wrapperWith(queryClient) },
     )
     errRun.result.current.mutate()
@@ -372,12 +361,7 @@ describe("useRunOrgSetup", () => {
 
     initClassroom50.mockResolvedValueOnce({ status: "ok" })
     const okRun = renderHook(
-      () =>
-        useRunOrgSetup({
-          org: ORG,
-          onStepUpdate: vi.fn(),
-          invalidate: guardedInvalidate,
-        }),
+      () => useRunOrgSetup({ org: ORG, mode: "rerun", onStepUpdate: vi.fn() }),
       { wrapper: wrapperWith(queryClient) },
     )
     okRun.result.current.mutate()
@@ -385,6 +369,12 @@ describe("useRunOrgSetup", () => {
     expect(doInvalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.orgAuditPrefix(ORG),
     })
+    expect(doInvalidate).toHaveBeenCalledWith({
+      queryKey: githubKeys.orgActionsMode(ORG),
+    })
     expect(doInvalidate).toHaveBeenCalledWith({ queryKey: ["orgs"] })
+    expect(doInvalidate).toHaveBeenCalledWith({
+      queryKey: githubKeys.orgDetails(ORG),
+    })
   })
 })

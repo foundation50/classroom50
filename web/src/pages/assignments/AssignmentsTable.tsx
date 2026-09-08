@@ -22,8 +22,6 @@ import {
 import { formatDueDate, formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { composedRepoNameFits } from "@/util/repoNameBudget"
 import { Link } from "@tanstack/react-router"
-import { githubKeys } from "@/github-core/queries"
-import { useQueryClient } from "@tanstack/react-query"
 import {
   assignmentName as name,
   CloneSubmissionsAction,
@@ -199,7 +197,6 @@ const AssignmentsTable = ({
   viewSignature?: string
 }) => {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const { data: scoresData } = useGetScores(org, classroom)
   // Org repo list, for every row's Accepted count (this assignment's repos that
   // exist). Shared react-query cache with the submissions page.
@@ -279,11 +276,6 @@ const AssignmentsTable = ({
   const manageAssignment = manageSlug
     ? (assignments?.find((a) => a.slug === manageSlug) ?? null)
     : null
-  const invalidateAssignments = () =>
-    queryClient.invalidateQueries({
-      queryKey: githubKeys.assignmentsFile(org, classroom),
-    })
-
   return (
     <>
       {/* The shell's own entrance is off: the page-level PageTransition already
@@ -758,7 +750,6 @@ const AssignmentsTable = ({
           secret={secret}
           secretPending={secretPending}
           canMutate={canMutate}
-          onDeleteAssignment={invalidateAssignments}
         />
       )}
     </>
