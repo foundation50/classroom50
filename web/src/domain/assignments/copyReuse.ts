@@ -1,26 +1,16 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { Assignment } from "@/types/classroom"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
-import { prefixCommit } from "@/util/commit"
-import { assignmentsFilePath as assignmentsFile } from "@/util/configRepoPaths"
+import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import { nextAvailableSlug } from "@/util/slug"
 import { validateReleaseAssets } from "@/util/releaseAssets"
-import {
-  createGitCommit,
-  createGitTree,
-  updateRef,
-} from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
-import {
-  getAssignmentsFile,
-  type AssignmentsFile,
-} from "../queries/assignments"
+import type { AssignmentsFile } from "../queries/assignments"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
 import { log } from "./accessPrimitives"
+import {
+  commitAssignments,
+  readAssignmentsForWriteAt,
+} from "./assignmentsWrite"
 import { resolveTemplateGrant, type CreateAssignmentResult } from "./createEdit"
 
 export type CopyAssignmentInput = {
@@ -208,7 +198,12 @@ export async function copyAssignmentToClassroom(
       : Promise.resolve(null),
     getConfigRepoBranch(client, org),
   ])
-  const ref = await getBranchRef(client, org, configBranch)
+  const ctx = await readAssignmentsForWriteAt(
+    client,
+    org,
+    targetClassroom,
+    configBranch,
+  )
 
   const needsTeamGrant = reuseTemplateNeedsGrant(
     org,
@@ -217,43 +212,20 @@ export async function copyAssignmentToClassroom(
     repo,
   )
 
-  const commit = await getCommit(client, org, ref.object.sha)
-
-  const assignmentsFilePath = assignmentsFile(targetClassroom)
-  const currentAssignments = await getAssignmentsFile(client, {
-    org,
-    path: assignmentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  assertSlugFreeInTarget(entry.slug, currentAssignments, targetClassroom)
+  assertSlugFreeInTarget(entry.slug, ctx.current, targetClassroom)
 
   const nextAssignments: AssignmentsFile = {
-    ...currentAssignments,
-    assignments: [...currentAssignments.assignments, entry],
+    ...ctx.current,
+    assignments: [...ctx.current.assignments, entry],
   }
 
-  const tree = await createGitTree(client, {
+  const written = await commitAssignments(
+    client,
     org,
-    base_tree: commit.tree.sha,
-    tree: [
-      {
-        path: assignmentsFilePath,
-        mode: "100644",
-        type: "blob",
-        content: JSON.stringify(nextAssignments, null, 2) + "\n",
-      },
-    ],
-  })
-  const newCommit = await createGitCommit(client, {
-    org,
-    message: prefixCommit(
-      `Reuse assignment: ${source.slug} -> ${targetClassroom}/${entry.slug}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
+    ctx,
+    nextAssignments,
+    `Reuse assignment: ${source.slug} -> ${targetClassroom}/${entry.slug}`,
+  )
 
   // A locked source copies as locked, so withhold the grant like create and
   // the CLI's reuse do; unlocking the copy grants it.
@@ -270,11 +242,9 @@ export async function copyAssignmentToClassroom(
   }
 
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     templateGrantWarning,
   }
 }

@@ -12,21 +12,14 @@ import { parseDocument, isMap, isScalar } from "yaml"
 
 import type { GitHubClient } from "@/github-core/client"
 import type { Assignment } from "@/types/classroom"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
+import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import {
   getAssignmentsFile,
   type AssignmentsFile,
 } from "../queries/assignments"
 import {
-  createGitCommit,
-  createGitTree,
   createCommitRepo,
   createTreeRepo,
-  updateRef,
   updateRefForRepo,
   renameRepo,
   getRepoTreeRecursive,
@@ -55,6 +48,15 @@ import {
   type LocalizedParam,
 } from "@/types/localizedMessage"
 import { log } from "./accessPrimitives"
+import {
+  commitConfigRepoFiles,
+  jsonFileEntry,
+  readConfigRepoHeadAt,
+} from "../configRepoWrite"
+import {
+  commitAssignments,
+  readAssignmentsForWriteAt,
+} from "./assignmentsWrite"
 
 // The `<classroom>-<slug>-` repo-name prefix every student repo of an
 // assignment shares. Routed through studentRepoName (the cross-binary naming
@@ -238,19 +240,17 @@ async function commitRenameConfig(
   const scoresPath = scoresFilePath(classroom)
 
   await withGitConflictRetry(async () => {
-    const ref = await getBranchRef(client, org, branch)
-    // The three parent-pinned reads are independent — fetch them together.
+    const head = await readConfigRepoHeadAt(client, org, branch)
+    // The two parent-pinned reads are independent — fetch them together.
     // The scores read tolerates 404 (no file — nothing was ever collected).
-    const [commit, file, scoresRaw] = await Promise.all([
-      getCommit(client, org, ref.object.sha),
+    const [file, scoresRaw] = await Promise.all([
       getAssignmentsFile(client, {
         org,
         path: assignmentsPath,
-        ref: ref.object.sha,
+        ref: head.headSha,
       }),
       tolerateGitHubError(
-        () =>
-          getRawFile(client, { org, path: scoresPath, ref: ref.object.sha }),
+        () => getRawFile(client, { org, path: scoresPath, ref: head.headSha }),
         null,
       ),
     ])
@@ -299,12 +299,7 @@ async function commitRenameConfig(
     }
 
     const tree: GitTreeEntry[] = [
-      {
-        path: assignmentsPath,
-        mode: "100644",
-        type: "blob",
-        content: JSON.stringify(nextAssignments, null, 2) + "\n",
-      },
+      jsonFileEntry(assignmentsPath, nextAssignments),
     ]
 
     // scores.json bucket re-key (skipped when the file or the old bucket is
@@ -330,7 +325,7 @@ async function commitRenameConfig(
       client,
       owner: org,
       repo: CONFIG_REPO,
-      treeSha: commit.tree.sha,
+      treeSha: head.baseTreeSha,
     })
     if (truncated) {
       // A truncated listing would move a PARTIAL directory — refuse.
@@ -347,20 +342,13 @@ async function commitRenameConfig(
       tree.push({ path: entry.path, mode: "100644", type: "blob", sha: null })
     }
 
-    const newTree = await createGitTree(client, {
+    await commitConfigRepoFiles(
+      client,
       org,
-      base_tree: commit.tree.sha,
+      head,
       tree,
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `Rename assignment ${oldSlug} to ${newSlug}: ${classroom}`,
-      ),
-      tree_sha: newTree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, branch)
+      `Rename assignment ${oldSlug} to ${newSlug}: ${classroom}`,
+    )
   })
 }
 
@@ -374,16 +362,10 @@ async function setRenamedEntryLocked(
   locked: boolean,
 ): Promise<void> {
   const { org, classroom, newSlug } = input
-  const assignmentsPath = assignmentsFilePath(classroom)
 
   await withGitConflictRetry(async () => {
-    const ref = await getBranchRef(client, org, branch)
-    const commit = await getCommit(client, org, ref.object.sha)
-    const file = await getAssignmentsFile(client, {
-      org,
-      path: assignmentsPath,
-      ref: ref.object.sha,
-    })
+    const ctx = await readAssignmentsForWriteAt(client, org, classroom, branch)
+    const file = ctx.current
     const target = file.assignments.find((a) => a.slug === newSlug)
     if (!target) {
       throw renameError("assignments.rename.error.notFound", {
@@ -404,27 +386,13 @@ async function setRenamedEntryLocked(
         return entry
       }),
     }
-    const tree = await createGitTree(client, {
+    await commitAssignments(
+      client,
       org,
-      base_tree: commit.tree.sha,
-      tree: [
-        {
-          path: assignmentsPath,
-          mode: "100644",
-          type: "blob",
-          content: JSON.stringify(nextAssignments, null, 2) + "\n",
-        },
-      ],
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `Restore lock state of ${newSlug} after rename: ${classroom}`,
-      ),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, branch)
+      ctx,
+      nextAssignments,
+      `Restore lock state of ${newSlug} after rename: ${classroom}`,
+    )
   })
 }
 

@@ -1,20 +1,14 @@
 import type { GitHubClient } from "@/github-core/client"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
-import {
-  createGitCommit,
-  createGitTree,
-  updateRef,
-} from "@/github-core/mutations"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { scoresFilePath } from "@/util/configRepoPaths"
 import { decodeBase64Utf8 } from "@/util/github"
 import { GitHubAPIError } from "@/github-core/errors"
-import { prefixCommit } from "@/util/commit"
-import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
+import { withGitConflictRetry } from "../classrooms"
+import {
+  commitConfigRepoFiles,
+  jsonFileEntry,
+  readConfigRepoHead,
+} from "../configRepoWrite"
 
 // A stored submission record inside scores.json (classroom50/result/v1 payload
 // minus the bucket-key `assignment`). We only type the fields the override path
@@ -184,14 +178,8 @@ export async function editScoreOverride(
   const { org, classroom, assignment, owner } = input
 
   return withGitConflictRetry(async () => {
-    const [, configBranch] = await Promise.all([
-      assertClassroomNotArchived(client, org, classroom),
-      getConfigRepoBranch(client, org),
-    ])
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
-
-    const scores = await readScoresFile(client, org, classroom, ref.object.sha)
+    const head = await readConfigRepoHead(client, org, classroom)
+    const scores = await readScoresFile(client, org, classroom, head.headSha)
     const bucket: AssignmentBucket = scores.assignments[assignment] ?? {
       type: input.assignmentType,
       entries: [],
@@ -285,29 +273,17 @@ export async function editScoreOverride(
       scores.assignments[assignment] = bucket
     }
 
-    const tree = await createGitTree(client, {
-      org,
-      base_tree: commit.tree.sha,
-      tree: [
-        {
-          path: scoresFilePath(classroom),
-          mode: "100644",
-          type: "blob",
-          content: JSON.stringify(scores, null, 2) + "\n",
-        },
-      ],
-    })
     const message = input.clear
       ? `Clear score override: ${classroom}/${assignment} (${owner})`
       : `Set score override: ${classroom}/${assignment} (${owner})`
-    const newCommit = await createGitCommit(client, {
+    const { newCommitSha } = await commitConfigRepoFiles(
+      client,
       org,
-      message: prefixCommit(message),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, configBranch)
+      head,
+      [jsonFileEntry(scoresFilePath(classroom), scores)],
+      message,
+    )
 
-    return { newCommitSha: newCommit.sha }
+    return { newCommitSha }
   })
 }

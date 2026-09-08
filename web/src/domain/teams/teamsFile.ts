@@ -1,21 +1,16 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { TeamFormation } from "@/types/classroom"
 import { GitHubAPIError } from "@/github-core/errors"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
-import {
-  createGitCommit,
-  createGitTree,
-  updateRef,
-} from "@/github-core/mutations"
+import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { teamsFilePath } from "@/util/configRepoPaths"
 import { decodeBase64Utf8 } from "@/util/github"
-import { prefixCommit } from "@/util/commit"
 import { withGitConflictRetry } from "../classrooms"
+import {
+  commitConfigRepoFiles,
+  jsonFileEntry,
+  readConfigRepoHeadAt,
+} from "../configRepoWrite"
 import { listTeamMembers } from "@/github-core/queries"
 import { listAssignmentGroupTeams } from "./groupTeams"
 
@@ -122,10 +117,11 @@ export function removeTeamFromSnapshot(
   )
 }
 
-// Commit an updated teams.json via the same git tree/commit path as the
-// assignment writes. `update` maps the freshly-read file to the next one; the
-// whole read -> update -> commit runs inside withGitConflictRetry, so a
-// concurrent config-repo write is re-read and retried rather than lost.
+// Commit an updated teams.json. `update` maps the freshly-read file to the next
+// one; the whole read -> update -> commit runs inside withGitConflictRetry, so
+// a concurrent config-repo write is re-read and retried rather than lost. No
+// archive guard: group-team bookkeeping stays writable on an archived classroom
+// (teardown records deletions here).
 export async function writeTeamsFile(
   client: GitHubClient,
   input: {
@@ -138,34 +134,19 @@ export async function writeTeamsFile(
   const { org, classroom, message, update } = input
   await withGitConflictRetry(async () => {
     const configBranch = await getConfigRepoBranch(client, org)
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
+    const head = await readConfigRepoHeadAt(client, org, configBranch)
     const current = await getTeamsFile(client, {
       org,
       classroom,
-      ref: ref.object.sha,
+      ref: head.headSha,
     })
-    const next = update(current)
-
-    const tree = await createGitTree(client, {
+    await commitConfigRepoFiles(
+      client,
       org,
-      base_tree: commit.tree.sha,
-      tree: [
-        {
-          path: teamsFilePath(classroom),
-          mode: "100644",
-          type: "blob",
-          content: JSON.stringify(next, null, 2) + "\n",
-        },
-      ],
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(message),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, configBranch)
+      head,
+      [jsonFileEntry(teamsFilePath(classroom), update(current))],
+      message,
+    )
   })
 }
 

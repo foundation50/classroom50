@@ -15,12 +15,7 @@ import {
   assertTeamFormation,
   defaultStudentPermission,
 } from "@/types/classroom"
-import {
-  getBranchRef,
-  getClassroomJson,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
+import { getClassroomJson } from "@/github-core/configRepoReads"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { GitHubAPIError } from "@/github-core/errors"
 import {
@@ -29,8 +24,6 @@ import {
   validateTestTimeout,
 } from "@/util/assignmentTests"
 import { buildDueFields } from "@/util/formatDate"
-import { prefixCommit } from "@/util/commit"
-import { assignmentsFilePath as assignmentsFile } from "@/util/configRepoPaths"
 import {
   parseRunnerLabels,
   isRunnerLabelShapeValid,
@@ -54,21 +47,11 @@ import {
   addRepositoryToTeam,
   removeRepositoryFromTeam,
   isDeletableClassroomTeamRef,
-  createGitCommit,
-  createGitTree,
-  updateRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { getRepo } from "@/github-core/repoReads"
-import {
-  getAssignmentsFile,
-  type AssignmentsFile,
-} from "../queries/assignments"
-import {
-  withGitConflictRetry,
-  assertClassroomNotArchived,
-  type CreateClassroomResult,
-} from "../classrooms"
+import type { AssignmentsFile } from "../queries/assignments"
+import { withGitConflictRetry, type CreateClassroomResult } from "../classrooms"
 import {
   log,
   parseTemplateRef,
@@ -77,6 +60,12 @@ import {
 } from "./accessPrimitives"
 import { CONFIG_REPO } from "@/util/configRepo"
 import type { CreateAssignmentInput } from "./repoCreation"
+import {
+  commitAssignments,
+  readAssignmentsForWrite,
+  requireAssignment,
+  type AssignmentsWriteContext,
+} from "./assignmentsWrite"
 import { resolveSubmissionMode } from "./submissionDetection"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
@@ -225,29 +214,9 @@ export async function editAssignment(
 
   log.info("edit assignment: started", { org, classroom, slug })
 
-  // The archive guard is independent of the org ref read, so run them
-  // concurrently — Promise.all rejects on the first rejection, so an archived
-  // classroom still fails closed before any write.
-  const [, configBranch] = await Promise.all([
-    assertClassroomNotArchived(client, org, classroom),
-    getConfigRepoBranch(client, org),
-  ])
-  const ref = await getBranchRef(client, org, configBranch)
-  const commit = await getCommit(client, org, ref.object.sha)
-
-  const assignmentsFilePath = assignmentsFile(classroom)
-  const currentAssignments = await getAssignmentsFile(client, {
-    org,
-    path: assignmentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const targetAssignment = currentAssignments.assignments.find(
-    (a) => a.slug === slug,
-  )
-  if (!targetAssignment) {
-    throw new Error(`Existing assignment matching ${slug} was not found.`)
-  }
+  const ctx = await readAssignmentsForWrite(client, org, classroom)
+  const currentAssignments = ctx.current
+  const targetAssignment = requireAssignment(ctx, slug)
 
   // Provisioning-class settings (empty_repo, no_autograder, init_shim) and the
   // grading.mode are no longer blocked on edit: student repos are provisioned
@@ -294,30 +263,12 @@ export async function editAssignment(
     ),
   }
 
-  const tree = await createGitTree(client, {
-    org: input.org,
-    base_tree: commit.tree.sha,
-    tree: [
-      {
-        path: assignmentsFilePath,
-        mode: "100644",
-        type: "blob",
-        content: JSON.stringify(nextAssignments, null, 2) + "\n",
-      },
-    ],
-  })
-
-  const newCommit = await createGitCommit(client, {
-    org: input.org,
-    message: prefixCommit(`Edit assignment: ${input.classroom}/${slug}`),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-  const updatedRef = await updateRef(
+  const written = await commitAssignments(
     client,
-    input.org,
-    newCommit.sha,
-    configBranch,
+    org,
+    ctx,
+    nextAssignments,
+    `Edit assignment: ${input.classroom}/${slug}`,
   )
 
   // Grant the (possibly changed) in-org private template a team read — a
@@ -359,11 +310,9 @@ export async function editAssignment(
   }
 
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     templateGrantWarning,
     templateAccessWarning,
   }
@@ -1157,25 +1106,14 @@ export async function createAssignment(
     classroom: input.classroom,
     slug: input.slug,
   })
-  // The archive guard, entry build, and org ref read are independent, so run
-  // them concurrently — Promise.all rejects on the first rejection, so an
-  // archived classroom still fails closed before any write.
-  const [, { entry: assignmentBody, needsTeamGrant }, configBranch] =
-    await Promise.all([
-      assertClassroomNotArchived(client, input.org, input.classroom),
-      buildAssignmentEntry(client, input),
-      getConfigRepoBranch(client, input.org),
-    ])
-  const ref = await getBranchRef(client, input.org, configBranch)
-
-  const commit = await getCommit(client, input.org, ref.object.sha)
-
-  const assignmentsFilePath = assignmentsFile(input.classroom)
-  const currentAssignments = await getAssignmentsFile(client, {
-    org: input.org,
-    path: assignmentsFilePath,
-    ref: ref.object.sha,
-  })
+  // The entry build (template probe) is independent of the config-repo read,
+  // so they overlap; Promise.all rejects on the first rejection, so an archived
+  // classroom or a bad template still fails closed before any write.
+  const [{ entry: assignmentBody, needsTeamGrant }, ctx] = await Promise.all([
+    buildAssignmentEntry(client, input),
+    readAssignmentsForWrite(client, input.org, input.classroom),
+  ])
+  const currentAssignments = ctx.current
 
   if (
     currentAssignments.assignments.some(
@@ -1203,31 +1141,12 @@ export async function createAssignment(
     assignments: [...currentAssignments.assignments, assignmentBody],
   }
 
-  const tree = await createGitTree(client, {
-    ...input,
-    base_tree: commit.tree.sha,
-    tree: [
-      {
-        path: assignmentsFilePath,
-        mode: "100644",
-        type: "blob",
-        content: JSON.stringify(nextAssignments, null, 2) + "\n",
-      },
-    ],
-  })
-  const newCommit = await createGitCommit(client, {
-    org: input.org,
-    message: prefixCommit(
-      `Create assignment: ${input.classroom}/${assignmentBody.slug}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-  const updatedRef = await updateRef(
+  const written = await commitAssignments(
     client,
     input.org,
-    newCommit.sha,
-    configBranch,
+    ctx,
+    nextAssignments,
+    `Create assignment: ${input.classroom}/${assignmentBody.slug}`,
   )
 
   // A locked create deliberately hands students no template read: the grant
@@ -1246,11 +1165,9 @@ export async function createAssignment(
   }
 
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     templateGrantWarning,
   }
 }
@@ -1374,12 +1291,60 @@ async function revokeStudentTeamTemplateRead(
   }
 }
 
+// Flip one boolean entry flag (`locked` or `closed`) in assignments.json.
+// Skips the commit when the entry is already in the requested state (a
+// double-click or stale tab), mirroring the CLI's no-op, and reports the head
+// as the "no change" result so callers can still seed their caches. Collapses a
+// false flag to absent (the CLI's omitempty), so clearing drops the key rather
+// than writing `false`.
+async function setAssignmentFlag(
+  client: GitHubClient,
+  ctx: AssignmentsWriteContext,
+  org: string,
+  slug: string,
+  flag: "locked" | "closed",
+  value: boolean,
+  message: string,
+): Promise<{
+  target: Assignment
+  next: AssignmentsFile
+  result: Omit<CreateClassroomResult, "updatedRef"> & {
+    updatedRef?: CreateClassroomResult["updatedRef"]
+  }
+}> {
+  const target = requireAssignment(ctx, slug)
+  const noChange = {
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    newTreeSha: ctx.baseTreeSha,
+    newCommitSha: ctx.headSha,
+  }
+  if (Boolean(target[flag]) === value) {
+    return { target, next: ctx.current, result: noChange }
+  }
+
+  const updatedEntry: Assignment = { ...target, [flag]: value }
+  if (!value) delete updatedEntry[flag]
+  const next: AssignmentsFile = {
+    ...ctx.current,
+    assignments: replaceAssignmentEntry(
+      ctx.current.assignments,
+      slug,
+      updatedEntry,
+    ),
+  }
+  const written = await commitAssignments(client, org, ctx, next, message)
+  return { target, next, result: { ...noChange, ...written } }
+}
+
 // Flip an assignment's `locked` flag in assignments.json and reconcile the
 // private-template student-team access: locking removes the student team's read
 // on a private in-org template, unlocking re-grants it (student + staff, via
 // the shared grant path). Public/absent/out-of-org templates are a UX-gate-only
 // lock with no GitHub access change. The template side effect never throws (the
-// commit already landed); its failure returns a non-fatal warning.
+// commit already landed); its failure returns a non-fatal warning, and it runs
+// even on a no-op flip since a prior run may have flipped the flag yet failed
+// the grant/revoke.
 export async function setAssignmentLock(
   client: GitHubClient,
   input: SetAssignmentLockInput,
@@ -1387,74 +1352,16 @@ export async function setAssignmentLock(
   const { org, classroom, slug, locked } = input
   log.info("set assignment lock: started", { org, classroom, slug, locked })
 
-  const [, configBranch] = await Promise.all([
-    assertClassroomNotArchived(client, org, classroom),
-    getConfigRepoBranch(client, org),
-  ])
-  const ref = await getBranchRef(client, org, configBranch)
-  const commit = await getCommit(client, org, ref.object.sha)
-
-  const assignmentsFilePath = assignmentsFile(classroom)
-  const currentAssignments = await getAssignmentsFile(client, {
+  const ctx = await readAssignmentsForWrite(client, org, classroom)
+  const { target, result } = await setAssignmentFlag(
+    client,
+    ctx,
     org,
-    path: assignmentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const target = currentAssignments.assignments.find((a) => a.slug === slug)
-  if (!target) {
-    throw new Error(`Existing assignment matching ${slug} was not found.`)
-  }
-
-  const alreadyInState = Boolean(target.locked) === locked
-
-  // Skip the commit when already in the requested state (a double-click or
-  // stale tab), mirroring the CLI's no-op — but still reconcile template access
-  // below, since a prior run may have flipped the flag yet failed the
-  // grant/revoke. Reuse the current ref/tree as the "no change" result.
-  let newCommitSha = ref.object.sha
-  let newTreeSha = commit.tree.sha
-  let updatedRef: CreateClassroomResult["updatedRef"] | undefined
-
-  if (!alreadyInState) {
-    const updatedEntry: Assignment = { ...target, locked }
-    // Collapse to the wire's absent-is-false shape (matches the CLI's
-    // omitempty), so unlocking drops the key rather than writing `locked: false`.
-    if (!locked) delete updatedEntry.locked
-
-    const nextAssignments: AssignmentsFile = {
-      ...currentAssignments,
-      assignments: replaceAssignmentEntry(
-        currentAssignments.assignments,
-        slug,
-        updatedEntry,
-      ),
-    }
-
-    const tree = await createGitTree(client, {
-      org,
-      base_tree: commit.tree.sha,
-      tree: [
-        {
-          path: assignmentsFilePath,
-          mode: "100644",
-          type: "blob",
-          content: JSON.stringify(nextAssignments, null, 2) + "\n",
-        },
-      ],
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `${locked ? "Lock" : "Unlock"} assignment: ${classroom}/${slug}`,
-      ),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
-    newCommitSha = newCommit.sha
-    newTreeSha = tree.sha
-  }
+    slug,
+    "locked",
+    locked,
+    `${locked ? "Lock" : "Unlock"} assignment: ${classroom}/${slug}`,
+  )
 
   const templateAccessWarning = await reconcileLockTemplateAccess(
     client,
@@ -1463,18 +1370,10 @@ export async function setAssignmentLock(
     slug,
     target.template,
     locked,
-    currentAssignments.assignments,
+    ctx.current.assignments,
   )
 
-  return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha,
-    newCommitSha,
-    updatedRef,
-    locked,
-    templateAccessWarning,
-  }
+  return { ...result, locked, templateAccessWarning }
 }
 
 // Reconcile the private in-org template's student-team read after a lock flip:
@@ -1560,79 +1459,17 @@ export async function setAssignmentClosed(
   const { org, classroom, slug, closed } = input
   log.info("set assignment closed: started", { org, classroom, slug, closed })
 
-  const [, configBranch] = await Promise.all([
-    assertClassroomNotArchived(client, org, classroom),
-    getConfigRepoBranch(client, org),
-  ])
-  const ref = await getBranchRef(client, org, configBranch)
-  const commit = await getCommit(client, org, ref.object.sha)
-
-  const assignmentsFilePath = assignmentsFile(classroom)
-  const currentAssignments = await getAssignmentsFile(client, {
+  const ctx = await readAssignmentsForWrite(client, org, classroom)
+  const { result } = await setAssignmentFlag(
+    client,
+    ctx,
     org,
-    path: assignmentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const target = currentAssignments.assignments.find((a) => a.slug === slug)
-  if (!target) {
-    throw new Error(`Existing assignment matching ${slug} was not found.`)
-  }
-
-  const alreadyInState = Boolean(target.closed) === closed
-
-  let newCommitSha = ref.object.sha
-  let newTreeSha = commit.tree.sha
-  let updatedRef: CreateClassroomResult["updatedRef"] | undefined
-
-  if (!alreadyInState) {
-    const updatedEntry: Assignment = { ...target, closed }
-    // Collapse to the wire's absent-is-false shape (matches the CLI's
-    // omitempty), so reopening drops the key rather than writing `closed: false`.
-    if (!closed) delete updatedEntry.closed
-
-    const nextAssignments: AssignmentsFile = {
-      ...currentAssignments,
-      assignments: replaceAssignmentEntry(
-        currentAssignments.assignments,
-        slug,
-        updatedEntry,
-      ),
-    }
-
-    const tree = await createGitTree(client, {
-      org,
-      base_tree: commit.tree.sha,
-      tree: [
-        {
-          path: assignmentsFilePath,
-          mode: "100644",
-          type: "blob",
-          content: JSON.stringify(nextAssignments, null, 2) + "\n",
-        },
-      ],
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `${closed ? "Close" : "Reopen"} assignment: ${classroom}/${slug}`,
-      ),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
-    newCommitSha = newCommit.sha
-    newTreeSha = tree.sha
-  }
-
-  return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha,
-    newCommitSha,
-    updatedRef,
+    slug,
+    "closed",
     closed,
-  }
+    `${closed ? "Close" : "Reopen"} assignment: ${classroom}/${slug}`,
+  )
+  return { ...result, closed }
 }
 
 // Same concurrency story as setAssignmentLock: the write hits classroom50's
