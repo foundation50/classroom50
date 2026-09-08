@@ -7,10 +7,7 @@ import { isClassroomArchived } from "@/types/classroom"
 // Refuse a write into an archived classroom (active: false). The UI hides the
 // affordances, but the write path is the authoritative guard (stale tab, direct
 // API call, CLI/agent). Reads classroom.json fresh and fails closed before any
-// commit; a missing/legacy classroom.json reads as active. Shared by the
-// assignment and roster mutations. A leaf module so configRepoWrite can run it
-// without importing the classroom writers that in turn depend on
-// configRepoWrite.
+// commit; a missing/legacy classroom.json reads as active.
 export async function assertClassroomNotArchived(
   client: GitHubClient,
   org: string,

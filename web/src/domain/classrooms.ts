@@ -41,6 +41,9 @@ export {
   type EditClassroomInput,
   type EditClassroomResult,
 } from "./classrooms/edit"
+// The guard is a leaf so configRepoWrite (which this module imports) can run
+// it without a cycle; re-exported here so writers keep one import path.
+export { assertClassroomNotArchived } from "./classrooms/archiveGuard"
 
 const log = logger.scope("mutations:classrooms")
 
@@ -262,8 +265,6 @@ export async function createClassroomFilesWithConflictRetry(
 ) {
   return withGitConflictRetry(() => createClassroomFiles(client, input))
 }
-
-export { assertClassroomNotArchived } from "./classrooms/archiveGuard"
 
 export async function editClassroomWithConflictRetry(
   client: GitHubClient,
