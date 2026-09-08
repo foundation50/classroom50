@@ -62,10 +62,10 @@ vi.mock("@/components/modals/BulkCloseSubmissionModal", () => ({
 // Both reads come from the page's cache in the app; here they are the fixture
 // the accepted-owner rule runs over.
 vi.mock("@/hooks/useGetMyOrgRepos", () => ({
-  default: () => ({ data: orgRepos }),
+  default: () => ({ data: orgRepos, isPending: reposPending, isError: false }),
 }))
 vi.mock("@/hooks/useGetStudents", () => ({
-  default: () => ({ students }),
+  default: () => ({ students, isLoading: false, isError: studentsError }),
 }))
 vi.mock("@/hooks/useStaffCapabilities", () => ({
   useStaffCapabilities: () => ({ isOwner }),
@@ -122,6 +122,8 @@ const orgRepos = [
 ].map((name) => ({ name }) as GitHubRepo)
 const students = [{ username: "ana" }, { username: "bo" }] as Student[]
 let isOwner = true
+let reposPending = false
+let studentsError = false
 
 // The menu item and the confirm dialog's button share a label, so menu
 // lookups are scoped to the menu.
@@ -142,6 +144,8 @@ const renderBar = (props: { selected: string[] }) =>
 
 beforeEach(() => {
   isOwner = true
+  reposPending = false
+  studentsError = false
   closedMutate
     .mockReset()
     .mockResolvedValue({ changed: [], missing: [], newCommitSha: null })
@@ -281,6 +285,40 @@ describe("AssignmentsBulkBar close submission", () => {
     expect(closeButton().getAttribute("title")).toBe(
       "assignments.bulk.closeSubmission.noneEligible",
     )
+    expect(reopenButton().disabled).toBe(true)
+  })
+
+  // Reopen restores write. Fanning out over an assignment that was never
+  // closed would re-grant push on repos a teacher downgraded per student.
+  it("reopens only the assignments that are actually closed", () => {
+    renderBar({ selected: ["hw1", "hw5"] })
+
+    fireEvent.click(reopenButton())
+
+    expect(screen.getByTestId("close-modal").getAttribute("data-mode")).toBe(
+      "reopen",
+    )
+    expect(screen.getByTestId("close-targets").textContent).toBe("hw5(ana)")
+  })
+
+  // Owners resolve from the org repo list and the roster; without them every
+  // assignment looks unaccepted and the run would commit the flag while every
+  // student kept write.
+  it("waits while the repository list is still loading", () => {
+    reposPending = true
+    renderBar({ selected: ["hw1"] })
+
+    expect(closeButton().disabled).toBe(true)
+    expect(closeButton().getAttribute("title")).toBe(
+      "assignments.bulk.closeSubmission.ownersUnknown",
+    )
+  })
+
+  it("waits when the roster read failed", () => {
+    studentsError = true
+    renderBar({ selected: ["hw1", "hw5"] })
+
+    expect(closeButton().disabled).toBe(true)
     expect(reopenButton().disabled).toBe(true)
   })
 

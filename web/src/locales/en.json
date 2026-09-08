@@ -1802,6 +1802,7 @@
         "noneEligible": "No selected assignment can be closed: group and team assignments manage their own repositories, and an empty-repository assignment has none to set read-only.",
         "allClosed": "Every selected assignment is already closed.",
         "noneClosed": "No selected assignment is closed.",
+        "ownersUnknown": "Waiting for the organization's repositories and the roster. The run needs both to know whose repository to change.",
         "title": "Close submission",
         "reopenTitle": "Reopen submission",
         "subtitle_one": "Blocks new students from accepting {{count}} assignment and sets the accepted students' repositories to read-only.",

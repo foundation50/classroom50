@@ -61,28 +61,49 @@ export function BulkCloseSubmissionModal({
   // writable (deferred/failed). Reopening would re-grant write first, so the
   // recovery is a fan-out-only re-run — same reasoning as CloseSubmissionModal.
   const [fanOutIncomplete, setFanOutIncomplete] = useState(false)
+  // What the committing run established, so a finish-only re-run reports the
+  // same numbers instead of re-deriving them from the selection: the flag is
+  // committed once, and an assignment that was already gone then is still gone.
+  const [committed, setCommitted] = useState<{
+    changed: number
+    missing: string[]
+  } | null>(null)
+  // The owners a run left unfinished (failed or never launched), grouped by
+  // assignment. "Finish closing" re-runs exactly these — retrying the owners
+  // already set to read would re-spend the request budget on the rate limit it
+  // is recovering from.
+  const [unfinished, setUnfinished] = useState<CloseSubmissionTarget[] | null>(
+    null,
+  )
 
   useEffect(() => {
     if (!open) return
     setFlagError(false)
     setFanOutIncomplete(false)
+    setCommitted(null)
+    setUnfinished(null)
   }, [open])
 
   const assignmentTotal = targets.length
   const repoTotal = targets.reduce((sum, one) => sum + one.owners.length, 0)
 
-  // `flipFlag` runs the whole action (commit, then fan-out); `finishOnly`
-  // re-runs just the fan-out to finish an interrupted close.
+  // `flipFlag` runs the whole action (commit, then fan-out); a finish-only run
+  // skips the commit and re-runs the fan-out over what the last one left.
   const run = async ({ flipFlag }: { flipFlag: boolean }) => {
-    if (!bulk.begin(repoTotal)) return
+    const runTargets = flipFlag ? targets : (unfinished ?? targets)
+    const runRepoTotal = runTargets.reduce(
+      (sum, one) => sum + one.owners.length,
+      0,
+    )
+    if (!bulk.begin(runRepoTotal)) return
     setFlagError(false)
     setFanOutIncomplete(false)
 
     // Commit the window flag FIRST: closing must block new accepts even if the
     // per-repo fan-out is later throttled. One commit for the selection, so a
     // failure here changed nothing at all.
-    let changed = flipFlag ? 0 : assignmentTotal
-    let missing: string[] = []
+    let changed = committed?.changed ?? assignmentTotal
+    let missing = committed?.missing ?? []
     if (flipFlag) {
       try {
         const write = await setClosed.mutateAsync({
@@ -91,6 +112,9 @@ export function BulkCloseSubmissionModal({
         })
         changed = write.changed.length
         missing = write.missing
+        if (bulk.isMounted()) {
+          setCommitted({ changed, missing })
+        }
       } catch {
         if (bulk.isMounted()) setFlagError(true)
         bulk.fail(t("submissions.closeSubmission.flagError"))
@@ -102,7 +126,7 @@ export function BulkCloseSubmissionModal({
     // reach either; its owners would 404 one by one.
     const gone = new Set(missing)
     const { outcomes, rateLimited } = await runBulkCloseSubmission({
-      targets: targets.filter((one) => !gone.has(one.slug)),
+      targets: runTargets.filter((one) => !gone.has(one.slug)),
       org,
       classroom,
       permission,
@@ -114,7 +138,7 @@ export function BulkCloseSubmissionModal({
       t,
       isMounted: bulk.isMounted,
       onProgress: (processed) =>
-        bulk.setProgress({ processed, total: repoTotal, message: "" }),
+        bulk.setProgress({ processed, total: runRepoTotal, message: "" }),
     })
     if (!bulk.isMounted()) return
 
@@ -127,14 +151,24 @@ export function BulkCloseSubmissionModal({
         ? "assignments.bulk.closeSubmission.resultHeadline"
         : "assignments.bulk.closeSubmission.reopenResultHeadline"
 
-    setFanOutIncomplete(closing && (failed.length > 0 || deferred.length > 0))
+    // Group what is still not read-only, so the finish-only re-run is exactly
+    // those owners.
+    const remaining = new Map<string, string[]>()
+    for (const outcome of [...failed, ...deferred]) {
+      remaining.set(outcome.slug, [
+        ...(remaining.get(outcome.slug) ?? []),
+        outcome.owner,
+      ])
+    }
+    setUnfinished([...remaining].map(([slug, owners]) => ({ slug, owners })))
+    setFanOutIncomplete(closing && remaining.size > 0)
     bulk.complete(
       {
         headline: t(headlineKey, {
           count: changed,
           total: assignmentTotal,
           repos: succeeded.length,
-          repoTotal,
+          repoTotal: runRepoTotal,
         }),
         sections: [
           ...(failed.length
