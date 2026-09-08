@@ -16,6 +16,7 @@ import {
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
 } from "@/authz"
+import { sortByColumn } from "./sortColumns"
 
 // Role vocabulary is single-sourced in the authz module (authz/roles). Re-exported
 // here because the roster row logic below is its primary consumer and callers
@@ -575,35 +576,32 @@ export function sortTeamRosterRowsBy(
   column: RosterTableSortColumn,
   direction: "asc" | "desc",
 ): TeamRosterRow[] {
-  const flip = direction === "desc" ? -1 : 1
   const topRank = (row: TeamRosterRow) =>
     Math.max(0, ...row.roles.map((role) => ROLE_RANK[role]))
   const byName = (a: TeamRosterRow, b: TeamRosterRow) =>
     sortName(a).localeCompare(sortName(b), undefined, NAME_COLLATION)
-  // Blank-last compare regardless of direction: the inner flip cancels the
-  // outer one, so "no data" never leads a reversed column.
-  const blankLast = (va: string, vb: string): number => {
-    if (!va || !vb) return flip * (va === vb ? 0 : va ? -1 : 1)
-    return va.localeCompare(vb, undefined, { numeric: true })
-  }
-  const byColumn = (a: TeamRosterRow, b: TeamRosterRow): number => {
-    switch (column) {
-      case "member":
-        return byName(a, b)
-      case "username":
-        return blankLast(
-          a.username.trim().toLowerCase(),
-          b.username.trim().toLowerCase(),
-        )
-      case "role":
-        return topRank(b) - topRank(a)
-      case "section":
-        return blankLast(a.section.trim(), b.section.trim())
-      case "status":
-        return STATE_ORDER[a.state] - STATE_ORDER[b.state]
-    }
-  }
-  return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
+  return sortByColumn(
+    rows,
+    direction,
+    (a, b, blankLast) => {
+      switch (column) {
+        case "member":
+          return byName(a, b)
+        case "username":
+          return blankLast(
+            a.username.trim().toLowerCase(),
+            b.username.trim().toLowerCase(),
+          )
+        case "role":
+          return topRank(b) - topRank(a)
+        case "section":
+          return blankLast(a.section.trim(), b.section.trim())
+        case "status":
+          return STATE_ORDER[a.state] - STATE_ORDER[b.state]
+      }
+    },
+    byName,
+  )
 }
 
 // Project a roster row back to the display-metadata Student shape the grade

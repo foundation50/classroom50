@@ -390,6 +390,61 @@ export const LockAssignmentAction = ({
 }
 
 // Delete (hub only): typed-slug confirm; the hook refreshes the listing.
+// The typed-slug delete confirm, shared by the hub row here and the
+// submissions page's Actions menu. The hook refreshes the listing; `onDeleted`
+// is for the caller that must leave the page it is on.
+export const DeleteAssignmentConfirm = ({
+  open,
+  onClose,
+  org,
+  classroom,
+  slug,
+  name,
+  onDeleted,
+}: {
+  open: boolean
+  onClose: () => void
+  org: string
+  classroom: string
+  slug: string
+  name: string
+  onDeleted?: () => Promise<void> | void
+}) => {
+  const { t } = useTranslation()
+  const deleteAssignmentMutation = useDeleteAssignment()
+  return (
+    <ConfirmModal
+      open={open}
+      title={t("assignments.table.deleteTitle")}
+      description={
+        <Trans
+          i18nKey="assignments.table.deleteDescription"
+          values={{ assignment: name, classroom: `${org}/${classroom}` }}
+          components={{
+            assignment: <EmphasisLtr className="text-base-content" />,
+            classroom: <EmphasisLtr className="text-base-content" />,
+          }}
+        />
+      }
+      confirmText={slug}
+      confirmLabel={t("assignments.table.deleteConfirm")}
+      cancelLabel={t("assignments.table.deleteCancel")}
+      tone="error"
+      warning={t("assignments.table.deleteWarning")}
+      onConfirm={async () => {
+        await deleteAssignmentMutation.mutateAsync({
+          org,
+          classroom,
+          assignment: slug,
+        })
+        await onDeleted?.()
+      }}
+      onClose={onClose}
+    />
+  )
+}
+
+// Delete (hub only): the row that opens the shared confirm.
 export const DeleteAssignmentAction = ({
   org,
   classroom,
@@ -401,7 +456,6 @@ export const DeleteAssignmentAction = ({
 }) => {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const deleteAssignmentMutation = useDeleteAssignment()
 
   return (
     <>
@@ -414,36 +468,13 @@ export const DeleteAssignmentAction = ({
           name: assignmentName(assignment),
         })}
       />
-
-      <ConfirmModal
+      <DeleteAssignmentConfirm
         open={open}
-        title={t("assignments.table.deleteTitle")}
-        description={
-          <Trans
-            i18nKey="assignments.table.deleteDescription"
-            values={{
-              assignment: assignmentName(assignment),
-              classroom: `${org}/${classroom}`,
-            }}
-            components={{
-              assignment: <EmphasisLtr className="text-base-content" />,
-              classroom: <EmphasisLtr className="text-base-content" />,
-            }}
-          />
-        }
-        confirmText={assignment.slug}
-        confirmLabel={t("assignments.table.deleteConfirm")}
-        cancelLabel={t("assignments.table.deleteCancel")}
-        tone="error"
-        warning={t("assignments.table.deleteWarning")}
-        onConfirm={async () => {
-          await deleteAssignmentMutation.mutateAsync({
-            org,
-            classroom,
-            assignment: assignment.slug,
-          })
-        }}
         onClose={() => setOpen(false)}
+        org={org}
+        classroom={classroom}
+        slug={assignment.slug}
+        name={assignmentName(assignment)}
       />
     </>
   )

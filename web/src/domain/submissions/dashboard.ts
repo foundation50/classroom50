@@ -755,41 +755,25 @@ export function assignmentRepoNames(params: {
 // (the `<owner>` segment of `<classroom>-<assignment>-<owner>`).
 export type GroupRepo = { owner: string; repoName: string }
 
-// Group repos that exist for the assignment. Unlike individual acceptance, the
-// founder logins aren't known up front (group repos are named after whoever
-// created the group), so we must reverse-parse the `<classroom>-<assignment>-`
-// prefix rather than forward-construct per student. Prefix-stripping alone
-// over-matches a sibling whose slug extends this one (assignment "hw1" capturing
-// `cs101-hw1-bonus-alice` from "hw1-bonus"), so reject any repo that belongs to
-// a longer sibling assignment: `siblingSlugs` is the classroom's other slugs, and
-// a repo under `<classroom>-<sibling>-` where `<sibling>` extends `<assignment>-`
-// is that sibling's, not ours. Empty owner segments (a bare
-// `<classroom>-<assignment>-`) are rejected.
+// Group repos that exist for the assignment, keyed by the `<owner>` segment.
+// Unlike individual acceptance, the founder logins aren't known up front
+// (group repos are named after whoever created the group), so the set is the
+// reverse-parsed prefix match every repo-list signal shares
+// (existingAssignmentRepos, including its sibling-slug exclusion) rather than a
+// forward construction per student.
 export function existingGroupRepos(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
   assignment: string,
   siblingSlugs: readonly string[] = [],
 ): GroupRepo[] {
-  if (!repos) return []
   const prefix = `${classroom}-${assignment}-`.toLowerCase()
-  // Prefixes of sibling assignments whose slug strictly extends this one; a repo
-  // under any of these was created for the sibling, not this assignment.
-  const overlapPrefixes = siblingSlugs
-    .map((slug) => slug.toLowerCase())
-    .filter((slug) => slug !== assignment.toLowerCase())
-    .map((slug) => `${classroom}-${slug}-`.toLowerCase())
-    .filter((siblingPrefix) => siblingPrefix.startsWith(prefix))
-  const out: GroupRepo[] = []
-  for (const repo of repos) {
-    const name = repo.name.toLowerCase()
-    if (!name.startsWith(prefix)) continue
-    if (overlapPrefixes.some((sibling) => name.startsWith(sibling))) continue
-    const owner = name.slice(prefix.length)
-    if (!owner) continue
-    out.push({ owner, repoName: name })
-  }
-  return out
+  return existingAssignmentRepos(repos, classroom, assignment, [
+    ...siblingSlugs,
+  ]).map((repo) => {
+    const repoName = repo.name.toLowerCase()
+    return { owner: repoName.slice(prefix.length), repoName }
+  })
 }
 
 // Team-mode repos that exist for the assignment — the team analog of

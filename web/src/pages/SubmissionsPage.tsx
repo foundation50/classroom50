@@ -23,7 +23,6 @@ import {
   Alert,
   Badge,
   Button,
-  EmphasisLtr,
   HelpTooltip,
   MetricBar,
   InlineSpinner,
@@ -127,7 +126,7 @@ import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
 import { useCollectController } from "./submissions/useCollectController"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { useSetAssignmentLock } from "@/hooks/mutations/useSetAssignmentLock"
-import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
+import { DeleteAssignmentConfirm } from "@/pages/assignments/AssignmentRowActions"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
@@ -1125,9 +1124,6 @@ const SubmissionsPageContent = () => {
         : t("submissions.lock.unlockSuccess"),
     )
   })
-  // Same delete mechanism as the assignments table's manage hub (removes the
-  // assignments.json entry; student repos are kept).
-  const deleteAssignmentMutation = useDeleteAssignment()
   // `anyRegrading` covers the whole-assignment regrade AND every per-row
   // regrade (via the page coordinator), so collect/regrade controls disable
   // while any regrade is in flight.
@@ -1912,39 +1908,19 @@ const SubmissionsPageContent = () => {
         onClose={() => setLockConfirmOpen(false)}
       />
       {/* Delete-assignment confirm: the assignments table's typed-slug flow. */}
-      <ConfirmModal
+      <DeleteAssignmentConfirm
         open={deleteConfirmOpen}
-        title={t("assignments.table.deleteTitle")}
-        description={
-          <Trans
-            i18nKey="assignments.table.deleteDescription"
-            values={{
-              assignment: assignmentInfo?.name ?? assignment,
-              classroom: `${org}/${classroom}`,
-            }}
-            components={{
-              assignment: <EmphasisLtr className="text-base-content" />,
-              classroom: <EmphasisLtr className="text-base-content" />,
-            }}
-          />
-        }
-        confirmText={assignment}
-        confirmLabel={t("assignments.table.deleteConfirm")}
-        cancelLabel={t("assignments.table.deleteCancel")}
-        tone="error"
-        warning={t("assignments.table.deleteWarning")}
-        onConfirm={async () => {
-          await deleteAssignmentMutation.mutateAsync({
-            org,
-            classroom,
-            assignment,
-          })
-          await navigate({
+        onClose={() => setDeleteConfirmOpen(false)}
+        org={org}
+        classroom={classroom}
+        slug={assignment}
+        name={assignmentInfo?.name ?? assignment}
+        onDeleted={() =>
+          navigate({
             to: "/$org/$classroom/assignments",
             params: { org, classroom },
           })
-        }}
-        onClose={() => setDeleteConfirmOpen(false)}
+        }
       />
       <MetricsModal
         open={metricsOpen && !overlayCapable}

@@ -1,6 +1,7 @@
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/github-core/types"
 import { memberIdSet, studentKey } from "@/util/identity"
+import { sortByColumn } from "./sortColumns"
 
 // Per-classroom enrollment state for an aggregated member, mirroring
 // buildTeamRoster so the two views agree:
@@ -257,11 +258,9 @@ const displayName = (row: OrgMemberRow) => row.username || row.name || row.email
 // What the Name cell shows: the name when known, else the avatar's fallbacks.
 const nameFirst = (row: OrgMemberRow) => row.name || row.username || row.email
 
-// Header-driven column sort for the Members table (mirroring
-// sortTeamRosterRowsBy). `desc` flips only the column comparison; ties fall
-// back to ascending display identity so a reversed column stays scannable.
-// `isOwner` backs the role column — ownership lives outside the row (the
-// admins read), so the caller supplies the predicate.
+// Header-driven column sort for the Members table (sortByColumn, like the
+// roster). `isOwner` backs the role column — ownership lives outside the row
+// (the admins read), so the caller supplies the predicate.
 export type OrgMembersSortColumn =
   "name" | "username" | "classrooms" | "role" | "status"
 export function sortOrgMemberRowsBy(
@@ -270,44 +269,41 @@ export function sortOrgMemberRowsBy(
   direction: "asc" | "desc",
   isOwner: (row: OrgMemberRow) => boolean = () => false,
 ): OrgMemberRow[] {
-  const flip = direction === "desc" ? -1 : 1
   const byName = (a: OrgMemberRow, b: OrgMemberRow) =>
     displayName(a).localeCompare(displayName(b), undefined, {
       sensitivity: "base",
       numeric: true,
     })
-  // Blank-last compare regardless of direction: the inner flip cancels the
-  // outer one, so "no data" never leads a reversed column.
-  const blankLast = (va: string, vb: string): number => {
-    if (!va || !vb) return flip * (va === vb ? 0 : va ? -1 : 1)
-    return va.localeCompare(vb, undefined, { numeric: true })
-  }
   const roleRank = (row: OrgMemberRow) =>
     isOwner(row) ? 2 : row.isMember ? 1 : 0
-  const byColumn = (a: OrgMemberRow, b: OrgMemberRow): number => {
-    switch (column) {
-      case "name":
-        return nameFirst(a).localeCompare(nameFirst(b), undefined, {
-          sensitivity: "base",
-          numeric: true,
-        })
-      case "username":
-        return blankLast(
-          a.username.trim().toLowerCase(),
-          b.username.trim().toLowerCase(),
-        )
-      case "classrooms":
-        return a.classrooms.length - b.classrooms.length
-      case "role":
-        return roleRank(b) - roleRank(a)
-      case "status":
-        return (
-          CLASSIFICATION_ORDER[a.classification] -
-          CLASSIFICATION_ORDER[b.classification]
-        )
-    }
-  }
-  return rows.toSorted((a, b) => flip * byColumn(a, b) || byName(a, b))
+  return sortByColumn(
+    rows,
+    direction,
+    (a, b, blankLast) => {
+      switch (column) {
+        case "name":
+          return nameFirst(a).localeCompare(nameFirst(b), undefined, {
+            sensitivity: "base",
+            numeric: true,
+          })
+        case "username":
+          return blankLast(
+            a.username.trim().toLowerCase(),
+            b.username.trim().toLowerCase(),
+          )
+        case "classrooms":
+          return a.classrooms.length - b.classrooms.length
+        case "role":
+          return roleRank(b) - roleRank(a)
+        case "status":
+          return (
+            CLASSIFICATION_ORDER[a.classification] -
+            CLASSIFICATION_ORDER[b.classification]
+          )
+      }
+    },
+    byName,
+  )
 }
 
 // The Members toolbar's "Show" facets (the roster's combined select). Status
