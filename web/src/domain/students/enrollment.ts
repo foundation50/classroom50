@@ -1,13 +1,10 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
-  createGitCommit,
-  createGitTree,
   createOrgInvitation,
   deleteInviteTeam,
   ensureInviteTeam,
   ensureOrgMembership,
   isActiveMember,
-  updateRef,
   type InviteTeamRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -16,15 +13,9 @@ import {
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "../classrooms"
-import { getRawFile, getUser } from "@/github-core/queries"
+import { getUser } from "@/github-core/queries"
 import { getAuthenticatedUser } from "../queries/users"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
 import { GitHubAPIError } from "@/github-core/errors"
-import { prefixCommit } from "@/util/commit"
 import {
   normalizeStudentRow,
   splitName,
@@ -32,18 +23,17 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/configRepoPaths"
 import { resolveGitHubId } from "@/util/students"
 import {
   appendEmailInviteRows,
   log,
-  rosterWriteTree,
   resolveClassroomTeam,
   resolveClassroomTeamWithRetry,
   tryAddUserToTeam,
   StudentAlreadyEnrolledError,
 } from "./rosterPrimitives"
 import i18n from "@/i18n"
+import { commitRoster, readRosterForWrite } from "./rosterWrite"
 
 export type AddStudentToClassroomResult = CreateClassroomResult & {
   student: StudentCsvRow
@@ -61,22 +51,10 @@ export async function addStudentToClassroom(
     throw new Error("GitHub username is required")
   }
 
-  await assertClassroomNotArchived(client, input.org, input.classroom)
-
-  const configBranch = await getConfigRepoBranch(client, input.org)
-  const ref = await getBranchRef(client, input.org, configBranch)
-  const commit = await getCommit(client, input.org, ref.object.sha)
-
-  const studentsFilePath = rosterPath(input.classroom)
-
-  const currentCsv = await getRawFile(client, {
-    org: input.org,
-    path: studentsFilePath,
-    ref: ref.object.sha,
-  })
+  const ctx = await readRosterForWrite(client, input.org, input.classroom)
 
   const githubUser = await getUser(client, normalizedUsername)
-  const currentStudents = parseStudentsCsv(currentCsv)
+  const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
   const alreadyExists = currentStudents.some(
     (student) =>
@@ -128,34 +106,18 @@ export async function addStudentToClassroom(
   const nextStudents = [...currentStudents, student]
   const nextCsv = stringifyStudentsCsv(nextStudents)
 
-  const tree = await createGitTree(client, {
-    org: input.org,
-    base_tree: commit.tree.sha,
-    tree: rosterWriteTree(input.classroom, nextCsv),
-  })
-
-  const newCommit = await createGitCommit(client, {
-    org: input.org,
-    message: prefixCommit(
-      `Add student: ${input.classroom}/${student.username}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-
-  const updatedRef = await updateRef(
+  const written = await commitRoster(
     client,
     input.org,
-    newCommit.sha,
-    configBranch,
+    ctx,
+    nextCsv,
+    `Add student: ${input.classroom}/${student.username}`,
   )
 
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     student,
   }
 }

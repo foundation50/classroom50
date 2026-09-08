@@ -1,23 +1,12 @@
 import type { GitHubClient } from "@/github-core/client"
-import {
-  createGitCommit,
-  createGitTree,
-  isActiveMember,
-  updateRef,
-} from "@/github-core/mutations"
+import { isActiveMember } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   withGitConflictRetry,
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "../classrooms"
-import { getRawFile, getUser } from "@/github-core/queries"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
-import { prefixCommit } from "@/util/commit"
+import { getUser } from "@/github-core/queries"
 import {
   normalizeStudentRow,
   splitName,
@@ -25,17 +14,16 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/configRepoPaths"
 import { type ClassroomRole } from "@/util/teamRoster"
 import {
   log,
-  rosterWriteTree,
   resolveClassroomTeamSlug,
   tryAddUserToTeam,
   normalizeGithubUsername,
   isLikelyGithubUsername,
   NoNewStudentsError,
 } from "./rosterPrimitives"
+import { commitRoster, readRosterForWrite } from "./rosterWrite"
 
 type BulkImportProgress = {
   processed: number
@@ -114,27 +102,14 @@ export async function addStudentsToClassroom(
     total: normalizedRows.length,
   })
 
-  await assertClassroomNotArchived(client, input.org, input.classroom)
-
   input.onProgress?.({
     processed: 0,
     total: normalizedRows.length,
     message: "Reading current roster.csv...",
   })
 
-  const configBranch = await getConfigRepoBranch(client, input.org)
-  const ref = await getBranchRef(client, input.org, configBranch)
-  const commit = await getCommit(client, input.org, ref.object.sha)
-
-  const studentsFilePath = rosterPath(input.classroom)
-
-  const currentCsv = await getRawFile(client, {
-    org: input.org,
-    path: studentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const currentStudents = parseStudentsCsv(currentCsv)
+  const ctx = await readRosterForWrite(client, input.org, input.classroom)
+  const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
   const existingUsernameKeys = new Set(
     currentStudents.map((student) => student.username.toLowerCase()),
@@ -248,28 +223,14 @@ export async function addStudentsToClassroom(
   const nextStudents = [...currentStudents, ...addedStudents]
   const nextCsv = stringifyStudentsCsv(nextStudents)
 
-  const tree = await createGitTree(client, {
-    org: input.org,
-    base_tree: commit.tree.sha,
-    tree: rosterWriteTree(input.classroom, nextCsv),
-  })
-
-  const newCommit = await createGitCommit(client, {
-    org: input.org,
-    message: prefixCommit(
-      `Add ${addedStudents.length} student ${
-        addedStudents.length === 1 ? "" : "s"
-      }: ${input.classroom}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-
-  const updatedRef = await updateRef(
+  const written = await commitRoster(
     client,
     input.org,
-    newCommit.sha,
-    configBranch,
+    ctx,
+    nextCsv,
+    `Add ${addedStudents.length} student ${
+      addedStudents.length === 1 ? "" : "s"
+    }: ${input.classroom}`,
   )
 
   input.onProgress?.({
@@ -286,11 +247,9 @@ export async function addStudentsToClassroom(
   })
 
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     addedStudents,
     skippedStudents,
   }

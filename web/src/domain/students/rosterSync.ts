@@ -1,35 +1,23 @@
 import type { GitHubClient } from "@/github-core/client"
-import {
-  createGitCommit,
-  createGitTree,
-  updateRef,
-} from "@/github-core/mutations"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
-import { getRawFile } from "@/github-core/queries"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
+import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import { rosterClaimSet } from "@/util/identity"
 import { parseGitHubId, resolveGitHubId } from "@/util/students"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
-import { prefixCommit } from "@/util/commit"
 import {
   normalizeStudentRow,
   parseStudentsCsv,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/configRepoPaths"
 import {
   log,
-  rosterWriteTree,
   resolveClassroomTeamSlugs,
   listClassroomMembersWithRoles,
 } from "./rosterPrimitives"
 import type { InviteReconcileState, RecoveredInvite } from "./inviteRecoveries"
 import { collectInviteRecoveries } from "./inviteRecoveries"
+import { commitRoster, readRosterForWriteAt } from "./rosterWrite"
 
 export type SyncRosterFromTeamResult = {
   // Team members newly appended to roster.csv as metadata rows.
@@ -100,16 +88,8 @@ export async function syncRosterFromTeam(
         listClassroomMembersWithRoles(client, org, slugs),
         getConfigRepoBranch(client, org),
       ])
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
-
-    const studentsFilePath = rosterPath(classroom)
-    const currentCsv = await getRawFile(client, {
-      org,
-      path: studentsFilePath,
-      ref: ref.object.sha,
-    })
-    const currentStudents = parseStudentsCsv(currentCsv)
+    const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
+    const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
     // --- Invite fold: claim each recovered mapping onto its row -------------
     // Match by the invited email first (the row written at invite time), then
@@ -376,20 +356,13 @@ export async function syncRosterFromTeam(
 
     const nextCsv = stringifyStudentsCsv([...reconciledStudents, ...addedRows])
 
-    const tree = await createGitTree(client, {
+    await commitRoster(
+      client,
       org,
-      base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv),
-    })
-
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(`Sync roster from teams: ${classroom}`),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-
-    await updateRef(client, org, newCommit.sha, configBranch)
+      ctx,
+      nextCsv,
+      `Sync roster from teams: ${classroom}`,
+    )
 
     log.info("sync roster from team: completed", {
       org,

@@ -1,30 +1,13 @@
 import type { GitHubClient } from "@/github-core/client"
-import {
-  createGitCommit,
-  createGitTree,
-  updateRef,
-} from "@/github-core/mutations"
-import {
-  withGitConflictRetry,
-  assertClassroomNotArchived,
-  type CreateClassroomResult,
-} from "../classrooms"
-import { getRawFile } from "@/github-core/queries"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
+import { withGitConflictRetry, type CreateClassroomResult } from "../classrooms"
 import { studentKey } from "@/util/identity"
-import { prefixCommit } from "@/util/commit"
 import {
   normalizeStudentRow,
   parseStudentsCsv,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/configRepoPaths"
-import { rosterWriteTree } from "./rosterPrimitives"
+import { commitRoster, readRosterForWrite } from "./rosterWrite"
 
 // The teacher-editable subset of a roster row. Identity columns (username,
 // github_id) are deliberately excluded — they are bound at enrollment and by
@@ -69,21 +52,8 @@ export async function updateStudent(
     throw new Error("A student row identity is required")
   }
 
-  await assertClassroomNotArchived(client, org, classroom)
-
-  const configBranch = await getConfigRepoBranch(client, org)
-  const ref = await getBranchRef(client, org, configBranch)
-  const commit = await getCommit(client, org, ref.object.sha)
-
-  const studentsFilePath = rosterPath(classroom)
-
-  const currentCsv = await getRawFile(client, {
-    org,
-    path: studentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const currentStudents = parseStudentsCsv(currentCsv)
+  const ctx = await readRosterForWrite(client, org, classroom)
+  const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
   // Stable per-row identity via the shared studentKey (github_id -> username ->
   // email), the same precedence the UI and reconcile use.
@@ -151,29 +121,18 @@ export async function updateStudent(
       )
   const nextCsv = stringifyStudentsCsv(nextStudents)
 
-  const tree = await createGitTree(client, {
+  const written = await commitRoster(
+    client,
     org,
-    base_tree: commit.tree.sha,
-    tree: rosterWriteTree(classroom, nextCsv),
-  })
-
-  const newCommit = await createGitCommit(client, {
-    org,
-    message: prefixCommit(
-      `Edit student: ${classroom}/${updatedStudent.username || updatedStudent.email || targetKey}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-
-  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
+    ctx,
+    nextCsv,
+    `Edit student: ${classroom}/${updatedStudent.username || updatedStudent.email || targetKey}`,
+  )
 
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     student: updatedStudent,
   }
 }

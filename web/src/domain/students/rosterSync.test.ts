@@ -32,16 +32,6 @@ vi.mock("../classrooms", () => ({
 }))
 vi.mock("./rosterPrimitives", () => ({
   log: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
-  // Mirrors the real helper (one blob at the roster path); hand-rolled because
-  // importing the actual module would drag in the unmocked github-core surface.
-  rosterWriteTree: (classroom: string, csv: string) => [
-    {
-      path: `${classroom}/roster.csv`,
-      mode: "100644",
-      type: "blob",
-      content: csv,
-    },
-  ],
   resolveClassroomTeamSlugs: (...a: unknown[]) =>
     resolveClassroomTeamSlugs(...a),
   listClassroomMembersWithRoles: (...a: unknown[]) =>

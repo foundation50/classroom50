@@ -1,36 +1,26 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
-  createGitCommit,
-  createGitTree,
   getOrgMembershipState,
   removeUserFromTeam,
-  updateRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { withGitConflictRetry, assertClassroomNotArchived } from "../classrooms"
-import { getRawFile } from "@/github-core/queries"
 import { getAuthenticatedUser } from "@/domain/queries/users"
-import {
-  getBranchRef,
-  getCommit,
-  getConfigRepoBranch,
-} from "@/github-core/configRepoReads"
+import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import { isSameGitHubUser } from "@/util/students"
-import { prefixCommit } from "@/util/commit"
 import {
   parseStudentsCsv,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
-import { rosterPath } from "@/util/configRepoPaths"
 import { type Student } from "@/types/classroom"
 import {
   log,
-  rosterWriteTree,
   resolveClassroomTeamSlug,
   cancelSoleClassroomInviteOnUnenroll,
   matchesRosterRow,
 } from "./rosterPrimitives"
+import { commitRoster, readRosterForWriteAt } from "./rosterWrite"
 
 export type UnenrollStudentInput = {
   org: string
@@ -75,18 +65,8 @@ export async function unenrollStudent(
   viewerPromise.catch(() => {})
 
   const configBranch = await getConfigRepoBranch(client, org)
-  const ref = await getBranchRef(client, org, configBranch)
-  const commit = await getCommit(client, org, ref.object.sha)
-
-  const studentsFilePath = rosterPath(classroom)
-
-  const currentCsv = await getRawFile(client, {
-    org,
-    path: studentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const currentStudents = parseStudentsCsv(currentCsv)
+  const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
+  const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
   // Match the target row via the shared roster-row matcher (username/github_id).
   const sameRow = (student: StudentCsvRow) =>
@@ -103,22 +83,13 @@ export async function unenrollStudent(
   const nextStudents = currentStudents.filter((student) => !sameRow(student))
   const nextCsv = stringifyStudentsCsv(nextStudents)
 
-  const tree = await createGitTree(client, {
+  const written = await commitRoster(
+    client,
     org,
-    base_tree: commit.tree.sha,
-    tree: rosterWriteTree(classroom, nextCsv),
-  })
-
-  const newCommit = await createGitCommit(client, {
-    org,
-    message: prefixCommit(
-      `Remove student: ${classroom}/${normalizedUsername || normalizedGithubId}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-
-  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
+    ctx,
+    nextCsv,
+    `Remove student: ${classroom}/${normalizedUsername || normalizedGithubId}`,
+  )
 
   // Commit landed, so every org-side step below is a non-fatal warning.
   const warnings: string[] = []
@@ -184,11 +155,9 @@ export async function unenrollStudent(
     warnings: warnings.length,
   })
   return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
+    previousCommitSha: ctx.headSha,
+    baseTreeSha: ctx.baseTreeSha,
+    ...written,
     teamWarning: warnings.length > 0 ? warnings.join(" ") : undefined,
   }
 }
@@ -267,21 +236,14 @@ export async function bulkUnenrollStudents(
   // One conflict-retried CSV commit dropping every matched row. Re-reads the CSV
   // each attempt so a concurrent edit is preserved. Reports which targets were
   // actually present (removed) vs. missing (notFound).
-  const studentsFilePath = rosterPath(classroom)
   let removed: Student[] = []
   let notFound: Student[] = []
   let newCommitSha: string | undefined
 
   await withGitConflictRetry(async () => {
     const configBranch = await getConfigRepoBranch(client, org)
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
-    const currentCsv = await getRawFile(client, {
-      org,
-      path: studentsFilePath,
-      ref: ref.object.sha,
-    })
-    const currentStudents = parseStudentsCsv(currentCsv)
+    const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
+    const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
     removed = targets.filter((target) =>
       currentStudents.some((row) => matchesTarget(row, target)),
@@ -299,21 +261,14 @@ export async function bulkUnenrollStudents(
     )
     const nextCsv = stringifyStudentsCsv(nextStudents)
 
-    const tree = await createGitTree(client, {
+    const written = await commitRoster(
+      client,
       org,
-      base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv),
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(
-        `Remove ${removed.length} student${removed.length === 1 ? "" : "s"}: ${classroom}`,
-      ),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, configBranch)
-    newCommitSha = newCommit.sha
+      ctx,
+      nextCsv,
+      `Remove ${removed.length} student${removed.length === 1 ? "" : "s"}: ${classroom}`,
+    )
+    newCommitSha = written.newCommitSha
   })
 
   // Roster commit landed; every org-side step below is a non-fatal warning.

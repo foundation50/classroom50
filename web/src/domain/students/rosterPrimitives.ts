@@ -2,13 +2,9 @@ import type { GitHubClient } from "@/github-core/client"
 import {
   addUserToTeam,
   cancelOrgInvitation,
-  createGitCommit,
-  createGitTree,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoAccess,
   resendOrgInvitation,
-  updateRef,
-  type GitTreeEntry,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
@@ -18,9 +14,7 @@ import {
   sleep,
 } from "@/github-core/queries"
 import {
-  getBranchRef,
   getClassroomJson,
-  getCommit,
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import {
@@ -28,8 +22,6 @@ import {
   isDefinitiveGitHubStatus,
   tolerateGitHubError,
 } from "@/github-core/errors"
-import { rosterPath } from "@/util/configRepoPaths"
-import { prefixCommit } from "@/util/commit"
 import {
   formatRosterProblems,
   normalizeStudentRow,
@@ -49,28 +41,18 @@ import { isTeacherRole } from "@/authz"
 import { classroomTeamSlug, resolveClassroomRoleSlug } from "@/util/teamSlug"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
 import { logger } from "@/lib/logger"
+import { commitRoster, readRosterForWriteAt } from "./rosterWrite"
 
 export const log = logger.scope("mutations:students")
 
-// Git-tree entries for a roster write: the roster.csv blob.
-export function rosterWriteTree(
-  classroom: string,
-  csv: string,
-): GitTreeEntry[] {
-  return [
-    { path: rosterPath(classroom), mode: "100644", type: "blob", content: csv },
-  ]
-}
-
 // The conflict-safe roster.csv read-modify-write shared by every roster writer
 // (the role/metadata/username writers in roleWrites, plus the email-invite row
-// append/remove below). Runs inside withGitConflictRetry:
-// reads the config branch/ref/commit, reads roster.csv,
-// parses it tolerantly and REFUSES a malformed file with a typed
-// RosterCsvMalformedError (a positional re-serialize would corrupt the bad row),
-// then hands the parsed rows to `mutate`. `mutate` returns the next rows plus how
-// many changed and the commit message; when `changed === 0` no commit is made.
-// The formula-injection guard + canonical column order come from
+// append/remove below). Runs inside withGitConflictRetry: reads roster.csv at
+// the config-repo head, parses it tolerantly and REFUSES a malformed file with
+// a typed RosterCsvMalformedError (a positional re-serialize would corrupt the
+// bad row), then hands the parsed rows to `mutate`, which returns the next rows
+// plus how many changed and the commit message; when `changed === 0` no commit
+// is made. The formula-injection guard + canonical column order come from
 // stringifyStudentsCsv. Callers own their own identity/field-diff logic and the
 // archived-classroom guard.
 export async function withRosterRewrite(
@@ -85,17 +67,8 @@ export async function withRosterRewrite(
   const { org, classroom } = input
   return withGitConflictRetry(async () => {
     const configBranch = await getConfigRepoBranch(client, org)
-    const ref = await getBranchRef(client, org, configBranch)
-    const commit = await getCommit(client, org, ref.object.sha)
-    // Read at the freshly-fetched branch HEAD (not a commit we just wrote), so
-    // a 404 here means roster.csv is genuinely absent, not read-your-own-write
-    // lag — surface it rather than masking a missing file.
-    const currentCsv = await getRawFile(client, {
-      org,
-      path: rosterPath(classroom),
-      ref: ref.object.sha,
-    })
-    const { rows: currentStudents, problems } = parseRosterCsv(currentCsv)
+    const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
+    const { rows: currentStudents, problems } = parseRosterCsv(ctx.currentCsv)
     if (problems.length > 0) {
       throw new RosterCsvMalformedError(formatRosterProblems(problems))
     }
@@ -103,19 +76,13 @@ export async function withRosterRewrite(
     const { nextStudents, changed, message } = mutate(currentStudents)
     if (changed === 0) return { changed: 0 }
 
-    const nextCsv = stringifyStudentsCsv(nextStudents)
-    const tree = await createGitTree(client, {
+    await commitRoster(
+      client,
       org,
-      base_tree: commit.tree.sha,
-      tree: rosterWriteTree(classroom, nextCsv),
-    })
-    const newCommit = await createGitCommit(client, {
-      org,
-      message: prefixCommit(message),
-      tree_sha: tree.sha,
-      parents: [ref.object.sha],
-    })
-    await updateRef(client, org, newCommit.sha, configBranch)
+      ctx,
+      stringifyStudentsCsv(nextStudents),
+      message,
+    )
     return { changed }
   })
 }
