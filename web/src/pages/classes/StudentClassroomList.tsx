@@ -31,6 +31,7 @@ import {
   type StudentClassroomSortKey,
 } from "@/lib/studentClassroomListPrefs"
 import type { StudentClassroomSummary } from "@/hooks/useStudentClassroomSummaries"
+import { matchesQuery, normalizeQuery } from "@/util/textMatch"
 
 const SORT_OPTIONS: { key: StudentClassroomSortKey; labelKey: string }[] = [
   { key: "name-asc", labelKey: "classes.student.toolbar.sort.nameAsc" },
@@ -169,17 +170,10 @@ export function StudentClassroomList({
     studentClassroomListPrefs,
   )
   const [search, setSearch] = useState("")
-  const query = search.trim().toLowerCase()
-
   const filtered = useMemo(() => {
-    const list = summaries.filter((s) => {
-      if (!query) return true
-      return (
-        classroomTitle(s).toLowerCase().includes(query) ||
-        s.classroom.toLowerCase().includes(query) ||
-        (s.term ?? "").toLowerCase().includes(query)
-      )
-    })
+    const list = summaries.filter((s) =>
+      matchesQuery(search, classroomTitle(s), s.classroom, s.term),
+    )
     const byName = (a: StudentClassroomSummary, b: StudentClassroomSummary) =>
       classroomTitle(a).localeCompare(classroomTitle(b))
     return list.toSorted((a, b) =>
@@ -187,12 +181,12 @@ export function StudentClassroomList({
         ? b.acceptedCount - a.acceptedCount || byName(a, b)
         : byName(a, b),
     )
-  }, [summaries, query, sortKey])
+  }, [summaries, search, sortKey])
 
   if (loading) return <ClassroomsSkeleton />
 
-  const noResults = query.length > 0 && filtered.length === 0
-  const empty = query.length === 0 && summaries.length === 0
+  const noResults = normalizeQuery(search).length > 0 && filtered.length === 0
+  const empty = normalizeQuery(search).length === 0 && summaries.length === 0
 
   return (
     <div className="space-y-4">

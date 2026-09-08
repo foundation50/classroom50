@@ -3,7 +3,6 @@ import { EmptyState } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import {
-  AlertIcon,
   ChevronRightIcon,
   FilterIcon,
   LinkExternalIcon,
@@ -15,13 +14,14 @@ import {
   AnimatedAlert,
   Button,
   Checkbox,
+  rtlFlip,
   SelectAllCheckbox,
   SelectSeparatorOption,
   SkeletonRows,
   SortableTh,
+  TableErrorRow,
   TableShell,
   Toolbar,
-  rtlFlip,
 } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
@@ -59,6 +59,7 @@ import {
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
 import useGetClasses from "@/hooks/useGetClasses"
+import { matchesQuery } from "@/util/textMatch"
 
 // Sentinel classroom-filter value for "members on no roster". A real classroom
 // path can't collide (paths don't contain a leading colon).
@@ -179,15 +180,9 @@ const OrgMembersPage = () => {
     (Boolean(row.github_id) && ownerIds.has(row.github_id)) || isSelf(row)
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
     const base = filterOrgMemberRows(
       rows.filter((row) => {
-        if (
-          q &&
-          ![row.username, row.name, row.email].some((field) =>
-            field.toLowerCase().includes(q),
-          )
-        ) {
+        if (!matchesQuery(query, row.username, row.name, row.email)) {
           return false
         }
         // Classroom filter: all / no-classroom / a specific classroom.
@@ -522,32 +517,12 @@ const OrgMembersPage = () => {
               >
                 {isLoading && <SkeletonRows rows={6} bars={SKELETON_BARS} />}
                 {!isLoading && isError && (
-                  <tr>
-                    <td
-                      colSpan={MEMBERS_COL_COUNT}
-                      className="px-6 py-10 text-center"
-                    >
-                      <span
-                        role="alert"
-                        className="inline-flex items-center gap-2 text-sm text-error"
-                      >
-                        <AlertIcon
-                          aria-hidden="true"
-                          className="size-4 shrink-0"
-                        />
-                        {t("orgMembers.loadError")}
-                      </span>
-                      <div className="mt-3">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={refetchMembers}
-                        >
-                          {t("orgMembers.retry")}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
+                  <TableErrorRow
+                    colSpan={MEMBERS_COL_COUNT}
+                    message={t("orgMembers.loadError")}
+                    retryLabel={t("orgMembers.retry")}
+                    onRetry={refetchMembers}
+                  />
                 )}
                 {!isLoading && !isError && filtered.length === 0 && (
                   <tr>

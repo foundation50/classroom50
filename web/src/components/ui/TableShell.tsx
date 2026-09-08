@@ -1,7 +1,9 @@
 import type { ReactNode } from "react"
 
 import { EnterDiv } from "@/lib/motionComponents"
+import { Button } from "./Button"
 import { SkeletonCell } from "./SkeletonCell"
+import { AlertIcon } from "./icons"
 import { cx } from "./cx"
 
 // The one table frame for the assignment/submission lists: a scrollable
@@ -97,6 +99,43 @@ export function SkeletonRows({
         </tr>
       ))}
     </>
+  )
+}
+
+// The one "the list failed to load" row: an alert line and a ghost Retry,
+// spanning the table. Announced via role="alert" because it replaces the rows
+// the reader was about to hear.
+export function TableErrorRow({
+  colSpan,
+  message,
+  retryLabel,
+  onRetry,
+}: {
+  colSpan: number
+  message: ReactNode
+  retryLabel: ReactNode
+  // Optional so a caller that has no way to retry can still show the alert.
+  onRetry?: () => void
+}) {
+  return (
+    <tr>
+      <td colSpan={colSpan} className="px-6 py-10 text-center">
+        <span
+          role="alert"
+          className="inline-flex items-center gap-2 text-sm text-error"
+        >
+          <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
+          {message}
+        </span>
+        {onRetry && (
+          <div className="mt-3">
+            <Button variant="ghost" size="sm" onClick={onRetry}>
+              {retryLabel}
+            </Button>
+          </div>
+        )}
+      </td>
+    </tr>
   )
 }
 

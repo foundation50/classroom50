@@ -28,6 +28,7 @@ import {
 import { useListPrefsState } from "@/lib/listPrefs"
 import { ClassroomCard, ClassroomRow } from "@/pages/classes/ClassroomCard"
 import { StudentCountProbes } from "@/pages/classes/StudentCountProbes"
+import { matchesQuery, normalizeQuery } from "@/util/textMatch"
 
 type ClassFilter = "active" | "archived" | "all"
 
@@ -89,7 +90,6 @@ const ClassroomList = ({
   const activeTerm =
     termFilter !== "all" && !terms.includes(termFilter) ? "all" : termFilter
 
-  const query = search.trim().toLowerCase()
   const filtered = useMemo(
     () =>
       summaries.filter((s) => {
@@ -98,14 +98,9 @@ const ClassroomList = ({
         if (filter === "archived" && !s.archived) return false
         if (activeTerm !== "all" && (s.term?.trim() ?? "") !== activeTerm)
           return false
-        if (!query) return true
-        return (
-          classroomDisplayName(s).toLowerCase().includes(query) ||
-          s.path.toLowerCase().includes(query) ||
-          (s.term ?? "").toLowerCase().includes(query)
-        )
+        return matchesQuery(search, classroomDisplayName(s), s.path, s.term)
       }),
-    [summaries, filter, activeTerm, query],
+    [summaries, filter, activeTerm, search],
   )
 
   const sorted = useMemo(() => {
@@ -151,8 +146,10 @@ const ClassroomList = ({
   }, [])
 
   const anyResolved = summaries.some((s) => !s.loading)
-  const noResults = anyResolved && query.length > 0 && sorted.length === 0
-  const emptyFilter = anyResolved && query.length === 0 && sorted.length === 0
+  const noResults =
+    anyResolved && normalizeQuery(search).length > 0 && sorted.length === 0
+  const emptyFilter =
+    anyResolved && normalizeQuery(search).length === 0 && sorted.length === 0
 
   return (
     <div className="space-y-4">

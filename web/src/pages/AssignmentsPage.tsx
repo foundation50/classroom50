@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { TriangleDownIcon, CopyIcon, PlusIcon } from "@/components/ui/icons"
+import { CopyIcon, PlusIcon } from "@/components/ui/icons"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
@@ -18,10 +18,10 @@ import {
 } from "@/pages/assignments/assignmentList"
 import {
   Badge,
-  Button,
   DropdownMenu,
   EmphasisLtr,
   RouterButton,
+  SplitButton,
 } from "@/components/ui"
 import {
   NoSearchResults,
@@ -68,46 +68,27 @@ const NewAssignmentButton = ({
 
   return (
     <>
-      <div className="join">
-        <RouterButton
-          to="/$org/$classroom/assignments/new"
-          params={{ org, classroom }}
-          variant="primary"
-          size="sm"
-          className="join-item"
-        >
-          <PlusIcon aria-hidden="true" className="size-4" />{" "}
-          {t("assignments.newButton.assignment")}
-        </RouterButton>
-        {/* Not a join-item: see NewClassroomButton in ClassesPage.tsx. */}
-        <div className="dropdown dropdown-end -ms-px">
-          <Button
+      <SplitButton
+        caretLabel={t("assignments.newButton.moreOptions")}
+        primary={
+          <RouterButton
+            to="/$org/$classroom/assignments/new"
+            params={{ org, classroom }}
             variant="primary"
             size="sm"
-            tabIndex={0}
-            className="join-item h-full border-s border-primary-content/20 px-2"
-            aria-label={t("assignments.newButton.moreOptions")}
+            className="join-item"
           >
-            <TriangleDownIcon aria-hidden="true" className="size-4" />
-          </Button>
-          <DropdownMenu className="w-max">
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  // Close the dropdown before opening the modal so focus
-                  // doesn't fight the dialog.
-                  ;(document.activeElement as HTMLElement | null)?.blur()
-                  setReuseOpen(true)
-                }}
-              >
-                <CopyIcon aria-hidden="true" className="size-4" />{" "}
-                {t("assignments.newButton.reuse")}
-              </button>
-            </li>
-          </DropdownMenu>
-        </div>
-      </div>
+            <PlusIcon aria-hidden="true" className="size-4" />{" "}
+            {t("assignments.newButton.assignment")}
+          </RouterButton>
+        }
+      >
+        <DropdownMenu.Item
+          icon={CopyIcon}
+          label={t("assignments.newButton.reuse")}
+          onSelect={() => setReuseOpen(true)}
+        />
+      </SplitButton>
 
       {reuseOpen ? (
         <ReuseFromClassroomModal

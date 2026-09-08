@@ -97,7 +97,7 @@ export type {
 export { SkeletonCell } from "./SkeletonCell"
 export type { SkeletonCellProps } from "./SkeletonCell"
 
-export { TableShell, SkeletonRows } from "./TableShell"
+export { SkeletonRows, TableErrorRow, TableShell } from "./TableShell"
 export type { TableShellProps } from "./TableShell"
 
 export { TablePagination } from "./TablePagination"
@@ -130,3 +130,4 @@ export { hasUtility } from "./cx"
 
 export { rtlFlip } from "./icons"
 export { ActionListRow } from "./ActionListRow"
+export { SplitButton } from "./SplitButton"

@@ -25,6 +25,7 @@ import {
   tabClass,
   useVpatReport,
 } from "./data"
+import { matchesQuery } from "@/util/textMatch"
 
 type VpatFilter = ConformanceLevel | "all"
 type VpatSort = "criterion" | "status"
@@ -263,16 +264,11 @@ export function VpatSection() {
 
   const visibleCriteria = useMemo(() => {
     if (!vpat) return []
-    const q = query.trim().toLowerCase()
-    const filtered = vpat.criteria.filter((c) => {
-      if (filter !== "all" && c.status !== filter) return false
-      if (!q) return true
-      return (
-        c.id.toLowerCase().includes(q) ||
-        c.name.toLowerCase().includes(q) ||
-        c.remark.toLowerCase().includes(q)
-      )
-    })
+    const filtered = vpat.criteria.filter(
+      (c) =>
+        (filter === "all" || c.status === filter) &&
+        matchesQuery(query, c.id, c.name, c.remark),
+    )
     if (sort === "status") {
       return [...filtered].sort(
         (a, b) => STATUS_SORT_WEIGHT[a.status] - STATUS_SORT_WEIGHT[b.status],

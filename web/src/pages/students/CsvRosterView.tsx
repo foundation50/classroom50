@@ -4,12 +4,11 @@ import { useTranslation } from "react-i18next"
 
 import {
   Alert,
-  Button,
   SkeletonRows,
+  TableErrorRow,
   TableShell,
   Toolbar,
 } from "@/components/ui"
-import { AlertIcon } from "@/components/ui/icons"
 import { RoleBadges } from "./RoleBadges"
 import { StudentSortSelect } from "./StudentSortSelect"
 import { coerceImportRole } from "./rosterImportParse"
@@ -83,22 +82,12 @@ const CsvRosterView = ({
           {loading ? (
             <SkeletonRows rows={3} bars={["w-40", "w-16", "w-20"]} />
           ) : loadError ? (
-            <tr>
-              <td colSpan={3} className="px-6 py-10 text-center">
-                <span
-                  role="alert"
-                  className="inline-flex items-center gap-2 text-sm text-error"
-                >
-                  <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
-                  {t("students.rosterLoadError")}
-                </span>
-                <div className="mt-3">
-                  <Button variant="ghost" size="sm" onClick={onRetryLoad}>
-                    {t("students.rosterRetry")}
-                  </Button>
-                </div>
-              </td>
-            </tr>
+            <TableErrorRow
+              colSpan={3}
+              message={t("students.rosterLoadError")}
+              retryLabel={t("students.rosterRetry")}
+              onRetry={onRetryLoad}
+            />
           ) : rows.length === 0 ? (
             <tr>
               <td colSpan={3}>

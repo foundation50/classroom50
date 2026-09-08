@@ -1,5 +1,6 @@
 import { Combobox, type InputSize } from "@/components/ui"
 import type { DirectoryMember } from "@/domain/students"
+import { matchesQuery } from "@/util/textMatch"
 
 // The one member-link picker recipe, shared by the roster detail modal and
 // batch Edit mode: the typed-query filter (login OR classroom, case-
@@ -51,14 +52,9 @@ export function MemberLinkPicker({
   onOpenChange: (open: boolean) => void
   onSelect: (member: DirectoryMember) => void
 }) {
-  const query = value.trim().toLowerCase()
-  const filtered = query
-    ? items.filter(
-        (m) =>
-          m.login.toLowerCase().includes(query) ||
-          m.classrooms.some((c) => c.toLowerCase().includes(query)),
-      )
-    : items
+  const filtered = items.filter((m) =>
+    matchesQuery(value, m.login, ...m.classrooms),
+  )
 
   return (
     <Combobox

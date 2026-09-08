@@ -1,5 +1,4 @@
 import {
-  AlertIcon,
   PaperAirplaneIcon,
   PeopleIcon,
   SyncIcon,
@@ -9,12 +8,13 @@ import {
 import {
   Alert,
   AnimatedAlert,
-  OutcomeAlert,
   Badge,
   Button,
+  OutcomeAlert,
   SelectAllCheckbox,
   SkeletonRows,
   SortableTh,
+  TableErrorRow,
   TableShell,
 } from "@/components/ui"
 import { EmptyState } from "@/components/list"
@@ -1049,29 +1049,12 @@ const EnrolledStudents = ({
               </tbody>
             ) : isError ? (
               <tbody>
-                <tr>
-                  <td colSpan={colCount} className="px-6 py-10 text-center">
-                    <span
-                      role="alert"
-                      className="inline-flex items-center gap-2 text-sm text-error"
-                    >
-                      <AlertIcon
-                        aria-hidden="true"
-                        className="size-4 shrink-0"
-                      />
-                      {t("students.rosterLoadError")}
-                    </span>
-                    <div className="mt-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => refetchRoster()}
-                      >
-                        {t("students.rosterRetry")}
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
+                <TableErrorRow
+                  colSpan={colCount}
+                  message={t("students.rosterLoadError")}
+                  retryLabel={t("students.rosterRetry")}
+                  onRetry={() => refetchRoster()}
+                />
               </tbody>
             ) : isEmpty ? (
               <tbody>

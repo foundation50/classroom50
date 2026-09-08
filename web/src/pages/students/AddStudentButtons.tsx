@@ -1,13 +1,12 @@
 import { useTranslation } from "react-i18next"
 import {
-  TriangleDownIcon,
   PencilIcon,
   PlusIcon,
   ShareAndroidIcon,
   UploadIcon,
 } from "@/components/ui/icons"
 
-import { Button, DropdownMenu, closeDropdownMenu } from "@/components/ui"
+import { Button, DropdownMenu, SplitButton } from "@/components/ui"
 import type { AddStudentActions } from "@/pages/students/RosterBulkActionsBar"
 
 // The roster's add-students trigger cluster — Share (classroom links), Edit
@@ -50,45 +49,28 @@ export function AddStudentButtons({
           {t("students.editRoster.button")}
         </Button>
       ) : null}
-      <div className="join">
-        <Button
-          variant="primary"
-          size="sm"
-          disabled={disabled}
-          className="join-item"
-          onClick={addActions.onUploadRoster}
-        >
-          <UploadIcon aria-hidden="true" className="size-4" />
-          {t("students.uploadTitle")}
-        </Button>
-        {/* Not a join-item itself: see NewClassroomButton in ClassesPage.tsx. */}
-        <div className="dropdown dropdown-end -ms-px">
+      <SplitButton
+        caretLabel={t("students.addMoreOptions")}
+        disabled={disabled}
+        primary={
           <Button
             variant="primary"
             size="sm"
-            tabIndex={0}
             disabled={disabled}
-            className="join-item h-full border-s border-primary-content/20 px-2"
-            aria-label={t("students.addMoreOptions")}
+            className="join-item"
+            onClick={addActions.onUploadRoster}
           >
-            <TriangleDownIcon aria-hidden="true" className="size-4" />
+            <UploadIcon aria-hidden="true" className="size-4" />
+            {t("students.uploadTitle")}
           </Button>
-          <DropdownMenu className="w-max">
-            <li>
-              <button
-                type="button"
-                onClick={() => {
-                  closeDropdownMenu()
-                  addActions.onAddStudent()
-                }}
-              >
-                <PlusIcon aria-hidden="true" className="size-4" />
-                {t("students.addTitle")}
-              </button>
-            </li>
-          </DropdownMenu>
-        </div>
-      </div>
+        }
+      >
+        <DropdownMenu.Item
+          icon={PlusIcon}
+          label={t("students.addTitle")}
+          onSelect={addActions.onAddStudent}
+        />
+      </SplitButton>
     </>
   )
 }

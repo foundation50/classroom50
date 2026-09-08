@@ -4,6 +4,7 @@ import type {
   TeamRosterRow,
   TeamRosterRowState,
 } from "@/util/teamRoster"
+import { matchesQuery } from "@/util/textMatch"
 
 // The unlabeled section bucket. Shared by the filter and the group-by-section
 // view so a row with no section is treated identically in both.
@@ -29,7 +30,6 @@ export function filterRosterRows(
   rows: TeamRosterRow[],
   { query, statusFilter, roleFilter, sectionFilter }: RosterFilterInput,
 ): TeamRosterRow[] {
-  const q = query.trim().toLowerCase()
   return rows.filter((row) => {
     if (statusFilter !== "all" && row.state !== statusFilter) return false
     if (roleFilter !== "all" && !row.roles.includes(roleFilter)) return false
@@ -37,10 +37,11 @@ export function filterRosterRows(
       const section = row.section.trim() || NO_SECTION
       if (section !== sectionFilter) return false
     }
-    if (!q) return true
-    const name = nameFromParts(row.first_name, row.last_name)
-    return [row.username, name, row.email].some((field) =>
-      field.toLowerCase().includes(q),
+    return matchesQuery(
+      query,
+      row.username,
+      nameFromParts(row.first_name, row.last_name),
+      row.email,
     )
   })
 }

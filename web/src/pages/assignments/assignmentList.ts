@@ -4,6 +4,7 @@
 
 import type { Assignment } from "@/types/classroom"
 import { dueDeadlineInstant } from "@/util/formatDate"
+import { matchesQuery } from "@/util/textMatch"
 
 export type AssignmentSort =
   "name-asc" | "name-desc" | "due-asc" | "due-desc" | "type"
@@ -30,14 +31,8 @@ export const DEFAULT_FILTERS: AssignmentFilters = {
 const dueInstant = (assignment: Assignment): Date | null =>
   assignment.due ? dueDeadlineInstant(assignment.due) : null
 
-const matchesQuery = (assignment: Assignment, query: string): boolean => {
-  const q = query.trim().toLowerCase()
-  if (!q) return true
-  return (
-    assignment.name.toLowerCase().includes(q) ||
-    assignment.slug.toLowerCase().includes(q)
-  )
-}
+const matchesAssignment = (assignment: Assignment, query: string): boolean =>
+  matchesQuery(query, assignment.name, assignment.slug)
 
 const matchesFilters = (
   assignment: Assignment,
@@ -120,7 +115,7 @@ export function filterAndSortAssignments(
   },
 ): Assignment[] {
   const filtered = assignments.filter(
-    (a) => matchesQuery(a, query) && matchesFilters(a, filters, now),
+    (a) => matchesAssignment(a, query) && matchesFilters(a, filters, now),
   )
   return sortAssignments(filtered, sort)
 }

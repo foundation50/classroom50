@@ -42,12 +42,13 @@ import {
   Badge,
   Button,
   Checkbox,
-  MetricCount,
   MetricBar,
+  MetricCount,
   RouterButton,
   SelectAllCheckbox,
   SkeletonRows,
   SortableTh,
+  TableErrorRow,
   TableShell,
 } from "@/components/ui"
 
@@ -340,25 +341,12 @@ const AssignmentsTable = ({
         >
           {loading && <SkeletonRows bars={SKELETON_BARS} />}
           {!loading && loadError && (
-            <tr>
-              <td
-                colSpan={selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS}
-                className="px-6 py-10 text-center"
-              >
-                <span
-                  role="alert"
-                  className="inline-flex items-center gap-2 text-sm text-error"
-                >
-                  <AlertIcon aria-hidden="true" className="size-4 shrink-0" />
-                  {t("assignments.table.loadError")}
-                </span>
-                <div className="mt-3">
-                  <Button variant="ghost" size="sm" onClick={onRetryLoad}>
-                    {t("assignments.table.retry")}
-                  </Button>
-                </div>
-              </td>
-            </tr>
+            <TableErrorRow
+              colSpan={selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS}
+              message={t("assignments.table.loadError")}
+              retryLabel={t("assignments.table.retry")}
+              onRetry={onRetryLoad}
+            />
           )}
           {!loading && !loadError && !assignments?.length && (
             <tr>
