@@ -1,5 +1,5 @@
 import { FilterRemoveIcon, InboxIcon } from "@/components/ui/icons"
-import { EmptyState } from "@/components/list"
+import { TableEmptyRow } from "@/components/list"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -953,48 +953,39 @@ const SubmissionsTable = ({
             (isGroup || !nonSubmitters.length) &&
             !unsubmittedGroupRepos.length &&
             !teamsWithoutRepos.length &&
-            !nonSubmittersLoading && (
-              <tr>
-                <td colSpan={isTeam ? 6 : 5}>
-                  {filtered ? (
-                    <EmptyState
-                      variant="bare"
-                      icon={FilterRemoveIcon}
-                      titleAs="h3"
-                      title={t("submissions.table.emptyFilteredTitle")}
-                      body={t("submissions.table.emptyFilteredBody")}
-                      action={
-                        onClearFilters && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={onClearFilters}
-                          >
-                            {t("submissions.table.emptyClearFilters")}
-                          </Button>
-                        )
-                      }
-                    />
-                  ) : (
-                    <EmptyState
-                      variant="bare"
-                      icon={InboxIcon}
-                      titleAs="h3"
-                      title={
-                        isGroup
-                          ? t("submissions.table.emptyNoGroupsTitle")
-                          : t("submissions.table.emptyNoDataTitle")
-                      }
-                      body={
-                        isGroup
-                          ? t("submissions.table.emptyNoGroupsBody")
-                          : t("submissions.table.emptyNoDataBody")
-                      }
-                    />
-                  )}
-                </td>
-              </tr>
-            )}
+            !nonSubmittersLoading &&
+            (filtered ? (
+              <TableEmptyRow
+                colSpan={isTeam ? 6 : 5}
+                icon={FilterRemoveIcon}
+                titleAs="h3"
+                title={t("submissions.table.emptyFilteredTitle")}
+                body={t("submissions.table.emptyFilteredBody")}
+                action={
+                  onClearFilters && (
+                    <Button variant="ghost" size="sm" onClick={onClearFilters}>
+                      {t("submissions.table.emptyClearFilters")}
+                    </Button>
+                  )
+                }
+              />
+            ) : (
+              <TableEmptyRow
+                colSpan={isTeam ? 6 : 5}
+                icon={InboxIcon}
+                titleAs="h3"
+                title={
+                  isGroup
+                    ? t("submissions.table.emptyNoGroupsTitle")
+                    : t("submissions.table.emptyNoDataTitle")
+                }
+                body={
+                  isGroup
+                    ? t("submissions.table.emptyNoGroupsBody")
+                    : t("submissions.table.emptyNoDataBody")
+                }
+              />
+            ))}
           {/* The whole row sequence waits for initialLoading: parts of it
               (e.g. team-mode group-repo rows from the org repo list) can be
               derivable before the queries the ROW CONTENT needs (team display

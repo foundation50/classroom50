@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react"
-import { EmptyState } from "@/components/list"
+import { TableEmptyRow } from "@/components/list"
 import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import {
@@ -525,25 +525,21 @@ const OrgMembersPage = () => {
                   />
                 )}
                 {!isLoading && !isError && filtered.length === 0 && (
-                  <tr>
-                    <td colSpan={MEMBERS_COL_COUNT}>
-                      <EmptyState
-                        variant="bare"
-                        body={
-                          classroomFilter === NO_CLASSROOM_FILTER
-                            ? t("orgMembers.noMembersNoClassroom")
-                            : classroomFilter
-                              ? t("orgMembers.noMembersInClassroom", {
-                                  classroom:
-                                    classroomOptions.find(
-                                      (c) => c.path === classroomFilter,
-                                    )?.name ?? classroomFilter,
-                                })
-                              : t("orgMembers.noMatch")
-                        }
-                      />
-                    </td>
-                  </tr>
+                  <TableEmptyRow
+                    colSpan={MEMBERS_COL_COUNT}
+                    body={
+                      classroomFilter === NO_CLASSROOM_FILTER
+                        ? t("orgMembers.noMembersNoClassroom")
+                        : classroomFilter
+                          ? t("orgMembers.noMembersInClassroom", {
+                              classroom:
+                                classroomOptions.find(
+                                  (c) => c.path === classroomFilter,
+                                )?.name ?? classroomFilter,
+                            })
+                          : t("orgMembers.noMatch")
+                    }
+                  />
                 )}
                 {!isLoading &&
                   !isError &&

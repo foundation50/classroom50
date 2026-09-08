@@ -60,6 +60,16 @@ export function ViewToggle({
 // one action slot. `variant="card"` is the dashed-border shell for page-level
 // blankslates; `variant="bare"` is shell-less for table rows and quiet
 // blocks. `className` merges onto the shell (layout-only additions like mt-4).
+export type EmptyStateProps = {
+  icon?: EmptyStateIcon
+  title?: ReactNode
+  titleAs?: "h1" | "h2" | "h3" | "h4"
+  body?: ReactNode
+  action?: ReactNode
+  variant?: "card" | "bare"
+  className?: string
+}
+
 export function EmptyState({
   icon: Icon,
   title,
@@ -68,15 +78,7 @@ export function EmptyState({
   action,
   variant = "card",
   className,
-}: {
-  icon?: EmptyStateIcon
-  title?: ReactNode
-  titleAs?: "h1" | "h2" | "h3" | "h4"
-  body?: ReactNode
-  action?: ReactNode
-  variant?: "card" | "bare"
-  className?: string
-}) {
+}: EmptyStateProps) {
   return (
     <div
       className={cx(
@@ -105,6 +107,21 @@ export function EmptyState({
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>
+  )
+}
+
+// The one "nothing to list" table row: a bare EmptyState spanning the table.
+// Sibling of TableErrorRow, which owns the "failed to load" row.
+export function TableEmptyRow({
+  colSpan,
+  ...emptyState
+}: { colSpan: number } & Omit<EmptyStateProps, "variant">) {
+  return (
+    <tr>
+      <td colSpan={colSpan}>
+        <EmptyState variant="bare" {...emptyState} />
+      </td>
+    </tr>
   )
 }
 

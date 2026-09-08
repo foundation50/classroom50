@@ -3,7 +3,7 @@ import { describe, expect, it, afterEach, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-import { EmptyState, NoSearchResults } from "./index"
+import { EmptyState, NoSearchResults, TableEmptyRow } from "./index"
 
 afterEach(cleanup)
 
@@ -58,6 +58,33 @@ describe("EmptyState", () => {
     render(<EmptyState body="Nothing matched" />)
     expect(screen.queryByRole("heading")).toBeNull()
     expect(screen.getByText("Nothing matched")).toBeDefined()
+  })
+})
+
+describe("TableEmptyRow", () => {
+  it("spans the table with a bare EmptyState and forwards its props", () => {
+    const { container } = render(
+      <table>
+        <tbody>
+          <TableEmptyRow
+            colSpan={4}
+            className="py-6"
+            title="No rows"
+            titleAs="h3"
+            body="Add one to begin"
+          />
+        </tbody>
+      </table>,
+    )
+    const cell = container.querySelector("tr > td")
+    expect(cell?.getAttribute("colspan")).toBe("4")
+    const state = cell?.firstElementChild
+    expect(state?.className).not.toContain("border-dashed")
+    expect(state?.className).toContain("py-6")
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toBe(
+      "No rows",
+    )
+    expect(screen.getByText("Add one to begin")).toBeDefined()
   })
 })
 

@@ -17,7 +17,7 @@ import {
   TableErrorRow,
   TableShell,
 } from "@/components/ui"
-import { EmptyState } from "@/components/list"
+import { TableEmptyRow } from "@/components/list"
 import type { Student } from "@/types/classroom"
 import type { RosterCsvProblem } from "@/domain/students"
 import { useDismissFailedInvite } from "@/hooks/mutations/useDismissFailedInvite"
@@ -1058,68 +1058,60 @@ const EnrolledStudents = ({
               </tbody>
             ) : isEmpty ? (
               <tbody>
-                <tr>
-                  <td colSpan={colCount}>
-                    <EmptyState
-                      variant="bare"
-                      className="py-12"
-                      icon={PeopleIcon}
-                      titleAs="h3"
-                      title={t("students.emptyTitle")}
-                      body={t("students.emptyBody")}
-                      action={
-                        addActions ? (
-                          <div className="flex flex-col items-center gap-3">
-                            {/* The toolbar (and its syncing indicator) is hidden
-                              on an empty roster, so say it here too. */}
-                            {syncing ? (
-                              <span
-                                className="flex items-center gap-2 text-sm text-base-content/70"
-                                aria-live="polite"
-                              >
-                                <SyncIcon
-                                  aria-hidden="true"
-                                  className="size-4 animate-spin"
-                                />
-                                {t("students.syncActive")}
-                              </span>
-                            ) : null}
-                            <div className="flex justify-center gap-2">
-                              <AddStudentButtons addActions={addActions} />
-                            </div>
-                          </div>
-                        ) : null
-                      }
-                    />
-                  </td>
-                </tr>
+                <TableEmptyRow
+                  colSpan={colCount}
+                  className="py-12"
+                  icon={PeopleIcon}
+                  titleAs="h3"
+                  title={t("students.emptyTitle")}
+                  body={t("students.emptyBody")}
+                  action={
+                    addActions ? (
+                      <div className="flex flex-col items-center gap-3">
+                        {/* The toolbar (and its syncing indicator) is hidden
+                          on an empty roster, so say it here too. */}
+                        {syncing ? (
+                          <span
+                            className="flex items-center gap-2 text-sm text-base-content/70"
+                            aria-live="polite"
+                          >
+                            <SyncIcon
+                              aria-hidden="true"
+                              className="size-4 animate-spin"
+                            />
+                            {t("students.syncActive")}
+                          </span>
+                        ) : null}
+                        <div className="flex justify-center gap-2">
+                          <AddStudentButtons addActions={addActions} />
+                        </div>
+                      </div>
+                    ) : null
+                  }
+                />
               </tbody>
             ) : filtered.length === 0 ? (
               <tbody>
-                <tr>
-                  <td colSpan={colCount}>
-                    <EmptyState
-                      variant="bare"
-                      body={
-                        query.trim()
-                          ? t("students.noMatch")
-                          : effectiveSection !== "all" && statusFilter === "all"
-                            ? t("students.noneInSection", {
-                                section:
-                                  effectiveSection === NO_SECTION
-                                    ? t("students.noSection")
-                                    : effectiveSection,
-                              })
-                            : t("students.noneWithStatus", {
-                                status:
-                                  statusOptions.find(
-                                    (o) => o.value === statusFilter,
-                                  )?.label ?? statusFilter,
-                              })
-                      }
-                    />
-                  </td>
-                </tr>
+                <TableEmptyRow
+                  colSpan={colCount}
+                  body={
+                    query.trim()
+                      ? t("students.noMatch")
+                      : effectiveSection !== "all" && statusFilter === "all"
+                        ? t("students.noneInSection", {
+                            section:
+                              effectiveSection === NO_SECTION
+                                ? t("students.noSection")
+                                : effectiveSection,
+                          })
+                        : t("students.noneWithStatus", {
+                            status:
+                              statusOptions.find(
+                                (o) => o.value === statusFilter,
+                              )?.label ?? statusFilter,
+                          })
+                  }
+                />
               </tbody>
             ) : groupedRows ? (
               // One <tbody> per group (role or section), opened by a full-width

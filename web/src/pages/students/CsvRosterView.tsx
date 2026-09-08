@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { EmptyState } from "@/components/list"
+import { TableEmptyRow } from "@/components/list"
 import { useTranslation } from "react-i18next"
 
 import {
@@ -89,14 +89,7 @@ const CsvRosterView = ({
               onRetry={onRetryLoad}
             />
           ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={3}>
-                <EmptyState
-                  variant="bare"
-                  body={t("students.csvRoster.empty")}
-                />
-              </td>
-            </tr>
+            <TableEmptyRow colSpan={3} body={t("students.csvRoster.empty")} />
           ) : (
             rows.map((student) => (
               // studentKey falls back to the email, so two pending invites

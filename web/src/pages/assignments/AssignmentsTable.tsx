@@ -1,7 +1,7 @@
 import { useMemo, useState, type ReactNode } from "react"
 import { selectAllState } from "@/util/rowSelection"
 import { useNavigate } from "@tanstack/react-router"
-import { EmptyState } from "@/components/list"
+import { TableEmptyRow } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
   AlertIcon,
@@ -263,6 +263,7 @@ const AssignmentsTable = ({
   // Mutating row actions require both an unarchived classroom and author rights.
   const canMutate = !archived && canAuthor
   const selectable = Boolean(selectedSlugs && onToggleRow && onToggleSelectAll)
+  const colSpan = selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS
   // The header box describes the view: "is everything I can see ticked".
   const { allSelected, someSelected } = selectAllState(
     selectable ? (assignments ?? []) : [],
@@ -342,39 +343,36 @@ const AssignmentsTable = ({
           {loading && <SkeletonRows bars={SKELETON_BARS} />}
           {!loading && loadError && (
             <TableErrorRow
-              colSpan={selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS}
+              colSpan={colSpan}
               message={t("assignments.table.loadError")}
               retryLabel={t("assignments.table.retry")}
               onRetry={onRetryLoad}
             />
           )}
-          {!loading && !loadError && !assignments?.length && (
-            <tr>
-              <td colSpan={selectable ? DATA_COLUMNS + 1 : DATA_COLUMNS}>
-                {emptyAction ? (
-                  // First-use blankslate (Primer): the resolving action lives
-                  // here, and the page hides its toolbar so the view carries
-                  // a single primary action.
-                  <EmptyState
-                    variant="bare"
-                    className="py-12"
-                    icon={PlusIcon}
-                    titleAs="h3"
-                    title={t("assignments.table.emptyTitle")}
-                    body={t("assignments.table.emptyBody")}
-                    action={emptyAction}
-                  />
-                ) : (
-                  // Read-only viewers (TA, archived classroom) get the plain
-                  // statement — there is no action they could take.
-                  <EmptyState
-                    variant="bare"
-                    body={t("assignments.table.empty")}
-                  />
-                )}
-              </td>
-            </tr>
-          )}
+          {!loading &&
+            !loadError &&
+            !assignments?.length &&
+            (emptyAction ? (
+              // First-use blankslate (Primer): the resolving action lives
+              // here, and the page hides its toolbar so the view carries
+              // a single primary action.
+              <TableEmptyRow
+                colSpan={colSpan}
+                className="py-12"
+                icon={PlusIcon}
+                titleAs="h3"
+                title={t("assignments.table.emptyTitle")}
+                body={t("assignments.table.emptyBody")}
+                action={emptyAction}
+              />
+            ) : (
+              // Read-only viewers (TA, archived classroom) get the plain
+              // statement: there is no action they could take.
+              <TableEmptyRow
+                colSpan={colSpan}
+                body={t("assignments.table.empty")}
+              />
+            ))}
           {!loading &&
             !loadError &&
             assignments?.map((assignment) => (

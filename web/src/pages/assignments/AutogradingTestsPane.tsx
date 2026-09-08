@@ -7,7 +7,7 @@ import {
   TrashIcon,
   UploadIcon,
 } from "@/components/ui/icons"
-import { EmptyState } from "@/components/list"
+import { TableEmptyRow } from "@/components/list"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
 import { assignmentBundleUploadUrl } from "@/util/orgUrl"
 import type { AssignmentForm } from "./assignmentFormModel"
@@ -688,15 +688,11 @@ const AutogradingTestsPane = ({
                 </thead>
                 <tbody>
                   {field.state.value.length === 0 ? (
-                    <tr>
-                      <td colSpan={5}>
-                        <EmptyState
-                          variant="bare"
-                          className="py-6"
-                          body={t("assignments.autograder.empty")}
-                        />
-                      </td>
-                    </tr>
+                    <TableEmptyRow
+                      colSpan={5}
+                      className="py-6"
+                      body={t("assignments.autograder.empty")}
+                    />
                   ) : (
                     field.state.value.map(
                       (test: AssignmentTestDraft, index: number) => (
