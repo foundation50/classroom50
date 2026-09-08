@@ -16,9 +16,9 @@ export type ExternalLinkVariant =
   | "plain"
 
 const variantClass: Record<ExternalLinkVariant, string> = {
-  link: "link inline-flex items-center",
-  muted: "inline-flex items-center text-base-content/70 hover:text-primary",
-  plain: "inline-flex items-center",
+  link: "link items-center",
+  muted: "items-center text-base-content/70 hover:text-primary",
+  plain: "items-center",
 }
 
 // A text link that opens off-site in a new tab: the `target`/`rel` pair a new
@@ -37,6 +37,9 @@ export type ExternalLinkProps = Omit<
   icon?: boolean
 }
 
+const setsDisplay = (className: string | undefined) =>
+  Boolean(className && /(^|\s)(inline-)?flex(\s|$)/.test(className))
+
 export function ExternalLink({
   href,
   children,
@@ -52,6 +55,9 @@ export function ExternalLink({
       rel="noreferrer"
       className={cx(
         variantClass[variant],
+        // A caller that sets `flex` gets a block-level link on its own line
+        // (a note's follow-up link); otherwise the link flows inline.
+        !setsDisplay(className) && "inline-flex",
         !hasUtility("gap-", className) && "gap-1",
         className,
       )}

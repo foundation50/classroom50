@@ -195,10 +195,9 @@ export const githubKeys = {
   csvFile: (owner: string, repo: string, path: string, ref?: string) =>
     [...githubKeys.all, "csv-file", owner, repo, path, ref ?? null] as const,
 
-  // The per-classroom config-repo files, as the jsonFile/csvFile keys their
-  // readers already use. Delegating (rather than minting new tuples) keeps the
-  // cache entries and every prefix invalidation identical; these exist so a
-  // writer's invalidation and the reader's key can't drift on the path string.
+  // The per-classroom config-repo files. Delegating to jsonFile/csvFile keeps
+  // every cache entry identical; the point is that a writer's invalidation and
+  // the reader's key can't drift on the path string.
   assignmentsFile: (org: string, classroom: string) =>
     githubKeys.jsonFile(org, CONFIG_REPO, assignmentsFilePath(classroom)),
   classroomFile: (org: string, classroom: string) =>

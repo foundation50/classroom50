@@ -15,8 +15,7 @@ import { prefixCommit } from "@/util/commit"
 
 import { assertClassroomNotArchived } from "./classrooms"
 
-// The head of the config repo's default branch, read once per write attempt.
-// Every field a writer needs to build a tree on top of it and move the ref.
+// The config repo's head, read once per write attempt.
 export type ConfigRepoHead = {
   configBranch: string
   headSha: string
@@ -56,11 +55,10 @@ export type ConfigRepoCommitResult = {
   updatedRef: GitHubMoveBranch
 }
 
-// The write half every config-repo mutation shares: one tree on the head's
-// base tree, one commit with the head as parent, one ref move. The message is
-// prefixed here so no writer can forget it. A concurrent write to the same
-// branch surfaces as a non-fast-forward 409 from updateRef; callers wrap the
-// read + commit in withGitConflictRetry to re-read and try again.
+// The write half every config-repo mutation shares: one tree, one commit, one
+// ref move. The message is prefixed here so no writer can forget it. A losing
+// concurrent write surfaces from updateRef; callers wrap read + commit in
+// withGitConflictRetry.
 export async function commitConfigRepoFiles(
   client: GitHubClient,
   org: string,

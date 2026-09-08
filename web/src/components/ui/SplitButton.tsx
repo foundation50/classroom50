@@ -4,15 +4,13 @@ import { Button } from "./Button"
 import { DropdownMenu } from "./DropdownMenu"
 import { TriangleDownIcon } from "./icons"
 
-// A primary action with a caret that opens secondary actions beside it (the
-// "New assignment ▾" and "Upload roster ▾" toolbar controls). The caller
-// renders the primary control (a Button or RouterButton with `join-item`) and
-// the menu items; this owns the join chrome, the caret button, and the menu.
+// A primary action with a caret that opens secondary actions beside it. The
+// caller renders the primary control (with `join-item`) and the menu items.
 //
-// The caret's wrapper is deliberately NOT a join-item: daisyUI's join rounds
-// its direct children, and the dropdown wrapper would take the rounding instead
-// of the caret button inside it. The negative margin closes the 1px seam that
-// leaves, and the inset border draws the divider the join would have drawn.
+// The caret's dropdown wrapper is NOT a join-item: daisyUI's join rounds its
+// direct children, and the wrapper would take the rounding instead of the
+// button inside it. The negative margin and inset border replace the seam and
+// divider the join would have drawn.
 export function SplitButton({
   primary,
   caretLabel,

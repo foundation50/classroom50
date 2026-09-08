@@ -241,7 +241,7 @@ async function commitRenameConfig(
 
   await withGitConflictRetry(async () => {
     const head = await readConfigRepoHeadAt(client, org, branch)
-    // The two parent-pinned reads are independent — fetch them together.
+    // Both reads pin to the same parent and are independent; fetch together.
     // The scores read tolerates 404 (no file — nothing was ever collected).
     const [file, scoresRaw] = await Promise.all([
       getAssignmentsFile(client, {

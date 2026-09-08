@@ -18,7 +18,7 @@ export interface UseRowSelectionArgs<T> {
   // The full set. Selection resolves against this, so a selected row the
   // search hides is still acted on.
   rows: T[]
-  // The current filtered view: the header checkbox's target.
+  // The header checkbox's target.
   filtered: T[]
   // The ACTUAL rendered order when it differs from `filtered` (a grouped view),
   // so a shift-range spans what the user sees.

@@ -14,31 +14,27 @@ export interface BulkRun {
   // per-row outcome existed). Rendered instead of `result`.
   error: string | null
   busy: boolean
-  // True while the component that started the run is still mounted. Fan-outs
-  // check it before every setState and before launching another write.
+  // Fan-outs check this before each setState and before launching a write.
   isMounted: () => boolean
-  // Enter "working". Returns false (and does nothing) when a run is already in
-  // flight, so a double-click can't start a second fan-out.
+  // False (and a no-op) while a run is in flight, so a double-click can't
+  // start a second fan-out.
   begin: (total: number, message?: string) => boolean
   setProgress: (progress: BulkProgress) => void
-  // Leave "working" with per-row results; `phase` is "error" when any row
-  // failed or was deferred, so the caller decides that from its outcomes.
+  // The caller passes "error" when any row failed or was deferred.
   complete: (result: BulkResultView, phase: "complete" | "error") => void
-  // Leave "working" because the run itself threw.
+  // The run itself threw, before any per-row outcome existed.
   fail: (message: string) => void
   // Back to idle with nothing shown. Modals call this on open, never on close
   // (see the close-animation note in ui/Modal).
   reset: () => void
 }
 
-// The lifecycle every bulk modal and action bar drives: idle -> working ->
-// complete | error, with the progress line, the mounted/running guards, and
-// the tab-close hold while working. Callers own what the run does and how its
-// outcomes map to a BulkResultView; this owns everything else.
+// The run lifecycle every bulk modal and action bar drives (idle, working,
+// complete or error) plus the guards around it. Callers own what the run does
+// and how outcomes map to a BulkResultView.
 //
-// `resetWhen` is the modal's `open` flag: the state resets as it turns true so
-// a reopened dialog starts fresh, while a close leaves the last result in
-// place through the exit animation.
+// `resetWhen` is the modal's `open` flag: reset as it turns true, never as it
+// turns false, so the last result stays visible through the exit animation.
 export function useBulkRun(resetWhen?: boolean): BulkRun {
   const [phase, setPhase] = useState<BulkPhase>("idle")
   const [progress, setProgressState] = useState<BulkProgress>(IDLE_PROGRESS)

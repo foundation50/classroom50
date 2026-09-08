@@ -99,6 +99,27 @@ describe("PreflightSummary", () => {
     expect(screen.queryByText(/summary_update/)).toBeNull()
   })
 
+  // The pills are solid, not soft: the soft wash reads as disabled against the
+  // bordered summary strip. Pinned because a tone-prop refactor once flipped it.
+  it("renders solid tone pills and a ghost skip pill", () => {
+    render(
+      <PreflightSummary
+        preflight={result({
+          needsInvite: [
+            { kind: "needs_invite", username: "a", role: "student" },
+          ],
+          noAction: [mk("b")],
+        })}
+        detailsOpen={false}
+        onToggleDetails={() => {}}
+      />,
+    )
+    const [add, skip] = screen.getAllByText("1").map((el) => el.className)
+    expect(add).toContain("badge-success")
+    expect(add).not.toContain("badge-soft")
+    expect(skip).toContain("badge-ghost")
+  })
+
   it("shows a no-changes message when every category is empty", () => {
     render(
       <PreflightSummary

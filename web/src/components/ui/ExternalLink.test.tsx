@@ -61,4 +61,17 @@ describe("ExternalLink", () => {
     expect(classes).toContain("gap-1.5")
     expect(classes).not.toContain("gap-1")
   })
+
+  // A note's follow-up link sits on its own line under the message; the
+  // caller says so with `flex`, and the primitive must not fight it.
+  it("yields inline-flex to a caller that sets flex", () => {
+    render(
+      <ExternalLink href="https://example.org" className="mt-1 flex">
+        Docs
+      </ExternalLink>,
+    )
+    const classes = screen.getByRole("link").className.split(" ")
+    expect(classes).toContain("flex")
+    expect(classes).not.toContain("inline-flex")
+  })
 })

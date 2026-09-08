@@ -35,8 +35,6 @@ type RunBulkFanOutParams<O> = {
   // workflow scope that every later owner would also hit).
   shouldStop?: () => boolean
   isMounted: () => boolean
-  // After each owner is processed (ok, failed, or deferred), with the running
-  // count and the owner just handled.
   onProgress: (processed: number, owner: string) => void
   t: TFunction
 }

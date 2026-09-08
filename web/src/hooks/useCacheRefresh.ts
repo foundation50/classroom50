@@ -12,7 +12,6 @@ import {
 // They live here so `useQueryClient` and `githubKeys` stay out of `pages/`
 // (AGENTS.md); each wraps the single-sourced invalidator in keys.ts.
 
-// Roster invite-status lists for every classroom team in the org.
 export function useInvalidateInviteQueries(org: string): () => void {
   const queryClient = useQueryClient()
   return useCallback(
@@ -21,13 +20,11 @@ export function useInvalidateInviteQueries(org: string): () => void {
   )
 }
 
-// Everything the viewer's org list derives from (see invalidateViewerOrgs).
 export function useInvalidateViewerOrgs(): () => void {
   const queryClient = useQueryClient()
   return useCallback(() => invalidateViewerOrgs(queryClient), [queryClient])
 }
 
-// The org policy audit, whatever plan the cached run used.
 export function useInvalidateOrgAudit(org: string): () => void {
   const queryClient = useQueryClient()
   return useCallback(

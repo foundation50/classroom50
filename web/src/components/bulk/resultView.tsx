@@ -242,11 +242,9 @@ export const BulkResultBody = ({
   )
 }
 
-// The action bars' run modal (roster and org members): opened by the bar when
-// a run starts, it shows the progress row while working, the results when
-// complete, or the whole-run error. Closing is refused while working. The
-// modal stays mounted across runs; the bar owns `open` so a close does not
-// reset the last result mid-animation.
+// The action bars' run modal: progress while working, then results or the
+// whole-run error. The bar owns `open`, so a close never resets the last
+// result mid-animation.
 export const BulkRunModal = ({
   open,
   onClose,

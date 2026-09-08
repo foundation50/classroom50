@@ -9,8 +9,9 @@ import type { BadgeTone } from "@/types/badgeTone"
 export type SummaryCategory = {
   key: "add" | "update" | "skip"
   count: number
-  // The count pill's Badge appearance.
-  pill: { tone: BadgeTone } | { ghost: true }
+  // The count pill's Badge appearance. Solid, not soft: the pill sits on a
+  // bordered summary strip where the soft wash reads as disabled.
+  pill: { tone: BadgeTone; soft: false } | { ghost: true }
 }
 
 // Collapse the five preflight buckets into the three teacher-facing categories:
@@ -38,8 +39,12 @@ export function summarizePreflight(
     preflight.metadataUpdate.length + preflight.roleChanges.length
   const skipCount = preflight.noAction.length
   const categories: SummaryCategory[] = [
-    { key: "add", count: addCount, pill: { tone: "success" } },
-    { key: "update", count: updateCount, pill: { tone: "warning" } },
+    { key: "add", count: addCount, pill: { tone: "success", soft: false } },
+    {
+      key: "update",
+      count: updateCount,
+      pill: { tone: "warning", soft: false },
+    },
     { key: "skip", count: skipCount, pill: { ghost: true } },
   ]
   return { categories, addCount, updateCount, skipCount }

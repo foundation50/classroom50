@@ -132,11 +132,8 @@ async function readScoresFile(
   classroom: string,
   ref: string,
 ): Promise<ScoresFile> {
-  // ONLY a genuine 404 means the file is absent (never collected), so an
-  // override can seed it. Any other error (5xx / rate-limit / network) is NOT
-  // proof of absence: swallowing it would let the caller commit a scaffold over
-  // the whole gradebook. readConfigJson rethrows those and parses outside the
-  // tolerated region, so a malformed body fails the save too.
+  // Only a 404 scaffolds (never collected). readConfigJson rethrows anything
+  // else, so a blip can't make the save overwrite the gradebook with a stub.
   const parsed = await readConfigJson<ScoresFile>(client, {
     org,
     path: scoresFilePath(classroom),

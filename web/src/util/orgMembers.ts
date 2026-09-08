@@ -258,9 +258,8 @@ const displayName = (row: OrgMemberRow) => row.username || row.name || row.email
 // What the Name cell shows: the name when known, else the avatar's fallbacks.
 const nameFirst = (row: OrgMemberRow) => row.name || row.username || row.email
 
-// Header-driven column sort for the Members table (sortByColumn, like the
-// roster). `isOwner` backs the role column — ownership lives outside the row
-// (the admins read), so the caller supplies the predicate.
+// Column sort for the Members table. `isOwner` backs the role column: ownership
+// lives outside the row (the admins read), so the caller supplies it.
 export type OrgMembersSortColumn =
   "name" | "username" | "classrooms" | "role" | "status"
 export function sortOrgMemberRowsBy(

@@ -492,7 +492,7 @@ function renderTemplateVerdict({
           <ExternalLink
             href={`https://github.com/${verification.owner}/${verification.repo}`}
             variant="plain"
-            className="mt-1 font-semibold underline"
+            className="mt-1 flex font-semibold underline"
           >
             {t("assignments.template.viewTemplateRepo", {
               owner: verification.owner,
@@ -575,7 +575,7 @@ function renderTemplateVerdict({
               <ExternalLink
                 href={`https://github.com/${verification.owner}/${verification.repo}`}
                 variant="plain"
-                className="mt-1 font-semibold underline"
+                className="mt-1 flex font-semibold underline"
               >
                 {t("assignments.template.viewTemplateRepo", {
                   owner: verification.owner,
@@ -666,7 +666,7 @@ const Note = ({
         <ExternalLink
           href={policy.href}
           variant="plain"
-          className="mt-1 font-semibold underline"
+          className="mt-1 flex font-semibold underline"
         >
           {t("assignments.template.policyLink", { owner: policy.owner })}
         </ExternalLink>
