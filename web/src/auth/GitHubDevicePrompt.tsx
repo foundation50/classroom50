@@ -3,14 +3,14 @@ import { CheckIcon, CopyIcon, LinkExternalIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import type { DeviceAuthState } from "./types"
-import { Button } from "@/components/ui"
+import { Button, chipToneClass } from "@/components/ui"
 
 function StepNumber({ value, done }: { value: number; done: boolean }) {
   return (
     <div
       className={[
         "flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
-        done ? "bg-success/10 text-success" : "bg-primary/10 text-primary",
+        chipToneClass[done ? "success" : "primary"],
       ].join(" ")}
     >
       {done ? <CheckIcon aria-hidden="true" className="size-4" /> : value}

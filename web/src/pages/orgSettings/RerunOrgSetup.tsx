@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
-import { Button, cx } from "@/components/ui"
+import { Button, cx, softTintToneClass } from "@/components/ui"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
 import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
@@ -21,10 +21,13 @@ import {
   useSkeletonOverwriteConfirm,
 } from "@/components/skeletonOverwrite/skeletonOverwriteUi"
 
+// The soft-tint recipe, except the warning banner keeps body-toned text: its
+// message is a paragraph of instructions, and amber text at that length reads
+// worse than the amber border and wash already signal.
 const BANNER_TONE = {
-  error: "border-error/30 bg-error/10 text-error",
+  error: softTintToneClass.error,
   warning: "border-warning/30 bg-warning/10 text-base-content/80",
-  success: "border-success/30 bg-success/10 text-success",
+  success: softTintToneClass.success,
 } as const
 
 // A small status callout shared by the re-run summary states so the

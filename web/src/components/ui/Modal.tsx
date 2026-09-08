@@ -17,6 +17,7 @@ import { Button } from "./Button"
 import { cx } from "./cx"
 import { logger } from "@/lib/logger"
 import { Heading } from "./Heading"
+import { chipToneClass } from "./tones"
 
 // The canonical dialog. Wraps the native `<dialog className="modal">` idiom the
 // app uses everywhere: it owns the `modal-box` (sized via `size`), the top-right
@@ -268,12 +269,6 @@ export function ModalFooterPortal({ children }: { children: ReactNode }) {
 // not hand-roll the size/tone recipe.
 export type ModalIconTone = "primary" | "warning" | "error"
 
-const MODAL_ICON_TONE_CLASS: Record<ModalIconTone, string> = {
-  primary: "bg-primary/10 text-primary",
-  warning: "bg-warning/10 text-warning",
-  error: "bg-error/10 text-error",
-}
-
 export function ModalIcon({
   tone = "primary",
   children,
@@ -285,7 +280,7 @@ export function ModalIcon({
     <div
       className={cx(
         "flex size-11 shrink-0 items-center justify-center rounded-box",
-        MODAL_ICON_TONE_CLASS[tone],
+        chipToneClass[tone],
       )}
     >
       {children}

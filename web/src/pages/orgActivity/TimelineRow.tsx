@@ -10,7 +10,13 @@ import {
   ZapIcon,
 } from "@/components/ui/icons"
 
-import { Badge, cx, ExternalLink, type BadgeTone } from "@/components/ui"
+import {
+  Badge,
+  chipToneClass,
+  cx,
+  ExternalLink,
+  type BadgeTone,
+} from "@/components/ui"
 import type { TimelineItem, TimelineStatus } from "@/lib/activity/timeline"
 import type { TFunction } from "i18next"
 
@@ -35,18 +41,6 @@ function itemTone(item: TimelineItem): BadgeTone {
   if (item.source === "commit") return "info"
   if (item.source === "run") return "success"
   return "info"
-}
-
-// Chip background/text derived from the single tone. Static map (not a template
-// string) so Tailwind's content scanner keeps these classes.
-const CHIP_TONE_CLASS: Record<BadgeTone, string> = {
-  error: "bg-error/10 text-error",
-  warning: "bg-warning/10 text-warning",
-  info: "bg-info/10 text-info",
-  success: "bg-success/10 text-success",
-  primary: "bg-primary/10 text-primary",
-  secondary: "bg-secondary/10 text-secondary",
-  neutral: "bg-base-300 text-base-content",
 }
 
 // Icon per status/source, independent of tone.
@@ -79,7 +73,7 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
       <span
         className={cx(
           "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-field",
-          CHIP_TONE_CLASS[tone],
+          chipToneClass[tone],
         )}
       >
         {createElement(icon, {

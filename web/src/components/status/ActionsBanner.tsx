@@ -1,4 +1,4 @@
-import { ExternalLink } from "@/components/ui"
+import { chipToneClass, ExternalLink } from "@/components/ui"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { InlineSpinner } from "@/components/Spinner"
 import { AnimatePresence, motion } from "motion/react"
@@ -13,6 +13,7 @@ import { useTranslation } from "react-i18next"
 
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
 import { collapseVariants, DURATION, EASE_OUT } from "@/lib/motion"
+import type { BadgeTone } from "@/types/badgeTone"
 
 // Compact elapsed duration ("8s", "1m 12s", "3m", "1h 5m"); "" for non-positive.
 function formatElapsed(ms: number): string {
@@ -72,11 +73,11 @@ const StatusIcon = ({
 
 // Per-phase tone for an expanded row, so rows stay distinguishable in the
 // neutral list even when the header is red.
-const ROW_TONE: Record<Tracker["phase"], string> = {
-  failed: "bg-error/10 text-error",
-  success: "bg-success/10 text-success",
-  running: "bg-info/10 text-info",
-  pending: "bg-info/10 text-info",
+const ROW_TONE: Record<Tracker["phase"], BadgeTone> = {
+  failed: "error",
+  success: "success",
+  running: "info",
+  pending: "info",
 }
 
 const TrackerRow = ({
@@ -100,7 +101,9 @@ const TrackerRow = ({
   return (
     <div
       className={`flex items-center gap-2 ${
-        compact ? "" : `rounded-selector px-2 py-1.5 ${ROW_TONE[tracker.phase]}`
+        compact
+          ? ""
+          : `rounded-selector px-2 py-1.5 ${chipToneClass[ROW_TONE[tracker.phase]]}`
       }`}
     >
       <StatusIcon phase={tracker.phase} tinted={!compact} />

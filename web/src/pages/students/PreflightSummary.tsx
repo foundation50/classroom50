@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Badge, Button } from "@/components/ui"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
+import type { BadgeTone } from "@/types/badgeTone"
 
 // One concise, high-level category the import will apply, derived from the
 // preflight buckets. Kept deliberately small (add / update / skip) so the
@@ -8,8 +9,8 @@ import type { PreflightResult } from "@/util/rosterUploadPreflight"
 export type SummaryCategory = {
   key: "add" | "update" | "skip"
   count: number
-  // Tailwind/DaisyUI classes for the count pill.
-  pillClass: string
+  // The count pill's Badge appearance.
+  pill: { tone: BadgeTone } | { ghost: true }
 }
 
 // Collapse the five preflight buckets into the three teacher-facing categories:
@@ -37,9 +38,9 @@ export function summarizePreflight(
     preflight.metadataUpdate.length + preflight.roleChanges.length
   const skipCount = preflight.noAction.length
   const categories: SummaryCategory[] = [
-    { key: "add", count: addCount, pillClass: "badge-success" },
-    { key: "update", count: updateCount, pillClass: "badge-warning" },
-    { key: "skip", count: skipCount, pillClass: "badge-ghost" },
+    { key: "add", count: addCount, pill: { tone: "success" } },
+    { key: "update", count: updateCount, pill: { tone: "warning" } },
+    { key: "skip", count: skipCount, pill: { ghost: true } },
   ]
   return { categories, addCount, updateCount, skipCount }
 }
@@ -76,7 +77,7 @@ export const PreflightSummary = ({
         ) : (
           active.map((c) => (
             <span key={c.key} className="flex items-center gap-1.5">
-              <Badge className={c.pillClass}>{c.count}</Badge>
+              <Badge {...c.pill}>{c.count}</Badge>
               <span>{t(`students.summary_${c.key}`, { count: c.count })}</span>
             </span>
           ))
