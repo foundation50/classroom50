@@ -102,7 +102,11 @@ export function BulkRepoVisibilityModal({
             }),
         sections: failedAndDeferredSections(
           t,
-          "submissions.bulkVisibility",
+          {
+            failed: "submissions.bulkVisibility.failedSection",
+            deferred: "submissions.bulkVisibility.deferredSection",
+            deferredDetail: "submissions.bulkVisibility.deferredDetail",
+          },
           { failed, deferred },
           displayFor,
         ),

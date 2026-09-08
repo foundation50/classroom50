@@ -105,7 +105,11 @@ export function BulkRepoAccessModal({
             }),
         sections: failedAndDeferredSections(
           t,
-          "submissions.bulkAccess",
+          {
+            failed: "submissions.bulkAccess.failedSection",
+            deferred: "submissions.bulkAccess.deferredSection",
+            deferredDetail: "submissions.bulkAccess.deferredDetail",
+          },
           { failed, deferred },
           displayFor,
         ),

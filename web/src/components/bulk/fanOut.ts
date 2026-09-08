@@ -138,23 +138,23 @@ export function outcomeSection<O extends AnyOutcome & { detail?: string }>(
 }
 
 // The two sections every fan-out result carries, from a `partitionOutcomes`
-// result and the modal's i18n prefix: `<prefix>.failedSection` with each
-// failure's reason, then `<prefix>.deferredSection` with
-// `<prefix>.deferredDetail` on every row.
+// result: failures with their own reasons, then deferrals sharing one
+// explanation. Callers spell out all three keys so the i18n audit can see them
+// (it can't follow a key assembled from a prefix).
 export function failedAndDeferredSections<O extends AnyOutcome>(
   t: TFunction,
-  prefix: string,
+  keys: { failed: string; deferred: string; deferredDetail: string },
   groups: Pick<ReturnType<typeof partitionOutcomes<O>>, "failed" | "deferred">,
   displayFor: (login: string) => string,
 ): BulkResultView["sections"] {
   return [
-    ...outcomeSection(t, `${prefix}.failedSection`, groups.failed, displayFor),
+    ...outcomeSection(t, keys.failed, groups.failed, displayFor),
     ...outcomeSection(
       t,
-      `${prefix}.deferredSection`,
+      keys.deferred,
       groups.deferred,
       displayFor,
-      t(`${prefix}.deferredDetail`),
+      t(keys.deferredDetail),
     ),
   ]
 }

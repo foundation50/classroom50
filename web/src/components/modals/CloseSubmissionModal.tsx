@@ -136,7 +136,11 @@ export function CloseSubmissionModal({
         headline: t(headlineKey, { count: succeeded.length, total }),
         sections: failedAndDeferredSections(
           t,
-          "submissions.closeSubmission",
+          {
+            failed: "submissions.closeSubmission.failedSection",
+            deferred: "submissions.closeSubmission.deferredSection",
+            deferredDetail: "submissions.closeSubmission.deferredDetail",
+          },
           { failed, deferred },
           displayFor,
         ),

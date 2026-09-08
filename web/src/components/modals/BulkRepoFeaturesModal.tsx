@@ -131,7 +131,11 @@ export function BulkRepoFeaturesModal({
             }),
         sections: failedAndDeferredSections(
           t,
-          "submissions.bulkFeatures",
+          {
+            failed: "submissions.bulkFeatures.failedSection",
+            deferred: "submissions.bulkFeatures.deferredSection",
+            deferredDetail: "submissions.bulkFeatures.deferredDetail",
+          },
           { failed, deferred },
           displayFor,
         ),

@@ -182,7 +182,16 @@ describe("failedAndDeferredSections", () => {
       { owner: "bob", status: "deferred" },
     ])
     expect(
-      failedAndDeferredSections(tCount, "submissions.bulkX", groups, (l) => l),
+      failedAndDeferredSections(
+        tCount,
+        {
+          failed: "submissions.bulkX.failedSection",
+          deferred: "submissions.bulkX.deferredSection",
+          deferredDetail: "submissions.bulkX.deferredDetail",
+        },
+        groups,
+        (l) => l,
+      ),
     ).toEqual([
       {
         title: "submissions.bulkX.deferredSection:1",
