@@ -1,25 +1,22 @@
 import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
-import {
-  AlertIcon,
-  InfoIcon,
-  ReadIcon,
-  ShieldCheckIcon,
-} from "@/components/ui/icons"
+import { InfoIcon, ShieldCheckIcon } from "@/components/ui/icons"
 
 import { Badge } from "@/components/ui"
 import { CellPlaceholder } from "@/components/memberList/memberPresentation"
 import type { GitHubClient } from "@/github-core/client"
 import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { memberStatusBadges } from "@/util/orgMemberUI"
 import { errorText } from "@/types/localizedMessage"
 
 // Org-specific member presentation. The view-agnostic primitives (initialsFor,
 // GitHubIdentity) moved down to components/memberList/memberPresentation so a
 // shared component can use them without a components->pages reach-up; they are
 // re-exported here so existing importers keep working unchanged.
-// ClassificationBadge and runInviteMember stay here — they read `classification`
-// and invite to the org, so they are genuinely org-feature code.
+// The badge components and runInviteMember stay here — they read
+// `classification` and invite to the org, so they are genuinely org-feature
+// code; the chip recipe itself is single-sourced in util/orgMemberUI.
 export {
   CellPlaceholder,
   GitHubIdentity,
@@ -50,45 +47,39 @@ export const OrgRoleBadge = ({
   return <CellPlaceholder />
 }
 
-// Health-only badge for the table's Status column: the actionable
-// discrepancy, the pending invite, or CSV/team drift; the empty placeholder
-// otherwise. The three are mutually exclusive — drift is only computed for
-// live members, which the other two are not.
+// The table's Status column: every chip memberStatusBadges yields (the
+// failed record, the classification, CSV/team drift), or the empty
+// placeholder for a healthy member. The drift chip carries the classroom list
+// as a title, since the cell has no room for it.
 export const MemberStatusBadge = ({ row }: { row: OrgMemberRow }) => {
   const { t } = useTranslation()
-  if (row.classification === "on-roster-not-member") {
-    return (
-      <Badge tone="error" className="gap-1 whitespace-nowrap">
-        <AlertIcon aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeNotMember")}
-      </Badge>
-    )
-  }
-  if (row.classification === "invitation-pending") {
-    return (
-      <Badge tone="info" className="gap-1 whitespace-nowrap">
-        <ReadIcon aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeInvitePending")}
-      </Badge>
-    )
-  }
-  if (row.unprovisionedClassrooms.length > 0) {
-    return (
-      <Badge
-        tone="warning"
-        className="gap-1 whitespace-nowrap"
-        title={t("orgMembers.unprovisionedTitle", {
-          classrooms: row.unprovisionedClassrooms.join(", "),
-        })}
-      >
-        <AlertIcon aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.unprovisionedBadge")}
-      </Badge>
-    )
-  }
-  return <CellPlaceholder />
+  const badges = memberStatusBadges(row)
+  if (badges.length === 0) return <CellPlaceholder />
+  return (
+    <span className="flex flex-wrap items-center gap-1">
+      {badges.map((badge) => (
+        <Badge
+          key={badge.labelKey}
+          tone={badge.tone}
+          className="whitespace-nowrap"
+          title={
+            badge.labelKey === "orgMembers.unprovisionedBadge"
+              ? t("orgMembers.unprovisionedTitle", {
+                  classrooms: row.unprovisionedClassrooms.join(", "),
+                })
+              : undefined
+          }
+        >
+          {t(badge.labelKey)}
+        </Badge>
+      ))}
+    </span>
+  )
 }
 
+// The detail modal's header chips: the same status list as the table, and
+// when there is nothing to flag, the org role so the header isn't blank
+// (Owner takes precedence; a member on no roster is still a member).
 export const ClassificationBadge = ({
   row,
   isOwner = false,
@@ -97,26 +88,18 @@ export const ClassificationBadge = ({
   isOwner?: boolean
 }) => {
   const { t } = useTranslation()
-  if (row.classification === "on-roster-not-member") {
+  const badges = memberStatusBadges(row)
+  if (badges.length > 0) {
     return (
-      <Badge tone="error" className="gap-1">
-        <AlertIcon aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeNotMember")}
-      </Badge>
+      <span className="flex flex-wrap items-center justify-end gap-1">
+        {badges.map((badge) => (
+          <Badge key={badge.labelKey} tone={badge.tone}>
+            {t(badge.labelKey)}
+          </Badge>
+        ))}
+      </span>
     )
   }
-  // An unaccepted email invite. Informational, not a discrepancy: there is no
-  // account yet to be missing from the org.
-  if (row.classification === "invitation-pending") {
-    return (
-      <Badge tone="info" className="gap-1">
-        <ReadIcon aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeInvitePending")}
-      </Badge>
-    )
-  }
-  // An owner/admin is labeled "Owner", not "Member" — takes precedence over the
-  // no-roster badge (an owner with no classroom is still an owner).
   if (isOwner) {
     return (
       <Badge tone="info" className="gap-1">

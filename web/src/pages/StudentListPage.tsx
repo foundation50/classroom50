@@ -10,7 +10,7 @@ import CsvRosterView from "@/pages/students/CsvRosterView"
 import UploadRoster from "@/pages/students/UploadRoster"
 import InviteLinksModal from "@/pages/students/InviteLinksModal"
 import { GitHubLink } from "@/components/GitHubLink"
-import { useParams } from "@tanstack/react-router"
+import { useParams, useSearch } from "@tanstack/react-router"
 import useGetStudents, {
   useUpdateRosterCache,
   useInvalidateRosterCache,
@@ -45,6 +45,8 @@ const TeamRosterContent = ({
     org,
     classroom,
   )
+  // `?q=` from another page (the Members detail modal) pre-fills the search.
+  const { q: initialQuery } = useSearch({ strict: false }) as { q?: string }
   const client = useGitHubClient()
   const invalidateInviteQueries = useInvalidateInviteQueries(org)
   const updateRosterCache = useUpdateRosterCache(org, classroom)
@@ -159,6 +161,7 @@ const TeamRosterContent = ({
       <EnrolledStudents
         students={students}
         parseProblems={parseProblems}
+        initialQuery={initialQuery}
         onRecheckRoster={recheckRoster}
         rechecking={rechecking}
         org={org}

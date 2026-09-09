@@ -120,12 +120,15 @@ const EnrolledStudents = ({
   parseProblems = [],
   onRecheckRoster,
   rechecking = false,
+  initialQuery = "",
   org,
   classroom,
   addActions,
   suppressedLogins,
 }: {
   students: Student[]
+  // Seeds the search box once (a deep link to one person's row).
+  initialQuery?: string
   // Per-line problems from the strict roster.csv parse (empty when the file is
   // well-formed). Surfaced as a banner so the teacher can fix the file.
   parseProblems?: RosterCsvProblem[]
@@ -168,7 +171,7 @@ const EnrolledStudents = ({
   // Explains a no-op select-all (visible rows exist but none are selectable).
   const [noneSelectableNotice, setNoneSelectableNotice] = useState(false)
   const [grouping, setGrouping] = useState<RosterGrouping>("none")
-  const [query, setQuery] = useState("")
+  const [query, setQuery] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
   const [sectionFilter, setSectionFilter] = useState<string>("all")

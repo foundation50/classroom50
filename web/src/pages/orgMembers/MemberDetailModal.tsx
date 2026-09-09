@@ -31,6 +31,7 @@ import {
   initialsFor,
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
+import StrandedRowNotice from "@/pages/orgMembers/StrandedRowNotice"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { errorText } from "@/types/localizedMessage"
 
@@ -355,14 +356,25 @@ const MemberDetailModal = ({
             {t("orgMembers.selfNotice")}
           </div>
         ) : !row.isMember ? (
-          row.github_id ? (
+          row.classification === "on-roster-not-member" && row.github_id ? (
             <div className="rounded-box border border-warning/30 bg-warning/5 p-4 text-sm">
               <p className="text-base-content/80">
-                <Trans
-                  i18nKey="orgMembers.notMember"
-                  values={{ label }}
-                  components={{ emphasis: <span className="font-semibold" /> }}
-                />
+                {row.failed_invitation ? (
+                  t(
+                    row.failed_invitation.kind === "expired"
+                      ? "orgMembers.notMemberExpired"
+                      : "orgMembers.notMemberFailed",
+                    { label, reason: row.failed_invitation.reason ?? "" },
+                  )
+                ) : (
+                  <Trans
+                    i18nKey="orgMembers.notMember"
+                    values={{ label }}
+                    components={{
+                      emphasis: <span className="font-semibold" />,
+                    }}
+                  />
+                )}
               </p>
               <Button
                 variant="primary"
@@ -414,13 +426,7 @@ const MemberDetailModal = ({
               ) : null}
             </div>
           ) : (
-            <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              {t(
-                row.classification === "invitation-pending"
-                  ? "orgMembers.invitePendingNotice"
-                  : "orgMembers.notMemberNoId",
-              )}
-            </div>
+            <StrandedRowNotice row={row} org={org} onNavigate={onClose} />
           )
         ) : confirming ? (
           <div className="rounded-box border border-error/30 bg-error/5 p-4 text-sm">
