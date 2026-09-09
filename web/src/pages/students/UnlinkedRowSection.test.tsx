@@ -148,8 +148,13 @@ const renderSection = ({
 const linkButton = () =>
   screen.getByText("students.linkMemberAction").closest("button")!
 
+// The picker lives behind the toolbar's "Link account" disclosure.
+const openLinkPanel = () => {
+  fireEvent.click(screen.getByText("students.linkAccountAction"))
+}
+
 const pickGhopper = () => {
-  const picker = screen.getByLabelText("students.linkMemberLabel")
+  const picker = screen.getByRole("combobox")
   fireEvent.focus(picker)
   fireEvent.pointerDown(screen.getByRole("option", { name: "ghopper" }))
 }
@@ -161,10 +166,34 @@ afterEach(() => {
 })
 
 describe("UnlinkedRowSection", () => {
+  it("shows one toolbar, and reveals the link picker only on Link account", () => {
+    renderSection({ rosterRow: emailRow })
+
+    // Idle: the three intents, no picker, no confirm.
+    expect(screen.getByText("students.reinvite")).not.toBeNull()
+    expect(screen.getByText("students.linkAccountAction")).not.toBeNull()
+    expect(screen.getByText("students.removeRowAction")).not.toBeNull()
+    expect(screen.queryByRole("combobox")).toBeNull()
+
+    openLinkPanel()
+
+    // Link panel replaces the toolbar and takes focus.
+    expect(screen.getByRole("combobox")).toBe(document.activeElement)
+    expect(screen.queryByText("students.reinvite")).toBeNull()
+    expect(screen.queryByText("students.linkAccountAction")).toBeNull()
+    expect(screen.queryByText("students.removeRowAction")).toBeNull()
+
+    // Cancel returns to the toolbar with the picker reset.
+    fireEvent.click(screen.getByText("common.cancel"))
+    expect(screen.queryByRole("combobox")).toBeNull()
+    expect(screen.getByText("students.reinvite")).not.toBeNull()
+  })
+
   it("offers Re-invite only for a row that has an address", () => {
     renderSection()
     expect(screen.queryByText("students.reinvite")).toBeNull()
     expect(screen.getByText("students.linkIntro")).not.toBeNull()
+    expect(screen.getByText("students.linkAccountAction")).not.toBeNull()
 
     cleanup()
     renderSection({ rosterRow: emailRow })
@@ -228,11 +257,12 @@ describe("UnlinkedRowSection", () => {
     linkRosterRowToMember.mockResolvedValue({ teamAdd: "ok" })
     const { onWorkingChange, onChanged, onClose, onError } = renderSection()
 
+    openLinkPanel()
     expect(linkButton().disabled).toBe(true)
 
     // A classroom-name query narrows the list (the shared picker recipe
     // matches login OR classroom).
-    const picker = screen.getByLabelText("students.linkMemberLabel")
+    const picker = screen.getByRole("combobox")
     fireEvent.focus(picker)
     fireEvent.change(picker, { target: { value: "cs101" } })
     expect(screen.queryByRole("option", { name: "other" })).toBeNull()
@@ -264,6 +294,7 @@ describe("UnlinkedRowSection", () => {
     )
     const { onChanged, onClose, onError } = renderSection()
 
+    openLinkPanel()
     pickGhopper()
     await act(async () => {
       fireEvent.click(linkButton())
@@ -285,7 +316,7 @@ describe("UnlinkedRowSection", () => {
     expect(removeUnlinkedRows).not.toHaveBeenCalled()
     expect(screen.getByText("students.confirmRemoveRowBody")).not.toBeNull()
 
-    // The ghost trigger is replaced by the confirm block, so the remaining
+    // The toolbar trigger is replaced by the confirm block, so the remaining
     // removeRowAction button is the destructive confirm.
     await act(async () => {
       fireEvent.click(screen.getByText("students.removeRowAction"))
@@ -303,13 +334,15 @@ describe("UnlinkedRowSection", () => {
 
   it("hides the org-wide toggle when the member list is unavailable", () => {
     renderSection({ orgPoolStatus: "unavailable" })
+    openLinkPanel()
     expect(screen.queryByText("students.linkIncludeOrgMembers")).toBeNull()
   })
 
   it("offers org-only members only after the toggle is checked", () => {
     renderSection({ orgLinkCandidates: orgCandidates, orgPoolStatus: "ready" })
+    openLinkPanel()
 
-    const picker = screen.getByLabelText("students.linkMemberLabel")
+    const picker = screen.getByRole("combobox")
     fireEvent.focus(picker)
     expect(screen.queryByRole("option", { name: "lonewolf" })).toBeNull()
 
@@ -322,10 +355,11 @@ describe("UnlinkedRowSection", () => {
 
   it("unchecking the toggle drops a staged org-only pick", () => {
     renderSection({ orgLinkCandidates: orgCandidates, orgPoolStatus: "ready" })
+    openLinkPanel()
 
     const toggle = screen.getByRole("checkbox")
     fireEvent.click(toggle)
-    const picker = screen.getByLabelText("students.linkMemberLabel")
+    const picker = screen.getByRole("combobox")
     fireEvent.focus(picker)
     fireEvent.pointerDown(screen.getByRole("option", { name: /lonewolf/ }))
     expect(linkButton().disabled).toBe(false)

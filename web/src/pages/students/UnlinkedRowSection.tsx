@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button, Checkbox } from "@/components/ui"
-import { PaperAirplaneIcon } from "@/components/ui/icons"
+import { LinkIcon, PaperAirplaneIcon } from "@/components/ui/icons"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   linkRosterRowToMember,
@@ -22,12 +22,16 @@ import MemberLinkPicker, {
   type OrgPoolStatus,
 } from "@/pages/students/MemberLinkPicker"
 
-// The member modal's unlinked-row reconciliation section: re-invite the address
-// (email rows only), link the row to an org member, or remove it. The picker
-// offers only unclaimed active members; the actual link re-proves everything at
-// commit time (domain guards). Owns the picker/confirm state, so the parent
-// remounts it (via `key`) on open or row-identity change instead of
-// hand-resetting each field.
+// The member modal's unlinked-row reconciliation section. Three exclusive
+// resolutions behind one toolbar: re-invite the address (email rows only),
+// link the row to an org member, or remove it. Link and Remove each open their
+// own panel in place of the toolbar, so the teacher commits to one intent
+// before seeing its controls. The picker offers only unclaimed active members;
+// the actual link re-proves everything at commit time (domain guards). Owns
+// the panel/picker state, so the parent remounts it (via `key`) on open or
+// row-identity change instead of hand-resetting each field.
+const LINK_PICKER_ID = "roster-link-member"
+
 const UnlinkedRowSection = ({
   org,
   classroom,
@@ -64,15 +68,17 @@ const UnlinkedRowSection = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
-  // The link picker's text/open/selection, the in-flight link/remove, and the
-  // remove confirmation.
+  // Which workflow is open. The three resolutions are exclusive, so the
+  // toolbar hands off to exactly one panel at a time: the link picker or the
+  // remove confirmation. Re-invite is one click, so it has no panel.
+  const [mode, setMode] = useState<"idle" | "link" | "remove">("idle")
+  // The link picker's text/open/selection and the in-flight link/remove.
   const [linkQuery, setLinkQuery] = useState("")
   const [linkOpen, setLinkOpen] = useState(false)
   const [linkTarget, setLinkTarget] = useState<DirectoryMember | null>(null)
   const [linking, setLinking] = useState(false)
   const [includeOrgMembers, setIncludeOrgMembers] = useState(false)
   const [removingRow, setRemovingRow] = useState(false)
-  const [confirmingRemoveRow, setConfirmingRemoveRow] = useState(false)
   const reinvite = useReinviteUnlinkedRow(org, classroom)
 
   const email = row.email.trim()
@@ -84,6 +90,20 @@ const UnlinkedRowSection = ({
     onWorkingChange(working)
     return () => onWorkingChange(false)
   }, [working, onWorkingChange])
+
+  // Disclosure pattern: opening the link panel moves focus into it, so a
+  // keyboard user lands in the picker instead of on a button that just
+  // disappeared.
+  useEffect(() => {
+    if (mode === "link") document.getElementById(LINK_PICKER_ID)?.focus()
+  }, [mode])
+
+  const closePanel = () => {
+    setMode("idle")
+    setLinkQuery("")
+    setLinkTarget(null)
+    setLinkOpen(false)
+  }
 
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
@@ -191,7 +211,7 @@ const UnlinkedRowSection = ({
       )
     } finally {
       setRemovingRow(false)
-      setConfirmingRemoveRow(false)
+      setMode("idle")
     }
   }
 
@@ -202,96 +222,132 @@ const UnlinkedRowSection = ({
           ? t("students.unlinkedEmailIntro", { email })
           : t("students.linkIntro")}
       </p>
-      {email ? (
-        <div className="flex justify-end">
+
+      {mode === "idle" ? (
+        <div className="flex flex-wrap items-center gap-2">
+          {email ? (
+            <Button
+              variant="primary"
+              size="sm"
+              loading={reinvite.isPending}
+              loadingLabel={t("common.working")}
+              disabled={busy}
+              onClick={handleReinvite}
+            >
+              {reinvite.isPending ? (
+                t("common.working")
+              ) : (
+                <>
+                  <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                  {t("students.reinvite")}
+                </>
+              )}
+            </Button>
+          ) : null}
           <Button
-            variant="primary"
+            variant={email ? "outline" : "primary"}
             size="sm"
-            loading={reinvite.isPending}
-            loadingLabel={t("common.working")}
             disabled={busy}
-            onClick={handleReinvite}
+            onClick={() => setMode("link")}
           >
-            {reinvite.isPending ? (
-              t("common.working")
-            ) : (
-              <>
-                <PaperAirplaneIcon aria-hidden="true" className="size-4" />
-                {t("students.reinvite")}
-              </>
-            )}
+            <LinkIcon aria-hidden="true" className="size-4" />
+            {t("students.linkAccountAction")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ms-auto text-error hover:bg-error/10"
+            disabled={busy}
+            onClick={() => setMode("remove")}
+          >
+            {t("students.removeRowAction")}
           </Button>
         </div>
       ) : null}
-      <div className="flex items-start gap-2">
-        <MemberLinkPicker
-          id="roster-link-member"
-          className="grow"
-          label={t("students.linkMemberLabel")}
-          placeholder={t("students.linkMemberPlaceholder")}
-          emptyState={
-            !includeOrgMembers && orgPoolStatus !== "unavailable"
-              ? t("students.linkMemberEmptyWiden")
-              : t("students.linkMemberEmpty")
-          }
-          items={includeOrgMembers ? orgLinkCandidates : linkCandidates}
-          notInClassroomLabel={
-            includeOrgMembers ? t("students.linkNotInClassroom") : undefined
-          }
-          value={linkQuery}
-          onInputChange={(value) => {
-            setLinkQuery(value)
-            setLinkTarget(null)
-          }}
-          open={linkOpen}
-          onOpenChange={setLinkOpen}
-          onSelect={(m) => {
-            setLinkTarget(m)
-            setLinkQuery(m.login)
-          }}
-        />
-        <Button
-          variant="primary"
-          loading={linking}
-          loadingLabel={t("common.working")}
-          disabled={busy || !linkTarget}
-          onClick={() => void handleLink()}
-        >
-          {t("students.linkMemberAction")}
-        </Button>
-      </div>
-      {orgPoolStatus !== "unavailable" ? (
-        <label className="flex items-start gap-2 text-sm">
-          <Checkbox
-            className="mt-0.5"
-            checked={includeOrgMembers}
-            disabled={busy || linking}
-            onChange={(e) => {
-              const next = e.currentTarget.checked
-              setIncludeOrgMembers(next)
-              // Narrowing back can strand an org-only pick the classroom pool
-              // no longer offers; drop it rather than link something unseen.
-              if (
-                !next &&
-                linkTarget &&
-                !linkCandidates.some((m) => m.id === linkTarget.id)
-              ) {
-                setLinkTarget(null)
-                setLinkQuery("")
-              }
+
+      {mode === "link" ? (
+        <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4">
+          <MemberLinkPicker
+            id={LINK_PICKER_ID}
+            label={t("students.linkMemberLabel")}
+            placeholder={t("students.linkMemberPlaceholder")}
+            emptyState={
+              !includeOrgMembers && orgPoolStatus !== "unavailable"
+                ? t("students.linkMemberEmptyWiden")
+                : t("students.linkMemberEmpty")
+            }
+            items={includeOrgMembers ? orgLinkCandidates : linkCandidates}
+            notInClassroomLabel={
+              includeOrgMembers ? t("students.linkNotInClassroom") : undefined
+            }
+            value={linkQuery}
+            onInputChange={(value) => {
+              setLinkQuery(value)
+              setLinkTarget(null)
+            }}
+            open={linkOpen}
+            onOpenChange={setLinkOpen}
+            onSelect={(m) => {
+              setLinkTarget(m)
+              setLinkQuery(m.login)
             }}
           />
-          <span>
-            {t("students.linkIncludeOrgMembers")}
-            {includeOrgMembers && orgPoolStatus === "loading" ? (
-              <span className="block text-xs text-base-content/60">
-                {t("students.linkOrgMembersLoading")}
+          {orgPoolStatus !== "unavailable" ? (
+            <label className="flex items-start gap-2 text-sm">
+              <Checkbox
+                className="mt-0.5"
+                checked={includeOrgMembers}
+                disabled={busy || linking}
+                onChange={(e) => {
+                  const next = e.currentTarget.checked
+                  setIncludeOrgMembers(next)
+                  // Narrowing back can strand an org-only pick the classroom
+                  // pool no longer offers; drop it rather than link something
+                  // unseen.
+                  if (
+                    !next &&
+                    linkTarget &&
+                    !linkCandidates.some((m) => m.id === linkTarget.id)
+                  ) {
+                    setLinkTarget(null)
+                    setLinkQuery("")
+                  }
+                }}
+              />
+              <span>
+                {t("students.linkIncludeOrgMembers")}
+                {includeOrgMembers && orgPoolStatus === "loading" ? (
+                  <span className="block text-xs text-base-content/60">
+                    {t("students.linkOrgMembersLoading")}
+                  </span>
+                ) : null}
               </span>
-            ) : null}
-          </span>
-        </label>
+            </label>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={linking}
+              onClick={closePanel}
+            >
+              {t("common.cancel")}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={linking}
+              loadingLabel={t("common.working")}
+              disabled={busy || !linkTarget}
+              onClick={() => void handleLink()}
+            >
+              {t("students.linkMemberAction")}
+            </Button>
+          </div>
+        </div>
       ) : null}
-      {confirmingRemoveRow ? (
+
+      {mode === "remove" ? (
         <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
           <p className="text-base-content/80">
             {t("students.confirmRemoveRowBody", { label: displayName })}
@@ -301,7 +357,7 @@ const UnlinkedRowSection = ({
               variant="ghost"
               size="sm"
               disabled={removingRow}
-              onClick={() => setConfirmingRemoveRow(false)}
+              onClick={closePanel}
             >
               {t("common.cancel")}
             </Button>
@@ -317,19 +373,7 @@ const UnlinkedRowSection = ({
             </Button>
           </div>
         </div>
-      ) : (
-        <div className="flex justify-end">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-error hover:bg-error/10"
-            disabled={busy}
-            onClick={() => setConfirmingRemoveRow(true)}
-          >
-            {t("students.removeRowAction")}
-          </Button>
-        </div>
-      )}
+      ) : null}
     </section>
   )
 }

@@ -500,6 +500,7 @@
     "linkOrgMembersLoading": "Loading organization members…",
     "linkNotInClassroom": "Not in a classroom",
     "linkMemberAction": "Link",
+    "linkAccountAction": "Link account",
     "linkFailed": "Couldn't link {{label}}: {{error}}",
     "linkRowGone": "The row for {{label}} changed while linking. Refresh the roster and try again.",
     "linkRowAmbiguous": "More than one identical row matches {{label}}. Remove one duplicate first, then link the other.",
