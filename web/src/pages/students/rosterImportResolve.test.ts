@@ -432,6 +432,7 @@ describe("indexRosterByEmail", () => {
       state: "unlinked",
       invitationId: undefined,
       failedInvitationId: 9,
+      failedKind: "expired",
     })
     expect(index.size).toBe(2)
   })

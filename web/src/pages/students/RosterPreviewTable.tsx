@@ -115,7 +115,13 @@ const IdentityCell = ({
       emailStanding?.state === "pending"
         ? { key: "students.previewAlreadyPending", tone: "neutral" as const }
         : emailStanding?.failedInvitationId !== undefined
-          ? { key: "students.previewResendExpired", tone: "warning" as const }
+          ? {
+              key:
+                emailStanding.failedKind === "failed"
+                  ? "students.previewResendFailed"
+                  : "students.previewResendExpired",
+              tone: "warning" as const,
+            }
           : alreadyOnRoster
             ? { key: "students.previewEmailOnRoster", tone: "neutral" as const }
             : { key: "students.previewInviteByEmail", tone: "info" as const }

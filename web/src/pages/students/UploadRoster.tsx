@@ -424,8 +424,8 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
-    setLinksDeclined(false)
-    setConfirmingUnlink(false)
+    // The link decision is deliberately NOT re-armed here: it doesn't depend on
+    // roles, and silently undoing an explicit decline would surprise.
   }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
@@ -520,10 +520,6 @@ const UploadRoster = ({
   // mismatch — it repairs the stored username. Counting only the preflight
   // buckets would leave either kind of file on a disabled "No changes to apply".
   const emailRowCount = emailRows.length
-  // How many people this upload will actually invite: non-members it will invite
-  // by username, plus every email-identity row. ONE source, so the notice, the
-  // summary, and the primary button can't disagree — a row that's already a
-  // member (or only getting its details updated) is not an invitation.
   // The links applied at submit (none once declined). Kept as one value so the
   // count below, the submit split, and the notice all read the same decision.
   const appliedLinks = useMemo(
@@ -541,17 +537,23 @@ const UploadRoster = ({
           "pending",
     ).length
   }, [emailRows, appliedLinks, standingByEmail])
+  // How many people this upload will actually invite: non-members it will invite
+  // by username, plus every email-identity row. ONE source, so the notice, the
+  // summary, and the primary button can't disagree — a row that's already a
+  // member (or only getting its details updated) is not an invitation.
   const inviteCount =
     (preflight?.needsInvite.length ?? 0) +
     emailRowCount -
     appliedLinks.length -
     pendingEmailCount
+  // Email rows count as work except the ones with a live invitation, which
+  // the upload leaves alone: a file of only those has nothing to apply.
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
       (preflight?.roleChanges.length ?? 0) +
       (preflight?.metadataUpdate.length ?? 0) +
-      emailRowCount +
+      (emailRowCount - pendingEmailCount) +
       mismatches.length >
     0
   const needsMetadataConfirm = (preflight?.metadataUpdate.length ?? 0) > 0
@@ -992,9 +994,12 @@ const UploadRoster = ({
                   <Alert tone="info" className="mb-4">
                     <div className="flex flex-col gap-2">
                       <span>
-                        {t("students.emailLinksNotice", {
-                          count: emailLinks.length,
-                        })}
+                        {t(
+                          linksDeclined
+                            ? "students.emailLinksDeclinedNotice"
+                            : "students.emailLinksNotice",
+                          { count: emailLinks.length },
+                        )}
                       </span>
                       <ul className="flex flex-col gap-0.5 text-sm">
                         {emailLinks.map((link) => (

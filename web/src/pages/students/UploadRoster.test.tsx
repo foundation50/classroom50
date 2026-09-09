@@ -798,6 +798,57 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     })
   })
 
+  it("reads a file of only live-pending addresses as no changes to apply", async () => {
+    const user = userEvent.setup()
+    resolveRosterUploadContext.mockResolvedValue({
+      ...stubContext,
+      claimedEmails: new Set(["pending@x.edu"]),
+    })
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: true,
+    })
+    renderModal(
+      <UploadRoster
+        org="acme"
+        classroom="cs50"
+        client={client}
+        open={true}
+        rosterRows={
+          [
+            {
+              key: "k",
+              state: "pending",
+              roles: ["student"],
+              username: "",
+              github_id: "",
+              first_name: "",
+              last_name: "",
+              section: "",
+              email: "pending@x.edu",
+              avatar_url: "",
+              invitation_id: 42,
+            },
+          ] as never
+        }
+      />,
+    )
+
+    await uploadFile(user, file("roster.csv", "email\npending@x.edu\n"))
+
+    // Nothing would be sent, so the button says so and stays disabled rather
+    // than offering "Confirm changes" over a no-op.
+    const button = await waitFor(() =>
+      screen.getByRole("button", { name: "students.noChangesToApply" }),
+    )
+    expect(button.disabled).toBe(true)
+  })
+
   // When the roster page's rows are available, the upload knows each address's
   // standing and acts on it: an expired invitation is re-sent with its failed
   // record (so the send can dismiss it), a live one is left alone and reported.
@@ -1105,14 +1156,25 @@ describe("UploadRoster resolve-before-invite email links", () => {
     expect(screen.queryByText("students.emailLinksUnlinkTitle")).toBeNull()
     expect(linkBox().checked).toBe(true)
 
-    // Confirming declines the link: box unchecks, and the row is now an invite.
+    // Confirming declines the link: box unchecks, the notice says what happens
+    // instead, and the row is now an invite.
     await user.click(linkBox())
     await user.click(screen.getByText("students.emailLinksUnlinkConfirm"))
     expect(screen.queryByText("students.emailLinksUnlinkTitle")).toBeNull()
     expect(linkBox().checked).toBe(false)
+    expect(screen.getByText(/students.emailLinksDeclinedNotice:1/)).toBeTruthy()
     expect(primaryButton().textContent).toContain(
       "students.importAndInviteMembers:1",
     )
+
+    // A role edit re-arms the content confirmations, but not this decision:
+    // undoing an explicit decline without a word would surprise.
+    await user.click(screen.getByText("students.summaryViewDetails"))
+    await user.selectOptions(
+      screen.getByLabelText("students.assignRoleLabel"),
+      "ta",
+    )
+    expect(linkBox().checked).toBe(false)
 
     bulkInviteByEmail.mockResolvedValue({
       invited: [],

@@ -271,6 +271,7 @@ export type EmailStanding = {
   state: TeamRosterRow["state"]
   invitationId?: number
   failedInvitationId?: number
+  failedKind?: "expired" | "failed"
 }
 
 export const indexRosterByEmail = (
@@ -284,6 +285,7 @@ export const indexRosterByEmail = (
       state: row.state,
       invitationId: row.invitation_id,
       failedInvitationId: row.failed_invitation?.id,
+      failedKind: row.failed_invitation?.kind,
     })
   }
   return out
