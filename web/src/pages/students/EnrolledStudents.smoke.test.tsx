@@ -26,19 +26,14 @@ vi.mock("@/hooks/useTeamRoster", () => ({
   useInvalidateTeamRoster: () => () => {},
 }))
 
-// Mutation hooks -> inert objects (no network); most phase tests never fire
-// them. Sync gets a dedicated, per-test-controllable spy so the composed wiring
+// Sync gets a dedicated, per-test-controllable spy so the composed wiring
 // test can observe the auto-sync.
-const inertMutation = { mutate: vi.fn(), isPending: false }
 const syncMutate = vi.fn()
 // Result of the last completed refresh (drives the toolbar caption);
 // per-test controllable.
 let mockSyncState: { isSuccess: boolean; data?: unknown } = {
   isSuccess: false,
 }
-vi.mock("@/hooks/mutations/useDismissFailedInvite", () => ({
-  useDismissFailedInvite: () => inertMutation,
-}))
 vi.mock("@/hooks/mutations/useSyncRoster", () => ({
   useSyncRoster: () => ({
     mutate: syncMutate,
@@ -61,9 +56,6 @@ vi.mock("@/hooks/useIdentityDirectory", () => ({
     isSuccess: false,
     isError: false,
   }),
-}))
-vi.mock("@/hooks/mutations/useReinviteFailedInvite", () => ({
-  useReinviteFailedInvite: () => inertMutation,
 }))
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
@@ -146,7 +138,6 @@ const emptyRoster = {
   isError: false,
   isEmpty: true,
   pendingHidden: false,
-  failedInvitations: [],
   teamSlugByRole: {},
   csvMissingCount: 0,
   csvMissingLogins: [],
@@ -231,17 +222,50 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(screen.getByText("alice")).not.toBeNull()
   })
 
-  it("surfaces failed invitations with a dismiss affordance", () => {
+  // An expired email invitation is a fact about the ROW: the status chip says
+  // "Invitation expired" where a bare unlinked row would say "Unlinked".
+  it("badges a row whose invitation expired instead of calling it unlinked", () => {
     useTeamRoster.mockReturnValue({
       ...emptyRoster,
       isEmpty: false,
-      failedInvitations: [
-        { id: 7, login: "ghost", email: null, failed_reason: "bounced" },
+      counts: { ...emptyRoster.counts, unlinked: 2 },
+      rows: [
+        {
+          key: "unlinked:grace@uni.edu",
+          username: "",
+          email: "grace@uni.edu",
+          first_name: "Grace",
+          last_name: "Hopper",
+          section: "",
+          github_id: "",
+          avatar_url: "",
+          roles: ["student"],
+          state: "unlinked",
+          failed_invitation: {
+            id: 7,
+            kind: "expired",
+            failed_at: "2026-09-07T00:41:28Z",
+            reason:
+              "Invitation expired. User did not accept this invite for 7 days",
+          },
+        },
+        {
+          key: "unlinked:plain@uni.edu",
+          username: "",
+          email: "plain@uni.edu",
+          first_name: "Plain",
+          last_name: "Row",
+          section: "",
+          github_id: "",
+          avatar_url: "",
+          roles: ["student"],
+          state: "unlinked",
+        },
       ],
     })
     render(renderView())
-    expect(screen.getByText("students.failedInvitesTitle:1")).not.toBeNull()
-    expect(screen.getByText("ghost")).not.toBeNull()
+    expect(screen.getByText("students.statusInviteExpired")).not.toBeNull()
+    expect(screen.getByText("students.statusUnlinked")).not.toBeNull()
   })
 
   // Composed wiring: exercises the useRosterAutoSync seam through

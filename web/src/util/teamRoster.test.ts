@@ -895,6 +895,159 @@ describe("sortTeamRosterRowsBy — table-header column sorts", () => {
   })
 })
 
+describe("buildTeamRoster — failed/expired invitations (org-wide list, roster-attributed)", () => {
+  // The shape GitHub returns for an invite nobody accepted for 7 days
+  // (verified live against classroom50-summer-dev, 2026-09-09).
+  const EXPIRED_REASON =
+    "Invitation expired. User did not accept this invite for 7 days"
+  const expired = (over: Partial<GitHubOrgInvitation>) =>
+    invite({
+      failed_at: "2026-09-07T00:41:28.000+02:00",
+      failed_reason: EXPIRED_REASON,
+      team_count: 1,
+      invitation_teams_url:
+        "https://api.github.com/organizations/1/invitations/1/teams",
+      ...over,
+    })
+
+  it("tags an email row whose invitation expired, keeping it unlinked", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "grace.hopper@students.example.edu" })],
+      failedInvitations: [
+        expired({ id: 79153766, email: "grace.hopper@students.example.edu" }),
+      ],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      state: "unlinked",
+      email: "grace.hopper@students.example.edu",
+      failed_invitation: {
+        id: 79153766,
+        kind: "expired",
+        failed_at: "2026-09-07T00:41:28.000+02:00",
+        reason: EXPIRED_REASON,
+      },
+    })
+  })
+
+  it("matches the address case-insensitively", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "Grace.Hopper@Students.Example.edu" })],
+      failedInvitations: [
+        expired({ id: 1, email: "grace.hopper@students.example.edu" }),
+      ],
+    })
+    expect(rows[0].failed_invitation?.id).toBe(1)
+  })
+
+  it("tags a login row whose invitation expired as not-in-org with the record", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ username: "monalisa", github_id: "" })],
+      orgMembersKnown: true,
+      orgMemberLogins: new Set(),
+      failedInvitations: [expired({ id: 79153763, login: "monalisa" })],
+    })
+    expect(rows[0]).toMatchObject({
+      state: "needs_attention_not_in_org",
+      username: "monalisa",
+      failed_invitation: { id: 79153763, kind: "expired" },
+    })
+  })
+
+  it("ignores a stale failed record for someone who is in the org anyway", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ username: "monalisa" })],
+      orgMembersKnown: true,
+      orgMemberLogins: new Set(["monalisa"]),
+      failedInvitations: [expired({ id: 1, login: "monalisa" })],
+    })
+    expect(rows[0].state).toBe("needs_attention_in_org")
+    expect(rows[0].failed_invitation).toBeUndefined()
+  })
+
+  it("never leaks another classroom's failed invite onto this roster", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "mine@x.edu" })],
+      failedInvitations: [
+        expired({ id: 1, email: "theirs@x.edu" }),
+        expired({ id: 2, login: "someone-else" }),
+      ],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].failed_invitation).toBeUndefined()
+  })
+
+  it("a live pending invitation wins over an older failed record", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [invite({ id: 9, email: "kept@x.edu" })],
+      students: [csvRow({ email: "kept@x.edu" })],
+      failedInvitations: [expired({ id: 1, email: "kept@x.edu" })],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("pending")
+    expect(rows[0].failed_invitation).toBeUndefined()
+  })
+
+  it("keeps the most recent record when an address failed more than once", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "twice@x.edu" })],
+      failedInvitations: [
+        expired({
+          id: 1,
+          email: "twice@x.edu",
+          failed_at: "2026-08-01T00:00:00Z",
+        }),
+        expired({
+          id: 2,
+          email: "twice@x.edu",
+          failed_at: "2026-09-07T00:00:00Z",
+        }),
+        expired({
+          id: 3,
+          email: "twice@x.edu",
+          failed_at: "2026-07-01T00:00:00Z",
+        }),
+      ],
+    })
+    expect(rows[0].failed_invitation?.id).toBe(2)
+  })
+
+  it("classifies a non-expiry reason as a delivery failure", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ email: "bounce@x.edu" })],
+      failedInvitations: [
+        invite({
+          id: 1,
+          email: "bounce@x.edu",
+          failed_reason: "Email bounced",
+        }),
+      ],
+    })
+    expect(rows[0].failed_invitation).toMatchObject({
+      kind: "failed",
+      reason: "Email bounced",
+    })
+  })
+
+  it("does not tag when the list is hidden (non-owner passes none)", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ first_name: "Grace", last_name: "H" })],
+      pendingHidden: true,
+      failedInvitations: [],
+    })
+    expect(rows[0].failed_invitation).toBeUndefined()
+  })
+})
+
 describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () => {
   it("emits a name-only row as unlinked", () => {
     const rows = buildTeamRoster({

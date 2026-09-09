@@ -22,9 +22,9 @@ export type GitHubOrgInvitation = {
   created_at: string
   failed_at: string | null
   failed_reason: string | null
-  // Teams on the invite: 0 => a team-less org invite (belongs to no classroom);
-  // >0 => resolve invitation_teams_url for the slugs. Used to scope a failed
-  // invite (which has no team-scoped list endpoint) to a classroom team.
+  // Present on the org-wide lists. Not usable for attributing a FAILED invite
+  // to a classroom: its invitation_teams_url 404s once the invite has failed
+  // (verified live, 2026-09-09). The roster matches by email/login instead.
   team_count?: number
   invitation_teams_url?: string | null
 }

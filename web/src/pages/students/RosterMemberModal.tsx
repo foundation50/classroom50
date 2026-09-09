@@ -18,6 +18,7 @@ import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
 import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
+  dismissFailedInvitation,
   inviteRosterStudents,
   bulkInviteByEmail,
   resendClassroomInvite,
@@ -43,8 +44,7 @@ import {
 import {
   canTargetForUnenroll,
   hasStudentEnrollment,
-  STATE_BADGE_TONE,
-  STATE_LABEL_KEY,
+  rowStatusBadge,
 } from "@/util/classroomRoleUI"
 import {
   Badge,
@@ -254,6 +254,7 @@ const RosterMemberModal = ({
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
   const label = row.username || row.email
+  const status = rowStatusBadge(row)
   // Re-sending needs SOMETHING to address the invitation to: an account (id), or
   // an address for an email-only pending invite. Excluding the latter left a
   // student whose invitation went to spam with no option but Cancel.
@@ -346,6 +347,14 @@ const RosterMemberModal = ({
     }
     setResolving(true)
     try {
+      // A stranded row whose last invite GitHub recorded as failed: dismiss
+      // that record first, so the fresh invite is the only one on file.
+      if (row.failed_invitation) {
+        await dismissFailedInvitation(client, {
+          org,
+          invitationId: row.failed_invitation.id,
+        })
+      }
       const res = await inviteRosterStudents(client, {
         org,
         classroom,
@@ -390,7 +399,7 @@ const RosterMemberModal = ({
     if (resending) return
     // An email-only pending invite has no account to re-invite by id, so re-send
     // by address instead — bulkInviteByEmail recreates the invitation and its
-    // invite team, the same recipe useReinviteFailedInvite uses for a failed one.
+    // invite team, the same recipe reinviteUnlinkedRow uses for an expired one.
     // appendEmailInviteRows skips the already-claimed address, so no second row.
     if (!row.username && row.email) {
       setResending(true)
@@ -811,7 +820,14 @@ const RosterMemberModal = ({
 
         {needsInvite ? (
           <p className="text-sm text-base-content/80">
-            {t("students.needsAttentionNotInOrgHelp", { label })}
+            {row.failed_invitation
+              ? t(
+                  row.failed_invitation.kind === "expired"
+                    ? "students.needsAttentionExpiredHelp"
+                    : "students.needsAttentionFailedHelp",
+                  { label, reason: row.failed_invitation.reason ?? "" },
+                )
+              : t("students.needsAttentionNotInOrgHelp", { label })}
           </p>
         ) : null}
 
@@ -826,8 +842,8 @@ const RosterMemberModal = ({
               <span className="text-sm text-base-content/70">
                 {t("students.statusLabel")}
               </span>
-              <Badge size="sm" tone={STATE_BADGE_TONE[row.state]}>
-                {t(STATE_LABEL_KEY[row.state])}
+              <Badge size="sm" tone={status.tone}>
+                {t(status.labelKey)}
               </Badge>
             </div>
             <div className="flex items-start justify-between gap-3 px-4 py-2.5">

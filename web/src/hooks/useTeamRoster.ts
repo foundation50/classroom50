@@ -8,7 +8,7 @@ import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
-  teamFailedInvitationsQuery,
+  orgFailedInvitationsQuery,
   orgMembersAllQuery,
 } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -27,7 +27,7 @@ import {
 import { enrolledCountsByRole, type RoleCounts } from "@/util/classroomRoleUI"
 import { memberIdentitySets } from "@/util/identity"
 import type { Student } from "@/types/classroom"
-import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
+import type { GitHubUser } from "@/github-core/types"
 
 // Pending is owner-only. The manageOrg capability is the authoritative owner
 // check (a non-owner can't read invitations at all), so we hide all pending
@@ -60,11 +60,6 @@ export type UseTeamRosterResult = {
   // can't read them). The view then hides the pending section and shows an
   // "owners only" note instead of rendering zero pending.
   pendingHidden: boolean
-  // Failed/expired invitations scoped to THIS classroom team (owner-only, like
-  // pending). Empty when pendingHidden (a non-owner can't read them). Surfaced
-  // so the roster can show a "needs re-invite" section for invites GitHub
-  // couldn't deliver.
-  failedInvitations: GitHubOrgInvitation[]
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
   // Resolved team slug per role, so the detail view can link each role a member
@@ -209,11 +204,13 @@ export function useTeamRoster(
     ...teamInvitationsQuery(client, org, teamSlug),
     enabled: Boolean(org && teamSlug) && isOwner,
   })
-  // Failed/expired invites, scoped to this classroom team (see
-  // getOrgFailedInvitationsForTeam). Owner-only, same gate.
-  const studentFailedInvitesQuery = useQuery({
-    ...teamFailedInvitationsQuery(client, org, teamSlug),
-    enabled: Boolean(org && teamSlug) && isOwner,
+  // Failed/expired invitations, org-wide (GitHub offers no team scope and a
+  // failed invite's teams URL 404s). buildTeamRoster attributes entries to this
+  // classroom by roster.csv match, so the shared cache leaks nothing. Owner-only,
+  // same gate.
+  const failedInvitesQuery = useQuery({
+    ...orgFailedInvitationsQuery(client, org),
+    enabled: Boolean(org) && isOwner,
   })
 
   // Team-scoped pending invitations for the staff teams (owner-only, like org
@@ -237,8 +234,8 @@ export function useTeamRoster(
     [studentInvitesQuery.data],
   )
   const failedInvitations = useMemo(
-    () => studentFailedInvitesQuery.data ?? [],
-    [studentFailedInvitesQuery.data],
+    () => failedInvitesQuery.data ?? [],
+    [failedInvitesQuery.data],
   )
 
   // All active org members (shared cache with the Org Members page). Used only
@@ -295,6 +292,9 @@ export function useTeamRoster(
         orgMembersKnown,
         pendingHidden,
         fallbackRows,
+        // Owner-only like pending: a non-owner gets no failed records, so no
+        // row is badged on a list it couldn't read.
+        failedInvitations: pendingHidden ? [] : failedInvitations,
       }),
     [
       members,
@@ -311,6 +311,7 @@ export function useTeamRoster(
       orgMemberLogins,
       orgMembersKnown,
       fallbackRows,
+      failedInvitations,
     ],
   )
 
@@ -388,7 +389,7 @@ export function useTeamRoster(
     htaMembersQuery.isError ||
     taMembersQuery.isError ||
     (!pendingHidden &&
-      (studentInvitesQuery.isError || studentFailedInvitesQuery.isError)),
+      (studentInvitesQuery.isError || failedInvitesQuery.isError)),
   )
 
   // Wait on every team-member fetch (student + staff) so the roster appears
@@ -414,8 +415,6 @@ export function useTeamRoster(
     isError,
     isEmpty: !isLoading && !isError && rows.length === 0,
     pendingHidden,
-    // Owner-only, like pending — hide wholesale for a non-owner.
-    failedInvitations: pendingHidden ? [] : failedInvitations,
     teamSlug,
     teamSlugByRole: {
       student: teamSlug,
@@ -441,7 +440,7 @@ export function useTeamRoster(
       void htaMembersQuery.refetch()
       void taMembersQuery.refetch()
       void studentInvitesQuery.refetch()
-      void studentFailedInvitesQuery.refetch()
+      void failedInvitesQuery.refetch()
       void teacherInvitesQuery.refetch()
       void htaInvitesQuery.refetch()
       void taInvitesQuery.refetch()

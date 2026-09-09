@@ -7,7 +7,7 @@ import {
   CellPlaceholder,
   GitHubIdentity,
 } from "@/components/memberList/memberPresentation"
-import { STATE_BADGE_TONE, STATE_LABEL_KEY } from "@/util/classroomRoleUI"
+import { rowStatusBadge } from "@/util/classroomRoleUI"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import { ClickableTr } from "@/lib/motionComponents"
 import type { TeamRosterRow } from "@/util/teamRoster"
@@ -58,6 +58,7 @@ export const RosterRow = ({
     row.state !== "needs_attention_not_in_org" &&
     row.roles.length > 0
   const section = row.section.trim()
+  const status = rowStatusBadge(row)
 
   return (
     <ClickableTr className="group/row hover:bg-base-200" onClick={open}>
@@ -115,14 +116,10 @@ export const RosterRow = ({
         </td>
       ) : null}
       <td>
-        {/* Same state -> badge recipe as the detail modal, enrolled included,
-            so the table and the modal never disagree about a row's status. */}
-        <Badge
-          size="sm"
-          tone={STATE_BADGE_TONE[row.state]}
-          className="whitespace-nowrap"
-        >
-          {t(STATE_LABEL_KEY[row.state])}
+        {/* Same status recipe as the detail modal (rowStatusBadge), enrolled
+            included, so the table and the modal never disagree about a row. */}
+        <Badge size="sm" tone={status.tone} className="whitespace-nowrap">
+          {t(status.labelKey)}
         </Badge>
       </td>
       <td className="w-0 ps-2">

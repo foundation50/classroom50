@@ -20,14 +20,12 @@ import {
 import { TableEmptyRow } from "@/components/list"
 import type { Student } from "@/types/classroom"
 import type { RosterCsvProblem } from "@/domain/students"
-import { useDismissFailedInvite } from "@/hooks/mutations/useDismissFailedInvite"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useClassroomRoleContextOptional } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
-import type { GitHubOrgInvitation } from "@/github-core/types"
 import { useInvalidateInviteQueries } from "@/hooks/useCacheRefresh"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
@@ -37,7 +35,6 @@ import {
   useOrgMemberPool,
 } from "@/hooks/useIdentityDirectory"
 import { useRosterLastUpdated } from "@/hooks/useRosterLastUpdated"
-import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
 import {
@@ -88,7 +85,6 @@ import {
 } from "./enrolledStudentsHelpers"
 import { useRosterAutoSync } from "./useRosterAutoSync"
 import { RosterRow } from "./RosterRow"
-import { FailedInvitationsList } from "./FailedInvitationsList"
 import { RosterParseProblems } from "./RosterParseProblems"
 import { RosterWarnings } from "./RosterWarnings"
 
@@ -163,11 +159,6 @@ const EnrolledStudents = ({
 
   // Keyed by row.key so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
-  // Failed-invite action (re-invite/dismiss) failure, rendered inline in the
-  // failed-invitations list (Primer: feedback next to its actions).
-  const [inviteActionError, setInviteActionError] = useState<string | null>(
-    null,
-  )
   // Manual/auto roster-sync failure, rendered as a banner above the table.
   const [syncError, setSyncError] = useState<string | null>(null)
   // Batch-edit partial outcome (stale-view misses, failed team adds),
@@ -199,7 +190,6 @@ const EnrolledStudents = ({
     isError,
     isEmpty,
     pendingHidden,
-    failedInvitations,
     teamSlugByRole,
     csvMissingLogins,
     backfillNeededLogins,
@@ -222,34 +212,6 @@ const EnrolledStudents = ({
     })
 
   const invalidateInviteQueries = useInvalidateInviteQueries(org)
-
-  // Dismiss a failed/expired invitation: cancel it on GitHub (removes it from
-  // the failed list) and refresh. The hook owns the invite-query invalidation;
-  // the error toast stays here so it skips on unmount.
-  const dismissFailedInvite = useDismissFailedInvite(org, classroom)
-
-  // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue
-  // an equivalent fresh invite — same classroom role (teacher -> org OWNER),
-  // by username when known (carries the team) else by email. A login-less,
-  // email-less invite can't be re-issued (dismiss-only). The hook owns the
-  // invite-query invalidation; the error toast lives here so it skips when
-  // unmounted.
-  const reinviteFailedInvite = useReinviteFailedInvite(org, classroom, {
-    noTarget: t("students.failedInviteNoTarget"),
-    rateLimited: (who) => t("students.failedInviteRateLimited", { who }),
-    notSent: (who) => t("students.failedInviteNotSent", { who }),
-  })
-  const reinvite = (inv: GitHubOrgInvitation) => {
-    setInviteActionError(null)
-    reinviteFailedInvite.mutate(inv, {
-      onError: (err) =>
-        setInviteActionError(
-          t("students.failedInviteReinviteError", {
-            error: getErrorMessage(err),
-          }),
-        ),
-    })
-  }
 
   // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
   // yourself), mirroring Org Members' self-exclusion. A pure staff row (no
@@ -823,39 +785,6 @@ const EnrolledStudents = ({
         <Alert tone="unavailable">
           <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
         </Alert>
-      ) : null}
-
-      {/* Failed/expired invitations (owner-only). Usable during a sync — a
-          concurrent re-invite/dismiss commit simply rebases (or is folded by
-          the pass's own conflict retry), so only the per-action pending
-          states gate the buttons. */}
-      {!isLoading && !isError && failedInvitations.length > 0 ? (
-        <FailedInvitationsList
-          failedInvitations={failedInvitations}
-          actionsDisabled={
-            reinviteFailedInvite.isPending || dismissFailedInvite.isPending
-          }
-          onReinvite={reinvite}
-          actionError={inviteActionError}
-          onDismiss={(inv) => {
-            setInviteActionError(null)
-            dismissFailedInvite.mutate(
-              {
-                invitationId: inv.id,
-                // Only an email-only invite has a metadata team to tear down.
-                inviteEmail: inv.login ? undefined : inv.email,
-              },
-              {
-                onError: (err) =>
-                  setInviteActionError(
-                    t("students.failedInviteDismissError", {
-                      error: getErrorMessage(err),
-                    }),
-                  ),
-              },
-            )
-          }}
-        />
       ) : null}
 
       {/* Toolbar: Sync leading on the left (mirroring the submissions

@@ -43,9 +43,12 @@ vi.mock("@/hooks/mutations/useReinviteUnlinkedRow", () => ({
 
 const linkRosterRowToMember = vi.fn()
 const removeUnlinkedRows = vi.fn()
+const dismissFailedInvitation = vi.fn()
 vi.mock("@/domain/students", () => ({
   linkRosterRowToMember: (...args: unknown[]) => linkRosterRowToMember(...args),
   removeUnlinkedRows: (...args: unknown[]) => removeUnlinkedRows(...args),
+  dismissFailedInvitation: (...args: unknown[]) =>
+    dismissFailedInvitation(...args),
   // Mirrors the real addressing rule closely enough to assert composed refs.
   unlinkedRowRef: (row: {
     email: string
@@ -100,6 +103,17 @@ const emailRow: TeamRosterRow = {
   ...row,
   key: "unlinked:grace@uni.edu",
   email: "grace@uni.edu",
+}
+
+// The same row once GitHub's failed list explains why: the invite expired.
+const expiredRow: TeamRosterRow = {
+  ...emailRow,
+  failed_invitation: {
+    id: 79153766,
+    kind: "expired",
+    failed_at: "2026-09-07T00:41:28Z",
+    reason: "Invitation expired. User did not accept this invite for 7 days",
+  },
 }
 
 const candidates = [
@@ -199,6 +213,58 @@ describe("UnlinkedRowSection", () => {
     renderSection({ rosterRow: emailRow })
     expect(screen.getByText("students.reinvite")).not.toBeNull()
     expect(screen.getByText("students.unlinkedEmailIntro")).not.toBeNull()
+  })
+
+  it("says the invitation expired when GitHub's failed list explains the row", () => {
+    renderSection({ rosterRow: expiredRow })
+    expect(screen.getByText("students.unlinkedExpiredIntro")).not.toBeNull()
+    expect(screen.queryByText("students.unlinkedEmailIntro")).toBeNull()
+
+    cleanup()
+    renderSection({
+      rosterRow: {
+        ...expiredRow,
+        failed_invitation: {
+          ...expiredRow.failed_invitation!,
+          kind: "failed",
+          reason: "Email bounced",
+        },
+      },
+    })
+    expect(screen.getByText("students.unlinkedFailedIntro")).not.toBeNull()
+  })
+
+  it("hands the attributed failed record to the re-invite", async () => {
+    reinviteOutcome = { ok: { status: "sent" } }
+    renderSection({ rosterRow: expiredRow })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("students.reinvite"))
+    })
+
+    expect(reinviteMutate).toHaveBeenCalledWith({
+      email: "grace@uni.edu",
+      role: "student",
+      failedInvitationId: 79153766,
+    })
+  })
+
+  it("dismisses the failed record when the row is removed", async () => {
+    dismissFailedInvitation.mockResolvedValue(undefined)
+    removeUnlinkedRows.mockResolvedValue({ removed: 1 })
+    const { onChanged } = renderSection({ rosterRow: expiredRow })
+
+    fireEvent.click(screen.getByText("students.removeRowAction"))
+    await act(async () => {
+      fireEvent.click(screen.getByText("students.removeRowAction"))
+    })
+
+    expect(dismissFailedInvitation).toHaveBeenCalledWith(expect.anything(), {
+      org: "acme",
+      invitationId: 79153766,
+    })
+    expect(removeUnlinkedRows).toHaveBeenCalledTimes(1)
+    expect(onChanged).toHaveBeenCalledWith("unlinked:grace@uni.edu")
   })
 
   it("re-invites the address with the row's role and closes once sent", async () => {

@@ -22,6 +22,7 @@ export {
   retireEmailInvites,
 } from "./students/retireEmailInvite"
 export {
+  dismissFailedInvitation,
   reinviteUnlinkedRow,
   type ReinviteUnlinkedRowInput,
   type ReinviteUnlinkedRowResult,

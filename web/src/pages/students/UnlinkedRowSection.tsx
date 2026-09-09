@@ -5,6 +5,7 @@ import { Button, Checkbox } from "@/components/ui"
 import { LinkIcon, PaperAirplaneIcon } from "@/components/ui/icons"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
+  dismissFailedInvitation,
   linkRosterRowToMember,
   removeUnlinkedRows,
   unlinkedRowRef,
@@ -108,6 +109,21 @@ const UnlinkedRowSection = ({
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
 
+  // Why the row is stranded, as specifically as GitHub lets us say: an expired
+  // invite, a delivery failure with GitHub's reason, an address with no
+  // invitation on file, or a name-only row.
+  const failed = row.failed_invitation
+  const intro = !email
+    ? t("students.linkIntro")
+    : !failed
+      ? t("students.unlinkedEmailIntro", { email })
+      : failed.kind === "expired"
+        ? t("students.unlinkedExpiredIntro", { email })
+        : t("students.unlinkedFailedIntro", {
+            email,
+            reason: failed.reason ?? "",
+          })
+
   // Typed domain errors -> teacher-actionable copy; anything else falls back
   // to the generic link failure with the raw detail.
   const linkErrorMessage = (err: unknown): string => {
@@ -159,7 +175,7 @@ const UnlinkedRowSection = ({
     if (reinvite.isPending || !email) return
     const role = sortRolesByRank(row.roles)[0] ?? "student"
     reinvite.mutate(
-      { email, role },
+      { email, role, failedInvitationId: row.failed_invitation?.id },
       {
         onSuccess: (result) => {
           if (result.status === "sent") {
@@ -190,6 +206,15 @@ const UnlinkedRowSection = ({
     if (removingRow) return
     setRemovingRow(true)
     try {
+      // Removing the row is the teacher saying "this person is not joining":
+      // take GitHub's failed record with it, or the address lingers under the
+      // org's failed invitations with nothing on the roster to explain it.
+      if (row.failed_invitation) {
+        await dismissFailedInvitation(client, {
+          org,
+          invitationId: row.failed_invitation.id,
+        })
+      }
       const result = await removeUnlinkedRows(client, {
         org,
         classroom,
@@ -217,11 +242,7 @@ const UnlinkedRowSection = ({
 
   return (
     <section className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-200/40 p-4">
-      <p className="text-sm text-base-content/80">
-        {email
-          ? t("students.unlinkedEmailIntro", { email })
-          : t("students.linkIntro")}
-      </p>
+      <p className="text-sm text-base-content/80">{intro}</p>
 
       {mode === "idle" ? (
         <div className="flex flex-wrap items-center gap-2">

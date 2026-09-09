@@ -9,15 +9,17 @@ import type { ClassroomRole } from "@/util/teamRoster"
 // "nothing sent", so the call site maps each outcome to its own copy and the
 // hook stays t()-free. Invalidates on any outcome: a 422 means GitHub holds an
 // invitation or member the roster hasn't seen yet, and a refetch may surface it.
-// Sibling of useReinviteFailedInvite.
 export function useReinviteUnlinkedRow(org: string, classroom: string) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
   return useMutation({
     meta: { keepTabOpen: true },
-    mutationFn: (input: { email: string; role: ClassroomRole }) =>
-      reinviteUnlinkedRow(client, { org, classroom, ...input }),
+    mutationFn: (input: {
+      email: string
+      role: ClassroomRole
+      failedInvitationId?: number
+    }) => reinviteUnlinkedRow(client, { org, classroom, ...input }),
     onSuccess: () => invalidateInviteQueries(queryClient, org),
   })
 }

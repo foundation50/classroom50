@@ -66,7 +66,6 @@ vi.mock("@/github-core/queries", async (importOriginal) => {
   }
 })
 
-import { useDismissFailedInvite } from "./useDismissFailedInvite"
 import { useAcceptAssignment } from "./useAcceptAssignment"
 import { useDeleteAssignment } from "./useDeleteAssignment"
 import { useUnenrollStudent } from "./useUnenrollStudent"
@@ -86,50 +85,6 @@ function freshClient() {
 
 beforeEach(() => {
   vi.clearAllMocks()
-})
-
-describe("useDismissFailedInvite", () => {
-  it("cancels the invite and invalidates the invite queries on success", async () => {
-    const queryClient = freshClient()
-    const { result } = renderHook(
-      () => useDismissFailedInvite(ORG, CLASSROOM),
-      {
-        wrapper: wrapperWith(queryClient),
-      },
-    )
-
-    result.current.mutate({ invitationId: 42 })
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    expect(cancelOrgInvitation).toHaveBeenCalledWith(expect.anything(), {
-      org: ORG,
-      invitationId: 42,
-    })
-    // A username invitation has no metadata team to tear down.
-    expect(deleteInviteTeamForEmail).not.toHaveBeenCalled()
-    expect(invalidateInviteQueries).toHaveBeenCalledWith(queryClient, ORG)
-  })
-
-  it("retires the invite team AND its pending roster row when dismissing an email-only invite", async () => {
-    const queryClient = freshClient()
-    const { result } = renderHook(
-      () => useDismissFailedInvite(ORG, CLASSROOM),
-      {
-        wrapper: wrapperWith(queryClient),
-      },
-    )
-
-    result.current.mutate({ invitationId: 42, inviteEmail: "gone@x.edu" })
-    await waitFor(() => expect(result.current.isSuccess).toBe(true))
-
-    // One helper clears both the metadata team and the roster row; leaving the
-    // row behind would strand it invisibly on roster.csv.
-    expect(retireEmailInvite).toHaveBeenCalledWith(expect.anything(), {
-      org: ORG,
-      classroom: CLASSROOM,
-      email: "gone@x.edu",
-    })
-  })
 })
 
 describe("useAcceptAssignment", () => {

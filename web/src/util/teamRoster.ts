@@ -88,6 +88,36 @@ export type TeamRosterRow = {
   // Pending org-invitation id, set only for `pending` rows. Threaded to
   // resendOrgInvitation, which short-circuits without it.
   invitation_id?: number
+  // GitHub's failed record for this person's last invitation, set on an
+  // `unlinked` (email) or `needs_attention_not_in_org` (login) row whose
+  // address/login appears in the org's failed_invitations list. Explains WHY
+  // the row is stranded (the badge reads "Invitation expired" instead of a bare
+  // state) and names the record a re-invite or removal must dismiss.
+  failed_invitation?: FailedInvitationRef
+}
+
+export type FailedInvitationRef = {
+  id: number
+  // "expired": nobody accepted within GitHub's 7-day window (the only failure
+  // a healthy address produces). "failed": anything else GitHub reports, such
+  // as a bounce; the raw reason is kept for the detail view.
+  kind: "expired" | "failed"
+  failed_at: string | null
+  reason: string | null
+}
+
+// GitHub reports expiry as free text ("Invitation expired. User did not accept
+// this invite for 7 days", verified live). Anything else is a delivery failure.
+export function failedInvitationRef(
+  inv: GitHubOrgInvitation,
+): FailedInvitationRef {
+  const reason = inv.failed_reason?.trim() || null
+  return {
+    id: inv.id,
+    kind: reason && /expired/i.test(reason) ? "expired" : "failed",
+    failed_at: inv.failed_at ?? null,
+    reason,
+  }
 }
 
 // A CSV row keyed for the fallback join: github_id, then lowercased username,
@@ -175,6 +205,12 @@ export type BuildTeamRosterInput = {
   // invite, so the whole needs-attention pass is suppressed to avoid mislabeling
   // a pending person as needs_attention_not_in_org.
   pendingHidden?: boolean
+  // The org's failed_invitations list (owner-only; pass none when hidden).
+  // Org-WIDE by necessity (see getOrgFailedInvitations): an entry is attributed
+  // to this classroom only when its email/login matches a roster.csv row the
+  // passes below emit as stranded, so another classroom's expired invite never
+  // leaks onto this roster.
+  failedInvitations?: GitHubOrgInvitation[]
   // roster.csv rows standing in for a team the viewer could not read, keyed by
   // the role that team backs. Every classroom team is `secret`, so GitHub 404s
   // it to a non-owner who isn't on it; the CSV (readable with config-repo
@@ -227,8 +263,32 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     orgMembersKnown = false,
     pendingHidden = false,
     fallbackRows = {},
+    failedInvitations = [],
   } = input
   const csv = indexCsv(students)
+
+  // Failed records keyed by lowercased login and email. When GitHub holds
+  // several for one person (an address re-invited more than once, each try
+  // expiring), keep the most recent: that is the one a re-invite must dismiss
+  // and the date worth showing.
+  const failedByLogin = new Map<string, FailedInvitationRef>()
+  const failedByEmail = new Map<string, FailedInvitationRef>()
+  const keepLatest = (
+    map: Map<string, FailedInvitationRef>,
+    key: string,
+    ref: FailedInvitationRef,
+  ) => {
+    const prev = map.get(key)
+    if (!prev || (ref.failed_at ?? "") > (prev.failed_at ?? ""))
+      map.set(key, ref)
+  }
+  for (const inv of failedInvitations) {
+    const ref = failedInvitationRef(inv)
+    const login = inv.login?.trim().toLowerCase()
+    const email = inv.email?.trim().toLowerCase()
+    if (login) keepLatest(failedByLogin, login, ref)
+    if (email) keepLatest(failedByEmail, email, ref)
+  }
 
   // Identity-less rows (an unaccepted email invite's pending row) indexed by
   // email, so a row that shares the address can borrow the name/section captured
@@ -428,9 +488,8 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       const loginKey = login.toLowerCase()
       const email = student.email?.trim().toLowerCase() ?? ""
       // A row must carry a GitHub identity to appear on its own; an email-only
-      // row only donates metadata (handled above). Note the consequence: an
-      // email-only row whose invitation has died is invisible here until the
-      // reconcile's dead-row reap removes it.
+      // row only donates metadata here and is emitted by the unlinked pass
+      // below once nothing backs it.
       if (!id && !loginKey) continue
       // Already an enrolled member or a pending invite?
       if (id && enrolledById.has(id)) continue
@@ -447,6 +506,12 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
         (id && orgMemberIds?.has(id)) ||
         (loginKey && orgMemberLogins?.has(loginKey)) ||
         false
+      // A failed record only explains a NOT-in-org row: an org member's stale
+      // failure record is noise (they got in some other way).
+      const failed = inOrg
+        ? undefined
+        : ((loginKey ? failedByLogin.get(loginKey) : undefined) ??
+          (email ? failedByEmail.get(email) : undefined))
       rows.push({
         key: id || login,
         state: inOrg ? "needs_attention_in_org" : "needs_attention_not_in_org",
@@ -455,6 +520,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
         github_id: id,
         avatar_url: "",
         ...metadataFrom(student, donorFor(email)),
+        ...(failed ? { failed_invitation: failed } : {}),
       })
     }
   }
@@ -494,6 +560,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       let key = base
       for (let n = 2; seenKeys.has(key); n++) key = `${base}#${n}`
       seenKeys.add(key)
+      const failed = email ? failedByEmail.get(email) : undefined
       rows.push({
         key,
         state: "unlinked",
@@ -502,6 +569,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
         github_id: "",
         avatar_url: "",
         ...metadataFrom(student),
+        ...(failed ? { failed_invitation: failed } : {}),
       })
     }
   }

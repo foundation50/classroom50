@@ -1,16 +1,19 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import type { GitHubClient } from "../client"
-import type { GitHubOrgInvitation, GitHubTeam } from "../types"
+import type { GitHubOrgInvitation } from "../types"
 import { retryTransientGitHubError, tolerateGitHubError } from "../errors"
 import { paginateAll } from "../paginate"
-import { mapWithConcurrency } from "@/util/concurrency"
 import { githubKeys } from "./keys"
-import { REPO_READ_CONCURRENCY } from "./shared"
 
-// Failed / expired org invitations (carry failed_at / failed_reason). Owner-only.
-// Read org-wide, then attributed to a classroom team by
-// getOrgFailedInvitationsForTeam (GitHub has no team-scoped failed endpoint).
+// Failed org invitations (GET /orgs/{org}/failed_invitations). Owner-only.
+// Verified against a live org (2026-09-09): an invitation nobody accepted for 7
+// days lands here with failed_reason "Invitation expired. User did not accept
+// this invite for 7 days", and it is gone from the pending lists. Its
+// `invitation_teams_url` 404s once failed (even with team_count 1), so a failed
+// invite CANNOT be attributed to a classroom through its teams. Attribution
+// happens in buildTeamRoster instead, by matching the invite's email/login to
+// this classroom's roster.csv rows (see BuildTeamRosterInput.failedInvitations).
 export async function getOrgFailedInvitations(
   client: GitHubClient,
   org: string,
@@ -37,37 +40,6 @@ export async function listOrgInvitations(
     (page) =>
       `/orgs/${encodeURIComponent(org)}/invitations?per_page=100&page=${page}`,
   )
-}
-
-// Failed org invitations scoped to ONE classroom team. GitHub has no
-// team-scoped failed endpoint, so this reads the org-wide failed list and keeps
-// only invites whose team set (resolved per invite from invitation_teams_url)
-// includes `teamSlug`. A per-invite teams read that fails drops that invite, so
-// one bad read never leaks an unattributable invite onto the roster. Owner-only.
-export async function getOrgFailedInvitationsForTeam(
-  client: GitHubClient,
-  org: string,
-  teamSlug: string,
-): Promise<GitHubOrgInvitation[]> {
-  const failed = await getOrgFailedInvitations(client, org)
-  const wantSlug = teamSlug.toLowerCase()
-  const candidates = failed.filter((inv) => (inv.team_count ?? 0) > 0)
-  const onTeam = await mapWithConcurrency(
-    candidates,
-    REPO_READ_CONCURRENCY,
-    async (inv) => {
-      if (!inv.invitation_teams_url) return false
-      try {
-        const teams = await client.request<GitHubTeam[]>(
-          inv.invitation_teams_url,
-        )
-        return teams.some((t) => t.slug?.toLowerCase() === wantSlug)
-      } catch {
-        return false
-      }
-    },
-  )
-  return candidates.filter((_, i) => onTeam[i])
 }
 
 // List a team's pending invitations across all pages (GET
@@ -111,20 +83,15 @@ export function teamInvitationsQuery(
   })
 }
 
-// Failed org invitations scoped to a classroom team. Owner-only, like the
-// pending read; a transient 5xx self-heals. Attributes each org-wide failed
-// invite to a team via its invitation_teams_url (see
-// getOrgFailedInvitationsForTeam), so a failed invite for another classroom
-// never surfaces on this roster.
-export function teamFailedInvitationsQuery(
-  client: GitHubClient,
-  org: string,
-  teamSlug: string,
-) {
+// Org-wide failed invitations. Owner-only, like the pending read; a transient
+// 5xx self-heals. The roster attributes entries to a classroom by roster.csv
+// match (see getOrgFailedInvitations), so one shared cache serves every
+// classroom of the org.
+export function orgFailedInvitationsQuery(client: GitHubClient, org: string) {
   return queryOptions({
-    queryKey: githubKeys.teamFailedInvitations(org, teamSlug),
-    queryFn: () => getOrgFailedInvitationsForTeam(client, org, teamSlug),
-    enabled: Boolean(org && teamSlug),
+    queryKey: githubKeys.orgFailedInvitations(org),
+    queryFn: () => getOrgFailedInvitations(client, org),
+    enabled: Boolean(org),
     staleTime: 60 * 1000,
     retry: retryTransientGitHubError,
   })

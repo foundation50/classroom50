@@ -76,6 +76,29 @@ describe("reinviteUnlinkedRow", () => {
     })
   })
 
+  it("dismisses the record the roster already attributed, without a second cancel for it", async () => {
+    getOrgFailedInvitations.mockResolvedValue([
+      { id: 79153766, email: "grace@uni.edu", login: null },
+      // An older expiry for the same address the roster didn't surface.
+      { id: 5, email: "grace@uni.edu", login: null },
+    ])
+
+    await reinviteUnlinkedRow(client, {
+      ...INPUT,
+      failedInvitationId: 79153766,
+    })
+
+    const ids = cancelOrgInvitation.mock.calls.map(
+      (c) => (c[1] as { invitationId: number }).invitationId,
+    )
+    expect(ids).toEqual([79153766, 5])
+    // Known id is dismissed BEFORE the list is read, so a lost read still
+    // clears the record the teacher is looking at.
+    expect(cancelOrgInvitation.mock.invocationCallOrder[0]).toBeLessThan(
+      getOrgFailedInvitations.mock.invocationCallOrder[0]!,
+    )
+  })
+
   it("still invites when the failed list is unreadable", async () => {
     getOrgFailedInvitations.mockRejectedValue(
       new GitHubAPIError({

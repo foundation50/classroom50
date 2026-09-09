@@ -97,11 +97,10 @@ export {
 } from "./queries/teamReads"
 export {
   getOrgFailedInvitations,
-  getOrgFailedInvitationsForTeam,
   listOrgInvitations,
   listTeamInvitations,
   teamInvitationsQuery,
-  teamFailedInvitationsQuery,
+  orgFailedInvitationsQuery,
 } from "./queries/invitationReads"
 export {
   getOrgActionsUsage,
