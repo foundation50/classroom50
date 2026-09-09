@@ -305,10 +305,12 @@ section. Most assignments never need them:
 - **GitHub Pages**: publish each student repository as a website, configured
   automatically when the student accepts so students never need admin access
   to their repository. **Off** is the default. **GitHub Actions** deploys
-  through a workflow in your template (for sites with a build step; the
-  workflow needs `pages: write` and `id-token: write` permissions, and the site
-  is created before the student's first push so the workflow's first run
-  deploys it). **A branch** publishes the files in a branch directly, no
+  through a workflow in the student repository (for sites with a build step).
+  The workflow must grant `pages: write` and `id-token: write` and use
+  `actions/upload-pages-artifact` and `actions/deploy-pages`; ship it in your
+  template or have students add it. The site is created when the student
+  accepts, so the workflow's first run deploys it. **A branch** publishes the
+  files in a branch directly, no
   workflow needed (plain HTML, CSS, and JavaScript): pick the branch (blank
   means the repository's default branch) and the folder (`/` or `/docs`).
   The site is public on the internet even when the repository is private, and

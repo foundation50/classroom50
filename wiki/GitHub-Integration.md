@@ -171,8 +171,10 @@ An assignment's **GitHub Pages** setting (web form, or `gh teacher assignment
 add --pages`) makes each accept configure a Pages site on the student's new
 repository with `POST /repos/{owner}/{repo}/pages`, before the setup commit,
 so students never need admin access to publish. **GitHub Actions** sets
-`build_type: workflow` (your template ships the deploy workflow, with
-`pages: write` and `id-token: write` permissions); **A branch** sets
+`build_type: workflow` (a workflow in the student repository, from the
+template or added by the student, deploys the site; it needs `pages: write`
+and `id-token: write` permissions and uses `actions/upload-pages-artifact` and
+`actions/deploy-pages`); **A branch** sets
 `build_type: legacy` with the branch and folder. What GitHub requires:
 
 - **Plan**: Pages on a private repository is available on GitHub Team,

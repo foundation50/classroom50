@@ -1261,10 +1261,10 @@
       },
       "pages": {
         "label": "GitHub Pages",
-        "help": "Publish each student repository as a website with GitHub Pages, configured automatically when the student accepts so they never need admin access. Off is the default. \"GitHub Actions\" deploys through a workflow in your template (for sites with a build step). \"A branch\" publishes the files in a branch directly, no workflow needed (for plain HTML, CSS, and JavaScript). The site is public on the internet even when the repository is private, and every file in the published branch and folder is served; only GitHub Enterprise Cloud can restrict who sees it. Pages on private repositories needs a GitHub plan that includes it; on GitHub Free for organizations, make the repository public or the site isn't created.",
+        "help": "Publish each student repository as a website with GitHub Pages, configured automatically when the student accepts so they never need admin access. Off is the default. \"GitHub Actions\" deploys through a workflow in the student repository (for sites with a build step). \"A branch\" publishes the files in a branch directly, no workflow needed (for plain HTML, CSS, and JavaScript). The site is public on the internet even when the repository is private, and every file in the published branch and folder is served; only GitHub Enterprise Cloud can restrict who sees it. Pages on private repositories needs a GitHub plan that includes it; on GitHub Free for organizations, make the repository public or the site isn't created.",
         "editHelp": "This applies to repositories created from now on; use the submissions page to enable Pages on existing ones.",
         "emptyRepoHint": "Not available for an empty repository: there is no branch to publish yet.",
-        "workflowNote": "Your template must include a GitHub Actions workflow that deploys to Pages (for example, one using actions/deploy-pages with pages: write and id-token: write permissions). The site is created before the student's first push, so the workflow's first run deploys it.",
+        "workflowNote": "Deploying through GitHub Actions needs a workflow in each student repository that publishes to Pages: it must grant pages: write and id-token: write permissions and use actions/upload-pages-artifact and actions/deploy-pages. Put it in your template, or have students add it. The site is created when the student accepts, so the workflow's first run deploys it.",
         "choices": {
           "off": "Off",
           "workflow": "GitHub Actions",
