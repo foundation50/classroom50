@@ -610,7 +610,10 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     holdInvitesUntilThrottled?: boolean
     // 500 the DELETE of these invitation ids (a cancel that won't go through).
     cancelFailIds?: number[]
+    // 422 "Over invitation rate limit" (the org's daily cap) for these emails.
+    capEmails?: string[]
   }) => {
+    const capEmails = new Set(opts?.capEmails ?? [])
     const memberEmails = new Set(opts?.memberEmails ?? [])
     const rateLimitEmails = new Set(opts?.rateLimitEmails ?? [])
     const failEmails = new Set(opts?.failEmails ?? [])
@@ -763,6 +766,10 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
             }
             if (memberEmails.has(body.email)) {
               return Promise.reject(apiError(422, "already a member"))
+            }
+            if (capEmails.has(body.email)) {
+              setTimeout(releaseHeldInvites, 0)
+              return Promise.reject(apiError(422, "Over invitation rate limit"))
             }
             if (rateLimitEmails.has(body.email)) {
               setTimeout(releaseHeldInvites, 0)
@@ -975,6 +982,70 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     expect(state.invitationDeletes).toEqual([11])
     expect(state.inviteBodies).toHaveLength(1)
     expect(state.inviteBodies[0]).toMatchObject({ email: "a@uni.edu" })
+  })
+
+  // GitHub reports its per-org daily invitation cap as a 422 too. It must not
+  // read as "already invited": the send failed, the cancelled invitation comes
+  // back, the failed record stays, and nothing else is attempted or retried.
+  it("treats the daily invitation cap as a failure: restores the live invite, stops the batch, no retries", async () => {
+    const { client, state } = makeClient({
+      capEmails: ["a@uni.edu"],
+      holdInvitesUntilThrottled: true,
+    })
+    let attempts = 0
+    const request = client.request as ReturnType<typeof vi.fn>
+    const inner = request.getMockImplementation() as (
+      path: string,
+      options?: { method?: string },
+    ) => Promise<unknown>
+    // First POST hits the cap; the second (the restore) goes through.
+    request.mockImplementation(
+      (path: string, options?: { method?: string }) => {
+        if (path.endsWith("/invitations") && ++attempts === 2) {
+          state.inviteBodies.push((options as { body: never }).body)
+          return Promise.resolve({})
+        }
+        return inner(path, options)
+      },
+    )
+    const sleepFn = vi.fn(async () => {})
+
+    // More targets than the concurrency window, so some are still queued
+    // when the cap hits and must be deferred rather than attempted.
+    const others = Array.from({ length: 12 }, (_, i) => ({
+      email: `u${i}@uni.edu`,
+    }))
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        {
+          email: "a@uni.edu",
+          pendingInvitationId: 11,
+          failedInvitationIds: [21],
+        },
+        ...others,
+      ],
+      sleepFn,
+    })
+
+    expect(result.failed).toEqual([
+      {
+        email: "a@uni.edu",
+        message: expect.stringContaining("daily invitation limit"),
+      },
+    ])
+    expect(result.skipped).toEqual([])
+    // Whatever was in flight went out; everything still queued was deferred,
+    // and nothing was retried (the cap is daily, not a Retry-After).
+    expect(result.deferred.length).toBeGreaterThan(0)
+    expect(result.invited.length + result.deferred.length).toBe(others.length)
+    expect(sleepFn).not.toHaveBeenCalled()
+    // Cancelled once, restored once; the failed record is NOT dismissed.
+    expect(state.invitationDeletes).toEqual([11])
+    expect(
+      state.inviteBodies.filter((b) => b.email === "a@uni.edu"),
+    ).toHaveLength(1)
   })
 
   it("restores a cancelled invitation that stays deferred after the retry cap", async () => {

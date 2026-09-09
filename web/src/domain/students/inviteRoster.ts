@@ -1,5 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
+  classifyInvitation422,
+  isInvitationLimitError,
   createOrgInvitation,
   cancelOrgInvitation,
   deleteInviteTeam,
@@ -176,6 +178,7 @@ export async function inviteRosterStudents(
   // Retry-After. Every error is classified individually so a genuine 429 is
   // always deferred, never mislabeled `failed`.
   let rateLimited = false
+  let capReached = false
   let retryAfterMs = 0
   const deferredTargets: Target[] = []
 
@@ -196,6 +199,11 @@ export async function inviteRosterStudents(
         if (err.rateLimit.retryAfter !== null)
           retryAfterMs = Math.max(retryAfterMs, err.rateLimit.retryAfter * 1000)
         deferredTargets.push(target)
+      } else if (isInvitationLimitError(err)) {
+        // The organization's daily invitation cap: stop, and don't retry.
+        capReached = true
+        rateLimited = true
+        failed.push({ username, message: i18n.t("students.inviteDailyLimit") })
       } else {
         failed.push({ username, message: getErrorMessage(err) })
       }
@@ -204,21 +212,27 @@ export async function inviteRosterStudents(
     }
   })
 
-  // Retry the deferred (rate-limited) set (see retryDeferred).
-  const stillDeferred = await retryDeferred({
-    queue: deferredTargets,
-    maxRetries,
-    sleepFn,
-    initialRetryAfterMs: retryAfterMs,
-    attempt: async (target) => {
-      const outcome = await inviteOne(target)
-      if ("skip" in outcome)
-        skipped.push({ username: target.username, reason: outcome.skip })
-      else invited.push(outcome)
-    },
-    onError: (target, err) =>
-      failed.push({ username: target.username, message: getErrorMessage(err) }),
-  })
+  // Retry the deferred (rate-limited) set (see retryDeferred), unless the
+  // daily cap ended the run.
+  const stillDeferred = capReached
+    ? deferredTargets
+    : await retryDeferred({
+        queue: deferredTargets,
+        maxRetries,
+        sleepFn,
+        initialRetryAfterMs: retryAfterMs,
+        attempt: async (target) => {
+          const outcome = await inviteOne(target)
+          if ("skip" in outcome)
+            skipped.push({ username: target.username, reason: outcome.skip })
+          else invited.push(outcome)
+        },
+        onError: (target, err) =>
+          failed.push({
+            username: target.username,
+            message: getErrorMessage(err),
+          }),
+      })
   for (const target of stillDeferred) deferred.push(target.username)
 
   return { invited, skipped, failed, deferred }
@@ -287,6 +301,34 @@ export type BulkInviteByEmailResult = {
 // (stop issuing new invites once throttled; defer the rest), and the same team
 // resolution (resolveTeamIdByRole ensures the staff team for a teacher/ta invite,
 // students-only never creates empty staff teams).
+// One reading of a failed email send for both passes of bulkInviteByEmail.
+type EmailSendVerdict =
+  | { kind: "rate-limited"; retryAfterMs: number | null }
+  | { kind: "already" }
+  | { kind: "limit"; message: string }
+  | { kind: "failed"; message: string }
+
+function classifyEmailSendError(err: unknown): EmailSendVerdict {
+  if (err instanceof GitHubAPIError) {
+    if (err.isRateLimited)
+      return {
+        kind: "rate-limited",
+        retryAfterMs:
+          err.rateLimit.retryAfter !== null
+            ? err.rateLimit.retryAfter * 1000
+            : null,
+      }
+    if (err.status === 422) {
+      const verdict = classifyInvitation422(err)
+      if (verdict.kind === "already") return { kind: "already" }
+      if (verdict.kind === "limit")
+        return { kind: "limit", message: i18n.t("students.inviteDailyLimit") }
+      return { kind: "failed", message: verdict.detail }
+    }
+  }
+  return { kind: "failed", message: getErrorMessage(err) }
+}
+
 export async function bulkInviteByEmail(
   client: GitHubClient,
   input: BulkInviteByEmailInput,
@@ -410,12 +452,17 @@ export async function bulkInviteByEmail(
       await createOrgInvitation(client, invite)
       revokedLive.delete(target.email)
     } catch (err) {
-      // A doomed invite (422 already-member/-invited, or a hard failure) must
-      // not leave a fresh, member-less metadata team behind for GC to reap.
-      // Keep it on a rate limit (the deferred retry re-adopts it) and keep an
-      // adopted team (it may hold a prior invite's still-unrecovered record).
+      // A doomed invite (already invited/a member, or a hard failure) must not
+      // leave a fresh, member-less metadata team behind for GC to reap. Keep it
+      // on a rate limit (the deferred retry re-adopts it) and keep an adopted
+      // team (it may hold a prior invite's still-unrecovered record). Only an
+      // "already" 422 is a no-op; the invitation cap and a bad address are
+      // failures (see classifyInvitation422).
       const rateLimited = err instanceof GitHubAPIError && err.isRateLimited
-      const alreadyThere = err instanceof GitHubAPIError && err.status === 422
+      const alreadyThere =
+        err instanceof GitHubAPIError &&
+        err.status === 422 &&
+        classifyInvitation422(err).kind === "already"
       // Something live already covers the address, so nothing to restore, and
       // the old failed record is noise.
       if (alreadyThere) {
@@ -441,6 +488,7 @@ export async function bulkInviteByEmail(
   }
 
   let rateLimited = false
+  let capReached = false
   let retryAfterMs = 0
   const deferredTargets: EmailTarget[] = []
 
@@ -455,39 +503,51 @@ export async function bulkInviteByEmail(
       await inviteOne(target)
       invited.push({ email, role: target.role })
     } catch (err) {
-      if (err instanceof GitHubAPIError && err.isRateLimited) {
+      const verdict = classifyEmailSendError(err)
+      if (verdict.kind === "rate-limited") {
         rateLimited = true
-        if (err.rateLimit.retryAfter !== null)
-          retryAfterMs = Math.max(retryAfterMs, err.rateLimit.retryAfter * 1000)
+        if (verdict.retryAfterMs !== null)
+          retryAfterMs = Math.max(retryAfterMs, verdict.retryAfterMs)
         deferredTargets.push(target)
-      } else if (err instanceof GitHubAPIError && err.status === 422) {
-        // Already a member or already invited — nothing to send.
+      } else if (verdict.kind === "already") {
         skipped.push({ email })
+      } else if (verdict.kind === "limit") {
+        // The organization's invitation cap: this send failed for good today,
+        // and so would every one after it. Stop, defer the rest, and don't
+        // retry (the cap is daily, not a Retry-After).
+        capReached = true
+        rateLimited = true
+        failed.push({ email, message: verdict.message })
       } else {
-        failed.push({ email, message: getErrorMessage(err) })
+        failed.push({ email, message: verdict.message })
       }
     } finally {
       bump(email)
     }
   })
 
-  // Retry the deferred (rate-limited) set (see retryDeferred).
-  const stillDeferred = await retryDeferred({
-    queue: deferredTargets,
-    maxRetries,
-    sleepFn,
-    initialRetryAfterMs: retryAfterMs,
-    attempt: async (target) => {
-      await inviteOne(target)
-      invited.push({ email: target.email, role: target.role })
-    },
-    onError: (target, err) => {
-      // A 422 on retry means already-member/already-invited, not a failure.
-      if (err instanceof GitHubAPIError && err.status === 422)
-        skipped.push({ email: target.email })
-      else failed.push({ email: target.email, message: getErrorMessage(err) })
-    },
-  })
+  // Retry the deferred (rate-limited) set (see retryDeferred), unless the
+  // daily cap ended the run: nothing more goes out today.
+  const stillDeferred = capReached
+    ? deferredTargets
+    : await retryDeferred({
+        queue: deferredTargets,
+        maxRetries,
+        sleepFn,
+        initialRetryAfterMs: retryAfterMs,
+        attempt: async (target) => {
+          await inviteOne(target)
+          invited.push({ email: target.email, role: target.role })
+        },
+        onError: (target, err) => {
+          // retryDeferred re-queues rate limits itself, so only the other
+          // verdicts reach here.
+          const verdict = classifyEmailSendError(err)
+          if (verdict.kind === "already") skipped.push({ email: target.email })
+          else if (verdict.kind !== "rate-limited")
+            failed.push({ email: target.email, message: verdict.message })
+        },
+      })
   for (const target of stillDeferred) deferred.push(target.email)
   // Rate-limited out with a live invitation already cancelled: give it back.
   for (const email of [...revokedLive.keys()]) await restoreLive(email)

@@ -49,6 +49,9 @@ export {
   type StaffTeamRefs,
 } from "./mutations/teams"
 export {
+  classifyInvitation422,
+  isInvitationLimitError,
+  type Invitation422,
   createOrgInvitation,
   cancelOrgInvitation,
   removeOrgMembership,

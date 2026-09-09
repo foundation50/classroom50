@@ -2,6 +2,52 @@ import type { GitHubClient } from "../client"
 import { type GitHubOrgMembership } from "../types"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 
+// What a 422 from POST /orgs/{org}/invitations means. GitHub uses one status
+// for three different answers (docs: "Validation failed, or the endpoint has
+// been spammed"):
+//   - "already": the invitee is already a member or already invited. A
+//     validation body (`errors[]`) whose text says so.
+//   - "limit": the organization's invitation cap (50 per 24 hours for a new or
+//     free organization, 500 otherwise) or the spam throttle. GitHub's message
+//     names the limit; no `errors[]`.
+//   - "invalid": any other validation failure (a malformed address), with the
+//     text GitHub gave.
+// Callers must not read every 422 as "already": a capped send is a real
+// failure, and one that cancelled a live invitation first must restore it.
+export type Invitation422 =
+  | { kind: "already" }
+  | { kind: "limit"; detail: string }
+  | { kind: "invalid"; detail: string }
+
+export function classifyInvitation422(err: GitHubAPIError): Invitation422 {
+  const body = err.body as { errors?: unknown } | null
+  const errors = Array.isArray(body?.errors) ? body.errors : []
+  const texts = [
+    err.message,
+    ...errors.map((e) =>
+      typeof e === "object" && e !== null && "message" in e
+        ? String((e as { message: unknown }).message)
+        : "",
+    ),
+  ].filter(Boolean)
+  const joined = texts.join(" ")
+  if (/rate limit|invitation limit|too many/i.test(joined))
+    return { kind: "limit", detail: joined }
+  if (/already/i.test(joined)) return { kind: "already" }
+  return { kind: "invalid", detail: joined || err.message }
+}
+
+// A thrown error (or its cause) that is the invitation cap.
+export function isInvitationLimitError(err: unknown): boolean {
+  const candidates = [err, err instanceof Error ? err.cause : undefined]
+  return candidates.some(
+    (e) =>
+      e instanceof GitHubAPIError &&
+      e.status === 422 &&
+      classifyInvitation422(e).kind === "limit",
+  )
+}
+
 // POST /orgs/{org}/invitations by invitee_id or email. An optional team_ids
 // array auto-adds the invitee to those teams on acceptance, so an email invite
 // can land a student directly in the classroom team without a separate
@@ -246,7 +292,11 @@ export async function ensureOrgMembership(
     })
     return { state: "invited" }
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 422) {
+    if (
+      err instanceof GitHubAPIError &&
+      err.status === 422 &&
+      classifyInvitation422(err).kind !== "limit"
+    ) {
       const state = await getOrgMembershipState(client, org, username)
       if (state === "active" || state === "pending") {
         return { state }

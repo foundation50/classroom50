@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  classifyInvitation422,
   ensureClassroom50Repo,
+  ensureOrgMembership,
   ensurePages,
   ensureSkeletonFiles,
   ensureWorkflowPermissions,
@@ -9,6 +11,7 @@ import {
   gitBlobSha,
   renameConfigRepoToMain,
   resendOrgInvitation,
+  isInvitationLimitError,
   triggerRegrade,
   updateOrgTeamCreation,
   validateServiceToken,
@@ -1271,5 +1274,134 @@ describe("updateOrgTeamCreation", () => {
       method: "PATCH",
       body: { members_can_create_teams: false },
     })
+  })
+})
+
+// GitHub answers POST /orgs/{org}/invitations with one 422 for three things
+// (docs: "Validation failed, or the endpoint has been spammed"). The bodies
+// differ: an invitee problem is a validation body with `errors[]`; the org's
+// daily invitation cap is a bare message naming the limit.
+describe("classifyInvitation422", () => {
+  const err422 = (message: string, body: unknown = null) =>
+    new GitHubAPIError({
+      status: 422,
+      url: "/orgs/acme/invitations",
+      message,
+      body,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  it("reads GitHub's cap message as the limit", () => {
+    expect(classifyInvitation422(err422("Over invitation rate limit"))).toEqual(
+      { kind: "limit", detail: "Over invitation rate limit" },
+    )
+  })
+
+  it("reads an already-member/already-invited validation body as 'already'", () => {
+    const body = {
+      message: "Validation Failed",
+      errors: [
+        {
+          resource: "OrganizationInvitation",
+          code: "unprocessable",
+          field: "data",
+          message: "Invitee is already a part of this org",
+        },
+      ],
+    }
+    expect(classifyInvitation422(err422("Validation Failed", body))).toEqual({
+      kind: "already",
+    })
+  })
+
+  it("reads any other validation failure as invalid, keeping GitHub's text", () => {
+    const body = {
+      message: "Validation Failed",
+      errors: [{ field: "email", code: "invalid", message: "is invalid" }],
+    }
+    expect(classifyInvitation422(err422("Validation Failed", body))).toEqual({
+      kind: "invalid",
+      detail: "Validation Failed is invalid",
+    })
+  })
+
+  it("isInvitationLimitError sees through a wrapping Error's cause", () => {
+    const cap = err422("Over invitation rate limit")
+    expect(isInvitationLimitError(cap)).toBe(true)
+    expect(isInvitationLimitError(new Error("wrapped", { cause: cap }))).toBe(
+      true,
+    )
+    expect(isInvitationLimitError(err422("already a member"))).toBe(false)
+    expect(isInvitationLimitError(new Error("boom"))).toBe(false)
+  })
+})
+
+describe("ensureOrgMembership on a 422", () => {
+  const err = (status: number, message: string) =>
+    new GitHubAPIError({
+      status,
+      url: "/orgs/acme/invitations",
+      message,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+  // Precheck says not a member; the POST answers with the given 422; a
+  // follow-up precheck (only for a non-cap 422) says pending.
+  const makeClient = (postMessage: string) => {
+    let membershipReads = 0
+    const request = vi.fn((path: string, options?: { method?: string }) => {
+      if (path.includes("/memberships/")) {
+        membershipReads += 1
+        return membershipReads === 1
+          ? Promise.reject(err(404, "not a member"))
+          : Promise.resolve({ state: "pending" })
+      }
+      if (path.endsWith("/invitations") && options?.method === "POST")
+        return Promise.reject(err(422, postMessage))
+      return Promise.reject(new Error(`unexpected ${path}`))
+    })
+    return {
+      client: { request } as unknown as GitHubClient,
+      reads: () => membershipReads,
+    }
+  }
+
+  it("re-reads membership on an already-invited 422 and reports the state", async () => {
+    const { client, reads } = makeClient("already invited")
+    await expect(
+      ensureOrgMembership(client, {
+        org: "acme",
+        username: "ada",
+        inviteeId: 1,
+      }),
+    ).resolves.toEqual({ state: "pending" })
+    expect(reads()).toBe(2)
+  })
+
+  it("propagates the daily cap instead of reading it as already invited", async () => {
+    const { client, reads } = makeClient("Over invitation rate limit")
+    await expect(
+      ensureOrgMembership(client, {
+        org: "acme",
+        username: "ada",
+        inviteeId: 1,
+      }),
+    ).rejects.toMatchObject({ status: 422 })
+    // No second membership read: the cap is not about this person.
+    expect(reads()).toBe(1)
   })
 })

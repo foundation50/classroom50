@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
+import { isInvitationLimitError } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   isInvitableToOrg,
@@ -101,6 +102,15 @@ export async function bulkInviteMembersToOrg(
       if (rateLimitHit) {
         rateLimited = true
         outcomes.push({ key: row.key, label, status: "deferred" })
+      } else if (isInvitationLimitError(err)) {
+        // The daily cap: this one failed for good today, the rest are deferred.
+        rateLimited = true
+        outcomes.push({
+          key: row.key,
+          label,
+          status: "failed",
+          detail: getErrorMessage(err),
+        })
       } else {
         outcomes.push({
           key: row.key,

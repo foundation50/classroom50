@@ -2,6 +2,7 @@ import type { GitHubClient } from "@/github-core/client"
 import {
   createOrgInvitation,
   ensureOrgMembership,
+  isInvitationLimitError,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { getUserById } from "@/github-core/queries"
@@ -103,7 +104,12 @@ export async function inviteMemberToOrg(
       state = "invited"
     }
   } catch (err) {
-    throw new Error(getErrorMessage(err), { cause: err })
+    throw new Error(
+      isInvitationLimitError(err)
+        ? i18n.t("students.inviteDailyLimit")
+        : getErrorMessage(err),
+      { cause: err },
+    )
   }
 
   // The person now has a live invitation or membership on file, so the old

@@ -527,6 +527,7 @@
     "inviteRosterMalformedId": "Can't invite {{username}}: \"{{githubId}}\" isn't a valid GitHub id. Fix the github_id cell in roster.csv.",
     "inviteRosterNoUsername": "{{label}} has no GitHub username on file. Add one before inviting.",
     "inviteRosterDeferred": "GitHub rate-limited the invitation to {{label}}. Wait a few minutes, then try again.",
+    "inviteDailyLimit": "GitHub's daily invitation limit for this organization is used up. Organizations under a month old or on the free plan can send 50 invitations a day, others 500. Try again tomorrow.",
     "inviteRosterNoneSent": "No invitation was sent to {{label}}. GitHub reports they're already invited or already a member. Refresh the roster to see the current state.",
     "filterAll": "All members",
     "filterEnrolled": "Enrolled",
