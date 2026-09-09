@@ -139,7 +139,15 @@ export const runInviteMember = async (
   try {
     const result = await inviteMemberToOrg(client, { org, row })
     const who = result.currentUsername ? `@${result.currentUsername}` : label
-    handlers.onSuccess(t("toasts.invited", { who, org }))
+    // Nothing new went out for pending/active: say so, and where to act, rather
+    // than claim an invitation was sent.
+    handlers.onSuccess(
+      result.state === "invited"
+        ? t("toasts.invited", { who, org })
+        : result.state === "pending"
+          ? t("orgMembers.inviteAlreadyPending", { who, org })
+          : t("orgMembers.inviteAlreadyMember", { who, org }),
+    )
     onDone()
   } catch (err) {
     handlers.onError(

@@ -3665,6 +3665,8 @@
     "removing": "Removing…",
     "removeFromOrg": "Remove from organization",
     "inviteFailed": "Couldn't invite {{label}}: {{reason}}",
+    "inviteAlreadyPending": "{{who}} already has a pending invitation to {{org}}, so nothing new was sent. Resend or cancel it from their row on the classroom roster.",
+    "inviteAlreadyMember": "{{who}} is already a member of {{org}}, so nothing new was sent. Refresh to see the current state.",
     "somethingWrong": "the action couldn't finish",
     "removed": "{{label}} was removed from the {{org}} organization.",
     "removedWithUnenroll_one": "{{label}} was removed from the {{org}} organization and unenrolled from {{count}} classroom.",
