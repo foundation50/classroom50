@@ -897,7 +897,7 @@ describe("sortTeamRosterRowsBy — table-header column sorts", () => {
 
 describe("buildTeamRoster — failed/expired invitations (org-wide list, roster-attributed)", () => {
   // The shape GitHub returns for an invite nobody accepted for 7 days
-  // (verified live against classroom50-summer-dev, 2026-09-09).
+  // (verified against a live organization, 2026-09-09).
   const EXPIRED_REASON =
     "Invitation expired. User did not accept this invite for 7 days"
   const expired = (over: Partial<GitHubOrgInvitation>) =>

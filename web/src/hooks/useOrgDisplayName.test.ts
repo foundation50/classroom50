@@ -28,13 +28,13 @@ beforeEach(() => {
 describe("useOrgDisplayName", () => {
   it("returns the org's display name from GET /orgs/{login}", async () => {
     request.mockResolvedValue({
-      login: "classroom50-summer-dev",
+      login: "cs50-fall-2026",
       id: 1,
-      name: "Classroom 50 Summer Dev",
+      name: "CS50 Fall 2026",
     })
-    const { result } = setup("classroom50-summer-dev")
-    await waitFor(() => expect(result.current).toBe("Classroom 50 Summer Dev"))
-    expect(request).toHaveBeenCalledWith("/orgs/classroom50-summer-dev")
+    const { result } = setup("cs50-fall-2026")
+    await waitFor(() => expect(result.current).toBe("CS50 Fall 2026"))
+    expect(request).toHaveBeenCalledWith("/orgs/cs50-fall-2026")
   })
 
   it("returns undefined when the org has no display name", async () => {

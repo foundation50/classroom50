@@ -41,11 +41,11 @@ const summary = (
   role: "admin" | "member" = "admin",
 ): Classroom50OrgSummary => ({
   org: {
-    login: "classroom50-summer-dev",
+    login: "cs50-fall-2026",
     id: 4242,
     avatar_url: "https://example.com/a.png",
-    description: "Summer cohort",
-    html_url: "https://github.com/classroom50-summer-dev",
+    description: "Fall cohort",
+    html_url: "https://github.com/cs50-fall-2026",
   },
   membership: { state: "active", role },
   classroom50: {
@@ -67,14 +67,14 @@ describe("OrgDetailsModal", () => {
   it("shows the display name, slug, plan, org id, and owner role in view mode", () => {
     planDetails.mockReturnValue({
       data: {
-        name: "Classroom 50 Summer Dev",
-        description: "Summer cohort",
+        name: "CS50 Fall 2026",
+        description: "Fall cohort",
         plan: { name: "team" },
       },
     })
     render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
-    expect(screen.getByText("Classroom 50 Summer Dev")).toBeTruthy()
-    expect(screen.getByText("classroom50-summer-dev")).toBeTruthy()
+    expect(screen.getByText("CS50 Fall 2026")).toBeTruthy()
+    expect(screen.getByText("cs50-fall-2026")).toBeTruthy()
     expect(screen.getByText("team")).toBeTruthy()
     expect(screen.getByText("4242")).toBeTruthy()
     expect(screen.getByText("orgs.detailsModal.roleAdmin")).toBeTruthy()
@@ -84,9 +84,7 @@ describe("OrgDetailsModal", () => {
   it("falls back to the slug heading when no display name is set", () => {
     planDetails.mockReturnValue({ data: { name: null } })
     render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
-    expect(
-      screen.getAllByText("classroom50-summer-dev").length,
-    ).toBeGreaterThan(0)
+    expect(screen.getAllByText("cs50-fall-2026").length).toBeGreaterThan(0)
   })
 
   it("for a non-owner: hides Edit, Manage link, plan, and org id", () => {

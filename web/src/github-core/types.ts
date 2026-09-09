@@ -220,8 +220,8 @@ export type MyTeam = GitHubTeam & {
 export type GitHubOrgDetails = {
   login: string
   id: number
-  // Org display name (the human-friendly name shown on GitHub), e.g., "Classroom
-  // 50 Summer Dev" for the `classroom50-summer-dev` login. Only GET /orgs/{org}
+  // Org display name (the human-friendly name shown on GitHub), e.g., "CS50
+  // Fall 2026" for the `cs50-fall-2026` login. Only GET /orgs/{org}
   // returns it; the membership list does not. Optional/nullable — fall back to
   // the login when absent.
   name?: string | null
