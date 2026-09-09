@@ -610,7 +610,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		u.Warn("this assignment creates a PUBLIC repository: your work (code, commits, name) will be visible to anyone on the internet")
 	}
 	if entry.Pages != nil {
-		u.Note("GitHub Pages is enabled for this assignment: it can show files from your repository as a website at %s once you publish something (your teacher will tell you what to build). Anyone on the internet can view the site, even when the repository is private",
+		u.Note("GitHub Pages is enabled for this assignment: your repository can publish a website at %s, and anyone on the internet can view it, even when the repository is private",
 			studentPagesURL(org, reponame.Name(classroom, assignment, ownerSegment)))
 	}
 	createMsg := fmt.Sprintf("Creating %s repository for %s", visibilityWord, assignment)

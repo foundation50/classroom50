@@ -2768,7 +2768,7 @@
     },
     "pagesSite": {
       "enabled": "GitHub Pages is enabled for this assignment",
-      "help": "GitHub Pages can show files from your repository as a website at {{url}}. Nothing appears there until you publish something; your teacher will tell you what to build. Anyone on the internet can view the site, even when the repository is private."
+      "help": "Your repository can publish a website at {{url}}. Anyone on the internet can view it, even when the repository is private."
     },
     "steps": {
       "account": "Checking your GitHub account",
