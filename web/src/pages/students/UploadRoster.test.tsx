@@ -191,11 +191,21 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     await user.selectOptions(roleSelect, "teacher")
 
     expect(send.disabled).toBe(true)
+    // The disabled button explains itself: the reason is reachable as the
+    // tooltip trigger's accessible name and as the button's title.
+    expect(
+      screen.getByRole("button", { name: "students.uploadBlockedRoles" }),
+    ).toBeTruthy()
+    expect(primaryButton().title).toBe("students.uploadBlockedRoles")
 
     // Ticking the confirmation enables the import.
     const checkbox = screen.getByRole("checkbox") as HTMLInputElement
     await user.click(checkbox)
     await waitFor(() => expect(primaryButton().disabled).toBe(false))
+    expect(
+      screen.queryByRole("button", { name: "students.uploadBlockedRoles" }),
+    ).toBeNull()
+    expect(primaryButton().title).toBe("")
 
     // And it actually sends when clicked.
     bulkInviteByEmail.mockResolvedValue({

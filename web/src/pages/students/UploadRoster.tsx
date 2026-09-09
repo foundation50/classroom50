@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { DownloadIcon, UploadIcon } from "@/components/ui/icons"
+import { AlertIcon, DownloadIcon, UploadIcon } from "@/components/ui/icons"
 
 import { resolveRosterUploadContext } from "@/domain/students"
 import type {
@@ -11,7 +11,7 @@ import type {
   RosterUploadContext,
 } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
-import { Alert, Button, Checkbox, Modal } from "@/components/ui"
+import { Alert, Button, Checkbox, HelpTooltip, Modal } from "@/components/ui"
 import { BulkProgressRow, bulkProgressPct } from "@/components/bulk/resultView"
 import {
   classifyRosterUpload,
@@ -559,6 +559,22 @@ const UploadRoster = ({
     (!needsMetadataConfirm || metadataConfirmed) &&
     (!needsMismatchConfirm || mismatchConfirmed)
 
+  // Why the primary button is disabled, as the first unmet gate in the order
+  // the teacher clears them. The "no changes" case needs none: the label says
+  // it. Shown as a tooltip beside the button (a natively disabled button can't
+  // be hovered in every browser) and as the button's title where it can.
+  const disabledReason = (() => {
+    if (canProcess) return null
+    if (preflighting) return t("students.uploadBlockedChecking")
+    if (needsRoleConfirm && !roleChangesConfirmed)
+      return t("students.uploadBlockedRoles")
+    if (needsMetadataConfirm && !metadataConfirmed)
+      return t("students.uploadBlockedDetails")
+    if (needsMismatchConfirm && !mismatchConfirmed)
+      return t("students.uploadBlockedUsernames")
+    return null
+  })()
+
   // The roster primary-button label names the action and its scale. Counts here
   // come from inviteCount / metadataUpdate — never the row total — so the button
   // can't claim more people than the notice above it says will be contacted.
@@ -771,9 +787,19 @@ const UploadRoster = ({
               <Button variant="ghost" onClick={resetToDropZone}>
                 {t("common.cancel")}
               </Button>
+              {/* tooltip-left: the bubble opens toward Cancel, not past the
+                  modal box's edge (the box clips, per the overlay rule). */}
+              {disabledReason ? (
+                <HelpTooltip
+                  help={disabledReason}
+                  position="left"
+                  icon={AlertIcon}
+                />
+              ) : null}
               <Button
                 variant="primary"
                 disabled={!canProcess}
+                title={disabledReason ?? undefined}
                 onClick={startImport}
               >
                 {rosterPrimaryLabel}
