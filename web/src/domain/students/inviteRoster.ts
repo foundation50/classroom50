@@ -251,9 +251,10 @@ export type BulkInviteByEmailInput = {
     first_name?: string
     last_name?: string
     section?: string
-    // A live invitation for the address to replace (a resend). GitHub refuses a
-    // second invitation for an address that already has one, so it is
-    // cancelled right before the create, once every batch precondition has
+    // A live invitation for the address to replace (a resend). Posting an
+    // address that already has one returns the existing invitation unchanged
+    // (same id, original created_at), so a real resend must cancel it first.
+    // That happens right before the create, once every batch precondition has
     // passed; a create that then fails restores it.
     pendingInvitationId?: number
     // GitHub's failed records for the address, dismissed once the fresh invite
