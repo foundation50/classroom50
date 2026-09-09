@@ -25,7 +25,6 @@ export const RosterRow = ({
   onToggle,
   selectable = true,
   showSection = false,
-  showStatus = true,
 }: {
   row: TeamRosterRow
   selfRow: boolean
@@ -41,9 +40,6 @@ export const RosterRow = ({
   onToggle: (key: string) => void
   // Whether the table renders the Section column (only when some row has one).
   showSection?: boolean
-  // Whether the table renders the Status column (only when some row is not
-  // plainly enrolled — a fully healthy roster has nothing to report there).
-  showStatus?: boolean
 }) => {
   const { t } = useTranslation()
   const member = rosterRowToMemberRow(row)
@@ -118,21 +114,17 @@ export const RosterRow = ({
           )}
         </td>
       ) : null}
-      {showStatus ? (
-        <td>
-          {row.state !== "enrolled" ? (
-            <Badge
-              size="sm"
-              tone={STATE_BADGE_TONE[row.state]}
-              className="whitespace-nowrap"
-            >
-              {t(STATE_LABEL_KEY[row.state])}
-            </Badge>
-          ) : (
-            <CellPlaceholder />
-          )}
-        </td>
-      ) : null}
+      <td>
+        {/* Same state -> badge recipe as the detail modal, enrolled included,
+            so the table and the modal never disagree about a row's status. */}
+        <Badge
+          size="sm"
+          tone={STATE_BADGE_TONE[row.state]}
+          className="whitespace-nowrap"
+        >
+          {t(STATE_LABEL_KEY[row.state])}
+        </Badge>
+      </td>
       <td className="w-0 ps-2">
         <div className="flex items-center justify-end">
           <ChevronRightIcon

@@ -92,14 +92,15 @@ import { FailedInvitationsList } from "./FailedInvitationsList"
 import { RosterParseProblems } from "./RosterParseProblems"
 import { RosterWarnings } from "./RosterWarnings"
 
-// One bar recipe per column: select, member, username, roles, actions. Loading
-// starts with no rows, so the conditional Section and Status columns (present
-// only when some row carries one) are never part of the skeleton.
+// One bar recipe per column: select, member, username, roles, status, actions.
+// Loading starts with no rows, so the conditional Section column (present only
+// when some row carries one) is never part of the skeleton.
 const SKELETON_BARS = [
   "size-5",
   "h-4 w-40",
   "h-4 w-32",
   "h-6 w-20",
+  "h-5 w-16",
   "ms-auto h-4 w-4",
 ]
 
@@ -666,16 +667,11 @@ const EnrolledStudents = ({
 
   // The Section column exists only when some row carries a section label —
   // derived from the status-independent sectionOptions so toggling a filter
-  // can't add/remove a column mid-view. Status follows the same rule: a fully
-  // enrolled roster has nothing to report there, so the column only appears
-  // while some row is pending or needs attention (derived from ALL rows, so
-  // filtering can't add/remove it mid-view either).
+  // can't add/remove a column mid-view. Status is always shown: every row has
+  // a state, and a column that came and went as students accepted invites read
+  // as a bug, not as "nothing to report".
   const showSection = sectionOptions.length > 0
-  const showStatus = useMemo(
-    () => rows.some((r) => r.state !== "enrolled"),
-    [rows],
-  )
-  const colCount = 5 + (showSection ? 1 : 0) + (showStatus ? 1 : 0)
+  const colCount = 6 + (showSection ? 1 : 0)
 
   // The combined "Show" select folds the status and role filters into ONE
   // control (mirroring the submissions status select): picking a status
@@ -719,7 +715,6 @@ const EnrolledStudents = ({
       onCheckboxClick={handleRowCheckboxClick}
       onToggle={handleToggleRow}
       showSection={showSection}
-      showStatus={showStatus}
     />
   )
 
@@ -1025,15 +1020,13 @@ const EnrolledStudents = ({
                     onSortChange={setTableSort}
                   />
                 ) : null}
-                {showStatus ? (
-                  <SortableTh
-                    label={t("students.table.colStatus")}
-                    sort={tableSort ?? undefined}
-                    asc="status-asc"
-                    desc="status-desc"
-                    onSortChange={setTableSort}
-                  />
-                ) : null}
+                <SortableTh
+                  label={t("students.table.colStatus")}
+                  sort={tableSort ?? undefined}
+                  asc="status-asc"
+                  desc="status-desc"
+                  onSortChange={setTableSort}
+                />
                 <th scope="col" className="w-0">
                   <span className="sr-only">
                     {t("students.table.colActions")}

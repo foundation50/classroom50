@@ -346,12 +346,16 @@ describe("EnrolledStudents — rendered phase views", () => {
     expect(order()).toBe("zed-first")
   })
 
-  // The Status column only exists while some row has something to report
-  // (pending / needs attention) — a fully enrolled roster drops it.
-  it("shows the Status column only when a row is not plainly enrolled", () => {
+  // Status is a permanent column: enrolled rows show an explicit "Enrolled"
+  // badge (the same recipe the detail modal uses) rather than an empty cell,
+  // so the table and the modal never disagree about a row's state.
+  it("always shows the Status column, with an Enrolled badge for healthy rows", () => {
     useTeamRoster.mockReturnValue(populatedRoster)
     render(renderView())
-    expect(screen.queryByText("students.table.colStatus")).toBeNull()
+    expect(screen.getByText("students.table.colStatus")).not.toBeNull()
+    expect(screen.getAllByText("students.statusEnrolled")).toHaveLength(
+      populatedRoster.rows.length,
+    )
 
     cleanup()
     useTeamRoster.mockReturnValue({
@@ -372,6 +376,7 @@ describe("EnrolledStudents — rendered phase views", () => {
     })
     render(renderView())
     expect(screen.getByText("students.table.colStatus")).not.toBeNull()
+    expect(screen.getByText("students.statusPending")).not.toBeNull()
   })
 
   // The Sync button is a standing affordance now (not drift-gated): always in
