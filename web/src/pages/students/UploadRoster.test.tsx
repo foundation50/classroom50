@@ -39,9 +39,8 @@ vi.mock("@/domain/students", async (importOriginal) => {
   return {
     ...actual,
     bulkInviteByEmail: (...args: unknown[]) => bulkInviteByEmail(...args),
-    // runRosterImport sends through the shared reinviteEmailRows recipe, which
-    // wraps bulkInviteByEmail. Forward to the same spy with the per-target ids
-    // folded to bulkInviteByEmail's shape, so assertions read one payload.
+    // runRosterImport calls reinviteEmailRows, which wraps bulkInviteByEmail.
+    // Forward to that spy in bulkInviteByEmail's shape so one payload is asserted.
     reinviteEmailRows: (
       client: unknown,
       input: {
@@ -215,8 +214,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     await user.selectOptions(roleSelect, "teacher")
 
     expect(send.disabled).toBe(true)
-    // The disabled button explains itself: the reason is reachable as the
-    // tooltip trigger's accessible name and as the button's title.
+    // The reason is the tooltip trigger's accessible name and the button's title.
     expect(
       screen.getByRole("button", { name: "students.uploadBlockedRoles" }),
     ).toBeTruthy()
@@ -841,17 +839,15 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
 
     await uploadFile(user, file("roster.csv", "email\npending@x.edu\n"))
 
-    // Nothing would be sent, so the button says so and stays disabled rather
-    // than offering "Confirm changes" over a no-op.
+    // Nothing would be sent, so the button says so and stays disabled.
     const button = await waitFor(() =>
       screen.getByRole("button", { name: "students.noChangesToApply" }),
     )
     expect(button.disabled).toBe(true)
   })
 
-  // When the roster page's rows are available, the upload knows each address's
-  // standing and acts on it: an expired invitation is re-sent with its failed
-  // record (so the send can dismiss it), a live one is left alone and reported.
+  // With the roster's rows, an expired address is re-sent with its failed record
+  // and a live-pending one is left alone and reported.
   it("re-sends an expired address with its failed record and leaves a pending one alone", async () => {
     const user = userEvent.setup()
     resolveRosterUploadContext.mockResolvedValue({
@@ -912,7 +908,7 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
       file("roster.csv", "email\nexpired@x.edu\npending@x.edu\nnew@x.edu\n"),
     )
 
-    // Two invitations go out (expired + new); the pending one is not counted.
+    // Expired + new are invitations; the pending one is not counted.
     await waitFor(() =>
       expect(
         screen.getByRole("button", {
@@ -945,7 +941,7 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     )
 
     await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
-    // The expired address carries its failed record; the pending one is absent.
+    // The expired address carries its failed record; the pending one isn't sent.
     expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
       invites: [
         { email: "expired@x.edu", failedInvitationIds: [79153766] },
@@ -1090,7 +1086,7 @@ describe("UploadRoster resolve-before-invite email links", () => {
     await waitFor(() =>
       expect(screen.getByText(/students.emailLinksNotice:1/)).toBeTruthy(),
     )
-    // Linking needs no confirmation: on by default, nothing gates the button.
+    // On by default, so nothing gates the button.
     expect(linkBox().checked).toBe(true)
     await waitFor(() => expect(primaryButton().disabled).toBe(false))
     // The button counts only the address that will actually be invited.
@@ -1143,21 +1139,20 @@ describe("UploadRoster resolve-before-invite email links", () => {
     await uploadFile(user, file("roster.csv", "email\nzoe@x.edu\n"))
     await waitFor(() => expect(linkBox().checked).toBe(true))
 
-    // Clicking to uncheck does NOT uncheck: the panel opens and the box holds.
+    // Clicking to uncheck opens the panel; the box stays checked.
     await user.click(linkBox())
     expect(screen.getByText("students.emailLinksUnlinkTitle")).toBeTruthy()
     expect(linkBox().checked).toBe(true)
 
-    // The panel's own Cancel (the modal footer has one too) closes it; still
-    // linking.
+    // The panel's own Cancel (the footer has one too) closes it; still linking.
     const panel = () =>
       screen.getByRole("group", { name: "students.emailLinksUnlinkTitle" })
     await user.click(within(panel()).getByText("common.cancel"))
     expect(screen.queryByText("students.emailLinksUnlinkTitle")).toBeNull()
     expect(linkBox().checked).toBe(true)
 
-    // Confirming declines the link: box unchecks, the notice says what happens
-    // instead, and the row is now an invite.
+    // Confirming declines: the box unchecks, the notice changes, the row is
+    // now an invitation.
     await user.click(linkBox())
     await user.click(screen.getByText("students.emailLinksUnlinkConfirm"))
     expect(screen.queryByText("students.emailLinksUnlinkTitle")).toBeNull()
@@ -1167,8 +1162,7 @@ describe("UploadRoster resolve-before-invite email links", () => {
       "students.importAndInviteMembers:1",
     )
 
-    // A role edit re-arms the content confirmations, but not this decision:
-    // undoing an explicit decline without a word would surprise.
+    // A role edit doesn't undo the decline.
     await user.click(screen.getByText("students.summaryViewDetails"))
     await user.selectOptions(
       screen.getByLabelText("students.assignRoleLabel"),
@@ -1188,8 +1182,6 @@ describe("UploadRoster resolve-before-invite email links", () => {
       invites: [{ email: "zoe@x.edu" }],
     })
     expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
-
-    // Re-checking the box is immediate (no acknowledgement to link).
   })
 
   it("appends the degraded warning to the links notice", async () => {

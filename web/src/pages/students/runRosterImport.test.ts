@@ -26,9 +26,8 @@ vi.mock("@/domain/students", () => {
     applyClassroomRoleChange: (...a: unknown[]) =>
       applyClassroomRoleChange(...a),
     bulkInviteByEmail: (...a: unknown[]) => bulkInviteByEmail(...a),
-    // runRosterImport sends through the shared reinviteEmailRows recipe, which
-    // wraps bulkInviteByEmail. Forward to the same spy with the per-target ids
-    // folded to bulkInviteByEmail's shape, so assertions read one payload.
+    // runRosterImport calls reinviteEmailRows, which wraps bulkInviteByEmail.
+    // Forward to that spy in bulkInviteByEmail's shape so one payload is asserted.
     reinviteEmailRows: (
       client: unknown,
       input: {
