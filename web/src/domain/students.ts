@@ -22,6 +22,11 @@ export {
   retireEmailInvites,
 } from "./students/retireEmailInvite"
 export {
+  reinviteUnlinkedRow,
+  type ReinviteUnlinkedRowInput,
+  type ReinviteUnlinkedRowResult,
+} from "./students/reinviteUnlinkedRow"
+export {
   addStudentToClassroom,
   addStudentToClassroomWithConflictRetry,
   inviteByEmail,

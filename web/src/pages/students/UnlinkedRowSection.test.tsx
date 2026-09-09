@@ -19,6 +19,28 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
 }))
 
+// The re-invite goes through its mutation hook; stub it with a mutate that
+// honours the call-site onSuccess/onError split the component relies on.
+const reinviteMutate = vi.fn()
+let reinviteOutcome: { ok: { status: string } } | { error: Error } | undefined
+vi.mock("@/hooks/mutations/useReinviteUnlinkedRow", () => ({
+  useReinviteUnlinkedRow: () => ({
+    isPending: false,
+    mutate: (
+      vars: unknown,
+      opts: {
+        onSuccess?: (r: { status: string }) => void
+        onError?: (e: Error) => void
+      },
+    ) => {
+      reinviteMutate(vars)
+      if (!reinviteOutcome) return
+      if ("ok" in reinviteOutcome) opts.onSuccess?.(reinviteOutcome.ok)
+      else opts.onError?.(reinviteOutcome.error)
+    },
+  }),
+}))
+
 const linkRosterRowToMember = vi.fn()
 const removeUnlinkedRows = vi.fn()
 vi.mock("@/domain/students", () => ({
@@ -73,6 +95,13 @@ const row: TeamRosterRow = {
   avatar_url: "",
 }
 
+// An email row whose invitation is no longer pending: the re-invite target.
+const emailRow: TeamRosterRow = {
+  ...row,
+  key: "unlinked:grace@uni.edu",
+  email: "grace@uni.edu",
+}
+
 const candidates = [
   { id: 42, login: "ghopper", classrooms: ["cs101"] },
   { id: 43, login: "other", classrooms: [] },
@@ -86,6 +115,7 @@ const orgCandidates = [
 ]
 
 const renderSection = ({
+  rosterRow = row,
   onWorkingChange = vi.fn(),
   onChanged = vi.fn(),
   onClose = vi.fn(),
@@ -101,7 +131,7 @@ const renderSection = ({
     <UnlinkedRowSection
       org="acme"
       classroom="cs101"
-      row={row}
+      row={rosterRow}
       linkCandidates={candidates}
       orgLinkCandidates={orgLinkCandidates}
       orgPoolStatus={orgPoolStatus}
@@ -127,9 +157,73 @@ const pickGhopper = () => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
+  reinviteOutcome = undefined
 })
 
 describe("UnlinkedRowSection", () => {
+  it("offers Re-invite only for a row that has an address", () => {
+    renderSection()
+    expect(screen.queryByText("students.reinvite")).toBeNull()
+    expect(screen.getByText("students.linkIntro")).not.toBeNull()
+
+    cleanup()
+    renderSection({ rosterRow: emailRow })
+    expect(screen.getByText("students.reinvite")).not.toBeNull()
+    expect(screen.getByText("students.unlinkedEmailIntro")).not.toBeNull()
+  })
+
+  it("re-invites the address with the row's role and closes once sent", async () => {
+    reinviteOutcome = { ok: { status: "sent" } }
+    const { onChanged, onClose, onError } = renderSection({
+      rosterRow: emailRow,
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("students.reinvite"))
+    })
+
+    expect(reinviteMutate).toHaveBeenCalledWith({
+      email: "grace@uni.edu",
+      role: "student",
+    })
+    expect(onChanged).toHaveBeenCalledWith("unlinked:grace@uni.edu")
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onError).not.toHaveBeenCalled()
+  })
+
+  it("stays open with next-step copy when GitHub sent nothing", async () => {
+    reinviteOutcome = { ok: { status: "already-invited-or-member" } }
+    const { onChanged, onClose, onError } = renderSection({
+      rosterRow: emailRow,
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("students.reinvite"))
+    })
+
+    expect(onError).toHaveBeenCalledWith(
+      "unlinked:grace@uni.edu",
+      "students.reinviteRowAlreadyInvited",
+    )
+    expect(onChanged).not.toHaveBeenCalled()
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it("surfaces a thrown re-invite failure", async () => {
+    reinviteOutcome = { error: new Error("boom") }
+    const { onClose, onError } = renderSection({ rosterRow: emailRow })
+
+    await act(async () => {
+      fireEvent.click(screen.getByText("students.reinvite"))
+    })
+
+    expect(onError).toHaveBeenCalledWith(
+      "unlinked:grace@uni.edu",
+      "students.reinviteRowFailed",
+    )
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it("links the picked member, filtering candidates by classroom too", async () => {
     linkRosterRowToMember.mockResolvedValue({ teamAdd: "ok" })
     const { onWorkingChange, onChanged, onClose, onError } = renderSection()

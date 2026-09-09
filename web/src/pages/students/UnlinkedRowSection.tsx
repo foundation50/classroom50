@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button, Checkbox } from "@/components/ui"
+import { PaperAirplaneIcon } from "@/components/ui/icons"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   linkRosterRowToMember,
@@ -14,17 +15,19 @@ import {
   type DirectoryMember,
 } from "@/domain/students"
 import { getErrorMessage } from "@/github-core/errorMessage"
+import { useReinviteUnlinkedRow } from "@/hooks/mutations/useReinviteUnlinkedRow"
 import { nameFromParts } from "@/util/students"
-import type { TeamRosterRow } from "@/util/teamRoster"
+import { sortRolesByRank, type TeamRosterRow } from "@/util/teamRoster"
 import MemberLinkPicker, {
   type OrgPoolStatus,
 } from "@/pages/students/MemberLinkPicker"
 
-// The member modal's unlinked-row reconciliation section: link the row to an
-// org member, or remove it. The picker offers only unclaimed active members;
-// the actual link re-proves everything at commit time (domain guards). Owns
-// the picker/confirm state, so the parent remounts it (via `key`) on open or
-// row-identity change instead of hand-resetting each field.
+// The member modal's unlinked-row reconciliation section: re-invite the address
+// (email rows only), link the row to an org member, or remove it. The picker
+// offers only unclaimed active members; the actual link re-proves everything at
+// commit time (domain guards). Owns the picker/confirm state, so the parent
+// remounts it (via `key`) on open or row-identity change instead of
+// hand-resetting each field.
 const UnlinkedRowSection = ({
   org,
   classroom,
@@ -70,8 +73,10 @@ const UnlinkedRowSection = ({
   const [includeOrgMembers, setIncludeOrgMembers] = useState(false)
   const [removingRow, setRemovingRow] = useState(false)
   const [confirmingRemoveRow, setConfirmingRemoveRow] = useState(false)
+  const reinvite = useReinviteUnlinkedRow(org, classroom)
 
-  const working = linking || removingRow
+  const email = row.email.trim()
+  const working = linking || removingRow || reinvite.isPending
   // Reset on unmount too: a success closes the modal while `working` is still
   // true for that render, so the parent would otherwise never see the trailing
   // false (same shape as EditStudentForm's onSubmittingChange).
@@ -127,6 +132,40 @@ const UnlinkedRowSection = ({
     }
   }
 
+  // Success closes the modal: the fresh invitation re-claims this row, so the
+  // roster shows it as "Pending invite" once the invite queries refetch. Every
+  // non-sent outcome stays open with copy that says what to do instead.
+  const handleReinvite = () => {
+    if (reinvite.isPending || !email) return
+    const role = sortRolesByRank(row.roles)[0] ?? "student"
+    reinvite.mutate(
+      { email, role },
+      {
+        onSuccess: (result) => {
+          if (result.status === "sent") {
+            onChanged(row.key)
+            onClose()
+            return
+          }
+          onError(
+            row.key,
+            result.status === "rate-limited"
+              ? t("students.reinviteRowRateLimited", { email })
+              : t("students.reinviteRowAlreadyInvited", { email }),
+          )
+        },
+        onError: (err) =>
+          onError(
+            row.key,
+            t("students.reinviteRowFailed", {
+              email,
+              error: getErrorMessage(err),
+            }),
+          ),
+      },
+    )
+  }
+
   const handleRemoveRow = async () => {
     if (removingRow) return
     setRemovingRow(true)
@@ -158,7 +197,32 @@ const UnlinkedRowSection = ({
 
   return (
     <section className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-200/40 p-4">
-      <p className="text-sm text-base-content/80">{t("students.linkIntro")}</p>
+      <p className="text-sm text-base-content/80">
+        {email
+          ? t("students.unlinkedEmailIntro", { email })
+          : t("students.linkIntro")}
+      </p>
+      {email ? (
+        <div className="flex justify-end">
+          <Button
+            variant="primary"
+            size="sm"
+            loading={reinvite.isPending}
+            loadingLabel={t("common.working")}
+            disabled={busy}
+            onClick={handleReinvite}
+          >
+            {reinvite.isPending ? (
+              t("common.working")
+            ) : (
+              <>
+                <PaperAirplaneIcon aria-hidden="true" className="size-4" />
+                {t("students.reinvite")}
+              </>
+            )}
+          </Button>
+        </div>
+      ) : null}
       <div className="flex items-start gap-2">
         <MemberLinkPicker
           id="roster-link-member"

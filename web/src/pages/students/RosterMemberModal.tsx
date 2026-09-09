@@ -270,9 +270,10 @@ const RosterMemberModal = ({
     typeof row.invitation_id === "number"
   const needsRole = canManage && row.state === "needs_attention_in_org"
   const needsInvite = canManage && row.state === "needs_attention_not_in_org"
-  // An UNLINKED row (no GitHub identity) offers exactly two actions: link it
-  // to an org member, or remove it. Everything identity-keyed above is
-  // structurally unavailable (no username/id, no invitation).
+  // An UNLINKED row (no GitHub identity) is handled by UnlinkedRowSection:
+  // re-invite the address (email rows), link the row to an org member, or
+  // remove it. Everything identity-keyed above is structurally unavailable (no
+  // username/id, no live invitation).
   const canLink = canManage && row.state === "unlinked"
   // Unenroll drops a roster.csv row + student-team membership — a student-only
   // action. Hidden for a staff-only row (nothing to unenroll from the roster),
@@ -644,10 +645,11 @@ const RosterMemberModal = ({
           </p>
         ) : null}
 
-        {/* Unlinked-row reconciliation: link the row to an org member, or
-            remove it. Keyed on open + row identity so the section's own state
-            (picker text/selection, remove confirm) resets the way the modal's
-            other per-row drafts do — by remount instead of hand-resets. */}
+        {/* Unlinked-row reconciliation: re-invite the address, link the row
+            to an org member, or remove it. Keyed on open + row identity so the
+            section's own state (picker text/selection, remove confirm) resets
+            the way the modal's other per-row drafts do — by remount instead of
+            hand-resets. */}
         {canLink ? (
           <UnlinkedRowSection
             key={`${open}:${row.key}`}
