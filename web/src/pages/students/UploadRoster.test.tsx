@@ -39,6 +39,30 @@ vi.mock("@/domain/students", async (importOriginal) => {
   return {
     ...actual,
     bulkInviteByEmail: (...args: unknown[]) => bulkInviteByEmail(...args),
+    // runRosterImport sends through the shared reinviteEmailRows recipe, which
+    // wraps bulkInviteByEmail. Forward to the same spy with the per-target ids
+    // folded to bulkInviteByEmail's shape, so assertions read one payload.
+    reinviteEmailRows: (
+      client: unknown,
+      input: {
+        org: string
+        classroom: string
+        targets: Array<
+          Record<string, unknown> & { failedInvitationId?: number }
+        >
+        onProgress?: unknown
+      },
+    ) =>
+      bulkInviteByEmail(client, {
+        org: input.org,
+        classroom: input.classroom,
+        invites: input.targets.map(({ failedInvitationId, ...t }) => ({
+          ...t,
+          failedInvitationIds:
+            failedInvitationId === undefined ? undefined : [failedInvitationId],
+        })),
+        onProgress: input.onProgress,
+      }),
     resolveRosterUploadContext: (...args: unknown[]) =>
       resolveRosterUploadContext(...args),
     inviteRosterStudents: (...args: unknown[]) => inviteRosterStudents(...args),
@@ -772,6 +796,118 @@ describe("UploadRoster email-identity rows in a roster CSV", () => {
     expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
       invites: [{ email: "zoe@x.edu" }, { email: "newbie@x.edu" }],
     })
+  })
+
+  // When the roster page's rows are available, the upload knows each address's
+  // standing and acts on it: an expired invitation is re-sent with its failed
+  // record (so the send can dismiss it), a live one is left alone and reported.
+  it("re-sends an expired address with its failed record and leaves a pending one alone", async () => {
+    const user = userEvent.setup()
+    resolveRosterUploadContext.mockResolvedValue({
+      ...stubContext,
+      claimedEmails: new Set(["expired@x.edu", "pending@x.edu"]),
+    })
+    classifyRosterUpload.mockReturnValue({
+      noAction: [],
+      needsInvite: [],
+      enroll: [],
+      roleChanges: [],
+      metadataUpdate: [],
+      identityMismatches: [],
+      allAlreadyMembers: true,
+    })
+    const rosterRow = (over: Record<string, unknown>) => ({
+      key: "k",
+      state: "unlinked",
+      roles: ["student"],
+      username: "",
+      github_id: "",
+      first_name: "",
+      last_name: "",
+      section: "",
+      email: "",
+      avatar_url: "",
+      ...over,
+    })
+    renderModal(
+      <UploadRoster
+        org="acme"
+        classroom="cs50"
+        client={client}
+        open={true}
+        rosterRows={
+          [
+            rosterRow({
+              email: "expired@x.edu",
+              failed_invitation: {
+                id: 79153766,
+                kind: "expired",
+                failed_at: null,
+                reason: null,
+              },
+            }),
+            rosterRow({
+              email: "pending@x.edu",
+              state: "pending",
+              invitation_id: 42,
+            }),
+          ] as never
+        }
+      />,
+    )
+
+    await uploadFile(
+      user,
+      file("roster.csv", "email\nexpired@x.edu\npending@x.edu\nnew@x.edu\n"),
+    )
+
+    // Two invitations go out (expired + new); the pending one is not counted.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", {
+          name: "students.importAndInviteMembers:2",
+        }),
+      ).toBeTruthy(),
+    )
+    await user.click(screen.getByText("students.summaryViewDetails"))
+    expect(screen.getByText("students.previewResendExpired")).toBeTruthy()
+    expect(screen.getByText("students.previewAlreadyPending")).toBeTruthy()
+    expect(screen.getByText("students.previewInviteByEmail")).toBeTruthy()
+
+    bulkEnrollStudentsInClassroom.mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+    })
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [
+        { email: "expired@x.edu", role: "student" },
+        { email: "new@x.edu", role: "student" },
+      ],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    await user.click(
+      screen.getByRole("button", {
+        name: "students.importAndInviteMembers:2",
+      }),
+    )
+
+    await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
+    // The expired address carries its failed record; the pending one is absent.
+    expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
+      invites: [
+        { email: "expired@x.edu", failedInvitationIds: [79153766] },
+        { email: "new@x.edu" },
+      ],
+    })
+    // The result names the address that was left alone and where to resend.
+    await waitFor(() =>
+      expect(
+        screen.getByText("students.emailInviteAlreadyPendingDetail"),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText("pending@x.edu")).toBeTruthy()
   })
 
   it("counts invitations, not rows, in the primary button and notice", async () => {

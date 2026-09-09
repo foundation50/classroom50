@@ -2,7 +2,7 @@ import { getUserById } from "@/github-core/queries"
 import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import { logger } from "@/lib/logger"
-import type { ClassroomRole } from "@/util/teamRoster"
+import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import type { ImportRosterRow, ResolvedEmailLink } from "@/domain/students"
 import type { ParsedImportRow } from "@/pages/students/rosterImportParse"
 
@@ -251,35 +251,73 @@ export async function resolveImportIdentities(
 }
 
 // An email-identity row headed for the invite pass, carrying the role the
-// teacher assigned and any metadata the file supplied.
+// teacher assigned, any metadata the file supplied, and GitHub's failed record
+// for the address's last invitation when the roster attributed one (dismissed
+// once the fresh invitation is confirmed sent; see bulkInviteByEmail).
 export type EmailInviteInput = {
   email: string
   role: ClassroomRole
   first_name?: string
   last_name?: string
   section?: string
+  failedInvitationId?: number
 }
 
-// Resolve-before-invite: split the email rows on the confirmed links. A linked
+// What the classroom roster already knows about an address the upload names:
+// the row's state and, when relevant, the invitation ids behind it. Built from
+// the same TeamRosterRow the roster page renders, so the upload and the roster
+// can't disagree about whether an address is pending or expired.
+export type EmailStanding = {
+  state: TeamRosterRow["state"]
+  invitationId?: number
+  failedInvitationId?: number
+}
+
+export const indexRosterByEmail = (
+  rows: readonly TeamRosterRow[],
+): Map<string, EmailStanding> => {
+  const out = new Map<string, EmailStanding>()
+  for (const row of rows) {
+    const email = row.email.trim().toLowerCase()
+    if (!email || out.has(email)) continue
+    out.set(email, {
+      state: row.state,
+      invitationId: row.invitation_id,
+      failedInvitationId: row.failed_invitation?.id,
+    })
+  }
+  return out
+}
+
+// Resolve-before-invite: split the email rows on the applied links. A linked
 // row imports as an ACCOUNT row under the verified member's current login —
 // the account pipeline enrolls/team-adds it like any other row — and its
-// address leaves the invite list; the rest go to the email-invite pass.
-// File order is preserved within each bucket.
+// address leaves the invite list. Of the rest, an address the roster shows as
+// PENDING already has a live invitation and is not sent again (a re-upload is
+// for adding people and recovering expired rows, not for re-sending every
+// outstanding invitation; the row's own Resend does that). Everything else
+// goes to the email-invite pass, carrying the failed record of an expired row
+// so the send can dismiss it. File order is preserved within each bucket.
 export const splitEmailRowsByLink = (
   emailRows: readonly EmailImportRow[],
   emailLinks: readonly ResolvedEmailLink[],
   roleFor: (identity: ImportIdentity) => ClassroomRole,
+  standingByEmail: ReadonlyMap<string, EmailStanding> = new Map(),
 ): {
   linkedRows: ImportRosterRow[]
   linkedEmails: { email: string; login: string; classroom: string }[]
   emailInvites: EmailInviteInput[]
+  // Addresses with a live invitation on the roster, left alone and reported.
+  alreadyPending: string[]
 } => {
   const linkByEmail = new Map(emailLinks.map((l) => [l.email, l]))
   const linkedRows: ImportRosterRow[] = []
   const linkedEmails: { email: string; login: string; classroom: string }[] = []
   const emailInvites: EmailInviteInput[] = []
+  const alreadyPending: string[] = []
   for (const r of emailRows) {
     const link = linkByEmail.get(r.identity.email)
+    const standing = standingByEmail.get(r.identity.email.toLowerCase())
     if (link) {
       linkedRows.push({
         username: link.login,
@@ -297,6 +335,8 @@ export const splitEmailRowsByLink = (
         login: link.login,
         classroom: link.classroom,
       })
+    } else if (standing?.state === "pending") {
+      alreadyPending.push(r.identity.email)
     } else {
       emailInvites.push({
         email: r.identity.email,
@@ -304,8 +344,9 @@ export const splitEmailRowsByLink = (
         first_name: r.first_name,
         last_name: r.last_name,
         section: r.section,
+        failedInvitationId: standing?.failedInvitationId,
       })
     }
   }
-  return { linkedRows, linkedEmails, emailInvites }
+  return { linkedRows, linkedEmails, emailInvites, alreadyPending }
 }

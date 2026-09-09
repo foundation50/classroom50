@@ -2,7 +2,7 @@ import {
   applyClassroomRoleChange,
   appendUnlinkedRows,
   bulkEnrollStudentsInClassroom,
-  bulkInviteByEmail,
+  reinviteEmailRows,
   inviteRosterStudents,
   NoNewStudentsError,
   repairRosterUsernames,
@@ -78,6 +78,8 @@ export type RosterImportOutcome =
       // classroom; their rows rode the account pipeline. Carried through
       // untouched, purely for the result dialog.
       linked: { email: string; login: string; classroom: string }[]
+      // Addresses left alone because their invitation is still pending.
+      emailAlreadyPending: string[]
     }
 
 // The roster-import flow. Runs up to two pipelines SEQUENTIALLY over one shared
@@ -97,15 +99,21 @@ export async function runRosterImport(
     org: string
     classroom: string
     rows: ImportRosterRow[]
-    // Email-identity rows, each already carrying the role the teacher assigned
-    // and any name/section the file supplied. Empty for an account-only file.
+    // Email-identity rows, each already carrying the role the teacher assigned,
+    // any name/section the file supplied, and the failed record of an expired
+    // previous invitation when the roster knows one. Empty for an account-only
+    // file.
     emailInvites?: {
       email: string
       role: ClassroomRole
       first_name?: string
       last_name?: string
       section?: string
+      failedInvitationId?: number
     }[]
+    // Uploaded addresses whose invitation is still live on the roster. Nothing
+    // is sent for them; echoed to the outcome so the result can say so.
+    emailAlreadyPending?: string[]
     // Name-only rows (no identity cell at all) the parse kept: written to the
     // roster as `unlinked` rows for manual reconciliation instead of dropped.
     unlinkedRows?: UnlinkedRowInput[]
@@ -126,6 +134,7 @@ export async function runRosterImport(
     classroom,
     rows,
     emailInvites = [],
+    emailAlreadyPending = [],
     unlinkedRows = [],
     linkedEmails = [],
     plan,
@@ -429,10 +438,13 @@ export async function runRosterImport(
       message: messages.invitingEmails,
     })
     try {
-      emailResult = await bulkInviteByEmail(client, {
+      // The shared "send again" recipe: an expired row's failed record is
+      // dismissed only after its fresh invitation is confirmed sent, and any
+      // older failed records for the address go with it.
+      emailResult = await reinviteEmailRows(client, {
         org,
         classroom,
-        invites: emailInvites,
+        targets: emailInvites,
         onProgress,
       })
     } catch (err) {
@@ -481,5 +493,6 @@ export async function runRosterImport(
     emailError,
     unlinkedKept,
     linked: linkedEmails,
+    emailAlreadyPending,
   }
 }

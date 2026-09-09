@@ -3,6 +3,7 @@ import {
   ID_RESOLUTION_CAP,
   identityKey,
   resolveImportIdentities,
+  indexRosterByEmail,
   splitEmailRowsByLink,
 } from "./rosterImportResolve"
 import type { ParsedImportRow } from "./rosterImportParse"
@@ -328,13 +329,110 @@ describe("splitEmailRowsByLink", () => {
     ])
   })
 
-  it("returns three empty buckets for no email rows", () => {
+  it("returns four empty buckets for no email rows", () => {
     expect(
       splitEmailRowsByLink(
         [],
         [{ email: "a@x.io", id: 1, login: "a", classroom: "c" }],
         studentFor,
       ),
-    ).toEqual({ linkedRows: [], linkedEmails: [], emailInvites: [] })
+    ).toEqual({
+      linkedRows: [],
+      linkedEmails: [],
+      emailInvites: [],
+      alreadyPending: [],
+    })
+  })
+
+  // What the roster already knows about an address decides the send: a live
+  // invitation is left alone and reported; an expired one is re-sent carrying
+  // its failed record so the send can dismiss it; anything else is a plain
+  // invitation. A link wins over any standing (the account is the student).
+  it("leaves a live pending address alone, re-sends an expired one with its failed record", () => {
+    const rows = [
+      emailRow("Pending@uni.edu"),
+      emailRow("expired@uni.edu", { first_name: "Ex" }),
+      emailRow("fresh@uni.edu"),
+      emailRow("linked@uni.edu"),
+    ]
+    const standing = new Map([
+      ["pending@uni.edu", { state: "pending" as const, invitationId: 42 }],
+      [
+        "expired@uni.edu",
+        { state: "unlinked" as const, failedInvitationId: 79153766 },
+      ],
+      ["linked@uni.edu", { state: "pending" as const, invitationId: 43 }],
+    ])
+    const links = [
+      { email: "linked@uni.edu", id: 7, login: "linked-gh", classroom: "c" },
+    ]
+
+    const out = splitEmailRowsByLink(rows, links, studentFor, standing)
+
+    expect(out.alreadyPending).toEqual(["Pending@uni.edu"])
+    expect(out.emailInvites).toEqual([
+      {
+        email: "expired@uni.edu",
+        role: "student",
+        first_name: "Ex",
+        last_name: undefined,
+        section: undefined,
+        failedInvitationId: 79153766,
+      },
+      {
+        email: "fresh@uni.edu",
+        role: "student",
+        first_name: undefined,
+        last_name: undefined,
+        section: undefined,
+        failedInvitationId: undefined,
+      },
+    ])
+    expect(out.linkedRows.map((r) => r.username)).toEqual(["linked-gh"])
+  })
+})
+
+describe("indexRosterByEmail", () => {
+  it("keys rows by lowercased address with their invitation ids, first row wins", () => {
+    const row = (over: Record<string, unknown>) => ({
+      key: "k",
+      state: "enrolled",
+      roles: ["student"],
+      username: "",
+      github_id: "",
+      first_name: "",
+      last_name: "",
+      section: "",
+      email: "",
+      avatar_url: "",
+      ...over,
+    })
+    const index = indexRosterByEmail([
+      row({ email: "Pend@x.edu", state: "pending", invitation_id: 1 }),
+      row({
+        email: "gone@x.edu",
+        state: "unlinked",
+        failed_invitation: {
+          id: 9,
+          kind: "expired",
+          failed_at: null,
+          reason: null,
+        },
+      }),
+      row({ email: "gone@x.edu", state: "enrolled" }),
+      row({ email: "", state: "enrolled" }),
+    ] as never)
+
+    expect(index.get("pend@x.edu")).toEqual({
+      state: "pending",
+      invitationId: 1,
+      failedInvitationId: undefined,
+    })
+    expect(index.get("gone@x.edu")).toEqual({
+      state: "unlinked",
+      invitationId: undefined,
+      failedInvitationId: 9,
+    })
+    expect(index.size).toBe(2)
   })
 })

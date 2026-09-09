@@ -74,6 +74,7 @@ const TeamRosterContent = ({
   // counts.enrolled, already de-duplicated per person) followed by a per-role
   // breakdown (roleCounts tallies each role a person holds).
   const {
+    rows,
     counts,
     roleCounts,
     isLoading: rosterLoading,
@@ -191,6 +192,7 @@ const TeamRosterContent = ({
             onEnrolled={(username) => suppressedLogins.forget([username])}
           />
           <UploadRoster
+            rosterRows={rows}
             org={org}
             classroom={classroom}
             client={client}

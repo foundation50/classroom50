@@ -26,6 +26,30 @@ vi.mock("@/domain/students", () => {
     applyClassroomRoleChange: (...a: unknown[]) =>
       applyClassroomRoleChange(...a),
     bulkInviteByEmail: (...a: unknown[]) => bulkInviteByEmail(...a),
+    // runRosterImport sends through the shared reinviteEmailRows recipe, which
+    // wraps bulkInviteByEmail. Forward to the same spy with the per-target ids
+    // folded to bulkInviteByEmail's shape, so assertions read one payload.
+    reinviteEmailRows: (
+      client: unknown,
+      input: {
+        org: string
+        classroom: string
+        targets: Array<
+          Record<string, unknown> & { failedInvitationId?: number }
+        >
+        onProgress?: unknown
+      },
+    ) =>
+      bulkInviteByEmail(client, {
+        org: input.org,
+        classroom: input.classroom,
+        invites: input.targets.map(({ failedInvitationId, ...t }) => ({
+          ...t,
+          failedInvitationIds:
+            failedInvitationId === undefined ? undefined : [failedInvitationId],
+        })),
+        onProgress: input.onProgress,
+      }),
     repairRosterUsernames: (...a: unknown[]) => repairRosterUsernames(...a),
     appendUnlinkedRows: (...a: unknown[]) => appendUnlinkedRows(...a),
     NoNewStudentsError,
@@ -528,6 +552,30 @@ describe("runRosterImport — keep-unplaced-as-unlinked pass", () => {
     if (!out.ok) return
     expect(appendUnlinkedRows).toHaveBeenCalledOnce()
     expect(out.unlinkedKept).toBe(1)
+  })
+
+  it("threads an expired row's failed record to the send and echoes already-pending addresses", async () => {
+    bulkInviteByEmail.mockResolvedValueOnce({
+      invited: [{ email: "expired@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    const out = await call({
+      emailInvites: [
+        { email: "expired@x.edu", role: "student", failedInvitationId: 9 },
+      ],
+      emailAlreadyPending: ["pending@x.edu"],
+    })
+    expect(out.ok).toBe(true)
+    if (!out.ok) return
+    // The recipe folds the row's record into the send (see the mock's shim).
+    expect(bulkInviteByEmail.mock.calls[0]?.[1]).toMatchObject({
+      invites: [{ email: "expired@x.edu", failedInvitationIds: [9] }],
+    })
+    // Nothing was sent for the pending address, and the outcome says which.
+    expect(out.emailAlreadyPending).toEqual(["pending@x.edu"])
+    expect(appendUnlinkedRows).not.toHaveBeenCalled()
   })
 
   it("skips the append entirely when nothing is unplaced", async () => {

@@ -23,7 +23,7 @@ import { errorText } from "@/types/localizedMessage"
 import { decodeTextFile } from "@/util/fileBytes"
 import { downloadBlob } from "@/util/downloadBlob"
 import { isTeacherRole } from "@/authz"
-import type { ClassroomRole } from "@/util/teamRoster"
+import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import {
   DEFAULT_UPLOAD_KIND,
   type UploadKind,
@@ -35,6 +35,7 @@ import {
   identityKey,
   isAccountRow,
   isEmailRow,
+  indexRosterByEmail,
   loginIdentityKey,
   resolveImportIdentities,
   splitEmailRowsByLink,
@@ -95,6 +96,12 @@ type UploadRosterProps = {
   // button drives file selection from there.
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  // The classroom roster as the roster page sees it, so an uploaded address the
+  // roster already knows is handled by its standing: a live invitation is left
+  // alone, an expired one is replaced (and its failed record dismissed). Omit
+  // (or pass a non-owner's rows, which carry no invitation data) and every
+  // address is a plain invitation, as before.
+  rosterRows?: readonly TeamRosterRow[]
 }
 type ImportPhase = "idle" | "preview" | "importing" | "complete" | "error"
 
@@ -106,10 +113,15 @@ const UploadRoster = ({
   onEmailSuccess,
   open,
   onOpenChange,
+  rosterRows,
 }: UploadRosterProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
   const resolveUploadedEmails = useResolveEmailRows(client, org)
+  const standingByEmail = useMemo(
+    () => indexRosterByEmail(rosterRows ?? []),
+    [rosterRows],
+  )
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
   useBeforeUnloadGuard(phase === "importing")
@@ -133,6 +145,8 @@ const UploadRoster = ({
   // How many unlinked rows the completed run actually wrote (name-only rows
   // plus email rows whose invitation couldn't be sent).
   const [unlinkedKept, setUnlinkedKept] = useState(0)
+  // Addresses the completed run left alone because their invitation is live.
+  const [emailAlreadyPending, setEmailAlreadyPending] = useState<string[]>([])
   const [parseId, setParseId] = useState(0)
   // Rows with a resolved identity (account or email), and the ones a github_id
   // made unusable. Null until resolution runs.
@@ -216,6 +230,7 @@ const UploadRoster = ({
     setDroppedRows([])
     setUnlinkedParsed([])
     setUnlinkedKept(0)
+    setEmailAlreadyPending([])
     setResolved(null)
     setUnusableRows([])
     setHeaderIssue(null)
@@ -511,9 +526,26 @@ const UploadRoster = ({
   // member (or only getting its details updated) is not an invitation.
   // The links applied at submit (none once declined). Kept as one value so the
   // count below, the submit split, and the notice all read the same decision.
-  const appliedLinks = linksDeclined ? [] : emailLinks
+  const appliedLinks = useMemo(
+    () => (linksDeclined ? [] : emailLinks),
+    [linksDeclined, emailLinks],
+  )
+  // Addresses whose invitation is still live on the roster are not re-sent by
+  // an upload (see splitEmailRowsByLink), so they don't count as invitations.
+  const pendingEmailCount = useMemo(() => {
+    const linked = new Set(appliedLinks.map((l) => l.email))
+    return emailRows.filter(
+      (r) =>
+        !linked.has(r.identity.email) &&
+        standingByEmail.get(r.identity.email.toLowerCase())?.state ===
+          "pending",
+    ).length
+  }, [emailRows, appliedLinks, standingByEmail])
   const inviteCount =
-    (preflight?.needsInvite.length ?? 0) + emailRowCount - appliedLinks.length
+    (preflight?.needsInvite.length ?? 0) +
+    emailRowCount -
+    appliedLinks.length -
+    pendingEmailCount
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
@@ -699,17 +731,15 @@ const UploadRoster = ({
     // Resolve-before-invite: a confirmed link's email row imports as an ACCOUNT
     // row under the verified member's current login, and its address leaves the
     // invite list — see splitEmailRowsByLink.
-    const { linkedRows, linkedEmails, emailInvites } = splitEmailRowsByLink(
-      emailRows,
-      appliedLinks,
-      roleFor,
-    )
+    const { linkedRows, linkedEmails, emailInvites, alreadyPending } =
+      splitEmailRowsByLink(emailRows, appliedLinks, roleFor, standingByEmail)
 
     const outcome = await runRosterImport(client, {
       org,
       classroom,
       rows: [...accountImportRows, ...linkedRows],
       emailInvites,
+      emailAlreadyPending: alreadyPending,
       linkedEmails,
       unlinkedRows: unlinkedParsed,
       // Snapshot the classification computed in the preview so the process pass
@@ -744,6 +774,7 @@ const UploadRoster = ({
     setEmailError(outcome.emailError)
     setUnlinkedKept(outcome.unlinkedKept)
     setLinkedApplied(outcome.linked)
+    setEmailAlreadyPending(outcome.emailAlreadyPending)
     setPhase("complete")
     onSuccess?.(outcome.importResult)
     // A mixed batch touches both caches, so both callbacks fire.
@@ -1111,6 +1142,7 @@ const UploadRoster = ({
                   roleChanges={roleChangeByUser}
                   identityChanges={identityChangeByUser}
                   alreadyOnRosterKeys={alreadyOnRosterKeys}
+                  emailStandingByEmail={standingByEmail}
                   loading={preflighting}
                   onRoleChange={(key, role) =>
                     setRolesByUser((prev) => ({ ...prev, [key]: role }))
@@ -1175,6 +1207,7 @@ const UploadRoster = ({
             emailError={emailError}
             unlinkedKept={unlinkedKept}
             linked={linkedApplied}
+            emailAlreadyPending={emailAlreadyPending}
           />
         )}
 

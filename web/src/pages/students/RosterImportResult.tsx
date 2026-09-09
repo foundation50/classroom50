@@ -18,6 +18,8 @@ type ImportResultSectionRow = {
 // handle on a screen that reports both.
 const emailInviteSections = (
   result: BulkInviteByEmailResult,
+  // Addresses the upload left alone because their invitation is still live.
+  alreadyPending: readonly string[],
   t: (key: string) => string,
   titles: {
     invited: string
@@ -37,11 +39,18 @@ const emailInviteSections = (
     },
     {
       title: titles.skipped,
-      rows: result.skipped.map(({ email }) => ({
-        key: email,
-        label: email,
-        detail: t("students.emailInviteSkippedDetail"),
-      })),
+      rows: [
+        ...alreadyPending.map((email) => ({
+          key: email,
+          label: email,
+          detail: t("students.emailInviteAlreadyPendingDetail"),
+        })),
+        ...result.skipped.map(({ email }) => ({
+          key: email,
+          label: email,
+          detail: t("students.emailInviteSkippedDetail"),
+        })),
+      ],
     },
     {
       title: titles.deferred,
@@ -108,6 +117,7 @@ export const RosterImportResult = ({
   emailError = null,
   unlinkedKept = 0,
   linked = [],
+  emailAlreadyPending = [],
 }: {
   result: BulkImportResult
   inviteError: string | null
@@ -121,6 +131,8 @@ export const RosterImportResult = ({
   // Addresses linked to a verified member of a previous classroom and enrolled
   // directly instead of invited.
   linked?: { email: string; login: string; classroom: string }[]
+  // Addresses whose invitation is still pending on the roster; nothing sent.
+  emailAlreadyPending?: string[]
 }) => {
   const { t } = useTranslation()
   const emailInvitedCount = emailResult?.invited.length ?? 0
@@ -260,13 +272,23 @@ export const RosterImportResult = ({
 
       {/* The email pass's buckets, under titles distinct from the account ones so
           "invited" by address never reads as "invited" by handle. */}
-      {emailResult
-        ? emailInviteSections(emailResult, t, {
-            invited: t("students.resultEmailInvited"),
-            skipped: t("students.resultEmailSkipped"),
-            deferred: t("students.resultEmailInvitesDeferred"),
-            failed: t("students.resultEmailInvitesFailed"),
-          }).map((section) => (
+      {emailResult || emailAlreadyPending.length > 0
+        ? emailInviteSections(
+            emailResult ?? {
+              invited: [],
+              skipped: [],
+              failed: [],
+              deferred: [],
+            },
+            emailAlreadyPending,
+            t,
+            {
+              invited: t("students.resultEmailInvited"),
+              skipped: t("students.resultEmailSkipped"),
+              deferred: t("students.resultEmailInvitesDeferred"),
+              failed: t("students.resultEmailInvitesFailed"),
+            },
+          ).map((section) => (
             <ImportResultSection key={section.title} {...section} />
           ))
         : null}
