@@ -12,8 +12,12 @@ vi.mock("react-i18next", async (importOriginal) => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string, opts?: Record<string, unknown>) =>
-        opts && "count" in opts ? `${key}:${opts.count}` : key,
+      // `label` composes (the "(N)" menu suffix); `count` renders as a suffix.
+      t: (key: string, opts?: Record<string, unknown>) => {
+        if (opts && "label" in opts && "count" in opts)
+          return `${opts.label} (${opts.count})`
+        return opts && "count" in opts ? `${key}:${opts.count}` : key
+      },
     }),
   }
 })
@@ -104,9 +108,11 @@ const renderBar = (
   selectedRows: OrgMemberRow[],
   {
     onDone = vi.fn(),
+    onRetainSelection = vi.fn(),
     isOwner = () => false,
   }: {
     onDone?: () => void
+    onRetainSelection?: (keys: Iterable<string>) => void
     isOwner?: (r: OrgMemberRow) => boolean
   } = {},
 ) =>
@@ -118,16 +124,22 @@ const renderBar = (
       classrooms={CLASSROOMS}
       isOwner={isOwner}
       onClearSelection={vi.fn()}
+      onRetainSelection={onRetainSelection}
       onDone={onDone}
     />,
   )
 
-const openRemoveConfirm = () => {
-  fireEvent.click(
-    screen.getByText("orgMembers.bulk.removeFromClassroomMenu", {
+// Menu labels carry the eligible count, "label (N)".
+const menuItem = (labelKey: string) =>
+  screen.getByText(
+    new RegExp(`^${labelKey.replace(/\./g, "\\.")} \\(\\d+\\)$`),
+    {
       selector: "button",
-    }),
+    },
   )
+
+const openRemoveConfirm = () => {
+  fireEvent.click(menuItem("orgMembers.bulk.removeFromClassroomMenu"))
 }
 
 const confirmRun = async () => {
@@ -219,9 +231,7 @@ describe("BulkActionsBar — destructive routing", () => {
     })
     renderBar([ada, grace])
 
-    fireEvent.click(
-      screen.getByText("orgMembers.removeFromOrg", { selector: "button" }),
-    )
+    fireEvent.click(menuItem("orgMembers.removeFromOrg"))
     expect(screen.queryByRole("checkbox")).toBeNull()
     await confirmRun()
 
@@ -248,23 +258,43 @@ describe("BulkActionsBar — destructive routing", () => {
   it("disables the classroom-remove entry when no selected member is on any classroom", () => {
     renderBar([grace])
 
-    const entry = screen.getByText("orgMembers.bulk.removeFromClassroomMenu", {
-      selector: "button",
-    }) as HTMLButtonElement
+    const entry = menuItem(
+      "orgMembers.bulk.removeFromClassroomMenu",
+    ) as HTMLButtonElement
     expect(entry.disabled).toBe(true)
+    expect(entry.textContent).toContain("(0)")
     // The org-wide route stays available for roster-less members.
-    const orgEntry = screen.getByText("orgMembers.removeFromOrg", {
-      selector: "button",
-    }) as HTMLButtonElement
+    const orgEntry = menuItem("orgMembers.removeFromOrg") as HTMLButtonElement
     expect(orgEntry.disabled).toBe(false)
   })
 
   it("warns when the org-wide removal would strip co-owners", () => {
     renderBar([ada, grace], { isOwner: (r) => r.username === "ada" })
 
-    fireEvent.click(
-      screen.getByText("orgMembers.removeFromOrg", { selector: "button" }),
-    )
+    fireEvent.click(menuItem("orgMembers.removeFromOrg"))
     expect(screen.getByText("orgMembers.bulk.orgRemoveOwners:1")).toBeTruthy()
+  })
+
+  it("shows eligible counts per action and narrows the selection on choose", () => {
+    const onRetainSelection = vi.fn()
+    // ada: member on cs101; grace: member on no classroom; ghost: not a member.
+    const ghost = row({
+      key: "ghost@x.edu",
+      email: "ghost@x.edu",
+      isMember: false,
+      classification: "unlinked",
+    })
+    renderBar([ada, grace, ghost], { onRetainSelection })
+
+    expect(
+      menuItem("orgMembers.bulk.addToClassroomMenu").textContent,
+    ).toContain("(2)")
+    expect(
+      menuItem("orgMembers.bulk.removeFromClassroomMenu").textContent,
+    ).toContain("(1)")
+    expect(menuItem("orgMembers.removeFromOrg").textContent).toContain("(2)")
+
+    fireEvent.click(menuItem("orgMembers.bulk.removeFromClassroomMenu"))
+    expect([...onRetainSelection.mock.calls[0]![0]]).toEqual(["ada"])
   })
 })

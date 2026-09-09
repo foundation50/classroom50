@@ -199,7 +199,7 @@ const RosterBulkActionsBar = ({
     setConfirming(true)
   }
   const withCount = (label: string, count: number) =>
-    t("students.bulk.actionWithCount", { label, count })
+    t("common.actionWithCount", { label, count })
 
   const deferRun = useDeferredRun()
 

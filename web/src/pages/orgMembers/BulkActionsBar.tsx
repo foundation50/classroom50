@@ -6,6 +6,7 @@ import { DropdownMenu, FormField, Select } from "@/components/ui"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import type { GitHubUser } from "@/github-core/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import type { OrgMembersBulkOutcome } from "@/hooks/useOrgMembersCacheSync"
 import { useBulkAddToClassroom } from "@/hooks/mutations/useBulkAddToClassroom"
 import { useBulkRemoveFromClassroom } from "@/hooks/mutations/useBulkRemoveFromClassroom"
@@ -44,6 +45,7 @@ const BulkActionsBar = ({
   classrooms,
   isOwner,
   onClearSelection,
+  onRetainSelection,
   onDone,
 }: {
   org: string
@@ -54,6 +56,11 @@ const BulkActionsBar = ({
   // warns when the selection would strip co-owners.
   isOwner: (row: OrgMemberRow) => boolean
   onClearSelection: () => void
+  // Narrow the page's selection to these row keys (the roster bar's recipe):
+  // each action keeps only the rows it can act on before confirming, so the
+  // dialog's count and the ticked checkboxes agree, and a cancelled confirm
+  // leaves that narrowed selection in place.
+  onRetainSelection: (keys: Iterable<string>) => void
   onDone: (input: BulkDoneInput) => void
 }) => {
   const { t } = useTranslation()
@@ -85,6 +92,26 @@ const BulkActionsBar = ({
   const hasSelection = selectedRows.length > 0
 
   const targetName = classrooms.find((c) => c.path === target)?.name ?? target
+
+  // Per-action eligibility that does not depend on the classroom picked in the
+  // dialog (that part stays in each preview): only members can be added; only
+  // an identity-bearing row on some active classroom can be removed from one;
+  // only a member with a username can be removed from the org (the DELETE is
+  // keyed by username).
+  const addableRows = selectedRows.filter((row) => row.isMember)
+  const classroomRemovableRows = selectedRows.filter(
+    (row) =>
+      canTargetForUnenroll(row) && row.classrooms.some((a) => !a.archived),
+  )
+  const orgRemovableRows = selectedRows.filter(
+    (row) => row.isMember && Boolean(row.username),
+  )
+  const withCount = (label: string, count: number) =>
+    t("common.actionWithCount", { label, count })
+  const beginAction = (eligible: OrgMemberRow[], open: () => void) => {
+    onRetainSelection(eligible.map((r) => r.key))
+    open()
+  }
 
   // Add preview, mirroring bulkAddToClassroom's PRE-filters (runtime skips
   // can only shrink it; results report those). Remove previews live in
@@ -194,47 +221,74 @@ const BulkActionsBar = ({
         >
           <DropdownMenu.Item
             icon={PlusIcon}
-            label={t("orgMembers.bulk.addToClassroomMenu")}
-            disabled={classrooms.length === 0}
+            label={withCount(
+              t("orgMembers.bulk.addToClassroomMenu"),
+              addableRows.length,
+            )}
+            disabled={classrooms.length === 0 || addableRows.length === 0}
             title={
               classrooms.length === 0
                 ? t("orgMembers.bulk.noClassrooms")
-                : undefined
+                : addableRows.length === 0
+                  ? t("orgMembers.bulk.addNoneMembers")
+                  : undefined
             }
-            onSelect={() => {
-              setTarget(classrooms[0].path)
-              setConfirmingAdd(true)
-            }}
+            onSelect={() =>
+              beginAction(addableRows, () => {
+                setTarget(classrooms[0].path)
+                setConfirmingAdd(true)
+              })
+            }
           />
           {/* Removals — destructive, so last and in their own group. */}
           <DropdownMenu.Separator />
           <DropdownMenu.Item
             icon={SignOutIcon}
-            label={t("orgMembers.bulk.removeFromClassroomMenu")}
+            label={withCount(
+              t("orgMembers.bulk.removeFromClassroomMenu"),
+              classroomRemovableRows.length,
+            )}
             destructive
-            disabled={removableClassrooms.length === 0}
+            disabled={
+              removableClassrooms.length === 0 ||
+              classroomRemovableRows.length === 0
+            }
             title={
-              removableClassrooms.length === 0
+              removableClassrooms.length === 0 ||
+              classroomRemovableRows.length === 0
                 ? t("orgMembers.bulk.removeNoneOnClassroom")
                 : undefined
             }
-            onSelect={() => {
-              setTarget(removableClassrooms[0].path)
-              setRemoveScope("classroom")
-              // Fresh decision each time: the escalation is opt-in per run.
-              setAlsoRemoveFromOrg(false)
-              setConfirmingRemove(true)
-            }}
+            onSelect={() =>
+              beginAction(classroomRemovableRows, () => {
+                setTarget(removableClassrooms[0].path)
+                setRemoveScope("classroom")
+                // Fresh decision each time: the escalation is opt-in per run.
+                setAlsoRemoveFromOrg(false)
+                setConfirmingRemove(true)
+              })
+            }
           />
           <DropdownMenu.Item
             icon={XCircleIcon}
-            label={t("orgMembers.removeFromOrg")}
+            label={withCount(
+              t("orgMembers.removeFromOrg"),
+              orgRemovableRows.length,
+            )}
             destructive
-            onSelect={() => {
-              setRemoveScope("org")
-              setAlsoRemoveFromOrg(false)
-              setConfirmingRemove(true)
-            }}
+            disabled={orgRemovableRows.length === 0}
+            title={
+              orgRemovableRows.length === 0
+                ? t("orgMembers.bulk.removeOrgNoneEligible")
+                : undefined
+            }
+            onSelect={() =>
+              beginAction(orgRemovableRows, () => {
+                setRemoveScope("org")
+                setAlsoRemoveFromOrg(false)
+                setConfirmingRemove(true)
+              })
+            }
           />
         </BulkSelectionCluster>
       ) : null}

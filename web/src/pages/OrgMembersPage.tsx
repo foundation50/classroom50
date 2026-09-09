@@ -319,6 +319,7 @@ const OrgMembersPage = () => {
     someSelected: someFilteredSelected,
     toggleSelectAll: handleToggleSelectAll,
     deselect: deselectRow,
+    retain: retainSelection,
     clear: clearSelection,
     handleToggleRow,
     handleRowCheckboxClick,
@@ -435,6 +436,7 @@ const OrgMembersPage = () => {
                 classrooms={classroomOptions}
                 isOwner={isOwner}
                 onClearSelection={clearSelection}
+                onRetainSelection={retainSelection}
                 onDone={handleBulkDone}
               />
             ) : null}
