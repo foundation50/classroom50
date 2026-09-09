@@ -98,6 +98,10 @@ vi.mock("@/auth/useGithubAuth", () => ({
 }))
 
 import { StudentAssignmentList } from "./StudentAssignmentList"
+import {
+  formatRelativeToNow,
+  formatSubmissionDateTime,
+} from "@/util/formatDate"
 
 // Fixtures default to a passed release date so the toolbar/sort/CTA specs
 // exercise listed assignments; the hide-by-default spec overrides it.
@@ -126,6 +130,7 @@ beforeEach(() => {
   // Nothing submitted unless a spec says so.
   submittedAssignments.mockReturnValue({
     submittedSlugs: new Set(),
+    lastSubmittedAt: new Map(),
     isPending: false,
   })
   // View mode + sort persist in localStorage; clear so one test's toggle
@@ -171,6 +176,7 @@ describe("StudentAssignmentList", () => {
     orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
     submittedAssignments.mockReturnValue({
       submittedSlugs: new Set(["hw1"]),
+      lastSubmittedAt: new Map(),
       isPending: false,
     })
 
@@ -226,6 +232,7 @@ describe("StudentAssignmentList", () => {
     })
     submittedAssignments.mockReturnValue({
       submittedSlugs: new Set(["hw1"]),
+      lastSubmittedAt: new Map(),
       isPending: false,
     })
 
@@ -248,6 +255,7 @@ describe("StudentAssignmentList", () => {
     orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
     submittedAssignments.mockReturnValue({
       submittedSlugs: new Set(),
+      lastSubmittedAt: new Map(),
       isPending: true,
     })
 
@@ -256,6 +264,52 @@ describe("StudentAssignmentList", () => {
     // No row paints "Accepted" only to flip to "Submitted" a beat later.
     expect(screen.queryByText("HW1")).toBeNull()
     expect(screen.queryByText("assignments.discover.accepted")).toBeNull()
+  })
+
+  it("shows when each assignment was last submitted, and a quiet placeholder otherwise", () => {
+    pagesAssignments.mockReturnValue({
+      data: [
+        assignment("hw1", { name: "HW1" }),
+        assignment("hw2", { name: "HW2" }),
+        assignment("hw3", { name: "HW3" }),
+        assignment("hw4", { name: "HW4" }),
+      ],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({
+      data: [
+        repo("cs-hw1-student1"),
+        repo("cs-hw2-student1"),
+        repo("cs-hw3-student1"),
+      ],
+    })
+    const at = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+    submittedAssignments.mockReturnValue({
+      submittedSlugs: new Set(["hw1", "hw3"]),
+      // hw3 is submitted via a dateless milestone tag: no time to show.
+      lastSubmittedAt: new Map([["hw1", at]]),
+      isPending: false,
+    })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    expect(screen.getByText("submissions.table.colLastSubmitted")).toBeTruthy()
+    const row = (name: string) => screen.getByText(name).closest("tr")!
+    // The submitted row carries the absolute time and its relative form.
+    expect(row("HW1").textContent).toContain(formatSubmissionDateTime(at))
+    expect(row("HW1").textContent).toContain(formatRelativeToNow(new Date(at)))
+    // Accepted-only and not-accepted rows: the same quiet placeholder.
+    expect(row("HW2").textContent).toContain(
+      "submissions.student.notSubmittedYet",
+    )
+    expect(row("HW4").textContent).toContain(
+      "submissions.student.notSubmittedYet",
+    )
+    // Submitted without a readable time says so instead of going blank.
+    expect(row("HW3").textContent).toContain(
+      "submissions.student.submittedAwaitingGrading",
+    )
   })
 
   it("threads the capability secret into the accept link", () => {
@@ -429,6 +483,7 @@ describe("StudentAssignmentList", () => {
     })
     submittedAssignments.mockReturnValue({
       submittedSlugs: new Set(["hw1"]),
+      lastSubmittedAt: new Map(),
       isPending: false,
     })
 

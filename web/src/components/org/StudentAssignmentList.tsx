@@ -27,10 +27,12 @@ import {
   ModeBadge,
 } from "@/components/assignments/AssignmentCells"
 import { GroupTeamMembersReadOnly } from "@/components/assignments/GroupTeamMembersReadOnly"
+import { LastSubmittedCell } from "@/components/submissions/SubmissionRowCells"
 import { EmptyState, NoSearchResults } from "@/components/list"
 import { ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
+import { formatRelativeToNow } from "@/util/formatDate"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -103,7 +105,44 @@ type AssignmentItemProps = {
   classroom: string
   assignment: Assignment
   status: StudentAssignmentStatus
+  // Newest submission's ISO time; absent until one lands (or when the only
+  // submissions are dateless milestone tags).
+  lastSubmittedAt?: string
   secret?: string
+}
+
+// The "Last submitted" cell, the same recipe as the submission page's row so
+// the two agree to the minute: absolute time plus a muted relative ("2 hours
+// ago", the "did my push register?" answer). Submitted without a readable
+// time says so rather than showing a blank; anything else is a quiet
+// placeholder, since the Status badge already carries the state.
+function LastSubmittedAtCell({
+  status,
+  lastSubmittedAt,
+}: {
+  status: StudentAssignmentStatus
+  lastSubmittedAt?: string
+}) {
+  const { t } = useTranslation()
+  if (lastSubmittedAt) {
+    return (
+      <div className="flex flex-wrap items-center gap-x-2 max-xl:text-xs xl:text-sm">
+        <LastSubmittedCell datetime={lastSubmittedAt} />
+        <span className="whitespace-nowrap text-base-content/60">
+          {formatRelativeToNow(new Date(lastSubmittedAt))}
+        </span>
+      </div>
+    )
+  }
+  return (
+    <span className="whitespace-nowrap text-base-content/60 max-xl:text-xs xl:text-sm">
+      {t(
+        status === "submitted"
+          ? "submissions.student.submittedAwaitingGrading"
+          : "submissions.student.notSubmittedYet",
+      )}
+    </span>
+  )
 }
 
 // The Status column: the one place a student reads "is my work in?". Only
@@ -144,6 +183,7 @@ function AssignmentRow({
   classroom,
   assignment,
   status,
+  lastSubmittedAt,
   secret,
 }: AssignmentItemProps) {
   const { t } = useTranslation()
@@ -196,6 +236,12 @@ function AssignmentRow({
           due={assignment.due}
           relative
           highlightOverdue={status !== "submitted"}
+        />
+      </td>
+      <td>
+        <LastSubmittedAtCell
+          status={status}
+          lastSubmittedAt={lastSubmittedAt}
         />
       </td>
       <td>
@@ -275,6 +321,7 @@ function TableHead({
           onSortChange={onSortChange}
           title={t("assignments.table.sortByDue")}
         />
+        <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
         <th scope="col">{t("assignments.discover.colStatus")}</th>
         <th scope="col">
           <span className="sr-only">{t("assignments.discover.colAction")}</span>
@@ -288,6 +335,7 @@ const SKELETON_BARS = [
   "h-4 w-40",
   "h-4 w-20",
   "h-4 w-28",
+  "h-4 w-32",
   "h-4 w-24",
   "ms-auto h-8 w-28",
 ]
@@ -507,11 +555,15 @@ export function StudentAssignmentList({
     [acceptedRepos],
   )
 
-  // Submitted (the green badge, and what un-reds a past due date) needs one
-  // read per accepted repo. Gated like the repo list so a row never paints
-  // "Accepted" over a red deadline and then flips to "Submitted".
-  const { submittedSlugs, isPending: loadingSubmitted } =
-    useMySubmittedAssignments(org, acceptedRepos)
+  // Submitted (the green badge, what un-reds a past due date, and the "Last
+  // submitted" time) needs one read per accepted repo. Gated like the repo
+  // list so a row never paints "Accepted" over a red deadline and then flips
+  // to "Submitted".
+  const {
+    submittedSlugs,
+    lastSubmittedAt,
+    isPending: loadingSubmitted,
+  } = useMySubmittedAssignments(org, acceptedRepos)
   const isLoading =
     loadingSecret || loadingAssignmentsData || loadingRepos || loadingSubmitted
 
@@ -631,6 +683,7 @@ export function StudentAssignmentList({
                   acceptedSlugs.has(assignment.slug),
                   submittedSlugs.has(assignment.slug),
                 )}
+                lastSubmittedAt={lastSubmittedAt.get(assignment.slug)}
                 secret={secret}
               />
             ))}

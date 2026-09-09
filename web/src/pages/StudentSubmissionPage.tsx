@@ -32,6 +32,7 @@ import {
   commitAuthor,
   submissionModeCountKey,
   latestDetectedAt,
+  latestPushSubmittedAt,
 } from "@/domain/assignments/submissionDetection"
 import type {
   Assignment,
@@ -274,8 +275,7 @@ const SubmissionBody = ({
       releases?.[0]?.published_at ??
       releases?.[0]?.created_at ??
       undefined)
-    : (pushSubmissions?.[0]?.commit.committer?.date ??
-      pushSubmissions?.[0]?.commit.author?.date)
+    : (latestPushSubmittedAt(pushSubmissions) ?? undefined)
 
   // Render once, settled: gate on every read that shapes the body (repo
   // existence, graded releases, AND the active-mode submission list) so the

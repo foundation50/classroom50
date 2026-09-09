@@ -10,6 +10,7 @@ import {
   detectedTagRef,
   jumpableTagEntries,
   latestDetectedAt,
+  latestPushSubmittedAt,
   resolveSubmissionMode,
   submissionModeBadgeKey,
   submissionModeCountKey,
@@ -191,6 +192,26 @@ describe("commitAuthor", () => {
       "2026-06-02T00:00:00Z",
       "2026-06-01T00:00:00Z",
     ])
+  })
+})
+
+describe("latestPushSubmittedAt", () => {
+  it("takes the newest-first list's head, preferring the committer date", () => {
+    expect(
+      latestPushSubmittedAt([
+        commit("c2", "2026-06-03T00:00:00Z"),
+        commit("c1", "2026-06-01T00:00:00Z"),
+      ]),
+    ).toBe("2026-06-03T00:00:00Z")
+  })
+
+  it("falls back to the author date, then null", () => {
+    const authored = commit("c1")
+    authored.commit.author = { date: "2026-06-02T00:00:00Z" }
+    expect(latestPushSubmittedAt([authored])).toBe("2026-06-02T00:00:00Z")
+    expect(latestPushSubmittedAt([commit("c1")])).toBeNull()
+    expect(latestPushSubmittedAt([])).toBeNull()
+    expect(latestPushSubmittedAt(undefined)).toBeNull()
   })
 })
 

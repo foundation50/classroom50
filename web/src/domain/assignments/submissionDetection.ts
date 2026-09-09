@@ -114,9 +114,23 @@ export function detectBranchSubmissions(
     label: c.sha.slice(0, 7),
     count: 1,
     sha: c.sha,
-    datetime: c.commit.committer?.date ?? c.commit.author?.date,
+    datetime: commitDatetime(c),
     author: commitAuthor(c),
   }))
+}
+
+// A commit's time: the committer's (when the push landed) over the author's.
+export function commitDatetime(c: GitHubCommit): string | undefined {
+  return c.commit.committer?.date ?? c.commit.author?.date
+}
+
+// The newest push submission's time from a newest-first list (the order the
+// commit log and submissionCommits preserve). Null before the first push.
+export function latestPushSubmittedAt(
+  pushes: GitHubCommit[] | undefined,
+): string | null {
+  const newest = pushes?.[0]
+  return newest ? (commitDatetime(newest) ?? null) : null
 }
 
 // The submission time encoded in a canonical submit/<UTC-ts>-<short-sha> tag
