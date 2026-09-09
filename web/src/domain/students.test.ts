@@ -608,6 +608,8 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // Without it the count depends on how the libuv threadpool orders each
     // target's inviteTeamName digest, which drifts with machine load.
     holdInvitesUntilThrottled?: boolean
+    // 500 the DELETE of these invitation ids (a cancel that won't go through).
+    cancelFailIds?: number[]
   }) => {
     const memberEmails = new Set(opts?.memberEmails ?? [])
     const rateLimitEmails = new Set(opts?.rateLimitEmails ?? [])
@@ -632,6 +634,8 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
       teamDeletes: [] as string[],
       // Invite teams the acting teacher was dropped from.
       actorDrops: [] as string[],
+      // Ids of DELETE /orgs/acme/invitations/{id} (cancels and dismissals).
+      invitationDeletes: [] as number[],
     }
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
@@ -724,6 +728,17 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
               slug: body?.name ?? "team",
               privacy: "secret",
             })
+          }
+          // A live-invitation cancel or a failed-record dismiss (same DELETE).
+          if (
+            options?.method === "DELETE" &&
+            /\/orgs\/acme\/invitations\/\d+$/.test(path)
+          ) {
+            const id = Number(path.split("/invitations/")[1])
+            if (opts?.cancelFailIds?.includes(id))
+              return Promise.reject(apiError(500, "cancel failed"))
+            state.invitationDeletes.push(id)
+            return Promise.resolve({})
           }
           // The doomed-invite cleanup deletes the fresh metadata team.
           if (path.includes("/teams/invite-") && options?.method === "DELETE") {
@@ -868,6 +883,173 @@ describe("bulkInviteByEmail — bulk org invites by email, one batch row write",
     // Only the successfully sent invite's email is retained on the roster.
     const rows = rowsFromCsv(state.committed!)
     expect(rows.map((r) => r.email)).toEqual(["fresh@x.edu"])
+  })
+
+  it("cancels a live invitation right before its create and dismisses failed records only after the send", async () => {
+    const { client, state } = makeClient()
+    const calls: string[] = []
+    const request = client.request as ReturnType<typeof vi.fn>
+    const inner = request.getMockImplementation() as (
+      path: string,
+      options?: { method?: string },
+    ) => Promise<unknown>
+    request.mockImplementation(
+      (path: string, options?: { method?: string }) => {
+        if (/\/invitations(\/\d+)?$/.test(path))
+          calls.push(`${options?.method ?? "POST"} ${path}`)
+        return inner(path, options)
+      },
+    )
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        {
+          email: "a@uni.edu",
+          pendingInvitationId: 11,
+          failedInvitationIds: [21, 22],
+        },
+      ],
+    })
+
+    expect(result.invited).toEqual([{ email: "a@uni.edu", role: "student" }])
+    expect(calls).toEqual([
+      "DELETE /orgs/acme/invitations/11",
+      "POST /orgs/acme/invitations",
+      "DELETE /orgs/acme/invitations/21",
+      "DELETE /orgs/acme/invitations/22",
+    ])
+    expect(state.invitationDeletes).toEqual([11, 21, 22])
+  })
+
+  it("cancels nothing when a batch precondition fails, so the live invitation survives", async () => {
+    const { client, state } = makeClient({ noTeam: true })
+
+    await expect(
+      bulkInviteByEmail(client, {
+        org: "acme",
+        classroom: "cs101",
+        invites: [{ email: "a@uni.edu", pendingInvitationId: 11 }],
+      }),
+    ).rejects.toThrow(/Couldn't resolve the classroom team/)
+    expect(state.invitationDeletes).toEqual([])
+    expect(state.inviteBodies).toEqual([])
+  })
+
+  it("restores the cancelled invitation when the create fails, and keeps the failed record", async () => {
+    const { client, state } = makeClient({ failEmails: ["a@uni.edu"] })
+    let attempts = 0
+    const request = client.request as ReturnType<typeof vi.fn>
+    const inner = request.getMockImplementation() as (
+      path: string,
+      options?: { method?: string },
+    ) => Promise<unknown>
+    // First POST fails (the send), the second (the restore) goes through.
+    request.mockImplementation(
+      (path: string, options?: { method?: string }) => {
+        if (path.endsWith("/invitations") && ++attempts === 2) {
+          state.inviteBodies.push((options as { body: never }).body)
+          return Promise.resolve({})
+        }
+        return inner(path, options)
+      },
+    )
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        {
+          email: "a@uni.edu",
+          pendingInvitationId: 11,
+          failedInvitationIds: [21],
+        },
+      ],
+    })
+
+    expect(result.failed).toEqual([
+      { email: "a@uni.edu", message: expect.stringContaining("server error") },
+    ])
+    // Cancelled once, restored once, the failed record left alone.
+    expect(state.invitationDeletes).toEqual([11])
+    expect(state.inviteBodies).toHaveLength(1)
+    expect(state.inviteBodies[0]).toMatchObject({ email: "a@uni.edu" })
+  })
+
+  it("restores a cancelled invitation that stays deferred after the retry cap", async () => {
+    const { client, state } = makeClient({ rateLimitEmails: ["a@uni.edu"] })
+    let attempts = 0
+    const request = client.request as ReturnType<typeof vi.fn>
+    const inner = request.getMockImplementation() as (
+      path: string,
+      options?: { method?: string },
+    ) => Promise<unknown>
+    // Every send 429s; the end-of-run restore is a plain POST that succeeds.
+    request.mockImplementation(
+      (path: string, options?: { method?: string }) => {
+        if (path.endsWith("/invitations")) {
+          attempts += 1
+          if (attempts > 2) {
+            state.inviteBodies.push((options as { body: never }).body)
+            return Promise.resolve({})
+          }
+        }
+        return inner(path, options)
+      },
+    )
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [{ email: "a@uni.edu", pendingInvitationId: 11 }],
+      sleepFn: async () => {},
+      maxRetries: 1,
+    })
+
+    expect(result.deferred).toEqual(["a@uni.edu"])
+    // The retry re-issues the (now no-op) cancel; the restore is the one POST.
+    expect(state.invitationDeletes).toEqual([11, 11])
+    expect(state.inviteBodies).toHaveLength(1)
+  })
+
+  it("dismisses failed records on a 422 too (the address is already covered), without restoring", async () => {
+    const { client, state } = makeClient({ memberEmails: ["a@uni.edu"] })
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        {
+          email: "a@uni.edu",
+          pendingInvitationId: 11,
+          failedInvitationIds: [21],
+        },
+      ],
+    })
+
+    expect(result.skipped).toEqual([{ email: "a@uni.edu" }])
+    expect(state.invitationDeletes).toEqual([11, 21])
+    expect(state.inviteBodies).toEqual([])
+  })
+
+  it("reports a cancel that won't go through as that target's failure, leaving the rest of the batch alone", async () => {
+    const { client, state } = makeClient({ cancelFailIds: [11] })
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        { email: "a@uni.edu", pendingInvitationId: 11 },
+        { email: "b@uni.edu" },
+      ],
+    })
+
+    expect(result.failed).toEqual([
+      { email: "a@uni.edu", message: expect.stringContaining("cancel failed") },
+    ])
+    expect(result.invited).toEqual([{ email: "b@uni.edu", role: "student" }])
+    expect(state.inviteBodies.map((b) => b.email)).toEqual(["b@uni.edu"])
   })
 
   it("reports progress and returns early for an empty invite list", async () => {

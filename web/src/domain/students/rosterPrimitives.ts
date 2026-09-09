@@ -45,6 +45,34 @@ import { commitRoster, readRosterForWriteAt } from "./rosterWrite"
 
 export const log = logger.scope("mutations:students")
 
+// Dismiss one entry of the org's failed_invitations list (the same DELETE that
+// cancels a pending invite; GitHub's UI calls it "dismiss"). Never throws: the
+// record is bookkeeping, and the caller's real operation (a fresh invite, a row
+// removal) must not fail because a stale record wouldn't go away. Callers
+// dismiss only AFTER the fresh invite is confirmed sent (or GitHub reports the
+// person already invited/a member), so a failed send keeps the record and the
+// row keeps its "Invitation expired" explanation.
+export async function dismissFailedInvitation(
+  client: GitHubClient,
+  input: { org: string; invitationId: number },
+): Promise<void> {
+  try {
+    await cancelOrgInvitation(client, input)
+  } catch (err) {
+    log.error("dismissing a failed invitation failed", { ...input, err })
+  }
+}
+
+export async function dismissFailedInvitations(
+  client: GitHubClient,
+  org: string,
+  invitationIds: Iterable<number> | undefined,
+): Promise<void> {
+  for (const invitationId of invitationIds ?? []) {
+    await dismissFailedInvitation(client, { org, invitationId })
+  }
+}
+
 // The conflict-safe roster.csv read-modify-write shared by every roster writer
 // (the role/metadata/username writers in roleWrites, plus the email-invite row
 // append/remove below). Runs inside withGitConflictRetry: reads roster.csv at

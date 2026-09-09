@@ -1,5 +1,6 @@
 import type { BadgeTone } from "@/types/badgeTone"
 import type { MemberClassification, OrgMemberRow } from "@/util/orgMembers"
+import { failedInvitationBadge } from "@/util/classroomRoleUI"
 
 // Single source for how a Members row's standing is presented, the way
 // classroomRoleUI is for the roster: the table's Status column and the detail
@@ -23,20 +24,10 @@ const CLASSIFICATION_BADGE: Partial<
   unlinked: { labelKey: "orgMembers.badgeUnlinked", tone: "neutral" },
 }
 
-// The failure chip reuses the roster's keys on purpose: one fact, one wording
-// across both pages.
 export function memberStatusBadges(row: OrgMemberRow): MemberStatusBadge[] {
   const badges: MemberStatusBadge[] = []
-  const failed = row.failed_invitation
-  if (failed) {
-    badges.push({
-      labelKey:
-        failed.kind === "expired"
-          ? "students.statusInviteExpired"
-          : "students.statusInviteFailed",
-      tone: "error",
-    })
-  }
+  if (row.failed_invitation)
+    badges.push(failedInvitationBadge(row.failed_invitation))
   const byClass = CLASSIFICATION_BADGE[row.classification]
   if (byClass) badges.push(byClass)
   // CSV/team drift is a member-only fact (a non-member has nothing to be on a

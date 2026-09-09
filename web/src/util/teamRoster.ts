@@ -120,6 +120,45 @@ export function failedInvitationRef(
   }
 }
 
+// The org's failed records keyed by lowercased login and email. When GitHub
+// holds several for one person (an address re-invited more than once, each
+// try expiring), keep the most recent: that is the one a re-invite must
+// dismiss and the date worth showing. Shared by the roster and the Members
+// page so the two can't attribute a record differently.
+export type FailedInvitationIndex = {
+  byLogin: Map<string, FailedInvitationRef>
+  byEmail: Map<string, FailedInvitationRef>
+}
+
+export function indexFailedInvitations(
+  failed: GitHubOrgInvitation[],
+): FailedInvitationIndex {
+  const byLogin = new Map<string, FailedInvitationRef>()
+  const byEmail = new Map<string, FailedInvitationRef>()
+  const keepLatest = (
+    map: Map<string, FailedInvitationRef>,
+    key: string,
+    ref: FailedInvitationRef,
+  ) => {
+    const prev = map.get(key)
+    if (!prev || (ref.failed_at ?? "") > (prev.failed_at ?? ""))
+      map.set(key, ref)
+  }
+  for (const inv of failed) {
+    const ref = failedInvitationRef(inv)
+    const login = inv.login?.trim().toLowerCase()
+    const email = inv.email?.trim().toLowerCase()
+    if (login) keepLatest(byLogin, login, ref)
+    if (email) keepLatest(byEmail, email, ref)
+  }
+  return { byLogin, byEmail }
+}
+
+// Any row shape that carries a failed record (roster rows and Members rows).
+export const hasExpiredInvite = (row: {
+  failed_invitation?: FailedInvitationRef
+}): boolean => row.failed_invitation?.kind === "expired"
+
 // A CSV row keyed for the fallback join: github_id, then lowercased username,
 // then lowercased email. The same fallback chain (github_id -> username) keeps
 // a pre-resolution row with an empty github_id from being misclassified as
@@ -267,28 +306,8 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   } = input
   const csv = indexCsv(students)
 
-  // Failed records keyed by lowercased login and email. When GitHub holds
-  // several for one person (an address re-invited more than once, each try
-  // expiring), keep the most recent: that is the one a re-invite must dismiss
-  // and the date worth showing.
-  const failedByLogin = new Map<string, FailedInvitationRef>()
-  const failedByEmail = new Map<string, FailedInvitationRef>()
-  const keepLatest = (
-    map: Map<string, FailedInvitationRef>,
-    key: string,
-    ref: FailedInvitationRef,
-  ) => {
-    const prev = map.get(key)
-    if (!prev || (ref.failed_at ?? "") > (prev.failed_at ?? ""))
-      map.set(key, ref)
-  }
-  for (const inv of failedInvitations) {
-    const ref = failedInvitationRef(inv)
-    const login = inv.login?.trim().toLowerCase()
-    const email = inv.email?.trim().toLowerCase()
-    if (login) keepLatest(failedByLogin, login, ref)
-    if (email) keepLatest(failedByEmail, email, ref)
-  }
+  const { byLogin: failedByLogin, byEmail: failedByEmail } =
+    indexFailedInvitations(failedInvitations)
 
   // Identity-less rows (an unaccepted email invite's pending row) indexed by
   // email, so a row that shares the address can borrow the name/section captured
@@ -564,7 +583,10 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       rows.push({
         key,
         state: "unlinked",
-        roles: ["student"],
+        // The CSV role, not a placeholder: the row renders its role badge, and
+        // Re-invite sends with it, so an expired ta/teacher email invitation
+        // is re-sent as ta/teacher rather than demoted to student.
+        roles: [csvRole(student) ?? "student"],
         username: "",
         github_id: "",
         avatar_url: "",

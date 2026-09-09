@@ -16,7 +16,7 @@ import {
   type DirectoryMember,
 } from "@/domain/students"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import { useReinviteUnlinkedRow } from "@/hooks/mutations/useReinviteUnlinkedRow"
+import { useReinviteEmailRow } from "@/hooks/mutations/useReinviteEmailRow"
 import { nameFromParts } from "@/util/students"
 import { sortRolesByRank, type TeamRosterRow } from "@/util/teamRoster"
 import MemberLinkPicker, {
@@ -80,7 +80,7 @@ const UnlinkedRowSection = ({
   const [linking, setLinking] = useState(false)
   const [includeOrgMembers, setIncludeOrgMembers] = useState(false)
   const [removingRow, setRemovingRow] = useState(false)
-  const reinvite = useReinviteUnlinkedRow(org, classroom)
+  const reinvite = useReinviteEmailRow(org, classroom)
 
   const email = row.email.trim()
   const working = linking || removingRow || reinvite.isPending

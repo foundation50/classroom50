@@ -70,14 +70,10 @@ describe("inviteMemberToOrg", () => {
     expect(result).toEqual({ currentUsername: "new-handle", state: "invited" })
   })
 
-  it("attaches every active classroom's student team, skipping archived and unresolved ones", async () => {
+  it("attaches every active classroom's student team, skipping archived ones and ones classroom.json names no team for", async () => {
     resolveTeamIdForRoleReadMock.mockImplementation(
       (_c: unknown, _o: unknown, classroom: string) =>
-        classroom === "cs101"
-          ? Promise.resolve(1001)
-          : classroom === "cs201"
-            ? Promise.reject(new Error("boom"))
-            : Promise.resolve(undefined),
+        Promise.resolve(classroom === "cs101" ? 1001 : undefined),
     )
 
     await inviteMemberToOrg(client, {
@@ -110,7 +106,52 @@ describe("inviteMemberToOrg", () => {
     })
   })
 
-  it("dismisses the attributed failed record before inviting", async () => {
+  it("propagates a failed team read instead of sending a team-less invite", async () => {
+    resolveTeamIdForRoleReadMock.mockRejectedValue(new Error("boom"))
+
+    await expect(
+      inviteMemberToOrg(client, {
+        org: "acme",
+        row: row({
+          classrooms: [
+            {
+              classroom: "cs101",
+              archived: false,
+              section: "",
+              state: "enrolled",
+            },
+          ],
+        }),
+      }),
+    ).rejects.toThrow("boom")
+    expect(ensureOrgMembershipMock).not.toHaveBeenCalled()
+    expect(createOrgInvitationMock).not.toHaveBeenCalled()
+  })
+
+  it("resolves each classroom's team once per run through a shared cache", async () => {
+    resolveTeamIdForRoleReadMock.mockResolvedValue(1001)
+    const teamIdCache = new Map()
+    const classrooms = [
+      { classroom: "cs101", archived: false, section: "", state: "enrolled" },
+    ] as const
+    await inviteMemberToOrg(client, {
+      org: "acme",
+      row: row({ classrooms: [...classrooms] }),
+      teamIdCache,
+    })
+    await inviteMemberToOrg(client, {
+      org: "acme",
+      row: row({ classrooms: [...classrooms] }),
+      teamIdCache,
+    })
+
+    expect(resolveTeamIdForRoleReadMock).toHaveBeenCalledTimes(1)
+    expect(ensureOrgMembershipMock.mock.calls[1]?.[1]).toMatchObject({
+      teamIds: [1001],
+    })
+  })
+
+  it("dismisses the attributed failed record only after the invite went out", async () => {
     await inviteMemberToOrg(client, {
       org: "acme",
       row: row({
@@ -129,7 +170,26 @@ describe("inviteMemberToOrg", () => {
     })
     expect(
       dismissFailedInvitationMock.mock.invocationCallOrder[0],
-    ).toBeLessThan(ensureOrgMembershipMock.mock.invocationCallOrder[0]!)
+    ).toBeGreaterThan(ensureOrgMembershipMock.mock.invocationCallOrder[0]!)
+  })
+
+  it("keeps the failed record when the send throws", async () => {
+    ensureOrgMembershipMock.mockRejectedValue(new Error("500"))
+
+    await expect(
+      inviteMemberToOrg(client, {
+        org: "acme",
+        row: row({
+          failed_invitation: {
+            id: 79153763,
+            kind: "expired",
+            failed_at: null,
+            reason: null,
+          },
+        }),
+      }),
+    ).rejects.toThrow()
+    expect(dismissFailedInvitationMock).not.toHaveBeenCalled()
   })
 
   it("reports an existing pending/active state instead of claiming a send", async () => {

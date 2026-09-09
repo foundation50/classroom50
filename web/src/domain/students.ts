@@ -24,11 +24,11 @@ export {
 export {
   dismissFailedInvitation,
   reinviteEmailRows,
-  reinviteUnlinkedRow,
+  reinviteEmailRow,
   type EmailReinviteTarget,
   type ReinviteEmailRowsInput,
-  type ReinviteUnlinkedRowInput,
-  type ReinviteUnlinkedRowResult,
+  type ReinviteEmailRowInput,
+  type ReinviteEmailRowResult,
 } from "./students/emailReinvite"
 export {
   addStudentToClassroom,

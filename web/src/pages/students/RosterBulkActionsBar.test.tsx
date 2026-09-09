@@ -75,6 +75,7 @@ vi.mock("@/github-core/mutations", () => ({
 import RosterBulkActionsBar from "./RosterBulkActionsBar"
 import type { TeamRosterRow } from "@/util/teamRoster"
 import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const row = (over: Partial<TeamRosterRow>): TeamRosterRow => ({
   key: over.username || over.email || "k",
@@ -347,14 +348,109 @@ describe("RosterBulkActionsBar — send invitations", () => {
         },
       ],
     })
-    // Lane 3: the expired login's record is dismissed, then a fresh invite.
-    expect(dismissFailedInvitation).toHaveBeenCalledWith(expect.anything(), {
-      org: "acme",
-      invitationId: 79153763,
-    })
+    // Lane 3: a fresh invite carrying the expired login's record, which the
+    // recipe dismisses once the invite is out; the page dismisses nothing.
     expect(inviteRosterStudents.mock.calls[0]?.[1]).toMatchObject({
-      students: [{ username: "monalisa", role: "student" }],
+      students: [
+        { username: "monalisa", role: "student", failedInvitationId: 79153763 },
+      ],
     })
+    expect(dismissFailedInvitation).not.toHaveBeenCalled()
     expect(onDone).toHaveBeenCalledWith("invite")
+  })
+
+  const rateLimit = () =>
+    new GitHubAPIError({
+      status: 429,
+      url: "/orgs/acme/invitations",
+      message: "secondary rate limit",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  const runInvite = async (rows: TeamRosterRow[]) => {
+    renderBar(rows)
+    fireEvent.click(inviteButton())
+    await act(async () => {
+      fireEvent.click(screen.getByText("confirm-run"))
+    })
+  }
+
+  it("stops at a lane-1 rate limit: later lanes are never sent, every row is deferred", async () => {
+    resendClassroomInvite.mockRejectedValue(rateLimit())
+
+    await runInvite([pending, pendingEmail, expiredLogin])
+
+    expect(reinviteEmailRows).not.toHaveBeenCalled()
+    expect(inviteRosterStudents).not.toHaveBeenCalled()
+    expect(screen.getByText("students.bulk.resultWarnings")).not.toBeNull()
+    expect(
+      screen.getByText(/students\.resendAllRateLimitedShort/),
+    ).not.toBeNull()
+    for (const label of ["grace", "pend@x.edu", "monalisa"])
+      expect(screen.getByText(label)).not.toBeNull()
+    expect(screen.queryByText("students.bulk.resultFailed")).toBeNull()
+  })
+
+  it("treats a rate limit thrown by a batch lane as deferred, not failed, and stops the next lane", async () => {
+    reinviteEmailRows.mockRejectedValue(rateLimit())
+
+    await runInvite([pendingEmail, expiredLogin])
+
+    expect(inviteRosterStudents).not.toHaveBeenCalled()
+    expect(screen.getByText("students.bulk.resultWarnings")).not.toBeNull()
+    expect(screen.queryByText("students.bulk.resultFailed")).toBeNull()
+    expect(screen.getByText("pend@x.edu")).not.toBeNull()
+    expect(screen.getByText("monalisa")).not.toBeNull()
+  })
+
+  it("reports every row of a lane whose precondition threw, and still runs the next lane", async () => {
+    reinviteEmailRows.mockRejectedValue(new Error("team missing"))
+    inviteRosterStudents.mockResolvedValue({
+      invited: [{ username: "monalisa", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+
+    await runInvite([pendingEmail, expiredEmail, expiredLogin])
+
+    expect(inviteRosterStudents).toHaveBeenCalledTimes(1)
+    expect(screen.getByText("students.bulk.resultFailed")).not.toBeNull()
+    expect(screen.getAllByText("team missing")).toHaveLength(2)
+    expect(screen.getByText("students.bulk.invitedHeadline:1")).not.toBeNull()
+  })
+
+  it("counts progress up once across lanes using the batch lane's offset", async () => {
+    resendClassroomInvite.mockResolvedValue({ state: "invited" })
+    let captured: ((p: { processed: number; message: string }) => void) | null =
+      null
+    reinviteEmailRows.mockImplementation(
+      (_c: unknown, input: { onProgress: typeof captured }) => {
+        captured = input.onProgress
+        return new Promise(() => {})
+      },
+    )
+
+    renderBar([pending, pendingEmail, expiredEmail])
+    fireEvent.click(inviteButton())
+    await act(async () => {
+      fireEvent.click(screen.getByText("confirm-run"))
+    })
+    // Lane 1 finished one row; lane 2 reports from zero, offset by that one:
+    // 2 of 3 done, so the bar reads 67%, and the caption names the address.
+    await act(async () => {
+      captured!({ processed: 1, message: "pend@x.edu" })
+    })
+    const bar = document.querySelector("progress") as HTMLProgressElement
+    expect(bar.value).toBe(67)
+    expect(bar.getAttribute("aria-label")).toBe("pend@x.edu")
   })
 })

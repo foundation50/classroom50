@@ -5,7 +5,10 @@ import { getUserById } from "@/github-core/queries"
 import { isActiveMember } from "@/github-core/mutations"
 import { parseGitHubId } from "@/util/students"
 import type { GitHubUser } from "@/github-core/types"
-import type { OrgMemberRow } from "@/util/orgMembers"
+import {
+  orgMemberLabel as labelFor,
+  type OrgMemberRow,
+} from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("orgMembers:bulkAddToClassroom")
@@ -33,8 +36,6 @@ export type BulkAddToClassroomResult = {
   // engine's own duplicate/team skips.
   preSkipped: BulkAddSkip[]
 }
-
-const labelFor = (row: OrgMemberRow) => row.username || row.email || row.key
 
 // Place selected org members into a classroom's team + roster in one bulk
 // action. Composition-only over the existing engine:

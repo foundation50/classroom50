@@ -1078,6 +1078,23 @@ describe("buildTeamRoster — unlinked rows (identity-less, teacher-kept)", () =
     })
   })
 
+  it("carries the CSV role so a staff email invitation is re-sent as staff", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [
+        csvRow({ email: "ta@x.edu", role: "ta" } as Partial<Student>),
+        csvRow({ email: "s@x.edu" }),
+        csvRow({ email: "odd@x.edu", role: "janitor" } as Partial<Student>),
+      ],
+    })
+    expect(Object.fromEntries(rows.map((r) => [r.email, r.roles]))).toEqual({
+      "ta@x.edu": ["ta"],
+      "s@x.edu": ["student"],
+      // An unknown role falls back to the placeholder rather than failing.
+      "odd@x.edu": ["student"],
+    })
+  })
+
   it("does not double-render an email row a pending invite already borrows", () => {
     const rows = buildTeamRoster({
       members: [],

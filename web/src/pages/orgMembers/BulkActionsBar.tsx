@@ -10,9 +10,8 @@ import {
 import { DropdownMenu, FormField, Select } from "@/components/ui"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import type { GitHubUser } from "@/github-core/types"
-import type { OrgMemberRow } from "@/util/orgMembers"
+import { isInvitableToOrg, type OrgMemberRow } from "@/util/orgMembers"
 import { canTargetForUnenroll } from "@/util/classroomRoleUI"
-import { resolveGitHubId } from "@/util/students"
 import type { OrgMembersBulkOutcome } from "@/hooks/useOrgMembersCacheSync"
 import { useBulkAddToClassroom } from "@/hooks/mutations/useBulkAddToClassroom"
 import { useBulkInviteMembersToOrg } from "@/hooks/mutations/useBulkInviteMembersToOrg"
@@ -109,13 +108,8 @@ const BulkActionsBar = ({
   // only a member with a username can be removed from the org (the DELETE is
   // keyed by username).
   const addableRows = selectedRows.filter((row) => row.isMember)
-  // Invitable = on a roster, not a member, with a usable github_id (the row
-  // button's rule). Pending and unlinked rows are handled from the roster.
-  const invitableRows = selectedRows.filter(
-    (row) =>
-      row.classification === "on-roster-not-member" &&
-      resolveGitHubId(row.github_id) !== null,
-  )
+  // Pending and unlinked rows are handled from the roster.
+  const invitableRows = selectedRows.filter(isInvitableToOrg)
   const classroomRemovableRows = selectedRows.filter(
     (row) =>
       canTargetForUnenroll(row) && row.classrooms.some((a) => !a.archived),

@@ -1,7 +1,11 @@
 import type { BadgeTone } from "@/types/badgeTone"
 import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/authz"
 import type { StaffRole } from "@/types/classroom"
-import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
+import type {
+  TeamRosterRow,
+  TeamRosterRowState,
+  FailedInvitationRef,
+} from "@/util/teamRoster"
 import type { MetadataField } from "@/util/rosterMetadataMerge"
 
 // Single source of truth for how a classroom role is presented and ranked.
@@ -74,18 +78,24 @@ export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
 // disagree between them.
 export type RowStatusBadge = { labelKey: string; tone: BadgeTone }
 
+// GitHub's failed record as a chip. One recipe for the roster and the Members
+// page: one fact, one wording across both.
+export function failedInvitationBadge(
+  failed: FailedInvitationRef,
+): RowStatusBadge {
+  return {
+    labelKey:
+      failed.kind === "expired"
+        ? "students.statusInviteExpired"
+        : "students.statusInviteFailed",
+    tone: "error",
+  }
+}
+
 export function rowStatusBadges(row: TeamRosterRow): RowStatusBadge[] {
   const badges: RowStatusBadge[] = []
-  const failed = row.failed_invitation
-  if (failed) {
-    badges.push({
-      labelKey:
-        failed.kind === "expired"
-          ? "students.statusInviteExpired"
-          : "students.statusInviteFailed",
-      tone: "error",
-    })
-  }
+  if (row.failed_invitation)
+    badges.push(failedInvitationBadge(row.failed_invitation))
   badges.push({
     labelKey: STATE_LABEL_KEY[row.state],
     tone: STATE_BADGE_TONE[row.state],

@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
   createOrgInvitation,
+  cancelOrgInvitation,
   deleteInviteTeam,
   ensureInviteTeam,
   ensureOrgMembership,
@@ -17,6 +18,8 @@ import {
   retryDeferred,
   resolveTeamIdByRole,
   appendEmailInviteRows,
+  dismissFailedInvitation,
+  dismissFailedInvitations,
   log,
 } from "./rosterPrimitives"
 import i18n from "@/i18n"
@@ -29,7 +32,15 @@ export type InviteRosterStudentsInput = {
   // `role` (default "student") selects the target team and org role: student ->
   // classroom team, ta -> TA team, teacher -> org OWNER (admin) + teacher
   // team. `pending` rows are handled by resendOrgInvitation, not here.
-  students: { username: string; github_id?: string; role?: ClassroomRole }[]
+  // `failedInvitationId` names GitHub's failed record for the row's last
+  // invitation; it is dismissed once the fresh invite is confirmed (or the
+  // person turns out to be already invited/a member), never before.
+  students: {
+    username: string
+    github_id?: string
+    role?: ClassroomRole
+    failedInvitationId?: number
+  }[]
   onProgress?: (progress: {
     processed: number
     total: number
@@ -89,6 +100,7 @@ export async function inviteRosterStudents(
       username: s.username.trim(),
       github_id: s.github_id,
       role: s.role ?? "student",
+      failedInvitationId: s.failedInvitationId,
     }))
     .filter((s) => s.username)
   if (targets.length === 0) return { invited, skipped, failed, deferred }
@@ -144,6 +156,14 @@ export async function inviteRosterStudents(
       teamIds: teamId ? [teamId] : undefined,
       role: githubOrgRoleForRole(role),
     })
+    // The person now has a live invitation or membership on file, so the old
+    // failed record is only noise; a thrown send above keeps it.
+    if (target.failedInvitationId !== undefined) {
+      await dismissFailedInvitation(client, {
+        org,
+        invitationId: target.failedInvitationId,
+      })
+    }
     if (result.state === "invited") return { username, role }
     return {
       skip: result.state === "active" ? "already-member" : "already-pending",
@@ -217,6 +237,14 @@ export type BulkInviteByEmailInput = {
     first_name?: string
     last_name?: string
     section?: string
+    // A live invitation for the address to replace (a resend). GitHub refuses a
+    // second invitation for an address that already has one, so it is
+    // cancelled right before the create, once every batch precondition has
+    // passed; a create that then fails restores it.
+    pendingInvitationId?: number
+    // GitHub's failed records for the address, dismissed once the fresh invite
+    // is confirmed (or GitHub reports the address already invited/a member).
+    failedInvitationIds?: number[]
   }[]
   onProgress?: (progress: {
     processed: number
@@ -285,6 +313,8 @@ export async function bulkInviteByEmail(
       first_name: i.first_name,
       last_name: i.last_name,
       section: i.section,
+      pendingInvitationId: i.pendingInvitationId,
+      failedInvitationIds: i.failedInvitationIds,
     }))
     .filter((i) => i.email)
   if (targets.length === 0) return { invited, skipped, failed, deferred }
@@ -325,6 +355,26 @@ export async function bulkInviteByEmail(
   }
 
   type EmailTarget = (typeof targets)[number]
+  // Addresses whose live invitation this run cancelled and has not replaced
+  // yet. Anything still here when the run ends is restored (below), so a
+  // resend that could not go out never leaves the student with no invitation.
+  const revokedLive = new Map<
+    string,
+    Parameters<typeof createOrgInvitation>[1]
+  >()
+  const restoreLive = async (email: string) => {
+    const invite = revokedLive.get(email)
+    if (!invite) return
+    revokedLive.delete(email)
+    try {
+      await createOrgInvitation(client, invite)
+    } catch (err) {
+      log.error("re-invite: restoring the cancelled invitation failed", {
+        email,
+        err,
+      })
+    }
+  }
   // Invite one email; throws on error so the caller classifies rate-limit/422.
   // The metadata team is a precondition, not a nicety: it's the only thing that
   // retains the invited address, so a failure to prepare it throws and the
@@ -340,19 +390,41 @@ export async function bulkInviteByEmail(
       actor.login,
     )
     teamIds.push(inviteTeam.id)
+    const invite = {
+      org,
+      email: target.email,
+      team_ids: teamIds.length > 0 ? teamIds : undefined,
+      role: githubOrgRoleForRole(target.role),
+    }
     try {
-      await createOrgInvitation(client, {
-        org,
-        email: target.email,
-        team_ids: teamIds.length > 0 ? teamIds : undefined,
-        role: githubOrgRoleForRole(target.role),
-      })
+      // Cancel the live invitation only now, after every batch precondition
+      // has passed. A deferred retry re-cancels harmlessly (a 404 is
+      // tolerated); any other cancel failure is this target's failure.
+      if (target.pendingInvitationId !== undefined) {
+        const { cancelled } = await cancelOrgInvitation(client, {
+          org,
+          invitationId: target.pendingInvitationId,
+        })
+        if (cancelled) revokedLive.set(target.email, invite)
+      }
+      await createOrgInvitation(client, invite)
+      revokedLive.delete(target.email)
     } catch (err) {
       // A doomed invite (422 already-member/-invited, or a hard failure) must
       // not leave a fresh, member-less metadata team behind for GC to reap.
       // Keep it on a rate limit (the deferred retry re-adopts it) and keep an
       // adopted team (it may hold a prior invite's still-unrecovered record).
       const rateLimited = err instanceof GitHubAPIError && err.isRateLimited
+      const alreadyThere = err instanceof GitHubAPIError && err.status === 422
+      // Something live already covers the address, so nothing to restore, and
+      // the old failed record is noise.
+      if (alreadyThere) {
+        revokedLive.delete(target.email)
+        await dismissFailedInvitations(client, org, target.failedInvitationIds)
+      }
+      // A hard failure right after the cancel: put the original back now. A
+      // rate limit waits for the deferred retry (and the end-of-run restore).
+      if (!rateLimited && !alreadyThere) await restoreLive(target.email)
       if (!rateLimited && inviteTeam.created) {
         try {
           await deleteInviteTeam(client, org, inviteTeam.slug)
@@ -365,6 +437,7 @@ export async function bulkInviteByEmail(
       }
       throw err
     }
+    await dismissFailedInvitations(client, org, target.failedInvitationIds)
   }
 
   let rateLimited = false
@@ -416,6 +489,8 @@ export async function bulkInviteByEmail(
     },
   })
   for (const target of stillDeferred) deferred.push(target.email)
+  // Rate-limited out with a live invitation already cancelled: give it back.
+  for (const email of [...revokedLive.keys()]) await restoreLive(email)
 
   // Retain the invited emails on the roster, one commit for the whole batch
   // (best-effort; appendEmailInviteRows swallows its own failures, and a miss is

@@ -1,35 +1,21 @@
 import type { GitHubClient } from "@/github-core/client"
-import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getOrgFailedInvitations } from "@/github-core/queries"
 import { tolerateGitHubError } from "@/github-core/errors"
 import type { ClassroomRole } from "@/util/teamRoster"
 import { bulkInviteByEmail, type BulkInviteByEmailResult } from "./inviteRoster"
-import { log } from "./rosterPrimitives"
 
-// Dismiss one entry of the org's failed_invitations list (the same DELETE that
-// cancels a pending invite; GitHub's UI calls it "dismiss"). Never throws: the
-// record is bookkeeping, and the caller's real operation (a fresh invite, a row
-// removal) must not fail because a stale record wouldn't go away.
-export async function dismissFailedInvitation(
-  client: GitHubClient,
-  input: { org: string; invitationId: number },
-): Promise<void> {
-  try {
-    await cancelOrgInvitation(client, input)
-  } catch (err) {
-    log.error("dismissing a failed invitation failed", { ...input, err })
-  }
-}
+export { dismissFailedInvitation } from "./rosterPrimitives"
 
 export type EmailReinviteTarget = {
   email: string
   role: ClassroomRole
   // The live invitation to replace (a pending email-only row). GitHub refuses a
   // second invitation for an address that already has one, so a resend must
-  // cancel first; without this the create 422s and nothing is sent.
+  // cancel it; bulkInviteByEmail does so right before the create and restores
+  // it if the create fails.
   pendingInvitationId?: number
   // The failed record the roster attributed to the row (see
-  // TeamRosterRow.failed_invitation), dismissed so it stops badging the row.
+  // TeamRosterRow.failed_invitation), dismissed once the fresh invite is out.
   failedInvitationId?: number
 }
 
@@ -47,16 +33,17 @@ export type ReinviteEmailRowsInput = {
 // Send a fresh organization invitation to each email row: a pending email-only
 // invite (resend), an unlinked address (re-invite), or one whose invitation
 // GitHub recorded as failed. One recipe for the row modal and the bulk bar so
-// the two can't drift on what "send again" clears first.
+// the two can't drift on what "send again" clears.
 //
-// GitHub has no resend endpoint, so this is cancel + create. Before sending:
-//   - every pending invitation named by a target is cancelled;
-//   - every failed record on a target address is dismissed: the ids the roster
-//     attributed, plus any older record for the same address (the roster keeps
-//     only the latest). The failed list is read once for the whole batch;
-//     owner-only, so a 403/404 just skips that sweep.
-// Then bulkInviteByEmail sends the batch with the classroom team attached and
-// re-claims each address's existing roster.csv row.
+// GitHub has no resend endpoint, so this is cancel + create, and the order
+// matters: bulkInviteByEmail runs every batch precondition (archived
+// classroom, team resolution) first, cancels each target's live invitation
+// right before its own create, restores it when the create fails, and
+// dismisses the address's failed records only after the send is confirmed.
+// The failed records to dismiss are the ids the roster attributed plus any
+// older record for the same address (the roster keeps only the latest); the
+// failed list is read once for the whole batch and is owner-only, so a 403/404
+// just skips that sweep.
 export async function reinviteEmailRows(
   client: GitHubClient,
   input: ReinviteEmailRowsInput,
@@ -69,72 +56,73 @@ export async function reinviteEmailRows(
     return { invited: [], skipped: [], failed: [], deferred: [] }
   }
 
-  const wantedEmails = new Set(targets.map((t) => t.email.toLowerCase()))
   const failedList = await tolerateGitHubError(
     () => getOrgFailedInvitations(client, org),
     [],
-    { predicate: (err) => err.isNotFound || err.isForbidden },
+    {
+      predicate: (err) =>
+        !err.isRateLimited && (err.isNotFound || err.isForbidden),
+    },
   )
-  const toDismiss = new Set<number>()
-  for (const t of targets) {
-    if (t.failedInvitationId !== undefined) toDismiss.add(t.failedInvitationId)
-  }
+  const failedIdsByEmail = new Map<string, Set<number>>()
   for (const inv of failedList) {
     const email = inv.email?.trim().toLowerCase()
-    if (email && wantedEmails.has(email)) toDismiss.add(inv.id)
-  }
-  for (const id of toDismiss) {
-    await dismissFailedInvitation(client, { org, invitationId: id })
-  }
-
-  for (const t of targets) {
-    if (t.pendingInvitationId === undefined) continue
-    // A 404 (already gone) is tolerated inside cancelOrgInvitation; anything
-    // else means the live invite may still block the create, so let it throw
-    // rather than report a resend that can't happen.
-    await cancelOrgInvitation(client, {
-      org,
-      invitationId: t.pendingInvitationId,
-    })
+    if (!email) continue
+    const ids = failedIdsByEmail.get(email) ?? new Set<number>()
+    ids.add(inv.id)
+    failedIdsByEmail.set(email, ids)
   }
 
   return bulkInviteByEmail(client, {
     org,
     classroom,
-    invites: targets.map(({ email, role }) => ({ email, role })),
+    invites: targets.map((t) => {
+      const ids = new Set(failedIdsByEmail.get(t.email.toLowerCase()))
+      if (t.failedInvitationId !== undefined) ids.add(t.failedInvitationId)
+      return {
+        email: t.email,
+        role: t.role,
+        pendingInvitationId: t.pendingInvitationId,
+        failedInvitationIds: ids.size > 0 ? [...ids] : undefined,
+      }
+    }),
     onProgress,
   })
 }
 
-export type ReinviteUnlinkedRowInput = {
+export type ReinviteEmailRowInput = {
   org: string
   classroom: string
   email: string
   role: ClassroomRole
+  pendingInvitationId?: number
   failedInvitationId?: number
 }
 
-export type ReinviteUnlinkedRowResult =
+export type ReinviteEmailRowResult =
   | { status: "sent" }
   // GitHub answered 422: the address already has a live invitation (one the
-  // classroom team can't see) or belongs to an org member. Nothing was sent.
+  // classroom team can't see, possibly sent from another classroom) or belongs
+  // to an org member. Nothing was sent.
   | { status: "already-invited-or-member" }
   | { status: "rate-limited" }
 
-// The single-row form for the member modal: reinviteEmailRows for one address,
-// folded to a status the call site maps to copy. Throws on a real failure.
-export async function reinviteUnlinkedRow(
+// The single-row form for the member modal (resend of a pending email row, or
+// re-invite of an unlinked one): reinviteEmailRows for one address, folded to a
+// status the call site maps to copy. Throws on a real failure.
+export async function reinviteEmailRow(
   client: GitHubClient,
-  input: ReinviteUnlinkedRowInput,
-): Promise<ReinviteUnlinkedRowResult> {
-  const { org, classroom, role, failedInvitationId } = input
+  input: ReinviteEmailRowInput,
+): Promise<ReinviteEmailRowResult> {
+  const { org, classroom, role, pendingInvitationId, failedInvitationId } =
+    input
   const email = input.email.trim()
-  if (!email) throw new Error("reinviteUnlinkedRow requires an email")
+  if (!email) throw new Error("reinviteEmailRow requires an email")
 
   const res = await reinviteEmailRows(client, {
     org,
     classroom,
-    targets: [{ email, role, failedInvitationId }],
+    targets: [{ email, role, pendingInvitationId, failedInvitationId }],
   })
   const failure = res.failed[0]
   if (failure) throw new Error(failure.message)

@@ -32,6 +32,7 @@ vi.mock("@/github-core/queries", async (importOriginal) => {
 })
 
 import { useDismissFailedInvitations } from "./useDismissFailedInvitations"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const wrapperWith = (queryClient: QueryClient) =>
   function Wrapper({ children }: PropsWithChildren) {
@@ -63,6 +64,7 @@ describe("useDismissFailedInvitations", () => {
       dismissed: 2,
       alreadyGone: 1,
       failed: [{ invitationId: 3, message: "boom" }],
+      deferred: [],
     })
     expect(cancelOrgInvitation).toHaveBeenCalledTimes(4)
     expect(cancelOrgInvitation.mock.calls[2]?.[1]).toEqual({
@@ -70,6 +72,46 @@ describe("useDismissFailedInvitations", () => {
       invitationId: 3,
     })
     // The failed list is refetched regardless of partial failure.
+    expect(invalidateInviteQueries).toHaveBeenCalledWith(queryClient, "acme")
+  })
+
+  it("stops at a rate limit and defers the id it hit plus every id after it", async () => {
+    cancelOrgInvitation
+      .mockResolvedValueOnce({ cancelled: true })
+      .mockRejectedValueOnce(
+        new GitHubAPIError({
+          status: 429,
+          url: "/orgs/acme/invitations/2",
+          message: "secondary rate limit",
+          body: null,
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: 60,
+          },
+        }),
+      )
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    })
+    const { result } = renderHook(() => useDismissFailedInvitations("acme"), {
+      wrapper: wrapperWith(queryClient),
+    })
+
+    result.current.mutate([1, 2, 3, 4])
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(result.current.data).toEqual({
+      dismissed: 1,
+      alreadyGone: 0,
+      failed: [],
+      deferred: [2, 3, 4],
+    })
+    // Hammering a throttled endpoint only extends the window.
+    expect(cancelOrgInvitation).toHaveBeenCalledTimes(2)
     expect(invalidateInviteQueries).toHaveBeenCalledWith(queryClient, "acme")
   })
 })

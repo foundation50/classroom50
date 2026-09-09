@@ -3,7 +3,10 @@ import type { TFunction } from "i18next"
 import { getAuthenticatedUser } from "@/domain/queries/users"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { isSameGitHubUser } from "@/util/students"
-import type { OrgMemberRow } from "@/util/orgMembers"
+import {
+  orgMemberLabel as labelFor,
+  type OrgMemberRow,
+} from "@/util/orgMembers"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import type { BulkRemoveProgress } from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import { logger } from "@/lib/logger"
@@ -27,8 +30,6 @@ export type BulkRemoveFromOrgResult = {
   // rosters, per-classroom unenroll failures).
   warnings: string[]
 }
-
-const labelFor = (row: OrgMemberRow) => row.username || row.email || row.key
 
 // Remove selected members from the ORGANIZATION, one removeMemberFromOrg call
 // each: unenroll from EVERY classroom first (not only the filtered one — the

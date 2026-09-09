@@ -23,8 +23,8 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 // honours the call-site onSuccess/onError split the component relies on.
 const reinviteMutate = vi.fn()
 let reinviteOutcome: { ok: { status: string } } | { error: Error } | undefined
-vi.mock("@/hooks/mutations/useReinviteUnlinkedRow", () => ({
-  useReinviteUnlinkedRow: () => ({
+vi.mock("@/hooks/mutations/useReinviteEmailRow", () => ({
+  useReinviteEmailRow: () => ({
     isPending: false,
     mutate: (
       vars: unknown,

@@ -36,6 +36,28 @@ describe("useRowSelection", () => {
     expect(result.current.selectedKeys.size).toBe(0)
   })
 
+  it("retain narrows the selection to the given keys and keeps the Set when nothing changes", () => {
+    const { result } = renderHook(() =>
+      useRowSelection({ rows, filtered: rows, isSelectable: notSelf, keyOf }),
+    )
+    act(() => result.current.handleToggleRow("a"))
+    act(() => result.current.handleToggleRow("b"))
+    act(() => result.current.handleToggleRow("c"))
+
+    act(() => result.current.retain(["a", "c"]))
+    expect([...result.current.selectedKeys]).toEqual(["a", "c"])
+    expect(result.current.selectedRows.map(keyOf)).toEqual(["a", "c"])
+
+    // Keys not selected are ignored; an unchanged set keeps its identity so
+    // memos keyed on it don't rerun.
+    const before = result.current.selectedKeys
+    act(() => result.current.retain(["a", "c", "zzz"]))
+    expect(result.current.selectedKeys).toBe(before)
+
+    act(() => result.current.retain([]))
+    expect(result.current.selectedKeys.size).toBe(0)
+  })
+
   it("never admits a non-selectable row, even through select-all", () => {
     const { result } = renderHook(() =>
       useRowSelection({ rows, filtered: rows, isSelectable: notSelf, keyOf }),

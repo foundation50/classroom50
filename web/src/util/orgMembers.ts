@@ -1,7 +1,13 @@
 import type { Student } from "@/types/classroom"
 import type { GitHubOrgInvitation, GitHubUser } from "@/github-core/types"
 import { memberIdSet, studentKey } from "@/util/identity"
-import { failedInvitationRef, type FailedInvitationRef } from "./teamRoster"
+import {
+  failedInvitationRef,
+  hasExpiredInvite,
+  indexFailedInvitations,
+  type FailedInvitationRef,
+} from "./teamRoster"
+import { resolveGitHubId } from "./students"
 import { sortByColumn } from "./sortColumns"
 
 // Per-classroom enrollment state for an aggregated member, mirroring
@@ -117,25 +123,8 @@ export function aggregateOrgMembers(
     if (login && !pendingByLogin.has(login)) pendingByLogin.set(login, inv.id)
     if (email && !pendingByEmail.has(email)) pendingByEmail.set(email, inv.id)
   }
-  // Failed records, keeping the most recent per key (the roster's rule).
-  const failedByLogin = new Map<string, FailedInvitationRef>()
-  const failedByEmail = new Map<string, FailedInvitationRef>()
-  const keepLatest = (
-    map: Map<string, FailedInvitationRef>,
-    key: string,
-    ref: FailedInvitationRef,
-  ) => {
-    const prev = map.get(key)
-    if (!prev || (ref.failed_at ?? "") > (prev.failed_at ?? ""))
-      map.set(key, ref)
-  }
-  for (const inv of invitations.failed ?? []) {
-    const ref = failedInvitationRef(inv)
-    const login = inv.login?.trim().toLowerCase()
-    const email = inv.email?.trim().toLowerCase()
-    if (login) keepLatest(failedByLogin, login, ref)
-    if (email) keepLatest(failedByEmail, email, ref)
-  }
+  const { byLogin: failedByLogin, byEmail: failedByEmail } =
+    indexFailedInvitations(invitations.failed ?? [])
   // A row's live invitation, else its latest failed record. Login first (the
   // account is the stronger identity), then any of the row's addresses.
   const invitationFor = (acc: {
@@ -397,8 +386,18 @@ export type OrgMembersStatusFilter =
   | "not-enrolled"
 export type OrgMembersRoleFilter = "all" | "owner" | "member"
 
-export const hasExpiredInvite = (row: OrgMemberRow): boolean =>
-  row.failed_invitation?.kind === "expired"
+export { hasExpiredInvite }
+
+// The rows the org-invite action can send to: on a roster, not a member, no
+// live invitation, and a usable github_id (the invite is sent by id). One rule
+// for the bulk bar's eligibility count and the domain's skip guard.
+export const isInvitableToOrg = (row: OrgMemberRow): boolean =>
+  row.classification === "on-roster-not-member" &&
+  resolveGitHubId(row.github_id) !== null
+
+// How a Members row is named in progress captions and result lists.
+export const orgMemberLabel = (row: OrgMemberRow): string =>
+  row.username || row.email || row.key
 
 export function filterOrgMemberRows(
   rows: OrgMemberRow[],

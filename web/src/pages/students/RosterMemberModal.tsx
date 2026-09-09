@@ -15,12 +15,11 @@ import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useUnenrollStudent } from "@/hooks/mutations/useUnenrollStudent"
 import { useBeforeUnloadGuard } from "@/hooks/useBeforeUnloadGuard"
+import { useReinviteEmailRow } from "@/hooks/mutations/useReinviteEmailRow"
 import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
-  dismissFailedInvitation,
   inviteRosterStudents,
-  reinviteEmailRows,
   resendClassroomInvite,
   retireEmailInvite,
   type StudentCsvRow,
@@ -135,6 +134,7 @@ const RosterMemberModal = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
+  const reinviteEmailRow = useReinviteEmailRow(org, classroom)
   const canManage = canManageProp
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
@@ -347,18 +347,19 @@ const RosterMemberModal = ({
     }
     setResolving(true)
     try {
-      // A stranded row whose last invite GitHub recorded as failed: dismiss
-      // that record first, so the fresh invite is the only one on file.
-      if (row.failed_invitation) {
-        await dismissFailedInvitation(client, {
-          org,
-          invitationId: row.failed_invitation.id,
-        })
-      }
+      // GitHub's failed record for the row's last invitation rides along and is
+      // dismissed once the fresh invite is confirmed, so a send that fails keeps
+      // the row's "Invitation expired" explanation.
       const res = await inviteRosterStudents(client, {
         org,
         classroom,
-        students: [{ username, github_id }],
+        students: [
+          {
+            username,
+            github_id,
+            failedInvitationId: row.failed_invitation?.id,
+          },
+        ],
       })
       // A failed target sent nothing; a rate-limited (deferred) target also sent
       // nothing. Only a fresh invite or an already-active/pending skip is a real
@@ -398,28 +399,24 @@ const RosterMemberModal = ({
   const handleResend = async () => {
     if (resending) return
     // An email-only pending invite has no account to re-invite by id, so re-send
-    // by address: cancel the live invitation (GitHub refuses a second one for
-    // the same address), then create afresh. Shared recipe with the bulk bar
-    // and the unlinked row's Re-invite; the existing roster row is re-claimed.
+    // by address through the shared recipe (cancel the live invitation right
+    // before the create, restore it if the create fails); the existing roster
+    // row is re-claimed. Same hook as the unlinked row's Re-invite.
     if (!row.username && row.email) {
       setResending(true)
       try {
         const role = sortRolesByRank(row.roles)[0] ?? "student"
-        const res = await reinviteEmailRows(client, {
-          org,
-          classroom,
-          targets: [
-            { email: row.email, role, pendingInvitationId: row.invitation_id },
-          ],
+        const result = await reinviteEmailRow.mutateAsync({
+          email: row.email,
+          role,
+          pendingInvitationId: row.invitation_id,
+          failedInvitationId: row.failed_invitation?.id,
         })
-        if (res.failed.length > 0) {
-          throw new Error(res.failed[0]!.message)
-        }
-        if (res.deferred.length > 0) {
+        if (result.status === "rate-limited") {
           onError(row.key, t("students.resendRateLimited", { label }))
           return
         }
-        if (res.invited.length === 0) {
+        if (result.status === "already-invited-or-member") {
           onError(row.key, t("students.resendNotSent", { label }))
           return
         }

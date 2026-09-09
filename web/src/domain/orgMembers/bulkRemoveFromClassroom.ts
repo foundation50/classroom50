@@ -4,7 +4,10 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import { studentKey } from "@/util/identity"
 import { canTargetForUnenroll } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
-import type { OrgMemberRow } from "@/util/orgMembers"
+import {
+  orgMemberLabel as labelFor,
+  type OrgMemberRow,
+} from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("orgMembers:bulkRemoveFromClassroom")
@@ -29,8 +32,6 @@ export type BulkRemoveFromClassroomResult = {
   // Non-fatal per-student side-effect warnings (team drop / invite cancel).
   warnings: string[]
 }
-
-const labelFor = (row: OrgMemberRow) => row.username || row.email || row.key
 
 // Reconstruct the minimal Student the roster matcher keys on (username /
 // github_id / email). Mirrors removeMemberFromOrg.rowToStudent.

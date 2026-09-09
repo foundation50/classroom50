@@ -1,10 +1,13 @@
 import { nameFromParts } from "@/util/students"
-import type {
-  ClassroomRole,
-  TeamRosterRow,
-  TeamRosterRowState,
+import {
+  hasExpiredInvite,
+  type ClassroomRole,
+  type TeamRosterRow,
+  type TeamRosterRowState,
 } from "@/util/teamRoster"
 import { matchesQuery } from "@/util/textMatch"
+
+export { hasExpiredInvite }
 
 // The unlabeled section bucket. Shared by the filter and the group-by-section
 // view so a row with no section is treated identically in both.
@@ -16,9 +19,6 @@ export const NO_SECTION = "No section"
 // filters; this option gathers them regardless of state.
 export type StatusFilter = "all" | TeamRosterRowState | "invite_expired"
 export type RoleFilter = "all" | ClassroomRole
-
-export const hasExpiredInvite = (row: TeamRosterRow): boolean =>
-  row.failed_invitation?.kind === "expired"
 
 const matchesStatus = (row: TeamRosterRow, filter: StatusFilter): boolean => {
   if (filter === "all") return true

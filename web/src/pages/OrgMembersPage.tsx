@@ -53,6 +53,7 @@ import BulkActionsBar, {
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
 import OrphanedInvitationsNotice from "@/pages/orgMembers/OrphanedInvitationsNotice"
 import { useDismissFailedInvitations } from "@/hooks/mutations/useDismissFailedInvitations"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import { useRowSelection } from "@/hooks/useRowSelection"
 import { useOrgMembersCacheSync } from "@/hooks/useOrgMembersCacheSync"
 import {
@@ -107,6 +108,8 @@ const OrgMembersPage = () => {
     displayNameByClassroom,
     rosterReadFailures,
     orphanedFailedInvitations,
+    invitationsUnavailable,
+    refetchInvitations,
   } = useOrgMembersOverview(org)
   const { classes } = useGetClasses(org)
   const [query, setQuery] = useState("")
@@ -152,7 +155,6 @@ const OrgMembersPage = () => {
     if (invitationIds.length === 0) return
     dismissFailedInvitations.mutate(invitationIds, {
       onSuccess: (result) => {
-        const cleared = result.dismissed + result.alreadyGone
         if (result.failed.length > 0) {
           notify({
             tone: "error",
@@ -162,11 +164,21 @@ const OrgMembersPage = () => {
             }),
           })
         }
-        if (cleared > 0) {
+        if (result.deferred.length > 0) {
+          notify({
+            tone: "warning",
+            message: t("orgMembers.orphanedInvitesDeferred", {
+              count: result.deferred.length,
+            }),
+          })
+        }
+        // Only real dismissals are announced; a record already gone on GitHub
+        // just disappears with the refetch.
+        if (result.dismissed > 0) {
           notify({
             tone: "success",
             message: t("orgMembers.orphanedInvitesDismissed", {
-              count: cleared,
+              count: result.dismissed,
             }),
           })
         }
@@ -176,7 +188,7 @@ const OrgMembersPage = () => {
           tone: "error",
           message: t("orgMembers.orphanedInvitesDismissFailed", {
             count: invitationIds.length,
-            error: err instanceof Error ? err.message : String(err),
+            error: getErrorMessage(err),
           }),
         }),
     })
@@ -398,6 +410,17 @@ const OrgMembersPage = () => {
                   )
                   .join(" ")}
               </span>
+            </AnimatedAlert>
+            <AnimatedAlert
+              tone="warning"
+              show={invitationsUnavailable}
+              role="status"
+              className="flex items-center justify-between gap-3"
+            >
+              <span>{t("orgMembers.invitationsUnavailable")}</span>
+              <Button variant="ghost" size="xs" onClick={refetchInvitations}>
+                {t("orgMembers.invitationsRetry")}
+              </Button>
             </AnimatedAlert>
             <OrphanedInvitationsNotice
               orphans={orphanedFailedInvitations}
