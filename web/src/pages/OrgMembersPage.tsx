@@ -49,6 +49,8 @@ import BulkActionsBar, {
   type BulkDoneInput,
 } from "@/pages/orgMembers/BulkActionsBar"
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
+import OrphanedInvitationsNotice from "@/pages/orgMembers/OrphanedInvitationsNotice"
+import { useDismissFailedInvitations } from "@/hooks/mutations/useDismissFailedInvitations"
 import { useRowSelection } from "@/hooks/useRowSelection"
 import { useOrgMembersCacheSync } from "@/hooks/useOrgMembersCacheSync"
 import {
@@ -102,6 +104,7 @@ const OrgMembersPage = () => {
     teamSlugByClassroom,
     displayNameByClassroom,
     notes,
+    orphanedFailedInvitations,
   } = useOrgMembersOverview(org)
   const { classes } = useGetClasses(org)
   const [query, setQuery] = useState("")
@@ -137,6 +140,44 @@ const OrgMembersPage = () => {
   const handleBulkDone = (input: BulkDoneInput) => {
     cacheSync.afterBulkRun(input, rows)
     clearSelection()
+  }
+
+  // Dismiss GitHub's orphaned failed-invitation records (see the notice). The
+  // hook owns the invalidation; the outcome toast lives here so it skips when
+  // the page has unmounted.
+  const dismissFailedInvitations = useDismissFailedInvitations(org ?? "")
+  const dismissOrphans = (invitationIds: number[]) => {
+    if (invitationIds.length === 0) return
+    dismissFailedInvitations.mutate(invitationIds, {
+      onSuccess: (result) => {
+        const cleared = result.dismissed + result.alreadyGone
+        if (result.failed.length > 0) {
+          notify({
+            tone: "error",
+            message: t("orgMembers.orphanedInvitesDismissFailed", {
+              count: result.failed.length,
+              error: result.failed[0]!.message,
+            }),
+          })
+        }
+        if (cleared > 0) {
+          notify({
+            tone: "success",
+            message: t("orgMembers.orphanedInvitesDismissed", {
+              count: cleared,
+            }),
+          })
+        }
+      },
+      onError: (err) =>
+        notify({
+          tone: "error",
+          message: t("orgMembers.orphanedInvitesDismissFailed", {
+            count: invitationIds.length,
+            error: err instanceof Error ? err.message : String(err),
+          }),
+        }),
+    })
   }
 
   // Inline row invite for an on-roster non-member (mirrors the detail-drawer
@@ -341,6 +382,21 @@ const OrgMembersPage = () => {
           >
             <span>{notes.join(" ")}</span>
           </AnimatedAlert>
+
+          {orphanedFailedInvitations.length > 0 ? (
+            <div className="mt-6">
+              <OrphanedInvitationsNotice
+                orphans={orphanedFailedInvitations}
+                busy={dismissFailedInvitations.isPending}
+                onDismiss={(id) => dismissOrphans([id])}
+                onDismissAll={() =>
+                  dismissOrphans(
+                    orphanedFailedInvitations.map((o) => o.invitation.id),
+                  )
+                }
+              />
+            </div>
+          ) : null}
 
           <AnimatedAlert
             tone="error"

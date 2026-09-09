@@ -1,6 +1,7 @@
 import type { Student } from "@/types/classroom"
-import type { GitHubUser } from "@/github-core/types"
+import type { GitHubOrgInvitation, GitHubUser } from "@/github-core/types"
 import { memberIdSet, studentKey } from "@/util/identity"
+import { failedInvitationRef, type FailedInvitationRef } from "./teamRoster"
 import { sortByColumn } from "./sortColumns"
 
 // Per-classroom enrollment state for an aggregated member, mirroring
@@ -333,4 +334,55 @@ export function filterOrgMemberRows(
     if (roleFilter === "member") return row.isMember && !isOwner(row)
     return true
   })
+}
+
+// A failed/expired invitation GitHub still lists that no classroom can explain:
+// its email and login match no roster row in any classroom AND no active member.
+// Such a record has nothing on any roster to badge or re-invite from (the row
+// was removed, or the invitation was never Classroom 50's), so it can only be
+// dismissed, and only by an explicit owner action: an owner-sent invitation
+// unrelated to any classroom looks identical, so nothing sweeps these
+// automatically.
+export type OrphanedFailedInvitation = {
+  invitation: GitHubOrgInvitation
+  ref: FailedInvitationRef
+}
+
+export function orphanedFailedInvitations(
+  failed: GitHubOrgInvitation[],
+  members: GitHubUser[],
+  rosters: ClassroomRoster[],
+): OrphanedFailedInvitation[] {
+  const logins = new Set<string>()
+  const emails = new Set<string>()
+  for (const m of members) {
+    logins.add(m.login.toLowerCase())
+    const email = m.email?.trim().toLowerCase()
+    if (email) emails.add(email)
+  }
+  for (const roster of rosters) {
+    for (const s of roster.students) {
+      const login = s.username?.trim().toLowerCase()
+      const email = s.email?.trim().toLowerCase()
+      if (login) logins.add(login)
+      if (email) emails.add(email)
+    }
+  }
+  return failed
+    .filter((inv) => {
+      const login = inv.login?.trim().toLowerCase()
+      const email = inv.email?.trim().toLowerCase()
+      if (login && logins.has(login)) return false
+      if (email && emails.has(email)) return false
+      return true
+    })
+    .map((invitation) => ({
+      invitation,
+      ref: failedInvitationRef(invitation),
+    }))
+    .sort(
+      (a, b) =>
+        (b.ref.failed_at ?? "").localeCompare(a.ref.failed_at ?? "") ||
+        a.invitation.id - b.invitation.id,
+    )
 }

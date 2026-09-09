@@ -6,6 +6,7 @@ import {
   csvFileQuery,
   jsonFileQuery,
   orgAdminsQuery,
+  orgFailedInvitationsQuery,
   orgMembersAllQuery,
   teamMembersQuery,
 } from "@/github-core/queries"
@@ -19,7 +20,12 @@ import {
   type Classroom,
   type Student,
 } from "@/types/classroom"
-import { aggregateOrgMembers, type OrgMemberRow } from "@/util/orgMembers"
+import {
+  aggregateOrgMembers,
+  orphanedFailedInvitations,
+  type OrgMemberRow,
+  type OrphanedFailedInvitation,
+} from "@/util/orgMembers"
 import { memberIdSet } from "@/util/identity"
 import type { GitHubUser } from "@/github-core/types"
 
@@ -47,6 +53,11 @@ export type OrgMembersOverview = {
   // Per-classroom roster read failures (a 404/parse error contributes no
   // students rather than failing the whole page).
   notes: string[]
+  // GitHub's failed/expired invitations that no classroom roster or member
+  // explains (see orphanedFailedInvitations). Owner-only read; empty while
+  // loading or when unreadable. Only meaningful once every roster has loaded:
+  // a roster still in flight would make its students look like orphans.
+  orphanedFailedInvitations: OrphanedFailedInvitation[]
 }
 
 // Aggregate the org's members against every classroom roster: dedupe students,
@@ -62,6 +73,11 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
 
   const adminsQuery = useQuery({
     ...orgAdminsQuery(client, org ?? ""),
+    enabled: Boolean(org),
+  })
+
+  const failedInvitesQuery = useQuery({
+    ...orgFailedInvitationsQuery(client, org ?? ""),
     enabled: Boolean(org),
   })
 
@@ -215,6 +231,27 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     rosterQueries.some((q) => q.isLoading)
   const isError = membersQuery.isError
 
+  // Withheld until every roster read has settled (success or failure): an
+  // orphan is "on no roster", which is unknowable while one is still loading.
+  // A roster that FAILED to read is excluded too, since its students would
+  // wrongly look orphaned; the page's `notes` already say that roster is out.
+  const rostersSettled =
+    !isLoading && rosterQueries.every((q) => q.isSuccess || q.isError)
+  const anyRosterFailed = rosterQueries.some((q) => q.isError)
+  const orphans = useMemo(
+    () =>
+      rostersSettled && !anyRosterFailed && failedInvitesQuery.data
+        ? orphanedFailedInvitations(failedInvitesQuery.data, members, rosters)
+        : [],
+    [
+      rostersSettled,
+      anyRosterFailed,
+      failedInvitesQuery.data,
+      members,
+      rosters,
+    ],
+  )
+
   return {
     rows,
     members,
@@ -227,6 +264,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     teamSlugByClassroom,
     displayNameByClassroom,
     notes,
+    orphanedFailedInvitations: orphans,
   }
 }
 

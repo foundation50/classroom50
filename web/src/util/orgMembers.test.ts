@@ -2,12 +2,13 @@ import { describe, expect, it } from "vitest"
 import {
   aggregateOrgMembers,
   filterOrgMemberRows,
+  orphanedFailedInvitations,
   sortOrgMemberRowsBy,
   type ClassroomRoster,
   type OrgMemberRow,
 } from "./orgMembers"
 import type { Student } from "@/types/classroom"
-import type { GitHubUser } from "@/github-core/types"
+import type { GitHubOrgInvitation, GitHubUser } from "@/github-core/types"
 
 const member = (id: number, login: string, name?: string): GitHubUser =>
   ({
@@ -452,5 +453,70 @@ describe("sortOrgMemberRowsBy", () => {
       expect(filter("all", "owner")).toEqual(["boss"])
       expect(filter("all", "member")).toEqual(["plain", "drifted"])
     })
+  })
+})
+
+describe("orphanedFailedInvitations", () => {
+  const EXPIRED =
+    "Invitation expired. User did not accept this invite for 7 days"
+  const failed = (over: Partial<GitHubOrgInvitation>): GitHubOrgInvitation =>
+    ({
+      id: 1,
+      login: null,
+      email: null,
+      role: "direct_member",
+      created_at: "",
+      failed_at: "2026-09-07T00:41:28Z",
+      failed_reason: EXPIRED,
+      ...over,
+    }) as GitHubOrgInvitation
+
+  it("keeps only records no roster row and no member explains", () => {
+    const rosters = [
+      roster("cs101", [
+        student({ email: "on-roster@x.edu" }),
+        student({ username: "OnRoster", github_id: "" }),
+      ]),
+    ]
+    const members = [{ ...member(7, "activemember"), email: "m@x.edu" }]
+    const out = orphanedFailedInvitations(
+      [
+        failed({ id: 1, email: "on-roster@x.edu" }),
+        failed({ id: 2, login: "onroster" }),
+        failed({ id: 3, login: "activemember" }),
+        failed({ id: 4, email: "M@x.edu" }),
+        failed({ id: 5, email: "gone@x.edu" }),
+        failed({ id: 6, login: "left-long-ago" }),
+      ],
+      members,
+      rosters,
+    )
+    expect(out.map((o) => o.invitation.id).sort()).toEqual([5, 6])
+  })
+
+  it("carries the classified failure and sorts newest failure first", () => {
+    const out = orphanedFailedInvitations(
+      [
+        failed({ id: 1, email: "a@x.edu", failed_at: "2026-08-01T00:00:00Z" }),
+        failed({
+          id: 2,
+          email: "b@x.edu",
+          failed_at: "2026-09-07T00:00:00Z",
+          failed_reason: "Email bounced",
+        }),
+      ],
+      [],
+      [],
+    )
+    expect(out.map((o) => o.invitation.id)).toEqual([2, 1])
+    expect(out[0].ref).toMatchObject({
+      kind: "failed",
+      reason: "Email bounced",
+    })
+    expect(out[1].ref.kind).toBe("expired")
+  })
+
+  it("is empty when there is nothing failed", () => {
+    expect(orphanedFailedInvitations([], [member(1, "a")], [])).toEqual([])
   })
 })
