@@ -3,6 +3,7 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  GlobeIcon,
   LinkExternalIcon,
   LockIcon,
   MarkGithubIcon,
@@ -22,6 +23,7 @@ import {
   RouterButton,
 } from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
+import { defaultRepoPagesUrl } from "@/util/repoPages"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -1373,6 +1375,27 @@ const AcceptAssignmentPage = () => {
                     </div>
                     <div className="mt-1 text-sm">
                       {t("accept.publicRepo.body")}
+                    </div>
+                  </div>
+                </Alert>
+              )}
+
+            {/* Pages disclosure (issue #919): the site URL is known by
+                construction, so tell the student where their work will be
+                published before the repo exists. */}
+            {assignmentData.pages &&
+              !repoExistsAlready &&
+              !acceptMutation.data && (
+                <Alert tone="info" className="items-start">
+                  <GlobeIcon aria-hidden="true" className="size-5 shrink-0" />
+                  <div>
+                    <div className="font-bold">
+                      {t("accept.pagesSite.title")}
+                    </div>
+                    <div className="mt-1 text-sm">
+                      {t("accept.pagesSite.body", {
+                        url: defaultRepoPagesUrl(org ?? "", expectedRepoName),
+                      })}
                     </div>
                   </div>
                 </Alert>

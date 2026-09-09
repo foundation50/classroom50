@@ -251,6 +251,58 @@ func SetCollaborator(client *api.RESTClient, owner, repo, username, permission s
 	return resp.StatusCode, nil
 }
 
+// PagesSource is the branch+path half of a Pages create body (GitHub's
+// build_type "legacy"). Path must be "/" or "/docs".
+type PagesSource struct {
+	Branch string `json:"branch"`
+	Path   string `json:"path,omitempty"`
+}
+
+// PagesCreateBody is the POST /repos/{owner}/{repo}/pages body. Source is sent
+// only for BuildType "legacy"; "workflow" (a GitHub Actions workflow publishes)
+// carries no source.
+// https://docs.github.com/en/rest/pages/pages#create-a-github-pages-site
+type PagesCreateBody struct {
+	BuildType string       `json:"build_type"`
+	Source    *PagesSource `json:"source,omitempty"`
+}
+
+// PagesBodyForAssignment maps an assignments.json pages block (source is
+// contract.PagesSourceWorkflow or contract.PagesSourceBranch) onto the API
+// body; defaultBranch fills an unset branch for the branch source.
+func PagesBodyForAssignment(source, branch, path, defaultBranch string) PagesCreateBody {
+	if source == contract.PagesSourceBranch {
+		if branch == "" {
+			branch = defaultBranch
+		}
+		if path == "" {
+			path = contract.PagesPathRoot
+		}
+		return PagesCreateBody{BuildType: contract.PagesBuildTypeLegacy, Source: &PagesSource{Branch: branch, Path: path}}
+	}
+	return PagesCreateBody{BuildType: contract.PagesBuildTypeWorkflow}
+}
+
+// EnablePages POSTs a Pages site configuration for owner/repo. Requires repo
+// admin. 201 = created (alreadyEnabled false); 409 = a site already exists,
+// treated as done and never overwritten (alreadyEnabled true). Any other
+// failure is returned for the caller to fail open or hard on.
+func EnablePages(client *api.RESTClient, owner, repo string, body PagesCreateBody) (alreadyEnabled bool, err error) {
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return false, fmt.Errorf("encode body: %w", err)
+	}
+	path := fmt.Sprintf("repos/%s/%s/pages", url.PathEscape(owner), url.PathEscape(repo))
+	switch err := client.Post(path, bytes.NewReader(raw), nil); {
+	case err == nil:
+		return false, nil
+	case IsHTTPStatus(err, http.StatusConflict):
+		return true, nil
+	default:
+		return false, fmt.Errorf("POST %s: %w", path, err)
+	}
+}
+
 // DecodeContentsBase64 decodes the base64 envelope the GitHub contents/git-data
 // APIs return. They wrap at column 60 and Go's std decoder rejects embedded
 // newlines, so strip them first.

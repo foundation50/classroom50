@@ -23,6 +23,7 @@ import {
 // assignmentFormModel directly.
 export { assignmentToFormValues } from "./assignmentFormModel"
 export { formValuesToRepoFeatures } from "./assignmentFormModel"
+export { formValuesToPages } from "./assignmentFormModel"
 export { formValuesToTestDefaults } from "./assignmentFormModel"
 
 // The whole-form error list (submit-time validation errors that aren't bound to

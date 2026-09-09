@@ -10,20 +10,27 @@ import {
   ExternalLink,
   fieldLabelClass,
   FormField,
+  Input,
   Radio,
   Select,
 } from "@/components/ui"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { repoContentsPathExists } from "@/domain/assignments"
 import {
+  PAGES_PATHS,
   REPO_PERMISSIONS,
   REPO_VISIBILITIES,
   defaultStudentPermission,
 } from "@/types/classroom"
 import { TemplateField } from "../TemplateField"
+import { fieldControlProps, fieldError } from "../formFieldHelpers"
 import { parseTemplateRefSafe, useTemplateRepo } from "../useTemplateRepo"
 import { ToggleField } from "@/components/ui"
-import type { AssignmentForm, RepoSource } from "../assignmentFormModel"
+import {
+  PAGES_SOURCE_CHOICES,
+  type AssignmentForm,
+  type RepoSource,
+} from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import type { FormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
@@ -305,6 +312,8 @@ function RepositoryAdvancedFields({
 
       <RepoVisibilityField form={form} edit={edit} />
 
+      <PagesField form={form} edit={edit} emptyRepo={shape.emptyRepo} />
+
       <StudentPermissionField form={form} />
 
       {/* RepoFeatureControls renders its own heading, refresh, help, and
@@ -454,6 +463,147 @@ function RepoVisibilityField({
           )}
         </FormField>
       )}
+    </form.Field>
+  )
+}
+
+// The accept-time GitHub Pages choice (issue #919): off (default), deploy via a
+// GitHub Actions workflow the template ships, or publish a branch directly.
+// The branch source reveals the branch name (blank = the repo's default) and
+// the "/" or "/docs" directory. A bare repo has no branch to publish, so the
+// control is disabled with a hint there; toSubmitValues also clears it. On
+// edit, the accept-time-only caveat points at the submissions page for
+// existing repos.
+function PagesField({
+  form,
+  edit,
+  emptyRepo,
+}: {
+  form: AssignmentForm
+  edit: boolean
+  emptyRepo: boolean
+}) {
+  const { t } = useTranslation()
+  return (
+    <form.Field name="pages_source">
+      {(field) => {
+        const error = fieldError(field)
+        const source = emptyRepo ? "off" : field.state.value
+        return (
+          <div className="flex flex-col gap-3">
+            <FormField
+              htmlFor={field.name}
+              label={t("assignments.form.pages.label")}
+              help={t("assignments.form.pages.help")}
+              error={error}
+              hint={
+                emptyRepo
+                  ? t("assignments.form.pages.emptyRepoHint")
+                  : edit
+                    ? t("assignments.form.pages.editHelp")
+                    : undefined
+              }
+            >
+              {({ id, describedById, invalid }) => (
+                <Select
+                  id={id}
+                  name={field.name}
+                  className="w-full sm:max-w-xs"
+                  aria-describedby={describedById}
+                  aria-invalid={invalid || undefined}
+                  disabled={emptyRepo}
+                  value={source}
+                  onBlur={field.handleBlur}
+                  onChange={(e) =>
+                    field.handleChange(
+                      e.target.value as typeof field.state.value,
+                    )
+                  }
+                >
+                  {PAGES_SOURCE_CHOICES.map((choice) => (
+                    <option key={choice} value={choice}>
+                      {t(`assignments.form.pages.choices.${choice}`)}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </FormField>
+
+            {source === "workflow" ? (
+              <Alert tone="info" role="status" className="text-sm">
+                <span>{t("assignments.form.pages.workflowNote")}</span>
+              </Alert>
+            ) : null}
+
+            {source === "branch" ? (
+              <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
+                <form.Field name="pages_branch">
+                  {(branchField) => (
+                    <FormField
+                      htmlFor={branchField.name}
+                      label={t("assignments.form.pages.branch.label")}
+                      help={t("assignments.form.pages.branch.help")}
+                      error={fieldError(branchField)}
+                    >
+                      {({ id, describedById, invalid }) => (
+                        <Input
+                          {...fieldControlProps(branchField, {
+                            id,
+                            describedById,
+                            invalid,
+                          })}
+                          className="font-mono w-full sm:max-w-xs"
+                          spellCheck={false}
+                          placeholder={t(
+                            "assignments.form.pages.branch.placeholder",
+                          )}
+                          onChange={(e) =>
+                            branchField.handleChange(e.target.value)
+                          }
+                        />
+                      )}
+                    </FormField>
+                  )}
+                </form.Field>
+
+                <form.Field name="pages_path">
+                  {(pathField) => (
+                    <FormField
+                      htmlFor={pathField.name}
+                      label={t("assignments.form.pages.path.label")}
+                      help={t("assignments.form.pages.path.help")}
+                      error={fieldError(pathField)}
+                    >
+                      {({ id, describedById, invalid }) => (
+                        <Select
+                          id={id}
+                          name={pathField.name}
+                          className="font-mono w-full sm:max-w-3xs"
+                          aria-describedby={describedById}
+                          aria-invalid={invalid || undefined}
+                          value={pathField.state.value}
+                          onBlur={pathField.handleBlur}
+                          onChange={(e) =>
+                            pathField.handleChange(
+                              e.target.value as typeof pathField.state.value,
+                            )
+                          }
+                        >
+                          {PAGES_PATHS.map((path) => (
+                            <option key={path} value={path}>
+                              {path}
+                            </option>
+                          ))}
+                        </Select>
+                      )}
+                    </FormField>
+                  )}
+                </form.Field>
+              </div>
+            ) : null}
+          </div>
+        )
+      }}
     </form.Field>
   )
 }

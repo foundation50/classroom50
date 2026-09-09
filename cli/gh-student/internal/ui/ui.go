@@ -18,6 +18,7 @@ import (
 const (
 	ansiReset  = "\x1b[0m"
 	ansiYellow = "\x1b[33m"
+	ansiCyan   = "\x1b[36m"
 	ansiDim    = "\x1b[2m"
 )
 
@@ -71,4 +72,15 @@ func (u *UI) Warn(format string, a ...any) {
 // otherwise) for verbose per-step operational detail.
 func (u *UI) Detail(format string, a ...any) {
 	_, _ = fmt.Fprintf(u.w, "%s\n", u.paint(ansiDim, fmt.Sprintf(format, a...)))
+}
+
+// Note prints a neutral heads-up that ALWAYS contains the literal "Note: ",
+// for something the student should know that is not a problem (unlike Warn).
+func (u *UI) Note(format string, a ...any) {
+	msg := fmt.Sprintf(format, a...)
+	if u.color {
+		_, _ = fmt.Fprintf(u.w, "%s %s%s\n", u.paint(ansiCyan, "\u2139"), u.paint(ansiCyan, "Note: "), msg)
+		return
+	}
+	_, _ = fmt.Fprintf(u.w, "Note: %s\n", msg)
 }

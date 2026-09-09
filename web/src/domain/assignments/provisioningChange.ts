@@ -1,6 +1,7 @@
 import type {
   Assignment,
   AssignmentMode,
+  AssignmentPages,
   RepoPermission,
   RepoVisibility,
 } from "@/types/classroom"
@@ -13,10 +14,10 @@ import { founderPermission } from "./permissions"
 // the difference.
 //
 // empty_repo / no_autograder / init_shim / grading.mode are the four transitions
-// the domain layer used to reject in editAssignment. student_permission and
-// repo_visibility share the "future accepts only" semantics (existing repos are
-// changed from the submissions page). max_points is deliberately excluded — it's
-// only a display max, safe to adjust.
+// the domain layer used to reject in editAssignment. student_permission,
+// repo_visibility, and pages share the "future accepts only" semantics (existing
+// repos are changed from the submissions page). max_points is deliberately
+// excluded — it's only a display max, safe to adjust.
 export type ProvisioningFields = {
   empty_repo?: boolean
   no_autograder?: boolean
@@ -29,6 +30,8 @@ export type ProvisioningFields = {
   student_permission?: RepoPermission
   // Visibility each repo is created with; absent reads as "private".
   repo_visibility?: RepoVisibility
+  // GitHub Pages site configured on each repo; absent reads as "off".
+  pages?: AssignmentPages
 }
 
 // Which setting a provisioning change touched, one per confirm bullet.
@@ -38,6 +41,7 @@ export type ProvisioningField =
   | "grading_mode"
   | "student_permission"
   | "repo_visibility"
+  | "pages"
 
 type NormalizedProvisioning = {
   empty_repo: boolean
@@ -46,6 +50,15 @@ type NormalizedProvisioning = {
   gradingMode: string
   student_permission: RepoPermission
   repo_visibility: RepoVisibility
+  // The pages block as a comparable string with wire defaults collapsed
+  // ("" branch = default branch, "/" path), "off" when absent.
+  pages: string
+}
+
+function normalizePages(pages: AssignmentPages | undefined): string {
+  if (!pages) return "off"
+  if (pages.source === "workflow") return "workflow"
+  return `branch:${pages.branch?.trim() ?? ""}:${pages.path ?? "/"}`
 }
 
 function normalizeProvisioning(
@@ -59,6 +72,7 @@ function normalizeProvisioning(
     gradingMode: fields.gradingMode ?? "auto",
     student_permission: founderPermission(mode, fields.student_permission),
     repo_visibility: fields.repo_visibility ?? "private",
+    pages: normalizePages(fields.pages),
   }
 }
 
@@ -76,6 +90,7 @@ export function provisioningFieldsFromAssignment(
     gradingMode: assignment.grading?.mode,
     student_permission: assignment.student_permission,
     repo_visibility: assignment.repo_visibility,
+    pages: assignment.pages,
   })
 }
 
@@ -105,6 +120,7 @@ export function provisioningChanges(
   if (before.repo_visibility !== after.repo_visibility) {
     changed.push("repo_visibility")
   }
+  if (before.pages !== after.pages) changed.push("pages")
   return changed
 }
 

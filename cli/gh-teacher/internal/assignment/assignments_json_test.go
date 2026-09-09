@@ -127,6 +127,109 @@ func TestRepoVisibilityEnumParity(t *testing.T) {
 	}
 }
 
+// TestPagesEnumParity pins contract.PagesSources / contract.PagesPaths against
+// the schema's pages.source / pages.path enums (the declared source of truth);
+// the web mirror (PAGES_SOURCES / PAGES_PATHS) is pinned by a vitest.
+func TestPagesEnumParity(t *testing.T) {
+	root, err := filepath.Abs(filepath.Join("..", "..", "..", ".."))
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(root, "schemas", "assignments-v1.schema.json"))
+	if err != nil {
+		t.Fatalf("read schema: %v", err)
+	}
+	var schema struct {
+		Defs struct {
+			Assignment struct {
+				Properties struct {
+					Pages struct {
+						Properties struct {
+							Source struct {
+								Enum []string `json:"enum"`
+							} `json:"source"`
+							Path struct {
+								Enum []string `json:"enum"`
+							} `json:"path"`
+						} `json:"properties"`
+					} `json:"pages"`
+				} `json:"properties"`
+			} `json:"assignment"`
+		} `json:"$defs"`
+	}
+	if err := json.Unmarshal(raw, &schema); err != nil {
+		t.Fatalf("parse schema: %v", err)
+	}
+	sources := schema.Defs.Assignment.Properties.Pages.Properties.Source.Enum
+	if len(sources) == 0 {
+		t.Fatalf("schema pages.source.enum not found; did the $defs shape change?")
+	}
+	if !reflect.DeepEqual(sources, contract.PagesSources) {
+		t.Errorf("pages.source drift: schema enum %v != contract.PagesSources %v — update every mirror in lockstep (schema, Go contract, web PAGES_SOURCES)",
+			sources, contract.PagesSources)
+	}
+	paths := schema.Defs.Assignment.Properties.Pages.Properties.Path.Enum
+	if !reflect.DeepEqual(paths, contract.PagesPaths) {
+		t.Errorf("pages.path drift: schema enum %v != contract.PagesPaths %v — update every mirror in lockstep (schema, Go contract, web PAGES_PATHS)",
+			paths, contract.PagesPaths)
+	}
+}
+
+func TestValidatePagesConfig(t *testing.T) {
+	cases := []struct {
+		name    string
+		p       *PagesConfig
+		wantErr bool
+	}{
+		{"nil", nil, false},
+		{"workflow", &PagesConfig{Source: "workflow"}, false},
+		{"branch default", &PagesConfig{Source: "branch"}, false},
+		{"branch named docs", &PagesConfig{Source: "branch", Branch: "gh-pages", Path: "/docs"}, false},
+		{"unknown source", &PagesConfig{Source: "legacy"}, true},
+		{"workflow with branch", &PagesConfig{Source: "workflow", Branch: "main"}, true},
+		{"workflow with path", &PagesConfig{Source: "workflow", Path: "/"}, true},
+		{"bad path", &PagesConfig{Source: "branch", Path: "/site"}, true},
+		{"padded branch", &PagesConfig{Source: "branch", Branch: " main"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidatePagesConfig(tc.p)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("ValidatePagesConfig(%+v) err = %v, wantErr %v", tc.p, err, tc.wantErr)
+			}
+		})
+	}
+}
+
+func TestPagesRoundTripsAndExcludesEmptyRepo(t *testing.T) {
+	raw := `{"slug":"site","name":"Site","mode":"individual","autograder":"default","pages":{"source":"branch","path":"/docs"}}`
+	var entry AssignmentEntry
+	if err := json.Unmarshal([]byte(raw), &entry); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if entry.Pages == nil || entry.Pages.Source != "branch" || entry.Pages.Path != "/docs" {
+		t.Fatalf("pages not decoded into the typed field: %+v", entry.Pages)
+	}
+	if _, diverted := entry.Extra["pages"]; diverted {
+		t.Fatalf("pages was diverted to Extra; add it to knownEntryKeys")
+	}
+	out, err := json.Marshal(entry)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(out), `"pages":{"source":"branch","path":"/docs"}`) {
+		t.Fatalf("pages did not round-trip: %s", out)
+	}
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Fatalf("valid pages entry rejected: %v", err)
+	}
+
+	entry.EmptyRepo = true
+	if err := ValidateAssignmentEntry(entry); err == nil || !strings.Contains(err.Error(), "pages") {
+		t.Fatalf("empty_repo + pages should be rejected, got %v", err)
+	}
+}
+
 // TestSubmissionModeReaderRuleParity pins the PROSE reader rule (absence is the
 // wire default; never gate on the field being present) across its three
 // hand-synced copies — the schema submission_mode.description, contract.go, and

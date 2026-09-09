@@ -266,6 +266,17 @@
             "pull_requests": { "type": "boolean" }
           },
           "description": "Per-assignment repository feature overrides applied to each student repo at ACCEPT TIME, on FRESH CREATE only. Each key (issues/wiki/projects/pull_requests) is tri-state: ABSENT = inherit the TEMPLATE's current setting — accept reads the template repo's has_issues/has_wiki/has_projects/has_pull_requests and re-applies them to the student repo, because GitHub's `POST /generate` does NOT copy the template's feature settings (a generated repo otherwise gets GitHub defaults). For a template-less/empty_repo assignment absent is left at GitHub's own create default (no PATCH key is sent — the \"Default\" choice does not override the feature). `true` = force the feature on, `false` = force it off (an explicit value always wins over the template). Applied via `PATCH /repos/{org}/{repo}`, best-effort/fail-open (a rejection, e.g. org-disabled projects, is logged and does not fail accept). NOT retrofitted to already-accepted repos and NOT re-asserted on re-accept (a student's own later toggle survives); reconcile existing repos with the gradebook bulk action instead. Trust boundary: inheriting a PRIVATE template copies its Issues/Projects/Wiki CONTENT (e.g. a wiki that may hold solutions) into every student repo, so a template used for inherit should not carry cohort-sensitive content. The object is omitted entirely when no key is set."
+        },
+        "pages": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["source"],
+          "properties": {
+            "source": { "type": "string", "enum": ["workflow", "branch"] },
+            "branch": { "type": "string", "minLength": 1, "maxLength": 255 },
+            "path": { "type": "string", "enum": ["/", "/docs"] }
+          },
+          "description": "Opt each student repo into a GitHub Pages site configured at ACCEPT TIME, on FRESH CREATE only, so students never need admin on their repo to publish (issue #919). ABSENT = Pages is not configured (the default). `source: \"workflow\"` maps to GitHub's `build_type: \"workflow\"` (the site is deployed by a GitHub Actions workflow the teacher ships in the template, e.g. actions/deploy-pages; the workflow needs `pages: write` and `id-token: write`). `source: \"branch\"` maps to `build_type: \"legacy\"` with `source: { branch, path }`: GitHub publishes the branch's files directly, no workflow needed. `branch` is only meaningful with `source: \"branch\"`; ABSENT = the student repo's default branch as resolved at accept time (the common case; a named branch must exist in the generated repo, e.g. via include_all_branches). `path` is only meaningful with `source: \"branch\"`; ABSENT = \"/\" (GitHub allows only \"/\" and \"/docs\"). Applied via `POST /repos/{org}/{repo}/pages` (409 = already configured, treated as done), best-effort/fail-open: a rejection (a private repo on a plan without private Pages, an org that blocks members from publishing Pages, a missing branch) is reported to the student and does not fail accept. Excluded with empty_repo (a bare repo has no branch to publish). NOT retrofitted to already-accepted repos and NOT re-asserted on re-accept; reconcile existing repos with the gradebook bulk action instead. The default site URL is `https://<org>.github.io/<repo>/`; an org with a custom Pages domain serves it under that domain instead."
         }
       },
       "allOf": [
@@ -300,8 +311,25 @@
               { "not": { "required": ["allowed_files"] } },
               { "not": { "required": ["release_assets"] } },
               { "not": { "required": ["pass_threshold"] } },
+              { "not": { "required": ["pages"] } },
               { "properties": { "feedback_pr": { "const": false } } }
             ]
+          }
+        },
+        {
+          "if": {
+            "properties": { "pages": { "properties": { "source": { "const": "workflow" } }, "required": ["source"] } },
+            "required": ["pages"]
+          },
+          "then": {
+            "properties": {
+              "pages": {
+                "allOf": [
+                  { "not": { "required": ["branch"] } },
+                  { "not": { "required": ["path"] } }
+                ]
+              }
+            }
           }
         },
         {

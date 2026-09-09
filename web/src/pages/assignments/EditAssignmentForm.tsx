@@ -3,6 +3,7 @@ import { FormSkeleton } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import CreateAssignmentForm, {
   assignmentToFormValues,
+  formValuesToPages,
   formValuesToRepoFeatures,
   formValuesToTestDefaults,
 } from "./CreateAssignmentForm"
@@ -206,6 +207,7 @@ const EditAssignmentForm = ({
                       }
                     : { mode: values.grading_choice },
                 repo_features: formValuesToRepoFeatures(values),
+                pages: formValuesToPages(values),
                 classroom,
                 tests: values.tests,
                 test_defaults: formValuesToTestDefaults(values),
@@ -230,6 +232,7 @@ const EditAssignmentForm = ({
                   gradingMode: values.grading_choice,
                   student_permission: values.student_permission || undefined,
                   repo_visibility: values.repo_visibility,
+                  pages: formValuesToPages(values),
                   locked,
                 },
                 acceptedCount,

@@ -5,6 +5,8 @@ import {
   GROUP_SIZE_MIN,
   PASS_THRESHOLD_MAX,
   PASS_THRESHOLD_MIN,
+  PAGES_PATHS,
+  PAGES_SOURCES,
   REPO_PERMISSIONS,
   REPO_VISIBILITIES,
   SUBMISSION_MODES,
@@ -132,6 +134,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // may be misread, so the teacher reconciles them).
   grading: "classroom50-owned",
   repo_features: "classroom50-owned",
+  pages: "classroom50-owned",
   tests: "classroom50-owned",
   // Rebuilt from input alongside tests; a clearing edit (back to the grader
   // defaults) must win over the stale stored block.
@@ -404,6 +407,11 @@ async function buildAssignmentEntry(
     if (input.pass_threshold !== undefined) {
       throw new Error(
         "empty_repo: an empty repository can't have a passing threshold — it never autogrades.",
+      )
+    }
+    if (input.pages) {
+      throw new Error(
+        "empty_repo: an empty repository can't publish a GitHub Pages site — it has no branch to publish.",
       )
     }
   }
@@ -940,6 +948,42 @@ async function buildAssignmentEntry(
   }
   if (Object.keys(repoFeatures).length > 0) {
     entry.repo_features = repoFeatures
+  }
+
+  // pages: validate against the schema (a known source; branch/path only with
+  // the branch source; path one of "/" or "/docs"), then write a normalized
+  // block with the wire defaults ("" branch, "/" path) collapsed away. Omitted
+  // when undefined (Pages not configured). Mirrors the CLI's ValidatePagesConfig.
+  if (input.pages) {
+    const { source, branch, path } = input.pages
+    if (!PAGES_SOURCES.includes(source)) {
+      throw new Error(
+        `pages.source: must be one of ${PAGES_SOURCES.join(", ")} (got "${String(source)}").`,
+      )
+    }
+    if (source === "workflow") {
+      if (branch !== undefined || path !== undefined) {
+        throw new Error(
+          "pages: branch and path only apply when the site deploys from a branch.",
+        )
+      }
+      entry.pages = { source }
+    } else {
+      const trimmedBranch = branch?.trim() ?? ""
+      if (/\s/.test(trimmedBranch) || trimmedBranch.length > 255) {
+        throw new Error(
+          `pages.branch: must be a branch name without whitespace, at most 255 characters (got "${String(branch)}").`,
+        )
+      }
+      if (path !== undefined && !PAGES_PATHS.includes(path)) {
+        throw new Error(
+          `pages.path: must be one of ${PAGES_PATHS.join(", ")} (got "${String(path)}").`,
+        )
+      }
+      entry.pages = { source }
+      if (trimmedBranch) entry.pages.branch = trimmedBranch
+      if (path !== undefined && path !== "/") entry.pages.path = path
+    }
   }
 
   return { entry, needsTeamGrant }

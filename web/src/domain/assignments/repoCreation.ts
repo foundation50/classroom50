@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubRepo } from "@/github-core/types"
 import type {
+  AssignmentPages,
   AssignmentTestDefaults,
   RepoPermission,
   RepoFeatures,
@@ -494,6 +495,10 @@ export type CreateAssignmentInput = {
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.
   repo_features?: RepoFeatures
+  // GitHub Pages site to configure on each student repo at accept time (fresh
+  // create only). Undefined = not configured (buildAssignmentEntry omits the
+  // block). Mirrors the CLI's --pages flags.
+  pages?: AssignmentPages
   tests: AssignmentTestDraft[]
   // Assignment-level defaults for the per-test reporting options
   // (failure-details / show-output); per-test values override.

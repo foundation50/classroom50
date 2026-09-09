@@ -1238,7 +1238,7 @@
       "studentPermission": {
         "label": "Student repository access",
         "learnMore": "Learn more",
-        "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings and enable GitHub Pages. This applies to students who accept from now on; use the submissions page to change repositories already created.",
+        "help": "The role each student is granted on their own assignment repository at accept time. Push (write) is the default. Choose Admin to let students manage repository settings themselves. This applies to students who accept from now on; use the submissions page to change repositories already created.",
         "groupHelp": "Group members join with at least admin so the group owner can add teammates. This applies to repositories created from now on; use the submissions page to change existing ones.",
         "default": "Default: {{level}}",
         "levels": {
@@ -1257,6 +1257,27 @@
         "levels": {
           "private": "Private",
           "public": "Public"
+        }
+      },
+      "pages": {
+        "label": "GitHub Pages",
+        "help": "Publish each student repository as a website with GitHub Pages, configured automatically when the student accepts so they never need admin access. Off is the default. \"GitHub Actions\" deploys through a workflow in your template (for sites with a build step). \"A branch\" publishes the files in a branch directly, no workflow needed (for plain HTML, CSS, and JavaScript). Pages on private repositories needs a GitHub plan that includes it; on GitHub Free for organizations, make the repository public or the site isn't created.",
+        "editHelp": "This applies to repositories created from now on; use the submissions page to enable Pages on existing ones.",
+        "emptyRepoHint": "Not available for an empty repository: there is no branch to publish yet.",
+        "workflowNote": "Your template must include a GitHub Actions workflow that deploys to Pages (for example, one using actions/deploy-pages with pages: write and id-token: write permissions). The site is created before the student's first push, so the workflow's first run deploys it.",
+        "choices": {
+          "off": "Off",
+          "workflow": "GitHub Actions",
+          "branch": "A branch"
+        },
+        "branch": {
+          "label": "Branch",
+          "help": "The branch GitHub publishes. Leave blank to use the repository's default branch. A named branch must exist in each student repository when they accept (for example, copied from the template with \"Include all branches\").",
+          "placeholder": "Default branch"
+        },
+        "path": {
+          "label": "Folder",
+          "help": "The folder in that branch to publish: the repository root (/) or /docs. GitHub allows only these two."
         }
       },
       "autograding": {
@@ -1406,6 +1427,10 @@
         "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
         "studentPermissionInvalid": "Student repository access must be one of pull, triage, push, maintain, or admin.",
         "repoVisibilityInvalid": "Repository visibility must be \"private\" or \"public\".",
+        "pagesSourceInvalid": "GitHub Pages must be \"Off\", \"GitHub Actions\", or \"A branch\".",
+        "pagesBranchInvalid": "Enter a branch name without spaces, at most 255 characters, or leave it blank for the default branch.",
+        "pagesPathInvalid": "The Pages folder must be / or /docs.",
+        "pagesEmptyRepo": "GitHub Pages can't be enabled for an empty repository: there is no branch to publish. Turn Pages off or add a README.",
         "submissionModeInvalid": "Autograding trigger must be \"every-push\" or \"tag\".",
         "gradingModeInvalid": "Grading must be \"off\", \"auto\", or \"manual\".",
         "gradingMaxPointsInvalid": "Max points must be a whole number of at least {{min}}.",
@@ -1958,7 +1983,8 @@
         "autograder": "Built-in autograder: turning it off makes existing repositories' autograde runs fail and drop out of the collected scores.",
         "grading_mode": "Grading mode: scores recorded under the old mode may read differently.",
         "student_permission": "Student repository access: change existing repositories from the submissions page.",
-        "repo_visibility": "Repository visibility: change existing repositories from the submissions page."
+        "repo_visibility": "Repository visibility: change existing repositories from the submissions page.",
+        "pages": "GitHub Pages: enable it on existing repositories from the submissions page."
       },
       "confirm": "Save changes",
       "cancel": "Cancel"
@@ -2741,6 +2767,10 @@
       "title": "This repository will be public",
       "body": "Your teacher configured this assignment to create public repositories: anyone on the internet will be able to see your work, including your code, commits, and name. If your organization doesn't allow you to create public repositories, a private one is created instead."
     },
+    "pagesSite": {
+      "title": "Your work will be published as a website",
+      "body": "Your teacher configured GitHub Pages for this assignment, so your repository gets a website at {{url}}. It updates when you push, and it can take a minute to appear."
+    },
     "steps": {
       "account": "Checking your GitHub account",
       "membership": "Confirming your classroom membership",
@@ -2766,6 +2796,13 @@
       "access": "Set your repository access",
       "setup": "Configured autograding",
       "setupSkippedEmptyRepo": "No setup needed: this assignment uses an empty repository",
+      "pagesSkipped": {
+        "plan": "Configured autograding. GitHub Pages wasn't enabled: this organization's GitHub plan doesn't allow Pages on private repositories. Your teacher can make the repository public and enable Pages from the submissions page.",
+        "policy": "Configured autograding. GitHub Pages wasn't enabled: the organization doesn't let members publish Pages sites. Your teacher can enable it from the submissions page.",
+        "branch": "Configured autograding. GitHub Pages wasn't enabled: the branch it publishes from doesn't exist in your repository yet. Your teacher can enable it from the submissions page.",
+        "access": "Configured autograding. GitHub Pages wasn't enabled: you don't have permission to change Pages settings on this repository. Your teacher can enable it from the submissions page.",
+        "unknown": "Configured autograding. GitHub Pages couldn't be enabled right now. Your teacher can enable it from the submissions page."
+      },
       "feedback": "Feedback pull request ready",
       "feedbackSkipped": "No feedback pull request for this assignment",
       "feedbackDeferred": "Couldn't open the feedback pull request now: accept again to retry (or it opens on your first submission if autograding is enabled)",

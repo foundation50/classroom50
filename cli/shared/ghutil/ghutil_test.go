@@ -218,6 +218,75 @@ func TestSetCollaborator(t *testing.T) {
 	}
 }
 
+func TestPagesBodyForAssignment(t *testing.T) {
+	cases := []struct {
+		name                        string
+		source, branch, path, defBr string
+		want                        string
+	}{
+		{"workflow", "workflow", "", "", "main", `{"build_type":"workflow"}`},
+		{"branch defaults", "branch", "", "", "master", `{"build_type":"legacy","source":{"branch":"master","path":"/"}}`},
+		{"branch named docs", "branch", "gh-pages", "/docs", "main", `{"build_type":"legacy","source":{"branch":"gh-pages","path":"/docs"}}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			raw, err := json.Marshal(PagesBodyForAssignment(tc.source, tc.branch, tc.path, tc.defBr))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(raw) != tc.want {
+				t.Errorf("body = %s, want %s", raw, tc.want)
+			}
+		})
+	}
+}
+
+func TestEnablePages(t *testing.T) {
+	cases := []struct {
+		name        string
+		status      int
+		wantAlready bool
+		wantErr     bool
+	}{
+		{"created", http.StatusCreated, false, false},
+		{"already exists", http.StatusConflict, true, false},
+		{"plan refusal", http.StatusUnprocessableEntity, false, true},
+		{"forbidden", http.StatusForbidden, false, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/repos/o/r/pages", func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost {
+					t.Errorf("method = %s, want POST", r.Method)
+				}
+				body, _ := io.ReadAll(r.Body)
+				if want := `{"build_type":"workflow"}`; string(body) != want {
+					t.Errorf("body = %s, want %s", body, want)
+				}
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(`{"message":"x"}`))
+			})
+			server := httptest.NewServer(mux)
+			defer server.Close()
+
+			already, err := EnablePages(newTestRESTClient(t, server), "o", "r", PagesCreateBody{BuildType: "workflow"})
+			if tc.wantErr {
+				if err == nil {
+					t.Errorf("expected error for status %d, got nil", tc.status)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("EnablePages: %v", err)
+			}
+			if already != tc.wantAlready {
+				t.Errorf("alreadyEnabled = %v, want %v", already, tc.wantAlready)
+			}
+		})
+	}
+}
+
 // TestWaitForStableBranch pins the post-create branch-stabilization poll the
 // accept flow relies on: a branch reporting the same non-empty SHA on two
 // consecutive reads resolves without error.

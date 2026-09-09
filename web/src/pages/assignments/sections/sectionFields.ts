@@ -30,6 +30,9 @@ export const SECTION_FIELDS: Record<
     "repo_feature_wiki",
     "repo_feature_projects",
     "repo_feature_pull_requests",
+    "pages_source",
+    "pages_branch",
+    "pages_path",
   ],
   submission: [
     "submission_mode",

@@ -40,6 +40,12 @@ func SetCollaborator(c Client, owner, repo, username, permission string) (int, e
 	return ghutil.SetCollaborator(rest(c), owner, repo, username, permission)
 }
 
+// EnablePages configures a GitHub Pages site on owner/repo; alreadyEnabled
+// reports a 409 (a site exists, left untouched). See ghutil.EnablePages.
+func EnablePages(c Client, owner, repo string, body ghutil.PagesCreateBody) (alreadyEnabled bool, err error) {
+	return ghutil.EnablePages(rest(c), owner, repo, body)
+}
+
 // WaitForStableBranch polls until owner/repo's branch is readable after
 // a templated-repo creation, smoothing replication lag.
 func WaitForStableBranch(c Client, owner, repo, branch string) error {

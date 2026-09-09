@@ -5,8 +5,10 @@ import {
   assignmentToFormValues,
   validateAssignmentForm,
   toSubmitValues,
+  formValuesToPages,
   formValuesToRepoFeatures,
   formValuesToTestDefaults,
+  pagesToFormValues,
   testFailureDetailsChoice,
   shouldSeedBuiltInAutograder,
   type CreateAssignmentFormValues,
@@ -76,6 +78,9 @@ const base: CreateAssignmentFormValues = {
   pass_threshold: 80,
   student_permission: "",
   repo_visibility: "private",
+  pages_source: "off",
+  pages_branch: "",
+  pages_path: "/",
   submission_mode: "every-push",
   submission_tags: "",
   grading_choice: "auto",
@@ -573,6 +578,110 @@ describe("toSubmitValues — grading", () => {
     expect(out.grading_choice).toBe("manual")
     expect(out.grading_max_points).toBe(20)
     expect(out.submission_mode).toBe("every-push")
+  })
+})
+
+describe("pages form mapping (issue #919)", () => {
+  it("round-trips off / workflow / branch through the form fields", () => {
+    expect(pagesToFormValues(undefined)).toEqual({
+      pages_source: "off",
+      pages_branch: "",
+      pages_path: "/",
+    })
+    expect(pagesToFormValues({ source: "workflow" })).toEqual({
+      pages_source: "workflow",
+      pages_branch: "",
+      pages_path: "/",
+    })
+    expect(
+      pagesToFormValues({ source: "branch", branch: "gh-pages", path: "/docs" }),
+    ).toEqual({
+      pages_source: "branch",
+      pages_branch: "gh-pages",
+      pages_path: "/docs",
+    })
+  })
+
+  it("writes only the non-default keys", () => {
+    expect(formValuesToPages(base)).toBeUndefined()
+    expect(formValuesToPages({ ...base, pages_source: "workflow" })).toEqual({
+      source: "workflow",
+    })
+    expect(formValuesToPages({ ...base, pages_source: "branch" })).toEqual({
+      source: "branch",
+    })
+    expect(
+      formValuesToPages({
+        ...base,
+        pages_source: "branch",
+        pages_branch: " site ",
+        pages_path: "/docs",
+      }),
+    ).toEqual({ source: "branch", branch: "site", path: "/docs" })
+    // Stale branch/path never ride with the workflow source.
+    expect(
+      formValuesToPages({
+        ...base,
+        pages_source: "workflow",
+        pages_branch: "x",
+        pages_path: "/docs",
+      }),
+    ).toEqual({ source: "workflow" })
+  })
+
+  it("toSubmitValues clears Pages for a bare repo and branch/path for non-branch", () => {
+    const bare = toSubmitValues({
+      ...base,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "none",
+      feedback_pr: false,
+      pages_source: "branch",
+      pages_branch: "x",
+      pages_path: "/docs",
+    })
+    expect(deriveFormShape(bare).emptyRepo).toBe(true)
+    expect(bare.pages_source).toBe("off")
+    expect(bare.pages_branch).toBe("")
+    expect(bare.pages_path).toBe("/")
+
+    const workflow = toSubmitValues({
+      ...base,
+      pages_source: "workflow",
+      pages_branch: "x",
+      pages_path: "/docs",
+    })
+    expect(workflow.pages_source).toBe("workflow")
+    expect(workflow.pages_branch).toBe("")
+    expect(workflow.pages_path).toBe("/")
+  })
+
+  it("validates the branch name and the bare-repo exclusion", () => {
+    expect(
+      validateAssignmentForm(
+        { ...base, pages_source: "branch", pages_branch: "a b" },
+        t,
+      ).pages_branch,
+    ).toBe("assignments.form.validation.pagesBranchInvalid")
+    expect(
+      validateAssignmentForm(
+        { ...base, pages_source: "branch", pages_branch: "" },
+        t,
+      ).pages_branch,
+    ).toBeUndefined()
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          repo_source: "none",
+          add_readme: false,
+          autograding_state: "none",
+          feedback_pr: false,
+          pages_source: "workflow",
+        },
+        t,
+      ).pages_source,
+    ).toBe("assignments.form.validation.pagesEmptyRepo")
   })
 })
 

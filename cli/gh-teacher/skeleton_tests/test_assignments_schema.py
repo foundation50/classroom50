@@ -716,6 +716,51 @@ class TestIncludeAllBranches:
         assert _errors(_manifest(entry)) != []
 
 
+class TestPages:
+    # pages configures a GitHub Pages site on each student repo at accept time:
+    # a closed object with a required source enum; branch/path only with the
+    # branch source; excluded with empty_repo (no branch to publish). Mirrors
+    # Go's ValidatePagesConfig and the empty_repo exclusion.
+    def test_pages_workflow_accepted(self):
+        assert _errors(_manifest(_entry(pages={"source": "workflow"}))) == []
+
+    def test_pages_branch_default_accepted(self):
+        assert _errors(_manifest(_entry(pages={"source": "branch"}))) == []
+
+    def test_pages_branch_named_with_docs_path_accepted(self):
+        entry = _entry(pages={"source": "branch", "branch": "gh-pages", "path": "/docs"})
+        assert _errors(_manifest(entry)) == []
+
+    def test_pages_accepted_without_template(self):
+        entry = _entry(pages={"source": "branch"})
+        del entry["template"]
+        assert _errors(_manifest(entry)) == []
+
+    def test_pages_requires_source(self):
+        assert _errors(_manifest(_entry(pages={}))) != []
+
+    def test_pages_rejects_unknown_source(self):
+        assert _errors(_manifest(_entry(pages={"source": "legacy"}))) != []
+
+    def test_pages_rejects_unknown_key(self):
+        assert _errors(_manifest(_entry(pages={"source": "workflow", "cname": "x"}))) != []
+
+    def test_pages_rejects_bad_path(self):
+        assert _errors(_manifest(_entry(pages={"source": "branch", "path": "/site"}))) != []
+
+    def test_pages_rejects_empty_branch(self):
+        assert _errors(_manifest(_entry(pages={"source": "branch", "branch": ""}))) != []
+
+    def test_pages_workflow_rejects_branch_and_path(self):
+        assert _errors(_manifest(_entry(pages={"source": "workflow", "branch": "main"}))) != []
+        assert _errors(_manifest(_entry(pages={"source": "workflow", "path": "/"}))) != []
+
+    def test_pages_rejects_empty_repo(self):
+        entry = _entry(empty_repo=True, feedback_pr=False, pages={"source": "workflow"})
+        del entry["template"]  # empty_repo also forbids a template
+        assert _errors(_manifest(entry)) != []
+
+
 class TestFeedbackPrTemplate:
     # feedback_pr_template sources the Feedback PR body from the template repo's
     # native pull_request_template.md, so it REQUIRES a template AND feedback_pr

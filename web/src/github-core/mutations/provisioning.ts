@@ -29,6 +29,7 @@ import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 import { CONFIG_REPO_BRANCH } from "./gitObjects"
 import { commitRepoFiles, readRepoHead } from "./repoCommit"
+import { enableRepoPages } from "./repoPages"
 import {
   classifyApiError,
   forbidden,
@@ -488,33 +489,17 @@ async function enableWorkflowPages(
   enabled: boolean
   alreadyEnabled: boolean
 }> {
-  try {
-    await client.request(`/repos/${owner}/${repo}/pages`, {
-      method: "POST",
-      body: {
-        build_type: "workflow",
-      },
-    })
+  const result = await enableRepoPages(client, owner, repo, {
+    build_type: "workflow",
+  })
+  if (result.enabled) return result
 
-    return {
-      enabled: true,
-      alreadyEnabled: false,
-    }
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 409) {
-      return {
-        enabled: true,
-        alreadyEnabled: true,
-      }
-    }
-
-    throw new Error(
-      `Could not enable GitHub Pages for ${owner}/${repo}: ${getErrorMessage(
-        err,
-      )}`,
-      { cause: err },
-    )
-  }
+  throw new Error(
+    `Could not enable GitHub Pages for ${owner}/${repo}: ${getErrorMessage(
+      result.error,
+    )}`,
+    { cause: result.error },
+  )
 }
 
 async function setPagesPublic(

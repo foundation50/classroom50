@@ -40,6 +40,8 @@ import type { GitHubClient } from "@/github-core/client"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
 import {
+  PAGES_PATHS,
+  PAGES_SOURCES,
   REPO_PERMISSIONS,
   REPO_VISIBILITIES,
   SUBMISSION_MODES,
@@ -1446,6 +1448,83 @@ describe("editAssignment (preserved-entry integration)", () => {
     await expect(
       editAssignment(client, editInput({ repo_visibility: "internal" })),
     ).rejects.toThrow(/repo_visibility: must be one of private, public/)
+  })
+
+  // pages (issue #919): normalized on write (wire defaults collapse away),
+  // omitted when undefined, and classroom50-owned so an edit that turns it
+  // off must clear a stored block.
+  it.each([
+    [{ source: "workflow" }, { source: "workflow" }],
+    [{ source: "branch" }, { source: "branch" }],
+    [{ source: "branch", branch: "", path: "/" }, { source: "branch" }],
+    [
+      { source: "branch", branch: " gh-pages ", path: "/docs" },
+      { source: "branch", branch: "gh-pages", path: "/docs" },
+    ],
+  ] as const)("writes pages %j as %j", async (input, want) => {
+    const { client, committedContent } = makeClient()
+    await editAssignment(client, editInput({ pages: input }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.pages).toEqual(want)
+  })
+
+  it("clears a stored pages block when the edit turns Pages off", async () => {
+    const { client, committedContent } = makeClient({
+      ...existingEntry,
+      pages: { source: "workflow" },
+    })
+    await editAssignment(client, editInput({ pages: undefined }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.pages).toBeUndefined()
+  })
+
+  it("rejects malformed pages before writing", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ pages: { source: "legacy" as "workflow" } }),
+      ),
+    ).rejects.toThrow(/pages.source: must be one of workflow, branch/)
+    await expect(
+      editAssignment(
+        client,
+        editInput({ pages: { source: "workflow", branch: "main" } }),
+      ),
+    ).rejects.toThrow(/branch and path only apply/)
+    await expect(
+      editAssignment(
+        client,
+        editInput({ pages: { source: "branch", path: "/site" as "/" } }),
+      ),
+    ).rejects.toThrow(/pages.path: must be one of \/, \/docs/)
+    await expect(
+      editAssignment(
+        client,
+        editInput({ pages: { source: "branch", branch: "a b" } }),
+      ),
+    ).rejects.toThrow(/pages.branch/)
+  })
+
+  it("rejects pages on an empty repository", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({
+          empty_repo: true,
+          template_repo: "",
+          feedback_pr: false,
+          pages: { source: "workflow" },
+        }),
+      ),
+    ).rejects.toThrow(/empty_repo: .*GitHub Pages/)
   })
 
   // copy_about / copy_topics (issue #569): template-required guard + omitempty.
@@ -3769,6 +3848,38 @@ describe("REPO_VISIBILITIES parity with assignments-v1 schema", () => {
   it("matches the schema repo_visibility enum exactly and in order", () => {
     const schemaEnum = schema.$defs.assignment.properties.repo_visibility.enum
     expect(schemaEnum).toEqual([...REPO_VISIBILITIES])
+  })
+})
+
+// The web half of the pages enum lockstep guard; the Go half is
+// TestPagesEnumParity.
+describe("PAGES_SOURCES / PAGES_PATHS parity with assignments-v1 schema", () => {
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: {
+      assignment: {
+        properties: {
+          pages: {
+            properties: { source: { enum: string[] }; path: { enum: string[] } }
+          }
+        }
+      }
+    }
+  }
+
+  it("matches the schema pages.source enum exactly and in order", () => {
+    expect(schema.$defs.assignment.properties.pages.properties.source.enum).toEqual(
+      [...PAGES_SOURCES],
+    )
+  })
+
+  it("matches the schema pages.path enum exactly and in order", () => {
+    expect(schema.$defs.assignment.properties.pages.properties.path.enum).toEqual(
+      [...PAGES_PATHS],
+    )
   })
 })
 

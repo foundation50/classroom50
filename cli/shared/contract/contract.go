@@ -181,6 +181,27 @@ const (
 	RepoVisibilityPrivate = "private"
 	RepoVisibilityPublic  = "public"
 
+	// PagesSourceWorkflow and PagesSourceBranch are the assignment
+	// pages.source values: how each student repo's GitHub Pages site is
+	// deployed, configured at accept time on fresh create. workflow = a GitHub
+	// Actions workflow the template ships (GitHub build_type "workflow");
+	// branch = GitHub publishes a branch directly (build_type "legacy").
+	// Mirrored in the assignments-v1 schema enum and the web PAGES_SOURCES;
+	// pinned by the schema-parity tests.
+	PagesSourceWorkflow = "workflow"
+	PagesSourceBranch   = "branch"
+
+	// PagesPathRoot and PagesPathDocs are the only publish directories GitHub
+	// accepts for a branch-deployed Pages site (POST /repos/{o}/{r}/pages
+	// source.path). Root is the wire default; writers omit it.
+	PagesPathRoot = "/"
+	PagesPathDocs = "/docs"
+
+	// PagesBuildTypeWorkflow and PagesBuildTypeLegacy are GitHub's build_type
+	// values on the Pages API, which pages.source maps onto.
+	PagesBuildTypeWorkflow = "workflow"
+	PagesBuildTypeLegacy   = "legacy"
+
 	// GradingModeOff, GradingModeAuto, and GradingModeManual are the assignment
 	// grading.mode values — the teacher's grading intent as a first-class GUI
 	// choice. auto = autograded (ABSENT reads as auto, so existing files are
@@ -556,6 +577,47 @@ func IsValidRepoVisibility(v string) bool {
 // Single-sources the allow-list; the schema enum in assignments-v1.schema.json
 // and the web GRADING_MODES mirror it (parity-tested on both sides).
 var GradingModes = []string{GradingModeOff, GradingModeAuto, GradingModeManual}
+
+// PagesSources is every valid assignments.json pages.source value.
+// Single-sources the allow-list; the schema enum in assignments-v1.schema.json
+// and the web PAGES_SOURCES mirror it (parity-tested on both sides).
+var PagesSources = []string{PagesSourceWorkflow, PagesSourceBranch}
+
+// IsValidPagesSource reports whether s is one of the PagesSources.
+func IsValidPagesSource(s string) bool {
+	for _, allowed := range PagesSources {
+		if s == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// PagesPaths is every valid assignments.json pages.path value; the schema enum
+// and the web PAGES_PATHS mirror it (parity-tested on both sides).
+var PagesPaths = []string{PagesPathRoot, PagesPathDocs}
+
+// IsValidPagesPath reports whether p is one of the PagesPaths.
+func IsValidPagesPath(p string) bool {
+	for _, allowed := range PagesPaths {
+		if p == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// PagesBuildType maps an assignments.json pages.source onto GitHub's Pages API
+// build_type ("" for an unknown source).
+func PagesBuildType(source string) string {
+	switch source {
+	case PagesSourceWorkflow:
+		return PagesBuildTypeWorkflow
+	case PagesSourceBranch:
+		return PagesBuildTypeLegacy
+	}
+	return ""
+}
 
 // IsValidGradingMode reports whether m is one of the GradingModes.
 func IsValidGradingMode(m string) bool {

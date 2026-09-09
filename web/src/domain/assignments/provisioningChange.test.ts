@@ -23,6 +23,7 @@ describe("provisioningFieldsFromAssignment", () => {
       gradingMode: "auto",
       student_permission: "push",
       repo_visibility: "private",
+      pages: "off",
     })
   })
 
@@ -42,6 +43,7 @@ describe("provisioningFieldsFromAssignment", () => {
       gradingMode: "manual",
       student_permission: "admin",
       repo_visibility: "public",
+      pages: "off",
     })
   })
 
@@ -137,6 +139,31 @@ describe("provisioningSettingsChanged", () => {
       ),
     ).toBe(true)
   })
+
+  it("detects a pages change but not a wire-default re-spelling", () => {
+    expect(
+      provisioningSettingsChanged(base, { pages: { source: "workflow" } }),
+    ).toBe(true)
+    expect(provisioningSettingsChanged(base, { pages: undefined })).toBe(false)
+    expect(
+      provisioningSettingsChanged(
+        { ...base, pages: { source: "branch" } },
+        { pages: { source: "branch", branch: "", path: "/" } },
+      ),
+    ).toBe(false)
+    expect(
+      provisioningSettingsChanged(
+        { ...base, pages: { source: "branch" } },
+        { pages: { source: "branch", path: "/docs" } },
+      ),
+    ).toBe(true)
+    expect(
+      provisioningSettingsChanged(
+        { ...base, pages: { source: "workflow" } },
+        { pages: undefined },
+      ),
+    ).toBe(true)
+  })
 })
 
 describe("provisioningChanges", () => {
@@ -149,6 +176,7 @@ describe("provisioningChanges", () => {
         gradingMode: "manual",
         student_permission: "admin",
         repo_visibility: "public",
+        pages: { source: "workflow" },
       }),
     ).toEqual([
       "repo_source",
@@ -156,6 +184,7 @@ describe("provisioningChanges", () => {
       "grading_mode",
       "student_permission",
       "repo_visibility",
+      "pages",
     ])
   })
 

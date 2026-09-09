@@ -9,6 +9,7 @@ import { AnimatedAlert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import CreateAssignmentForm, {
+  formValuesToPages,
   formValuesToRepoFeatures,
   formValuesToTestDefaults,
 } from "@/pages/assignments/CreateAssignmentForm"
@@ -171,6 +172,7 @@ const CreateAssignmentPage = () => {
                       }
                     : { mode: values.grading_choice },
                 repo_features: formValuesToRepoFeatures(values),
+                pages: formValuesToPages(values),
                 classroom,
                 tests: values.tests,
                 test_defaults: formValuesToTestDefaults(values),
