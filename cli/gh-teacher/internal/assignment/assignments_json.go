@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/output"
@@ -387,8 +388,8 @@ func ValidatePagesConfig(p *PagesConfig) error {
 		}
 		return nil
 	}
-	if strings.TrimSpace(p.Branch) != p.Branch || len(p.Branch) > 255 {
-		return fmt.Errorf("pages.branch %q must have no surrounding whitespace and be at most 255 characters", p.Branch)
+	if strings.ContainsFunc(p.Branch, unicode.IsSpace) || len(p.Branch) > 255 {
+		return fmt.Errorf("pages.branch %q must not contain whitespace and must be at most 255 characters", p.Branch)
 	}
 	if p.Path != "" && !contract.IsValidPagesPath(p.Path) {
 		return fmt.Errorf("pages.path %q must be one of %s", p.Path, strings.Join(contract.PagesPaths, ", "))

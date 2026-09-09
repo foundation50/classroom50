@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/github-core/queries"
-import { getRepoPages, type RepoPagesInfo } from "@/github-core/mutations"
+import {
+  getRepoPages,
+  githubKeys,
+  type RepoPagesInfo,
+} from "@/github-core/queries"
 
 // One student repo's live GitHub Pages site (null = none configured), so the
 // manage hub can show the real URL (which reflects an org custom domain) and

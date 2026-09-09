@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from "vitest"
 
-import {
-  classifyPagesEnableError,
-  enableRepoPages,
-  getRepoPages,
-} from "./repoPages"
+import { classifyPagesEnableError, enableRepoPages } from "./repoPages"
 import { GitHubAPIError } from "../errors"
 import type { GitHubClient } from "../client"
 
 const PATH = "/repos/cs50/cs50-fall-2026-site-alice/pages"
 
-function apiError(status: number, message = `HTTP ${status}`): GitHubAPIError {
+function apiError(
+  status: number,
+  message = `HTTP ${status}`,
+  remaining: number | null = null,
+): GitHubAPIError {
   return new GitHubAPIError({
     status,
     url: PATH,
@@ -18,7 +18,7 @@ function apiError(status: number, message = `HTTP ${status}`): GitHubAPIError {
     body: { message },
     rateLimit: {
       limit: null,
-      remaining: null,
+      remaining,
       used: null,
       reset: null,
       resource: null,
@@ -71,6 +71,19 @@ describe("enableRepoPages", () => {
     })
     expect(result).toEqual({ enabled: false, reason: "plan", error: err })
   })
+
+  it.each([
+    ["429", apiError(429)],
+    ["403 with the quota exhausted", apiError(403, "API rate limit", 0)],
+  ])(
+    "rethrows a rate limit (%s) so a fan-out can stop instead of misreporting",
+    async (_label, err) => {
+      const { client } = makeClient(err)
+      await expect(
+        enableRepoPages(client, "cs50", "r", { build_type: "workflow" }),
+      ).rejects.toBe(err)
+    },
+  )
 })
 
 describe("classifyPagesEnableError", () => {
@@ -87,26 +100,5 @@ describe("classifyPagesEnableError", () => {
     [new Error("network"), "unknown"],
   ])("classifies %s as %s", (err, reason) => {
     expect(classifyPagesEnableError(err)).toBe(reason)
-  })
-})
-
-describe("getRepoPages", () => {
-  it("returns the site info", async () => {
-    const info = {
-      html_url: "https://cs50.github.io/r/",
-      build_type: "workflow",
-    }
-    const { client } = makeClient(info)
-    expect(await getRepoPages(client, "cs50", "r")).toEqual(info)
-  })
-
-  it("reads a 404 as no site", async () => {
-    const { client } = makeClient(apiError(404))
-    expect(await getRepoPages(client, "cs50", "r")).toBeNull()
-  })
-
-  it("rethrows other failures", async () => {
-    const { client } = makeClient(apiError(500))
-    await expect(getRepoPages(client, "cs50", "r")).rejects.toThrow()
   })
 })

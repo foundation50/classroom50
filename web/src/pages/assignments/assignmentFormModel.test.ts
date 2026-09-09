@@ -660,7 +660,7 @@ describe("pages form mapping (issue #919)", () => {
     expect(workflow.pages_path).toBe("/")
   })
 
-  it("validates the branch name and the bare-repo exclusion", () => {
+  it("validates the branch name and lets a bare repo submit with Pages cleared", () => {
     expect(
       validateAssignmentForm(
         { ...base, pages_source: "branch", pages_branch: "a b" },
@@ -673,19 +673,19 @@ describe("pages form mapping (issue #919)", () => {
         t,
       ).pages_branch,
     ).toBeUndefined()
-    expect(
-      validateAssignmentForm(
-        {
-          ...base,
-          repo_source: "none",
-          add_readme: false,
-          autograding_state: "none",
-          feedback_pr: false,
-          pages_source: "workflow",
-        },
-        t,
-      ).pages_source,
-    ).toBe("assignments.form.validation.pagesEmptyRepo")
+    // A teacher who picked a Pages source and then switched to an empty
+    // repository sees a disabled control showing Off; the stale stored value
+    // must not block the save (toSubmitValues clears it).
+    const bare = {
+      ...base,
+      repo_source: "none" as const,
+      add_readme: false,
+      autograding_state: "none" as const,
+      feedback_pr: false,
+      pages_source: "workflow" as const,
+    }
+    expect(validateAssignmentForm(bare, t).pages_source).toBeUndefined()
+    expect(toSubmitValues(bare).pages_source).toBe("off")
   })
 })
 

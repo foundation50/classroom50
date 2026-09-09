@@ -91,11 +91,17 @@ export function BulkRepoPagesModal({
             }
           }
         }
-        const outcome = await setPagesMutation.mutateAsync({
-          org,
-          repo,
-          body: pagesCreateBody(pages, defaultBranch),
-        })
+        const body = pagesCreateBody(pages, defaultBranch)
+        if (!body) {
+          return {
+            owner,
+            status: "failed",
+            detail: t(PAGES_REFUSAL_KEYS.unknown, { repo }),
+          }
+        }
+        // A rate limit is rethrown by enableRepoPages, so it reaches
+        // runBulkFanOut's stop-and-defer instead of being reported per repo.
+        const outcome = await setPagesMutation.mutateAsync({ org, repo, body })
         if (outcome.enabled) return
         return {
           owner,

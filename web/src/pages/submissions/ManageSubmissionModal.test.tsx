@@ -40,8 +40,30 @@ vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => autogradeStateData(),
 }))
 vi.mock("@/hooks/useGetRepoPages", () => ({
-  useGetRepoPages: () => ({ data: null, isLoading: false, isError: false }),
+  useGetRepoPages: () => pagesData(),
 }))
+const pagesData = vi.fn(
+  () =>
+    ({ data: null, isLoading: false, isError: false }) as {
+      data: unknown
+      isLoading?: boolean
+      isError?: boolean
+    },
+)
+// The per-repo Enable GitHub Pages action's mutation, configurable per test.
+const setPagesMutateAsync = vi.fn()
+vi.mock("@/hooks/mutations/useSetRepoPages", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/hooks/mutations/useSetRepoPages")>()
+  return {
+    ...actual,
+    default: () => ({ mutateAsync: setPagesMutateAsync, isPending: false }),
+    useSetRepoPages: () => ({
+      mutateAsync: setPagesMutateAsync,
+      isPending: false,
+    }),
+  }
+})
 // The setup-marker probe, configurable so a test can drive the issue #502
 // "Incomplete" badge. The spy records the hook's arguments for the
 // empty_repo gate assertion.
@@ -110,6 +132,8 @@ afterEach(() => {
   })
   repoSetupData.mockReturnValue({ state: "complete", isLoading: false })
   repoSetupSpy.mockReset()
+  pagesData.mockReturnValue({ data: null, isLoading: false, isError: false })
+  setPagesMutateAsync.mockReset()
 })
 
 describe("ManageSubmissionModal", () => {
@@ -597,5 +621,112 @@ describe("ManageSubmissionModal — action feedback channel", () => {
         message: "submissions.rowDownload.error",
       }),
     )
+  })
+})
+
+// GitHub Pages (issue #919): the details row and the per-repo Enable action.
+describe("ManageSubmissionModal — GitHub Pages", () => {
+  const pagesAction = {
+    ...individualAction,
+    assignmentPages: { source: "workflow" as const },
+  }
+  const renderHub = (action: typeof individualAction = pagesAction) =>
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={action}
+      />,
+    )
+  const enableButton = () =>
+    screen.getByRole("button", {
+      name: "submissions.rowPages.aria:cs101-hw1-alice",
+    })
+
+  it("shows Not enabled and offers Enable when the assignment expects a site", () => {
+    repoData.mockReturnValue({
+      data: { has_pages: false, default_branch: "main" },
+    })
+    renderHub()
+    expect(
+      screen.getByText("submissions.manageModal.pagesNotEnabled"),
+    ).toBeTruthy()
+    expect(enableButton().hasAttribute("disabled")).toBe(false)
+  })
+
+  it("omits the row and the action when the assignment has no Pages setting", () => {
+    repoData.mockReturnValue({
+      data: { has_pages: false, default_branch: "main" },
+    })
+    renderHub(individualAction)
+    expect(screen.queryByText("submissions.manageModal.pages")).toBeNull()
+    expect(
+      screen.queryByRole("button", {
+        name: "submissions.rowPages.aria:cs101-hw1-alice",
+      }),
+    ).toBeNull()
+  })
+
+  it("links the live URL and the github.io default when they differ, with build status", () => {
+    repoData.mockReturnValue({
+      data: { has_pages: true, default_branch: "main" },
+    })
+    pagesData.mockReturnValue({
+      data: {
+        html_url: "https://cs.example.edu/cs101-hw1-alice/",
+        status: "errored",
+      },
+      isLoading: false,
+      isError: false,
+    })
+    renderHub()
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"))
+    expect(hrefs).toContain("https://cs.example.edu/cs101-hw1-alice/")
+    expect(hrefs).toContain("https://acme.github.io/cs101-hw1-alice/")
+    expect(
+      screen.getByText("submissions.manageModal.pagesBuildErrored"),
+    ).toBeTruthy()
+    // A repo that already has a site never shows the Enable action.
+    expect(
+      screen.queryByRole("button", {
+        name: "submissions.rowPages.aria:cs101-hw1-alice",
+      }),
+    ).toBeNull()
+  })
+
+  it("reports a refusal as an in-hub banner, then success on retry", async () => {
+    repoData.mockReturnValue({
+      data: { has_pages: false, default_branch: "main" },
+    })
+    setPagesMutateAsync
+      .mockResolvedValueOnce({
+        enabled: false,
+        reason: "plan",
+        error: new Error("x"),
+      })
+      .mockResolvedValueOnce({ enabled: true, alreadyEnabled: false })
+    renderHub()
+    const user = userEvent.setup()
+
+    await user.click(enableButton())
+    expect(
+      await screen.findByText(
+        "submissions.rowPages.refused.plan:cs101-hw1-alice",
+      ),
+    ).toBeTruthy()
+    expect(setPagesMutateAsync).toHaveBeenCalledWith({
+      org: "acme",
+      repo: "cs101-hw1-alice",
+      body: { build_type: "workflow" },
+    })
+
+    await user.click(enableButton())
+    expect(
+      await screen.findByText("submissions.rowPages.outcome.enabled"),
+    ).toBeTruthy()
+    expect(notifyMock).not.toHaveBeenCalled()
   })
 })

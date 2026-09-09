@@ -156,10 +156,8 @@ export { updateOrgProfile, type OrgProfileUpdate } from "./mutations/orgProfile"
 export { updateOrgTeamCreation } from "./mutations/orgTeamCreation"
 export {
   enableRepoPages,
-  getRepoPages,
   classifyPagesEnableError,
   type PagesCreateBody,
   type PagesEnableReason,
   type EnableRepoPagesResult,
-  type RepoPagesInfo,
 } from "./mutations/repoPages"

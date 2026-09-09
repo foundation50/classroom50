@@ -34,7 +34,25 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 import { BulkRepoPagesModal } from "./BulkRepoPagesModal"
+import { GitHubAPIError } from "@/github-core/errors"
 import type { AssignmentPages } from "@/types/classroom"
+
+function rateLimitError(): GitHubAPIError {
+  return new GitHubAPIError({
+    status: 429,
+    url: "/repos/o/cs-site-alice/pages",
+    message: "HTTP 429",
+    body: null,
+    rateLimit: {
+      limit: null,
+      remaining: 0,
+      used: null,
+      reset: null,
+      resource: null,
+      retryAfter: 60,
+    },
+  })
+}
 
 afterEach(() => {
   cleanup()
@@ -120,5 +138,40 @@ describe("BulkRepoPagesModal", () => {
     )
     expect(mutateAsync).toHaveBeenCalledTimes(2)
     expect(screen.getByText("submissions.rowPages.refused.plan")).toBeTruthy()
+  })
+
+  it("stops launching on a rate limit and defers the rest (never 'access')", async () => {
+    // Mirrors BulkRepoFeaturesModal: enableRepoPages rethrows a throttle, so
+    // the fan-out marks the remainder deferred instead of hammering GitHub
+    // and mislabelling every remaining student as an access refusal.
+    const owners = Array.from({ length: 12 }, (_, i) => `student${i}`)
+    mutateAsync.mockImplementation(() => Promise.reject(rateLimitError()))
+    renderModal(owners, { source: "workflow" })
+    fireEvent.click(screen.getByText(applyBtn))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.bulkPages.resultHeadlineThrottled"),
+      ).toBeTruthy(),
+    )
+    expect(
+      screen.getByText("submissions.bulkPages.deferredSection"),
+    ).toBeTruthy()
+    expect(screen.queryByText("submissions.rowPages.refused.access")).toBeNull()
+    expect(mutateAsync.mock.calls.length).toBeLessThan(owners.length)
+  })
+
+  it("reports an unresolvable default branch without POSTing", async () => {
+    getRepo.mockResolvedValue(null)
+    renderModal(["alice"], { source: "branch" })
+    fireEvent.click(screen.getByText(applyBtn))
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("submissions.bulkPages.failedSection"),
+      ).toBeTruthy(),
+    )
+    expect(screen.getByText("submissions.rowPages.refused.branch")).toBeTruthy()
+    expect(mutateAsync).not.toHaveBeenCalled()
   })
 })

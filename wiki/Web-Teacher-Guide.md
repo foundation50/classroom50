@@ -311,10 +311,13 @@ section. Most assignments never need them:
   deploys it). **A branch** publishes the files in a branch directly, no
   workflow needed (plain HTML, CSS, and JavaScript): pick the branch (blank
   means the repository's default branch) and the folder (`/` or `/docs`).
-  Pages on private repositories needs a GitHub plan that includes it; on
-  GitHub Free for organizations, pair it with a **Public** repository
-  visibility or the site isn't created (accept tells the student, and the
-  assignment still works). Not available for an empty repository. The setting
+  The site is public on the internet even when the repository is private, and
+  every file in the published branch and folder is served (only GitHub
+  Enterprise Cloud can restrict who sees a site); tell students what belongs in
+  the published folder. Pages on private repositories needs a GitHub plan that
+  includes it; on GitHub Free for organizations, pair it with a **Public**
+  repository visibility or the site isn't created (accept tells the student,
+  and the assignment still works). Not available for an empty repository. The setting
   applies to repositories created from then on; to configure existing ones,
   use **Enable GitHub Pages** on the submissions page. Each site lives at
   `https://<org>.github.io/<repo>/` (an organization with a custom Pages

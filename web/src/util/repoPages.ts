@@ -3,7 +3,6 @@
 // needs no API call, and the create-body mapper is the one place the
 // assignments.json `pages` block turns into GitHub's POST /pages body.
 import type { AssignmentPages } from "@/types/classroom"
-import { CONFIG_REPO } from "./configRepo"
 
 // The POST /repos/{owner}/{repo}/pages body. GitHub's two deploy models:
 // `workflow` (a GitHub Actions workflow publishes; `source` is not sent) and
@@ -15,15 +14,27 @@ export type PagesCreateBody =
   | { build_type: "legacy"; source: { branch: string; path: "/" | "/docs" } }
 
 // `defaultBranch` is the student repo's settled default branch, used when the
-// assignment names none (the common case).
+// assignment names none (the common case). Returns null for a source this
+// release does not know (a newer writer's value): the caller skips the POST
+// rather than guess a deploy model, so the two accept clients never configure
+// different sites for the same entry (the Go mapper fails closed the same way).
 export function pagesCreateBody(
   pages: AssignmentPages,
   defaultBranch: string,
-): PagesCreateBody {
-  if (pages.source === "workflow") return { build_type: "workflow" }
-  return {
-    build_type: "legacy",
-    source: { branch: pages.branch || defaultBranch, path: pages.path ?? "/" },
+): PagesCreateBody | null {
+  switch (pages.source) {
+    case "workflow":
+      return { build_type: "workflow" }
+    case "branch":
+      return {
+        build_type: "legacy",
+        source: {
+          branch: pages.branch || defaultBranch,
+          path: pages.path ?? "/",
+        },
+      }
+    default:
+      return null
   }
 }
 
@@ -31,41 +42,4 @@ export function pagesCreateBody(
 // show: on an org with a custom Pages domain github.io redirects to it.
 export function defaultRepoPagesUrl(org: string, repo: string): string {
   return `https://${org.toLowerCase()}.github.io/${repo.toLowerCase()}/`
-}
-
-// The URL a student repo's site is served at when the org has a custom Pages
-// domain, or null when none applies. Project sites inherit an ORG-ROOT custom
-// domain (the `https://<host>/classroom50` layout of classroom.pages_base_url:
-// the org's user site carries the CNAME, so `<host>/<repo>/` serves every repo);
-// a CNAME on the classroom50 repo alone (`https://<host>` layout) covers only
-// that repo, so nothing is derived.
-export function customRepoPagesUrl(
-  pagesBaseUrl: string | undefined,
-  repo: string,
-): string | null {
-  if (!pagesBaseUrl) return null
-  let url: URL
-  try {
-    url = new URL(pagesBaseUrl)
-  } catch {
-    return null
-  }
-  if (url.protocol !== "https:" || url.pathname !== `/${CONFIG_REPO}`) {
-    return null
-  }
-  return `https://${url.host}/${repo.toLowerCase()}/`
-}
-
-// Both URLs worth showing for a student repo's site: the github.io default
-// first, then the custom-domain one when the classroom has an org-root custom
-// Pages domain.
-export function studentRepoPagesUrls(
-  org: string,
-  repo: string,
-  pagesBaseUrl?: string,
-): string[] {
-  const urls = [defaultRepoPagesUrl(org, repo)]
-  const custom = customRepoPagesUrl(pagesBaseUrl, repo)
-  if (custom) urls.push(custom)
-  return urls
 }

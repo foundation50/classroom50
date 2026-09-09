@@ -144,3 +144,4 @@ export {
   type ServiceTokenExpiry,
   type RunAnnotation,
 } from "./queries/releaseRunReads"
+export { getRepoPages, type RepoPagesInfo } from "./queries/repoPagesReads"

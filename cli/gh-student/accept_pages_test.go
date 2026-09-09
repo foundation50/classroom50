@@ -3,12 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/cli/go-gh/v2/pkg/api"
 
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/ui"
@@ -177,6 +181,36 @@ func TestAcceptIntoRepo_Pages(t *testing.T) {
 		}
 	})
 
+	t.Run("403 policy refusal fails open with the policy hint", func(t *testing.T) {
+		server, order, _ := pagesTestServer(t, org, repoName, http.StatusForbidden, "Resource not accessible by integration")
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, params(&assignments.Pages{Source: "workflow"}, false)); err != nil {
+			t.Fatalf("a Pages refusal must not fail accept: %v", err)
+		}
+		if !strings.Contains(out.String(), "may not let members publish Pages sites") {
+			t.Errorf("expected the policy hint:\n%s", out.String())
+		}
+		if !strings.Contains(strings.Join(*order, ","), "POST commits") {
+			t.Errorf("the accept commit must still land; order = %v", *order)
+		}
+	})
+
+	t.Run("unknown pages.source skips the POST and warns to update", func(t *testing.T) {
+		server, order, _ := pagesTestServer(t, org, repoName, http.StatusCreated, "")
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, params(&assignments.Pages{Source: "container"}, false)); err != nil {
+			t.Fatalf("acceptIntoRepo: %v", err)
+		}
+		for _, o := range *order {
+			if strings.Contains(o, "pages") {
+				t.Fatalf("an unknown source must not POST /pages; order = %v", *order)
+			}
+		}
+		if !strings.Contains(out.String(), "Update gh-student") {
+			t.Errorf("expected an update hint:\n%s", out.String())
+		}
+	})
+
 	t.Run("no pages block: /pages is never called", func(t *testing.T) {
 		server, order, _ := pagesTestServer(t, org, repoName, http.StatusCreated, "")
 		var out bytes.Buffer
@@ -205,21 +239,30 @@ func TestAcceptIntoRepo_Pages(t *testing.T) {
 }
 
 func TestPagesRefusalHint(t *testing.T) {
+	// The wrapped shape EnablePages returns: the request path (which carries
+	// the repo name) is in err.Error(), the API's reason is in the HTTPError.
+	wrap := func(status int, message string, headers http.Header) error {
+		return fmt.Errorf("POST repos/cs50/cs50-git-branching-alice/pages: %w",
+			&api.HTTPError{StatusCode: status, Message: message, Headers: headers})
+	}
 	cases := []struct {
-		msg  string
+		name string
+		err  error
 		want string
 	}{
-		{"HTTP 422: Upgrade to GitHub Pro or make this repository public", "plan doesn't allow Pages on private repositories"},
-		{"HTTP 422: Validation Failed: branch does not exist", "branch it publishes from doesn't exist"},
-		{"something else", "Your teacher can enable it from the submissions page"},
+		{"plan", wrap(http.StatusUnprocessableEntity, "Upgrade to GitHub Pro or make this repository public", nil), "plan doesn't allow Pages on private repositories"},
+		{"missing branch", wrap(http.StatusUnprocessableEntity, "Validation Failed: branch does not exist", nil), "branch it publishes from doesn't exist"},
+		// The repo name contains "branch" but the API said nothing about one:
+		// the URL must never drive the hint.
+		{"policy 403 with branch in repo name", wrap(http.StatusForbidden, "Resource not accessible by integration", nil), "may not let members publish Pages sites"},
+		{"rate limit", wrap(http.StatusForbidden, "API rate limit exceeded", http.Header{"Retry-After": []string{"60"}}), "rate-limited"},
+		{"transport error", errors.New("dial tcp: timeout"), "Your teacher can enable it from the submissions page"},
 	}
 	for _, tc := range cases {
-		if got := pagesRefusalHint(errString(tc.msg)); !strings.Contains(got, tc.want) {
-			t.Errorf("pagesRefusalHint(%q) = %q, want it to contain %q", tc.msg, got, tc.want)
-		}
+		t.Run(tc.name, func(t *testing.T) {
+			if got := pagesRefusalHint(tc.err); !strings.Contains(got, tc.want) {
+				t.Errorf("pagesRefusalHint(%v) = %q, want it to contain %q", tc.err, got, tc.want)
+			}
+		})
 	}
 }
-
-type errString string
-
-func (e errString) Error() string { return string(e) }

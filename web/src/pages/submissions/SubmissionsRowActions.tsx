@@ -745,11 +745,15 @@ const EnablePagesButton = ({
 
   const apply = async () => {
     try {
-      const result = await mutation.mutateAsync({
-        org,
-        repo,
-        body: pagesCreateBody(pages, defaultBranch ?? ""),
-      })
+      const body = pagesCreateBody(pages, defaultBranch ?? "")
+      if (!body) {
+        feedback({
+          tone: "error",
+          message: t(PAGES_REFUSAL_KEYS.unknown, { repo }),
+        })
+        return
+      }
+      const result = await mutation.mutateAsync({ org, repo, body })
       if (result.enabled) {
         feedback({
           tone: "success",

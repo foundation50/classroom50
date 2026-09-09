@@ -2,10 +2,13 @@ package ghutil
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -230,7 +233,11 @@ func TestPagesBodyForAssignment(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			raw, err := json.Marshal(PagesBodyForAssignment(tc.source, tc.branch, tc.path, tc.defBr))
+			body, ok := PagesBodyForAssignment(tc.source, tc.branch, tc.path, tc.defBr)
+			if !ok {
+				t.Fatalf("PagesBodyForAssignment(%q) ok = false, want true", tc.source)
+			}
+			raw, err := json.Marshal(body)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -238,6 +245,29 @@ func TestPagesBodyForAssignment(t *testing.T) {
 				t.Errorf("body = %s, want %s", raw, tc.want)
 			}
 		})
+	}
+	// A source this release does not know must fail closed (skip the POST), so
+	// a newer writer's value never yields a different site per accept client.
+	if _, ok := PagesBodyForAssignment("container", "", "", "main"); ok {
+		t.Errorf("unknown source must not map to a body")
+	}
+}
+
+func TestHTTPErrorMessage(t *testing.T) {
+	err := fmt.Errorf("POST repos/o/git-branching-alice/pages: %w", &api.HTTPError{
+		StatusCode: http.StatusUnprocessableEntity,
+		Message:    "Validation Failed",
+		Errors:     []api.HTTPErrorItem{{Message: "The branch does not exist"}},
+	})
+	got := HTTPErrorMessage(err)
+	if !strings.Contains(got, "Validation Failed") || !strings.Contains(got, "The branch does not exist") {
+		t.Errorf("HTTPErrorMessage = %q, want message and error items", got)
+	}
+	if strings.Contains(got, "git-branching") {
+		t.Errorf("HTTPErrorMessage must not include the request path: %q", got)
+	}
+	if HTTPErrorMessage(errors.New("dial tcp: timeout")) != "" {
+		t.Errorf("non-HTTPError must yield an empty message")
 	}
 }
 

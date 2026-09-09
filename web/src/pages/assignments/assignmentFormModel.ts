@@ -625,7 +625,10 @@ export function validateAssignmentForm(
 
   // Pages: guard the pickers, and (branch source only) a branch name GitHub
   // would refuse: surrounding whitespace, spaces, or over the ref limit. The
-  // empty string means the repo's default branch and is valid.
+  // empty string means the repo's default branch and is valid. A bare repo is
+  // NOT rejected here: PagesField is disabled and shows Off for it while the
+  // stored value stays, so an error would land on a control the teacher cannot
+  // change; toSubmitValues clears it and buildAssignmentEntry is the backstop.
   if (!PAGES_SOURCE_CHOICES.includes(value.pages_source)) {
     errors.pages_source = t("assignments.form.validation.pagesSourceInvalid")
   } else if (value.pages_source === "branch") {
@@ -636,9 +639,6 @@ export function validateAssignmentForm(
     if (!PAGES_PATHS.includes(value.pages_path)) {
       errors.pages_path = t("assignments.form.validation.pagesPathInvalid")
     }
-  }
-  if (value.pages_source !== "off" && deriveFormShape(value).emptyRepo) {
-    errors.pages_source = t("assignments.form.validation.pagesEmptyRepo")
   }
 
   // Mirror the CLI's ValidateSubmissionTags so a bad pattern can't reach the

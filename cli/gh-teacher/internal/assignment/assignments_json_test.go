@@ -190,6 +190,7 @@ func TestValidatePagesConfig(t *testing.T) {
 		{"workflow with path", &PagesConfig{Source: "workflow", Path: "/"}, true},
 		{"bad path", &PagesConfig{Source: "branch", Path: "/site"}, true},
 		{"padded branch", &PagesConfig{Source: "branch", Branch: " main"}, true},
+		{"branch with inner space", &PagesConfig{Source: "branch", Branch: "gh pages"}, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

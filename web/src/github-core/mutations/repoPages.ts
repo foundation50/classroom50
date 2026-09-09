@@ -11,15 +11,6 @@ import type { PagesCreateBody } from "@/util/repoPages"
 
 export type { PagesCreateBody }
 
-export type RepoPagesInfo = {
-  html_url?: string
-  cname?: string | null
-  build_type?: "legacy" | "workflow" | null
-  source?: { branch: string; path: string }
-  status?: "built" | "building" | "errored" | null
-  public?: boolean
-}
-
 // Why a Pages create was refused, for callers that fail open (accept, bulk):
 // - plan: the repo is private and the plan has no private Pages (GitHub Free
 //   for organizations). GitHub answers 422 or 403 mentioning upgrade/plan.
@@ -60,9 +51,11 @@ export type EnableRepoPagesResult =
 
 // Configure a repo's Pages site. 201 = created, 409 = a site already exists
 // (treated as done: the existing configuration is left alone, never overwritten
-// by a PUT, so a student's or teacher's own later change survives). Any other
-// failure is returned classified rather than thrown, so accept and the bulk
-// action can fail open with a specific message.
+// by a PUT, so a student's or teacher's own later change survives). A refusal
+// is returned classified rather than thrown, so accept and the bulk action can
+// fail open with a specific message. A rate limit is the one exception: it is
+// rethrown, because it is not a refusal of THIS repo and a bulk fan-out must
+// stop launching more writes on it (runBulkFanOut keys on the throw).
 export async function enableRepoPages(
   client: GitHubClient,
   owner: string,
@@ -76,26 +69,10 @@ export async function enableRepoPages(
     )
     return { enabled: true, alreadyEnabled: false }
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 409) {
-      return { enabled: true, alreadyEnabled: true }
+    if (err instanceof GitHubAPIError) {
+      if (err.status === 409) return { enabled: true, alreadyEnabled: true }
+      if (err.isRateLimited) throw err
     }
     return { enabled: false, reason: classifyPagesEnableError(err), error: err }
-  }
-}
-
-// GET /repos/{owner}/{repo}/pages. `null` when no site is configured (404);
-// any other failure throws.
-export async function getRepoPages(
-  client: GitHubClient,
-  owner: string,
-  repo: string,
-): Promise<RepoPagesInfo | null> {
-  try {
-    return await client.request<RepoPagesInfo>(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pages`,
-    )
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) return null
-    throw err
   }
 }

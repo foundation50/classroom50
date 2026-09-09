@@ -351,26 +351,42 @@ async function provisionAcceptedRepo(params: {
   // site's first deploy: a template's deploy workflow would otherwise fail its
   // first run because no site existed yet. Best-effort: a refusal is remembered
   // and shown on the setup step, never thrown (the control files matter more).
+  // A rate limit (which enableRepoPages rethrows for the bulk fan-out's sake)
+  // is caught here for the same reason and shown as "unknown".
   let pagesRefusal: PagesEnableReason | null = null
   const configurePages = pages
     ? async (settledBranch: string) => {
-        const result = await enableRepoPages(
-          client,
-          org,
-          repo.name,
-          pagesCreateBody(pages, settledBranch),
-        )
-        if (result.enabled) {
-          pagesRefusal = null
+        const body = pagesCreateBody(pages, settledBranch)
+        if (!body) {
+          pagesRefusal = "unknown"
+          log.warn("pages: unknown source, skipped (non-fatal)", {
+            org,
+            repo: repo.name,
+            source: pages.source,
+          })
           return
         }
-        pagesRefusal = result.reason
-        log.warn("pages: enable refused (non-fatal)", {
-          org,
-          repo: repo.name,
-          reason: result.reason,
-          error: result.error,
-        })
+        try {
+          const result = await enableRepoPages(client, org, repo.name, body)
+          if (result.enabled) {
+            pagesRefusal = null
+            return
+          }
+          pagesRefusal = result.reason
+          log.warn("pages: enable refused (non-fatal)", {
+            org,
+            repo: repo.name,
+            reason: result.reason,
+            error: result.error,
+          })
+        } catch (err) {
+          pagesRefusal = "unknown"
+          log.warn("pages: enable failed (non-fatal)", {
+            org,
+            repo: repo.name,
+            error: err,
+          })
+        }
       }
     : undefined
 

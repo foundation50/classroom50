@@ -610,8 +610,8 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		u.Warn("this assignment creates a PUBLIC repository: your work (code, commits, name) will be visible to anyone on the internet")
 	}
 	if entry.Pages != nil {
-		u.Note("this assignment publishes your repository as a website with GitHub Pages at https://%s.github.io/%s/ (it updates when you push and can take a minute to appear)",
-			strings.ToLower(org), reponame.Name(classroom, assignment, ownerSegment))
+		u.Note("this assignment publishes your repository as a website with GitHub Pages at %s. Anyone on the internet can view the site, even when the repository itself is private (it updates when you push and can take a minute to appear)",
+			studentPagesURL(org, reponame.Name(classroom, assignment, ownerSegment)))
 	}
 	createMsg := fmt.Sprintf("Creating %s repository for %s", visibilityWord, assignment)
 	createSp := u.Spinner(createMsg)
@@ -921,7 +921,12 @@ func enablePagesStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRe
 		u.Warn("could not enable GitHub Pages on %s/%s (%v); your teacher can enable it from the submissions page", p.org, p.repoName, err)
 		return
 	}
-	body := ghutil.PagesBodyForAssignment(p.pages.Source, p.pages.Branch, p.pages.Path, p.branch)
+	body, ok := ghutil.PagesBodyForAssignment(p.pages.Source, p.pages.Branch, p.pages.Path, p.branch)
+	if !ok {
+		sp.Fail(msg)
+		u.Warn("could not enable GitHub Pages on %s/%s: this version of gh-student doesn't understand the assignment's Pages setting (%q). Update gh-student, or your teacher can enable it from the submissions page", p.org, p.repoName, p.pages.Source)
+		return
+	}
 	already, err := githubapi.EnablePages(client, p.org, p.repoName, body)
 	if err != nil {
 		sp.Fail(msg)
@@ -934,20 +939,29 @@ func enablePagesStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRe
 		sp.Stop("GitHub Pages enabled")
 	}
 	if verbose {
-		u.Detail("site: https://%s.github.io/%s/ (build_type=%s)", strings.ToLower(p.org), p.repoName, body.BuildType)
+		u.Detail("site: %s (build_type=%s)", studentPagesURL(p.org, p.repoName), body.BuildType)
 	}
 }
 
+// studentPagesURL is the github.io project-site address GitHub assigns every
+// repo; an org custom Pages domain redirects from it.
+func studentPagesURL(org, repo string) string {
+	return fmt.Sprintf("https://%s.github.io/%s/", strings.ToLower(org), strings.ToLower(repo))
+}
+
 // pagesRefusalHint names the next step for a Pages create refusal, from the
-// message GitHub attaches: a private repo on a plan without private Pages, an
-// org Pages policy, or a missing source branch. The teacher's submissions
-// page can retry all of them.
+// message GitHub attached (never err.Error(), which embeds the request URL and
+// so the repo name): a throttle, a private repo on a plan without private
+// Pages, a missing source branch, or an org Pages policy. The teacher's
+// submissions page can retry all of them.
 func pagesRefusalHint(err error) string {
-	lower := strings.ToLower(err.Error())
+	message := strings.ToLower(ghutil.HTTPErrorMessage(err))
 	switch {
-	case strings.Contains(lower, "upgrade") || strings.Contains(lower, "make this repository public"):
+	case ghutil.IsRateLimited(err):
+		return "GitHub rate-limited the request; run accept again in a few minutes, or your teacher can enable it from the submissions page"
+	case strings.Contains(message, "upgrade") || strings.Contains(message, "make this repository public"):
 		return "This organization's GitHub plan doesn't allow Pages on private repositories; your teacher can make the repository public and enable Pages from the submissions page"
-	case strings.Contains(lower, "branch"):
+	case ghutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) && strings.Contains(message, "branch"):
 		return "The branch it publishes from doesn't exist yet; your teacher can enable Pages from the submissions page once it does"
 	case ghutil.IsHTTPStatus(err, http.StatusForbidden):
 		return "The organization may not let members publish Pages sites; your teacher can enable it from the submissions page"

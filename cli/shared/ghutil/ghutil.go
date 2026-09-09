@@ -85,6 +85,28 @@ func IsHTTPNotFound(err error) bool {
 	return IsHTTPStatus(err, http.StatusNotFound)
 }
 
+// HTTPErrorMessage returns the text GitHub attached to an API error (the body
+// `message` plus any `errors[]` items), or "" when err is not an *api.HTTPError.
+// For classifying a refusal by wording, prefer this over err.Error(): the
+// latter embeds the request URL, so a repo or org whose name contains a
+// keyword (e.g. "branch") would match a check meant for the API's reason.
+func HTTPErrorMessage(err error) string {
+	httpErr, ok := errors.AsType[*api.HTTPError](err)
+	if !ok {
+		return ""
+	}
+	parts := []string{httpErr.Message}
+	for _, item := range httpErr.Errors {
+		if item.Message != "" {
+			parts = append(parts, item.Message)
+		}
+		if item.Code != "" {
+			parts = append(parts, item.Code)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
 // IsRateLimited reports whether err is a GitHub rate-limit / secondary-limit
 // (abuse) response rather than a genuine permission denial. GitHub signals these
 // with a `Retry-After` header (secondary limit / 429) or `x-ratelimit-remaining:
@@ -269,18 +291,26 @@ type PagesCreateBody struct {
 
 // PagesBodyForAssignment maps an assignments.json pages block (source is
 // contract.PagesSourceWorkflow or contract.PagesSourceBranch) onto the API
-// body; defaultBranch fills an unset branch for the branch source.
-func PagesBodyForAssignment(source, branch, path, defaultBranch string) PagesCreateBody {
-	if source == contract.PagesSourceBranch {
+// body; defaultBranch fills an unset branch for the branch source. ok is false
+// for a source this release does not know (a newer writer's value): the caller
+// skips the POST rather than guess a deploy model, so the two accept clients
+// never configure different sites for the same entry (the web mapper fails
+// closed the same way).
+func PagesBodyForAssignment(source, branch, path, defaultBranch string) (body PagesCreateBody, ok bool) {
+	buildType := contract.PagesBuildType(source)
+	switch buildType {
+	case contract.PagesBuildTypeLegacy:
 		if branch == "" {
 			branch = defaultBranch
 		}
 		if path == "" {
 			path = contract.PagesPathRoot
 		}
-		return PagesCreateBody{BuildType: contract.PagesBuildTypeLegacy, Source: &PagesSource{Branch: branch, Path: path}}
+		return PagesCreateBody{BuildType: buildType, Source: &PagesSource{Branch: branch, Path: path}}, true
+	case contract.PagesBuildTypeWorkflow:
+		return PagesCreateBody{BuildType: buildType}, true
 	}
-	return PagesCreateBody{BuildType: contract.PagesBuildTypeWorkflow}
+	return PagesCreateBody{}, false
 }
 
 // EnablePages POSTs a Pages site configuration for owner/repo. Requires repo
