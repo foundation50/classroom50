@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import type { ReactElement } from "react"
 
@@ -860,7 +866,13 @@ describe("UploadRoster resolve-before-invite email links", () => {
     classroom: "cs50-fall",
   }
 
-  it("surfaces the links notice, gates behind the confirm, then moves linked rows into the account pipeline", async () => {
+  const linkBox = () =>
+    screen
+      .getByText("students.emailLinksConfirm")
+      .closest("label")!
+      .querySelector("input[type=checkbox]") as HTMLInputElement
+
+  it("links by default: the box starts checked, the import is enabled, and linked rows ride the account pipeline", async () => {
     const user = userEvent.setup()
     resolveEmailRows.mockResolvedValue({ links: [zoeLink], degraded: false })
     renderModal(
@@ -878,20 +890,16 @@ describe("UploadRoster resolve-before-invite email links", () => {
       ),
     )
 
-    // The notice names the linked count, and the import stays disabled until
-    // the teacher confirms the linking.
     await waitFor(() =>
       expect(screen.getByText(/students.emailLinksNotice:1/)).toBeTruthy(),
     )
-    const button = primaryButton()
-    expect(button.disabled).toBe(true)
-
-    const confirm = screen
-      .getByText("students.emailLinksConfirm")
-      .closest("label")!
-      .querySelector("input[type=checkbox]") as HTMLInputElement
-    await user.click(confirm)
+    // Linking needs no confirmation: on by default, nothing gates the button.
+    expect(linkBox().checked).toBe(true)
     await waitFor(() => expect(primaryButton().disabled).toBe(false))
+    // The button counts only the address that will actually be invited.
+    expect(primaryButton().textContent).toContain(
+      "students.importAndInviteMembers:1",
+    )
 
     bulkEnrollStudentsInClassroom.mockResolvedValue({
       addedStudents: [],
@@ -927,6 +935,53 @@ describe("UploadRoster resolve-before-invite email links", () => {
     expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
       invites: [{ email: "newbie@x.edu" }],
     })
+  })
+
+  it("unchecking opens an acknowledgement; Cancel keeps the link, confirming declines it and invites by email instead", async () => {
+    const user = userEvent.setup()
+    resolveEmailRows.mockResolvedValue({ links: [zoeLink], degraded: false })
+    renderModal(
+      <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
+    )
+    await uploadFile(user, file("roster.csv", "email\nzoe@x.edu\n"))
+    await waitFor(() => expect(linkBox().checked).toBe(true))
+
+    // Clicking to uncheck does NOT uncheck: the panel opens and the box holds.
+    await user.click(linkBox())
+    expect(screen.getByText("students.emailLinksUnlinkTitle")).toBeTruthy()
+    expect(linkBox().checked).toBe(true)
+
+    // The panel's own Cancel (the modal footer has one too) closes it; still
+    // linking.
+    const panel = () =>
+      screen.getByRole("group", { name: "students.emailLinksUnlinkTitle" })
+    await user.click(within(panel()).getByText("common.cancel"))
+    expect(screen.queryByText("students.emailLinksUnlinkTitle")).toBeNull()
+    expect(linkBox().checked).toBe(true)
+
+    // Confirming declines the link: box unchecks, and the row is now an invite.
+    await user.click(linkBox())
+    await user.click(screen.getByText("students.emailLinksUnlinkConfirm"))
+    expect(screen.queryByText("students.emailLinksUnlinkTitle")).toBeNull()
+    expect(linkBox().checked).toBe(false)
+    expect(primaryButton().textContent).toContain(
+      "students.importAndInviteMembers:1",
+    )
+
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [],
+      skipped: [{ email: "zoe@x.edu" }],
+      failed: [],
+      deferred: [],
+    })
+    await user.click(primaryButton())
+    await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
+    expect(bulkInviteByEmail.mock.calls[0][1]).toMatchObject({
+      invites: [{ email: "zoe@x.edu" }],
+    })
+    expect(bulkEnrollStudentsInClassroom).not.toHaveBeenCalled()
+
+    // Re-checking the box is immediate (no acknowledgement to link).
   })
 
   it("appends the degraded warning to the links notice", async () => {

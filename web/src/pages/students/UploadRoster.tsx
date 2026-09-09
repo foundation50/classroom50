@@ -144,12 +144,17 @@ const UploadRoster = ({
     useState<BulkInviteByEmailResult | null>(null)
   const [emailError, setEmailError] = useState<string | null>(null)
   // Uploaded addresses the identity directory matched to a verified member of a
-  // previous classroom — enrolled directly instead of invited, once confirmed.
-  // Resolved ONCE per parse, alongside the identity resolution below.
+  // previous classroom — enrolled directly instead of invited. Resolved ONCE
+  // per parse, alongside the identity resolution below.
   const [emailLinks, setEmailLinks] = useState<ResolvedEmailLink[]>([])
   const [emailLinksDegraded, setEmailLinksDegraded] = useState(false)
-  // The teacher's explicit confirmation of those email→account links.
-  const [linksConfirmed, setLinksConfirmed] = useState(false)
+  // Linking is the default (the matched account IS the student). The teacher
+  // can decline it, but only through the inline acknowledgement below: an
+  // email invitation to someone who is already a member is skipped by GitHub,
+  // so declining leaves those rows unlinked. Every reset site returns this to
+  // false, which means "link".
+  const [linksDeclined, setLinksDeclined] = useState(false)
+  const [confirmingUnlink, setConfirmingUnlink] = useState(false)
   // The links the completed run actually applied, for the result dialog.
   const [linkedApplied, setLinkedApplied] = useState<
     { email: string; login: string; classroom: string }[]
@@ -218,7 +223,8 @@ const UploadRoster = ({
     setEmailError(null)
     setEmailLinks([])
     setEmailLinksDegraded(false)
-    setLinksConfirmed(false)
+    setLinksDeclined(false)
+    setConfirmingUnlink(false)
     setLinkedApplied([])
     setProgress({ processed: 0, total: 0, message: "" })
     setResult(null)
@@ -403,7 +409,8 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
-    setLinksConfirmed(false)
+    setLinksDeclined(false)
+    setConfirmingUnlink(false)
   }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
@@ -502,7 +509,11 @@ const UploadRoster = ({
   // by username, plus every email-identity row. ONE source, so the notice, the
   // summary, and the primary button can't disagree — a row that's already a
   // member (or only getting its details updated) is not an invitation.
-  const inviteCount = (preflight?.needsInvite.length ?? 0) + emailRowCount
+  // The links applied at submit (none once declined). Kept as one value so the
+  // count below, the submit split, and the notice all read the same decision.
+  const appliedLinks = linksDeclined ? [] : emailLinks
+  const inviteCount =
+    (preflight?.needsInvite.length ?? 0) + emailRowCount - appliedLinks.length
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
@@ -546,8 +557,7 @@ const UploadRoster = ({
     (!preflight || hasActionableWork) &&
     (!needsRoleConfirm || roleChangesConfirmed) &&
     (!needsMetadataConfirm || metadataConfirmed) &&
-    (!needsMismatchConfirm || mismatchConfirmed) &&
-    (emailLinks.length === 0 || linksConfirmed)
+    (!needsMismatchConfirm || mismatchConfirmed)
 
   // The roster primary-button label names the action and its scale. Counts here
   // come from inviteCount / metadataUpdate — never the row total — so the button
@@ -585,7 +595,8 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
-    setLinksConfirmed(false)
+    setLinksDeclined(false)
+    setConfirmingUnlink(false)
     setParseId((n) => n + 1)
     const parsed = parseRosterImportFile(text, kind)
     setParsedRows(parsed.rows)
@@ -674,7 +685,7 @@ const UploadRoster = ({
     // invite list — see splitEmailRowsByLink.
     const { linkedRows, linkedEmails, emailInvites } = splitEmailRowsByLink(
       emailRows,
-      emailLinks,
+      appliedLinks,
       roleFor,
     )
 
@@ -912,10 +923,14 @@ const UploadRoster = ({
                   </Alert>
                 ) : null}
                 {/* Resolve-before-invite: addresses matched (and re-verified) to
-                    members of previous classrooms skip the invitation entirely.
-                    The teacher confirms the CONCRETE bindings — each address is
-                    listed with the account and source classroom it links to —
-                    mirroring the metadata gate above. */}
+                    members of previous classrooms are linked to that account
+                    and enrolled directly; the CONCRETE bindings are listed so
+                    the teacher sees who. Linking is on by default and can be
+                    declined only through the acknowledgement panel: the box
+                    stays checked until the teacher confirms the consequence
+                    (an email invitation to a member is skipped, so the rows
+                    stay unlinked). Inline, since a nested dialog can't stack
+                    on this one. */}
                 {emailLinks.length > 0 ? (
                   <Alert tone="info" className="mb-4">
                     <div className="flex flex-col gap-2">
@@ -938,13 +953,53 @@ const UploadRoster = ({
                       <label className="flex items-start gap-2 text-sm">
                         <Checkbox
                           className="mt-0.5"
-                          checked={linksConfirmed}
-                          onChange={(e) =>
-                            setLinksConfirmed(e.currentTarget.checked)
-                          }
+                          checked={!linksDeclined}
+                          onChange={(e) => {
+                            if (e.currentTarget.checked) {
+                              setLinksDeclined(false)
+                              setConfirmingUnlink(false)
+                            } else {
+                              setConfirmingUnlink(true)
+                            }
+                          }}
                         />
                         <span>{t("students.emailLinksConfirm")}</span>
                       </label>
+                      {confirmingUnlink ? (
+                        <div
+                          role="group"
+                          aria-label={t("students.emailLinksUnlinkTitle")}
+                          className="flex flex-col gap-3 rounded-box border border-warning/40 bg-warning/10 p-3 text-sm"
+                        >
+                          <p className="font-medium">
+                            {t("students.emailLinksUnlinkTitle")}
+                          </p>
+                          <p className="text-base-content/80">
+                            {t("students.emailLinksUnlinkBody", {
+                              count: emailLinks.length,
+                            })}
+                          </p>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => setConfirmingUnlink(false)}
+                            >
+                              {t("common.cancel")}
+                            </Button>
+                            <Button
+                              variant="warning"
+                              size="sm"
+                              onClick={() => {
+                                setLinksDeclined(true)
+                                setConfirmingUnlink(false)
+                              }}
+                            >
+                              {t("students.emailLinksUnlinkConfirm")}
+                            </Button>
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   </Alert>
                 ) : null}
