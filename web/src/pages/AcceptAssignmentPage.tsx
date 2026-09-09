@@ -17,6 +17,7 @@ import {
   Badge,
   Button,
   Card,
+  HelpTooltip,
   Markdown,
   MonoLtr,
   Heading,
@@ -1380,25 +1381,22 @@ const AcceptAssignmentPage = () => {
                 </Alert>
               )}
 
-            {/* Pages disclosure (issue #919): the site URL is known by
-                construction, so tell the student where their work will be
-                published before the repo exists. */}
+            {/* Pages disclosure (issue #919): one line that Pages is on, with the
+                explanation in a tooltip. Students may not know what Pages is,
+                and a site only exists once something is deployed, so the copy
+                must not promise a live website. */}
             {assignmentData.pages &&
               !repoExistsAlready &&
               !acceptMutation.data && (
-                <Alert tone="info" className="items-start">
-                  <GlobeIcon aria-hidden="true" className="size-5 shrink-0" />
-                  <div>
-                    <div className="font-bold">
-                      {t("accept.pagesSite.title")}
-                    </div>
-                    <div className="mt-1 text-sm">
-                      {t("accept.pagesSite.body", {
-                        url: defaultRepoPagesUrl(org ?? "", expectedRepoName),
-                      })}
-                    </div>
-                  </div>
-                </Alert>
+                <div className="flex items-center gap-1.5 text-sm text-base-content/70">
+                  <GlobeIcon aria-hidden="true" className="size-4 shrink-0" />
+                  <span>{t("accept.pagesSite.enabled")}</span>
+                  <HelpTooltip
+                    help={t("accept.pagesSite.help", {
+                      url: defaultRepoPagesUrl(org ?? "", expectedRepoName),
+                    })}
+                  />
+                </div>
               )}
 
             {(acceptMutation.isPending ||

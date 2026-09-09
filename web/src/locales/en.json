@@ -2767,8 +2767,8 @@
       "body": "Your teacher configured this assignment to create public repositories: anyone on the internet will be able to see your work, including your code, commits, and name. If your organization doesn't allow you to create public repositories, a private one is created instead."
     },
     "pagesSite": {
-      "title": "Your work will be published as a website",
-      "body": "Your teacher configured GitHub Pages for this assignment, so your repository gets a website at {{url}}. Anyone on the internet can view the site, even when the repository itself is private. It updates when you push, and it can take a minute to appear."
+      "enabled": "GitHub Pages is enabled for this assignment",
+      "help": "GitHub Pages can show files from your repository as a website at {{url}}. Nothing appears there until you publish something; your teacher will tell you what to build. Anyone on the internet can view the site, even when the repository is private."
     },
     "steps": {
       "account": "Checking your GitHub account",
