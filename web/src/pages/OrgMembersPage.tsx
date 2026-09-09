@@ -35,7 +35,6 @@ import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import {
   filterOrgMemberRows,
-  hasExpiredInvite,
   sortOrgMemberRowsBy,
   type OrgMemberRow,
   type OrgMembersRoleFilter,
@@ -43,6 +42,7 @@ import {
   type OrgMembersStatusFilter,
 } from "@/util/orgMembers"
 import { githubOrgPeopleUrl } from "@/util/orgUrl"
+import { hasExpiredInvite } from "@/util/teamRoster"
 import { isSameGitHubUser } from "@/util/students"
 import { motion } from "motion/react"
 import { blockEnter } from "@/lib/motion"

@@ -378,7 +378,7 @@ const RosterBulkActionsBar = ({
       bulk.setProgress({
         processed,
         total: invitableSelected,
-        message: t("students.bulk.starting"),
+        message: t("students.bulk.nextBatch"),
       })
     }
 

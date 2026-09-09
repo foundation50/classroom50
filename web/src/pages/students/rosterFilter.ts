@@ -7,8 +7,6 @@ import {
 } from "@/util/teamRoster"
 import { matchesQuery } from "@/util/textMatch"
 
-export { hasExpiredInvite }
-
 // The unlabeled section bucket. Shared by the filter and the group-by-section
 // view so a row with no section is treated identically in both.
 export const NO_SECTION = "No section"

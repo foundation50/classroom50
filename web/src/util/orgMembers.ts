@@ -386,8 +386,6 @@ export type OrgMembersStatusFilter =
   | "not-enrolled"
 export type OrgMembersRoleFilter = "all" | "owner" | "member"
 
-export { hasExpiredInvite }
-
 // The rows the org-invite action can send to: on a roster, not a member, no
 // live invitation, and a usable github_id (the invite is sent by id). One rule
 // for the bulk bar's eligibility count and the domain's skip guard.

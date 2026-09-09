@@ -39,6 +39,7 @@ import { useRosterLastUpdated } from "@/hooks/useRosterLastUpdated"
 import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
 import {
+  hasExpiredInvite,
   sortTeamRosterRows,
   sortTeamRosterRowsBy,
   type RosterTableSortColumn,
@@ -52,7 +53,6 @@ import {
 } from "@/util/classroomRoleUI"
 import {
   filterRosterRows,
-  hasExpiredInvite,
   NO_SECTION,
   type RoleFilter,
   type StatusFilter,

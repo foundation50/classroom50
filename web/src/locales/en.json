@@ -573,6 +573,7 @@
       "unenrollSelected_one": "Unenroll {{count}} student",
       "unenrollSelected_other": "Unenroll {{count}} students",
       "starting": "Starting…",
+      "nextBatch": "Preparing the next batch…",
       "keepTabOpen": "Keep this tab open until the action completes.",
       "progressProcessed": "{{processed}} of {{total}}",
       "done": "Done",
