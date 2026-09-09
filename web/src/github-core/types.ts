@@ -101,6 +101,10 @@ export type GitHubRepo = {
   has_wiki?: boolean
   has_projects?: boolean
   has_pull_requests?: boolean
+  // Whether a GitHub Pages site is configured (returned by the repo list and
+  // GET /repos, so the submissions page can show a site link without a
+  // per-repo Pages read).
+  has_pages?: boolean
   // Last push to the repo; used to sort orgs by "last modified" on the home
   // page. GitHub returns both on GET /repos; typed optional as older callers
   // don't rely on them.

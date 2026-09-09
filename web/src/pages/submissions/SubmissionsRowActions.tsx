@@ -25,12 +25,20 @@ import useDownloadSubmission from "@/hooks/mutations/useDownloadSubmission"
 import useGetAutogradeState from "@/hooks/useGetAutogradeState"
 import useSetAutogradeState from "@/hooks/mutations/useSetAutogradeState"
 import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
+import useSetRepoPages, {
+  PAGES_REFUSAL_KEYS,
+} from "@/hooks/mutations/useSetRepoPages"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { ToastTone } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
-import type { AssignmentMode, SubmissionMode } from "@/types/classroom"
+import type {
+  AssignmentMode,
+  AssignmentPages,
+  SubmissionMode,
+} from "@/types/classroom"
+import { defaultRepoPagesUrl, pagesCreateBody } from "@/util/repoPages"
 import { errorText } from "@/types/localizedMessage"
 
 // Feedback channel for actions running inside the submission hub: outcomes
@@ -269,6 +277,7 @@ export const RepoRowActions = ({
   owner,
   header,
   feedbackPr,
+  pages,
   release,
   skipsGrading = false,
   onManage,
@@ -281,6 +290,9 @@ export const RepoRowActions = ({
   // after the repo link (issue #741). Omitted for empty_repo assignments,
   // which have no Feedback PR — mirrors the hub's Review gate.
   feedbackPr?: React.ReactNode
+  // The "Open site" shortcut for a repo with a GitHub Pages site (issue #919);
+  // omitted when the repo has none.
+  pages?: React.ReactNode
   // The submission's latest release page (autograder result). When present, a
   // direct "View autograder details" shortcut links it (skipping the hub). The
   // shortcut is hidden when there's no result to view — before a submission
@@ -298,6 +310,7 @@ export const RepoRowActions = ({
     <>
       {header}
       {feedbackPr}
+      {pages}
       {releaseHref && (
         <ActionIconLink
           href={releaseHref}
@@ -384,6 +397,15 @@ export type SubmissionActionListProps = {
   // Whether the per-row Regrade action applies: config-repo write (teacher and
   // head TA). A pull-only TA can't dispatch regrade.yaml, so it is omitted.
   canRegrade?: boolean
+  // The assignment's Pages block (issue #919). When set and the repo has no
+  // site yet (repoHasPages false), the "Enable GitHub Pages" action appears.
+  assignmentPages?: AssignmentPages
+  // The repo's live has_pages flag (from the hub's repo read). undefined =
+  // still loading, which disables the action.
+  repoHasPages?: boolean
+  // The repo's default branch (from the hub's repo read), the branch a
+  // branch-deployed site publishes when the assignment names none.
+  repoDefaultBranch?: string
 }
 
 export const SubmissionActionList = ({
@@ -407,6 +429,9 @@ export const SubmissionActionList = ({
   canChangeVisibility = false,
   repoPrivate,
   canRegrade = true,
+  assignmentPages,
+  repoHasPages,
+  repoDefaultBranch,
 }: SubmissionActionListProps) => {
   const { t } = useTranslation()
   const commitHref = latestCommitHref ?? safeHttpUrl(commit)
@@ -490,6 +515,15 @@ export const SubmissionActionList = ({
           repo={repo}
           isPrivate={repoPrivate}
           displayName={displayName || owner}
+          noRepo={!hasRepo}
+        />
+      )}
+      {assignmentPages && repoHasPages === false && (
+        <EnablePagesButton
+          org={org}
+          repo={repo}
+          pages={assignmentPages}
+          defaultBranch={repoDefaultBranch}
           noRepo={!hasRepo}
         />
       )}
@@ -679,6 +713,75 @@ const ChangeVisibilityButton = ({
         onClose={() => setConfirmOpen(false)}
       />
     </>
+  )
+}
+
+// Per-row Enable GitHub Pages (issue #919): configure the assignment's Pages
+// site on one repo that missed it (accepted before the setting existed, or
+// the accept-time enable was refused). Applies immediately (a site is strictly
+// additive); a refusal reports the classified reason so the teacher knows
+// whether to make the repo public, fix org policy, or push the branch first.
+const EnablePagesButton = ({
+  org,
+  repo,
+  pages,
+  defaultBranch,
+  noRepo,
+}: {
+  org: string
+  repo: string
+  pages: AssignmentPages
+  // The repo's default branch; undefined while the repo read is pending, which
+  // disables the action (a branch-deployed site must name a real branch).
+  defaultBranch?: string
+  noRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  const feedback = useSubmissionFeedback()
+  const run = useSafeSubmit()
+  const mutation = useSetRepoPages()
+
+  const branchUnknown = !noRepo && !defaultBranch
+
+  const apply = async () => {
+    try {
+      const result = await mutation.mutateAsync({
+        org,
+        repo,
+        body: pagesCreateBody(pages, defaultBranch ?? ""),
+      })
+      if (result.enabled) {
+        feedback({
+          tone: "success",
+          message: t("submissions.rowPages.outcome.enabled", {
+            url: defaultRepoPagesUrl(org, repo),
+          }),
+        })
+        return
+      }
+      feedback({
+        tone: "error",
+        message: t(PAGES_REFUSAL_KEYS[result.reason], { repo }),
+      })
+    } catch (err) {
+      feedback({ tone: "error", message: errorText(t, err) })
+    }
+  }
+
+  return (
+    <ActionListRow
+      icon={GlobeIcon}
+      title={t("submissions.rowPages.title")}
+      description={t("submissions.rowPages.description")}
+      onClick={() => {
+        if (noRepo || branchUnknown || mutation.isPending) return
+        void run(apply)
+      }}
+      disabled={noRepo || branchUnknown || mutation.isPending}
+      loading={branchUnknown || mutation.isPending}
+      loadingLabel={t("submissions.rowPages.title")}
+      ariaLabel={t("submissions.rowPages.aria", { repo })}
+    />
   )
 }
 

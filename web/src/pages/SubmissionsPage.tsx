@@ -41,6 +41,7 @@ import { BulkRepoAccessModal } from "@/components/modals/BulkRepoAccessModal"
 import { CloseSubmissionModal } from "@/components/modals/CloseSubmissionModal"
 import { BulkRepoFeaturesModal } from "@/components/modals/BulkRepoFeaturesModal"
 import { BulkRepoVisibilityModal } from "@/components/modals/BulkRepoVisibilityModal"
+import { BulkRepoPagesModal } from "@/components/modals/BulkRepoPagesModal"
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
@@ -471,6 +472,7 @@ const SubmissionsPageContent = () => {
   const [bulkAccessOpen, setBulkAccessOpen] = useState(false)
   const [bulkFeaturesOpen, setBulkFeaturesOpen] = useState(false)
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false)
+  const [bulkPagesOpen, setBulkPagesOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
   const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
   const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
@@ -894,6 +896,24 @@ const SubmissionsPageContent = () => {
     for (const repo of orgRepos) {
       const name = repo.name.toLowerCase()
       if (repo.private === false && assignmentRepos.has(name)) {
+        set.add(name)
+      }
+    }
+    return set
+  }, [orgRepos, allAssignmentRepos])
+
+  // This assignment's repos with a GitHub Pages site (lowercased), for the
+  // table's per-row site link (issue #919). Same derivation as
+  // publicRepoNames: has_pages rides the org repo list, no extra reads.
+  const pagesRepoNames = useMemo(() => {
+    if (!orgRepos) return undefined
+    const assignmentRepos = new Set(
+      allAssignmentRepos.map((name) => name.toLowerCase()),
+    )
+    const set = new Set<string>()
+    for (const repo of orgRepos) {
+      const name = repo.name.toLowerCase()
+      if (repo.has_pages === true && assignmentRepos.has(name)) {
         set.add(name)
       }
     }
@@ -1622,6 +1642,18 @@ const SubmissionsPageContent = () => {
                     ? () => setBulkVisibilityOpen(true)
                     : undefined
                 }
+                // Bulk enable GitHub Pages (issue #919): same gate as bulk
+                // features plus an assignment that configures Pages. The
+                // retrofit for repos accepted before the setting existed.
+                onBulkPages={
+                  isOwner &&
+                  !isGroupFlavor &&
+                  !isEmptyRepoAssignment &&
+                  acceptedSet.size > 0 &&
+                  assignmentInfo?.pages
+                    ? () => setBulkPagesOpen(true)
+                    : undefined
+                }
                 // Bulk retrofit autograding triggers: same gate as bulk features
                 // plus default-autograder only — teacher-authored (custom) shims
                 // are never rewritten, and a no_autograder assignment has no shim
@@ -1816,6 +1848,8 @@ const SubmissionsPageContent = () => {
           canChangeVisibility={canChangeVisibility}
           canRegrade={canDispatchWorkflows}
           publicRepoNames={publicRepoNames}
+          pagesRepoNames={pagesRepoNames}
+          assignmentPages={assignmentInfo?.pages}
           initialLoading={initialLoading}
           nonSubmittersLoading={
             !nonSubmittersReady &&
@@ -2002,6 +2036,18 @@ const SubmissionsPageContent = () => {
         owners={acceptedOwners}
         students={students}
       />
+      {assignmentInfo?.pages && (
+        <BulkRepoPagesModal
+          open={bulkPagesOpen}
+          onClose={() => setBulkPagesOpen(false)}
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          pages={assignmentInfo.pages}
+          owners={acceptedOwners}
+          students={students}
+        />
+      )}
       {/* Mounted only once resolved so the retrofit payload can't depend on the
           opener's gate — see assignmentResolved. */}
       {assignmentResolved && (

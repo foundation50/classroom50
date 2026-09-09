@@ -39,6 +39,9 @@ vi.mock("@/hooks/useGetRepoCollaborators", () => ({
 vi.mock("@/hooks/useGetAutogradeState", () => ({
   default: () => autogradeStateData(),
 }))
+vi.mock("@/hooks/useGetRepoPages", () => ({
+  useGetRepoPages: () => ({ data: null, isLoading: false, isError: false }),
+}))
 // The setup-marker probe, configurable so a test can drive the issue #502
 // "Incomplete" badge. The spy records the hook's arguments for the
 // empty_repo gate assertion.

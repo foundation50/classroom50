@@ -594,7 +594,11 @@ describe("pages form mapping (issue #919)", () => {
       pages_path: "/",
     })
     expect(
-      pagesToFormValues({ source: "branch", branch: "gh-pages", path: "/docs" }),
+      pagesToFormValues({
+        source: "branch",
+        branch: "gh-pages",
+        path: "/docs",
+      }),
     ).toEqual({
       pages_source: "branch",
       pages_branch: "gh-pages",

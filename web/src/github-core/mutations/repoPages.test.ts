@@ -77,7 +77,10 @@ describe("classifyPagesEnableError", () => {
   it.each([
     [apiError(422, "Validation Failed: branch does not exist"), "branch"],
     [apiError(403, "Upgrade to GitHub Pro to enable Pages"), "plan"],
-    [apiError(403, "Pages creation is disabled for this organization"), "policy"],
+    [
+      apiError(403, "Pages creation is disabled for this organization"),
+      "policy",
+    ],
     [apiError(403, "Resource not accessible"), "access"],
     [apiError(404), "access"],
     [apiError(500), "unknown"],
@@ -89,7 +92,10 @@ describe("classifyPagesEnableError", () => {
 
 describe("getRepoPages", () => {
   it("returns the site info", async () => {
-    const info = { html_url: "https://cs50.github.io/r/", build_type: "workflow" }
+    const info = {
+      html_url: "https://cs50.github.io/r/",
+      build_type: "workflow",
+    }
     const { client } = makeClient(info)
     expect(await getRepoPages(client, "cs50", "r")).toEqual(info)
   })

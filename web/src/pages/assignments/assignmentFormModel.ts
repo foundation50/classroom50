@@ -264,7 +264,10 @@ export const PAGES_SOURCE_CHOICES: readonly PagesSourceChoice[] = [
 // Read mapping: a stored pages block (or absent) -> the three form fields.
 export function pagesToFormValues(
   pages: AssignmentPages | undefined,
-): Pick<CreateAssignmentFormValues, "pages_source" | "pages_branch" | "pages_path"> {
+): Pick<
+  CreateAssignmentFormValues,
+  "pages_source" | "pages_branch" | "pages_path"
+> {
   return {
     pages_source: pages?.source ?? "off",
     pages_branch: pages?.branch ?? "",

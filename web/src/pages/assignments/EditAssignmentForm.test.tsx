@@ -38,6 +38,7 @@ vi.mock("react-i18next", async (importOriginal) => {
 vi.mock("./CreateAssignmentForm", () => ({
   assignmentToFormValues: (value: unknown) => value,
   formValuesToRepoFeatures: () => undefined,
+  formValuesToPages: () => undefined,
   formValuesToTestDefaults: () => undefined,
   default: ({
     onSubmit,

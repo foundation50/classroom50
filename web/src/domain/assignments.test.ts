@@ -3871,15 +3871,15 @@ describe("PAGES_SOURCES / PAGES_PATHS parity with assignments-v1 schema", () => 
   }
 
   it("matches the schema pages.source enum exactly and in order", () => {
-    expect(schema.$defs.assignment.properties.pages.properties.source.enum).toEqual(
-      [...PAGES_SOURCES],
-    )
+    expect(
+      schema.$defs.assignment.properties.pages.properties.source.enum,
+    ).toEqual([...PAGES_SOURCES])
   })
 
   it("matches the schema pages.path enum exactly and in order", () => {
-    expect(schema.$defs.assignment.properties.pages.properties.path.enum).toEqual(
-      [...PAGES_PATHS],
-    )
+    expect(
+      schema.$defs.assignment.properties.pages.properties.path.enum,
+    ).toEqual([...PAGES_PATHS])
   })
 })
 

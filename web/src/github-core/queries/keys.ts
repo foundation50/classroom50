@@ -282,6 +282,11 @@ export const githubKeys = {
   autogradeState: (owner: string, repo: string) =>
     [...githubKeys.all, "autogradeState", owner, repo] as const,
 
+  // One student repo's GitHub Pages site (null = none). Invalidated after the
+  // per-repo or bulk enable so the hub's status flips.
+  repoPages: (owner: string, repo: string) =>
+    [...githubKeys.all, "repoPages", owner, repo] as const,
+
   // The org's Actions spending budget classification (hard-stop cap set?).
   orgActionsBudget: (owner: string) =>
     [...githubKeys.all, "orgActionsBudget", owner] as const,

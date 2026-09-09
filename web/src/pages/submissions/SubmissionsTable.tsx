@@ -1,4 +1,4 @@
-import { FilterRemoveIcon, InboxIcon } from "@/components/ui/icons"
+import { FilterRemoveIcon, GlobeIcon, InboxIcon } from "@/components/ui/icons"
 import { TableEmptyRow } from "@/components/list"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
@@ -17,6 +17,7 @@ import {
   GROUP_REPO_SEGMENT,
 } from "@/util/studentRepo"
 import { repoCommitUrl } from "@/util/orgUrl"
+import { defaultRepoPagesUrl } from "@/util/repoPages"
 import Avatar from "@/components/avatar"
 import {
   Badge,
@@ -44,6 +45,7 @@ import {
   PAGE_SIZE_OPTIONS,
 } from "@/domain/submissions/dashboard"
 import {
+  ActionIconLink,
   GroupActionControls,
   GroupMembers,
   GroupRepoRow,
@@ -90,7 +92,12 @@ import type { SubmissionRow } from "@/hooks/useGetScores"
 import { submissionModeCountKey } from "@/domain/assignments/submissionDetection"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDisplayName } from "@/util/groupTeam"
-import type { Student, SubmissionMode, TeamFormation } from "@/types/classroom"
+import type {
+  AssignmentPages,
+  Student,
+  SubmissionMode,
+  TeamFormation,
+} from "@/types/classroom"
 import type { ClassroomRole } from "@/util/teamRoster"
 import { ClickableTr } from "@/lib/motionComponents"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
@@ -312,7 +319,9 @@ const SubmissionsTable = ({
   canPauseAutograding = false,
   canChangeVisibility = false,
   canRegrade = true,
+  assignmentPages,
   publicRepoNames,
+  pagesRepoNames,
   initialLoading = false,
   nonSubmittersLoading = false,
   page = 0,
@@ -415,10 +424,18 @@ const SubmissionsTable = ({
   // regrade.yaml in the config repo, which needs config-repo write (teacher and
   // head TA); a pull-only TA would 403, so the page passes false for them.
   canRegrade?: boolean
+  // The assignment's Pages block (issue #919), when configured. Drives the
+  // hub's Pages status row and its per-repo "Enable GitHub Pages" action for
+  // repos accepted before the setting existed (or whose enable was refused).
+  assignmentPages?: AssignmentPages
   // Lowercased names of this assignment's repos that are currently PUBLIC
   // (derived from the org repo list). Rows whose repo is in the set show the
   // warning badge; undefined/absent renders no badges (list still loading).
   publicRepoNames?: ReadonlySet<string>
+  // Lowercased names of this assignment's repos that have a GitHub Pages site
+  // (issue #919), derived from the org repo list's has_pages. Rows in the set
+  // show an "Open site" shortcut; undefined/absent renders none.
+  pagesRepoNames?: ReadonlySet<string>
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
   // otherwise flash before data arrives.
@@ -566,6 +583,21 @@ const SubmissionsTable = ({
   // badge shared by every row family. False while the set is still loading.
   const isPublicRepo = (repoName: string) =>
     Boolean(publicRepoNames?.has(repoName.toLowerCase()))
+
+  // The per-row "Open site" shortcut (issue #919), shown only when the repo
+  // has a Pages site. The github.io URL is derived by construction; on an org
+  // with a custom Pages domain it redirects there.
+  const pagesShortcut = (repo: string) =>
+    pagesRepoNames?.has(repo.toLowerCase()) ? (
+      <ActionIconLink
+        href={defaultRepoPagesUrl(org, repo)}
+        icon={GlobeIcon}
+        label={t("submissions.table.openSiteLabel", { repo })}
+        title={t("submissions.table.viewSite")}
+        emptyLabel={t("submissions.table.viewSite")}
+        emptyTitle={t("submissions.table.viewSite")}
+      />
+    ) : undefined
 
   const staffRoles = (login: string) =>
     staffRolesByLogin?.get(login.trim().toLowerCase())
@@ -834,6 +866,7 @@ const SubmissionsTable = ({
                 skipsGrading={skipsGrading}
                 header={<GroupActionControls repo={repo} repoHref={repoHref} />}
                 feedbackPr={feedbackPrShortcut(repo, true)}
+                pages={pagesShortcut(repo)}
                 onManage={openManage}
               />
             ) : (
@@ -849,6 +882,7 @@ const SubmissionsTable = ({
                   />
                 }
                 feedbackPr={feedbackPrShortcut(repo, true)}
+                pages={pagesShortcut(repo)}
                 onManage={openManage}
               />
             )}
@@ -1054,6 +1088,7 @@ const SubmissionsTable = ({
                         />
                       }
                       feedbackPr={feedbackPrShortcut(repoName, accepted)}
+                      pages={pagesShortcut(repoName)}
                       onManage={openManage}
                     />
                   )
@@ -1183,6 +1218,7 @@ const SubmissionsTable = ({
                         />
                       }
                       feedbackPr={feedbackPrShortcut(repoName, true)}
+                      pages={pagesShortcut(repoName)}
                       onManage={openManage}
                     />
                   }
@@ -1277,6 +1313,7 @@ const SubmissionsTable = ({
             canPauseAutograding,
             canChangeVisibility,
             canRegrade,
+            assignmentPages,
           }}
         />
       )}

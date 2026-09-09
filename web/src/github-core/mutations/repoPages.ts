@@ -26,7 +26,8 @@ export type RepoPagesInfo = {
 // - policy: the org blocks members from publishing Pages sites (403).
 // - branch: `source.branch` does not exist in the repo yet (422).
 // - access: the caller is not a repo admin, or the repo is invisible (404/403).
-export type PagesEnableReason = "plan" | "policy" | "branch" | "access" | "unknown"
+export type PagesEnableReason =
+  "plan" | "policy" | "branch" | "access" | "unknown"
 
 const mentionsPlan = (err: GitHubAPIError) =>
   githubErrorMentions(err, "upgrade") ||

@@ -42,9 +42,9 @@ describe("student repo Pages URLs", () => {
   })
 
   it("derives the custom-domain URL only for the org-root layout", () => {
-    expect(
-      customRepoPagesUrl("https://cs.example.edu/classroom50", "r"),
-    ).toBe("https://cs.example.edu/r/")
+    expect(customRepoPagesUrl("https://cs.example.edu/classroom50", "r")).toBe(
+      "https://cs.example.edu/r/",
+    )
     expect(customRepoPagesUrl("https://cs.example.edu", "r")).toBeNull()
     expect(customRepoPagesUrl(undefined, "r")).toBeNull()
     expect(customRepoPagesUrl("not a url", "r")).toBeNull()

@@ -3095,6 +3095,8 @@
       "viewRepo": "View repository",
       "openFeedbackPrLabel": "Open feedback pull request for {{repo}}",
       "viewFeedbackPr": "View feedback PR",
+      "viewSite": "Open GitHub Pages site",
+      "openSiteLabel": "Open the GitHub Pages site for {{repo}}",
       "manageAccess": "Manage repository access",
       "manageAccessAria": "Manage repository access for {{owner}}",
       "viewCommit": "View latest commit",
@@ -3327,6 +3329,29 @@
       "deferredSection_other": "{{count}} repositories were not updated",
       "deferredDetail": "Skipped. Re-run to update."
     },
+    "bulkPages": {
+      "menuLabel": "Enable GitHub Pages",
+      "menuTitle": "Configure this assignment's GitHub Pages site on every accepted repository",
+      "titleEmptyRoster": "No students have accepted yet",
+      "title": "Enable GitHub Pages",
+      "subtitle_one": "Applies to {{count}} student who has accepted this assignment.",
+      "subtitle_other": "Applies to {{count}} students who have accepted this assignment.",
+      "noRepos": "No students have accepted yet, so there's nothing to enable.",
+      "infoWorkflow_one": "This configures GitHub Pages to deploy through GitHub Actions on {{count}} student's repository. Repositories that already have a site are left as they are. Repositories students accept later are configured automatically.",
+      "infoWorkflow_other": "This configures GitHub Pages to deploy through GitHub Actions on {{count}} students' repositories. Repositories that already have a site are left as they are. Repositories students accept later are configured automatically.",
+      "infoBranch_one": "This configures GitHub Pages to publish a branch on {{count}} student's repository. Repositories that already have a site are left as they are. Repositories students accept later are configured automatically.",
+      "infoBranch_other": "This configures GitHub Pages to publish a branch on {{count}} students' repositories. Repositories that already have a site are left as they are. Repositories students accept later are configured automatically.",
+      "apply": "Enable on all",
+      "working": "Enabling GitHub Pages",
+      "progress": "Processed {{processed}} of {{total}}",
+      "resultHeadline": "GitHub Pages is enabled on {{count}} of {{total}} repositories.",
+      "resultHeadlineThrottled": "Enabled GitHub Pages on {{count}} of {{total}} repositories before GitHub rate-limited the request. Re-run to finish the rest.",
+      "failedSection_one": "{{count}} repository couldn't be enabled",
+      "failedSection_other": "{{count}} repositories couldn't be enabled",
+      "deferredSection_one": "{{count}} repository was not processed",
+      "deferredSection_other": "{{count}} repositories were not processed",
+      "deferredDetail": "Skipped. Re-run to enable."
+    },
     "bulkVisibility": {
       "menuLabel": "Change repository visibility",
       "menuTitle": "Make every student repository in this assignment public or private",
@@ -3408,6 +3433,21 @@
         "paused": "Autograding paused for this repository.",
         "resumed": "Autograding resumed for this repository.",
         "notGradable": "This repository has no autograding workflow, so there's nothing to change."
+      }
+    },
+    "rowPages": {
+      "title": "Enable GitHub Pages",
+      "description": "Configure the site this assignment expects on this repository. Use it for a repository accepted before Pages was turned on, or when enabling it at accept time failed.",
+      "aria": "Enable GitHub Pages on {{repo}}",
+      "outcome": {
+        "enabled": "GitHub Pages enabled. The site will be available at {{url}} after the first build."
+      },
+      "refused": {
+        "plan": "GitHub Pages wasn't enabled on {{repo}}: this organization's GitHub plan doesn't allow Pages on private repositories. Make the repository public, then try again.",
+        "policy": "GitHub Pages wasn't enabled on {{repo}}: the organization doesn't let members publish Pages sites. Check the organization's Pages settings, then try again.",
+        "branch": "GitHub Pages wasn't enabled on {{repo}}: the branch it publishes from doesn't exist in this repository yet.",
+        "access": "GitHub Pages wasn't enabled on {{repo}}: you need admin access to this repository.",
+        "unknown": "GitHub Pages couldn't be enabled on {{repo}} right now. Try again in a moment."
       }
     },
     "rowVisibility": {
@@ -3493,6 +3533,10 @@
       "autogradingPausedByGitHub": "Paused by GitHub",
       "visibility": "Visibility",
       "visibilityPrivate": "Private",
+      "pages": "GitHub Pages",
+      "pagesNotEnabled": "Not enabled",
+      "pagesBuilding": "Building",
+      "pagesBuildErrored": "Build failed",
       "collaborators_one": "{{count}} collaborator",
       "collaborators_other": "{{count}} collaborators",
       "commitDescription": "Open the latest commit on GitHub",

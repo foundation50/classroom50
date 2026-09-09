@@ -126,7 +126,11 @@ function makeClient(opts: {
       throw new Error(`unexpected request: ${method} ${url}`)
     },
   )
-  return { client: { request } as unknown as GitHubClient, requests, pagesBodies }
+  return {
+    client: { request } as unknown as GitHubClient,
+    requests,
+    pagesBodies,
+  }
 }
 
 // The repo's real default branch is `master`, deliberately different from the
