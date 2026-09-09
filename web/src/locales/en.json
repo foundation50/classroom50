@@ -1126,6 +1126,7 @@
       "notAccepted": "Not accepted",
       "accepted": "Accepted",
       "submitted": "Submitted",
+      "submissionUnknown": "Couldn't check submissions. Refresh to try again.",
       "viewSubmission": "View my submission",
       "viewSubmissionTeam": "View group submission",
       "viewGroup": "View group",

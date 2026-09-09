@@ -42,13 +42,12 @@ export function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
 
 // The due-date cell. Dates are data, not status: a real date renders as plain
 // text with the full timestamp on hover, and "no due date" is muted
-// placeholder text. Overdue is a state, so it keeps the error badge — unless
-// the caller turns `highlightOverdue` off, for a row where the deadline no
-// longer demands action (the student already submitted) and red would read
-// as a false alarm. `relative` appends the live countdown ("in 3 days") — on
-// for the student list, where "what's next" matters most; off for the teacher
-// table, whose columns are denser. The countdown uses dueDeadlineInstant so
-// bare-date deadlines agree with isPastDue on end-of-local-day semantics.
+// placeholder text. Overdue is a state, so it keeps the error badge, unless
+// `highlightOverdue` is off: for a student who already submitted, a red past
+// deadline reads as "you missed it". `relative` appends the live countdown
+// ("in 3 days"), on for the student list and off for the denser teacher table.
+// The countdown uses dueDeadlineInstant so bare-date deadlines agree with
+// isPastDue on end-of-local-day semantics.
 export function DueDateCell({
   due,
   relative = false,

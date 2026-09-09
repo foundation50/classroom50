@@ -15,7 +15,10 @@ import {
   submissionModeCountKey,
 } from "@/domain/assignments/submissionDetection"
 import type { AutogradingState } from "@/domain/assignments/autogradingState"
-import { formatSubmissionDateTime } from "@/util/formatDate"
+import {
+  formatRelativeToNow,
+  formatSubmissionDateTime,
+} from "@/util/formatDate"
 import type { SubmissionMode } from "@/types/classroom"
 
 // The mode's submission icon: a tag for tag mode, a commit for every-push.
@@ -231,6 +234,11 @@ export const SubmissionCountCell = ({
   )
 }
 
+// The shimmer that stands in for a last-submitted time while its read settles.
+const lastSubmittedSkeleton = (
+  <div className="skeleton skeleton-shimmer h-4 w-28" />
+)
+
 // The "last submitted" cell: the latest submission time plus optional teacher-
 // only sub-lines (late badge, graded-at, live-latest). The student view passes
 // only `datetime`, so the sub-lines collapse away.
@@ -261,7 +269,7 @@ export const LastSubmittedCell = ({
     <LoadingSwap
       loading={settling}
       deferUntilLoaded
-      fallback={<div className="skeleton skeleton-shimmer h-4 w-28" />}
+      fallback={lastSubmittedSkeleton}
     >
       <div className="flex flex-col gap-0.5">
         <div className="flex items-center gap-2">
@@ -307,3 +315,39 @@ export const LastSubmittedCell = ({
     </LoadingSwap>
   )
 }
+
+// The student-facing "last submitted" cell, shared by the submission page and
+// the assignments list so the two agree: the time plus a muted relative ("2
+// hours ago", the "did my push just register?" answer without date math), or
+// the caller's muted `fallback` when there is no time to show.
+export const StudentLastSubmittedCell = ({
+  datetime,
+  fallback,
+  settling = false,
+  className,
+}: {
+  datetime?: string | null
+  fallback: string
+  // The row's submission read is still in flight: shimmer instead of a
+  // placeholder that would flip once it lands.
+  settling?: boolean
+  className?: string
+}) => (
+  <LoadingSwap
+    loading={settling}
+    deferUntilLoaded
+    fallback={lastSubmittedSkeleton}
+    className={className}
+  >
+    {datetime ? (
+      <div className="flex flex-wrap items-center gap-x-2">
+        <LastSubmittedCell datetime={datetime} />
+        <span className="whitespace-nowrap text-base-content/60">
+          {formatRelativeToNow(new Date(datetime))}
+        </span>
+      </div>
+    ) : (
+      <span className="text-base-content/60">{fallback}</span>
+    )}
+  </LoadingSwap>
+)

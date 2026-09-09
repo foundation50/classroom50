@@ -27,18 +27,18 @@ import {
   ModeBadge,
 } from "@/components/assignments/AssignmentCells"
 import { GroupTeamMembersReadOnly } from "@/components/assignments/GroupTeamMembersReadOnly"
-import { LastSubmittedCell } from "@/components/submissions/SubmissionRowCells"
+import { StudentLastSubmittedCell } from "@/components/submissions/SubmissionRowCells"
 import { EmptyState, NoSearchResults } from "@/components/list"
 import { ClickableTr } from "@/lib/motionComponents"
 import { blockEnter } from "@/lib/motion"
 import { isInteractiveEventTarget } from "@/util/interactiveTarget"
-import { formatRelativeToNow } from "@/util/formatDate"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import {
   useMySubmittedAssignments,
   type AcceptedAssignmentRepo,
+  type MySubmissionState,
 } from "@/hooks/useMySubmittedAssignments"
 import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { useListPrefsState } from "@/lib/listPrefs"
@@ -104,51 +104,14 @@ type AssignmentItemProps = {
   org: string
   classroom: string
   assignment: Assignment
-  status: StudentAssignmentStatus
-  // Newest submission's ISO time; absent until one lands (or when the only
-  // submissions are dateless milestone tags).
-  lastSubmittedAt?: string
+  // Undefined until accepted: the submission read only runs on accepted repos.
+  submission?: MySubmissionState
   secret?: string
 }
 
-// The "Last submitted" cell, the same recipe as the submission page's row so
-// the two agree to the minute: absolute time plus a muted relative ("2 hours
-// ago", the "did my push register?" answer). Submitted without a readable
-// time says so rather than showing a blank; anything else is a quiet
-// placeholder, since the Status badge already carries the state.
-function LastSubmittedAtCell({
-  status,
-  lastSubmittedAt,
-}: {
-  status: StudentAssignmentStatus
-  lastSubmittedAt?: string
-}) {
-  const { t } = useTranslation()
-  if (lastSubmittedAt) {
-    return (
-      <div className="flex flex-wrap items-center gap-x-2 max-xl:text-xs xl:text-sm">
-        <LastSubmittedCell datetime={lastSubmittedAt} />
-        <span className="whitespace-nowrap text-base-content/60">
-          {formatRelativeToNow(new Date(lastSubmittedAt))}
-        </span>
-      </div>
-    )
-  }
-  return (
-    <span className="whitespace-nowrap text-base-content/60 max-xl:text-xs xl:text-sm">
-      {t(
-        status === "submitted"
-          ? "submissions.student.submittedAwaitingGrading"
-          : "submissions.student.notSubmittedYet",
-      )}
-    </span>
-  )
-}
-
 // The Status column: the one place a student reads "is my work in?". Only
-// "Not accepted" is alarming (red); "Accepted" is neutral progress, and
-// "Submitted" is the green all-clear, so a submitted row never looks like a
-// warning even once its due date has passed.
+// "Not accepted" is alarming (red); "Accepted" is neutral progress and
+// "Submitted" the green all-clear.
 function StatusBadge({ status }: { status: StudentAssignmentStatus }) {
   const { t } = useTranslation()
   if (status === "submitted") {
@@ -182,14 +145,18 @@ function AssignmentRow({
   org,
   classroom,
   assignment,
-  status,
-  lastSubmittedAt,
+  submission,
   secret,
 }: AssignmentItemProps) {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [groupOpen, setGroupOpen] = useState(false)
-  const accepted = status !== "not-accepted"
+  const accepted = submission !== undefined
+  const status = studentAssignmentStatus(
+    accepted,
+    submission?.kind === "submitted",
+  )
+  const settling = submission?.kind === "pending"
   // Accepted team-mode rows get a secondary "View group" action: a read-only
   // look at who shares the repo, without leaving the list.
   const showViewGroup = accepted && assignment.mode === "team"
@@ -230,22 +197,39 @@ function AssignmentRow({
         <ModeBadge mode={assignment.mode} />
       </td>
       <td>
-        {/* A past deadline is only a warning while nothing is in: once the
-            student has submitted, red would read as "you missed it". */}
+        {/* Red only once the read has settled on "nothing in": a pending or
+            failed read must not alarm, and a submission clears it. */}
         <DueDateCell
           due={assignment.due}
           relative
-          highlightOverdue={status !== "submitted"}
+          highlightOverdue={!submission || submission.kind === "none"}
         />
       </td>
       <td>
-        <LastSubmittedAtCell
-          status={status}
-          lastSubmittedAt={lastSubmittedAt}
+        <StudentLastSubmittedCell
+          className="max-xl:text-xs xl:text-sm"
+          settling={settling}
+          datetime={
+            submission?.kind === "submitted" ? submission.latestAt : undefined
+          }
+          fallback={t(
+            submission?.kind === "unknown"
+              ? "assignments.discover.submissionUnknown"
+              : submission?.kind === "submitted"
+                ? "assignments.discover.submitted"
+                : "submissions.student.notSubmittedYet",
+          )}
         />
       </td>
       <td>
-        <StatusBadge status={status} />
+        {settling ? (
+          <div
+            aria-busy="true"
+            className="skeleton skeleton-shimmer h-4 w-20 rounded-full"
+          />
+        ) : (
+          <StatusBadge status={status} />
+        )}
       </td>
       {/* Quarantined from the row click so a near-miss around the CTA never
           double-navigates. */}
@@ -523,28 +507,35 @@ export function StudentAssignmentList({
     const list: AcceptedAssignmentRepo[] = []
     const login = user?.login
     if (!login) return list
-    // Set of the student's own writable repo names, then match each assignment's
-    // canonical repo name against it (one pass each — no nested filter).
-    const writableNames = new Set(
+    // The student's own writable repos by lowercased name, then match each
+    // assignment's canonical repo name against it (one pass each — no nested
+    // filter).
+    const writable = new Map(
       (repos ?? [])
         .filter((repo) => repo.permissions?.push)
-        .map((repo) => repo.name.toLowerCase()),
+        .map((repo) => [repo.name.toLowerCase(), repo] as const),
     )
+    const push = (a: Assignment, name: string) =>
+      list.push({
+        assignment: a,
+        repo: name,
+        defaultBranch: writable.get(name)?.default_branch,
+      })
     for (const a of assignments ?? []) {
       if (a.mode === "team") {
         // A team-mode repo is named after the group counter, not the login;
         // the viewer's push on any `<classroom>-<slug>-group-<n>` repo (via
         // the team attachment) means their group accepted. Mode-gated parse —
         // `group-3` is also a valid username shape.
-        for (const name of writableNames) {
+        for (const name of writable.keys()) {
           if (parseGroupRepoCounter(name, classroom, a.slug) !== null) {
-            list.push({ assignment: a, repo: name })
+            push(a, name)
             break
           }
         }
       } else {
         const name = studentRepoName(classroom, a.slug, login)
-        if (writableNames.has(name)) list.push({ assignment: a, repo: name })
+        if (writable.has(name)) push(a, name)
       }
     }
     return list
@@ -555,17 +546,20 @@ export function StudentAssignmentList({
     [acceptedRepos],
   )
 
-  // Submitted (the green badge, what un-reds a past due date, and the "Last
-  // submitted" time) needs one read per accepted repo. Gated like the repo
-  // list so a row never paints "Accepted" over a red deadline and then flips
-  // to "Submitted".
-  const {
-    submittedSlugs,
-    lastSubmittedAt,
-    isPending: loadingSubmitted,
-  } = useMySubmittedAssignments(org, acceptedRepos)
-  const isLoading =
-    loadingSecret || loadingAssignmentsData || loadingRepos || loadingSubmitted
+  // One read per accepted repo, settling per row (shimmer in the Status and
+  // Last submitted cells) rather than holding the whole table: a slow repo, or
+  // a repo accepted while the list is open, must not blank rows already shown.
+  const submissions = useMySubmittedAssignments(org, acceptedRepos)
+  const submittedSlugs = useMemo(
+    () =>
+      new Set(
+        Object.entries(submissions)
+          .filter(([, state]) => state.kind === "submitted")
+          .map(([slug]) => slug),
+      ),
+    [submissions],
+  )
+  const isLoading = loadingSecret || loadingAssignmentsData || loadingRepos
 
   const visible = useMemo(
     () =>
@@ -679,11 +673,7 @@ export function StudentAssignmentList({
                 org={org}
                 classroom={classroom}
                 assignment={assignment}
-                status={studentAssignmentStatus(
-                  acceptedSlugs.has(assignment.slug),
-                  submittedSlugs.has(assignment.slug),
-                )}
-                lastSubmittedAt={lastSubmittedAt.get(assignment.slug)}
+                submission={submissions[assignment.slug]}
                 secret={secret}
               />
             ))}

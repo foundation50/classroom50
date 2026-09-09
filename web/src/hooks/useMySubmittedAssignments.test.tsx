@@ -30,6 +30,7 @@ const wrapper =
 const accepted = (
   slug: string,
   over: Partial<Assignment> = {},
+  extra: Partial<AcceptedAssignmentRepo> = {},
 ): AcceptedAssignmentRepo => ({
   assignment: {
     slug,
@@ -39,7 +40,10 @@ const accepted = (
     ...over,
   } as Assignment,
   repo: `cs101-${slug}-alice`,
+  ...extra,
 })
+
+const settled = (state: { kind: string }) => state.kind !== "pending"
 
 // Route each repo's reads by name so one client can answer a mixed fan-out:
 // `hw1` has real work, `hw2` only the tool's accept-time commit, `hw3` submits
@@ -75,7 +79,7 @@ beforeEach(() => {
 })
 
 describe("useMySubmittedAssignments", () => {
-  it("marks submitted per the assignment's submission mode, ignoring bookkeeping commits and stray tags", async () => {
+  it("settles each accepted repo per its submission mode, with the newest time where the source carries one", async () => {
     request.mockImplementation(mixedClient)
     const { result } = renderHook(
       () =>
@@ -91,85 +95,95 @@ describe("useMySubmittedAssignments", () => {
         ]),
       { wrapper: wrapper(makeClient()) },
     )
-    expect(result.current.isPending).toBe(true)
-    await waitFor(() => expect(result.current.isPending).toBe(false))
-    expect([...result.current.submittedSlugs].toSorted()).toEqual([
-      "hw1",
-      "hw3",
-      "hw5",
-    ])
-  })
-
-  it("reports the newest submission time where the source carries one", async () => {
-    request.mockImplementation(mixedClient)
-    const { result } = renderHook(
-      () =>
-        useMySubmittedAssignments("acme", [
-          accepted("hw1"),
-          accepted("hw3", { submission_mode: "tag" }),
-          accepted("hw5", {
-            submission_mode: "tag",
-            submission_tags: ["phase1"],
-          }),
-        ]),
-      { wrapper: wrapper(makeClient()) },
+    expect(
+      Object.values(result.current).every((s) => s.kind === "pending"),
+    ).toBe(true)
+    await waitFor(() =>
+      expect(Object.values(result.current).every(settled)).toBe(true),
     )
-    await waitFor(() => expect(result.current.isPending).toBe(false))
-    // Push: the newest commit's committer date. Canonical tag: decoded from
-    // its name. Milestone tag: submitted, but no time without a commit read.
-    expect(Object.fromEntries(result.current.lastSubmittedAt)).toEqual({
-      hw1: "2026-06-20T10:00:00Z",
-      hw3: "2026-01-01T00:00:00Z",
+    expect(result.current).toEqual({
+      // Push: the newest commit's committer date; the bookkeeping-only repo
+      // reads as nothing submitted.
+      hw1: { kind: "submitted", latestAt: "2026-06-20T10:00:00Z" },
+      hw2: { kind: "none" },
+      // Canonical tag: time decoded from its name. Stray tags don't count.
+      hw3: { kind: "submitted", latestAt: "2026-01-01T00:00:00Z" },
+      hw4: { kind: "none" },
+      // Milestone tag: submitted, but no time without a commit read.
+      hw5: { kind: "submitted", latestAt: null },
     })
-    expect(result.current.submittedSlugs.has("hw5")).toBe(true)
   })
 
-  it("settles a repo whose read fails as not submitted, without holding the rest", async () => {
+  it("reports a failed read as unknown rather than as nothing submitted, in either mode", async () => {
     request.mockImplementation((url: string) =>
-      url.includes("cs101-hw2-alice")
+      url.includes("cs101-hw2-alice") || url.includes("cs101-hw4-alice")
         ? Promise.reject(apiError(500))
         : mixedClient(url),
     )
     const { result } = renderHook(
       () =>
-        useMySubmittedAssignments("acme", [accepted("hw1"), accepted("hw2")]),
+        useMySubmittedAssignments("acme", [
+          accepted("hw1"),
+          accepted("hw2"),
+          accepted("hw4", { submission_mode: "tag" }),
+        ]),
       { wrapper: wrapper(makeClient()) },
     )
-    await waitFor(() => expect(result.current.isPending).toBe(false))
-    expect([...result.current.submittedSlugs]).toEqual(["hw1"])
+    await waitFor(() =>
+      expect(Object.values(result.current).every(settled)).toBe(true),
+    )
+    expect(result.current.hw1.kind).toBe("submitted")
+    expect(result.current.hw2).toEqual({ kind: "unknown" })
+    expect(result.current.hw4).toEqual({ kind: "unknown" })
   })
 
-  it("is settled and empty with nothing accepted, issuing no reads", () => {
+  it("is empty with nothing accepted, issuing no reads", () => {
     const { result } = renderHook(() => useMySubmittedAssignments("acme", []), {
       wrapper: wrapper(makeClient()),
     })
-    expect(result.current.isPending).toBe(false)
-    expect(result.current.submittedSlugs.size).toBe(0)
+    expect(result.current).toEqual({})
     expect(request).not.toHaveBeenCalled()
   })
 
-  it("keeps the set's identity while the resolved values are unchanged", async () => {
+  it("keeps the record's identity while the resolved values are unchanged", async () => {
     request.mockImplementation(mixedClient)
     const { result, rerender } = renderHook(
       () => useMySubmittedAssignments("acme", [accepted("hw1")]),
       { wrapper: wrapper(makeClient()) },
     )
-    await waitFor(() => expect(result.current.isPending).toBe(false))
-    const first = result.current.submittedSlugs
-    const firstAt = result.current.lastSubmittedAt
+    await waitFor(() => expect(settled(result.current.hw1)).toBe(true))
+    const first = result.current
     rerender()
-    expect(result.current.submittedSlugs).toBe(first)
-    expect(result.current.lastSubmittedAt).toBe(firstAt)
+    expect(result.current).toBe(first)
+  })
+
+  it("skips the opening repo read when the caller already knows the default branch", async () => {
+    request.mockImplementation(mixedClient)
+    const { result } = renderHook(
+      () =>
+        useMySubmittedAssignments("acme", [
+          accepted("hw1", {}, { defaultBranch: "main" }),
+        ]),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(settled(result.current.hw1)).toBe(true))
+    expect(result.current.hw1.kind).toBe("submitted")
+    const urls = request.mock.calls.map(([url]) => String(url))
+    expect(urls.some((u) => /\/repos\/[^/]+\/[^/]+$/.test(u))).toBe(false)
+    expect(urls).toHaveLength(2) // baseline + commit log
   })
 
   it("shares the cache entry with the single-repo reader the submission page uses", async () => {
     request.mockImplementation(mixedClient)
     const client = makeClient()
     const list = renderHook(
-      () => useMySubmittedAssignments("acme", [accepted("hw1")]),
+      () =>
+        useMySubmittedAssignments("acme", [
+          accepted("hw1", {}, { defaultBranch: "main" }),
+        ]),
       { wrapper: wrapper(client) },
     )
-    await waitFor(() => expect(list.result.current.isPending).toBe(false))
+    await waitFor(() => expect(settled(list.result.current.hw1)).toBe(true))
     const reads = request.mock.calls.length
 
     // Opening the row: the page's reader finds the list's result already cached.

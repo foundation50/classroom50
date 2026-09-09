@@ -147,6 +147,15 @@ export function submitTagDatetime(tagName: string): string | undefined {
   return Number.isFinite(new Date(iso).getTime()) ? iso : undefined
 }
 
+// The tag patterns that count as submissions: the teacher's milestone patterns
+// unioned with the always-on canonical submit/* namespace, mirroring the shim's
+// trigger. Without submit/* a tag-mode assignment with no milestone patterns
+// (the common case, where students push submit/* via `gh student submit`) would
+// detect nothing. The one source for every tag-mode reader.
+export function submissionTagPatterns(submissionTags?: string[]): string[] {
+  return [...(submissionTags ?? []), `${SUBMISSION_TAG_PREFIX}*`]
+}
+
 // Tag mode: for each configured pattern, an EXACT pattern yields one submission
 // per matching tag; a GLOB pattern groups all its matching tags into a single
 // submission set (R7). A tag matched by more than one pattern is attributed to

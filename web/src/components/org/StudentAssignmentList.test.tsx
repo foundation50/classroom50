@@ -73,6 +73,9 @@ const pagesAssignments = vi.fn()
 const orgRepos = vi.fn()
 const studentClassrooms = vi.fn()
 const submittedAssignments = vi.fn()
+// Per-slug submission state overrides for the mocked hook; accepted slugs not
+// listed here settle as "none" (accepted, nothing in).
+let submissionStates: Record<string, MySubmissionState> = {}
 
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: (...args: unknown[]) => pagesAssignments(...args),
@@ -98,7 +101,12 @@ vi.mock("@/auth/useGithubAuth", () => ({
 }))
 
 import { StudentAssignmentList } from "./StudentAssignmentList"
+import type {
+  AcceptedAssignmentRepo,
+  MySubmissionState,
+} from "@/hooks/useMySubmittedAssignments"
 import {
+  formatDueDate,
   formatRelativeToNow,
   formatSubmissionDateTime,
 } from "@/util/formatDate"
@@ -117,6 +125,7 @@ const assignment = (slug: string, over: Record<string, unknown> = {}) => ({
 const repo = (name: string, push = true) => ({
   id: name,
   name,
+  default_branch: "main",
   full_name: `acme/${name}`,
   permissions: { push, pull: true, admin: false, maintain: false },
 })
@@ -127,12 +136,16 @@ beforeEach(() => {
   studentClassrooms.mockReset()
   submittedAssignments.mockReset()
   studentClassrooms.mockReturnValue({ classrooms: [{ classroom: "cs" }] })
-  // Nothing submitted unless a spec says so.
-  submittedAssignments.mockReturnValue({
-    submittedSlugs: new Set(),
-    lastSubmittedAt: new Map(),
-    isPending: false,
-  })
+  submissionStates = {}
+  submittedAssignments.mockImplementation(
+    (_org: string, accepted: AcceptedAssignmentRepo[]) =>
+      Object.fromEntries(
+        accepted.map(({ assignment }) => [
+          assignment.slug,
+          submissionStates[assignment.slug] ?? { kind: "none" },
+        ]),
+      ),
+  )
   // View mode + sort persist in localStorage; clear so one test's toggle
   // doesn't bleed the stored view into another's default-view assertion.
   globalThis.localStorage?.clear()
@@ -174,11 +187,9 @@ describe("StudentAssignmentList", () => {
       isError: false,
     })
     orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
-    submittedAssignments.mockReturnValue({
-      submittedSlugs: new Set(["hw1"]),
-      lastSubmittedAt: new Map(),
-      isPending: false,
-    })
+    submissionStates = {
+      hw1: { kind: "submitted", latestAt: "2026-06-20T10:00:00Z" },
+    }
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
@@ -187,6 +198,7 @@ describe("StudentAssignmentList", () => {
       {
         assignment: expect.objectContaining({ slug: "hw1" }),
         repo: "cs-hw1-student1",
+        defaultBranch: "main",
       },
     ])
     expect(screen.getAllByText("assignments.discover.submitted")).toHaveLength(
@@ -214,6 +226,7 @@ describe("StudentAssignmentList", () => {
       {
         assignment: expect.objectContaining({ slug: "hw1" }),
         repo: "cs-hw1-group-2",
+        defaultBranch: "main",
       },
     ])
   })
@@ -230,40 +243,63 @@ describe("StudentAssignmentList", () => {
     orgRepos.mockReturnValue({
       data: [repo("cs-hw1-student1"), repo("cs-hw2-student1")],
     })
-    submittedAssignments.mockReturnValue({
-      submittedSlugs: new Set(["hw1"]),
-      lastSubmittedAt: new Map(),
-      isPending: false,
-    })
+    submissionStates = { hw1: { kind: "submitted", latestAt: null } }
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
     // Both accepted, so the only red badge left is the overdue deadline of the
     // row with nothing submitted; the submitted row shows its date as data.
     const submittedRow = screen.getByText("HW1").closest("tr")!
-    const pendingRow = screen.getByText("HW2").closest("tr")!
+    const noneRow = screen.getByText("HW2").closest("tr")!
     expect(submittedRow.querySelector(".badge-error")).toBeNull()
-    expect(pendingRow.querySelector(".badge-error")).not.toBeNull()
+    expect(submittedRow.textContent).toContain(formatDueDate("2020-01-01"))
+    expect(noneRow.querySelector(".badge-error")!.textContent).toContain(
+      formatDueDate("2020-01-01"),
+    )
   })
 
-  it("holds the skeleton while the submission reads are still pending", () => {
+  it("settles per row: a pending read shimmers its Status and Last submitted cells without hiding the table", () => {
     pagesAssignments.mockReturnValue({
-      data: [assignment("hw1")],
+      data: [
+        assignment("hw1", { name: "HW1", due: "2020-01-01" }),
+        assignment("hw2", { name: "HW2" }),
+      ],
       isLoading: false,
       isError: false,
     })
     orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
-    submittedAssignments.mockReturnValue({
-      submittedSlugs: new Set(),
-      lastSubmittedAt: new Map(),
-      isPending: true,
-    })
+    submissionStates = { hw1: { kind: "pending" } }
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
-    // No row paints "Accepted" only to flip to "Submitted" a beat later.
-    expect(screen.queryByText("HW1")).toBeNull()
-    expect(screen.queryByText("assignments.discover.accepted")).toBeNull()
+    // Rows already paint (a slow repo must not blank the list)...
+    const row = screen.getByText("HW1").closest("tr")!
+    expect(screen.getByText("HW2")).toBeTruthy()
+    // ...but the pending row commits to no badge, no red deadline, and no
+    // "not submitted" copy until its read lands.
+    expect(row.querySelectorAll(".skeleton-shimmer").length).toBeGreaterThan(1)
+    expect(row.querySelector(".badge-error")).toBeNull()
+    expect(row.textContent).not.toContain("assignments.discover.accepted")
+    expect(row.textContent).not.toContain("submissions.student.notSubmittedYet")
+  })
+
+  it("never claims 'not submitted' or reddens the deadline when the read failed", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { name: "HW1", due: "2020-01-01" })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
+    submissionStates = { hw1: { kind: "unknown" } }
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    const row = screen.getByText("HW1").closest("tr")!
+    // Accepted is still true, so the badge stays; the rest stays neutral.
+    expect(row.textContent).toContain("assignments.discover.accepted")
+    expect(row.textContent).toContain("assignments.discover.submissionUnknown")
+    expect(row.textContent).not.toContain("submissions.student.notSubmittedYet")
+    expect(row.querySelector(".badge-error")).toBeNull()
   })
 
   it("shows when each assignment was last submitted, and a quiet placeholder otherwise", () => {
@@ -285,12 +321,11 @@ describe("StudentAssignmentList", () => {
       ],
     })
     const at = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
-    submittedAssignments.mockReturnValue({
-      submittedSlugs: new Set(["hw1", "hw3"]),
+    submissionStates = {
+      hw1: { kind: "submitted", latestAt: at },
       // hw3 is submitted via a dateless milestone tag: no time to show.
-      lastSubmittedAt: new Map([["hw1", at]]),
-      isPending: false,
-    })
+      hw3: { kind: "submitted", latestAt: null },
+    }
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
@@ -306,9 +341,13 @@ describe("StudentAssignmentList", () => {
     expect(row("HW4").textContent).toContain(
       "submissions.student.notSubmittedYet",
     )
-    // Submitted without a readable time says so instead of going blank.
-    expect(row("HW3").textContent).toContain(
+    // Submitted without a readable time repeats the plain fact rather than
+    // going blank or claiming a grading state the list can't verify.
+    expect(row("HW3").textContent).not.toContain(
       "submissions.student.submittedAwaitingGrading",
+    )
+    expect(row("HW3").querySelectorAll("td")[3].textContent).toContain(
+      "assignments.discover.submitted",
     )
   })
 
@@ -481,11 +520,7 @@ describe("StudentAssignmentList", () => {
     orgRepos.mockReturnValue({
       data: [repo("cs-hw1-student1"), repo("cs-hw2-student1")],
     })
-    submittedAssignments.mockReturnValue({
-      submittedSlugs: new Set(["hw1"]),
-      lastSubmittedAt: new Map(),
-      isPending: false,
-    })
+    submissionStates = { hw1: { kind: "submitted", latestAt: null } }
 
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 

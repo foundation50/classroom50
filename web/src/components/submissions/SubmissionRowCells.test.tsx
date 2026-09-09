@@ -11,7 +11,15 @@ vi.mock("react-i18next", async (importOriginal) => {
   }
 })
 
-import { LastSubmittedCell, SubmissionCountCell } from "./SubmissionRowCells"
+import {
+  LastSubmittedCell,
+  StudentLastSubmittedCell,
+  SubmissionCountCell,
+} from "./SubmissionRowCells"
+import {
+  formatRelativeToNow,
+  formatSubmissionDateTime,
+} from "@/util/formatDate"
 
 afterEach(cleanup)
 
@@ -132,5 +140,32 @@ describe("LastSubmittedCell", () => {
     )
     expect(container.querySelector(".skeleton-shimmer")).toBeNull()
     expect(container.querySelector('[aria-busy="true"]')).toBeNull()
+  })
+})
+
+describe("StudentLastSubmittedCell", () => {
+  it("renders the time with its relative form", () => {
+    const at = new Date(Date.now() - 2 * 3600 * 1000).toISOString()
+    const { container } = render(
+      <StudentLastSubmittedCell datetime={at} fallback="nothing" />,
+    )
+    expect(container.textContent).toContain(formatSubmissionDateTime(at))
+    expect(container.textContent).toContain(formatRelativeToNow(new Date(at)))
+    expect(container.textContent).not.toContain("nothing")
+  })
+
+  it("renders the caller's fallback, muted, when there is no time", () => {
+    render(<StudentLastSubmittedCell datetime={null} fallback="nothing yet" />)
+    expect(screen.getByText("nothing yet").className).toContain(
+      "text-base-content/60",
+    )
+  })
+
+  it("shimmers instead of the fallback while settling", () => {
+    const { container } = render(
+      <StudentLastSubmittedCell fallback="nothing yet" settling />,
+    )
+    expect(container.querySelector(".skeleton-shimmer")).toBeTruthy()
+    expect(screen.queryByText("nothing yet")).toBeNull()
   })
 })

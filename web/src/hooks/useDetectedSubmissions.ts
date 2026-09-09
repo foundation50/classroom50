@@ -14,13 +14,13 @@ import {
   withGithubReadSlot,
 } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
-import { SUBMISSION_TAG_PREFIX } from "@/github-core/queries/releaseRunReads"
 import type { SubmissionMode } from "@/types/classroom"
 import {
   detectBranchSubmissions,
   detectTagSubmissions,
   detectedSubmissionCount,
   resolveSubmissionMode,
+  submissionTagPatterns,
   type DetectedSubmission,
 } from "@/domain/assignments/submissionDetection"
 import { studentRepoName } from "@/util/studentRepo"
@@ -124,16 +124,11 @@ export function useDetectedSubmissions({
               retryOnRateLimit(async () => {
                 if (resolvedMode === "tag") {
                   const tags = await listRepoTags(client, org!, repo)
-                  // Detection must mirror the shim's trigger, which always
-                  // unions the canonical submit/* namespace with the milestone
-                  // patterns (see shimTagsList). Without submit/* a tag-mode
-                  // assignment with no milestone patterns — the common case,
-                  // where students push submit/* tags via `gh student submit` —
-                  // would detect nothing. submit/* is a glob, so it groups.
-                  const entries = detectTagSubmissions(tags, [
-                    ...(submissionTags ?? []),
-                    `${SUBMISSION_TAG_PREFIX}*`,
-                  ])
+                  // submit/* is a glob, so it groups.
+                  const entries = detectTagSubmissions(
+                    tags,
+                    submissionTagPatterns(submissionTags),
+                  )
                   return dateMilestoneTagEntries(client, org!, repo, entries)
                 }
                 // Branch mode: resolve the default branch, its baseline, and

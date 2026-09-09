@@ -54,9 +54,9 @@ import {
 } from "@/components/submissions/submissionDetailItems"
 import {
   AssignmentTitleWithSlug,
-  LastSubmittedCell,
   MetaItem,
   MetaStrip,
+  StudentLastSubmittedCell,
   SubmissionCountCell,
 } from "@/components/submissions/SubmissionRowCells"
 import { StudentRowActions } from "@/pages/submissions/StudentRowActions"
@@ -473,29 +473,19 @@ const SubmissionBody = ({
               />
             </td>
             <td>
-              {latestSubmittedAt ? (
-                <div className="flex flex-wrap items-center gap-x-2">
-                  <LastSubmittedCell datetime={latestSubmittedAt} />
-                  {/* Relative time answers "did my push just register?"
-                        without date math. */}
-                  <span className="whitespace-nowrap text-base-content/60">
-                    {formatRelativeToNow(new Date(latestSubmittedAt))}
-                  </span>
-                </div>
-              ) : submissionCount > 0 ? (
+              <StudentLastSubmittedCell
+                datetime={latestSubmittedAt}
                 // Submissions exist (e.g. a pushed milestone tag) but none
                 // has a graded release yet, so there's no timestamp to show.
                 // "Not submitted yet" beside a positive count would
-                // contradict itself — say the work is in and awaiting
+                // contradict itself; say the work is in and awaiting
                 // grading instead.
-                <span className="text-base-content/60">
-                  {t("submissions.student.submittedAwaitingGrading")}
-                </span>
-              ) : (
-                <span className="text-base-content/60">
-                  {t("submissions.student.notSubmittedYet")}
-                </span>
-              )}
+                fallback={t(
+                  submissionCount > 0
+                    ? "submissions.student.submittedAwaitingGrading"
+                    : "submissions.student.notSubmittedYet",
+                )}
+              />
             </td>
             <td>
               <StudentRowActions

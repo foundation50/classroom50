@@ -15,16 +15,20 @@ import { studentRepoName } from "@/util/studentRepo"
 // Query options for one repo's push submissions, shared by the single-repo
 // hook below and the student list's per-assignment fan-out so both hit one
 // cache entry: opening a row from the list finds its submissions already read.
+// A caller that already holds the repo's default branch (the list, from the
+// org repo walk) passes it to skip the opening getRepo; the key is the same
+// either way, so the two callers still share the entry.
 export const myPushSubmissionsQuery = (
   client: GitHubClient,
   org: string,
   repo: string,
+  knownDefaultBranch?: string,
 ) =>
   queryOptions({
     queryKey: [...githubKeys.all, "my-push-submissions", org, repo],
     queryFn: async (): Promise<GitHubCommit[]> => {
-      const info = await getRepo(client, org, repo)
-      const branch = info?.default_branch
+      const branch =
+        knownDefaultBranch ?? (await getRepo(client, org, repo))?.default_branch
       if (!branch) return [] // not accepted / commitless
       const baseline = await getOldestCommitShaForPath(
         client,
