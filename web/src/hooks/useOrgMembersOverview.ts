@@ -7,6 +7,7 @@ import {
   jsonFileQuery,
   orgAdminsQuery,
   orgFailedInvitationsQuery,
+  orgInvitationsQuery,
   orgMembersAllQuery,
   teamMembersQuery,
 } from "@/github-core/queries"
@@ -76,6 +77,13 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     enabled: Boolean(org),
   })
 
+  // The org's invitation lists (owner-only; this page is owner-gated). Pending
+  // decides "Invitation pending" vs "Unlinked"/"Not in organization"; failed
+  // explains a stranded row ("Invitation expired") and feeds the orphan notice.
+  const pendingInvitesQuery = useQuery({
+    ...orgInvitationsQuery(client, org ?? ""),
+    enabled: Boolean(org),
+  })
   const failedInvitesQuery = useQuery({
     ...orgFailedInvitationsQuery(client, org ?? ""),
     enabled: Boolean(org),
@@ -191,9 +199,24 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomNames, teamSignature])
 
+  // `pending` is passed only once loaded (see OrgInvitationLists); a failed
+  // pending read leaves it undefined, so identity-less rows read as unlinked
+  // rather than as a pending invitation nobody verified.
+  const pendingInvitations = pendingInvitesQuery.data
+  const failedInvitations = failedInvitesQuery.data
   const rows = useMemo(
-    () => aggregateOrgMembers(members, rosters, teamMembersByClassroom),
-    [members, rosters, teamMembersByClassroom],
+    () =>
+      aggregateOrgMembers(members, rosters, teamMembersByClassroom, {
+        pending: pendingInvitations,
+        failed: failedInvitations,
+      }),
+    [
+      members,
+      rosters,
+      teamMembersByClassroom,
+      pendingInvitations,
+      failedInvitations,
+    ],
   )
 
   const ownerIds = useMemo(
@@ -225,8 +248,11 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomNames, metaSignature])
 
+  // The pending read is awaited too: a row's standing depends on it, and
+  // rendering before it lands would flash "Unlinked" over a pending student.
   const isLoading =
     membersQuery.isLoading ||
+    pendingInvitesQuery.isLoading ||
     metaQueries.some((q) => q.isLoading) ||
     rosterQueries.some((q) => q.isLoading)
   const isError = membersQuery.isError

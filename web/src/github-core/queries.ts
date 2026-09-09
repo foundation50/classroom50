@@ -101,6 +101,7 @@ export {
   listTeamInvitations,
   teamInvitationsQuery,
   orgFailedInvitationsQuery,
+  orgInvitationsQuery,
 } from "./queries/invitationReads"
 export {
   getOrgActionsUsage,

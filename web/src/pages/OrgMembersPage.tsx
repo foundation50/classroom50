@@ -34,6 +34,7 @@ import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import {
   filterOrgMemberRows,
+  hasExpiredInvite,
   sortOrgMemberRowsBy,
   type OrgMemberRow,
   type OrgMembersRoleFilter,
@@ -291,6 +292,14 @@ const OrgMembersPage = () => {
         .length,
     [rows],
   )
+  const unlinkedCount = useMemo(
+    () => rows.filter((row) => row.classification === "unlinked").length,
+    [rows],
+  )
+  const expiredCount = useMemo(
+    () => rows.filter(hasExpiredInvite).length,
+    [rows],
+  )
 
   // The signed-in owner can't be bulk-added/removed — a row is selectable only
   // when it isn't self. Stable per viewer so the selection memos key on it.
@@ -458,6 +467,19 @@ const OrgMembersPage = () => {
                 <option value="invitation-pending">
                   {t("orgMembers.filterInvitationPending")}
                 </option>
+                {/* Like the roster, the rarer buckets appear only while such
+                    rows exist (or while selected), so most orgs never see a
+                    dead option. */}
+                {unlinkedCount > 0 || statusFilter === "unlinked" ? (
+                  <option value="unlinked">
+                    {t("orgMembers.filterUnlinked")}
+                  </option>
+                ) : null}
+                {expiredCount > 0 || statusFilter === "invite-expired" ? (
+                  <option value="invite-expired">
+                    {t("orgMembers.filterInviteExpired")}
+                  </option>
+                ) : null}
                 <option value="not-enrolled">
                   {t("orgMembers.filterNotEnrolled")}
                 </option>

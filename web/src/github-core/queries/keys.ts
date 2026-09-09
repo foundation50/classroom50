@@ -124,6 +124,11 @@ export const githubKeys = {
   orgFailedInvitations: (org: string) =>
     [...githubKeys.all, "org-failed-invitations", org] as const,
 
+  // Org-wide pending invitations (the Members page); the roster reads
+  // team-scoped lists instead (teamInvitations).
+  orgInvitations: (org: string) =>
+    [...githubKeys.all, "org-invitations", org] as const,
+
   orgTeams: (org: string) => [...githubKeys.all, "org-teams", org] as const,
 
   // Teams with access to a repo (GET /repos/{owner}/{repo}/teams) — repo-scoped,
@@ -355,6 +360,7 @@ export function invalidateInviteQueries(queryClient: QueryClient, org: string) {
   queryClient.invalidateQueries({
     queryKey: githubKeys.orgFailedInvitations(org),
   })
+  queryClient.invalidateQueries({ queryKey: githubKeys.orgInvitations(org) })
   queryClient.invalidateQueries({ queryKey: githubKeys.orgMembers(org) })
 }
 

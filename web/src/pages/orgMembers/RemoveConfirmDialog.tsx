@@ -47,20 +47,24 @@ const RemoveConfirmDialog = ({
   // only shrink the counts; the results view reports those).
 
   // bulkRemoveFromClassroom: skips rows not on the target, archived
-  // instances, and identity-less pending email invites.
+  // instances, and identity-less rows (a live email invitation, or an unlinked
+  // row nothing backs), which the roster matcher can't target.
   const removePreview = (() => {
     let removable = 0
     let notOn = 0
     let archived = 0
     let pendingEmail = 0
+    let unlinked = 0
     for (const row of selectedRows) {
       const access = row.classrooms.find((c) => c.classroom === target)
       if (!access) notOn++
       else if (access.archived) archived++
-      else if (!canTargetForUnenroll(row)) pendingEmail++
-      else removable++
+      else if (!canTargetForUnenroll(row)) {
+        if (row.classification === "invitation-pending") pendingEmail++
+        else unlinked++
+      } else removable++
     }
-    return { removable, notOn, archived, pendingEmail }
+    return { removable, notOn, archived, pendingEmail, unlinked }
   })()
 
   // bulkRemoveFromOrg: skips username-less rows (the membership DELETE is
@@ -212,6 +216,13 @@ const RemoveConfirmDialog = ({
                 ? [
                     t("orgMembers.bulk.previewSkipPendingEmail", {
                       count: removePreview.pendingEmail,
+                    }),
+                  ]
+                : []),
+              ...(removePreview.unlinked > 0
+                ? [
+                    t("orgMembers.bulk.previewSkipUnlinked", {
+                      count: removePreview.unlinked,
                     }),
                   ]
                 : []),

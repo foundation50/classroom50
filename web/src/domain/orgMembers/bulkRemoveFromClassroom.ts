@@ -99,11 +99,17 @@ export async function bulkRemoveFromClassroom(
       continue
     }
     if (!canTargetForUnenroll(row)) {
+      // An identity-less row: the roster matcher keys on username/github_id,
+      // so nothing here can target it. Say which kind it is, since the fix
+      // differs (cancel the live invitation vs. remove/re-invite the row).
       outcomes.push({
         key: row.key,
         label: labelFor(row),
         status: "skipped",
-        detail: "pending-email-invite",
+        detail:
+          row.classification === "invitation-pending"
+            ? "pending-email-invite"
+            : "unlinked-row",
       })
       continue
     }

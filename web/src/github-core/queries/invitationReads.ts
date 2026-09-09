@@ -96,3 +96,17 @@ export function orgFailedInvitationsQuery(client: GitHubClient, org: string) {
     retry: retryTransientGitHubError,
   })
 }
+
+// Org-wide PENDING invitations, for the org Members page (which is org-scoped,
+// unlike a classroom roster, so the unscoped list is the right one there). The
+// roster keeps its team-scoped reads (#236). Owner-only; not error-tolerated,
+// for the same fail-closed reason as listOrgInvitations.
+export function orgInvitationsQuery(client: GitHubClient, org: string) {
+  return queryOptions({
+    queryKey: githubKeys.orgInvitations(org),
+    queryFn: () => listOrgInvitations(client, org),
+    enabled: Boolean(org),
+    staleTime: 60 * 1000,
+    retry: retryTransientGitHubError,
+  })
+}

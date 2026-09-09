@@ -35,6 +35,18 @@ const roster = (
   archived = false,
 ): ClassroomRoster => ({ classroom, archived, students })
 
+const invite = (over: Partial<GitHubOrgInvitation>): GitHubOrgInvitation =>
+  ({
+    id: 1,
+    login: null,
+    email: null,
+    role: "direct_member",
+    created_at: "",
+    failed_at: null,
+    failed_reason: null,
+    ...over,
+  }) as GitHubOrgInvitation
+
 describe("aggregateOrgMembers", () => {
   it("dedupes a student across two rosters into one row listing both classrooms", () => {
     const alice = student({
@@ -95,8 +107,9 @@ describe("aggregateOrgMembers", () => {
       ],
     )
     expect(rows).toHaveLength(1)
-    // An identity-less row is an unaccepted email invite, not a departed member.
-    expect(rows[0].classification).toBe("invitation-pending")
+    // With no live invitation on the address, an identity-less row is unlinked
+    // (not a departed member: there is no account to have left).
+    expect(rows[0].classification).toBe("unlinked")
     expect(rows[0].isMember).toBe(false)
     expect(rows[0].classrooms).toHaveLength(2)
   })
@@ -273,34 +286,139 @@ describe("aggregateOrgMembers — team-verified membership / unprovisioned", () 
     expect(cs201?.state).toBe("unprovisioned")
   })
 
-  it("classifies an unaccepted email invite as pending, not a discrepancy", () => {
-    // The row an email invite writes: an address and nothing else. It is NOT a
-    // person who left the org — there is no account yet — so counting it in the
-    // "on a roster but not a member" tally cries wolf on a healthy invitation.
-    const rows = aggregateOrgMembers(
-      [],
-      [roster("cs101", [student({ email: "ada@uni.edu", first_name: "Ada" })])],
-    )
-    expect(rows).toHaveLength(1)
-    expect(rows[0].classification).toBe("invitation-pending")
-    expect(rows[0].isMember).toBe(false)
+  it("classifies an email row as pending only when GitHub lists a live invitation", () => {
+    const rosters = [
+      roster("cs101", [student({ email: "ada@uni.edu", first_name: "Ada" })]),
+    ]
+    // Live invitation on the address: pending, carrying its id.
+    const pending = aggregateOrgMembers([], rosters, undefined, {
+      pending: [invite({ id: 77, email: "ADA@uni.edu" })],
+    })
+    expect(pending[0]).toMatchObject({
+      classification: "invitation-pending",
+      invitation_id: 77,
+      isMember: false,
+    })
+    // Same row, no live invitation: unlinked, not "pending" on faith.
+    const unlinked = aggregateOrgMembers([], rosters, undefined, {
+      pending: [],
+    })
+    expect(unlinked[0].classification).toBe("unlinked")
+    expect(unlinked[0].invitation_id).toBeUndefined()
   })
 
-  it("sorts a pending invitation below healthy members", () => {
-    // A pending row is informational; ordering it above members would bury the
-    // rows a teacher can actually act on.
+  it("treats an unknown pending list as no live invitation (unlinked), never as pending", () => {
+    const rows = aggregateOrgMembers(
+      [],
+      [roster("cs101", [student({ email: "ada@uni.edu" })])],
+    )
+    expect(rows[0].classification).toBe("unlinked")
+  })
+
+  it("marks a login row with a live invitation as pending, not as not-in-org", () => {
+    const rows = aggregateOrgMembers(
+      [],
+      [roster("cs101", [student({ username: "Mona", github_id: "90914" })])],
+      undefined,
+      { pending: [invite({ id: 5, login: "monalisa" })] },
+    )
+    // Different casing/login than the roster's stale username: no match, so
+    // this row is genuinely not in the org...
+    expect(rows[0].classification).toBe("on-roster-not-member")
+    // ...while a login match is pending.
+    const matched = aggregateOrgMembers(
+      [],
+      [roster("cs101", [student({ username: "monalisa" })])],
+      undefined,
+      { pending: [invite({ id: 5, login: "MonaLisa" })] },
+    )
+    expect(matched[0]).toMatchObject({
+      classification: "invitation-pending",
+      invitation_id: 5,
+    })
+  })
+
+  it("attaches the latest failed record to a stranded row, and drops it for members", () => {
+    const EXPIRED =
+      "Invitation expired. User did not accept this invite for 7 days"
     const rows = aggregateOrgMembers(
       [member(42, "alice")],
       [
         roster("cs101", [
-          student({ email: "ada@uni.edu" }),
+          student({ email: "grace@uni.edu" }),
+          student({ username: "monalisa" }),
           student({ username: "alice", github_id: "42" }),
         ]),
       ],
+      undefined,
+      {
+        pending: [],
+        failed: [
+          invite({
+            id: 1,
+            email: "grace@uni.edu",
+            failed_at: "2026-08-01T00:00:00Z",
+            failed_reason: EXPIRED,
+          }),
+          invite({
+            id: 2,
+            email: "grace@uni.edu",
+            failed_at: "2026-09-07T00:00:00Z",
+            failed_reason: EXPIRED,
+          }),
+          invite({ id: 3, login: "monalisa", failed_reason: "Email bounced" }),
+          invite({ id: 4, login: "alice", failed_reason: EXPIRED }),
+        ],
+      },
+    )
+    const grace = rows.find((r) => r.email === "grace@uni.edu")!
+    expect(grace.classification).toBe("unlinked")
+    expect(grace.failed_invitation).toMatchObject({ id: 2, kind: "expired" })
+    const mona = rows.find((r) => r.username === "monalisa")!
+    expect(mona.classification).toBe("on-roster-not-member")
+    expect(mona.failed_invitation).toMatchObject({ id: 3, kind: "failed" })
+    const alice = rows.find((r) => r.username === "alice")!
+    expect(alice.classification).toBe("member-on-roster")
+    expect(alice.failed_invitation).toBeUndefined()
+  })
+
+  it("a live invitation wins over an older failed record", () => {
+    const rows = aggregateOrgMembers(
+      [],
+      [roster("cs101", [student({ email: "twice@uni.edu" })])],
+      undefined,
+      {
+        pending: [invite({ id: 9, email: "twice@uni.edu" })],
+        failed: [invite({ id: 1, email: "twice@uni.edu" })],
+      },
+    )
+    expect(rows[0]).toMatchObject({
+      classification: "invitation-pending",
+      invitation_id: 9,
+    })
+    expect(rows[0].failed_invitation).toBeUndefined()
+  })
+
+  it("orders actionable rows first, then members, then pending, then no-roster members", () => {
+    const rows = aggregateOrgMembers(
+      [member(42, "alice"), member(43, "loner")],
+      [
+        roster("cs101", [
+          student({ email: "pending@uni.edu" }),
+          student({ email: "expired@uni.edu" }),
+          student({ username: "alice", github_id: "42" }),
+          student({ username: "left" }),
+        ]),
+      ],
+      undefined,
+      { pending: [invite({ id: 1, email: "pending@uni.edu" })] },
     )
     expect(rows.map((r) => r.classification)).toEqual([
+      "on-roster-not-member",
+      "unlinked",
       "member-on-roster",
       "invitation-pending",
+      "member-no-roster",
     ])
   })
 })
@@ -428,6 +546,19 @@ describe("sortOrgMemberRowsBy", () => {
         email: "ada@uni.edu",
         isMember: false,
         classification: "invitation-pending",
+        invitation_id: 1,
+      }),
+      orgRow({
+        key: "expired",
+        email: "grace@uni.edu",
+        isMember: false,
+        classification: "unlinked",
+        failed_invitation: {
+          id: 2,
+          kind: "expired",
+          failed_at: null,
+          reason: null,
+        },
       }),
       orgRow({ username: "drifted", unprovisionedClassrooms: ["cs101"] }),
     ]
@@ -446,6 +577,8 @@ describe("sortOrgMemberRowsBy", () => {
     it("filters each status facet to its rows", () => {
       expect(filter("not-in-org", "all")).toEqual(["left"])
       expect(filter("invitation-pending", "all")).toEqual(["ada@uni.edu"])
+      expect(filter("unlinked", "all")).toEqual(["grace@uni.edu"])
+      expect(filter("invite-expired", "all")).toEqual(["grace@uni.edu"])
       expect(filter("not-enrolled", "all")).toEqual(["drifted"])
     })
 
