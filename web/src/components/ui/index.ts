@@ -66,6 +66,7 @@ export type { InlineMessageProps, InlineMessageTone } from "./InlineMessage"
 
 export { AnimatedAlert } from "./AnimatedAlert"
 export type { AnimatedAlertProps } from "./AnimatedAlert"
+export { AlertStack } from "./AlertStack"
 
 export { OutcomeAlert } from "./OutcomeAlert"
 export type { OutcomeAlertProps } from "./OutcomeAlert"

@@ -11,6 +11,7 @@ import {
 
 import {
   Alert,
+  AlertStack,
   AnimatedAlert,
   Button,
   Checkbox,
@@ -377,53 +378,47 @@ const OrgMembersPage = () => {
             }
           />
 
-          {/* Always-on scope warning: a shared org lists other teachers'
-              members and students too, so say so before the destructive
-              member actions below. */}
-          <Alert tone="warning" className="mt-6 text-sm">
-            <span>{t("orgMembers.sharedOrgNotice", { org })}</span>
-          </Alert>
-
-          <AnimatedAlert
-            tone="warning"
-            show={rosterReadFailures.length > 0}
-            className="mt-6 text-sm"
-            role="status"
-          >
-            <span>
-              {rosterReadFailures
-                .map((classroom) =>
-                  t("orgMembers.rosterReadFailed", { classroom }),
-                )
-                .join(" ")}
-            </span>
-          </AnimatedAlert>
-
-          {orphanedFailedInvitations.length > 0 ? (
-            <div className="mt-6">
-              <OrphanedInvitationsNotice
-                orphans={orphanedFailedInvitations}
-                busy={dismissFailedInvitations.isPending}
-                onDismiss={(id) => dismissOrphans([id])}
-                onDismissAll={() =>
-                  dismissOrphans(
-                    orphanedFailedInvitations.map((o) => o.invitation.id),
+          {/* Page notices as ONE section (AlertStack): the always-on scope
+              warning first (a shared org lists other teachers' members and
+              students too, so say so before the destructive actions below),
+              then whatever this org currently needs attention on. */}
+          <AlertStack className="mt-6 text-sm">
+            <Alert tone="warning">
+              <span>{t("orgMembers.sharedOrgNotice", { org })}</span>
+            </Alert>
+            <AnimatedAlert
+              tone="warning"
+              show={rosterReadFailures.length > 0}
+              role="status"
+            >
+              <span>
+                {rosterReadFailures
+                  .map((classroom) =>
+                    t("orgMembers.rosterReadFailed", { classroom }),
                   )
-                }
-              />
-            </div>
-          ) : null}
-
-          <AnimatedAlert
-            tone="error"
-            show={discrepancyCount > 0}
-            className="mt-6 text-sm"
-            role="status"
-          >
-            <span>
-              {t("orgMembers.discrepancy", { count: discrepancyCount })}
-            </span>
-          </AnimatedAlert>
+                  .join(" ")}
+              </span>
+            </AnimatedAlert>
+            <OrphanedInvitationsNotice
+              orphans={orphanedFailedInvitations}
+              busy={dismissFailedInvitations.isPending}
+              onDismiss={(id) => dismissOrphans([id])}
+              onDismissAll={() =>
+                dismissOrphans(
+                  orphanedFailedInvitations.map((o) => o.invitation.id),
+                )
+              }
+            />
+            <AnimatedAlert
+              tone="error"
+              show={discrepancyCount > 0}
+              role="status"
+            >
+              <span>
+                {t("orgMembers.discrepancy", { count: discrepancyCount })}
+              </span>
+            </AnimatedAlert>
+          </AlertStack>
 
           {/* One toolbar row (the roster/submissions recipe): member count —
               swapped for the selection cluster while rows are selected — on
