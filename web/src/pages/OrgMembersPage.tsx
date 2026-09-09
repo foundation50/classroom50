@@ -104,7 +104,7 @@ const OrgMembersPage = () => {
     refetchMembers,
     teamSlugByClassroom,
     displayNameByClassroom,
-    notes,
+    rosterReadFailures,
     orphanedFailedInvitations,
   } = useOrgMembersOverview(org)
   const { classes } = useGetClasses(org)
@@ -386,11 +386,17 @@ const OrgMembersPage = () => {
 
           <AnimatedAlert
             tone="warning"
-            show={notes.length > 0}
+            show={rosterReadFailures.length > 0}
             className="mt-6 text-sm"
             role="status"
           >
-            <span>{notes.join(" ")}</span>
+            <span>
+              {rosterReadFailures
+                .map((classroom) =>
+                  t("orgMembers.rosterReadFailed", { classroom }),
+                )
+                .join(" ")}
+            </span>
           </AnimatedAlert>
 
           {orphanedFailedInvitations.length > 0 ? (

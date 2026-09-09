@@ -56,7 +56,8 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 // This layer owns the per-row PRE-filtering the members view needs:
 //   - rows not on the target classroom (nothing to remove) -> skipped
 //   - rows on an ARCHIVED instance -> skipped (read-only; the write would throw)
-//   - rows with NO GitHub identity — an unaccepted email invite — -> skipped.
+//   - rows with NO GitHub identity (a live email invitation, or an unlinked
+//     row nothing backs) -> skipped, each with its own reason.
 //     The roster matcher keys on username/github_id (a shared address must never
 //     widen a removal), so bulkUnenrollStudents drops such a target and it would
 //     otherwise reconcile to "already removed" while both the row AND the live

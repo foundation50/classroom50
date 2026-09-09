@@ -138,8 +138,8 @@ const MemberDetailModal = ({
         org,
         row,
         {
-          // Kept as a toast: the pending badge lags the eventually-consistent
-          // refetch, and this dialog is closing.
+          // Kept as a toast: the row's "Invitation pending" chip lands with
+          // the eventually-consistent refetch, and this dialog is closing.
           onSuccess: (message) =>
             notify({ tone: "success", durationMs: 6000, message }),
           // The dialog stays open on failure, so the error belongs inside it.

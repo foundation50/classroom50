@@ -73,7 +73,9 @@ export async function removeMemberFromOrg(
     }))
   if (!viewer) {
     throw new Error(
-      "Couldn't verify your account, so the member wasn't removed. Please try again.",
+      t
+        ? t("orgMembers.removeViewerUnverified")
+        : "Couldn't verify your account, so the member wasn't removed. Try again.",
     )
   }
   if (
@@ -83,7 +85,9 @@ export async function removeMemberFromOrg(
     })
   ) {
     throw new Error(
-      "You can't remove your own account from the organization here.",
+      t
+        ? t("orgMembers.removeSelf")
+        : "You can't remove your own account from the organization here.",
     )
   }
 
@@ -94,7 +98,9 @@ export async function removeMemberFromOrg(
     return {
       unenrolledClassrooms: [],
       warnings: [
-        `Couldn't remove ${row.email || "this student"} from the organization: no GitHub username on file.`,
+        t
+          ? t("orgMembers.warnNoUsername", { who: row.email || row.key })
+          : `Couldn't remove ${row.email || row.key} from the organization: no GitHub username on file.`,
       ],
       removed: false,
     }
@@ -155,9 +161,12 @@ export async function removeMemberFromOrg(
       record: true,
     })
     warnings.push(
-      `Removing ${row.username} from the organization failed (${getErrorMessage(
-        err,
-      )}); retry from the organization's people page.`,
+      t
+        ? t("orgMembers.warnOrgRemoveFailed", {
+            who: row.username,
+            reason: getErrorMessage(err),
+          })
+        : `Removing ${row.username} from the organization failed (${getErrorMessage(err)}). Try again.`,
     )
   }
 

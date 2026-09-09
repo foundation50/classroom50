@@ -53,7 +53,7 @@ export async function bulkRemoveFromOrg(
     throw new Error(
       t
         ? t("orgMembers.bulk.viewerUnverified")
-        : "Couldn't verify your account, so no members were removed. Please try again.",
+        : "Couldn't verify your account, so no members were removed. Try again.",
     )
   }
 

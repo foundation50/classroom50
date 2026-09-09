@@ -51,9 +51,10 @@ export type OrgMembersOverview = {
   // classroom path -> display name from classroom.json. Absent while metadata
   // hasn't loaded (or carries no name) — callers fall back to the path.
   displayNameByClassroom: Map<string, string>
-  // Per-classroom roster read failures (a 404/parse error contributes no
-  // students rather than failing the whole page).
-  notes: string[]
+  // Classrooms whose roster.csv couldn't be read (a 404/parse error
+  // contributes no students rather than failing the whole page). The page
+  // renders the note, so no English is assembled here.
+  rosterReadFailures: string[]
   // GitHub's failed/expired invitations that no classroom roster or member
   // explains (see orphanedFailedInvitations). Owner-only read; empty while
   // loading or when unreadable. Only meaningful once every roster has loaded:
@@ -153,7 +154,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     .map((q) => (q.data ? String(q.data.length) : "-"))
     .join("|")
 
-  const { rosters, notes } = useMemo(() => {
+  const { rosters, rosterReadFailures } = useMemo(() => {
     const collected = classroomNames.map((name, i) => {
       const meta = metaQueries[i]?.data
       const rosterQuery = rosterQueries[i]
@@ -164,19 +165,15 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
         failed: rosterQuery?.isError ?? false,
       }
     })
-    const failedNotes = collected
-      .filter((c) => c.failed)
-      .map(
-        (c) =>
-          `Couldn't read the roster for "${c.classroom}" — its students are not shown.`,
-      )
     return {
       rosters: collected.map(({ classroom, archived, students }) => ({
         classroom,
         archived,
         students,
       })),
-      notes: failedNotes,
+      rosterReadFailures: collected
+        .filter((c) => c.failed)
+        .map((c) => c.classroom),
     }
     // metaQueries/rosterQueries are fresh arrays each render; depend on the
     // names plus stable signatures of the data/error we actually read.
@@ -260,7 +257,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
   // Withheld until every roster read has settled (success or failure): an
   // orphan is "on no roster", which is unknowable while one is still loading.
   // A roster that FAILED to read is excluded too, since its students would
-  // wrongly look orphaned; the page's `notes` already say that roster is out.
+  // wrongly look orphaned; the page already notes that roster is out.
   const rostersSettled =
     !isLoading && rosterQueries.every((q) => q.isSuccess || q.isError)
   const anyRosterFailed = rosterQueries.some((q) => q.isError)
@@ -289,7 +286,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     },
     teamSlugByClassroom,
     displayNameByClassroom,
-    notes,
+    rosterReadFailures,
     orphanedFailedInvitations: orphans,
   }
 }

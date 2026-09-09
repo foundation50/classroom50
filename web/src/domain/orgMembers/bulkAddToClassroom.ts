@@ -125,7 +125,7 @@ export async function bulkAddToClassroom(
     onProgress?.({
       processed: resolved,
       total: toResolve.length,
-      message: `Resolving ${labelFor(row)}...`,
+      message: labelFor(row),
     })
     const id = parseGitHubId(matchedId)
     if (id === null) {
