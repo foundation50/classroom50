@@ -20,7 +20,7 @@ import {
   applyClassroomRoleChange,
   dismissFailedInvitation,
   inviteRosterStudents,
-  bulkInviteByEmail,
+  reinviteEmailRows,
   resendClassroomInvite,
   retireEmailInvite,
   type StudentCsvRow,
@@ -398,20 +398,30 @@ const RosterMemberModal = ({
   const handleResend = async () => {
     if (resending) return
     // An email-only pending invite has no account to re-invite by id, so re-send
-    // by address instead — bulkInviteByEmail recreates the invitation and its
-    // invite team, the same recipe reinviteUnlinkedRow uses for an expired one.
-    // appendEmailInviteRows skips the already-claimed address, so no second row.
+    // by address: cancel the live invitation (GitHub refuses a second one for
+    // the same address), then create afresh. Shared recipe with the bulk bar
+    // and the unlinked row's Re-invite; the existing roster row is re-claimed.
     if (!row.username && row.email) {
       setResending(true)
       try {
         const role = sortRolesByRank(row.roles)[0] ?? "student"
-        const res = await bulkInviteByEmail(client, {
+        const res = await reinviteEmailRows(client, {
           org,
           classroom,
-          invites: [{ email: row.email, role }],
+          targets: [
+            { email: row.email, role, pendingInvitationId: row.invitation_id },
+          ],
         })
         if (res.failed.length > 0) {
           throw new Error(res.failed[0]!.message)
+        }
+        if (res.deferred.length > 0) {
+          onError(row.key, t("students.resendRateLimited", { label }))
+          return
+        }
+        if (res.invited.length === 0) {
+          onError(row.key, t("students.resendNotSent", { label }))
+          return
         }
         onResent(row.key)
         onClose()

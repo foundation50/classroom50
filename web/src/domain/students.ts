@@ -23,10 +23,13 @@ export {
 } from "./students/retireEmailInvite"
 export {
   dismissFailedInvitation,
+  reinviteEmailRows,
   reinviteUnlinkedRow,
+  type EmailReinviteTarget,
+  type ReinviteEmailRowsInput,
   type ReinviteUnlinkedRowInput,
   type ReinviteUnlinkedRowResult,
-} from "./students/reinviteUnlinkedRow"
+} from "./students/emailReinvite"
 export {
   addStudentToClassroom,
   addStudentToClassroomWithConflictRetry,

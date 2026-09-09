@@ -20,6 +20,9 @@ import {
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
 import {
+  dismissFailedInvitation,
+  inviteRosterStudents,
+  reinviteEmailRows,
   resendClassroomInvite,
   retireEmailInvites,
   removeUnlinkedRows,
@@ -94,10 +97,10 @@ const buildUnenrollResult = (
 }
 
 // Roster multi-select actions: the toolbar's selection cluster (count + one
-// "Actions" menu with Resend / Cancel invite / Unenroll + Clear), shown only
-// while rows are selected. Owns one progress -> results <dialog> shared by all
-// three runs. On completion it calls onDone so the page can refresh its
-// roster/invite caches.
+// "Actions" menu with Send invitations / Cancel invitations / Unenroll /
+// Remove rows + Clear), shown only while rows are selected. Owns one
+// progress -> results <dialog> shared by all runs. On completion it calls
+// onDone so the page can refresh its roster/invite caches.
 const RosterBulkActionsBar = ({
   org,
   classroom,
@@ -138,9 +141,27 @@ const RosterBulkActionsBar = ({
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
-  // Only pending rows are "invitable" — the action resends their org invite.
-  // (The roster is team-driven; there are no CSV-only rows to freshly invite.)
-  const invitableSelected = pendingSelected.length
+  // "Send invitations" covers every row that can receive a fresh org invite,
+  // in three lanes that share one run and one result dialog:
+  //   - a pending row with a GitHub account: cancel + recreate by id;
+  //   - an email row (a pending email-only invite, or an unlinked address
+  //     whose invitation died or expired): cancel/dismiss + recreate by address;
+  //   - a roster row with a GitHub account that isn't in the org (including
+  //     one whose invitation expired): a fresh invite by id.
+  const loginResendSelected = pendingSelected.filter((r) => r.username)
+  const emailReinviteSelected = selectedRows.filter(
+    (r) =>
+      !r.username &&
+      r.email.trim() &&
+      (r.state === "pending" || r.state === "unlinked"),
+  )
+  const notInOrgSelected = selectedRows.filter(
+    (r) => r.state === "needs_attention_not_in_org" && r.username,
+  )
+  const invitableSelected =
+    loginResendSelected.length +
+    emailReinviteSelected.length +
+    notInOrgSelected.length
   // Cancellable = pending rows that carry an org-invitation id.
   const cancellableSelected = pendingSelected.filter(
     (r) => typeof r.invitation_id === "number",
@@ -150,9 +171,8 @@ const RosterBulkActionsBar = ({
   // ordinary rows, so filter rather than sending the whole selection and letting
   // the writer silently report the pending ones as "already removed".
   const unenrollableSelected = selectedRows.filter(canTargetForUnenroll)
-  // Unlinked rows (no GitHub identity): the ONLY bulk action for them is
-  // removing the rows themselves — invite/cancel/unenroll are all keyed on an
-  // identity or an invitation these rows don't have.
+  // Unlinked rows (no GitHub identity) are the bulk remove-rows target; the
+  // email-carrying ones are also re-invitable above.
   const unlinkedSelected = selectedRows.filter((r) => r.state === "unlinked")
 
   // Visibility is its own flag: closing must not reset phase/result/action
@@ -210,20 +230,32 @@ const RosterBulkActionsBar = ({
     setAction("invite")
     setModalOpen(true)
 
-    const invited: { key: string; label: string; detail?: string }[] = []
-    const skipped: { key: string; label: string; detail?: string }[] = []
-    const failed: { key: string; label: string; detail?: string }[] = []
-    const deferred: { key: string; label: string; detail?: string }[] = []
+    type Outcome = { key: string; label: string; detail?: string }
+    const invited: Outcome[] = []
+    const skipped: Outcome[] = []
+    const failed: Outcome[] = []
+    const deferred: Outcome[] = []
     let rateLimited = false
     let processed = 0
     const tick = (label: string) => {
       processed += 1
       bulk.setProgress({ processed, total: invitableSelected, message: label })
     }
+    // The batch lanes report their own progress from zero; offset it by the
+    // rows already done so the dialog counts up once, across lanes.
+    const laneProgress =
+      (base: number) => (p: { processed: number; message: string }) => {
+        processed = base + p.processed
+        bulk.setProgress({
+          processed,
+          total: invitableSelected,
+          message: p.message,
+        })
+      }
 
-    // Pending rows: cancel + re-send the existing invite (resendOrgInvitation).
-    for (const row of pendingSelected) {
-      const label = row.username || row.email
+    // Lane 1: pending rows with a GitHub account: cancel + recreate by id.
+    for (const row of loginResendSelected) {
+      const label = row.username
       // Once GitHub rate-limits us, stop issuing new resends (hammering only
       // extends the throttle) and defer the rest for a later retry.
       if (rateLimited) {
@@ -232,7 +264,7 @@ const RosterBulkActionsBar = ({
         continue
       }
       const inviteeId = resolveGitHubId(row.github_id)
-      if (inviteeId === null || !row.username) {
+      if (inviteeId === null) {
         skipped.push({
           key: row.key,
           label,
@@ -254,7 +286,12 @@ const RosterBulkActionsBar = ({
           role,
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })
-        else skipped.push({ key: row.key, label })
+        else
+          skipped.push({
+            key: row.key,
+            label,
+            detail: t("students.bulk.alreadyInvitedOrMember"),
+          })
       } catch (err) {
         // A 429 is deferred (never failed) — mirroring the deferred bucket in
         // inviteRosterStudents — and flips the flag so the remaining rows are
@@ -270,12 +307,127 @@ const RosterBulkActionsBar = ({
       tick(label)
     }
 
+    // Lane 2: email rows, one batch (the recipe cancels live invites and
+    // dismisses failed records before sending; see reinviteEmailRows).
+    if (emailReinviteSelected.length > 0) {
+      const byEmail = new Map(
+        emailReinviteSelected.map((r) => [r.email.trim().toLowerCase(), r]),
+      )
+      const rowFor = (email: string) => byEmail.get(email.trim().toLowerCase())
+      const outcome = (email: string, detail?: string): Outcome => {
+        const row = rowFor(email)
+        return { key: row?.key ?? email, label: email, detail }
+      }
+      const base = processed
+      if (rateLimited) {
+        for (const row of emailReinviteSelected)
+          deferred.push({ key: row.key, label: row.email })
+        processed = base + emailReinviteSelected.length
+      } else {
+        try {
+          const res = await reinviteEmailRows(client, {
+            org,
+            classroom,
+            targets: emailReinviteSelected.map((row) => ({
+              email: row.email,
+              role: sortRolesByRank(row.roles)[0] ?? "student",
+              pendingInvitationId:
+                row.state === "pending" ? row.invitation_id : undefined,
+              failedInvitationId: row.failed_invitation?.id,
+            })),
+            onProgress: laneProgress(base),
+          })
+          for (const i of res.invited) invited.push(outcome(i.email))
+          for (const s of res.skipped)
+            skipped.push(
+              outcome(s.email, t("students.bulk.alreadyInvitedOrMember")),
+            )
+          for (const f of res.failed) failed.push(outcome(f.email, f.message))
+          if (res.deferred.length > 0) rateLimited = true
+          for (const email of res.deferred) deferred.push(outcome(email))
+        } catch (err) {
+          // The batch precondition failed (archived classroom, unresolvable
+          // team, a live invite that wouldn't cancel): nothing in this lane
+          // was sent, so report every row rather than lose the lane silently.
+          log.debug("bulk re-invite: email batch failed", { err })
+          const detail = getErrorMessage(err)
+          for (const row of emailReinviteSelected)
+            failed.push({ key: row.key, label: row.email, detail })
+        }
+        processed = base + emailReinviteSelected.length
+      }
+      bulk.setProgress({
+        processed,
+        total: invitableSelected,
+        message: "",
+      })
+    }
+
+    // Lane 3: roster rows with an account that isn't in the org: fresh invite.
+    // Dismiss each attributed failed record first so the new invite is the only
+    // one on file.
+    if (notInOrgSelected.length > 0) {
+      const byLogin = new Map(
+        notInOrgSelected.map((r) => [r.username.toLowerCase(), r]),
+      )
+      const outcome = (username: string, detail?: string): Outcome => {
+        const row = byLogin.get(username.toLowerCase())
+        return { key: row?.key ?? username, label: username, detail }
+      }
+      const base = processed
+      if (rateLimited) {
+        for (const row of notInOrgSelected)
+          deferred.push({ key: row.key, label: row.username })
+        processed = base + notInOrgSelected.length
+      } else {
+        try {
+          for (const row of notInOrgSelected) {
+            if (!row.failed_invitation) continue
+            await dismissFailedInvitation(client, {
+              org,
+              invitationId: row.failed_invitation.id,
+            })
+          }
+          const res = await inviteRosterStudents(client, {
+            org,
+            classroom,
+            students: notInOrgSelected.map((row) => ({
+              username: row.username,
+              github_id: row.github_id,
+              role: sortRolesByRank(row.roles)[0] ?? "student",
+            })),
+            onProgress: laneProgress(base),
+          })
+          for (const i of res.invited) invited.push(outcome(i.username))
+          for (const s of res.skipped)
+            skipped.push(
+              outcome(s.username, t("students.bulk.alreadyInvitedOrMember")),
+            )
+          for (const f of res.failed)
+            failed.push(outcome(f.username, f.message))
+          if (res.deferred.length > 0) rateLimited = true
+          for (const username of res.deferred) deferred.push(outcome(username))
+        } catch (err) {
+          log.debug("bulk invite: not-in-org batch failed", { err })
+          const detail = getErrorMessage(err)
+          for (const row of notInOrgSelected)
+            failed.push({ key: row.key, label: row.username, detail })
+        }
+        processed = base + notInOrgSelected.length
+      }
+      bulk.setProgress({
+        processed,
+        total: invitableSelected,
+        message: "",
+      })
+    }
+
     const sections: BulkResultView["sections"] = []
     if (skipped.length > 0)
       sections.push({ title: t("students.bulk.resultSkipped"), rows: skipped })
     if (failed.length > 0)
       sections.push({ title: t("students.bulk.resultFailed"), rows: failed })
-    if (rateLimited)
+    if (deferred.length > 0)
       sections.push({
         title: t("students.bulk.resultWarnings"),
         rows: [

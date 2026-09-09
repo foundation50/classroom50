@@ -18,7 +18,7 @@ vi.mock("./rosterPrimitives", () => ({
   log: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
 }))
 
-import { reinviteUnlinkedRow } from "./reinviteUnlinkedRow"
+import { reinviteEmailRows, reinviteUnlinkedRow } from "./emailReinvite"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
 const client = {} as never
@@ -73,6 +73,7 @@ describe("reinviteUnlinkedRow", () => {
       org: "acme",
       classroom: "cs101",
       invites: [{ email: "Grace@Uni.edu", role: "student" }],
+      onProgress: undefined,
     })
   })
 
@@ -91,12 +92,26 @@ describe("reinviteUnlinkedRow", () => {
     const ids = cancelOrgInvitation.mock.calls.map(
       (c) => (c[1] as { invitationId: number }).invitationId,
     )
-    expect(ids).toEqual([79153766, 5])
-    // Known id is dismissed BEFORE the list is read, so a lost read still
-    // clears the record the teacher is looking at.
-    expect(cancelOrgInvitation.mock.invocationCallOrder[0]).toBeLessThan(
-      getOrgFailedInvitations.mock.invocationCallOrder[0]!,
+    expect(ids.sort()).toEqual([5, 79153766])
+  })
+
+  it("dismisses the attributed record even when the failed list is unreadable", async () => {
+    getOrgFailedInvitations.mockRejectedValue(
+      new GitHubAPIError({
+        status: 403,
+        url: "https://api.github.com/orgs/acme/failed_invitations",
+        message: "forbidden",
+        body: null,
+        rateLimit: emptyRateLimit,
+      }),
     )
+
+    await reinviteUnlinkedRow(client, { ...INPUT, failedInvitationId: 9 })
+
+    expect(cancelOrgInvitation).toHaveBeenCalledWith(client, {
+      org: "acme",
+      invitationId: 9,
+    })
   })
 
   it("still invites when the failed list is unreadable", async () => {
@@ -169,6 +184,74 @@ describe("reinviteUnlinkedRow", () => {
     await expect(
       reinviteUnlinkedRow(client, { ...INPUT, email: "   " }),
     ).rejects.toThrow(/email/)
+    expect(getOrgFailedInvitations).not.toHaveBeenCalled()
+    expect(bulkInviteByEmail).not.toHaveBeenCalled()
+  })
+})
+
+describe("reinviteEmailRows (batch)", () => {
+  it("cancels each pending invitation before sending, so the create isn't blocked", async () => {
+    bulkInviteByEmail.mockResolvedValue({
+      invited: [{ email: "a@x.edu", role: "student" }],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+
+    await reinviteEmailRows(client, {
+      org: "acme",
+      classroom: "cs101",
+      targets: [{ email: "a@x.edu", role: "student", pendingInvitationId: 77 }],
+    })
+
+    expect(cancelOrgInvitation).toHaveBeenCalledWith(client, {
+      org: "acme",
+      invitationId: 77,
+    })
+    expect(cancelOrgInvitation.mock.invocationCallOrder[0]).toBeLessThan(
+      bulkInviteByEmail.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it("reads the failed list once for the batch and dismisses every matching record", async () => {
+    getOrgFailedInvitations.mockResolvedValue([
+      { id: 1, email: "a@x.edu", login: null },
+      { id: 2, email: "b@x.edu", login: null },
+      { id: 3, email: "other@x.edu", login: null },
+    ])
+
+    await reinviteEmailRows(client, {
+      org: "acme",
+      classroom: "cs101",
+      targets: [
+        { email: "A@x.edu", role: "student", failedInvitationId: 1 },
+        { email: "b@x.edu", role: "student" },
+      ],
+    })
+
+    expect(getOrgFailedInvitations).toHaveBeenCalledTimes(1)
+    const ids = cancelOrgInvitation.mock.calls
+      .map((c) => (c[1] as { invitationId: number }).invitationId)
+      .sort()
+    expect(ids).toEqual([1, 2])
+    expect(bulkInviteByEmail).toHaveBeenCalledWith(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        { email: "A@x.edu", role: "student" },
+        { email: "b@x.edu", role: "student" },
+      ],
+      onProgress: undefined,
+    })
+  })
+
+  it("does nothing for an empty or blank-only batch", async () => {
+    const res = await reinviteEmailRows(client, {
+      org: "acme",
+      classroom: "cs101",
+      targets: [{ email: "  ", role: "student" }],
+    })
+    expect(res).toEqual({ invited: [], skipped: [], failed: [], deferred: [] })
     expect(getOrgFailedInvitations).not.toHaveBeenCalled()
     expect(bulkInviteByEmail).not.toHaveBeenCalled()
   })
