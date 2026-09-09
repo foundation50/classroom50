@@ -44,7 +44,7 @@ import {
 import {
   canTargetForUnenroll,
   hasStudentEnrollment,
-  rowStatusBadge,
+  rowStatusBadges,
 } from "@/util/classroomRoleUI"
 import {
   Badge,
@@ -254,7 +254,7 @@ const RosterMemberModal = ({
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
   const label = row.username || row.email
-  const status = rowStatusBadge(row)
+  const statusBadges = rowStatusBadges(row)
   // Re-sending needs SOMETHING to address the invitation to: an account (id), or
   // an address for an email-only pending invite. Excluding the latter left a
   // student whose invitation went to spam with no option but Cancel.
@@ -842,9 +842,13 @@ const RosterMemberModal = ({
               <span className="text-sm text-base-content/70">
                 {t("students.statusLabel")}
               </span>
-              <Badge size="sm" tone={status.tone}>
-                {t(status.labelKey)}
-              </Badge>
+              <div className="flex flex-wrap items-center justify-end gap-1">
+                {statusBadges.map((badge) => (
+                  <Badge key={badge.labelKey} size="sm" tone={badge.tone}>
+                    {t(badge.labelKey)}
+                  </Badge>
+                ))}
+              </div>
             </div>
             <div className="flex items-start justify-between gap-3 px-4 py-2.5">
               <span className="text-sm text-base-content/70">

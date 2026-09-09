@@ -65,28 +65,32 @@ export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
   unlinked: "students.statusUnlinked",
 }
 
-// The status chip for one row. A stranded row whose last invitation GitHub
-// recorded as failed says so ("Invitation expired") instead of the bare state,
-// since that is the fact the teacher needs to act on. Both surfaces (table and
-// modal) go through this so the chip can't disagree between them.
-export function rowStatusBadge(row: TeamRosterRow): {
-  labelKey: string
-  tone: BadgeTone
-} {
+// The status chips for one row: the enrollment state, plus GitHub's failed
+// record when the roster attributed one ("Invitation expired" beside
+// "Unlinked" or "Not in organization"). The failure comes first because it is
+// the fact to act on; the state stays because it still names what is missing
+// (an account to link, an org membership) and is what the status filter keys
+// on. Both surfaces (table and modal) go through this so the chips can't
+// disagree between them.
+export type RowStatusBadge = { labelKey: string; tone: BadgeTone }
+
+export function rowStatusBadges(row: TeamRosterRow): RowStatusBadge[] {
+  const badges: RowStatusBadge[] = []
   const failed = row.failed_invitation
   if (failed) {
-    return {
+    badges.push({
       labelKey:
         failed.kind === "expired"
           ? "students.statusInviteExpired"
           : "students.statusInviteFailed",
       tone: "error",
-    }
+    })
   }
-  return {
+  badges.push({
     labelKey: STATE_LABEL_KEY[row.state],
     tone: STATE_BADGE_TONE[row.state],
-  }
+  })
+  return badges
 }
 
 // i18n label key per updatable roster metadata field, used by the CSV import

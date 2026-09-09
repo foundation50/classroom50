@@ -88,4 +88,52 @@ describe("filterRosterRows", () => {
       filterRosterRows(rows, { ...base, query: "prof" }).map((r) => r.username),
     ).toEqual(["prof"])
   })
+
+  // Expired rows keep their state, so they appear under BOTH the state filter
+  // and the cross-state "Invitation expired" option.
+  it("'invite_expired' gathers expired rows across states; state filters still include them", () => {
+    const expired = (over: Partial<TeamRosterRow>) =>
+      row({
+        roles: ["student"],
+        failed_invitation: {
+          id: 1,
+          kind: "expired",
+          failed_at: null,
+          reason: null,
+        },
+        ...over,
+      })
+    const mixed: TeamRosterRow[] = [
+      expired({ key: "e1", email: "e1@x.edu", state: "unlinked" }),
+      expired({
+        key: "e2",
+        username: "mona",
+        state: "needs_attention_not_in_org",
+      }),
+      row({
+        key: "u",
+        email: "u@x.edu",
+        roles: ["student"],
+        state: "unlinked",
+      }),
+      row({
+        key: "b",
+        email: "b@x.edu",
+        roles: ["student"],
+        state: "unlinked",
+        failed_invitation: {
+          id: 2,
+          kind: "failed",
+          failed_at: null,
+          reason: "Email bounced",
+        },
+      }),
+    ]
+    const keys = (f: RosterFilterInput["statusFilter"]) =>
+      filterRosterRows(mixed, { ...base, statusFilter: f }).map((r) => r.key)
+
+    expect(keys("invite_expired")).toEqual(["e1", "e2"])
+    expect(keys("unlinked")).toEqual(["e1", "u", "b"])
+    expect(keys("needs_attention_not_in_org")).toEqual(["e2"])
+  })
 })

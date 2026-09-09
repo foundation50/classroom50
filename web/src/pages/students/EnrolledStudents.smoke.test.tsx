@@ -264,8 +264,16 @@ describe("EnrolledStudents — rendered phase views", () => {
       ],
     })
     render(renderView())
+    // The expired row carries BOTH chips: the failure, and the state that still
+    // names what is missing (an account to link). Two unlinked rows -> two
+    // "Unlinked" chips; one "Invitation expired".
     expect(screen.getByText("students.statusInviteExpired")).not.toBeNull()
-    expect(screen.getByText("students.statusUnlinked")).not.toBeNull()
+    expect(screen.getAllByText("students.statusUnlinked")).toHaveLength(2)
+    // And the status filter offers the cross-state option only now that such
+    // a row exists.
+    expect(
+      screen.getByRole("option", { name: "students.filterInviteExpired" }),
+    ).not.toBeNull()
   })
 
   // Composed wiring: exercises the useRosterAutoSync seam through

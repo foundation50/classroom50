@@ -531,6 +531,7 @@
     "filterNeedsAttentionInOrg": "Needs a role",
     "filterNeedsAttentionNotInOrg": "Not in organization",
     "filterUnlinked": "Unlinked",
+    "filterInviteExpired": "Invitation expired",
     "searchPlaceholder": "Search members",
     "searchLabel": "Search members by name, username, or email",
     "filterShowLabel": "Filter members by status or role",

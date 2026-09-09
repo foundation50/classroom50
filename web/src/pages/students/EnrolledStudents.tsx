@@ -51,6 +51,7 @@ import {
 } from "@/util/classroomRoleUI"
 import {
   filterRosterRows,
+  hasExpiredInvite,
   NO_SECTION,
   type RoleFilter,
   type StatusFilter,
@@ -392,8 +393,13 @@ const EnrolledStudents = ({
   // Status-filter options; hide "Pending" when invites are owner-only and this
   // viewer can't read them (avoids a dead, always-empty filter). The two
   // needs-attention options only exist when org membership is known (else those
-  // rows are suppressed, so the filters would be dead). "Unlinked" appears only
-  // while such rows exist — most classrooms never have any.
+  // rows are suppressed, so the filters would be dead). "Unlinked" and
+  // "Invitation expired" appear only while such rows exist — most classrooms
+  // never have any.
+  const expiredCount = useMemo(
+    () => rows.filter(hasExpiredInvite).length,
+    [rows],
+  )
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: "all", label: t("students.filterAll") },
     { value: "enrolled", label: t("students.filterEnrolled") },
@@ -414,6 +420,14 @@ const EnrolledStudents = ({
       : []),
     ...(counts.unlinked > 0 || statusFilter === "unlinked"
       ? [{ value: "unlinked" as const, label: t("students.filterUnlinked") }]
+      : []),
+    ...(expiredCount > 0 || statusFilter === "invite_expired"
+      ? [
+          {
+            value: "invite_expired" as const,
+            label: t("students.filterInviteExpired"),
+          },
+        ]
       : []),
   ]
 

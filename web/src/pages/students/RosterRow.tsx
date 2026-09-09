@@ -7,7 +7,7 @@ import {
   CellPlaceholder,
   GitHubIdentity,
 } from "@/components/memberList/memberPresentation"
-import { rowStatusBadge } from "@/util/classroomRoleUI"
+import { rowStatusBadges } from "@/util/classroomRoleUI"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import { ClickableTr } from "@/lib/motionComponents"
 import type { TeamRosterRow } from "@/util/teamRoster"
@@ -58,7 +58,7 @@ export const RosterRow = ({
     row.state !== "needs_attention_not_in_org" &&
     row.roles.length > 0
   const section = row.section.trim()
-  const status = rowStatusBadge(row)
+  const statusBadges = rowStatusBadges(row)
 
   return (
     <ClickableTr className="group/row hover:bg-base-200" onClick={open}>
@@ -116,11 +116,20 @@ export const RosterRow = ({
         </td>
       ) : null}
       <td>
-        {/* Same status recipe as the detail modal (rowStatusBadge), enrolled
+        {/* Same status recipe as the detail modal (rowStatusBadges), enrolled
             included, so the table and the modal never disagree about a row. */}
-        <Badge size="sm" tone={status.tone} className="whitespace-nowrap">
-          {t(status.labelKey)}
-        </Badge>
+        <div className="flex flex-wrap items-center gap-1">
+          {statusBadges.map((badge) => (
+            <Badge
+              key={badge.labelKey}
+              size="sm"
+              tone={badge.tone}
+              className="whitespace-nowrap"
+            >
+              {t(badge.labelKey)}
+            </Badge>
+          ))}
+        </div>
       </td>
       <td className="w-0 ps-2">
         <div className="flex items-center justify-end">
