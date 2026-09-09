@@ -1,14 +1,21 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PlusIcon, SignOutIcon, XCircleIcon } from "@/components/ui/icons"
+import {
+  PaperAirplaneIcon,
+  PlusIcon,
+  SignOutIcon,
+  XCircleIcon,
+} from "@/components/ui/icons"
 
 import { DropdownMenu, FormField, Select } from "@/components/ui"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
 import type { GitHubUser } from "@/github-core/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { canTargetForUnenroll } from "@/util/classroomRoleUI"
+import { resolveGitHubId } from "@/util/students"
 import type { OrgMembersBulkOutcome } from "@/hooks/useOrgMembersCacheSync"
 import { useBulkAddToClassroom } from "@/hooks/mutations/useBulkAddToClassroom"
+import { useBulkInviteMembersToOrg } from "@/hooks/mutations/useBulkInviteMembersToOrg"
 import { useBulkRemoveFromClassroom } from "@/hooks/mutations/useBulkRemoveFromClassroom"
 import { useBulkRemoveFromOrg } from "@/hooks/mutations/useBulkRemoveFromOrg"
 import { ConfirmModal } from "@/components/modals"
@@ -18,6 +25,7 @@ import { BulkRunModal, type BulkResultView } from "@/components/bulk/resultView"
 import { useBulkRun } from "@/components/bulk/useBulkRun"
 import {
   buildAddResult,
+  buildInviteResult,
   buildOrgRemoveResult,
   buildRemoveResult,
 } from "@/pages/orgMembers/bulkResults"
@@ -65,15 +73,16 @@ const BulkActionsBar = ({
 }) => {
   const { t } = useTranslation()
   const bulkAdd = useBulkAddToClassroom(org)
+  const bulkInvite = useBulkInviteMembersToOrg(org)
   const bulkRemove = useBulkRemoveFromClassroom(org)
   const bulkRemoveOrg = useBulkRemoveFromOrg(org)
 
   // The classroom a menu action targets: `target` is the config-repo path
   // (what the writers key on); `targetName` the display name copy shows.
   const [target, setTarget] = useState("")
-  const [action, setAction] = useState<"add" | "remove" | "remove-org" | null>(
-    null,
-  )
+  const [action, setAction] = useState<
+    "add" | "invite" | "remove" | "remove-org" | null
+  >(null)
   const bulk = useBulkRun()
   const { progress } = bulk
   // Gates the destructive remove behind a confirmation. Scope is the menu
@@ -83,8 +92,9 @@ const BulkActionsBar = ({
   const [removeScope, setRemoveScope] = useState<"classroom" | "org">(
     "classroom",
   )
-  // Gates the bulk add (org invite + classroom enroll) behind a confirmation.
+  // Gates the bulk add (classroom enroll) behind a confirmation.
   const [confirmingAdd, setConfirmingAdd] = useState(false)
+  const [confirmingInvite, setConfirmingInvite] = useState(false)
   // The #664 opt-in: escalate the remove from the picked classroom to the
   // whole organization.
   const [alsoRemoveFromOrg, setAlsoRemoveFromOrg] = useState(false)
@@ -99,6 +109,13 @@ const BulkActionsBar = ({
   // only a member with a username can be removed from the org (the DELETE is
   // keyed by username).
   const addableRows = selectedRows.filter((row) => row.isMember)
+  // Invitable = on a roster, not a member, with a usable github_id (the row
+  // button's rule). Pending and unlinked rows are handled from the roster.
+  const invitableRows = selectedRows.filter(
+    (row) =>
+      row.classification === "on-roster-not-member" &&
+      resolveGitHubId(row.github_id) !== null,
+  )
   const classroomRemovableRows = selectedRows.filter(
     (row) =>
       canTargetForUnenroll(row) && row.classrooms.some((a) => !a.archived),
@@ -147,16 +164,28 @@ const BulkActionsBar = ({
     setModalOpen(false)
   }
 
-  const run = async (which: "add" | "remove" | "remove-org") => {
+  const run = async (which: "add" | "invite" | "remove" | "remove-org") => {
     if (selectedRows.length === 0) return
-    if (which !== "remove-org" && !target) return
+    if ((which === "add" || which === "remove") && !target) return
     if (!bulk.begin(selectedRows.length, t("orgMembers.bulk.starting"))) return
     setAction(which)
     setModalOpen(true)
 
     try {
       let result: BulkResultView
-      if (which === "add") {
+      if (which === "invite") {
+        const res = await bulkInvite.mutateAsync({
+          rows: selectedRows,
+          onProgress: bulk.setProgress,
+        })
+        result = buildInviteResult(res, t)
+        onDone({
+          action: "invite",
+          affectedKeys: res.outcomes
+            .filter((o) => o.status === "invited")
+            .map((o) => o.key),
+        })
+      } else if (which === "add") {
         const res = await bulkAdd.mutateAsync({
           classroom: target,
           rows: selectedRows,
@@ -219,6 +248,24 @@ const BulkActionsBar = ({
           })}
           onClearSelection={onClearSelection}
         >
+          <DropdownMenu.Item
+            icon={PaperAirplaneIcon}
+            label={withCount(
+              t("orgMembers.bulk.sendInvitations"),
+              invitableRows.length,
+            )}
+            disabled={invitableRows.length === 0}
+            title={
+              invitableRows.length === 0
+                ? t("orgMembers.bulk.inviteNoneInvitable")
+                : t("orgMembers.bulk.inviteSelected", {
+                    count: invitableRows.length,
+                  })
+            }
+            onSelect={() =>
+              beginAction(invitableRows, () => setConfirmingInvite(true))
+            }
+          />
           <DropdownMenu.Item
             icon={PlusIcon}
             label={withCount(
@@ -315,6 +362,26 @@ const BulkActionsBar = ({
       />
 
       <ConfirmModal
+        open={confirmingInvite}
+        tone="warning"
+        needsConfirm={false}
+        title={t("orgMembers.bulk.confirmInviteTitle", {
+          count: invitableRows.length,
+        })}
+        description={t("orgMembers.bulk.confirmInviteBody", {
+          count: invitableRows.length,
+          org,
+        })}
+        confirmLabel={t("orgMembers.bulk.sendInvitations")}
+        confirmDisabled={invitableRows.length === 0}
+        onConfirm={async () => {
+          setConfirmingInvite(false)
+          deferRun(() => run("invite"))
+        }}
+        onClose={() => setConfirmingInvite(false)}
+      />
+
+      <ConfirmModal
         open={confirmingAdd}
         tone="warning"
         needsConfirm={false}
@@ -379,15 +446,17 @@ const BulkActionsBar = ({
         onClose={closeModal}
         run={bulk}
         title={
-          action === "remove-org"
-            ? t("orgMembers.bulk.removeOrgTitle", { org })
-            : action === "remove"
-              ? t("orgMembers.bulk.removeTitle", {
-                  classroom: targetName,
-                })
-              : t("orgMembers.bulk.addTitle", {
-                  classroom: targetName,
-                })
+          action === "invite"
+            ? t("orgMembers.bulk.inviteTitle", { org })
+            : action === "remove-org"
+              ? t("orgMembers.bulk.removeOrgTitle", { org })
+              : action === "remove"
+                ? t("orgMembers.bulk.removeTitle", {
+                    classroom: targetName,
+                  })
+                : t("orgMembers.bulk.addTitle", {
+                    classroom: targetName,
+                  })
         }
         processedCaption={t("orgMembers.bulk.progressProcessed", {
           processed: progress.processed,

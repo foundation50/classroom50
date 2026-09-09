@@ -1,6 +1,7 @@
 import type { TFunction } from "i18next"
 
 import type { BulkAddToClassroomResult } from "@/domain/orgMembers/bulkAddToClassroom"
+import type { BulkInviteMembersResult } from "@/domain/orgMembers/bulkInviteMembersToOrg"
 import type { BulkRemoveFromClassroomResult } from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import type { BulkRemoveFromOrgResult } from "@/domain/orgMembers/bulkRemoveFromOrg"
 import type { BulkResultView } from "@/components/bulk/resultView"
@@ -181,6 +182,61 @@ export const buildOrgRemoveResult = (
       count: removed.length,
       org,
     }),
+    sections,
+  }
+}
+
+export const buildInviteResult = (
+  res: BulkInviteMembersResult,
+  t: TFunction,
+): BulkResultView => {
+  const by = (status: BulkInviteMembersResult["outcomes"][number]["status"]) =>
+    res.outcomes.filter((o) => o.status === status)
+  const sections: BulkResultView["sections"] = []
+  const skipped = by("skipped")
+  if (skipped.length > 0) {
+    sections.push({
+      title: t("orgMembers.bulk.resultSkipped"),
+      rows: skipped.map((o) => ({
+        key: o.key,
+        label: o.label,
+        // Stable reason tokens -> copy; anything else is shown as is.
+        detail: o.detail
+          ? t(`orgMembers.bulk.inviteSkipReason.${o.detail}`, {
+              defaultValue: o.detail,
+            })
+          : undefined,
+      })),
+    })
+  }
+  const failed = by("failed")
+  if (failed.length > 0) {
+    sections.push({
+      title: t("orgMembers.bulk.resultFailed"),
+      rows: failed.map((o) => ({
+        key: o.key,
+        label: o.label,
+        detail: o.detail,
+      })),
+    })
+  }
+  const deferred = by("deferred")
+  if (deferred.length > 0) {
+    sections.push({
+      title: t("orgMembers.bulk.resultWarnings"),
+      rows: [
+        {
+          key: "rate-limited",
+          label: t("orgMembers.bulk.inviteRateLimited", {
+            sent: res.invitedCount,
+          }),
+        },
+        ...deferred.map((o) => ({ key: o.key, label: o.label })),
+      ],
+    })
+  }
+  return {
+    headline: t("orgMembers.bulk.invitedHeadline", { count: res.invitedCount }),
     sections,
   }
 }

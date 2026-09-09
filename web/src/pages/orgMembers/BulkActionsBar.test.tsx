@@ -67,6 +67,10 @@ const bulkRemoveFromOrg = vi.fn()
 vi.mock("@/hooks/mutations/useBulkRemoveFromOrg", () => ({
   useBulkRemoveFromOrg: () => ({ mutateAsync: bulkRemoveFromOrg }),
 }))
+const bulkInviteMembers = vi.fn()
+vi.mock("@/hooks/mutations/useBulkInviteMembersToOrg", () => ({
+  useBulkInviteMembersToOrg: () => ({ mutateAsync: bulkInviteMembers }),
+}))
 
 import BulkActionsBar from "./BulkActionsBar"
 import type { OrgMemberRow } from "@/util/orgMembers"
@@ -296,5 +300,44 @@ describe("BulkActionsBar — destructive routing", () => {
 
     fireEvent.click(menuItem("orgMembers.bulk.removeFromClassroomMenu"))
     expect([...onRetainSelection.mock.calls[0]![0]]).toEqual(["ada"])
+  })
+
+  it("sends invitations to the not-in-org rows only, narrowing the selection first", async () => {
+    bulkInviteMembers.mockResolvedValue({
+      outcomes: [{ key: "left", label: "left", status: "invited" }],
+      invitedCount: 1,
+      rateLimited: false,
+    })
+    const onDone = vi.fn()
+    const onRetainSelection = vi.fn()
+    const left = row({
+      username: "left",
+      github_id: "7",
+      isMember: false,
+      classification: "on-roster-not-member",
+    })
+    const pending = row({
+      username: "pend",
+      github_id: "8",
+      isMember: false,
+      classification: "invitation-pending",
+    })
+    renderBar([ada, left, pending], { onDone, onRetainSelection })
+
+    const entry = menuItem("orgMembers.bulk.sendInvitations")
+    expect(entry.textContent).toContain("(1)")
+    fireEvent.click(entry)
+    expect([...onRetainSelection.mock.calls[0]![0]]).toEqual(["left"])
+
+    await confirmRun()
+
+    expect(bulkInviteMembers).toHaveBeenCalledTimes(1)
+    expect(bulkInviteMembers.mock.calls[0][0]).toMatchObject({
+      rows: [ada, left, pending],
+    })
+    expect(onDone).toHaveBeenCalledWith({
+      action: "invite",
+      affectedKeys: ["left"],
+    })
   })
 })

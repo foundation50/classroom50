@@ -34,6 +34,9 @@ export type OrgMembersBulkOutcome =
       affectedKeys: string[]
       unenrolled: Array<{ key: string; classrooms: string[] }>
     }
+  // Bulk org invitations: only invitation state changed (no roster or team
+  // write), so this is the single-invite refresh over the batch.
+  | { action: "invite"; affectedKeys: string[] }
 
 export interface OrgMembersCacheSync {
   // After a single org-level removal. `removed` false = the DELETE failed, so
@@ -245,6 +248,10 @@ export function useOrgMembersCacheSync(
   const afterBulkRun = useCallback<OrgMembersCacheSync["afterBulkRun"]>(
     (outcome, rows) => {
       if (!org) return
+      if (outcome.action === "invite") {
+        afterInvite()
+        return
+      }
       const rowByKey = new Map(rows.map((r) => [r.key, r]))
 
       if (outcome.action === "remove-org") {
@@ -295,6 +302,7 @@ export function useOrgMembersCacheSync(
     [
       org,
       queryClient,
+      afterInvite,
       optimisticRemove,
       optimisticAdd,
       optimisticRemoveFromMembers,
