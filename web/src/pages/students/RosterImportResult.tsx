@@ -18,7 +18,7 @@ type ImportResultSectionRow = {
 // handle on a screen that reports both.
 const emailInviteSections = (
   result: BulkInviteByEmailResult,
-  // Addresses the upload left alone because their invitation is still live.
+  // Left alone by the upload: their invitation is still live.
   alreadyPending: readonly string[],
   t: (key: string) => string,
   titles: {
@@ -131,7 +131,7 @@ export const RosterImportResult = ({
   // Addresses linked to a verified member of a previous classroom and enrolled
   // directly instead of invited.
   linked?: { email: string; login: string; classroom: string }[]
-  // Addresses whose invitation is still pending on the roster; nothing sent.
+  // Left alone by the upload: their invitation is still live.
   emailAlreadyPending?: string[]
 }) => {
   const { t } = useTranslation()

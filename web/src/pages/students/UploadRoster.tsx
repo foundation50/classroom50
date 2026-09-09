@@ -96,11 +96,10 @@ type UploadRosterProps = {
   // button drives file selection from there.
   open?: boolean
   onOpenChange?: (open: boolean) => void
-  // The classroom roster as the roster page sees it, so an uploaded address the
-  // roster already knows is handled by its standing: a live invitation is left
-  // alone, an expired one is replaced (and its failed record dismissed). Omit
-  // (or pass a non-owner's rows, which carry no invitation data) and every
-  // address is a plain invitation, as before.
+  // The roster page's rows, so an uploaded address the roster already knows is
+  // handled by its standing: a live invitation is left alone, a failed one is
+  // replaced. Without them (or for a non-owner, whose rows carry no invitation
+  // data) every address is a plain invitation.
   rosterRows?: readonly TeamRosterRow[]
 }
 type ImportPhase = "idle" | "preview" | "importing" | "complete" | "error"
@@ -145,7 +144,7 @@ const UploadRoster = ({
   // How many unlinked rows the completed run actually wrote (name-only rows
   // plus email rows whose invitation couldn't be sent).
   const [unlinkedKept, setUnlinkedKept] = useState(0)
-  // Addresses the completed run left alone because their invitation is live.
+  // Left alone by the completed run: their invitation was still live.
   const [emailAlreadyPending, setEmailAlreadyPending] = useState<string[]>([])
   const [parseId, setParseId] = useState(0)
   // Rows with a resolved identity (account or email), and the ones a github_id
@@ -162,11 +161,10 @@ const UploadRoster = ({
   // per parse, alongside the identity resolution below.
   const [emailLinks, setEmailLinks] = useState<ResolvedEmailLink[]>([])
   const [emailLinksDegraded, setEmailLinksDegraded] = useState(false)
-  // Linking is the default (the matched account IS the student). The teacher
-  // can decline it, but only through the inline acknowledgement below: an
-  // email invitation to someone who is already a member is skipped by GitHub,
-  // so declining leaves those rows unlinked. Every reset site returns this to
-  // false, which means "link".
+  // Linking is the default; declining goes through the inline acknowledgement
+  // below, since GitHub skips an email invitation to an existing member and the
+  // rows would stay unlinked. Reset to false (link) on a new parse, but kept
+  // across role edits: the decision doesn't depend on roles.
   const [linksDeclined, setLinksDeclined] = useState(false)
   const [confirmingUnlink, setConfirmingUnlink] = useState(false)
   // The links the completed run actually applied, for the result dialog.
@@ -424,8 +422,7 @@ const UploadRoster = ({
     setRoleChangesConfirmed(false)
     setMetadataConfirmed(false)
     setMismatchConfirmed(false)
-    // The link decision is deliberately NOT re-armed here: it doesn't depend on
-    // roles, and silently undoing an explicit decline would surprise.
+    // Not linksDeclined: it doesn't depend on roles (see its declaration).
   }, [rolesKey])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
@@ -520,14 +517,13 @@ const UploadRoster = ({
   // mismatch — it repairs the stored username. Counting only the preflight
   // buckets would leave either kind of file on a disabled "No changes to apply".
   const emailRowCount = emailRows.length
-  // The links applied at submit (none once declined). Kept as one value so the
-  // count below, the submit split, and the notice all read the same decision.
+  // The links applied at submit (none once declined): one value for the count,
+  // the split, and the notice.
   const appliedLinks = useMemo(
     () => (linksDeclined ? [] : emailLinks),
     [linksDeclined, emailLinks],
   )
-  // Addresses whose invitation is still live on the roster are not re-sent by
-  // an upload (see splitEmailRowsByLink), so they don't count as invitations.
+  // Not re-sent by an upload (see splitEmailRowsByLink), so not invitations.
   const pendingEmailCount = useMemo(() => {
     const linked = new Set(appliedLinks.map((l) => l.email))
     return emailRows.filter(
@@ -546,8 +542,7 @@ const UploadRoster = ({
     emailRowCount -
     appliedLinks.length -
     pendingEmailCount
-  // Email rows count as work except the ones with a live invitation, which
-  // the upload leaves alone: a file of only those has nothing to apply.
+  // Live-pending email rows are left alone, so they aren't work.
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
       (preflight?.enroll.length ?? 0) +
@@ -593,10 +588,9 @@ const UploadRoster = ({
     (!needsMetadataConfirm || metadataConfirmed) &&
     (!needsMismatchConfirm || mismatchConfirmed)
 
-  // Why the primary button is disabled, as the first unmet gate in the order
-  // the teacher clears them. The "no changes" case needs none: the label says
-  // it. Shown as a tooltip beside the button (a natively disabled button can't
-  // be hovered in every browser) and as the button's title where it can.
+  // The first unmet gate, in the order the teacher clears them. None for "no
+  // changes": the label says it. Shown as a tooltip beside the button (a
+  // disabled button can't be hovered in every browser) and as its title.
   const disabledReason = (() => {
     if (canProcess) return null
     if (preflighting) return t("students.uploadBlockedChecking")
@@ -820,8 +814,7 @@ const UploadRoster = ({
               <Button variant="ghost" onClick={resetToDropZone}>
                 {t("common.cancel")}
               </Button>
-              {/* tooltip-left: the bubble opens toward Cancel, not past the
-                  modal box's edge (the box clips, per the overlay rule). */}
+              {/* Opens toward Cancel so the modal box doesn't clip it. */}
               {disabledReason ? (
                 <HelpTooltip
                   help={disabledReason}
@@ -981,15 +974,11 @@ const UploadRoster = ({
                     <span>{t("students.emailInviteRosterNotice")}</span>
                   </Alert>
                 ) : null}
-                {/* Resolve-before-invite: addresses matched (and re-verified) to
-                    members of previous classrooms are linked to that account
-                    and enrolled directly; the CONCRETE bindings are listed so
-                    the teacher sees who. Linking is on by default and can be
-                    declined only through the acknowledgement panel: the box
-                    stays checked until the teacher confirms the consequence
-                    (an email invitation to a member is skipped, so the rows
-                    stay unlinked). Inline, since a nested dialog can't stack
-                    on this one. */}
+                {/* Resolve-before-invite: matched addresses are linked to their
+                    account and enrolled directly, with each binding listed.
+                    Unchecking opens an inline acknowledgement (a nested dialog
+                    can't stack on this one); the box stays checked until the
+                    teacher confirms. */}
                 {emailLinks.length > 0 ? (
                   <Alert tone="info" className="mb-4">
                     <div className="flex flex-col gap-2">

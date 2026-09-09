@@ -250,10 +250,9 @@ export async function resolveImportIdentities(
   return { rows: rowsOut, unusable }
 }
 
-// An email-identity row headed for the invite pass, carrying the role the
-// teacher assigned, any metadata the file supplied, and GitHub's failed record
-// for the address's last invitation when the roster attributed one (dismissed
-// once the fresh invitation is confirmed sent; see bulkInviteByEmail).
+// An email-identity row headed for the invite pass: the teacher's role, the
+// file's metadata, and the roster's failed record for the address, if any
+// (dismissed once the fresh invitation is sent; see bulkInviteByEmail).
 export type EmailInviteInput = {
   email: string
   role: ClassroomRole
@@ -263,10 +262,8 @@ export type EmailInviteInput = {
   failedInvitationId?: number
 }
 
-// What the classroom roster already knows about an address the upload names:
-// the row's state and, when relevant, the invitation ids behind it. Built from
-// the same TeamRosterRow the roster page renders, so the upload and the roster
-// can't disagree about whether an address is pending or expired.
+// The roster's standing for an uploaded address, from the same rows the roster
+// page renders so the two can't disagree.
 export type EmailStanding = {
   state: TeamRosterRow["state"]
   invitationId?: number
@@ -291,15 +288,12 @@ export const indexRosterByEmail = (
   return out
 }
 
-// Resolve-before-invite: split the email rows on the applied links. A linked
-// row imports as an ACCOUNT row under the verified member's current login —
-// the account pipeline enrolls/team-adds it like any other row — and its
-// address leaves the invite list. Of the rest, an address the roster shows as
-// PENDING already has a live invitation and is not sent again (a re-upload is
-// for adding people and recovering expired rows, not for re-sending every
-// outstanding invitation; the row's own Resend does that). Everything else
-// goes to the email-invite pass, carrying the failed record of an expired row
-// so the send can dismiss it. File order is preserved within each bucket.
+// Split the email rows for the send. A linked row imports as an ACCOUNT row
+// under the member's current login and leaves the invite list. Of the rest, an
+// address with a live invitation on the roster is left alone (re-sending is
+// the row's own Resend, not an upload's job); everything else is invited,
+// carrying the roster's failed record so the send can dismiss it. File order
+// is preserved within each bucket.
 export const splitEmailRowsByLink = (
   emailRows: readonly EmailImportRow[],
   emailLinks: readonly ResolvedEmailLink[],
@@ -309,7 +303,7 @@ export const splitEmailRowsByLink = (
   linkedRows: ImportRosterRow[]
   linkedEmails: { email: string; login: string; classroom: string }[]
   emailInvites: EmailInviteInput[]
-  // Addresses with a live invitation on the roster, left alone and reported.
+  // Left alone: their invitation is still live.
   alreadyPending: string[]
 } => {
   const linkByEmail = new Map(emailLinks.map((l) => [l.email, l]))

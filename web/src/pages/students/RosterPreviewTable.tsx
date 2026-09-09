@@ -107,10 +107,9 @@ const IdentityCell = ({
 }) => {
   const { t } = useTranslation()
   if (row.identity.kind === "email") {
-    // What the send will do for this address, from what the roster already
-    // knows: a live invitation is left alone; an expired one is replaced; an
-    // address on the roster with no invitation data gets a new invitation and
-    // no second row; anything else is a fresh invitation.
+    // What the send does for this address: a live invitation is left alone, a
+    // failed one is replaced, an address already on the roster gets a new
+    // invitation but no second row, anything else a fresh invitation.
     const badge =
       emailStanding?.state === "pending"
         ? { key: "students.previewAlreadyPending", tone: "neutral" as const }
@@ -176,8 +175,7 @@ export const RosterPreviewTable = ({
   // them (GitHub decides whether that is redundant), but no second roster row is
   // written, so the identity cell says so instead of implying a fresh invite.
   alreadyOnRosterKeys?: ReadonlySet<string>
-  // What the classroom roster knows about each uploaded address (keyed by
-  // lowercased email): a live or expired invitation changes what the send does.
+  // The roster's standing per uploaded address (lowercased email).
   emailStandingByEmail?: ReadonlyMap<string, EmailStanding>
   // While the preflight resolves, the per-cell changes aren't known yet: render
   // the change-bearing columns as skeletons to signal "computing changes" in

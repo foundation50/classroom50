@@ -17,9 +17,8 @@ export type EmailReinviteTarget = {
   // The failed record the roster attributed to the row (see
   // TeamRosterRow.failed_invitation), dismissed once the fresh invite is out.
   failedInvitationId?: number
-  // Row metadata for an address with no roster row yet (a roster upload):
-  // written with the pending row, since nothing else can fill it in before the
-  // student has an account. Ignored for an address already on the roster.
+  // Written with a NEW pending row (a roster upload); an address already on the
+  // roster keeps its row unchanged.
   first_name?: string
   last_name?: string
   section?: string
