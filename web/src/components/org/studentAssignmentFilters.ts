@@ -1,8 +1,9 @@
 // Pure search/filter/sort for the STUDENT per-classroom assignment list, over
-// the already-loaded published assignments plus the student's accepted-slug set.
-// No fetches, no React (mirrors assignmentList.ts) so it's testable in isolation.
-// Adds the student-only `status` dimension (accepted vs not) the teacher list has
-// no concept of, and defaults to due-soonest-first.
+// the already-loaded published assignments plus the student's accepted- and
+// submitted-slug sets. No fetches, no React (mirrors assignmentList.ts) so it's
+// testable in isolation. Adds the student-only `status` dimension (to do vs
+// accepted vs submitted) the teacher list has no concept of, and defaults to
+// due-soonest-first.
 
 import type { Assignment } from "@/types/classroom"
 import { dueDeadlineInstant } from "@/util/formatDate"
@@ -13,7 +14,20 @@ import type { StudentAssignmentSort } from "@/lib/studentAssignmentListPrefs"
 // layer) so persistence can reference it without importing components/.
 export type { StudentAssignmentSort }
 
-export type StatusFilter = "all" | "todo" | "accepted"
+// The student's standing on one assignment, as the Status column shows it.
+// "accepted" is accepted with nothing submitted yet; a submission (in the
+// assignment's submission-mode sense) promotes it to "submitted".
+export type StudentAssignmentStatus = "not-accepted" | "accepted" | "submitted"
+
+export const studentAssignmentStatus = (
+  accepted: boolean,
+  submitted: boolean,
+): StudentAssignmentStatus =>
+  submitted ? "submitted" : accepted ? "accepted" : "not-accepted"
+
+// Each option matches exactly one Status badge, so the filter never returns a
+// row whose badge reads differently from the option picked.
+export type StatusFilter = "all" | "todo" | "accepted" | "submitted"
 export type TypeFilter = "all" | "individual" | "group" | "team"
 export type DueFilter = "all" | "overdue"
 
@@ -74,14 +88,16 @@ export const isListableToStudent = (
 const matchesFilters = (
   assignment: Assignment,
   filters: StudentAssignmentFilters,
-  accepted: boolean,
+  status: StudentAssignmentStatus,
   now: number,
 ): boolean => {
+  const accepted = status !== "not-accepted"
   // Hide link-only assignments unless the student already accepted (see
   // isListableToStudent) — an accepted assignment always stays reachable.
   if (!isListableToStudent(assignment, accepted, now)) return false
-  if (filters.status === "accepted" && !accepted) return false
   if (filters.status === "todo" && accepted) return false
+  if (filters.status === "accepted" && status !== "accepted") return false
+  if (filters.status === "submitted" && status !== "submitted") return false
   if (filters.type !== "all" && assignment.mode !== filters.type) return false
   if (filters.due === "overdue") {
     const instant = dueInstant(assignment)
@@ -127,19 +143,30 @@ export function filterAndSortStudentAssignments(
     filters,
     sort,
     acceptedSlugs,
+    submittedSlugs = new Set(),
     now = Date.now(),
   }: {
     query: string
     filters: StudentAssignmentFilters
     sort: StudentAssignmentSort
     acceptedSlugs: ReadonlySet<string>
+    // Subset of acceptedSlugs with a detected submission; absent reads as none.
+    submittedSlugs?: ReadonlySet<string>
     now?: number
   },
 ): Assignment[] {
   const filtered = assignments.filter(
     (a) =>
       matchesQuery(a, query) &&
-      matchesFilters(a, filters, acceptedSlugs.has(a.slug), now),
+      matchesFilters(
+        a,
+        filters,
+        studentAssignmentStatus(
+          acceptedSlugs.has(a.slug),
+          submittedSlugs.has(a.slug),
+        ),
+        now,
+      ),
   )
   return sortAssignments(filtered, sort)
 }

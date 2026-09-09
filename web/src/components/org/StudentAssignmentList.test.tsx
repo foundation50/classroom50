@@ -72,12 +72,17 @@ vi.mock("@/components/ui", async (importOriginal) => {
 const pagesAssignments = vi.fn()
 const orgRepos = vi.fn()
 const studentClassrooms = vi.fn()
+const submittedAssignments = vi.fn()
 
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: (...args: unknown[]) => pagesAssignments(...args),
 }))
 vi.mock("@/hooks/useGetMyOrgRepos", () => ({
   default: (...args: unknown[]) => orgRepos(...args),
+}))
+vi.mock("@/hooks/useMySubmittedAssignments", () => ({
+  useMySubmittedAssignments: (...args: unknown[]) =>
+    submittedAssignments(...args),
 }))
 vi.mock("@/hooks/useStudentClassrooms", () => ({
   useStudentClassrooms: () => studentClassrooms(),
@@ -116,7 +121,13 @@ beforeEach(() => {
   pagesAssignments.mockReset()
   orgRepos.mockReset()
   studentClassrooms.mockReset()
+  submittedAssignments.mockReset()
   studentClassrooms.mockReturnValue({ classrooms: [{ classroom: "cs" }] })
+  // Nothing submitted unless a spec says so.
+  submittedAssignments.mockReturnValue({
+    submittedSlugs: new Set(),
+    isPending: false,
+  })
   // View mode + sort persist in localStorage; clear so one test's toggle
   // doesn't bleed the stored view into another's default-view assertion.
   globalThis.localStorage?.clear()
@@ -149,6 +160,102 @@ describe("StudentAssignmentList", () => {
       screen.getAllByText("assignments.discover.notAccepted"),
     ).toHaveLength(1)
     expect(screen.getAllByText("assignments.discover.accepted")).toHaveLength(1)
+  })
+
+  it("shows Submitted once the accepted repo has a submission, reading the repo acceptance resolved", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1"), assignment("hw2")],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
+    submittedAssignments.mockReturnValue({
+      submittedSlugs: new Set(["hw1"]),
+      isPending: false,
+    })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    // The submission read is scoped to exactly the accepted repos.
+    expect(submittedAssignments).toHaveBeenCalledWith("acme", [
+      {
+        assignment: expect.objectContaining({ slug: "hw1" }),
+        repo: "cs-hw1-student1",
+      },
+    ])
+    expect(screen.getAllByText("assignments.discover.submitted")).toHaveLength(
+      1,
+    )
+    expect(screen.queryByText("assignments.discover.accepted")).toBeNull()
+    expect(
+      screen.getAllByText("assignments.discover.notAccepted"),
+    ).toHaveLength(1)
+    // Submitted still routes to the submission view, not back to accept.
+    expect(screen.getByText("assignments.discover.viewSubmission")).toBeTruthy()
+  })
+
+  it("hands the group repo to the submission read for an accepted team assignment", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { mode: "team" })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-group-2")] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    expect(submittedAssignments).toHaveBeenCalledWith("acme", [
+      {
+        assignment: expect.objectContaining({ slug: "hw1" }),
+        repo: "cs-hw1-group-2",
+      },
+    ])
+  })
+
+  it("keeps a past due date red only until the student submits", () => {
+    pagesAssignments.mockReturnValue({
+      data: [
+        assignment("hw1", { name: "HW1", due: "2020-01-01" }),
+        assignment("hw2", { name: "HW2", due: "2020-01-01" }),
+      ],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({
+      data: [repo("cs-hw1-student1"), repo("cs-hw2-student1")],
+    })
+    submittedAssignments.mockReturnValue({
+      submittedSlugs: new Set(["hw1"]),
+      isPending: false,
+    })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    // Both accepted, so the only red badge left is the overdue deadline of the
+    // row with nothing submitted; the submitted row shows its date as data.
+    const submittedRow = screen.getByText("HW1").closest("tr")!
+    const pendingRow = screen.getByText("HW2").closest("tr")!
+    expect(submittedRow.querySelector(".badge-error")).toBeNull()
+    expect(pendingRow.querySelector(".badge-error")).not.toBeNull()
+  })
+
+  it("holds the skeleton while the submission reads are still pending", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1")],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
+    submittedAssignments.mockReturnValue({
+      submittedSlugs: new Set(),
+      isPending: true,
+    })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    // No row paints "Accepted" only to flip to "Submitted" a beat later.
+    expect(screen.queryByText("HW1")).toBeNull()
+    expect(screen.queryByText("assignments.discover.accepted")).toBeNull()
   })
 
   it("threads the capability secret into the accept link", () => {
@@ -305,6 +412,41 @@ describe("StudentAssignmentList", () => {
 
     expect(screen.getByText("HW1")).toBeTruthy()
     expect(screen.queryByText("HW2")).toBeNull()
+  })
+
+  it("filters to submitted-only via the status control, excluding accepted-but-unsubmitted", () => {
+    pagesAssignments.mockReturnValue({
+      data: [
+        assignment("hw1", { name: "HW1", due: "2026-06-15" }),
+        assignment("hw2", { name: "HW2", due: "2026-07-15" }),
+        assignment("hw3", { name: "HW3", due: "2026-08-15" }),
+      ],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({
+      data: [repo("cs-hw1-student1"), repo("cs-hw2-student1")],
+    })
+    submittedAssignments.mockReturnValue({
+      submittedSlugs: new Set(["hw1"]),
+      isPending: false,
+    })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    const status = screen.getByLabelText(
+      "assignments.discover.toolbar.statusAria",
+    )
+    fireEvent.change(status, { target: { value: "submitted" } })
+    expect(screen.getByText("HW1")).toBeTruthy()
+    expect(screen.queryByText("HW2")).toBeNull()
+    expect(screen.queryByText("HW3")).toBeNull()
+
+    // "Accepted" means accepted with nothing in yet, matching its badge.
+    fireEvent.change(status, { target: { value: "accepted" } })
+    expect(screen.queryByText("HW1")).toBeNull()
+    expect(screen.getByText("HW2")).toBeTruthy()
+    expect(screen.queryByText("HW3")).toBeNull()
   })
 
   it("flips the due-date order from the sortable column header", () => {

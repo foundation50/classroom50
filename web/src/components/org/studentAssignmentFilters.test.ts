@@ -3,6 +3,8 @@ import {
   DEFAULT_STUDENT_FILTERS,
   DEFAULT_STUDENT_SORT,
   filterAndSortStudentAssignments,
+  studentAssignmentStatus,
+  type StatusFilter,
 } from "./studentAssignmentFilters"
 import type { Assignment } from "@/types/classroom"
 
@@ -60,24 +62,42 @@ describe("filterAndSortStudentAssignments", () => {
     expect(run(list, { query: "hw2" })).toEqual(["hw2"])
   })
 
-  it("filters by status (to-do vs accepted)", () => {
+  it("filters by status (to-do vs accepted vs submitted)", () => {
     const list = [
       a("done", { due: "2026-07-01" }),
+      a("started", { due: "2026-07-15" }),
       a("todo", { due: "2026-08-01" }),
     ]
-    const accepted = new Set(["done"])
+    const accepted = new Set(["done", "started"])
+    const submitted = new Set(["done"])
+    const withStatus = (status: StatusFilter) =>
+      run(list, {
+        filters: { ...DEFAULT_STUDENT_FILTERS, status },
+        acceptedSlugs: accepted,
+        submittedSlugs: submitted,
+      })
+    expect(withStatus("all")).toEqual(["done", "started", "todo"])
+    expect(withStatus("todo")).toEqual(["todo"])
+    // The options are disjoint, each matching its badge: "accepted" is
+    // accepted with nothing submitted yet.
+    expect(withStatus("accepted")).toEqual(["started"])
+    expect(withStatus("submitted")).toEqual(["done"])
+  })
+
+  it("treats an absent submitted set as nothing submitted", () => {
+    const list = [a("done", { due: "2026-07-01" })]
     expect(
       run(list, {
         filters: { ...DEFAULT_STUDENT_FILTERS, status: "accepted" },
-        acceptedSlugs: accepted,
+        acceptedSlugs: new Set(["done"]),
       }),
     ).toEqual(["done"])
-    expect(
-      run(list, {
-        filters: { ...DEFAULT_STUDENT_FILTERS, status: "todo" },
-        acceptedSlugs: accepted,
-      }),
-    ).toEqual(["todo"])
+  })
+
+  it("derives the status a row shows from the two sets", () => {
+    expect(studentAssignmentStatus(false, false)).toBe("not-accepted")
+    expect(studentAssignmentStatus(true, false)).toBe("accepted")
+    expect(studentAssignmentStatus(true, true)).toBe("submitted")
   })
 
   it("filters by type", () => {
