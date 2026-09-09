@@ -710,7 +710,9 @@ const RosterBulkActionsBar = ({
         description={t("students.bulk.confirmCancelBody", {
           count: cancellableSelected.length,
         })}
-        confirmLabel={t("students.bulk.cancelInvite")}
+        confirmLabel={t("students.bulk.cancelInviteConfirm", {
+          count: cancellableSelected.length,
+        })}
         onConfirm={async () => {
           setConfirmingCancel(false)
           deferRun(runCancel)
