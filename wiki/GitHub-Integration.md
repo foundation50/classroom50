@@ -165,6 +165,33 @@ custom domain directly; server-side readers (the CLIs and Actions workflows)
 follow the redirect and are unaffected. See
 [Using a custom Pages domain](Web-Teacher-Guide#using-a-custom-pages-domain).
 
+#### Pages on student repositories
+
+An assignment's **GitHub Pages** setting (web form, or `gh teacher assignment
+add --pages`) makes each accept configure a Pages site on the student's new
+repository with `POST /repos/{owner}/{repo}/pages`, before the setup commit,
+so students never need admin access to publish. **GitHub Actions** sets
+`build_type: workflow` (your template ships the deploy workflow, with
+`pages: write` and `id-token: write` permissions); **A branch** sets
+`build_type: legacy` with the branch and folder. What GitHub requires:
+
+- **Plan**: Pages on a private repository is available on GitHub Team,
+  Enterprise Cloud, and Enterprise Server. On GitHub Free for organizations,
+  only public repositories can have a site, so pair the setting with a
+  **Public** repository visibility.
+- **Organization policy**: members must be allowed to publish Pages sites.
+  `init` turns on **Pages creation** (public) because the `classroom50`
+  repository needs it; `gh teacher audit` confirms it.
+- **Site visibility**: a private repository's site is private (visible only to
+  people with repository access) on plans that support it; a public
+  repository's site is public.
+
+Accept never fails on a refusal: the student sees why, and the teacher can
+enable the site later from the submissions page (per repository or **Enable
+GitHub Pages** for the whole assignment). Each site lives at
+`https://YOUR-ORGANIZATION.github.io/<repo>/`; an organization with an
+organization-wide custom Pages domain serves it under that domain as well.
+
 `init` also turns on the organization's **Allow GitHub Actions to create and
 approve pull requests** setting (the feedback pull request is opened by each
 student repository's workflow) and opens the `classroom50` repository's
@@ -453,6 +480,7 @@ every call.
 | GET / POST / PUT | `/user/teams`, `/orgs/{org}/teams`, `/orgs/{org}/teams/{slug}/memberships/{username}`, `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Group assignments: find your group, found one (`--new-team`), add teammates, and attach the team to the shared repository. |
 | GET / POST / PATCH | `/repos/{owner}/{repo}/git/{refs,commits,blobs,trees}` + `/branches/{branch}` | Commit the setup files and freeze the `feedback` base branch. |
 | GET / POST | `/repos/{owner}/{repo}/pulls`, `/repos/{owner}/{repo}/labels` | Open the feedback pull request at accept. |
+| POST | `/repos/{owner}/{repo}/pages` | Configure the assignment's GitHub Pages site on the new repository (when the assignment sets `pages`). |
 | GET | `/repos/{owner}/{repo}/contents/{path}` | Fetch `.gitignore` and `.github/` from the template (`submit`), and the template's pull request template. |
 
 ### `collect_scores.py` (Actions, uses `CLASSROOM50_SERVICE_TOKEN`)
