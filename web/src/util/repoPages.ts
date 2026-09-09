@@ -1,23 +1,20 @@
-// GitHub Pages helpers for STUDENT repos (the org config repo's own Pages site
-// is handled by github-core/queries/pagesReads.ts). Pure: the URL derivation
-// needs no API call, and the create-body mapper is the one place the
-// assignments.json `pages` block turns into GitHub's POST /pages body.
+// GitHub Pages helpers for STUDENT repos; the org config repo's own site lives
+// in github-core/queries/pagesReads.ts. The body mapper is the one place the
+// assignments.json `pages` block becomes GitHub's POST /pages body.
 import type { AssignmentPages } from "@/types/classroom"
 
-// The POST /repos/{owner}/{repo}/pages body. GitHub's two deploy models:
-// `workflow` (a GitHub Actions workflow publishes; `source` is not sent) and
-// `legacy` (GitHub publishes `source.branch` at `source.path`, which must be
-// "/" or "/docs").
+// The POST /repos/{owner}/{repo}/pages body: `workflow` (a GitHub Actions
+// workflow publishes; no `source`) or `legacy` (GitHub publishes
+// `source.branch` at `source.path`, "/" or "/docs").
 // https://docs.github.com/en/rest/pages/pages#create-a-github-pages-site
 export type PagesCreateBody =
   | { build_type: "workflow" }
   | { build_type: "legacy"; source: { branch: string; path: "/" | "/docs" } }
 
-// `defaultBranch` is the student repo's settled default branch, used when the
-// assignment names none (the common case). Returns null for a source this
-// release does not know (a newer writer's value): the caller skips the POST
-// rather than guess a deploy model, so the two accept clients never configure
-// different sites for the same entry (the Go mapper fails closed the same way).
+// `defaultBranch` fills an unnamed branch. Returns null for a source this
+// release does not know (a newer writer's value) so the caller skips the POST
+// instead of guessing a deploy model; the Go mapper fails closed the same way,
+// so both accept clients agree.
 export function pagesCreateBody(
   pages: AssignmentPages,
   defaultBranch: string,
@@ -38,8 +35,8 @@ export function pagesCreateBody(
   }
 }
 
-// The github.io project-site URL GitHub assigns every repo. Always valid to
-// show: on an org with a custom Pages domain github.io redirects to it.
+// The github.io project-site URL every repo gets. Safe to show even on an org
+// with a custom Pages domain: github.io redirects there.
 export function defaultRepoPagesUrl(org: string, repo: string): string {
   return `https://${org.toLowerCase()}.github.io/${repo.toLowerCase()}/`
 }

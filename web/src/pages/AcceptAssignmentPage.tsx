@@ -1381,10 +1381,9 @@ const AcceptAssignmentPage = () => {
                 </Alert>
               )}
 
-            {/* Pages disclosure (issue #919): one line that Pages is on, with the
-                explanation in a tooltip. Students may not know what Pages is,
-                and a site only exists once something is deployed, so the copy
-                must not promise a live website. */}
+            {/* Pages disclosure: one line that Pages is on, the explanation in a
+                tooltip. A site only exists once the student deploys something,
+                so the copy must not promise a live website. */}
             {assignmentData.pages &&
               !repoExistsAlready &&
               !acceptMutation.data && (

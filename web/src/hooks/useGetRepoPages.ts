@@ -7,11 +7,10 @@ import {
   type RepoPagesInfo,
 } from "@/github-core/queries"
 
-// One student repo's live GitHub Pages site (null = none configured), so the
-// manage hub can show the real URL (which reflects an org custom domain) and
-// build status. Read lazily: the hub enables it only while open and only once
-// the repo read says a site exists. Short-lived so a just-run enable flips the
-// row (the mutation also invalidates this key).
+// One student repo's live Pages site (null = none), for the manage hub's real
+// URL (which reflects an org custom domain) and build status. Read only while
+// the hub is open and the repo read says a site exists; short-lived so a
+// just-run enable flips the row (the mutation also invalidates this key).
 export function useGetRepoPages(
   org: string | undefined,
   repo: string | undefined,

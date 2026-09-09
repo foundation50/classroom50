@@ -290,8 +290,7 @@ export const RepoRowActions = ({
   // after the repo link (issue #741). Omitted for empty_repo assignments,
   // which have no Feedback PR — mirrors the hub's Review gate.
   feedbackPr?: React.ReactNode
-  // The "Open site" shortcut for a repo with a GitHub Pages site (issue #919);
-  // omitted when the repo has none.
+  // The "Open site" shortcut for a repo with a Pages site; omitted otherwise.
   pages?: React.ReactNode
   // The submission's latest release page (autograder result). When present, a
   // direct "View autograder details" shortcut links it (skipping the hub). The
@@ -397,14 +396,14 @@ export type SubmissionActionListProps = {
   // Whether the per-row Regrade action applies: config-repo write (teacher and
   // head TA). A pull-only TA can't dispatch regrade.yaml, so it is omitted.
   canRegrade?: boolean
-  // The assignment's Pages block (issue #919). When set and the repo has no
-  // site yet (repoHasPages false), the "Enable GitHub Pages" action appears.
+  // The assignment's Pages block. With it set and repoHasPages false, the
+  // "Enable GitHub Pages" action appears.
   assignmentPages?: AssignmentPages
-  // The repo's live has_pages flag (from the hub's repo read). undefined =
-  // still loading, which disables the action.
+  // The repo's live has_pages flag from the hub's repo read; undefined while
+  // loading, which hides the action.
   repoHasPages?: boolean
-  // The repo's default branch (from the hub's repo read), the branch a
-  // branch-deployed site publishes when the assignment names none.
+  // The repo's default branch from the hub's repo read: what a branch-deployed
+  // site publishes when the assignment names no branch.
   repoDefaultBranch?: string
 }
 
@@ -716,11 +715,11 @@ const ChangeVisibilityButton = ({
   )
 }
 
-// Per-row Enable GitHub Pages (issue #919): configure the assignment's Pages
-// site on one repo that missed it (accepted before the setting existed, or
-// the accept-time enable was refused). Applies immediately (a site is strictly
-// additive); a refusal reports the classified reason so the teacher knows
-// whether to make the repo public, fix org policy, or push the branch first.
+// Per-row Enable GitHub Pages: configure the assignment's site on one repo that
+// missed it (accepted before the setting existed, or refused at accept). No
+// confirm: a site is strictly additive. A refusal reports the classified reason
+// so the teacher knows whether to make the repo public, fix org policy, or wait
+// for the branch.
 const EnablePagesButton = ({
   org,
   repo,
@@ -731,8 +730,8 @@ const EnablePagesButton = ({
   org: string
   repo: string
   pages: AssignmentPages
-  // The repo's default branch; undefined while the repo read is pending, which
-  // disables the action (a branch-deployed site must name a real branch).
+  // Undefined while the repo read is pending, which disables the action (a
+  // branch-deployed site must name a real branch).
   defaultBranch?: string
   noRepo: boolean
 }) => {

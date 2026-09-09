@@ -64,9 +64,9 @@ const SubmissionDetails = ({
   // An empty_repo assignment never writes the setup marker, so there is no
   // incomplete-setup state to probe for.
   emptyRepoAssignment?: boolean
-  // The assignment configures GitHub Pages (issue #919): show a "Not enabled"
-  // row for a repo without a site. A repo WITH a site shows its row regardless
-  // (a student or teacher may have enabled it by hand).
+  // The assignment configures GitHub Pages: show a "Not enabled" row for a repo
+  // without a site. A repo with a site shows its row regardless (someone may
+  // have enabled it by hand).
   pagesConfigured?: boolean
 }) => {
   const { t } = useTranslation()
@@ -74,8 +74,7 @@ const SubmissionDetails = ({
     useGetRepoCollaborators(org, repo)
   const { data: autogradeState, isLoading: autogradeLoading } =
     useGetAutogradeState(org, repo, { enabled: canPauseAutograding })
-  // The live site (URL reflects an org custom domain; build status), read only
-  // once the repo says a site exists.
+  // The live site (URL, build status), read only once the repo says one exists.
   const { data: pagesInfo } = useGetRepoPages(org, repo, {
     enabled: repoData?.has_pages === true,
   })
@@ -159,10 +158,10 @@ const SubmissionDetails = ({
         ),
     })
   }
-  // GitHub Pages (issue #919). With a site: the live URL (GitHub's html_url
-  // reflects an org custom domain) and, when that differs, the github.io
-  // default too, since both resolve. Without one: a "Not enabled" badge, only
-  // when the assignment expects a site (the action list offers the fix).
+  // GitHub Pages. With a site: the live URL (html_url reflects an org custom
+  // domain) plus the github.io default when it differs, since both resolve.
+  // Without one: a "Not enabled" badge, only when the assignment expects a site
+  // (the action list offers the fix).
   if (repoData?.has_pages) {
     const defaultUrl = defaultRepoPagesUrl(org, repo)
     const liveUrl = pagesInfo?.html_url ?? defaultUrl

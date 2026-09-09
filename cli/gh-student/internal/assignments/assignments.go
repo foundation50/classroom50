@@ -143,15 +143,15 @@ type Entry struct {
 	// if org policy blocks a member's public create, accept retries private.
 	RepoVisibility string `json:"repo_visibility,omitempty"`
 
-	// Pages configures a GitHub Pages site on the student repo at accept time
-	// (fresh create only, best-effort) so the student never needs admin to
-	// publish. Nil = not configured. See accept.go's enablePagesStep.
+	// Pages configures a GitHub Pages site on the student repo at accept (fresh
+	// create only, best-effort) so the student never needs admin to publish.
+	// Nil = off. See accept.go's enablePagesStep.
 	Pages *Pages `json:"pages,omitempty"`
 }
 
 // Pages mirrors the assignments-v1 `pages` block. Source is
 // contract.PagesSourceWorkflow or contract.PagesSourceBranch; Branch and Path
-// only apply to the branch source (empty = the repo's default branch / "/").
+// apply only to the branch source (empty = the repo's default branch / "/").
 type Pages struct {
 	Source string `json:"source"`
 	Branch string `json:"branch,omitempty"`

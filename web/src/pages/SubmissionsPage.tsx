@@ -903,8 +903,8 @@ const SubmissionsPageContent = () => {
   }, [orgRepos, allAssignmentRepos])
 
   // This assignment's repos with a GitHub Pages site (lowercased), for the
-  // table's per-row site link (issue #919). Same derivation as
-  // publicRepoNames: has_pages rides the org repo list, no extra reads.
+  // table's per-row site link. Same derivation as publicRepoNames: has_pages
+  // rides the org repo list, so no extra reads.
   const pagesRepoNames = useMemo(() => {
     if (!orgRepos) return undefined
     const assignmentRepos = new Set(
@@ -1642,9 +1642,9 @@ const SubmissionsPageContent = () => {
                     ? () => setBulkVisibilityOpen(true)
                     : undefined
                 }
-                // Bulk enable GitHub Pages (issue #919): same gate as bulk
-                // features plus an assignment that configures Pages. The
-                // retrofit for repos accepted before the setting existed.
+                // Bulk enable GitHub Pages: same gate as bulk features, plus an
+                // assignment that configures Pages. Retrofits repos accepted
+                // before the setting existed.
                 onBulkPages={
                   isOwner &&
                   !isGroupFlavor &&

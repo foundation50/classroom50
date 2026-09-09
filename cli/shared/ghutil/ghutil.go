@@ -86,10 +86,9 @@ func IsHTTPNotFound(err error) bool {
 }
 
 // HTTPErrorMessage returns the text GitHub attached to an API error (the body
-// `message` plus any `errors[]` items), or "" when err is not an *api.HTTPError.
-// For classifying a refusal by wording, prefer this over err.Error(): the
-// latter embeds the request URL, so a repo or org whose name contains a
-// keyword (e.g. "branch") would match a check meant for the API's reason.
+// `message` plus any `errors[]` items), or "" for a non-HTTPError. Classify a
+// refusal by wording from this, not err.Error(): the latter embeds the request
+// URL, so a repo named after a keyword (e.g. "branch") would match.
 func HTTPErrorMessage(err error) string {
 	httpErr, ok := errors.AsType[*api.HTTPError](err)
 	if !ok {
@@ -273,29 +272,26 @@ func SetCollaborator(client *api.RESTClient, owner, repo, username, permission s
 	return resp.StatusCode, nil
 }
 
-// PagesSource is the branch+path half of a Pages create body (GitHub's
-// build_type "legacy"). Path must be "/" or "/docs".
+// PagesSource is the branch+path half of a Pages create body (build_type
+// "legacy"). Path must be "/" or "/docs".
 type PagesSource struct {
 	Branch string `json:"branch"`
 	Path   string `json:"path,omitempty"`
 }
 
 // PagesCreateBody is the POST /repos/{owner}/{repo}/pages body. Source is sent
-// only for BuildType "legacy"; "workflow" (a GitHub Actions workflow publishes)
-// carries no source.
+// only for BuildType "legacy"; "workflow" carries none.
 // https://docs.github.com/en/rest/pages/pages#create-a-github-pages-site
 type PagesCreateBody struct {
 	BuildType string       `json:"build_type"`
 	Source    *PagesSource `json:"source,omitempty"`
 }
 
-// PagesBodyForAssignment maps an assignments.json pages block (source is
-// contract.PagesSourceWorkflow or contract.PagesSourceBranch) onto the API
+// PagesBodyForAssignment maps an assignments.json pages block onto the API
 // body; defaultBranch fills an unset branch for the branch source. ok is false
-// for a source this release does not know (a newer writer's value): the caller
-// skips the POST rather than guess a deploy model, so the two accept clients
-// never configure different sites for the same entry (the web mapper fails
-// closed the same way).
+// for a source this release does not know (a newer writer's value) so the
+// caller skips the POST instead of guessing a deploy model; the web mapper
+// fails closed the same way, so both accept clients agree.
 func PagesBodyForAssignment(source, branch, path, defaultBranch string) (body PagesCreateBody, ok bool) {
 	buildType := contract.PagesBuildType(source)
 	switch buildType {
@@ -313,10 +309,10 @@ func PagesBodyForAssignment(source, branch, path, defaultBranch string) (body Pa
 	return PagesCreateBody{}, false
 }
 
-// EnablePages POSTs a Pages site configuration for owner/repo. Requires repo
-// admin. 201 = created (alreadyEnabled false); 409 = a site already exists,
-// treated as done and never overwritten (alreadyEnabled true). Any other
-// failure is returned for the caller to fail open or hard on.
+// EnablePages POSTs a Pages site configuration for owner/repo (needs repo
+// admin). 201 = created; 409 = a site already exists and is left untouched
+// (alreadyEnabled). Any other failure is returned for the caller to fail open
+// or hard on.
 func EnablePages(client *api.RESTClient, owner, repo string, body PagesCreateBody) (alreadyEnabled bool, err error) {
 	raw, err := json.Marshal(body)
 	if err != nil {

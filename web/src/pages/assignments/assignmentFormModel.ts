@@ -198,18 +198,17 @@ export type CreateAssignmentFormValues = {
   // Editing it later affects only repos created from then on; existing repos
   // are flipped from the submissions page.
   repo_visibility: RepoVisibility
-  // How each student repo's GitHub Pages site deploys: "off" (the default;
-  // the `pages` block is omitted on the wire), "workflow" (a GitHub Actions
-  // workflow in the template publishes), or "branch" (GitHub publishes a
-  // branch directly). Applied at accept time on fresh create only, so editing
-  // it later affects only repos created from then on; existing repos are
-  // enabled from the submissions page.
+  // How each student repo's GitHub Pages site deploys: "off" (the default; no
+  // `pages` block on the wire), "workflow" (a GitHub Actions workflow in the
+  // repo publishes), or "branch" (GitHub publishes a branch directly). Accept-
+  // time, fresh create only: editing it affects repos created from then on;
+  // existing repos are enabled from the submissions page.
   pages_source: PagesSourceChoice
   // Branch to publish for pages_source "branch"; "" = the repo's default
-  // branch at accept time. Cleared on submit otherwise.
+  // branch. Cleared on submit otherwise.
   pages_branch: string
-  // Directory to publish for pages_source "branch". Cleared on submit
-  // otherwise; "/" is the wire default and omitted.
+  // Folder to publish for pages_source "branch"; "/" is the wire default and
+  // omitted. Cleared on submit otherwise.
   pages_path: PagesPath
   // When the autograder fires: "every-push" (the default; omitted on the
   // wire) or "tag" (only submit/* tag pushes grade — the submit flows push
@@ -276,8 +275,7 @@ export function pagesToFormValues(
 }
 
 // Write mapping: the three form fields -> the wire pages block, or undefined
-// when off (the caller omits the block). branch/path ride only with the
-// "branch" source, and the "/" default is omitted.
+// when off. branch/path ride only with the "branch" source; "/" is omitted.
 export function formValuesToPages(
   value: Pick<
     CreateAssignmentFormValues,
@@ -623,12 +621,12 @@ export function validateAssignmentForm(
     )
   }
 
-  // Pages: guard the pickers, and (branch source only) a branch name GitHub
-  // would refuse: surrounding whitespace, spaces, or over the ref limit. The
-  // empty string means the repo's default branch and is valid. A bare repo is
-  // NOT rejected here: PagesField is disabled and shows Off for it while the
-  // stored value stays, so an error would land on a control the teacher cannot
-  // change; toSubmitValues clears it and buildAssignmentEntry is the backstop.
+  // Pages: guard the pickers and, for the branch source, a branch name GitHub
+  // would refuse (whitespace, over the ref limit); "" means the default branch.
+  // A bare repo is deliberately not rejected here: PagesField is disabled and
+  // shows Off while the stored value stays, so an error would land on a control
+  // the teacher cannot change. toSubmitValues clears it; buildAssignmentEntry
+  // is the backstop.
   if (!PAGES_SOURCE_CHOICES.includes(value.pages_source)) {
     errors.pages_source = t("assignments.form.validation.pagesSourceInvalid")
   } else if (value.pages_source === "branch") {
@@ -774,9 +772,8 @@ export function toSubmitValues(
     // Repo visibility is accept-time provisioning like student_permission, so
     // it is NOT cleared by any repo shape.
     repo_visibility: value.repo_visibility,
-    // Pages is accept-time provisioning too, but a bare repo has no branch to
-    // publish (the schema excludes it with empty_repo), so clear it there.
-    // branch/path only ride with the "branch" source.
+    // A bare repo has no branch to publish (the schema excludes the pair), so
+    // clear Pages there; branch/path ride only with the "branch" source.
     pages_source: isEmptyRepo ? "off" : value.pages_source,
     pages_branch:
       !isEmptyRepo && value.pages_source === "branch"

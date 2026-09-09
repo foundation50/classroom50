@@ -102,9 +102,8 @@ export function SubmissionsActionsMenu({
   // Opens the whole-assignment "Change repository visibility" modal (issue
   // #766). Same gate as onBulkFeatures; omitted otherwise.
   onBulkVisibility?: () => void
-  // Opens the whole-assignment "Enable GitHub Pages" modal (issue #919). Same
-  // gate as onBulkFeatures plus an assignment with a pages block; omitted
-  // otherwise.
+  // Opens the whole-assignment "Enable GitHub Pages" modal. Same gate as
+  // onBulkFeatures plus an assignment with a pages block; omitted otherwise.
   onBulkPages?: () => void
   // Opens the whole-assignment "Update autograding triggers" modal (retrofits
   // each repo's shim to the assignment's submission_mode). Bulk-features gate

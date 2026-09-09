@@ -467,13 +467,11 @@ function RepoVisibilityField({
   )
 }
 
-// The accept-time GitHub Pages choice (issue #919): off (default), deploy via a
-// GitHub Actions workflow the template ships, or publish a branch directly.
-// The branch source reveals the branch name (blank = the repo's default) and
-// the "/" or "/docs" directory. A bare repo has no branch to publish, so the
-// control is disabled with a hint there; toSubmitValues also clears it. On
-// edit, the accept-time-only caveat points at the submissions page for
-// existing repos.
+// The accept-time GitHub Pages choice: off (default), deploy through a GitHub
+// Actions workflow in the repo, or publish a branch directly (which reveals the
+// branch name, blank = default, and the "/" or "/docs" folder). Disabled with a
+// hint for a bare repo, which has no branch to publish; toSubmitValues clears
+// it too. On edit the hint points at the submissions page for existing repos.
 function PagesField({
   form,
   edit,

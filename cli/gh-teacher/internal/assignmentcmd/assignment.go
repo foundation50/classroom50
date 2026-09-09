@@ -394,11 +394,10 @@ func assignmentAddCmd() *cobra.Command {
 // pagesOff is the --pages value that writes no pages block.
 const pagesOff = "off"
 
-// parsePagesFlags turns the --pages / --pages-branch / --pages-path trio into
-// the entry's pages block (nil for off), rejecting branch/path with a
-// non-branch source and normalizing the wire defaults ("" branch, "/" path)
-// away. Validation of the enum values is shared with the parser
-// (assignment.ValidatePagesConfig).
+// parsePagesFlags turns --pages / --pages-branch / --pages-path into the entry's
+// pages block (nil for off), rejecting branch/path with a non-branch source and
+// collapsing the wire defaults ("" branch, "/" path). Enum validation is shared
+// with the parser (assignment.ValidatePagesConfig).
 func parsePagesFlags(source, branch, path string, branchSet, pathSet bool) (*assignment.PagesConfig, error) {
 	source = strings.TrimSpace(source)
 	if source == "" || source == pagesOff {
@@ -1081,11 +1080,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 				attemptEntry.RepoVisibility = previous.RepoVisibility
 			}
 			// pages gets the same treatment: often GUI-authored, and a silent
-			// reset to off would stop future accepters' sites from being
-			// configured. Copy so the carried block doesn't alias the previous
-			// entry. A bare repo has no branch to publish (the schema excludes
-			// the pair), so --empty-repo drops the stored block with a warning
-			// rather than failing the re-add on a flag the teacher never passed.
+			// reset to off would stop configuring future accepters' sites. Copy
+			// so the carried block doesn't alias the previous entry. A bare repo
+			// has no branch to publish (the schema excludes the pair), so
+			// --empty-repo drops the stored block with a warning instead of
+			// failing on a flag the teacher never passed.
 			if !p.PagesChanged && previous.Pages != nil {
 				if attemptEntry.EmptyRepo {
 					droppedPages = true

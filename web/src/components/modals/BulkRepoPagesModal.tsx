@@ -38,12 +38,11 @@ type BulkRepoPagesModalProps = {
   students?: Student[]
 }
 
-// Whole-assignment GitHub Pages enable (issue #919): configure the
-// assignment's site on every accepted repo in one bounded fan-out. The
-// retrofit path for repos accepted before the setting existed, or whose
-// accept-time enable was refused. A repo that already has a site counts as
-// done (409); a refusal is a failure row carrying the classified reason.
-// Sibling of BulkRepoVisibilityModal.
+// Whole-assignment GitHub Pages enable: configure the assignment's site on every
+// accepted repo in one bounded fan-out, for repos accepted before the setting
+// existed or refused at accept. A repo that already has a site counts as done
+// (409); a refusal is a failure row with the classified reason. Sibling of
+// BulkRepoVisibilityModal.
 export function BulkRepoPagesModal({
   open,
   onClose,
@@ -99,8 +98,8 @@ export function BulkRepoPagesModal({
             detail: t(PAGES_REFUSAL_KEYS.unknown, { repo }),
           }
         }
-        // A rate limit is rethrown by enableRepoPages, so it reaches
-        // runBulkFanOut's stop-and-defer instead of being reported per repo.
+        // enableRepoPages rethrows a rate limit so runBulkFanOut can stop and
+        // defer the rest instead of reporting it per repo.
         const outcome = await setPagesMutation.mutateAsync({ org, repo, body })
         if (outcome.enabled) return
         return {

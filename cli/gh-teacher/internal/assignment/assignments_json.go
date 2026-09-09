@@ -363,10 +363,10 @@ type RepoFeatures struct {
 }
 
 // PagesConfig is the GitHub Pages site configured on each student repo at
-// accept time (fresh create only). Source is contract.PagesSourceWorkflow or
-// contract.PagesSourceBranch; Branch and Path are only meaningful for the
-// branch source (empty = the repo's default branch / "/"). Closed object like
-// RepoFeatures: an unknown sub-key is a hard parse error.
+// accept (fresh create only). Source is contract.PagesSourceWorkflow or
+// contract.PagesSourceBranch; Branch and Path apply only to the branch source
+// (empty = the repo's default branch / "/"). Closed object like RepoFeatures:
+// an unknown sub-key is a hard parse error.
 type PagesConfig struct {
 	Source string `json:"source"`
 	Branch string `json:"branch,omitempty"`
@@ -374,7 +374,8 @@ type PagesConfig struct {
 }
 
 // ValidatePagesConfig checks a pages block against the schema: a known source,
-// branch/path only with the branch source, and path one of "/" or "/docs".
+// branch/path only with the branch source, a branch GitHub would accept, and a
+// path of "/" or "/docs".
 func ValidatePagesConfig(p *PagesConfig) error {
 	if p == nil {
 		return nil

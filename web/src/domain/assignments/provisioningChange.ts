@@ -50,8 +50,8 @@ type NormalizedProvisioning = {
   gradingMode: string
   student_permission: RepoPermission
   repo_visibility: RepoVisibility
-  // The pages block as a comparable string with wire defaults collapsed
-  // ("" branch = default branch, "/" path), "off" when absent.
+  // The pages block as a comparable string with wire defaults collapsed;
+  // "off" when absent.
   pages: string
 }
 

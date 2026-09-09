@@ -950,10 +950,8 @@ async function buildAssignmentEntry(
     entry.repo_features = repoFeatures
   }
 
-  // pages: validate against the schema (a known source; branch/path only with
-  // the branch source; path one of "/" or "/docs"), then write a normalized
-  // block with the wire defaults ("" branch, "/" path) collapsed away. Omitted
-  // when undefined (Pages not configured). Mirrors the CLI's ValidatePagesConfig.
+  // pages: validate like the CLI's ValidatePagesConfig, then write it with the
+  // wire defaults ("" branch, "/" path) collapsed away; omitted when off.
   if (input.pages) {
     const { source, branch, path } = input.pages
     if (!PAGES_SOURCES.includes(source)) {

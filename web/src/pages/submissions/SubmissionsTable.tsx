@@ -424,17 +424,16 @@ const SubmissionsTable = ({
   // regrade.yaml in the config repo, which needs config-repo write (teacher and
   // head TA); a pull-only TA would 403, so the page passes false for them.
   canRegrade?: boolean
-  // The assignment's Pages block (issue #919), when configured. Drives the
-  // hub's Pages status row and its per-repo "Enable GitHub Pages" action for
-  // repos accepted before the setting existed (or whose enable was refused).
+  // The assignment's Pages block, when configured. Drives the hub's Pages row
+  // and its per-repo "Enable GitHub Pages" action.
   assignmentPages?: AssignmentPages
   // Lowercased names of this assignment's repos that are currently PUBLIC
   // (derived from the org repo list). Rows whose repo is in the set show the
   // warning badge; undefined/absent renders no badges (list still loading).
   publicRepoNames?: ReadonlySet<string>
-  // Lowercased names of this assignment's repos that have a GitHub Pages site
-  // (issue #919), derived from the org repo list's has_pages. Rows in the set
-  // show an "Open site" shortcut; undefined/absent renders none.
+  // Lowercased names of this assignment's repos with a Pages site (from the org
+  // repo list's has_pages). Rows in the set show an "Open site" shortcut;
+  // undefined renders none.
   pagesRepoNames?: ReadonlySet<string>
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
@@ -584,9 +583,8 @@ const SubmissionsTable = ({
   const isPublicRepo = (repoName: string) =>
     Boolean(publicRepoNames?.has(repoName.toLowerCase()))
 
-  // The per-row "Open site" shortcut (issue #919), shown only when the repo
-  // has a Pages site. The github.io URL is derived by construction; on an org
-  // with a custom Pages domain it redirects there.
+  // The per-row "Open site" shortcut, only for a repo with a Pages site. The
+  // github.io URL is derived by construction; an org custom domain redirects.
   const pagesShortcut = (repo: string) =>
     pagesRepoNames?.has(repo.toLowerCase()) ? (
       <ActionIconLink

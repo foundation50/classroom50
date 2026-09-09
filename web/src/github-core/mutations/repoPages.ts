@@ -11,12 +11,12 @@ import type { PagesCreateBody } from "@/util/repoPages"
 
 export type { PagesCreateBody }
 
-// Why a Pages create was refused, for callers that fail open (accept, bulk):
-// - plan: the repo is private and the plan has no private Pages (GitHub Free
-//   for organizations). GitHub answers 422 or 403 mentioning upgrade/plan.
+// Why a Pages create was refused, for callers that fail open:
+// - plan: a private repo on a plan without private Pages (GitHub Free for
+//   organizations); GitHub says to upgrade or make the repo public.
 // - policy: the org blocks members from publishing Pages sites (403).
 // - branch: `source.branch` does not exist in the repo yet (422).
-// - access: the caller is not a repo admin, or the repo is invisible (404/403).
+// - access: not a repo admin, or the repo is invisible (403/404).
 export type PagesEnableReason =
   "plan" | "policy" | "branch" | "access" | "unknown"
 
@@ -32,8 +32,8 @@ const mentionsPolicy = (err: GitHubAPIError) =>
   githubErrorMentions(err, "disabled") ||
   githubErrorMentions(err, "restrict")
 
-// Order matters: the plan refusal can arrive as a 403 too, so it is tried
-// before the generic policy/access rungs.
+// Order matters: the plan refusal can arrive as a 403, so it precedes the
+// generic policy/access rungs.
 const PAGES_ENABLE_RUNGS: ErrorRung<PagesEnableReason>[] = [
   [(err) => status(422)(err) && mentionsBranch(err), "branch"],
   [mentionsPlan, "plan"],
@@ -49,13 +49,11 @@ export type EnableRepoPagesResult =
   | { enabled: true; alreadyEnabled: boolean }
   | { enabled: false; reason: PagesEnableReason; error: unknown }
 
-// Configure a repo's Pages site. 201 = created, 409 = a site already exists
-// (treated as done: the existing configuration is left alone, never overwritten
-// by a PUT, so a student's or teacher's own later change survives). A refusal
-// is returned classified rather than thrown, so accept and the bulk action can
-// fail open with a specific message. A rate limit is the one exception: it is
-// rethrown, because it is not a refusal of THIS repo and a bulk fan-out must
-// stop launching more writes on it (runBulkFanOut keys on the throw).
+// Configure a repo's Pages site. 201 = created; 409 = a site already exists and
+// is left alone (never overwritten, so a later manual change survives). A
+// refusal is returned classified rather than thrown so callers fail open with a
+// specific message. A rate limit is rethrown: it is not a refusal of this repo,
+// and runBulkFanOut stops launching writes only on a throw.
 export async function enableRepoPages(
   client: GitHubClient,
   owner: string,

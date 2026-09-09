@@ -18,13 +18,12 @@ export const PAGES_REFUSAL_KEYS: Record<PagesEnableReason, string> = {
   unknown: "submissions.rowPages.refused.unknown",
 }
 
-// Configure a student repo's GitHub Pages site after the fact (issue #919):
-// the per-repo action and the bulk action for repos accepted before the
-// assignment's Pages setting existed, or whose accept-time enable was refused.
-// A refusal resolves (classified) rather than rejecting so callers show the
-// specific reason; the caller decides what counts as a failure. Invalidates on
-// settled the caches that carry the site: the org repo list (has_pages drives
-// the row shortcut) and the per-repo Pages read (the hub's status row).
+// Configure a student repo's Pages site after accept: the per-repo and bulk
+// actions for repos accepted before the setting existed, or whose accept-time
+// enable was refused. A refusal resolves classified (the caller shows the
+// reason); a rate limit rejects (see enableRepoPages). Invalidates on settled
+// the caches that carry the site: the org repo list (has_pages drives the row
+// shortcut) and the per-repo Pages read (the hub's status row).
 export function useSetRepoPages() {
   const client = useGitHubClient()
   const queryClient = useQueryClient()

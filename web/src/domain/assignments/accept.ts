@@ -108,11 +108,9 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   // default branch, which is only known after GitHub's async template copy
   // settles (see below). Omitted for branch-agnostic (teacher-authored) shims.
   rerenderShimForBranch?: (branch: string) => string
-  // Runs once the fresh repo is readable (branch settled, head resolved) and
-  // BEFORE the accept commit, so a side effect the commit's push should see
-  // (the Pages site) is in place first. Re-invoked on a retry, so it must be
-  // idempotent; it must never throw (the accept commit is the load-bearing
-  // step, and this hook is best-effort).
+  // Runs after the fresh repo is readable and before the accept commit, so a
+  // side effect the commit's push should see (the Pages site) exists first.
+  // Re-invoked on retry, so it must be idempotent, and it must not throw.
   beforeCommit?: (settledBranch: string) => Promise<void>
   // Called once the wait has gone on long enough to be worth explaining.
   onStillInitializing?: () => void
@@ -309,9 +307,9 @@ async function provisionAcceptedRepo(params: {
   repoFeatures: RepoFeatureApply
   // Template About/Topics to copy, forwarded to the founder-access step.
   repoAboutTopics: RepoAboutTopics
-  // The assignment's Pages block to configure on the repo before the accept
-  // commit (issue #919). FRESH CREATE only: the heal/re-accept paths pass
-  // undefined so a student's own later Pages change survives.
+  // The assignment's Pages block, configured before the accept commit. Fresh
+  // create only: the heal/re-accept paths pass undefined so a student's own
+  // later Pages change survives.
   pages?: AssignmentPages
   branch: string
   metadataYaml: string
@@ -347,12 +345,11 @@ async function provisionAcceptedRepo(params: {
     onStepUpdate,
   } = params
 
-  // Pages is configured BEFORE the accept commit so that commit's push is the
-  // site's first deploy: a template's deploy workflow would otherwise fail its
-  // first run because no site existed yet. Best-effort: a refusal is remembered
-  // and shown on the setup step, never thrown (the control files matter more).
-  // A rate limit (which enableRepoPages rethrows for the bulk fan-out's sake)
-  // is caught here for the same reason and shown as "unknown".
+  // Pages goes before the accept commit so that commit's push is the site's
+  // first deploy (a deploy workflow's first run would otherwise fail: no site
+  // yet). Best-effort: any refusal, including a rate limit enableRepoPages
+  // rethrows for the bulk fan-out's sake, is remembered for the setup step's
+  // done message and never thrown.
   let pagesRefusal: PagesEnableReason | null = null
   const configurePages = pages
     ? async (settledBranch: string) => {
@@ -423,8 +420,8 @@ async function provisionAcceptedRepo(params: {
       }),
   )
 
-  // Overwrite the setup done message so the student learns the site was not
-  // configured and why (the teacher can enable it from the submissions page).
+  // Tell the student the site was not configured and why; the teacher can
+  // enable it from the submissions page.
   if (pagesRefusal) {
     onStepUpdate?.({
       id: "setup",
@@ -1301,7 +1298,7 @@ export async function acceptAssignment(params: {
       // re-applied when repairing an already-existing repo (a re-accept), so a
       // student's own later edit survives. Nothing to copy on this path.
       repoAboutTopics: {},
-      // Same again for Pages: configured on FRESH create only.
+      // Pages too: fresh create only.
       pages: undefined,
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,

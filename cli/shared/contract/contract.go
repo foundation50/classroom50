@@ -181,24 +181,23 @@ const (
 	RepoVisibilityPrivate = "private"
 	RepoVisibilityPublic  = "public"
 
-	// PagesSourceWorkflow and PagesSourceBranch are the assignment
-	// pages.source values: how each student repo's GitHub Pages site is
-	// deployed, configured at accept time on fresh create. workflow = a GitHub
-	// Actions workflow the template ships (GitHub build_type "workflow");
-	// branch = GitHub publishes a branch directly (build_type "legacy").
-	// Mirrored in the assignments-v1 schema enum and the web PAGES_SOURCES;
-	// pinned by the schema-parity tests.
+	// PagesSourceWorkflow and PagesSourceBranch are the assignment pages.source
+	// values: how each student repo's GitHub Pages site is deployed, configured
+	// at accept on fresh create. workflow = a GitHub Actions workflow in the
+	// repo publishes (GitHub build_type "workflow"); branch = GitHub publishes
+	// a branch directly (build_type "legacy"). Mirrored in the assignments-v1
+	// schema enum and the web PAGES_SOURCES; pinned by the schema-parity tests.
 	PagesSourceWorkflow = "workflow"
 	PagesSourceBranch   = "branch"
 
-	// PagesPathRoot and PagesPathDocs are the only publish directories GitHub
-	// accepts for a branch-deployed Pages site (POST /repos/{o}/{r}/pages
-	// source.path). Root is the wire default; writers omit it.
+	// PagesPathRoot and PagesPathDocs are the only folders GitHub publishes for
+	// a branch-deployed site (POST /repos/{o}/{r}/pages source.path). Root is
+	// the wire default; writers omit it.
 	PagesPathRoot = "/"
 	PagesPathDocs = "/docs"
 
-	// PagesBuildTypeWorkflow and PagesBuildTypeLegacy are GitHub's build_type
-	// values on the Pages API, which pages.source maps onto.
+	// PagesBuildTypeWorkflow and PagesBuildTypeLegacy are the Pages API's
+	// build_type values that pages.source maps onto.
 	PagesBuildTypeWorkflow = "workflow"
 	PagesBuildTypeLegacy   = "legacy"
 

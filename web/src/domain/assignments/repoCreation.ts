@@ -495,9 +495,8 @@ export type CreateAssignmentInput = {
   // inherit, true = force on, false = force off). buildAssignmentEntry omits
   // the block when no key is set; accept resolves + applies it at fresh create.
   repo_features?: RepoFeatures
-  // GitHub Pages site to configure on each student repo at accept time (fresh
-  // create only). Undefined = not configured (buildAssignmentEntry omits the
-  // block). Mirrors the CLI's --pages flags.
+  // GitHub Pages site to configure on each student repo at accept (fresh
+  // create only). Undefined = off; buildAssignmentEntry omits the block.
   pages?: AssignmentPages
   tests: AssignmentTestDraft[]
   // Assignment-level defaults for the per-test reporting options

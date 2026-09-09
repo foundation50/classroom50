@@ -172,8 +172,8 @@ export type RepoFeatures = {
   pull_requests?: boolean
 }
 
-// How each student repo's GitHub Pages site is deployed. "workflow" = a GitHub
-// Actions workflow the template ships (GitHub build_type "workflow");
+// How each student repo's GitHub Pages site is deployed: "workflow" = a GitHub
+// Actions workflow in the repo publishes (GitHub build_type "workflow");
 // "branch" = GitHub publishes a branch directly (build_type "legacy"). In
 // lockstep with the CLI's assignments-v1 schema enum and contract.PagesSources
 // (parity-tested).
@@ -184,11 +184,11 @@ export type PagesSource = (typeof PAGES_SOURCES)[number]
 export const PAGES_PATHS = ["/", "/docs"] as const
 export type PagesPath = (typeof PAGES_PATHS)[number]
 
-// The `pages` block on Assignment: configure a GitHub Pages site on each
-// student repo at accept time (fresh create only) so students never need admin
-// to publish. `branch`/`path` are only meaningful for source "branch"; absent
-// = the repo's default branch at accept time and "/". In lockstep with the
-// CLI's assignments-v1 schema and the Go PagesConfig struct (closed object).
+// The `pages` block on Assignment: a GitHub Pages site configured on each
+// student repo at accept (fresh create only), so students never need admin to
+// publish. `branch`/`path` apply only to source "branch"; absent = the repo's
+// default branch and "/". In lockstep with the CLI's assignments-v1 schema and
+// the Go PagesConfig struct (closed object).
 export type AssignmentPages = {
   source: PagesSource
   branch?: string
@@ -403,10 +403,9 @@ export type Assignment = {
   // re-accept. In lockstep with the CLI's assignments-v1 schema and the Go
   // RepoFeatures struct (`repo_features`, closed object).
   repo_features?: RepoFeatures
-  // GitHub Pages site configured on each student repo at accept time, on fresh
-  // create only, best-effort. Absent = not configured. Excluded with
-  // empty_repo. In lockstep with the CLI's assignments-v1 schema and the Go
-  // PagesConfig struct (`pages`, closed object).
+  // GitHub Pages site configured on each student repo at accept (fresh create
+  // only, best-effort). Absent = off. Excluded with empty_repo. In lockstep
+  // with the CLI's assignments-v1 schema and the Go PagesConfig struct.
   pages?: AssignmentPages
   tests?: AssignmentTest[]
   // Assignment-level defaults for the per-test reporting options

@@ -742,10 +742,9 @@ type acceptRepoParams struct {
 	// the template repo's pull_request_template.md (feedback_pr_template opt-in).
 	// Nil means the built-in body. The read is best-effort (fail-open).
 	feedbackPRTemplate *feedbackTemplateRef
-	// pages, when set, configures a GitHub Pages site on the repo before the
-	// control-files commit (issue #919). FRESH CREATE only: acceptIntoRepo
-	// clears it on the heal path so a student's later Pages change survives.
-	// Best-effort; a refusal warns and never fails accept.
+	// pages, when set, configures a GitHub Pages site before the control-files
+	// commit; see enablePagesStep. Fresh create only: acceptIntoRepo clears it
+	// on the heal path.
 	pages             *assignments.Pages
 	fullName, htmlURL string
 	alreadyExisted    bool
@@ -808,8 +807,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 		// the repair — the following setup spinner reports that with its own
 		// ✓/✗, so a failed re-provision isn't preceded by a success glyph.
 		p.createSp.Stop(fmt.Sprintf("Found incomplete setup: %s", p.fullName))
-		// Pages is fresh-create only, like repo features: never re-asserted on
-		// a repair, so a student's own later Pages change survives.
+		// Pages is fresh-create only, like repo features; see enablePagesStep.
 		p.pages = nil
 	} else {
 		p.createSp.Stop(fmt.Sprintf("Created %s", p.fullName))
@@ -902,13 +900,13 @@ func attachTeamStep(client githubapi.Client, p acceptRepoParams) error {
 	return groupteam.AttachRepo(context.Background(), client, p.org, p.teamSlug, p.repoName)
 }
 
-// enablePagesStep configures the assignment's GitHub Pages site on the repo
-// (issue #919) once the branch is readable, so the branch source exists for a
-// legacy build and the following accept commit deploys a workflow build.
-// Best-effort/fail-open: a refusal (a private repo on a plan without private
-// Pages, an org that blocks members' Pages, a missing branch) warns with what
-// to do next and never fails accept; 409 means a site already exists and is
-// left alone.
+// enablePagesStep configures the assignment's GitHub Pages site once the branch
+// is readable and before the control-files commit, so a branch source exists
+// and that commit's push is a workflow site's first deploy (a deploy workflow's
+// first run would otherwise fail with no site). Fresh create only, never
+// re-asserted on heal, so a student's own later Pages change survives.
+// Best-effort: a refusal warns with the next step and never fails accept; 409
+// means a site already exists and is left alone.
 func enablePagesStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams) {
 	if p.pages == nil {
 		return
@@ -943,17 +941,16 @@ func enablePagesStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRe
 	}
 }
 
-// studentPagesURL is the github.io project-site address GitHub assigns every
-// repo; an org custom Pages domain redirects from it.
+// studentPagesURL is the github.io project-site address every repo gets; an org
+// custom Pages domain redirects from it.
 func studentPagesURL(org, repo string) string {
 	return fmt.Sprintf("https://%s.github.io/%s/", strings.ToLower(org), strings.ToLower(repo))
 }
 
-// pagesRefusalHint names the next step for a Pages create refusal, from the
-// message GitHub attached (never err.Error(), which embeds the request URL and
-// so the repo name): a throttle, a private repo on a plan without private
-// Pages, a missing source branch, or an org Pages policy. The teacher's
-// submissions page can retry all of them.
+// pagesRefusalHint names the next step for a Pages create refusal, classified
+// from the message GitHub attached (never err.Error(), which embeds the request
+// URL and so the repo name). The teacher's submissions page can retry any of
+// them.
 func pagesRefusalHint(err error) string {
 	message := strings.ToLower(ghutil.HTTPErrorMessage(err))
 	switch {
@@ -1007,9 +1004,7 @@ func attachTeamBestEffort(client githubapi.Client, u *ui.UI, _ bool, p acceptRep
 // paths. Mirrors the GUI's provisionAcceptedRepo so CLI and GUI heal a
 // half-finished accept identically.
 func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, cfg classroomcfg.Config) error {
-	// Pages goes BEFORE the control-files commit so that commit's push is the
-	// site's first deploy (a template's deploy workflow would otherwise fail
-	// its first run against a site that does not exist yet). Best-effort.
+	// Pages goes before the control-files commit; see enablePagesStep.
 	enablePagesStep(client, u, verbose, p)
 
 	// DropFiles lands both control files in one Tree commit, waiting out
