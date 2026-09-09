@@ -373,6 +373,7 @@ const EnrolledStudents = ({
     someSelected,
     toggleSelectAll,
     deselect: deselectRow,
+    retain: retainSelection,
     clear: clearSelection,
     handleToggleRow,
     handleRowCheckboxClick,
@@ -831,6 +832,7 @@ const EnrolledStudents = ({
           }
           selectedRows={selectedRows}
           onClearSelection={clearSelection}
+          onRetainSelection={retainSelection}
           onBulkDone={onBulkDone}
           query={query}
           onQueryChange={setQuery}

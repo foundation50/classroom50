@@ -107,6 +107,7 @@ const RosterBulkActionsBar = ({
   client,
   selectedRows,
   onClearSelection,
+  onRetainSelection,
   onDone,
   disabled = false,
 }: {
@@ -115,6 +116,11 @@ const RosterBulkActionsBar = ({
   client: GitHubClient
   selectedRows: TeamRosterRow[]
   onClearSelection: () => void
+  // Narrow the page's selection to these row keys. Each action calls it with
+  // its eligible rows before opening its confirm, so the dialog's count, the
+  // rows the run touches, and the ticked checkboxes are the same set; a
+  // cancelled confirm leaves that narrowed selection in place.
+  onRetainSelection: (keys: Iterable<string>) => void
   // Called after a run completes so the page can invalidate roster + invite
   // caches. `action` distinguishes what changed; on an unenroll run the removed
   // rows are passed so the page can suppress the automatic backfills from
@@ -158,10 +164,12 @@ const RosterBulkActionsBar = ({
   const notInOrgSelected = selectedRows.filter(
     (r) => r.state === "needs_attention_not_in_org" && r.username,
   )
-  const invitableSelected =
-    loginResendSelected.length +
-    emailReinviteSelected.length +
-    notInOrgSelected.length
+  const invitableRows = [
+    ...loginResendSelected,
+    ...emailReinviteSelected,
+    ...notInOrgSelected,
+  ]
+  const invitableSelected = invitableRows.length
   // Cancellable = pending rows that carry an org-invitation id.
   const cancellableSelected = pendingSelected.filter(
     (r) => typeof r.invitation_id === "number",
@@ -178,6 +186,20 @@ const RosterBulkActionsBar = ({
   // Visibility is its own flag: closing must not reset phase/result/action
   // (close-animation note in ui/Modal); each run resets them anyway.
   const [isOpen, setModalOpen] = useState(false)
+
+  // Opening an action's confirm first narrows the selection to the rows that
+  // action can touch. The menu label already showed "(N)" against M selected;
+  // this makes the checkboxes match, so the dialog never says "5" over a table
+  // showing 12 ticks, and a cancelled confirm leaves the honest 5 behind.
+  const beginAction = (
+    eligible: TeamRosterRow[],
+    setConfirming: (open: boolean) => void,
+  ) => {
+    onRetainSelection(eligible.map((r) => r.key))
+    setConfirming(true)
+  }
+  const withCount = (label: string, count: number) =>
+    t("students.bulk.actionWithCount", { label, count })
 
   const deferRun = useDeferredRun()
 
@@ -591,7 +613,7 @@ const RosterBulkActionsBar = ({
           >
             <DropdownMenu.Item
               icon={PaperAirplaneIcon}
-              label={t("students.bulk.invite")}
+              label={withCount(t("students.bulk.invite"), invitableSelected)}
               disabled={invitableSelected === 0}
               title={
                 invitableSelected === 0
@@ -600,11 +622,14 @@ const RosterBulkActionsBar = ({
                       count: invitableSelected,
                     })
               }
-              onSelect={() => setConfirmingInvite(true)}
+              onSelect={() => beginAction(invitableRows, setConfirmingInvite)}
             />
             <DropdownMenu.Item
               icon={XCircleIcon}
-              label={t("students.bulk.cancelInvite")}
+              label={withCount(
+                t("students.bulk.cancelInvite"),
+                cancellableSelected.length,
+              )}
               disabled={cancellableSelected.length === 0}
               title={
                 cancellableSelected.length === 0
@@ -613,19 +638,26 @@ const RosterBulkActionsBar = ({
                       count: cancellableSelected.length,
                     })
               }
-              onSelect={() => setConfirmingCancel(true)}
+              onSelect={() =>
+                beginAction(cancellableSelected, setConfirmingCancel)
+              }
             />
             {/* Unenroll — destructive, so last and in its own group. */}
             <DropdownMenu.Separator />
             <DropdownMenu.Item
               icon={SignOutIcon}
-              label={t("students.bulk.unenroll")}
+              label={withCount(
+                t("students.bulk.unenroll"),
+                unenrollableSelected.length,
+              )}
               destructive
               disabled={unenrollableSelected.length === 0}
               title={t("students.bulk.unenrollSelected", {
                 count: unenrollableSelected.length,
               })}
-              onSelect={() => setConfirmingUnenroll(true)}
+              onSelect={() =>
+                beginAction(unenrollableSelected, setConfirmingUnenroll)
+              }
             />
             {/* Remove unlinked rows — the roster-only delete for rows with
                 no GitHub identity. Rendered only when the selection contains
@@ -633,12 +665,17 @@ const RosterBulkActionsBar = ({
             {unlinkedSelected.length > 0 ? (
               <DropdownMenu.Item
                 icon={TrashIcon}
-                label={t("students.bulk.removeRows")}
+                label={withCount(
+                  t("students.bulk.removeRows"),
+                  unlinkedSelected.length,
+                )}
                 destructive
                 title={t("students.bulk.removeRowsSelected", {
                   count: unlinkedSelected.length,
                 })}
-                onSelect={() => setConfirmingRemoveRows(true)}
+                onSelect={() =>
+                  beginAction(unlinkedSelected, setConfirmingRemoveRows)
+                }
               />
             ) : null}
           </BulkSelectionCluster>

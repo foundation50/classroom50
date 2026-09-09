@@ -43,6 +43,11 @@ export interface RowSelection<T> extends RangeSelection {
   someSelected: boolean
   toggleSelectAll: () => SelectAllOutcome
   deselect: (key: string) => void
+  // Keep only these keys. A bulk action narrows the selection to the rows it
+  // can act on before confirming, so the count in the dialog, the rows it
+  // runs over, and the ticked checkboxes all agree, and a cancelled confirm
+  // leaves that same narrowed set behind.
+  retain: (keys: Iterable<string>) => void
   clear: () => void
 }
 
@@ -110,6 +115,14 @@ export function useRowSelection<T>({
 
   const clear = useCallback(() => setSelectedKeys(new Set()), [])
 
+  const retain = useCallback((keys: Iterable<string>) => {
+    const keep = new Set(keys)
+    setSelectedKeys((prev) => {
+      const next = new Set([...prev].filter((key) => keep.has(key)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [])
+
   // `liveKeys` is a subset of `selectedKeys`, so sizes suffice. Setting state
   // during render (rather than in an effect) avoids a frame with a stale count.
   if (pruneMissing) {
@@ -125,6 +138,7 @@ export function useRowSelection<T>({
     someSelected,
     toggleSelectAll: toggleSelectAllRows,
     deselect,
+    retain,
     clear,
     handleToggleRow,
     handleRowCheckboxClick,

@@ -12,8 +12,12 @@ vi.mock("react-i18next", async (importOriginal) => {
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string, opts?: Record<string, unknown>) =>
-        opts && "count" in opts ? `${key}:${opts.count}` : key,
+      // `label` composes (the "(N)" menu suffix); `count` renders as a suffix.
+      t: (key: string, opts?: Record<string, unknown>) => {
+        if (opts && "label" in opts && "count" in opts)
+          return `${opts.label} (${opts.count})`
+        return opts && "count" in opts ? `${key}:${opts.count}` : key
+      },
     }),
   }
 })
@@ -26,12 +30,16 @@ vi.mock("@/components/modals", () => ({
     open: boolean
     title: string
     onConfirm: () => void
+    onClose: () => void
   }) =>
     props.open ? (
       <div data-testid="confirm-modal">
         <span>{props.title}</span>
         <button type="button" onClick={props.onConfirm}>
           confirm-run
+        </button>
+        <button type="button" onClick={props.onClose}>
+          confirm-close
         </button>
       </div>
     ) : null,
@@ -125,10 +133,12 @@ const renderBar = (
   {
     disabled = false,
     onClearSelection = vi.fn(),
+    onRetainSelection = vi.fn(),
     onDone = vi.fn(),
   }: {
     disabled?: boolean
     onClearSelection?: () => void
+    onRetainSelection?: (keys: Iterable<string>) => void
     onDone?: () => void
   } = {},
 ) =>
@@ -139,6 +149,7 @@ const renderBar = (
       client={{} as GitHubClient}
       selectedRows={selectedRows}
       onClearSelection={onClearSelection}
+      onRetainSelection={onRetainSelection}
       onDone={onDone}
       disabled={disabled}
     />,
@@ -169,13 +180,13 @@ describe("RosterBulkActionsBar — selection cluster", () => {
   it("enables each action only for the selection shapes it can act on", () => {
     renderBar([enrolled])
     const invite = screen
-      .getByText("students.bulk.invite")
+      .getByText(/^students\.bulk\.invite \(\d+\)$/)
       .closest("button") as HTMLButtonElement
     const cancel = screen
-      .getByText("students.bulk.cancelInvite")
+      .getByText(/^students\.bulk\.cancelInvite \(\d+\)$/)
       .closest("button") as HTMLButtonElement
     const unenroll = screen
-      .getByText("students.bulk.unenroll")
+      .getByText(/^students\.bulk\.unenroll \(\d+\)$/)
       .closest("button") as HTMLButtonElement
     // An enrolled row: unenrollable, but not invitable/cancellable.
     expect(invite.disabled).toBe(true)
@@ -186,7 +197,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
   it("opens the unenroll confirm from the menu and runs on confirm", async () => {
     bulkUnenrollRoster.mockResolvedValue({ outcomes: [] })
     renderBar([enrolled])
-    fireEvent.click(screen.getByText("students.bulk.unenroll"))
+    fireEvent.click(screen.getByText(/^students\.bulk\.unenroll \(\d+\)$/))
     expect(screen.getByTestId("confirm-modal")).not.toBeNull()
     await act(async () => {
       fireEvent.click(screen.getByText("confirm-run"))
@@ -204,7 +215,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
 
   it("hides an already-open confirm when disabled arms (the sync lock)", () => {
     const { rerender } = renderBar([enrolled])
-    fireEvent.click(screen.getByText("students.bulk.unenroll"))
+    fireEvent.click(screen.getByText(/^students\.bulk\.unenroll \(\d+\)$/))
     expect(screen.getByTestId("confirm-modal")).not.toBeNull()
     rerender(
       <RosterBulkActionsBar
@@ -213,6 +224,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
         client={{} as GitHubClient}
         selectedRows={[enrolled]}
         onClearSelection={vi.fn()}
+        onRetainSelection={vi.fn()}
         onDone={vi.fn()}
         disabled
       />,
@@ -227,6 +239,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
         client={{} as GitHubClient}
         selectedRows={[enrolled]}
         onClearSelection={vi.fn()}
+        onRetainSelection={vi.fn()}
         onDone={vi.fn()}
       />,
     )
@@ -238,7 +251,7 @@ describe("RosterBulkActionsBar — selection cluster", () => {
 describe("RosterBulkActionsBar — send invitations", () => {
   const inviteButton = () =>
     screen
-      .getByText("students.bulk.invite")
+      .getByText(/^students\.bulk\.invite \(\d+\)$/)
       .closest("button") as HTMLButtonElement
 
   it("is enabled for every row that can receive a fresh invite, and only those", () => {
@@ -258,9 +271,36 @@ describe("RosterBulkActionsBar — send invitations", () => {
     expect(inviteButton().disabled).toBe(true)
   })
 
-  it("counts the mixed selection across lanes in the menu title", () => {
+  it("shows the eligible count in the label against the larger selection", () => {
     renderBar([enrolled, pending, pendingEmail, expiredEmail, expiredLogin])
+    // Five selected, four invitable: the label says so before any click.
+    expect(inviteButton().textContent).toContain("students.bulk.invite (4)")
     expect(inviteButton().title).toBe("students.bulk.inviteSelected:4")
+    expect(
+      screen.getByText(/^students\.bulk\.cancelInvite \(\d+\)$/).textContent,
+    ).toContain("(2)")
+  })
+
+  it("narrows the selection to the eligible rows when the action is chosen", () => {
+    const onRetainSelection = vi.fn()
+    renderBar([enrolled, pending, pendingEmail, expiredEmail, expiredLogin], {
+      onRetainSelection,
+    })
+
+    fireEvent.click(inviteButton())
+
+    // The enrolled row is dropped; the confirm opens over exactly the four.
+    expect(onRetainSelection).toHaveBeenCalledTimes(1)
+    expect([...onRetainSelection.mock.calls[0]![0]]).toEqual([
+      pending.key,
+      pendingEmail.key,
+      expiredEmail.key,
+      expiredLogin.key,
+    ])
+    expect(screen.getByTestId("confirm-modal")).not.toBeNull()
+    // Cancelling keeps that narrowed set: nothing clears or re-widens it.
+    fireEvent.click(screen.getByText("confirm-close"))
+    expect(onRetainSelection).toHaveBeenCalledTimes(1)
   })
 
   it("routes each row to its lane with the ids the recipe must clear first", async () => {

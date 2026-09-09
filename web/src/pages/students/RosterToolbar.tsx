@@ -36,6 +36,7 @@ export function RosterToolbar({
   lastSyncChanges = null,
   selectedRows,
   onClearSelection,
+  onRetainSelection,
   onBulkDone,
   query,
   onQueryChange,
@@ -74,6 +75,7 @@ export function RosterToolbar({
   lastSyncChanges?: number | null
   selectedRows: TeamRosterRow[]
   onClearSelection: () => void
+  onRetainSelection: (keys: Iterable<string>) => void
   onBulkDone: (
     action: "unenroll" | "invite" | "cancel" | "removeRows",
     removed?: Array<Pick<TeamRosterRow, "username">>,
@@ -165,6 +167,7 @@ export function RosterToolbar({
         client={client}
         selectedRows={selectedRows}
         onClearSelection={onClearSelection}
+        onRetainSelection={onRetainSelection}
         onDone={onBulkDone}
       />
       <Toolbar.Trailing>

@@ -568,6 +568,7 @@
       "noneSelectable": "Bulk actions (send invitations, unenroll) apply to students only. Manage staff (teachers, head TAs, and TAs) in classroom Settings.",
       "selectedCount_one": "{{count}} selected",
       "selectedCount_other": "{{count}} selected",
+      "actionWithCount": "{{label}} ({{count}})",
       "unenroll": "Unenroll",
       "unenrollSelected_one": "Unenroll {{count}} student",
       "unenrollSelected_other": "Unenroll {{count}} students",
