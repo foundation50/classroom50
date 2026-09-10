@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.48.0](https://github.com/foundation50/classroom50/compare/web-v1.47.0...web-v1.48.0) (2026-09-10)
+
+
+### Features
+
+* **web:** add per-assignment GitHub Pages for student repos ([#934](https://github.com/foundation50/classroom50/issues/934)) ([36e5631](https://github.com/foundation50/classroom50/commit/36e56313455423b5c57e51f0ed5fee55cd66b4c3))
+* **web:** re-send expired invitations and link matched accounts on roster upload ([#938](https://github.com/foundation50/classroom50/issues/938)) ([7917cb2](https://github.com/foundation50/classroom50/commit/7917cb20a7b6cb1e44a9ed441f58f58e750a565b))
+* **web:** recover expired and unlinked invitations from the Roster and Members pages ([#931](https://github.com/foundation50/classroom50/issues/931)) ([a84982c](https://github.com/foundation50/classroom50/commit/a84982c96d55dcacc653624c8786ef4635c0d4af))
+
+
+### Bug Fixes
+
+* **web:** restore two visuals and eight tests the dedup PRs changed ([#923](https://github.com/foundation50/classroom50/issues/923)) ([8a66ab0](https://github.com/foundation50/classroom50/commit/8a66ab0b37ec9928c243cc302ca99ffb33ceb8e3))
+* **web:** show submission status in the student assignments list ([#939](https://github.com/foundation50/classroom50/issues/939)) ([f8cd00b](https://github.com/foundation50/classroom50/commit/f8cd00be0c64ea9e282109ea27a61c43d5e60316))
+
 ## [1.47.0](https://github.com/foundation50/classroom50/compare/web-v1.46.1...web-v1.47.0) (2026-09-08)
 
 

@@ -17,6 +17,20 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.48.0](https://github.com/foundation50/classroom50/compare/cli-v1.47.0...cli-v1.48.0) (2026-09-10)
+
+
+### Features
+
+* **web:** add per-assignment GitHub Pages for student repos ([#934](https://github.com/foundation50/classroom50/issues/934)) ([36e5631](https://github.com/foundation50/classroom50/commit/36e56313455423b5c57e51f0ed5fee55cd66b4c3))
+
+
+### Bug Fixes
+
+* **cli:** bound every GitHub API request with a client-level timeout ([#940](https://github.com/foundation50/classroom50/issues/940)) ([b1dc041](https://github.com/foundation50/classroom50/commit/b1dc041b4c8c897215a9452fba381029fa3c6569))
+* **gh-student:** add timeouts to submit's network calls ([#933](https://github.com/foundation50/classroom50/issues/933)) ([033b7fa](https://github.com/foundation50/classroom50/commit/033b7fac06331a4f0b74cec70a8fd498534c4b04))
+* **gh-teacher:** stop a stalled clone or pull from hanging download ([#941](https://github.com/foundation50/classroom50/issues/941)) ([f73ed27](https://github.com/foundation50/classroom50/commit/f73ed2748dabbe9b14ee3af09fe9257065c89d4c))
+
 ## [1.47.0](https://github.com/foundation50/classroom50/compare/cli-v1.46.1...cli-v1.47.0) (2026-09-08)
 
 
