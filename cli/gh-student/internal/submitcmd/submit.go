@@ -18,7 +18,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
 	"github.com/foundation50/classroom50-cli-shared/ghutil"
+	"github.com/foundation50/classroom50-cli-shared/gitexec"
 	"github.com/foundation50/gh-student/internal/assignments"
 	"github.com/foundation50/gh-student/internal/classroomcfg"
 	"github.com/foundation50/gh-student/internal/githubapi"
@@ -434,15 +434,9 @@ var (
 	teacherFileTimeout = 15 * time.Second
 	// Post-push ls-remote probe + tag push.
 	submitTagTimeout = 30 * time.Second
-	// git aborts an HTTPS transfer that moves under 1 byte/s for this long:
-	// catches a dead connection in seconds without failing a slow one.
-	gitStallTimeout = 30 * time.Second
-	// Ceiling on clone + push. The stall detector is HTTPS-only, so this is
-	// the SSH backstop; generous so a slow transfer never trips it.
+	// Ceiling on clone + push. gitexec's stall detector is HTTPS-only, so this
+	// is the SSH backstop; generous so a slow transfer never trips it.
 	gitNetworkTimeout = 10 * time.Minute
-	// How long Wait() may block on a killed git's pipes, which an orphaned
-	// git-remote-https still holds open.
-	cmdWaitDelay = 5 * time.Second
 )
 
 // getBounded issues a GET under its own deadline and returns the raw body.
@@ -666,18 +660,6 @@ func commitWorkTreeOnRemoteBranch(ctx context.Context, gitDir string, workTree s
 	return strings.TrimSpace(sha), nil
 }
 
-// gitCmd builds a ctx-bound git invocation with the HTTPS stall detector and
-// WaitDelay; both are no-ops for local-only subcommands.
-func gitCmd(ctx context.Context, args ...string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "git", args...)
-	cmd.Env = append(os.Environ(),
-		"GIT_HTTP_LOW_SPEED_LIMIT=1",
-		"GIT_HTTP_LOW_SPEED_TIME="+strconv.Itoa(int(gitStallTimeout/time.Second)),
-	)
-	cmd.WaitDelay = cmdWaitDelay
-	return cmd
-}
-
 // gitErr wraps a failed git run. Only a deadline is reworded; Ctrl-C also
 // cancels ctx and is not a network problem.
 func gitErr(ctx context.Context, args []string, err error) error {
@@ -694,7 +676,7 @@ func gitErr(ctx context.Context, args []string, err error) error {
 // clone and returns stdout.
 func gitOutputWithGitDir(ctx context.Context, gitDir string, args ...string) (string, error) {
 	fullArgs := append([]string{"--git-dir", gitDir}, args...)
-	out, err := gitCmd(ctx, fullArgs...).Output()
+	out, err := gitexec.Command(ctx, "git", fullArgs...).Output()
 	if err != nil {
 		return "", gitErr(ctx, fullArgs, err)
 	}
@@ -703,7 +685,7 @@ func gitOutputWithGitDir(ctx context.Context, gitDir string, args ...string) (st
 
 // runGit runs git with stdout/stderr streamed to the given writers.
 func runGit(ctx context.Context, out io.Writer, errOut io.Writer, args ...string) error {
-	cmd := gitCmd(ctx, args...)
+	cmd := gitexec.Command(ctx, "git", args...)
 	cmd.Stdout = out
 	cmd.Stderr = errOut
 	if err := cmd.Run(); err != nil {

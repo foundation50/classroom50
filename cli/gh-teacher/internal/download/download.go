@@ -8,6 +8,7 @@ package download
 
 import (
 	"bytes"
+	"context"
 	"encoding/csv"
 	"encoding/json"
 	"errors"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
+	"github.com/foundation50/classroom50-cli-shared/gitexec"
 	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
@@ -1286,8 +1288,15 @@ func cloneOrgRepo(out, errOut io.Writer, org, repo, target string, quiet, verbos
 	if quiet {
 		args = append(args, "--", "--quiet")
 	}
-	return runGitStep(exec.Command("gh", args...), out, errOut, verbose)
+	ctx, cancel := context.WithTimeout(context.Background(), repoStepTimeout)
+	defer cancel()
+	return runGitStep(ctx, gitexec.Command(ctx, "gh", args...), out, errOut, verbose)
 }
+
+// repoStepTimeout is the ceiling on one clone or pull. gitexec's stall
+// detector is HTTPS-only, so this is the SSH backstop; generous so a slow
+// transfer never trips it, but finite so one dead repo cannot hang the batch.
+const repoStepTimeout = 10 * time.Minute
 
 // pullRepo fast-forwards the clone at target with `git pull --ff-only`.
 // Fast-forward only: a teacher may have local commits (feedback, notes) and a
@@ -1313,9 +1322,11 @@ func pullRepo(out, errOut io.Writer, target string, quiet, verbose bool) error {
 	if quiet {
 		args = append(args, "--quiet")
 	}
-	cmd := exec.Command("git", args...)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	if err := runGitStep(cmd, out, errOut, verbose); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), repoStepTimeout)
+	defer cancel()
+	cmd := gitexec.Command(ctx, "git", args...)
+	cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
+	if err := runGitStep(ctx, cmd, out, errOut, verbose); err != nil {
 		return fmt.Errorf("%w (fix the clone with git, or delete %s and run again to clone it fresh)", err, target)
 	}
 	return nil
@@ -1323,8 +1334,9 @@ func pullRepo(out, errOut io.Writer, target string, quiet, verbose bool) error {
 
 // runGitStep runs a git-backed command. Verbose streams its output; otherwise
 // stdout is discarded and the stderr tail is captured so failures carry git's
-// diagnostic, not just "exit status 1".
-func runGitStep(cmd *exec.Cmd, out, errOut io.Writer, verbose bool) error {
+// diagnostic, not just "exit status 1". A deadline is reported as a stall,
+// since a killed git leaves no diagnostic of its own.
+func runGitStep(ctx context.Context, cmd *exec.Cmd, out, errOut io.Writer, verbose bool) error {
 	var stderrTail *tailWriter
 	if verbose {
 		cmd.Stdout = out
@@ -1336,6 +1348,9 @@ func runGitStep(cmd *exec.Cmd, out, errOut io.Writer, verbose bool) error {
 	}
 
 	if err := cmd.Run(); err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return fmt.Errorf("timed out after %s, the network connection appears stalled", repoStepTimeout)
+		}
 		if stderrTail != nil {
 			// Last line is git's actionable error (e.g., `fatal: ...`).
 			if msg := lastNonEmptyLine(stderrTail.String()); msg != "" {

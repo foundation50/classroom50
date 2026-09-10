@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/gitexec"
 	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 	scoresschema "github.com/foundation50/gh-teacher/internal/scores"
@@ -1470,6 +1472,31 @@ func TestPullRepo(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(target, "NOTES.md")); err != nil {
 			t.Errorf("local work lost: %v", err)
+		}
+	})
+
+	t.Run("stalled remote fails instead of hanging the batch", func(t *testing.T) {
+		restore := gitexec.StallTimeout
+		gitexec.StallTimeout = time.Second // git's minimum granularity
+		t.Cleanup(func() { gitexec.StallTimeout = restore })
+
+		origin, _ := studentRepo(t)
+		target := teacherClone(t, t.TempDir(), "clone", origin)
+		// A socket that completes the TCP handshake but never sends a byte.
+		ln, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatalf("listen: %v", err)
+		}
+		t.Cleanup(func() { _ = ln.Close() })
+		git(t, target, "remote", "set-url", "origin", fmt.Sprintf("http://%s/o/repo.git", ln.Addr().String()))
+
+		start := time.Now()
+		err = pullRepo(io.Discard, io.Discard, target, false, false)
+		if err == nil {
+			t.Fatal("expected pullRepo against a stalled remote to fail")
+		}
+		if elapsed := time.Since(start); elapsed > 3*time.Second {
+			t.Fatalf("pullRepo took %v to fail; the stall detector should have ended it", elapsed)
 		}
 	})
 }

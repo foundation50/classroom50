@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/foundation50/classroom50-cli-shared/gitexec"
 	"github.com/foundation50/gh-student/internal/githubtest"
 	identitypkg "github.com/foundation50/gh-student/internal/identity"
 )
@@ -89,8 +90,8 @@ func TestFetchRepoPath_FailsFastOnStall(t *testing.T) {
 // On a dead HTTPS remote the stall detector, not the ceiling, should fire: git
 // exits on its own and the error is git's, not a deadline.
 func TestCommitWorkTreeOnRemoteBranch_StallDetectorAbortsClone(t *testing.T) {
-	setTimeout(t, &gitStallTimeout, time.Second) // git's minimum granularity
-	setTimeout(t, &cmdWaitDelay, 50*time.Millisecond)
+	setTimeout(t, &gitexec.StallTimeout, time.Second) // git's minimum granularity
+	setTimeout(t, &gitexec.WaitDelay, 50*time.Millisecond)
 
 	start := time.Now()
 	_, err := commitWorkTreeOnRemoteBranch(
@@ -109,7 +110,7 @@ func TestCommitWorkTreeOnRemoteBranch_StallDetectorAbortsClone(t *testing.T) {
 // and say what to do next.
 func TestCommitWorkTreeOnRemoteBranch_CeilingAbortsClone(t *testing.T) {
 	setTimeout(t, &gitNetworkTimeout, 200*time.Millisecond)
-	setTimeout(t, &cmdWaitDelay, 50*time.Millisecond)
+	setTimeout(t, &gitexec.WaitDelay, 50*time.Millisecond)
 
 	start := time.Now()
 	_, err := commitWorkTreeOnRemoteBranch(
@@ -126,7 +127,7 @@ func TestCommitWorkTreeOnRemoteBranch_CeilingAbortsClone(t *testing.T) {
 
 // Ctrl-C cancels the root context; that must not read as network advice.
 func TestRunGit_CancelIsNotReportedAsStall(t *testing.T) {
-	setTimeout(t, &cmdWaitDelay, 50*time.Millisecond)
+	setTimeout(t, &gitexec.WaitDelay, 50*time.Millisecond)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
@@ -141,7 +142,7 @@ func TestRunGit_CancelIsNotReportedAsStall(t *testing.T) {
 
 func TestPushSubmitTag_FailsFastOnStall(t *testing.T) {
 	setTimeout(t, &submitTagTimeout, 200*time.Millisecond)
-	setTimeout(t, &cmdWaitDelay, 50*time.Millisecond)
+	setTimeout(t, &gitexec.WaitDelay, 50*time.Millisecond)
 
 	local, _, sha := _tagTestRepos(t)
 	if out, err := exec.Command("git", "--git-dir", local, "remote", "set-url", "origin", stalledRemoteURL(t)).CombinedOutput(); err != nil {
