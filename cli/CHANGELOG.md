@@ -17,6 +17,14 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.48.1](https://github.com/foundation50/classroom50/compare/cli-v1.48.0...cli-v1.48.1) (2026-09-10)
+
+
+### Bug Fixes
+
+* complete a roster row that already names the account instead of refusing it ([#946](https://github.com/foundation50/classroom50/issues/946)) ([ab045ab](https://github.com/foundation50/classroom50/commit/ab045ab552e7466bfabf6d435343f2fbcf538216))
+* **deps:** update dependencies and fix vulnerabilities ([#944](https://github.com/foundation50/classroom50/issues/944)) ([64e291b](https://github.com/foundation50/classroom50/commit/64e291b5d09c3a94da871e5291a1a0cef2c0ec06))
+
 ## [1.48.0](https://github.com/foundation50/classroom50/compare/cli-v1.47.0...cli-v1.48.0) (2026-09-10)
 
 
