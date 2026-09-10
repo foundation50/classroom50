@@ -234,18 +234,14 @@ const SubmissionsPageContent = () => {
   // null check (a `let` makes each one fail with TS18048).
   const assignmentResolved = assignmentInfo != null
   // Assignments that never autograde (empty_repo bare repos, or no_autograder
-  // teacher-supplied CI) produce no submit/* releases. Grading UI (Regrade all,
-  // per-row regrade, scores, live polling, the trigger retrofit) is hidden and
-  // the header's grading badge explains why — including collect/freshness,
-  // since a collect scoped to this assignment would be skipped by
-  // collect_scores.py anyway. Mirrors the Python skips_grading() predicate
-  // family.
+  // teacher-supplied CI) produce no submit/* releases, so the grading UI is
+  // hidden; their submissions are still detected from repo state. Mirrors the
+  // Python skips_grading() predicate family.
   const skipsGrading = assignmentResolved
     ? assignmentSkipsGrading(assignmentInfo)
     : false
-  // The narrower bare-repo case: no repos worth managing at all. Only the
-  // repo-management bulk actions (access/features) key off this — a
-  // no_autograder repo is templated and DOES have repos to manage.
+  // The narrower bare-repo case: no control files, so no bulk repo management,
+  // Feedback PR, or close toggle. A no_autograder repo is templated and has them.
   const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
   // Locked assignments are closed to students (accept + submission surfaces
   // refuse them); the gradebook stays fully functional for staff, so this is a
@@ -599,13 +595,11 @@ const SubmissionsPageContent = () => {
   // repo this viewer can't see 404s into "not submitted" inside the fan-out.
   const liveCapable = !skipsGrading
 
-  // Detection is a SEPARATE capability from live presence, and deliberately
-  // wider: it reads raw repo state (commits/tags), so it works for a
-  // no_autograder assignment, which produces no submit/* release and which
-  // collect_scores.py skips outright — leaving scores.json permanently empty
-  // (issue #659). Only a bare empty_repo is excluded: it carries no submission
-  // definition to detect against.
-  const detectionCapable = !isEmptyRepoAssignment
+  // Detection reads raw repo state (commits/tags), so it applies to every repo
+  // shape; for no_autograder and empty_repo it is the only way a submission
+  // shows at all (#659, #950). Resolved-only, else an undefined mode would
+  // count a tag-mode assignment in branch mode.
+  const detectionCapable = assignmentResolved
 
   // Either overlay makes the view more than a replay of the collected snapshot,
   // so the affordances that describe "we're still resolving rows beyond the
@@ -618,7 +612,7 @@ const SubmissionsPageContent = () => {
   // from the SNAPSHOT display list (never the live-merged rows), so honoring the
   // real sort/filters can't loop the fan-out's output back into its input.
   // PAGE-SCOPED: it reads only the repos on the CURRENT table page (#359's burst
-  // mitigation). Off for empty_repo.
+  // mitigation).
   const snapshotScoped = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
@@ -720,23 +714,16 @@ const SubmissionsPageContent = () => {
     mode: assignmentInfo?.submission_mode,
     submissionTags: assignmentInfo?.submission_tags,
     repoOwners: livePageOwners,
-    // Detection-capable (no_autograder included) — see detectionCapable.
-    // Resolved-only: otherwise the fan-out starts with an
-    // undefined mode and counts a tag-mode assignment in branch mode.
-    enabled: detectionCapable && assignmentResolved,
+    enabled: detectionCapable,
   })
 
-  // Overlay live presence over the snapshot for a live-capable assignment
-  // (snapshot wins per owner for GRADES; live adds a pending row for an
-  // as-yet-uncollected submitter and bumps stale counts), then overlay
-  // detection the same way (a second count/presence-only overlay on the same
-  // snapshot — KTD6). An assignment with NEITHER overlay (a bare empty_repo)
-  // uses the collected snapshot ALONE. The two overlays are independent: a
-  // no_autograder assignment is detection-capable but not live-capable, and
-  // detection alone is what makes its submissions visible at all (issue #659).
-  // Then roster-scope, gated on a resolved, known roster so a transient
-  // failure or an unreadable student list falls back to unscoped rows rather
-  // than blanking a populated gradebook.
+  // Overlay live presence over the snapshot (snapshot wins per owner for
+  // GRADES; live adds a pending row for an as-yet-uncollected submitter and
+  // bumps stale counts), then overlay detection the same way. The two are
+  // independent: a never-autograding assignment has detection only. Then
+  // roster-scope, gated on a resolved, known roster so a transient failure or
+  // an unreadable student list falls back to unscoped rows rather than
+  // blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
     if (!overlayCapable) {
       return rosterReady
@@ -1213,12 +1200,9 @@ const SubmissionsPageContent = () => {
   const lastCollectedLabel = effectiveLastCollectedAt
     ? formatRelativeToNow(new Date(effectiveLastCollectedAt))
     : null
-  // Staleness applies wherever a collect exists. A no_autograder assignment is
-  // collected (detected submissions), so a push after the last run means its
-  // snapshot is out of date too; only a bare empty_repo has nothing to collect.
-  const snapshotStale =
-    !isEmptyRepoAssignment &&
-    snapshotIsStale(latestPush, effectiveLastCollectedAt)
+  // Every shape is collected (never-autograding ones as detected submissions),
+  // so a push after the last run makes any snapshot out of date.
+  const snapshotStale = snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
@@ -1311,7 +1295,6 @@ const SubmissionsPageContent = () => {
               showCheckingAccepted({
                 showSubmissionProgress,
                 orgReposPending,
-                isEmptyRepoAssignment,
               }) && (
                 <MetaItem>
                   <InlineSpinner />
@@ -1517,29 +1500,24 @@ const SubmissionsPageContent = () => {
               />
             ) : undefined
           }
-          // A bare empty_repo assignment has no collect at all. A no_autograder
-          // assignment IS collected now (its submissions are detected rather than
-          // graded), so it keeps the freshness line and the re-collect button.
           leading={
-            isEmptyRepoAssignment ? undefined : (
-              <DataFreshness
-                lastCollectedLabel={lastCollectedLabel}
-                stale={snapshotStale}
-                collecting={collecting}
-                refreshing={refreshing}
-                errorCount={liveErrorCount}
-                canCollect={canDispatchWorkflows}
-                // Stays mounted while collecting: the button IS the in-page
-                // progress indicator (it spins and goes inert), so it must
-                // not vanish the moment it's clicked. Omitted only when a
-                // dispatching viewer has nobody to collect for.
-                onRefresh={
-                  canDispatchWorkflows && emptyRoster.show
-                    ? undefined
-                    : refreshSubmissions
-                }
-              />
-            )
+            <DataFreshness
+              lastCollectedLabel={lastCollectedLabel}
+              stale={snapshotStale}
+              collecting={collecting}
+              refreshing={refreshing}
+              errorCount={liveErrorCount}
+              canCollect={canDispatchWorkflows}
+              // Stays mounted while collecting: the button IS the in-page
+              // progress indicator (it spins and goes inert), so it must
+              // not vanish the moment it's clicked. Omitted only when a
+              // dispatching viewer has nobody to collect for.
+              onRefresh={
+                canDispatchWorkflows && emptyRoster.show
+                  ? undefined
+                  : refreshSubmissions
+              }
+            />
           }
           trailing={
             <>

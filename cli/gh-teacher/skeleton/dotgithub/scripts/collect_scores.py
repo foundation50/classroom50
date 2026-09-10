@@ -955,12 +955,11 @@ def skips_grading(entry: dict[str, Any]) -> bool:
 
 
 def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
-    """Slugs worth collecting: non-empty strings, in manifest order, excluding
-    assignments that never autograde (empty_repo or no_autograder; their repos
-    produce no submit/* releases, so polling them would only produce dead
-    gradebook rows). main()'s zero-submission guard counts these; the collect
-    loop applies the same predicate inline (it also needs each entry's `due`),
-    so both agree on what counts as collectable."""
+    """Slugs worth polling for releases: non-empty strings, in manifest order,
+    excluding assignments that never autograde (empty_repo or no_autograder,
+    whose submissions are detected from repo state instead). main()'s
+    zero-submission guard counts these; the collect loop applies the same
+    predicate inline (it also needs each entry's `due`)."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
@@ -972,8 +971,8 @@ def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
 def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     """Every valid slug including assignments that never autograde (empty_repo
     or no_autograder). Staff access grants use this instead of
-    valid_assignment_slugs: these repos never autograde, but TAs still need read
-    on them to review the student-built work."""
+    valid_assignment_slugs: these repos never produce releases, but TAs still
+    need read on them to review the student-built work."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
@@ -989,10 +988,9 @@ def poll_candidate_names(
     usernames: Iterable[str],
 ) -> list[str]:
     """Every repo name collection may poll for `usernames`: one per (collectable
-    or detected assignment, member). empty_repo assignments are skipped outright
-    and team assignments derive their targets from the listing, so neither is
-    a candidate. Feeds RepoIndex.prefetch so the poll loop's lookups are one
-    batch instead of one request each."""
+    or detected assignment, member). Team assignments derive their targets from
+    the listing, so they are not candidates. Feeds RepoIndex.prefetch so the
+    poll loop's lookups are one batch instead of one request each."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
@@ -1000,7 +998,7 @@ def poll_candidate_names(
             continue
         if assignment_filter and slug != assignment_filter:
             continue
-        if is_empty_repo(entry) or normalize_assignment_type(entry.get("mode")) == "team":
+        if normalize_assignment_type(entry.get("mode")) == "team":
             continue
         slugs.append(slug)
     users = list(usernames)
@@ -1114,8 +1112,8 @@ def parse_due(
 
 class SubmissionDetector:
     """Per-repo submission detection for one assignment, shared by the
-    no_autograder path (every repo) and the autograded path (repos with no
-    submit/* release yet).
+    never-autograding path (every repo of a no_autograder or empty_repo
+    assignment) and the autograded path (repos with no submit/* release yet).
 
     Never records a score. `detect` returns (record, visited): `record` is None
     when the repo has no detections or its read failed, and `visited` is False
@@ -1218,8 +1216,9 @@ def collect_detected(
     repo_index: "RepoIndex | None",
     service_token: str,
 ) -> tuple[str, list[dict[str, Any]], set[str]]:
-    """Detected submissions for one no_autograder assignment: walk its repos and
-    record presence/count per submitter. Returns (mode, records, visited owners).
+    """Detected submissions for one assignment that never autogrades: walk its
+    repos and record presence/count per submitter. Returns (mode, records,
+    visited owners).
 
     A repo with no detections is OMITTED, so the record list is exactly the
     submitter set. `visited` names the owners whose repo was actually read
@@ -1615,19 +1614,11 @@ def collect_classroom(
             continue
         if assignment_filter and slug != assignment_filter:
             continue
-        # Assignments that never autograde (empty_repo or no_autograder):
-        # same predicate as valid_assignment_slugs, kept in lockstep. There are
-        # no submit/* releases to ingest and no scores to record, but a
-        # submission still HAPPENED, so detect it from repo state instead
-        # (presence/count only, never a grade); see issue #659. An empty_repo
-        # assignment has no submission definition at all, so it stays skipped.
+        # Assignments that never autograde (empty_repo or no_autograder) have no
+        # submit/* releases to ingest, but a submission still HAPPENED, so
+        # detect it from repo state (presence/count only, never a grade); see
+        # issues #659 and #950. Same predicate as valid_assignment_slugs.
         if skips_grading(entry):
-            if is_empty_repo(entry):
-                print(
-                    f"{classroom_short}/{slug}: empty_repo assignment: "
-                    f"autograding is disabled; skipping collection"
-                )
-                continue
             detected_type, detected_records, detected_visited = collect_detected(
                 api_url=api_url,
                 org=org,
@@ -1640,8 +1631,9 @@ def collect_classroom(
             )
             detected[slug] = (detected_type, detected_records, detected_visited)
             collected[slug] = detected_type
+            shape = "empty_repo" if is_empty_repo(entry) else "no_autograder"
             print(
-                f"{classroom_short}/{slug}: no_autograder assignment: "
+                f"{classroom_short}/{slug}: {shape} assignment: "
                 f"autograding is disabled; detected "
                 f"{len(detected_records)} submitter(s) from repo state"
             )
@@ -2137,9 +2129,8 @@ def grant_classroom_team_access(
     if not grant_teams:
         return
 
-    # ALL slugs, not just the collectable subset: empty_repo assignments are
-    # skipped by collection but their student repos still exist and staff
-    # still need access to review them.
+    # ALL slugs, not just the collectable subset: never-autograding
+    # assignments still have student repos staff need to review.
     slugs = all_assignment_slugs(assignments)
     if assignment_filter:
         # Skip a classroom lacking the slug silently, like collect_classroom:
@@ -3173,12 +3164,19 @@ def detect_repo_submissions(
         branch = (info or {}).get("default_branch")
     if not isinstance(branch, str) or not branch:
         return []  # not accepted, or no commits yet
-    baseline = oldest_commit_sha_for_path(
-        api_url, org, repo_name, ACCEPT_MARKER_PATH, token
-    )
-    commits = list_default_branch_commits(
-        api_url, org, repo_name, branch, token, stop_at_sha=baseline
-    )
+    try:
+        baseline = oldest_commit_sha_for_path(
+            api_url, org, repo_name, ACCEPT_MARKER_PATH, token
+        )
+        commits = list_default_branch_commits(
+            api_url, org, repo_name, branch, token, stop_at_sha=baseline
+        )
+    except urllib.error.HTTPError as exc:
+        # 409 "Git Repository is empty": a bare repo nobody has pushed to yet,
+        # so "no submissions" rather than a failed read.
+        if exc.code == 409:
+            return []
+        raise
     return detect_branch_submissions(commits, baseline)
 
 

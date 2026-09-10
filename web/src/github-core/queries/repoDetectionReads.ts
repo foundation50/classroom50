@@ -5,6 +5,7 @@ import type { GitHubCommit, GitHubTag } from "../types"
 import { tolerateGitHubError } from "../errors"
 import { paginateAll } from "../paginate"
 import { githubKeys } from "./keys"
+import { getOldestCommitShaForPath } from "./repoRefReads"
 
 // Detection reads for the submission-configuration hybrid model. Unlike the
 // release reads (which key off submit/* Releases the autograder publishes),
@@ -30,6 +31,43 @@ export async function listDefaultBranchCommits(
           )}/commits?sha=${encodeURIComponent(branch)}&per_page=100&page=${page}`,
       ),
     [],
+  )
+}
+
+export type BranchSubmissionLog = {
+  commits: GitHubCommit[]
+  // Oldest .classroom50.yaml commit; null on a bare repo, where every commit counts.
+  baselineSha: string | null
+}
+
+// The two reads branch-mode detection narrows with submissionCommits. A repo
+// with no commits yet answers 409 "Git Repository is empty" to both, which is
+// "no submissions", not a failed read. Any other error propagates: swallowing
+// a transient one to a null baseline would count the accept commit.
+export async function readBranchSubmissionLog(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  branch: string,
+): Promise<BranchSubmissionLog> {
+  return tolerateGitHubError(
+    async () => {
+      const baselineSha = await getOldestCommitShaForPath(
+        client,
+        owner,
+        repo,
+        ".classroom50.yaml",
+      )
+      const commits = await listDefaultBranchCommits(
+        client,
+        owner,
+        repo,
+        branch,
+      )
+      return { commits, baselineSha }
+    },
+    { commits: [], baselineSha: null },
+    { predicate: (err) => err.status === 409 },
   )
 }
 

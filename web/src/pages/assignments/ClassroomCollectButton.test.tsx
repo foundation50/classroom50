@@ -397,11 +397,9 @@ describe("ClassroomCollectButton", () => {
       expect(screen.queryByText("submissions.freshness.stale")).toBeNull()
     })
 
-    // collect_scores.py skips a bare empty_repo assignment outright, so its
-    // bucket is never written and never stamped — while its student repos
-    // exist and carry an accept-time push. Measured, it would latch the badge
-    // on forever with no collect able to clear it.
-    it("never latches on an empty_repo assignment, which is never collected", () => {
+    // empty_repo is collected like any other shape (#950), so a push after
+    // its stamp reads as stale.
+    it("measures an empty_repo assignment like any other", () => {
       assignmentsResult = {
         data: {
           assignments: [
@@ -414,13 +412,16 @@ describe("ClassroomCollectButton", () => {
         "cs50-hw1-alice": "2026-06-01T00:00:00Z",
         "cs50-reflection-alice": "2026-06-05T00:00:00Z",
       })
-      scoresResult = withScores({ hw1: "2026-06-03T00:00:00Z" })
+      scoresResult = withScores({
+        hw1: "2026-06-03T00:00:00Z",
+        reflection: "2026-06-03T00:00:00Z",
+      })
       const { wrapper } = setup()
       render(<ClassroomCollectButton org="acme" classroom="cs50" />, {
         wrapper,
       })
 
-      expect(screen.queryByText("submissions.freshness.stale")).toBeNull()
+      expect(screen.getByText("submissions.freshness.stale")).toBeTruthy()
     })
 
     // Before scores.json lands every bucket looks unstamped. The collected
@@ -460,11 +461,9 @@ describe("ClassroomCollectButton", () => {
       expect(screen.getByText("submissions.freshness.stale")).toBeTruthy()
     })
 
-    // Pins the sixth-argument wiring: an EXCLUDED empty_repo slug must still
-    // guard its prefix sibling, or "hw1" absorbs "hw1-bonus"'s newer push and
-    // latches a badge no collect can clear. Fails if the component ever hands
-    // classroomSnapshotIsStale an incomplete `allSlugs` list.
-    it("keeps an excluded empty_repo sibling guarding its prefix", () => {
+    // "hw1" must not absorb "hw1-bonus"'s newer push and read as stale against
+    // its own older stamp.
+    it("keeps a slug-extending sibling from shadowing its prefix", () => {
       assignmentsResult = {
         data: {
           assignments: [
@@ -477,7 +476,10 @@ describe("ClassroomCollectButton", () => {
         "cs50-hw1-alice": "2026-06-01T00:00:00Z",
         "cs50-hw1-bonus-bob": "2026-06-05T00:00:00Z",
       })
-      scoresResult = withScores({ hw1: "2026-06-03T00:00:00Z" })
+      scoresResult = withScores({
+        hw1: "2026-06-03T00:00:00Z",
+        "hw1-bonus": "2026-06-06T00:00:00Z",
+      })
       const { wrapper } = setup()
       render(<ClassroomCollectButton org="acme" classroom="cs50" />, {
         wrapper,

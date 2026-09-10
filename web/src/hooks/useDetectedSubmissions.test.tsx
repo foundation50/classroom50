@@ -169,6 +169,51 @@ describe("useDetectedSubmissions — branch mode", () => {
     expect(result.current.detected).toEqual([])
     expect(result.current.errorCount).toBe(1)
   })
+
+  // A bare empty_repo accept (#950): no marker, so a null baseline.
+  it("counts every commit on a bare repo with no marker", async () => {
+    request.mockImplementation(
+      branchClient({
+        defaultBranch: "main",
+        baselineCommits: [],
+        branchCommits: [{ sha: "c3" }, { sha: "c2" }, { sha: "c1" }],
+      }),
+    )
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected[0].count).toBe(3)
+    expect(result.current.errorCount).toBe(0)
+  })
+
+  it("reads a commitless bare repo (409 on the commit reads) as no submissions, not an error", async () => {
+    request.mockImplementation((url: string) => {
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
+        return Promise.resolve({ default_branch: "main" })
+      }
+      if (url.includes("/commits")) return Promise.reject(apiError(409))
+      return Promise.resolve([])
+    })
+    const { result } = renderHook(
+      () =>
+        useDetectedSubmissions({
+          ...base,
+          mode: "every-push",
+          repoOwners: ["a"],
+        }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.detected).toEqual([])
+    expect(result.current.errorCount).toBe(0)
+  })
 })
 
 describe("useDetectedSubmissions — tag mode", () => {
@@ -305,7 +350,7 @@ describe("useDetectedSubmissions — fan-out contract", () => {
     expect(result.current.errorCount).toBe(1)
   })
 
-  it("does not fetch when disabled (empty_repo assignment)", () => {
+  it("does not fetch when disabled", () => {
     const { result } = renderHook(
       () =>
         useDetectedSubmissions({

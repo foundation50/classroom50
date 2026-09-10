@@ -1,6 +1,10 @@
 import { describe, it, expect, vi } from "vitest"
 
-import { listDefaultBranchCommits, listRepoTags } from "./repoDetectionReads"
+import {
+  listDefaultBranchCommits,
+  listRepoTags,
+  readBranchSubmissionLog,
+} from "./repoDetectionReads"
 import type { GitHubClient } from "../client"
 import { GitHubAPIError, type GitHubRateLimit } from "../errors"
 
@@ -98,5 +102,64 @@ describe("listRepoTags", () => {
     })
     const client = { request } as unknown as GitHubClient
     await expect(listRepoTags(client, "o", "r")).resolves.toEqual([])
+  })
+})
+
+describe("readBranchSubmissionLog", () => {
+  function conflict(): GitHubAPIError {
+    return new GitHubAPIError({
+      status: 409,
+      url: "x",
+      message: "Git Repository is empty.",
+      body: null,
+      rateLimit: noRateLimit,
+    })
+  }
+
+  it("returns the log and the oldest marker commit as the baseline", async () => {
+    const request = vi.fn(async (url: string) => {
+      if (url.includes("path=.classroom50.yaml")) {
+        return [{ sha: "marker-edit" }, { sha: "accept" }]
+      }
+      return [{ sha: "c1" }, { sha: "marker-edit" }, { sha: "accept" }]
+    })
+    const client = { request } as unknown as GitHubClient
+    const log = await readBranchSubmissionLog(client, "o", "r", "main")
+    expect(log.baselineSha).toBe("accept")
+    expect(log.commits.map((c) => c.sha)).toEqual([
+      "c1",
+      "marker-edit",
+      "accept",
+    ])
+  })
+
+  it("reads a bare repo with no marker as a null baseline", async () => {
+    const request = vi.fn(async (url: string) =>
+      url.includes("path=.classroom50.yaml") ? [] : [{ sha: "c1" }],
+    )
+    const client = { request } as unknown as GitHubClient
+    const log = await readBranchSubmissionLog(client, "o", "r", "main")
+    expect(log.baselineSha).toBeNull()
+    expect(log.commits).toHaveLength(1)
+  })
+
+  it("reads a commitless repo (409 Git Repository is empty) as an empty log", async () => {
+    const request = vi.fn(async () => {
+      throw conflict()
+    })
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      readBranchSubmissionLog(client, "o", "r", "main"),
+    ).resolves.toEqual({ commits: [], baselineSha: null })
+  })
+
+  it("rethrows a transient error rather than collapsing the baseline to null", async () => {
+    const request = vi.fn(async () => {
+      throw serverError()
+    })
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      readBranchSubmissionLog(client, "o", "r", "main"),
+    ).rejects.toBeInstanceOf(GitHubAPIError)
   })
 })

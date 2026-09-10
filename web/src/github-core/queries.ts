@@ -65,6 +65,8 @@ export {
   listDefaultBranchCommits,
   listRepoTags,
   getCommitDatetime,
+  readBranchSubmissionLog,
+  type BranchSubmissionLog,
   defaultBranchCommitsQuery,
   repoTagsQuery,
 } from "./queries/repoDetectionReads"

@@ -1551,7 +1551,7 @@ describe("classroomSnapshotIsStale", () => {
     ).toBe(false)
   })
 
-  // An excluded slug (empty_repo) still has to shadow a slug-extending
+  // A slug left out of the question still has to shadow a slug-extending
   // sibling, so the guard list stays complete while the measured list shrinks.
   it("keeps the sibling guard complete when a slug is excluded", () => {
     const withSibling = [
@@ -2714,31 +2714,18 @@ describe("showCheckingAccepted", () => {
       showCheckingAccepted({
         showSubmissionProgress: false,
         orgReposPending: true,
-        isEmptyRepoAssignment: false,
       }),
     ).toBe(true)
     expect(
       showCheckingAccepted({
         showSubmissionProgress: true,
         orgReposPending: true,
-        isEmptyRepoAssignment: false,
       }),
     ).toBe(false)
     expect(
       showCheckingAccepted({
         showSubmissionProgress: false,
         orgReposPending: false,
-        isEmptyRepoAssignment: false,
-      }),
-    ).toBe(false)
-  })
-
-  it("never shows for an empty_repo assignment", () => {
-    expect(
-      showCheckingAccepted({
-        showSubmissionProgress: false,
-        orgReposPending: true,
-        isEmptyRepoAssignment: true,
       }),
     ).toBe(false)
   })
@@ -2881,21 +2868,25 @@ describe("assignmentFunnelCounts", () => {
     })
   })
 
-  it("flags a no_autograder bucket no collect has walked, but not an autograded one", () => {
-    const skipping = assignment({ no_autograder: true })
-    expect(
-      assignmentFunnelCounts(skipping, scores({}), [], "cs", []).notCollected,
-    ).toBe(true)
-    // A `detected: []` means a collect walked it and found nobody.
-    expect(
-      assignmentFunnelCounts(
-        skipping,
-        scores({ detected: { hw1: [] } }),
-        [],
-        "cs",
-        [],
-      ).notCollected,
-    ).toBe(false)
+  it("flags a never-autograding bucket no collect has walked, but not an autograded one", () => {
+    for (const skipping of [
+      assignment({ no_autograder: true }),
+      assignment({ empty_repo: true }),
+    ]) {
+      expect(
+        assignmentFunnelCounts(skipping, scores({}), [], "cs", []).notCollected,
+      ).toBe(true)
+      // A `detected: []` means a collect walked it and found nobody.
+      expect(
+        assignmentFunnelCounts(
+          skipping,
+          scores({ detected: { hw1: [] } }),
+          [],
+          "cs",
+          [],
+        ).notCollected,
+      ).toBe(false)
+    }
     expect(
       assignmentFunnelCounts(assignment(), scores({}), [], "cs", [])
         .notCollected,

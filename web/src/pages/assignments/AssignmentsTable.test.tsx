@@ -626,11 +626,27 @@ describe("AssignmentsTable — assignments that skip grading", () => {
   })
 
   it("applies to a bare empty_repo assignment too", () => {
-    // empty_repo is never detected (no submission definition), so it keeps the
-    // entries-based count rather than waiting for a `detected` list no writer
-    // produces — otherwise it would read "not collected yet" forever.
+    // empty_repo is detected like no_autograder (#950), so an absent key means
+    // the same: no collect has walked it yet.
+    scores.mockReturnValue({ data: { submissions: {}, detected: {} } })
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[assignment({ empty_repo: true })]}
+        roster={roster(studentsOf(2))}
+      />,
+    )
+    expect(screen.getByText("assignments.table.notCollectedYet")).toBeTruthy()
+    expect(bars()).toBe(0)
+  })
+
+  it("counts detected pushes on a bare empty_repo assignment", () => {
     scores.mockReturnValue({
-      data: { submissions: { hw1: gradedBy(["s1"]) }, detected: {} },
+      data: {
+        submissions: {},
+        detected: { hw1: detected(["s1"]) },
+      },
     })
     wrap(
       <AssignmentsTable

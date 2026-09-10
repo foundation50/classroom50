@@ -128,25 +128,13 @@ export function ClassroomCollectButton({
     () => assignmentsData?.assignments ?? [],
     [assignmentsData],
   )
-  // Every slug in the classroom — the sibling-slug guard needs the COMPLETE
-  // list, or "hw1" starts absorbing "hw1-bonus"'s repos.
+  // Every slug: the sibling-slug guard needs the complete list, or "hw1"
+  // absorbs "hw1-bonus"'s repos. Every slug is also measured, since the
+  // collector stamps a bucket for every shape. On an org running an older
+  // collector the badge latches for no_autograder (pre-#694) or empty_repo
+  // (pre-#950) until the workflows update, which the drift banner already asks.
   const assignmentSlugs = useMemo(
     () => assignments.map((a) => a.slug),
-    [assignments],
-  )
-  // ...but only the collectable ones are asked whether they are behind. A bare
-  // empty_repo assignment is skipped by collect_scores.py outright, so its
-  // bucket is never written and never stamped, while its student repos exist
-  // and carry a push from accept time. Measured against a stamp that can never
-  // arrive it would read as stale forever — a badge no collect could clear.
-  // (no_autograder is NOT excluded: the collector does write its bucket, from
-  // detected submissions rather than grades, so it stamps like any other.
-  // Known edge: a pre-#694 collector never stamps no_autograder buckets, so on
-  // such an org the badge latches for them until the workflows are updated —
-  // accepted, because the skeleton-drift banner is already telling that org's
-  // teachers to update, and updating is the actual fix.)
-  const collectableSlugs = useMemo(
-    () => assignments.filter((a) => a.empty_repo !== true).map((a) => a.slug),
     [assignments],
   )
   const { data: orgRepos } = useGetOrgRepos(org)
@@ -162,17 +150,15 @@ export function ClassroomCollectButton({
       classroomSnapshotIsStale({
         repos: orgRepos,
         classroom,
-        measuredSlugs: collectableSlugs,
+        measuredSlugs: assignmentSlugs,
         collectedAt: scoresData?.collectedAt,
         runCollectedAt: lastCollectedAt,
-        allSlugs: assignmentSlugs,
       }),
     [
       scoresLoading,
       scoresReadFailed,
       orgRepos,
       classroom,
-      collectableSlugs,
       assignmentSlugs,
       scoresData?.collectedAt,
       lastCollectedAt,

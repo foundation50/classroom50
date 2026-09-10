@@ -3339,7 +3339,7 @@ class TestCollectedAtStamp:
         assert collected == {}
 
     def test_collect_classroom_reports_only_walked_slugs(self, monkeypatch):
-        # The filtered-out sibling and the never-grading assignment are not
+        # The filtered-out siblings (graded and never-grading alike) are not
         # walked, so neither may be stamped; the group assignment reports its
         # mode so an absent bucket can be scaffolded with the right type.
         stub_team_members(monkeypatch, ["alice"])
@@ -3591,6 +3591,80 @@ def test_collect_classroom_detects_no_autograder_assignment(monkeypatch, capsys)
     assert collected["ci-lab"] == "individual"
 
 
+def test_collect_classroom_detects_empty_repo_assignment(monkeypatch, capsys):
+    # A bare empty_repo assignment used to be skipped outright, leaving every
+    # student "awaiting submission" no matter what they pushed (#950).
+    def fail_releases(*args, **kwargs):
+        raise AssertionError("empty_repo repos must not be polled for releases")
+
+    monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
+    monkeypatch.setattr(
+        cs,
+        "detect_repo_submissions",
+        lambda *a, **k: [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}],
+    )
+    stub_team_members(monkeypatch, ["alice"])
+
+    results, _, collected, detected = cs.collect_classroom(
+        api_url="https://api.github.com",
+        org="cs50",
+        classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "scratch", "empty_repo": True}]},
+        service_token="token",
+    )
+
+    assert results == []
+    assert "empty_repo" in capsys.readouterr().out
+    atype, records, _visited = detected["scratch"]
+    assert atype == "individual"
+    assert records == [
+        {
+            "owner": "alice",
+            "count": 1,
+            "latest_datetime": "2026-06-01T10:00:00Z",
+            "kind": "commit",
+        }
+    ]
+    assert collected["scratch"] == "individual"
+
+
+def test_detect_repo_submissions_reads_commitless_repo_as_nothing(monkeypatch):
+    # 409 "Git Repository is empty" is a bare repo nobody has pushed to yet:
+    # no submissions, no warning, owner still visited.
+    monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"default_branch": "main"})
+
+    def empty_repo(*a, **k):
+        raise http_error(409, {}, b'{"message":"Git Repository is empty."}')
+
+    monkeypatch.setattr(cs, "oldest_commit_sha_for_path", empty_repo)
+    monkeypatch.setattr(cs, "list_default_branch_commits", empty_repo)
+    assert (
+        cs.detect_repo_submissions(
+            "https://api.github.com", "cs50", "cs-scratch-alice", "tok", "every-push", []
+        )
+        == []
+    )
+
+
+def test_detect_repo_submissions_counts_every_commit_on_a_bare_repo(monkeypatch):
+    # No .classroom50.yaml marker means no baseline to trim.
+    monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"default_branch": "main"})
+    monkeypatch.setattr(cs, "oldest_commit_sha_for_path", lambda *a, **k: None)
+    monkeypatch.setattr(
+        cs,
+        "list_default_branch_commits",
+        lambda *a, **k: [
+            {"sha": "c2", "commit": {"message": "more", "committer": {"date": "2026-06-02T10:00:00Z"}}},
+            {"sha": "c1", "commit": {"message": "first", "committer": {"date": "2026-06-01T10:00:00Z"}}},
+        ],
+    )
+    got = cs.detect_repo_submissions(
+        "https://api.github.com", "cs50", "cs-scratch-alice", "tok", "every-push", []
+    )
+    assert [d["sha"] for d in got] == ["c2", "c1"]
+
+
 def test_no_autograder_detection_records_no_score(monkeypatch):
     # Guard the contract that keeps grades uncontaminated: a detected record
     # carries presence/count only — never score, max-score, tests or a release.
@@ -3815,35 +3889,6 @@ def test_no_autograder_detection_reports_visited_owners(monkeypatch):
     assert "alice" in visited
     # bob's read failed, so he is NOT visited — his prior record must survive.
     assert "bob" not in visited
-
-
-def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
-    # An empty_repo assignment is skipped with a log line: its bare repos are
-    # never polled for releases, so no dead gradebook rows are produced. Unlike
-    # no_autograder it is not detected either — a bare repo carries no
-    # submission definition to detect against.
-    def fail_releases(*args, **kwargs):
-        raise AssertionError("empty_repo repos must not be polled for releases")
-
-    def fail_detect(*args, **kwargs):
-        raise AssertionError("empty_repo repos must not be detected")
-
-    monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
-    monkeypatch.setattr(cs, "detect_repo_submissions", fail_detect)
-    stub_team_members(monkeypatch, ["alice"])
-
-    results, _, _, detected = cs.collect_classroom(
-        api_url="https://api.github.com",
-        org="cs50",
-        classroom_short="cs-principles",
-        classroom_meta={},
-        assignments={"assignments": [{"slug": "actions-lab", "empty_repo": True}]},
-        service_token="token",
-    )
-
-    assert results == []
-    assert detected == {}
-    assert "empty_repo" in capsys.readouterr().out
 
 
 # Autograded assignments: pushes without a graded release --------------------
@@ -5907,6 +5952,8 @@ class TestPollCandidateNames:
             "cs-hw1-bob",
             "cs-hw2-alice",
             "cs-hw2-bob",
+            "cs-warmup-alice",
+            "cs-warmup-bob",
             "cs-essay-alice",
             "cs-essay-bob",
         ]

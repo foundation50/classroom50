@@ -7,9 +7,8 @@ import {
   REPO_READ_CONCURRENCY,
   githubKeys,
   getCommitDatetime,
-  getOldestCommitShaForPath,
-  listDefaultBranchCommits,
   listRepoTags,
+  readBranchSubmissionLog,
   retryOnRateLimit,
   withGithubReadSlot,
 } from "@/github-core/queries"
@@ -135,27 +134,16 @@ export function useDetectedSubmissions({
                 // the commit log; detectBranchSubmissions narrows it.
                 const info = await getRepo(client, org!, repo)
                 const branch = info?.default_branch
-                if (!branch) return [] // not accepted / commitless
-                // Resolve the baseline (oldest .classroom50.yaml commit)
-                // directly so a genuinely-absent marker reads as null (a bare
-                // repo — count every commit) while a transient read failure
-                // PROPAGATES: resolveFeedbackBaselineSha swallows every error to
-                // null, which would keep the accept/baseline commit and inflate
-                // the count by one. Letting it throw routes the repo to the
-                // per-repo errorCount/rate-limit retry instead.
-                const baseline = await getOldestCommitShaForPath(
-                  client,
-                  org!,
-                  repo,
-                  ".classroom50.yaml",
-                )
-                const commits = await listDefaultBranchCommits(
+                if (!branch) return [] // not accepted
+                // A transient read failure propagates to the per-repo
+                // errorCount rather than reading as a null baseline.
+                const { commits, baselineSha } = await readBranchSubmissionLog(
                   client,
                   org!,
                   repo,
                   branch,
                 )
-                return detectBranchSubmissions(commits, baseline)
+                return detectBranchSubmissions(commits, baselineSha)
               }),
             )
             if (entries.length > 0) {

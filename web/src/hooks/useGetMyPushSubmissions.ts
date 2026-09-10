@@ -2,11 +2,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { GitHubClient } from "@/github-core/client"
-import {
-  githubKeys,
-  getOldestCommitShaForPath,
-  listDefaultBranchCommits,
-} from "@/github-core/queries"
+import { githubKeys, readBranchSubmissionLog } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
 import type { GitHubCommit } from "@/github-core/types"
 import { submissionCommits } from "@/domain/assignments/submissionDetection"
@@ -29,15 +25,14 @@ export const myPushSubmissionsQuery = (
     queryFn: async (): Promise<GitHubCommit[]> => {
       const branch =
         knownDefaultBranch ?? (await getRepo(client, org, repo))?.default_branch
-      if (!branch) return [] // not accepted / commitless
-      const baseline = await getOldestCommitShaForPath(
+      if (!branch) return [] // not accepted
+      const { commits, baselineSha } = await readBranchSubmissionLog(
         client,
         org,
         repo,
-        ".classroom50.yaml",
+        branch,
       )
-      const commits = await listDefaultBranchCommits(client, org, repo, branch)
-      return submissionCommits(commits, baseline)
+      return submissionCommits(commits, baselineSha)
     },
     enabled: Boolean(org && repo),
     staleTime: 60 * 1000,
