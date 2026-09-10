@@ -43,7 +43,7 @@
         "detected": {
           "type": "array",
           "items": { "$ref": "#/$defs/detectedRecord" },
-          "description": "Optional. Presence/count records for repos that have submissions but no graded entry: every submitter of a no_autograder assignment (those repos publish no submit/* release, so this is their only signal), and for an autograded assignment the repos with pushes or submission tags whose autograder has not published a submit/* release. An owner is never in both `entries` and this list. Deliberately NOT `entries`: a detected submission has no score, tests, release or review, and writing one as a submissionRecord would fabricate a grade. One record per repo owner; absent when the bucket was never collected (a collect that found nobody writes [])."
+          "description": "Optional. Presence/count records for repos that have submissions but no graded entry: every submitter of a no_autograder or empty_repo assignment (those repos publish no submit/* release, so this is their only signal), and for an autograded assignment the repos with pushes or submission tags whose autograder has not published a submit/* release. An owner is never in both `entries` and this list. Deliberately NOT `entries`: a detected submission has no score, tests, release or review, and writing one as a submissionRecord would fabricate a grade. One record per repo owner; absent when the bucket was never collected (a collect that found nobody writes [])."
         }
       }
     },

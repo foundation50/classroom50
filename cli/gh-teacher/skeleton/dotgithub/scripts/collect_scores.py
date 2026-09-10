@@ -654,23 +654,21 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 
 class RepoFacts(NamedTuple):
     """What a listing (or a direct read) said about one repo, kept so a later
-    pass does not re-read the repo to learn it. `size` is GitHub's kilobyte
-    figure; 0 means the repo has no commits, so there is nothing to detect."""
+    pass does not re-read the repo to learn it. Deliberately not GitHub's
+    `size`: it is computed lazily, so a just-pushed repo reads 0 for minutes
+    (the web's #544) and cannot stand in for "has no commits"."""
 
     private: bool
     default_branch: str | None = None
-    size: int | None = None
 
 
 def repo_facts(repo: dict[str, Any]) -> RepoFacts:
     """The RepoFacts of one repo object. `private` is strict (anything but the
-    boolean true reads as public, as before); the rest is optional."""
+    boolean true reads as public, as before); the branch is optional."""
     branch = repo.get("default_branch")
-    size = repo.get("size")
     return RepoFacts(
         repo.get("private") is True,
         branch if isinstance(branch, str) and branch else None,
-        size if isinstance(size, int) and not isinstance(size, bool) else None,
     )
 
 
@@ -929,9 +927,10 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
 def is_no_autograder(entry: dict[str, Any]) -> bool:
     """True only when no_autograder is the boolean `true` (strict, like
     is_empty_repo). A templated no_autograder assignment commits no shim, so it
-    never autogrades and produces no submit/* releases, so collection and regrade
-    skip it exactly as they skip empty_repo. Keep byte-identical across
-    collect/regrade and the autograde-runner read step so every tool agrees."""
+    never autogrades and produces no submit/* releases: regrade skips it and
+    collection detects its submissions from repo state, exactly like empty_repo.
+    Keep byte-identical across collect/regrade and the autograde-runner read
+    step so every tool agrees."""
     return entry.get("no_autograder") is True
 
 
@@ -3146,25 +3145,24 @@ def detect_repo_submissions(
 ) -> list[dict[str, Any]]:
     """One repo's detected submissions. Branch mode reads the default branch, its
     accept-marker baseline and its commit log; tag mode reads its tags. Returns
-    [] for a repo that isn't accepted or is commitless.
+    [] for a repo that isn't accepted or has no commits yet.
 
-    `facts` is what the org listing already said about the repo (RepoIndex).
-    A commitless repo is answered from it without a request, and a known
-    default branch spares the GET /repos read that only existed to learn it."""
-    if facts is not None and facts.size == 0:
-        return []
-    if mode == "tag":
-        tags = list_repo_tags(api_url, org, repo_name, token)
-        patterns = [*submission_tags, f"{SUBMIT_TAG_PREFIX}*"]
-        return detect_tag_submissions(tags, patterns)
-
-    branch: Any = facts.default_branch if facts is not None else None
-    if branch is None:
-        info = get_repo(api_url, org, repo_name, token)
-        branch = (info or {}).get("default_branch")
-    if not isinstance(branch, str) or not branch:
-        return []  # not accepted, or no commits yet
+    `facts` is what the org listing already said about the repo (RepoIndex): a
+    known default branch spares the GET /repos read that only existed to learn
+    it. A commitless repo is learned from the read itself (409), never from the
+    listing's lagging `size`, at the cost of one request per bare repo."""
     try:
+        if mode == "tag":
+            tags = list_repo_tags(api_url, org, repo_name, token)
+            patterns = [*submission_tags, f"{SUBMIT_TAG_PREFIX}*"]
+            return detect_tag_submissions(tags, patterns)
+
+        branch: Any = facts.default_branch if facts is not None else None
+        if branch is None:
+            info = get_repo(api_url, org, repo_name, token)
+            branch = (info or {}).get("default_branch")
+        if not isinstance(branch, str) or not branch:
+            return []  # not accepted
         baseline = oldest_commit_sha_for_path(
             api_url, org, repo_name, ACCEPT_MARKER_PATH, token
         )

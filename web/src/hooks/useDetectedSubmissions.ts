@@ -56,7 +56,7 @@ export type UseDetectedSubmissionsArgs = {
   submissionTags?: string[]
   // Page-scoped repo-name owner segments (mirror useLiveSubmissions).
   repoOwners: string[]
-  // Off switch: an empty_repo assignment has nothing to detect.
+  // Off switch, e.g. until the assignment entry has resolved its mode.
   enabled?: boolean
 }
 

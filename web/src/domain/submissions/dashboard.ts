@@ -563,9 +563,9 @@ export function computeStats(
   let late = 0
   for (const row of rows) {
     // A pending live row (a submit/* release the collector hasn't ingested yet)
-    // carries a placeholder 0/0 and no real grade — exclude it from every graded
-    // tally (matching classAverage), so an uncollected submitter doesn't inflate
-    // `submitted`/`ungraded` in the Metrics summary of the collected snapshot.
+    // carries a placeholder 0/0 and no real grade, so it is excluded from every
+    // graded tally: an uncollected submitter must not inflate `submitted` or
+    // `ungraded`.
     if (row.pending) continue
     submitted++
     switch (rowPassState(row, thresholdFraction)) {
@@ -588,23 +588,6 @@ export function computeStats(
     ungraded,
     late,
   }
-}
-
-// Mean of the numeric scores, rounded to 2 decimals, or null when none is finite
-// (rendered "N/A"). Avoids the old `sum/length || 1` bug where an empty/NaN
-// result showed "1" (`/` binds before `||`). Pending live rows (a submit/*
-// release the collector hasn't ingested yet) carry a placeholder 0/0 and no
-// real grade, so they're excluded — otherwise every uncollected submitter would
-// drag the average toward 0, the opposite of the intended presence signal.
-export function classAverage(rows: SubmissionRow[]): number | null {
-  const numericScores = rows
-    .filter((row) => !row.pending)
-    .map((row) => Number(row["score"]))
-    .filter((n) => Number.isFinite(n))
-  if (numericScores.length === 0) return null
-  const avg =
-    numericScores.reduce((sum, n) => sum + n, 0) / numericScores.length
-  return Math.round(avg * 100) / 100
 }
 
 // Filters the dashboard exposes. Each is independent ("all" = no constraint);
@@ -944,17 +927,6 @@ export function applyStatusSelection(
   }
 }
 
-// Count of ROSTER students who accepted. Intersecting with the roster keeps the
-// "Accepted N / roster" stat from exceeding its denominator when `accepted`
-// includes non-roster owners (an unenrolled student, a stray test repo).
-export function acceptedRosterCount(
-  students: Student[],
-  accepted: Set<string>,
-): number {
-  return students.filter((student) => hasAccepted(student.username, accepted))
-    .length
-}
-
 // Case-insensitive match of a query against a row's identities: each credited
 // username plus its roster display name (so searching a real name works though
 // scores.json only carries logins).
@@ -979,13 +951,11 @@ export function rowMatchesQuery(
 // roster in name order with no grade-implying filter. A time sort, or a status/
 // passing filter that implies a grade, drops that owner from the page's owner
 // set until a collect ingests it. Used to surface an honest hint instead of
-// hiding the sort/status controls. False when the overlay doesn't apply.
+// hiding the sort/status controls.
 export function pendingMayHide(
-  liveCapable: boolean,
   sort: SubmissionSort,
   filters: SubmissionFilters,
 ): boolean {
-  if (!liveCapable) return false
   return (
     !isNameSort(sort) ||
     filters.submission !== "all" ||
@@ -1630,6 +1600,22 @@ export function orgReposReadEnabled(args: {
   rosterLoading: boolean
 }): boolean {
   return !args.assignmentLoading && (args.isGroupFlavor || !args.rosterLoading)
+}
+
+// Which overlays the Submissions page layers over the collected snapshot. Live
+// presence reads submit/* releases, which an assignment that never autogrades
+// (empty_repo, no_autograder) never produces; detection reads raw repo state,
+// so it applies to every shape once the entry has resolved (an undefined mode
+// would count a tag-mode assignment in branch mode). For the never-autograding
+// shapes detection is the only way a submission shows at all (#659, #950).
+export function overlayCapabilities(args: {
+  assignmentResolved: boolean
+  skipsGrading: boolean
+}): { liveCapable: boolean; detectionCapable: boolean } {
+  return {
+    liveCapable: !args.skipsGrading,
+    detectionCapable: args.assignmentResolved,
+  }
 }
 
 // Whether to show "Checking who accepted..." in place of the submission

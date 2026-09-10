@@ -20,10 +20,8 @@ import { SubmissionFreshnessLine } from "@/components/SubmissionFreshnessLine"
 // and can't dispatch, so their button is "Refresh" (re-read what a teacher
 // collected) with a note on who to ask.
 //
-// A bare empty_repo assignment has no collect at all — the page omits this
-// component and the header's grading badge explains why. A no_autograder
-// assignment IS collected (its submissions are detected rather than graded), so
-// it keeps this surface.
+// Every shape is collected (a never-autograding assignment as detected
+// submissions rather than grades), so every shape renders this surface.
 export type DataFreshnessProps = {
   // Relative "x ago" of the last completed collect run — when the submission
   // data was produced org-wide. Null when never collected.

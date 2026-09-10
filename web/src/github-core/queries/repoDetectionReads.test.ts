@@ -103,6 +103,20 @@ describe("listRepoTags", () => {
     const client = { request } as unknown as GitHubClient
     await expect(listRepoTags(client, "o", "r")).resolves.toEqual([])
   })
+
+  it("treats a commitless repo (409) as an empty tag list", async () => {
+    const request = vi.fn(async () => {
+      throw new GitHubAPIError({
+        status: 409,
+        url: "x",
+        message: "Git Repository is empty.",
+        body: null,
+        rateLimit: noRateLimit,
+      })
+    })
+    const client = { request } as unknown as GitHubClient
+    await expect(listRepoTags(client, "o", "r")).resolves.toEqual([])
+  })
 })
 
 describe("readBranchSubmissionLog", () => {

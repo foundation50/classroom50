@@ -33,7 +33,6 @@ import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
 import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMenu"
 import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
-import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { OpenAllFeedbackPrsModal } from "@/pages/submissions/OpenAllFeedbackPrsModal"
 import { DownloadAllSubmissionsModal } from "@/pages/submissions/DownloadAllSubmissionsModal"
 import { CloneSubmissionsModal } from "@/pages/submissions/CloneSubmissionsModal"
@@ -62,14 +61,12 @@ import { ConfirmModal } from "@/components/modals"
 import {
   DEFAULT_FILTERS,
   DEFAULT_PAGE_SIZE,
-  acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
   assignmentRepoCandidateLogins,
   assignmentRepoNames,
   buildScoresCsvRows,
   buildSectionLookup,
-  classAverage,
   computeStats,
   displayPageOwners,
   distinctSections,
@@ -77,7 +74,6 @@ import {
   existingTeamRepos,
   filterAndSortRows,
   filterNonSubmitters,
-  hasAccepted,
   latestAssignmentPush,
   effectiveCollectedAt,
   mergeDetectedSubmissions,
@@ -89,6 +85,7 @@ import {
   rowInSection,
   selectActiveWorkflowAction,
   showCheckingAccepted,
+  overlayCapabilities,
   showsNonSubmitters,
   snapshotIsStale,
   sortNameMode,
@@ -460,7 +457,6 @@ const SubmissionsPageContent = () => {
   // Toolbar modals: metrics + accept-link are consolidated behind buttons so
   // the roster surfaces near the top instead of below stat cards and the
   // accept disclosure.
-  const [metricsOpen, setMetricsOpen] = useState(false)
   const [acceptOpen, setAcceptOpen] = useState(false)
   const [openAllPrsOpen, setOpenAllPrsOpen] = useState(false)
   const [downloadAllOpen, setDownloadAllOpen] = useState(false)
@@ -589,22 +585,13 @@ const SubmissionsPageContent = () => {
     ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
     : null
 
-  // Whether the live presence overlay applies here: an assignment that
-  // autogrades (empty_repo and no_autograder never produce submit/* releases).
-  // Runs for every staff viewer: reading a release needs only repo read, and a
-  // repo this viewer can't see 404s into "not submitted" inside the fan-out.
-  const liveCapable = !skipsGrading
-
-  // Detection reads raw repo state (commits/tags), so it applies to every repo
-  // shape; for no_autograder and empty_repo it is the only way a submission
-  // shows at all (#659, #950). Resolved-only, else an undefined mode would
-  // count a tag-mode assignment in branch mode.
-  const detectionCapable = assignmentResolved
-
-  // Either overlay makes the view more than a replay of the collected snapshot,
-  // so the affordances that describe "we're still resolving rows beyond the
-  // snapshot" key off this union rather than live alone.
-  const overlayCapable = liveCapable || detectionCapable
+  // Both overlays run for every staff viewer: reading a release or a commit
+  // needs only repo read, and a repo this viewer can't see 404s into "not
+  // submitted" inside the fan-out.
+  const { liveCapable, detectionCapable } = overlayCapabilities({
+    assignmentResolved,
+    skipsGrading,
+  })
 
   // Live submission presence for THIS assignment comes from student repos'
   // submit/* releases, so a student who pushed but hasn't been collected yet
@@ -695,7 +682,6 @@ const SubmissionsPageContent = () => {
     classroom,
     assignment,
     repoOwners: livePageOwners,
-    // Not empty_repo — see liveCapable.
     enabled: liveCapable,
   })
 
@@ -705,6 +691,7 @@ const SubmissionsPageContent = () => {
   // without a submit/* release. Grades still come from the snapshot/live side.
   const {
     detected: detectedSubmissions,
+    errorCount: detectedErrorCount,
     isPending: detectedPending,
     refetch: refetchDetected,
   } = useDetectedSubmissions({
@@ -725,11 +712,6 @@ const SubmissionsPageContent = () => {
   // an unreadable student list falls back to unscoped rows rather than
   // blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
-    if (!overlayCapable) {
-      return rosterReady
-        ? rosterScopedRows(snapshotRows, students)
-        : snapshotRows
-    }
     const withLive = liveCapable
       ? mergeLiveRows(
           snapshotRows,
@@ -755,7 +737,6 @@ const SubmissionsPageContent = () => {
       : withLive
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [
-    overlayCapable,
     liveCapable,
     detectionCapable,
     snapshotRows,
@@ -833,7 +814,7 @@ const SubmissionsPageContent = () => {
   // overlay row (live-only or detection-only) from the page-scoped fan-out (a
   // time sort, or a grade-implying status/passing filter). We keep every control
   // live and surface this instead of hiding Sort + Status.
-  const showPendingHiddenHint = pendingMayHide(overlayCapable, sort, filters)
+  const showPendingHiddenHint = pendingMayHide(sort, filters)
 
   // Deterministic acceptance from the org repo list (see acceptedUsernames);
   // individual assignments only, so gated on acceptedAvailable.
@@ -950,13 +931,6 @@ const SubmissionsPageContent = () => {
     [scopedScores],
   )
   const acceptedOwners = useMemo(() => [...acceptedSet], [acceptedSet])
-  const scopedNonSubmitters = useMemo(
-    () =>
-      sectionFilter === "all"
-        ? nonSubmitters
-        : nonSubmitters.filter((s) => studentInSection(s, sectionFilter)),
-    [nonSubmitters, sectionFilter],
-  )
 
   // Passing bar as a fraction of max, or null when the teacher didn't opt in
   // (off by default) — then no Passing rollup/filter, neutral badges.
@@ -971,20 +945,10 @@ const SubmissionsPageContent = () => {
     [scopedScores, scopedStudents, thresholdFraction],
   )
 
-  // Class average over numeric scores in the section-scoped set; null -> "N/A".
-  const avgScore = useMemo(() => classAverage(scopedScores), [scopedScores])
-
-  // Accepted count scoped to the active section (matches the card's denominator).
-  const acceptedCount = useMemo(
-    () => acceptedRosterCount(scopedStudents, acceptedSet),
-    [scopedStudents, acceptedSet],
-  )
-
   // The header funnel's Submitted numerator: PRESENCE, not grades. Unlike
-  // stats.submitted (which excludes `pending` rows so uncollected submissions
-  // don't inflate the graded Metrics summary), the bar must agree with the
-  // table right below it — which lists pending live/detected submitters
-  // (the only signal for no_autograder assignments). Count every scoped row.
+  // stats.submitted (which excludes `pending` rows), the bar must agree with
+  // the table right below it, which lists pending live/detected submitters
+  // (the only signal for a never-autograding assignment). Count every scoped row.
   const submittedPresenceCount = scopedScores.length
 
   // The header bar's submission share: over the student-role roster for
@@ -999,21 +963,12 @@ const SubmissionsPageContent = () => {
     ? orgRepos != null && groupRepoList.length > 0
     : acceptedAvailable
 
-  // Roster students who accepted (repo exists) but have no submission row.
-  // Individual assignments only.
-  const acceptedNotSubmittedCount = acceptedAvailable
-    ? scopedNonSubmitters.filter((s) => hasAccepted(s.username, acceptedSet))
-        .length
-    : 0
-
-  // One-click stat shortcuts: jump to the students a sub-label calls out. Reset
-  // the other axes so the surfaced set matches the label exactly.
-  const showFailing = () =>
-    setFilters({ ...DEFAULT_FILTERS, passing: "failing" })
-  // On this page a "not submitted" row implies the student accepted (no repo
-  // ⇒ nothing to submit), so the accepted-not-submitted set is just the
-  // not-submitted filter — a single axis the Status select represents exactly,
-  // so switching away from it never silently drops a hidden acceptance filter.
+  // The progress bar's one-click jump to who hasn't submitted. On this page a
+  // "not submitted" row implies the student accepted (no repo, nothing to
+  // submit), so the set is just the not-submitted filter: a single axis the
+  // Status select represents exactly, so switching away from it never silently
+  // drops a hidden acceptance filter. The other axes reset so the surfaced set
+  // matches the label.
   const showAcceptedNotSubmitted = () =>
     setFilters({ ...DEFAULT_FILTERS, submission: "not-submitted" })
 
@@ -1506,7 +1461,9 @@ const SubmissionsPageContent = () => {
               stale={snapshotStale}
               collecting={collecting}
               refreshing={refreshing}
-              errorCount={liveErrorCount}
+              // Both fan-outs read the same page of repos, so a repo that
+              // failed both would double-count if summed.
+              errorCount={Math.max(liveErrorCount, detectedErrorCount)}
               canCollect={canDispatchWorkflows}
               // Stays mounted while collecting: the button IS the in-page
               // progress indicator (it spins and goes inert), so it must
@@ -1555,15 +1512,6 @@ const SubmissionsPageContent = () => {
                 canRegradeAll={canRegradeAll}
                 emptyRoster={emptyRoster.show}
                 skipsGrading={skipsGrading}
-                // Metrics summarizes the GRADED snapshot, and computeStats skips
-                // every `pending` row — so hide it whenever an overlay is adding
-                // those rows, live or detection. Keying this on liveCapable alone
-                // left it reachable for a no_autograder assignment, where detection
-                // supplies every row: the modal would report 0 submitted while the
-                // table listed detected submitters right next to it.
-                onMetrics={
-                  overlayCapable ? undefined : () => setMetricsOpen(true)
-                }
                 onCollect={
                   canDispatchWorkflows
                     ? () => collectScores.collect()
@@ -1845,11 +1793,9 @@ const SubmissionsPageContent = () => {
           // `page` inside the table.
           viewSignature={animationSignature}
           // The current page's live/detected data is still resolving, so the
-          // count + last-submitted cells shimmer until they settle. Gated on
-          // overlayCapable so a snapshot-only view never shows a settling
-          // affordance; each pending flag is already false unless its own overlay
-          // is enabled, so a detection-only view (no_autograder) still shimmers.
-          settling={overlayCapable && (livePending || detectedPending)}
+          // count + last-submitted cells shimmer until they settle. Each pending
+          // flag is false unless its own overlay is enabled.
+          settling={livePending || detectedPending}
         />
         {/* The skip link's landing point, focusable so focus actually moves. */}
         <span id="after-submissions-table" tabIndex={-1} />
@@ -1933,26 +1879,6 @@ const SubmissionsPageContent = () => {
             params: { org, classroom },
           })
         }
-      />
-      <MetricsModal
-        open={metricsOpen && !overlayCapable}
-        onClose={() => setMetricsOpen(false)}
-        isGroup={isGroupFlavor}
-        submitted={stats.submitted}
-        rosterCount={scopedStudents.length}
-        avgScore={avgScore}
-        maxScore={scopedScores?.[0]?.["max-score"]}
-        notAvailableLabel={t("submissions.stats.notAvailable")}
-        passing={stats.passing}
-        passingEnabled={passingEnabled}
-        passingDenom={stats.passing + stats.failing}
-        failing={stats.failing}
-        ungraded={stats.ungraded}
-        onShowFailing={showFailing}
-        acceptedAvailable={acceptedAvailable}
-        acceptedCount={acceptedCount}
-        acceptedNotSubmitted={acceptedNotSubmittedCount}
-        onShowAcceptedNotSubmitted={showAcceptedNotSubmitted}
       />
       <AcceptLinkModal
         open={acceptOpen}

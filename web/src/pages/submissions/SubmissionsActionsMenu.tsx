@@ -7,7 +7,6 @@ import {
   GitBranchIcon,
   GitPullRequestIcon,
   GlobeIcon,
-  GraphIcon,
   LinkExternalIcon,
   LockIcon,
   PauseIcon,
@@ -35,7 +34,6 @@ export function SubmissionsActionsMenu({
   canRegradeAll = true,
   emptyRoster,
   skipsGrading = false,
-  onMetrics,
   onCollect,
   onRegradeAll,
   onOpenAllPrs,
@@ -72,9 +70,6 @@ export function SubmissionsActionsMenu({
   // grading actions (Regrade all / View workflow) are hidden — Collect and the
   // exports stay.
   skipsGrading?: boolean
-  // Opens the Metrics modal. Omitted (hidden) in live view, where the graded
-  // snapshot stats don't apply.
-  onMetrics?: () => void
   // Dispatches a collect. Omitted (hidden) for a viewer who can't dispatch
   // workflows in the config repo (a TA); they refresh from the toolbar instead.
   onCollect?: () => void
@@ -170,18 +165,6 @@ export function SubmissionsActionsMenu({
         )}
       </Button>
       <DropdownMenu className="w-64">
-        {/* Metrics: graded-snapshot stats; hidden in live view (onMetrics
-            omitted there). */}
-        {onMetrics && (
-          <>
-            <DropdownMenu.Item
-              icon={GraphIcon}
-              label={t("submissions.menu.metrics")}
-              onSelect={onMetrics}
-            />
-            <DropdownMenu.Separator />
-          </>
-        )}
         {/* Open all Feedback PRs leads the menu. The page owns the gate
             (owner-only, non-empty_repo): a no_autograder repo is templated and
             PERMITS the PR, so no skipsGrading re-gate here. */}

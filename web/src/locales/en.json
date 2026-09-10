@@ -2917,7 +2917,7 @@
       "badgeNoAutograder": "Custom autograding",
       "titleNoAutograder": "The template ships its own grading workflow. Built-in scores and regrading are disabled; the feedback pull request still works when enabled.",
       "badgeEmptyRepo": "No autograding",
-      "titleEmptyRepo": "This assignment uses empty repositories, so autograding, scores, and the feedback pull request are disabled. The table shows who has accepted."
+      "titleEmptyRepo": "This assignment uses empty repositories, so autograding, scores, and the feedback pull request are disabled. The table shows who has accepted and who has pushed."
     },
     "details": {
       "viewRepository": "View repository",
@@ -2977,11 +2977,7 @@
     },
     "menu": {
       "actions": "Actions",
-      "metrics": "Metrics",
       "share": "Share"
-    },
-    "metrics": {
-      "title": "Submission metrics"
     },
     "errors": {
       "gradebookLoad": "Couldn't load the collected scores.",
@@ -3037,22 +3033,6 @@
       "shareWithCount_one": "Sharing with <count>{{count}} student</count> who can accept this assignment.",
       "shareWithCount_other": "Sharing with <count>{{count}} students</count> who can accept this assignment.",
       "manageRoster": "Manage roster"
-    },
-    "stats": {
-      "submitted": "Submitted",
-      "groupsSubmitted": "Groups submitted",
-      "classAverage": "Classroom average",
-      "passing": "Passing",
-      "accepted": "Accepted",
-      "notAvailable": "N/A",
-      "showFailing": "Show failing students",
-      "failingCount_one": "{{count}} failing",
-      "failingCount_other": "{{count}} failing",
-      "ungradedNote_one": ", {{count}} ungraded",
-      "ungradedNote_other": ", {{count}} ungraded",
-      "showAcceptedNotSubmitted": "Show students who accepted but haven't submitted",
-      "notYetSubmitted_one": "{{count}} not yet submitted",
-      "notYetSubmitted_other": "{{count}} not yet submitted"
     },
     "filters": {
       "searchGroupPlaceholder": "Search group or member",

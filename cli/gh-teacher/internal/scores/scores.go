@@ -22,9 +22,10 @@ type File struct {
 // freshness stamp written by collect_scores.py; empty when absent.
 //
 // Detected carries presence/count records for repos with submissions but no
-// graded entry: every submitter of a no_autograder assignment (no submit/*
-// release exists, so this is their only signal) and, for an autograded
-// assignment, repos with pushes the autograder has not turned into a release.
+// graded entry: every submitter of a no_autograder or empty_repo assignment
+// (no submit/* release exists, so this is their only signal) and, for an
+// autograded assignment, repos with pushes the autograder has not turned into
+// a release.
 // It never carries a score, so `download` (which reports grades) ignores it —
 // the field exists so this reader mirrors scores-v1 rather than silently
 // dropping it. Decoded as tolerant maps for the same reason Entries is.

@@ -132,7 +132,8 @@ export function ClassroomCollectButton({
   // absorbs "hw1-bonus"'s repos. Every slug is also measured, since the
   // collector stamps a bucket for every shape. On an org running an older
   // collector the badge latches for no_autograder (pre-#694) or empty_repo
-  // (pre-#950) until the workflows update, which the drift banner already asks.
+  // (pre-#950) until an owner updates the workflows (the owner-only drift
+  // banner asks for exactly that).
   const assignmentSlugs = useMemo(
     () => assignments.map((a) => a.slug),
     [assignments],

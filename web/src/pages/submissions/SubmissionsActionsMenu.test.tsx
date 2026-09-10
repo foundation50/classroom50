@@ -107,13 +107,6 @@ describe("SubmissionsActionsMenu — Metrics item", () => {
     render(<SubmissionsActionsMenu {...baseProps} />)
     expect(screen.queryByText("submissions.menu.share")).toBeNull()
   })
-
-  it("shows Metrics only when onMetrics is provided (hidden in live view)", () => {
-    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
-    expect(screen.queryByText("submissions.menu.metrics")).toBeNull()
-    rerender(<SubmissionsActionsMenu {...baseProps} onMetrics={() => {}} />)
-    expect(screen.queryByText("submissions.menu.metrics")).not.toBeNull()
-  })
 })
 
 describe("SubmissionsActionsMenu — Open all Feedback PRs item", () => {

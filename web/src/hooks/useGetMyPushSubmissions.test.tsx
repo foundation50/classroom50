@@ -14,7 +14,7 @@ import {
   FEEDBACK_OPEN_COMMIT_MESSAGE,
   shimUpdateCommitMessage,
 } from "@/util/commit"
-import { branchClient } from "@/test/branchDetectionClient"
+import { apiError, branchClient } from "@/test/branchDetectionClient"
 
 const makeClient = () =>
   new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -57,6 +57,25 @@ describe("useGetMyPushSubmissions", () => {
       "submit",
       "work",
     ])
+  })
+
+  it("reads a commitless bare repo (409 on the commit reads) as no submissions", async () => {
+    // An empty_repo accept the student hasn't pushed to yet: their view must
+    // say "nothing submitted", not fail to load.
+    request.mockImplementation((url: string) => {
+      if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
+        return Promise.resolve({ default_branch: "main" })
+      }
+      if (url.includes("/commits")) return Promise.reject(apiError(409))
+      return Promise.resolve([])
+    })
+    const { result } = renderHook(
+      () => useGetMyPushSubmissions("acme", "cs101", "hw1", "alice"),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.isError).toBe(false)
+    expect(result.current.data).toEqual([])
   })
 
   it("returns empty for a not-accepted repo (no default branch)", async () => {
