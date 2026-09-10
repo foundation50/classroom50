@@ -49,7 +49,9 @@ your teacher configured the assignment to create public repositories; in that
 case accept warns you first that your work will be visible to anyone on the
 internet. If the organization doesn't let you create public repositories,
 accept creates a private one instead and says your teacher can make it public
-later.
+later. If the assignment publishes a website with GitHub Pages, accept turns
+the site on for your repository and prints its address; anyone on the internet
+can view the site even when the repository is private.
 
 <details>
 <summary>What accept does, step by step</summary>
@@ -60,13 +62,16 @@ later.
 4. Creates your repository (a copy of the starter code, or a new
    README-initialized repository), private unless the assignment opts into
    public repositories, in which case you're warned first.
-5. Commits the setup files (`.classroom50.yaml` and the autograding workflow)
+5. Turns on GitHub Pages, when the assignment publishes a website. If GitHub
+   refuses (for example, the plan doesn't allow Pages on a private
+   repository), accept warns and carries on; your teacher can enable it later.
+6. Commits the setup files (`.classroom50.yaml` and the autograding workflow)
    and verifies they're in place.
-6. Opens the feedback pull request, when the assignment enables it.
-7. Sets your repository role: `push` for an individual assignment, or `admin`
+7. Opens the feedback pull request, when the assignment enables it.
+8. Sets your repository role: `push` for an individual assignment, or `admin`
    for a legacy group assignment (so its founder can invite teammates). On a
    team assignment your access comes through the group's GitHub team instead.
-8. Prints the `git clone` command.
+9. Prints the `git clone` command.
 
 </details>
 

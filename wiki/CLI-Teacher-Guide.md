@@ -486,9 +486,10 @@ member who accepted an email invitation is recorded with their staff role rather
 than as a student. A role already recorded is never rewritten.
 
 The sync **never removes a row**. A pending row whose invitation expired or was
-canceled stays on the roster for you to link or delete by hand (the web app
-shows it as unlinked); drop it from the web app's roster or by editing
-`roster.csv`.
+canceled stays on the roster for you to re-invite, link, or delete by hand: the
+web app shows it as unlinked with an **Invitation expired** badge and offers
+**Re-invite**, **Link account**, and **Remove row**; from the CLI, drop it by
+editing `roster.csv`.
 
 The web app runs this same sync when a teacher opens the roster, and
 additionally refreshes each row's recorded `role` from live team membership; this

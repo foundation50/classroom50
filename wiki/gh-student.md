@@ -40,7 +40,9 @@ repositories; then accept warns you before creating it that your work (code,
 commits, and name) will be visible to anyone on the internet. If the
 organization doesn't let you create public repositories, accept creates a
 private repository instead and notes that your teacher can make it public
-later.
+later. When the assignment publishes a website with GitHub Pages, accept
+prints a note before creating the repository: the site's address, and that
+anyone on the internet can view it even when the repository is private.
 
 Flags:
 
@@ -69,7 +71,7 @@ Flags:
    repository).
 4. Creates the repository: a copy of the starter code, a new
    README-initialized repository, or (when the teacher chose an empty
-   repository) a bare one with steps 3, 6, and 7 skipped. Private by default;
+   repository) a bare one with steps 3, 6, 7, and 8 skipped. Private by default;
    public when the assignment opts in, with the warning printed before
    creation and a fallback to private when the organization denies the public
    create.
@@ -80,22 +82,32 @@ Flags:
    on or off per assignment. With no starter code, GitHub's own defaults apply
    unless the teacher forced a feature. Best-effort: a rejected feature update
    never fails accept.
-6. Writes the classroom marker file (`.classroom50.yaml`) and the autograding
+6. Turns on GitHub Pages when the assignment publishes a website, before the
+   setup commit so that commit's push is the site's first deploy (and a
+   deploy workflow succeeds on its first run). Best-effort: a refusal (the
+   organization's plan doesn't allow Pages on a private repository, the
+   organization doesn't let members publish sites, or the branch to publish
+   doesn't exist yet) is printed with what to do next and never fails accept;
+   your teacher can enable the site later from the submissions page. A site
+   that already exists is left alone, and this step runs on a fresh create
+   only, never on a re-run. An older `gh-student` that doesn't recognize the
+   assignment's Pages setting warns and skips the step rather than guess.
+7. Writes the classroom marker file (`.classroom50.yaml`) and the autograding
    workflow (`.github/workflows/autograde.yaml`) in a single commit, then
    verifies both are in place before reporting success. The workflow only
    points at the grading logic your teacher manages, so grading updates apply
    on your next submission without changing your repository. When the teacher
    turned the README off for an assignment with no starter code, this commit
    also removes the seeded README.
-7. Opens the feedback pull request when the assignment enables it.
+8. Opens the feedback pull request when the assignment enables it.
    Best-effort: if this fails, the autograding run creates the pull request on
    your first submission instead.
-8. Sets your repository role, last so a failed role change never leaves a
+9. Sets your repository role, last so a failed role change never leaves a
    half-set-up repository: `push` for an individual assignment, or `admin`
    for a legacy group assignment (so its founder can invite teammates). On a
    team assignment access flows through the group's GitHub team, so no
    special role is kept. The teacher can override the role per assignment.
-9. Prints the `git clone` command.
+10. Prints the `git clone` command.
 
 </details>
 

@@ -25,6 +25,35 @@ GH_DEBUG=api gh teacher invite cs50-fall-2026 alice
 
 Commands with informational output also accept `--quiet` / `-q`.
 
+### A command reports "the network connection appears stalled"
+
+Both CLIs put a limit on every network step, so a dead connection (a VPN that
+dropped, a firewall silently discarding packets) ends with an error instead of
+a command that hangs until you press Ctrl-C:
+
+- Every GitHub API request has a 60-second limit.
+- The git transfers (`gh student submit`'s clone and push, `gh teacher
+  download`'s clone and pull) use git's own stall detector: a transfer that
+  moves no data for about 30 seconds fails, while a slow but progressing one
+  is left alone. A 10-minute limit per repository is the backstop, mainly for
+  SSH remotes, where the detector doesn't apply.
+
+What to do:
+
+- **`gh student submit`**: check your connection, then run `gh student submit`
+  again. Submit is safe to repeat.
+- **`gh teacher download`**: the batch skips the stalled repository and
+  continues; the summary line and the error at the end list every repository
+  that failed. Run the same command again to retry them. Existing clones are
+  skipped (or fast-forwarded with `--pull`); if a pull keeps failing, delete
+  that clone and run again to clone it fresh, as the error suggests.
+- Any other command: check the connection and re-run. The commands that write
+  (`init`, `roster add`, `assignment add`, `accept`) check what already exists
+  first, so a re-run picks up where the stalled one stopped.
+
+If the same step times out on a healthy connection, run it with `-v` to see
+which request stalls, and include that output when you file an issue.
+
 ## Reaching classroom50.org and signing in
 
 ### classroom50.org won't load, or is flagged as unsafe
@@ -243,6 +272,39 @@ The desired state already exists, but the commands react differently:
   a non-zero exit: GitHub rejects re-invites to a pending or existing member.
   Use `roster add` when you need a re-runnable enrollment path.
 
+### A student's invitation expired before they accepted
+
+GitHub organization invitations last 7 days. When one lapses, GitHub moves it
+to the organization's failed invitations list, and the student can no longer
+accept it. In Classroom 50 the row stays on the roster (nothing removes a row
+automatically) with an **Invitation expired** badge next to its state
+(**Unlinked** for an email row, **Not in organization** for an account row),
+and the **Members** page shows the same badge. To recover:
+
+- **One student.** On the classroom's **Roster** page, click the row, then
+  **Re-invite**. A fresh invitation is sent and GitHub's failed record is
+  cleared once the send is confirmed.
+- **Several students.** Select their rows, open **Actions**, then click **Send
+  invitations (N)**; or filter by **Invitation expired** first and select all.
+  The count shows how many of the selected rows can be invited.
+- **A whole class.** Upload the roster file again. Each expired address is
+  marked **Resend invitation (expired)** in the preview and re-sent on import;
+  addresses with a live invitation are skipped.
+
+A failed invitation whose roster row was already removed shows up on the
+**Members** page as a **failed invitation that isn't on any roster**. Nothing
+can re-invite it from there: add the student to a roster again (upload or
+**Add to classroom**), and **Dismiss** the leftover record to clear GitHub's
+list.
+
+If **Re-invite** reports that nothing was sent because GitHub already has a
+live invitation or a member for the address, the student was invited from
+another classroom in the organization or has already joined. Check the
+organization's **People** page on GitHub, then link the row to that member
+once they accept. If it reports GitHub's daily invitation limit (50 a day for
+organizations under a month old or on the free plan, otherwise 500), wait
+until the next day and try again.
+
 ### Already an org member, but not on the roster
 
 Adding a student who is **already in your organization** (commonly someone from
@@ -275,17 +337,21 @@ only a **name** (an SIS export before students have GitHub accounts).
 
 To link or remove unlinked rows yourself, open the roster's **Unlinked** filter, then:
 
-- Click a row and use **Link to organization member** to attach the right
+- Click a row and use **Link account** to open the **Link to organization
+  member** picker and attach the right
   account, which also enrolls them on the classroom team. The picker suggests
   members of your classrooms first. To search every member of the organization,
   such as a student who joined the organization directly on GitHub, select
   **Include organization members not in any classroom**.
+- Click a row and use **Re-invite** if the row has an email address and the
+  student isn't in the organization yet (for example, the invitation expired).
 - Select rows, open **Actions**, then click **Remove rows** to delete the ones
   you don't need.
 
 Unlinked rows are never removed automatically: Classroom 50's roster sync never
 deletes a row, so a row whose invitation expired (or was never sendable) waits
-visibly under **Unlinked** instead of disappearing; only linking or an explicit
+visibly under **Unlinked** with an **Invitation expired** badge instead of
+disappearing; only linking or an explicit
 delete ends it. From the CLI, `gh teacher roster add cs50-fall-2026
 cs-principles alice` (or `roster import`) enrolls an existing member the same
 way. **Keep `gh teacher` up to date** if you use both tools: releases older than

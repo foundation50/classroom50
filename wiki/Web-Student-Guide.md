@@ -51,10 +51,24 @@ After signing in, the home page lists your **Classroom 50 organizations**.
    **View assignments**.
 
 The **Assignments** page lists every assignment your teacher has released, with
-its type (**Individual**, **Group**, or **Group (legacy)**), due date, and
-status (**Accepted** or **Not accepted**). Click **Accept assignment** to accept
-one. Once you have, the button reads **View my submission** (or **View group
-submission** on a group assignment).
+its type (**Individual**, **Group**, or **Group (legacy)**), due date, when you
+last submitted, and status:
+
+- **Not accepted**: you haven't accepted it yet. Click **Accept assignment**
+  to accept one.
+- **Accepted**: you have a repository but nothing submitted in it yet. The
+  button reads **View my submission** (or **View group submission** on a group
+  assignment).
+- **Submitted**: your repository has at least one submission. **Last
+  submitted** shows when.
+
+A past due date is red only while nothing has been submitted; once you've
+submitted, it's shown as plain text. The status and last-submitted cells of
+each row fill in as the page checks your repositories, so a row may shimmer
+for a moment. If a check fails, the row keeps its **Accepted** badge and says
+**Couldn't check submissions**; refresh the page to try again. Filter the list
+by status (**To do**, **Accepted**, **Submitted**), type, or due date, and
+sort by due date or name.
 
 Some assignments open only from the invite link your teacher shares. After you
 accept one, it appears in the list too.
@@ -83,6 +97,16 @@ repository.
 > accept: **This repository will be public**, so anyone on the internet can see
 > your work, including your code, commits, and name. If your organization
 > doesn't let you create public repositories, a private one is created instead.
+
+If the accept page says **GitHub Pages is enabled for this assignment**, your
+teacher set the assignment up to publish each repository as a website, and
+accepting turns the site on for you. The site's address is shown in the
+notice's tooltip, and anyone on the internet can view it even when the
+repository itself is private, so keep anything you don't want published out of
+the branch or folder your teacher told you to publish from. If the site
+couldn't be turned on (for example, the organization's GitHub plan doesn't
+allow it on a private repository), the setup checklist says so; your
+assignment still works, and your teacher can enable the site later.
 
 You can't accept when the page reports one of these:
 

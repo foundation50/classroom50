@@ -98,8 +98,8 @@ accepted yet. It holds the invited address and role, with no username or
 `github_id`, because GitHub offers no way to look up an account from an email
 address. A sync fills in the account once they accept; cancelling the
 invitation removes the row immediately. A sync never removes a row, so a row
-whose invitation expired stays on the roster as an unlinked row until you link
-or delete it.
+whose invitation expired stays on the roster as an unlinked row, flagged
+**Invitation expired** in the web app, until you re-invite, link, or delete it.
 
 #### Invite team
 

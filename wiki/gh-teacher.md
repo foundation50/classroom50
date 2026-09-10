@@ -415,8 +415,9 @@ membership, and it adds a row for a classroom-team member the roster is
 missing.
 
 The sync **never removes a roster row**. An email-only row nothing backs (an
-expired or canceled invitation) stays on the roster for you to link or delete
-by hand; the web app shows it as unlinked. Its scope is the email-invite
+expired or canceled invitation) stays on the roster for you to re-invite, link,
+or delete by hand; the web app shows it as unlinked with an **Invitation
+expired** badge and offers **Re-invite**. Its scope is the email-invite
 lifecycle and `github_id`. It never rewrites a `role` already recorded on a
 row, and it doesn't add rows for organization members who were never invited
 through Classroom 50; see

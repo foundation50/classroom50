@@ -583,6 +583,32 @@ The upload checks every row before it changes anything:
   you can link or remove later.
 - Only a row with nothing usable at all is skipped; everyone else is imported.
 
+Re-uploading a roster is also how you recover invitations in bulk. The preview
+marks each email row with what will happen to it:
+
+- **Resend invitation (expired)** or **Resend invitation (not delivered)**:
+  the previous invitation expired or couldn't be delivered, so a fresh one is
+  sent. GitHub's record of the failed invitation is cleared only after the new
+  one is confirmed.
+- **Invitation already pending**: the address has a live invitation, so
+  nothing is re-sent. An upload where every row is already pending imports
+  nothing and says so.
+- An address that matches a student who already has a GitHub account is
+  **linked to that account** by default, since GitHub skips an email
+  invitation to an existing member. Clear **Link these addresses to the
+  matched GitHub accounts** to opt out; the row then gets an email invitation
+  and stays **Unlinked** until you link it by hand.
+
+If the **Import** button is unavailable, hover over it: the tooltip says which
+check hasn't passed yet (nothing to process, a change waiting for your
+confirmation, and so on).
+
+GitHub caps how many invitations an organization can send per day (50 for
+organizations under a month old or on the free plan, otherwise 500). When an
+upload hits the cap, the batch stops there, the rows it didn't reach are
+reported, and any invitation it had cancelled to re-send is restored; upload
+the same file again the next day to finish.
+
 ### Roster CSV fields
 
 Each row needs at least one column that identifies a student: `github_id`,
@@ -669,8 +695,9 @@ email, and the address is recorded as a pending roster row:
   identifies the invitation: to use a different one, cancel and invite the new
   address.
 - If you cancel the invitation, the row is removed with it. An expired
-  invitation's row is not removed: it stays on the roster as **Unlinked** for
-  you to link or remove, and the next roster refresh only retires the
+  invitation's row is not removed: it stays on the roster with an
+  **Invitation expired** badge (GitHub invitations last 7 days) for you to
+  **Re-invite**, link, or remove, and the next roster refresh only retires the
   invitation's bookkeeping.
 
 A pending row is why the stored `roster.csv` can hold a row with no `username`
@@ -711,33 +738,52 @@ first, then share a link so they can accept and sign in.
 The table lists everyone in this classroom, one row per member, with
 **Member**, **Username**, **Role**, **Section**, and **Status** columns; click
 a column header to sort by it, and click a row to open the member's detail.
-**Section** appears only when at least one member carries a section label, and
-**Status** only while a row has something to report: a pending invitation, a
-member who needs a role, someone not in the organization, or an **unlinked**
-row (one with no GitHub account attached: a name-only upload, or an address
-that couldn't be invited). Click an unlinked row to link it to an organization
-member or remove it.
+**Section** appears only when at least one member carries a section label.
+**Status** shows one badge per row:
+
+- **Enrolled.** In the organization and on the classroom team.
+- **Invitation pending.** An email invitation hasn't been accepted yet.
+- **Not enrolled.** In the organization but missing from the classroom team,
+  so score collection would miss them.
+- **Not in organization.** On the roster but not an organization member (for
+  example, they left or were removed).
+- **Unlinked.** No GitHub account attached: a name-only upload, an address
+  that couldn't be invited, or an address whose invitation is no longer live.
+
+A row whose invitation expired before it was accepted (GitHub invitations last
+7 days) or couldn't be delivered carries an extra **Invitation expired** or
+**Invitation failed** badge next to its state. Click an unlinked or expired row
+to fix it: the detail explains the case and offers **Re-invite** (sends a fresh
+invitation), **Link account** (attach the row to an organization member), and
+**Remove row**. Link and Remove open their own panel, so one workflow is on
+screen at a time.
 
 The toolbar narrows and groups the table:
 
 - **Search**: match members by name, username, or email.
-- **Show**: one filter covering both status (**Enrolled**, **Pending**,
-  **Needs a role**, **Not in organization**, **Unlinked** while such rows
-  exist) and role (**Student**, **Teacher**, **Head TA**, **TA**).
+- **Show**: one filter covering both status (**Enrolled**, **Invitation
+  pending**, **Not enrolled**, **Not in organization**, **Unlinked**, and
+  **Invitation expired**, each shown while such rows exist) and role
+  (**Student**, **Teacher**, **Head TA**, **TA**).
 - A **section filter**, shown when members have sections.
 - **Group by**: group the rows by role or by section.
 
 Selecting rows (with the row checkboxes, or the select-all in the header)
 replaces the toolbar's left side with a selection bar carrying one
-**Actions** menu:
+**Actions** menu. Each action shows how many of the selected rows it can act
+on and applies only to those, so a mixed selection is safe:
 
-- **Invite** re-sends the selected students' organization invitations.
-- **Cancel** cancels their pending invitations.
-- **Unenroll** removes them from the classroom.
-- **Remove rows** (when the selection includes unlinked rows) deletes those
-  rows from `roster.csv`.
+- **Send invitations (N)** invites the selected students to the organization:
+  a pending invitation is cancelled and sent again, an expired one is
+  replaced, and a student who isn't in the organization is invited. A row
+  with no email address or GitHub username can't be invited.
+- **Cancel invitations (N)** cancels their pending invitations.
+- **Unenroll (N)** removes them from the classroom.
+- **Remove rows (N)** (when the selection includes unlinked rows) deletes
+  those rows from `roster.csv`.
 
-Each action asks you to confirm, then reports its results. Bulk actions apply
+Each action asks you to confirm, then reports its results, with a next step
+for every row it skipped or couldn't process. Bulk actions apply
 to students only; staff are managed in the classroom's **Settings**.
 
 **Edit** (owners only) switches the table into an editing surface:
@@ -834,30 +880,59 @@ classrooms they belong to. Open your organization in Classroom 50, then select
 The table shows **Name**, **Username**, **Classrooms**, **Roles**, and
 **Status** columns; click a column header to sort by it. **Roles** is the
 organization role (**Owner** or **Member**), and **Status** reports only
-problems:
+problems, using the same vocabulary as the roster:
 
-- **Not an org member.** On a classroom roster but not in the organization
+- **Not in organization.** On a classroom roster but not in the organization
   (for example, they left or were removed). Click **Invite** on the row to
   restore their access.
-- **Invitation pending.** An email invitation hasn't been accepted yet.
+- **Invitation pending.** GitHub has a live invitation for this person that
+  hasn't been accepted yet.
+- **Unlinked.** A roster row with no GitHub account and no live invitation
+  (a name-only row, or an address whose invitation lapsed).
 - **Not enrolled.** On a roster but missing from the classroom team, so
   score collection would miss them.
 
+A row whose invitation expired (GitHub invitations last 7 days) or couldn't be
+delivered also carries an **Invitation expired** or **Invitation failed**
+badge, as on the roster. Its detail panel says
+exactly what happened and links to the person's row on each classroom roster,
+where **Re-invite**, **Link account**, and **Remove row** live; the Members
+page itself doesn't act on pending or unlinked rows, since an invitation
+belongs to a classroom. If the organization's invitation list can't be read,
+the page says so: pending and expired invitations aren't shown, rows may read
+as unlinked or not in the organization, and you should retry before inviting
+anyone.
+
+A notice reading **N failed invitations aren't on any roster** appears when
+GitHub still records expired or undeliverable invitations that no roster row
+or member matches (usually the row was removed after the invitation expired).
+Nothing here can re-invite them. Click **View details** to list them, then
+**Dismiss** one or **Dismiss all** to clear them from GitHub's failed
+invitations list, or leave any you sent for another purpose.
+
 The toolbar narrows the table: **Search** matches members by name, username,
-or email; a **Show** filter covers both status and organization role
-(**Owners**, **Members**); and a classroom filter shows one classroom's
-members, or members on **No classroom**.
+or email; a **Show** filter covers both status (**Not in organization**,
+**Invitation pending**, **Unlinked**, **Invitation expired**, **Not
+enrolled**) and organization role (**Owners**, **Members**); and a classroom
+filter shows one classroom's members, or members on **No classroom**.
 
 Click a row to open the member's details: their name, GitHub username and ID,
 every email address the rosters record for them, and their classroom access
 with a link to each classroom. From here you can also invite an on-roster
-non-member back to the organization, or remove a member from the organization.
+non-member back to the organization (the invitation attaches their classroom
+teams, and an existing pending or active state is reported rather than
+re-sent), or remove a member from the organization.
 
 ### Bulk member actions
 
 Select rows with the checkboxes (or the select-all in the header), then open
-the **Actions** menu:
+the **Actions** menu. Each action shows how many of the selected rows it can
+act on and applies only to those:
 
+- **Send invitations (N)** invites the selected people who are on a roster
+  but not in the organization, attaching their classroom teams. Rows invited
+  by email and still pending, and unlinked rows, are skipped with a pointer to
+  the classroom's **Roster** page, where those cases are handled.
 - **Add to classroom** enrolls the selected members on a classroom you pick in
   the dialog. Members already on that classroom, and people who aren't
   organization members yet, are skipped.
