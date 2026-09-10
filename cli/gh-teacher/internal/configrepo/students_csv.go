@@ -471,23 +471,36 @@ func collectExtraColumns(rows []RosterRow) []string {
 	return ordered
 }
 
-// UpsertRosterRow replaces by Username (case-insensitive), else claims a pending
+// UpsertRosterRow completes the row whose GitHubID matches when its username is
+// blank or stale (the id is the immutable identity, so the login is corrected
+// from it), else replaces by Username (case-insensitive), else claims a pending
 // email-invite row with the same email, else appends. Position preserved on
 // replace. Returns the slice and whether a row was replaced.
+//
+// The id completion is borrow-only: a name, email, or section cell the incoming
+// row leaves blank keeps the stored value, so a bare `roster add <login>`
+// against a row a hand edit left id-only fills the login in rather than wiping
+// teacher-entered metadata. A row that already carries the incoming login falls
+// through to the username replace, whose whole-row semantics `roster import`
+// relies on to clear a cell.
 //
 // The email fallback finishes what an email invite started: that row carries
 // only the invited address until the student accepts, so adding them by username
 // would otherwise leave a second row for the same person. Claimable means
 // exactly RosterRow.IsPendingEmailInvite, and a username match always wins. An
 // email claim does NOT inherit the pending row's Role (an email invite may have
-// been for staff; the team is the role authority), whereas a username match
-// does.
+// been for staff; the team is the role authority), whereas an id or username
+// match does.
 //
 // On replace, the existing row's Extra is carried over UNLESS the incoming row
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
 // web-written extra columns. The same guard applies to Role: an incoming empty
 // Role (a caller that doesn't know the team-derived role) preserves the
 // existing recorded role rather than blanking it.
+//
+// Callers that resolved the account from a login must run RosterIdentityConflict
+// first: this function never refuses, so on a recycled login the username pass
+// would repoint the stored row onto the new holder.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	claim := func(i int, keepRole bool) ([]RosterRow, bool) {
 		if row.Extra == nil && rows[i].Extra != nil {
@@ -499,6 +512,19 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 		}
 		rows[i] = row
 		return rows, true
+	}
+	if row.GitHubID != 0 {
+		for i := range rows {
+			if rows[i].isRaw() || rows[i].GitHubID != row.GitHubID ||
+				strings.EqualFold(rows[i].Username, row.Username) {
+				continue
+			}
+			keepStored(&row.FirstName, rows[i].FirstName)
+			keepStored(&row.LastName, rows[i].LastName)
+			keepStored(&row.Email, rows[i].Email)
+			keepStored(&row.Section, rows[i].Section)
+			return claim(i, true)
+		}
 	}
 	for i := range rows {
 		if rows[i].isRaw() {
@@ -527,6 +553,44 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 		}
 	}
 	return append(rows, row), false
+}
+
+func keepStored(incoming *string, stored string) {
+	if strings.TrimSpace(*incoming) == "" {
+		*incoming = stored
+	}
+}
+
+// RosterIdentityConflict reports the stored row that makes writing login for
+// githubID bind one identity to two people: a row carrying the login for a
+// DIFFERENT resolved account (a recycled login), or a row carrying the login
+// while another row already records githubID (the login would end up on two
+// rows). Mirrors the web's RosterIdentityConflictError; UpsertRosterRow does
+// not check this itself.
+func RosterIdentityConflict(rows []RosterRow, login string, githubID int64) (holder RosterRow, conflict bool) {
+	login = strings.TrimSpace(login)
+	if login == "" || githubID <= 0 {
+		return RosterRow{}, false
+	}
+	idRow := -1
+	for i := range rows {
+		if !rows[i].isRaw() && rows[i].GitHubID == githubID {
+			idRow = i
+			break
+		}
+	}
+	for i := range rows {
+		if rows[i].isRaw() || !strings.EqualFold(rows[i].Username, login) {
+			continue
+		}
+		if rows[i].GitHubID != 0 && rows[i].GitHubID != githubID {
+			return rows[i], true
+		}
+		if idRow != -1 && idRow != i {
+			return rows[i], true
+		}
+	}
+	return RosterRow{}, false
 }
 
 // RemoveRosterRow drops by Username (case-insensitive). Returns the slice and
@@ -730,6 +794,29 @@ func BackfillRosterGitHubID(rows []RosterRow, username string, githubID int64) (
 		}
 		rows[i].GitHubID = githubID
 		rows[i].githubIDRaw = ""
+		return rows, true
+	}
+	return rows, false
+}
+
+// BackfillRosterUsername writes login onto the row whose GitHubID matches when
+// its username is blank or differs. The mirror of BackfillRosterGitHubID: keyed
+// by the immutable id, it can only correct a row's spelling of its own account.
+// The caller sources login from the classroom's own team membership and skips
+// a login another row already carries.
+func BackfillRosterUsername(rows []RosterRow, githubID int64, login string) (out []RosterRow, filled bool) {
+	login = strings.TrimSpace(login)
+	if githubID <= 0 || login == "" {
+		return rows, false
+	}
+	for i := range rows {
+		if rows[i].isRaw() || rows[i].GitHubID != githubID {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(rows[i].Username), login) {
+			return rows, false
+		}
+		rows[i].Username = login
 		return rows, true
 	}
 	return rows, false

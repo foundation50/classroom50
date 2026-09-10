@@ -73,6 +73,12 @@ func rosterAddCmd() *cobra.Command {
 			"numeric ID is resolved at write time and stored in the\n" +
 			"`github_id` column, defending against mid-class username\n" +
 			"changes.\n\n" +
+			"A row that already carries that github_id but a blank or outdated\n" +
+			"username is completed in place: the username is set to the\n" +
+			"account's current login and any name, email, or section you\n" +
+			"don't pass keeps the stored value. If a row carries the username\n" +
+			"for a different account, nothing is written; correct or remove\n" +
+			"that row first.\n\n" +
 			"If no username matches and --email is given, an existing row\n" +
 			"holding only that address is completed in place instead of a\n" +
 			"second row being added: that is the pending row an email\n" +
@@ -347,6 +353,18 @@ func inviteIfNotMember(client githubapi.Client, org, username string, userID int
 	return "invited", nil
 }
 
+// identityConflictError names the stored row that blocks writing login for
+// userID and what to do about it, so the teacher is never left guessing which
+// row to fix (see configrepo.RosterIdentityConflict).
+func identityConflictError(classroom, login string, userID int64, holder configrepo.RosterRow) error {
+	if holder.GitHubID != 0 && holder.GitHubID != userID {
+		return fmt.Errorf("%s: the roster row for %s records github_id %d, a different account than %s (github_id %d), so nothing was written. If that row is stale, run `gh teacher roster remove` on it (or correct its github_id in %s), then retry",
+			classroom, holder.Username, holder.GitHubID, login, userID, configrepo.RosterFilePath(classroom))
+	}
+	return fmt.Errorf("%s: another roster row already carries the username %s, so completing the row for github_id %d would put one username on two rows and nothing was written. Remove or correct the duplicate row in %s, then retry",
+		classroom, holder.Username, userID, configrepo.RosterFilePath(classroom))
+}
+
 // runRosterAdd commits the roster row first, then invites. Committing first
 // leaves the roster ahead of org membership (a re-run reconciles), which is
 // safer than an invite landing before a failed commit.
@@ -375,6 +393,9 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 		rows, err := configrepo.LoadRosterLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
+		}
+		if holder, conflict := configrepo.RosterIdentityConflict(rows, login, userID); conflict {
+			return configwrite.CommitChange{}, identityConflictError(classroom, login, userID, holder)
 		}
 		updated, replaced := configrepo.UpsertRosterRow(rows, newRow)
 		if replaced {
@@ -698,6 +719,9 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		// pending matches) differently.
 		added, updated, pendingUpdated, pendingMissing = 0, 0, 0, nil
 		for _, row := range accounts {
+			if holder, conflict := configrepo.RosterIdentityConflict(rows, row.Username, row.GitHubID); conflict {
+				return configwrite.CommitChange{}, identityConflictError(classroom, row.Username, row.GitHubID, holder)
+			}
 			var replaced bool
 			rows, replaced = configrepo.UpsertRosterRow(rows, row)
 			if replaced {
@@ -707,8 +731,9 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 			}
 		}
 		for _, p := range pending {
-			// Name/section come wholesale from the file, like an account row's;
-			// the address and role stay as the invitation recorded them.
+			// Name/section come wholesale from the file, like an account row's
+			// username replace; the address and role stay as the invitation
+			// recorded them.
 			var found bool
 			rows, found = configrepo.UpdatePendingEmailRow(rows, p.row.Email, configrepo.RosterPatch{
 				FirstName: &p.row.FirstName,

@@ -602,6 +602,63 @@ func TestRunRosterAdd_PreservesMalformedRow(t *testing.T) {
 	}
 }
 
+// A row a hand edit left id-only is completed by `roster add <login>` rather
+// than duplicated, and the bare add keeps the stored name and section.
+func TestRunRosterAdd_CompletesIDOnlyRow(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role\n" +
+		",Ada,Lovelace,,s1,999,student\n" + // the mock resolves every login to id 999
+		"alice,Alice,A,a@x.edu,s1,1,student\n"
+
+	mock := &rosterAddMock{&rosterWriteMock{files: map[string]string{"ai26/roster.csv": roster}}}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runRosterAdd(client, &out, &errOut, "o", "ai26", "ada", "", "", "", ""); err != nil {
+		t.Fatalf("runRosterAdd: %v", err)
+	}
+	if !strings.Contains(out.String(), "updated ada (github_id 999)") {
+		t.Errorf("expected the add to report an update, got:\n%s", out.String())
+	}
+	if len(mock.blobs) != 1 {
+		t.Fatalf("got %d blobs POSTed, want 1", len(mock.blobs))
+	}
+	rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("re-parse written roster: %v\n%s", err, mock.blobs[0])
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected the id-only row to be completed in place, not appended beside; got %d rows:\n%s", len(rows), mock.blobs[0])
+	}
+	got := rows[0]
+	if got.Username != "ada" || got.GitHubID != 999 || got.FirstName != "Ada" || got.LastName != "Lovelace" || got.Section != "s1" || got.Role != "student" {
+		t.Errorf("completed row should carry the login and keep the stored cells, got %#v", got)
+	}
+}
+
+// A recycled login: the stored row for that username records a different
+// account, so the add must refuse rather than repoint the row (the web's
+// RosterIdentityConflictError), and nothing is committed.
+func TestRunRosterAdd_RefusesRecycledLogin(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role\n" +
+		"ada,Ada,Lovelace,,s1,123,student\n" // the mock resolves "ada" to id 999
+
+	mock := &rosterAddMock{&rosterWriteMock{files: map[string]string{"ai26/roster.csv": roster}}}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runRosterAdd(client, &out, &errOut, "o", "ai26", "ada", "", "", "", "")
+	if err == nil || !strings.Contains(err.Error(), "records github_id 123, a different account") {
+		t.Fatalf("expected the identity-conflict error, got %v", err)
+	}
+	if len(mock.blobs) != 0 {
+		t.Errorf("nothing must be written on a conflict, got %d blob(s)", len(mock.blobs))
+	}
+}
+
 // dualRoleAddMock extends rosterAddMock with classroom.json (carrying staff-team
 // refs) and staff-team member endpoints, so runRosterAdd's best-effort
 // dual-role check can resolve teams and find (or not find) the target on them.

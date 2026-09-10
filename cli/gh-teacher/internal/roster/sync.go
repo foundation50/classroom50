@@ -146,6 +146,10 @@ type classroomIndex struct {
 	// idByLogin omits any login held by more than one member: two accounts
 	// answering to one login is not something to guess at.
 	idByLogin map[string]int64
+	// loginByID is the mirror, for a row whose github_id names a member but
+	// whose username is blank or stale. Ids are unique per member, so no
+	// pruning is needed.
+	loginByID map[int64]string
 	// teamSlugs are the classroom teams `enrolled` was built from (student
 	// first), kept for the scan's decision-time enrollment re-check.
 	teamSlugs []string
@@ -167,7 +171,7 @@ type classroomIndex struct {
 func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) (classroomIndex, error) {
 	idx := classroomIndex{
 		enrolled: map[int64]bool{}, roleByID: map[int64]string{},
-		idByLogin: map[string]int64{}, ok: true,
+		idByLogin: map[string]int64{}, loginByID: map[int64]string{}, ok: true,
 	}
 
 	slug, err := configrepo.ResolveClassroomTeamSlug(client, org, classroom, branch)
@@ -224,6 +228,7 @@ func loadClassroomIndex(client githubapi.Client, org, classroom, branch string) 
 				continue
 			}
 			idx.enrolled[m.ID] = true
+			idx.loginByID[m.ID] = m.Login
 			key := loginKey(m.Login)
 			counts[key]++
 			idx.idByLogin[key] = m.ID
@@ -427,12 +432,22 @@ type rosterPlan struct {
 	// backfills are usernames whose github_id can be filled from the classroom
 	// team's membership.
 	backfills []string
+	// loginFills are rows whose github_id names a team member but whose
+	// username is blank or stale; the member's current login is written.
+	loginFills []loginFill
 	// appends are recoveries no row claims at all — the invite-time row was
 	// deleted (or never written, e.g. `roster invite`'s commit failed). Without
 	// this the address would be lost when the team is retired below.
 	appends []inviteRecovery
 	// findings is what this pass will only REPORT. Never consulted by empty().
 	findings rosterFindings
+}
+
+// loginFill is one planned username backfill: the id that keys the row and
+// the login the classroom team reports for it.
+type loginFill struct {
+	ID    int64
+	Login string
 }
 
 // rosterFindings are the report-only outcomes of a pass: nothing --write would
@@ -444,11 +459,15 @@ type rosterFindings struct {
 	// so a later duplicate is reported for a hand-fix rather than planned — a
 	// change --write can't make would leave every dry run exiting 2 forever.
 	dupLogins []string
+	// loginClaimed are rows whose github_id names a member whose login another
+	// row already carries, so the username can't be filled without giving one
+	// login two rows. Reported for a hand-fix, never planned.
+	loginClaimed []loginFill
 }
 
 func (p rosterPlan) empty() bool {
 	return len(p.folds) == 0 && len(p.emailFills) == 0 &&
-		len(p.backfills) == 0 && len(p.appends) == 0
+		len(p.backfills) == 0 && len(p.loginFills) == 0 && len(p.appends) == 0
 }
 
 // planRosterSync is phase 2: match the scan against the roster rows. Read-only,
@@ -500,6 +519,25 @@ func planRosterSync(rows []configrepo.RosterRow, scan inviteScan, idx classroomI
 			continue
 		}
 		plan.backfills = append(plan.backfills, row.Username)
+	}
+
+	// The mirror of the id backfill, keyed by the immutable id so it can only
+	// correct a row's spelling of its own account. A claimed login goes to
+	// findings.loginClaimed instead of the plan.
+	for i, row := range folded {
+		if row.GitHubID == 0 || rowIdx.firstByID[row.GitHubID] != i {
+			continue
+		}
+		login, ok := idx.loginByID[row.GitHubID]
+		if !ok || loginKey(row.Username) == loginKey(login) {
+			continue
+		}
+		fill := loginFill{ID: row.GitHubID, Login: login}
+		if _, claimed := rowIdx.firstByLogin[loginKey(login)]; claimed {
+			plan.findings.loginClaimed = append(plan.findings.loginClaimed, fill)
+			continue
+		}
+		plan.loginFills = append(plan.loginFills, fill)
 	}
 
 	// The two remaining steps join on IDENTITY (id or login), as the web's fold
@@ -727,6 +765,9 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 	for _, username := range plan.backfills {
 		_, _ = fmt.Fprintf(out, "%s: fill in %s's github_id from the classroom team\n", path, username)
 	}
+	for _, fill := range plan.loginFills {
+		_, _ = fmt.Fprintf(out, "%s: fill in the username %s on the row for github_id %d from the classroom team\n", path, fill.Login, fill.ID)
+	}
 	for _, slug := range scan.staleSlugs {
 		_, _ = fmt.Fprintf(out, "%s: delete the leftover metadata team %s\n", org, slug)
 	}
@@ -736,6 +777,10 @@ func reportSyncPlan(out, errOut io.Writer, org, classroom string, scan inviteSca
 	for _, username := range plan.findings.dupLogins {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: left a second row for %q alone: more than one row carries that username, and only the first can be filled in, so which student the id belongs to is not this pass's guess. Remove the duplicate row (or give it its own username) to let the sync finish it.\n",
 			path, username)
+	}
+	for _, fill := range plan.findings.loginClaimed {
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: left the row for github_id %d without its username: the classroom team reports that account as %q, but another row already carries that username. Remove or correct one of the two rows to let the sync finish it.\n",
+			path, fill.ID, fill.Login)
 	}
 	for _, anomaly := range scan.anomalies {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: kept %s\n", org, anomaly)
@@ -785,6 +830,12 @@ func applyRosterSync(client githubapi.Client, out io.Writer, org, classroom, bra
 				applied.backfills = append(applied.backfills, username)
 			}
 		}
+		for _, fill := range plan.loginFills {
+			if next, ok := configrepo.BackfillRosterUsername(rows, fill.ID, fill.Login); ok {
+				rows = next
+				applied.loginFills = append(applied.loginFills, fill)
+			}
+		}
 		for _, rec := range plan.appends {
 			// Identity + the recovered address only: name and section stay
 			// teacher-owned, never fabricated from a GitHub profile. Role comes
@@ -813,9 +864,9 @@ func applyRosterSync(client githubapi.Client, out io.Writer, org, classroom, bra
 	if applied.empty() {
 		return retired, nil
 	}
-	_, _ = fmt.Fprintf(out, "%s/%s/%s: recorded %d accepted invite(s), added %d row(s), filled %d github_id(s)\n",
+	_, _ = fmt.Fprintf(out, "%s/%s/%s: recorded %d accepted invite(s), added %d row(s), filled %d github_id(s), filled %d username(s)\n",
 		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom),
-		len(applied.folds)+len(applied.emailFills), len(applied.appends), len(applied.backfills))
+		len(applied.folds)+len(applied.emailFills), len(applied.appends), len(applied.backfills), len(applied.loginFills))
 	return retired, nil
 }
 

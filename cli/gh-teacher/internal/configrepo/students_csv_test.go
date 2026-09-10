@@ -722,6 +722,108 @@ func TestUpsertRosterRow_CaseInsensitive(t *testing.T) {
 	}
 }
 
+func TestUpsertRosterRow_ClaimsRowByGitHubID(t *testing.T) {
+	// A hand edit left the row id-only. Adding the account by login must
+	// complete that row, not append a second one for the same person, and a
+	// bare add (no name flags) must keep the stored metadata.
+	rows := []RosterRow{
+		{FirstName: "Ada", LastName: "Lovelace", Section: "s1", GitHubID: 42, Role: "student"},
+		{Username: "bob", GitHubID: 2},
+	}
+	rows, replaced := UpsertRosterRow(rows, RosterRow{Username: "ada", GitHubID: 42})
+	if !replaced {
+		t.Fatalf("id match should report replace")
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d: %#v", len(rows), rows)
+	}
+	got := rows[0]
+	if got.Username != "ada" || got.FirstName != "Ada" || got.LastName != "Lovelace" ||
+		got.Section != "s1" || got.GitHubID != 42 || got.Role != "student" {
+		t.Errorf("completed row should carry the login plus every stored cell, got %#v", got)
+	}
+}
+
+func TestUpsertRosterRow_IDClaimTypedCellsWin(t *testing.T) {
+	rows := []RosterRow{{Username: "old-ada", FirstName: "Ada", Email: "ada@x", GitHubID: 42}}
+	rows, replaced := UpsertRosterRow(rows, RosterRow{Username: "new-ada", FirstName: "Augusta", GitHubID: 42})
+	if !replaced || len(rows) != 1 {
+		t.Fatalf("stale login on an id-matched row should be replaced in place, got replaced=%v rows=%#v", replaced, rows)
+	}
+	if rows[0].Username != "new-ada" || rows[0].FirstName != "Augusta" || rows[0].Email != "ada@x" {
+		t.Errorf("expected the current login, the typed name, and the stored email; got %#v", rows[0])
+	}
+}
+
+func TestUpsertRosterRow_IDMatchWinsOverUsernameMatch(t *testing.T) {
+	// Row 0 records the incoming account by id under a stale login; row 1 is a
+	// pre-id row for the same login. The id-matched row is the one updated.
+	// (RosterIdentityConflict is what refuses the recycled-login shape where
+	// the login-holding row records a DIFFERENT account; see its test.)
+	rows := []RosterRow{
+		{Username: "old-alice", GitHubID: 42},
+		{Username: "bob", GitHubID: 7},
+	}
+	rows, replaced := UpsertRosterRow(rows, RosterRow{Username: "alice", GitHubID: 42})
+	if !replaced {
+		t.Fatalf("expected the id-matched row to be replaced")
+	}
+	if rows[0].Username != "alice" || rows[0].GitHubID != 42 {
+		t.Errorf("row 0 should now carry the current login for id 42, got %#v", rows[0])
+	}
+	if rows[1].Username != "bob" || rows[1].GitHubID != 7 {
+		t.Errorf("row 1 (a different account) must be untouched, got %#v", rows[1])
+	}
+}
+
+func TestUpsertRosterRow_CompleteRowKeepsWholeRowReplace(t *testing.T) {
+	// A row already carrying both the id and the login is not "incomplete", so
+	// the id pass steps aside and the username replace clears a blank incoming
+	// cell as `roster import` documents.
+	rows := []RosterRow{{Username: "alice", FirstName: "Alice", Section: "s1", GitHubID: 42}}
+	rows, replaced := UpsertRosterRow(rows, RosterRow{Username: "alice", FirstName: "Alice", GitHubID: 42})
+	if !replaced || len(rows) != 1 {
+		t.Fatalf("expected an in-place replace, got replaced=%v rows=%#v", replaced, rows)
+	}
+	if rows[0].Section != "" {
+		t.Errorf("a blank incoming cell on a complete row must clear the stored one, got %#v", rows[0])
+	}
+}
+
+func TestRosterIdentityConflict(t *testing.T) {
+	t.Run("recycled login: the login's row records another account", func(t *testing.T) {
+		rows := []RosterRow{{Username: "alice", GitHubID: 99}}
+		holder, conflict := RosterIdentityConflict(rows, "alice", 42)
+		if !conflict || holder.GitHubID != 99 {
+			t.Fatalf("conflict = %v, holder = %#v", conflict, holder)
+		}
+	})
+
+	t.Run("login held by another row while a different row records the id", func(t *testing.T) {
+		rows := []RosterRow{
+			{Username: "old-alice", GitHubID: 42},
+			{Username: "alice"},
+		}
+		holder, conflict := RosterIdentityConflict(rows, "alice", 42)
+		if !conflict || holder.Username != "alice" {
+			t.Fatalf("conflict = %v, holder = %#v", conflict, holder)
+		}
+	})
+
+	t.Run("no conflict: same row, an id-less match, or no match", func(t *testing.T) {
+		for _, rows := range [][]RosterRow{
+			{{Username: "alice", GitHubID: 42}},
+			{{Username: "Alice"}},
+			{{Username: "bob", GitHubID: 7}},
+			{{FirstName: "Ada", GitHubID: 42}},
+		} {
+			if _, conflict := RosterIdentityConflict(rows, "alice", 42); conflict {
+				t.Errorf("unexpected conflict for %#v", rows)
+			}
+		}
+	})
+}
+
 func TestRemoveRosterRow(t *testing.T) {
 	rows := []RosterRow{
 		{Username: "alice", GitHubID: 1},
@@ -1618,6 +1720,41 @@ func TestBackfillRosterGitHubID(t *testing.T) {
 	t.Run("no match is a no-op", func(t *testing.T) {
 		if _, ok := BackfillRosterGitHubID([]RosterRow{{Username: "bob"}}, "ada", 101); ok {
 			t.Error("filled a row for a different student")
+		}
+	})
+}
+
+func TestBackfillRosterUsername(t *testing.T) {
+	t.Run("fills a blank username, leaving metadata alone", func(t *testing.T) {
+		rows, ok := BackfillRosterUsername([]RosterRow{{FirstName: "Ada", Section: "s1", GitHubID: 101}}, 101, "ada")
+		if !ok || rows[0].Username != "ada" || rows[0].FirstName != "Ada" || rows[0].Section != "s1" {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("corrects a stale username", func(t *testing.T) {
+		rows, ok := BackfillRosterUsername([]RosterRow{{Username: "old-ada", GitHubID: 101}}, 101, "ada")
+		if !ok || rows[0].Username != "ada" {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("a login that already matches is a no-op", func(t *testing.T) {
+		rows, ok := BackfillRosterUsername([]RosterRow{{Username: "Ada", GitHubID: 101}}, 101, "ada")
+		if ok || rows[0].Username != "Ada" {
+			t.Fatalf("filled = %v, row = %#v", ok, rows[0])
+		}
+	})
+
+	t.Run("no id match, an unresolved id, and a blank login are no-ops", func(t *testing.T) {
+		if _, ok := BackfillRosterUsername([]RosterRow{{Username: "bob", GitHubID: 7}}, 101, "ada"); ok {
+			t.Error("filled a row for a different account")
+		}
+		if _, ok := BackfillRosterUsername([]RosterRow{{githubIDRaw: "0"}}, 0, "ada"); ok {
+			t.Error("an unresolved id addresses nobody and must match nothing")
+		}
+		if _, ok := BackfillRosterUsername([]RosterRow{{GitHubID: 101}}, 101, " "); ok {
+			t.Error("a blank login must write nothing")
 		}
 	})
 }

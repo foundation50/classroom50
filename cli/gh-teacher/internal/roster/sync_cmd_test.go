@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -768,6 +769,76 @@ func TestRunRosterSync_BackfillsIDsFromClassroomTeamOnly(t *testing.T) {
 	}
 	if n := countCalls(mock.calls, http.MethodGet, "/users/outsider"); n != 0 {
 		t.Errorf("resolved a login through a global user lookup %d time(s)", n)
+	}
+}
+
+// The mirror of the id backfill: a row whose github_id names a classroom
+// member gets that member's login, whether the cell is blank (a hand edit) or
+// stale (a renamed account). Keyed by id, so no global user lookup is made.
+func TestRunRosterSync_FillsUsernamesFromClassroomTeam(t *testing.T) {
+	roster := storedRosterHeader +
+		",Ada,L,,s1," + strconv.Itoa(syncTestAcceptedID) + ",student\n" +
+		"old-bob,Bob,B,,s1,202,student\n" +
+		"carol,Carol,C,,s1,303,student\n"
+	dry := newSyncMock(t, roster)
+	dry.classroomMembers = append(dry.classroomMembers, map[string]any{"login": "bob", "id": 202})
+	out, _, err := runSync(t, dry, false)
+	if got := exitCode(err); got != 2 {
+		t.Fatalf("dry-run exit code = %d (err %v), want 2 for changes pending", got, err)
+	}
+	if !strings.Contains(out, "fill in the username "+syncTestAcceptedLogin) || !strings.Contains(out, "fill in the username bob") {
+		t.Errorf("dry run must report both username fills:\n%s", out)
+	}
+	if writes := writeCalls(dry.calls); len(writes) != 0 {
+		t.Errorf("dry run issued %d write request(s): %#v", len(writes), writes)
+	}
+
+	mock := newSyncMock(t, roster)
+	mock.classroomMembers = append(mock.classroomMembers, map[string]any{"login": "bob", "id": 202})
+	out, _, err = runSync(t, mock, true)
+	if err != nil {
+		t.Fatalf("runRosterSync --write: %v", err)
+	}
+	if !strings.Contains(out, "filled 2 username(s)") {
+		t.Errorf("summary should count the username fills:\n%s", out)
+	}
+	byID := map[int64]configrepo.RosterRow{}
+	for _, row := range committedRosterRows(t, mock) {
+		byID[row.GitHubID] = row
+	}
+	if got := byID[syncTestAcceptedID]; got.Username != syncTestAcceptedLogin || got.FirstName != "Ada" || got.Section != "s1" {
+		t.Errorf("blank username not filled (metadata must be untouched): %#v", got)
+	}
+	if got := byID[202]; got.Username != "bob" {
+		t.Errorf("stale username not corrected: %#v", got)
+	}
+	if got := byID[303]; got.Username != "carol" {
+		t.Errorf("a row on no classroom team must be left alone: %#v", got)
+	}
+	for _, login := range []string{syncTestAcceptedLogin, "bob", "carol"} {
+		if n := countCalls(mock.calls, http.MethodGet, "/users/"+login); n != 0 {
+			t.Errorf("resolved %s through a global user lookup %d time(s)", login, n)
+		}
+	}
+}
+
+// A login another row already carries is reported, not written: the fill
+// would give one login two rows. Nothing else is pending, so the pass stays
+// clean (exit 0), since --write could never make that change.
+func TestRunRosterSync_UsernameFillYieldsToAClaimedLogin(t *testing.T) {
+	roster := storedRosterHeader +
+		"stale,Ada,L,,s1," + strconv.Itoa(syncTestAcceptedID) + ",student\n" +
+		syncTestAcceptedLogin + ",Other,O,,s1,555,student\n"
+	mock := newSyncMock(t, roster)
+	out, errOut, err := runSync(t, mock, false)
+	if err != nil {
+		t.Fatalf("a report-only finding must leave the pass clean, got exit %d: %v", exitCode(err), err)
+	}
+	if !strings.Contains(errOut, "another row already carries that username") {
+		t.Errorf("expected the claimed-login warning on stderr, got:\n%s", errOut)
+	}
+	if strings.Contains(out, "fill in the username") {
+		t.Errorf("a claimed login must not be planned:\n%s", out)
 	}
 }
 
