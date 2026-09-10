@@ -19,6 +19,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 	"github.com/cli/go-gh/v2/pkg/auth"
@@ -107,11 +108,30 @@ func RequireClient(out, errOut writer, opts Options) (*api.RESTClient, error) {
 // newDefaultClient builds go-gh's default REST client (reads the ambient gh
 // auth/host config), wrapping the error for callers.
 func newDefaultClient() (*api.RESTClient, error) {
-	client, err := api.DefaultRESTClient()
+	client, err := NewRESTClient(api.ClientOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("REST client: %w", err)
 	}
 	return client, nil
+}
+
+// RequestTimeout bounds every REST request either CLI makes. go-gh sets no
+// HTTP timeout, so without this a stalled connection hangs the command until
+// Ctrl-C. Generous because it also covers the largest single request, a
+// base64 blob upload; callers that want a tighter bound layer a context on top.
+const RequestTimeout = 60 * time.Second
+
+// NewRESTClient is the single constructor for go-gh REST clients in both CLIs,
+// applying RequestTimeout unless opts already sets one.
+func NewRESTClient(opts api.ClientOptions) (*api.RESTClient, error) {
+	return api.NewRESTClient(withRequestTimeout(opts))
+}
+
+func withRequestTimeout(opts api.ClientOptions) api.ClientOptions {
+	if opts.Timeout == 0 {
+		opts.Timeout = RequestTimeout
+	}
+	return opts
 }
 
 // isGhManagedToken reports whether TokenForHost's source string denotes a token
