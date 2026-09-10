@@ -302,6 +302,9 @@ gh teacher roster add cs50-fall-2026 cs-principles alice --first-name Alice --em
 Resolves the student's numeric `github_id`, upserts the row (case-insensitive by
 username), sends an organization invite if needed, and adds the student to the
 classroom team (so they can read in-org private templates). Re-running is safe.
+A row that already carries the student's `github_id` but a blank or outdated
+username is completed in place rather than duplicated; a row that carries the
+username for a different account blocks the add until you correct or remove it.
 If the student was invited by email, pass `--email` with that same address:
 `add` then fills in the pending row instead of adding a second one for the same
 person. Without it, the pending row stays put and the student is listed twice. See
@@ -478,7 +481,8 @@ gh teacher roster sync <org> <classroom> --write    # apply it
 
 It records the students who accepted an email invitation (username and
 `github_id`, onto their own pending row), fills in a missing `github_id` from the
-classroom team's membership, and deletes the invite teams that are done. If no
+classroom team's membership (and a blank or outdated username from the member's
+`github_id`), and deletes the invite teams that are done. If no
 row claims an accepted invitation (the pending row was deleted, or the invite's
 roster commit never landed), it appends one so the address isn't lost; that row
 records the role of the classroom team the account was found on, so a staff

@@ -537,6 +537,12 @@ dialog, choose a **Role** (**Student** is preselected), then enter the student's
 **GitHub username**. **First name**, **Last name**, **Email**, and **Section**
 are optional. Click **Add member**.
 
+If the roster already has a row for that account with only its `github_id` or
+only its username filled in (for example, after a hand edit to `roster.csv`), the
+add completes that row instead of adding a second one, and the confirmation names
+the row it linked. Fields you type replace the stored ones; fields you leave blank
+keep them.
+
 To invite a student who hasn't given you a GitHub username yet, enter their
 **Email** and leave **GitHub username** empty. The address goes onto the roster
 as a pending row and is matched to the student's account when they accept. For

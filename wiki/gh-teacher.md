@@ -302,7 +302,12 @@ gh teacher roster add <org> <classroom> <username> [--first-name <n>] [--last-na
 ```
 
 Upserts one row by username (case-insensitive), then invites the student to the
-organization if needed and adds them to the classroom team. Safe to re-run. When
+organization if needed and adds them to the classroom team. Safe to re-run. A
+row that already carries the account's `github_id` but a blank or outdated
+username is completed in place: the username is set to the current login and
+any name, email, or section you don't pass keeps the stored value. If a row
+carries that username for a different account, nothing is written; correct or
+remove that row first. When
 no row matches the username and `--email` matches a pending row's address, that
 row is filled in rather than duplicated; the pending row's `role` is deliberately
 not inherited, since the team is the authority for role.
@@ -405,7 +410,8 @@ gh teacher roster sync <org> <classroom> --write    # apply
 
 Catches `roster.csv` up with GitHub: records the students who accepted an email
 invitation (username and `github_id`, onto their own pending row), fills in a
-missing `github_id` from the classroom team's membership, and deletes the
+missing `github_id` from the classroom team's membership (and a blank or
+outdated username from the member's `github_id`), and deletes the
 invite teams that are done. If no row claims a recovered invitation (the
 pending row was deleted, or `roster invite`'s commit never landed), it appends
 a row so the address isn't lost. The web app runs this same sync when a teacher
