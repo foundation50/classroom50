@@ -5,7 +5,9 @@
 // module too. The shared module is consumed via a relative replace while the
 // CLIs live in this monorepo; when an extension is split into its own repo the
 // replace is swapped for a published version.
-go 1.26
+go 1.26.0
+
+toolchain go1.26.8
 
 use (
 	./cli/gh-student

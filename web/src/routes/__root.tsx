@@ -2,6 +2,7 @@ import {
   createRootRouteWithContext,
   Outlet,
   useParams,
+  type ErrorComponentProps,
 } from "@tanstack/react-router"
 import type { RouterContext } from "@/types/router"
 import { AlertIcon } from "@/components/ui/icons"
@@ -30,7 +31,7 @@ const RootComponent = () => {
 
 // App-wide safety net: any uncaught render error in a route subtree degrades to
 // this screen instead of a blank white page.
-const RootErrorComponent = ({ error }: { error: Error }) => {
+const RootErrorComponent = ({ error }: ErrorComponentProps) => {
   const { t } = useTranslation()
   // Log once per distinct error (effect deps [error]); the logger's record path
   // dedups repeat records of the same message within its window, so StrictMode's
@@ -39,6 +40,7 @@ const RootErrorComponent = ({ error }: { error: Error }) => {
   useEffect(() => {
     log.error("route error boundary triggered", { error, record: true })
   }, [error])
+  const message = error instanceof Error ? error.message : undefined
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-10 text-center">
       <div className="flex size-16 items-center justify-center rounded-box bg-error/10 text-error">
@@ -49,7 +51,7 @@ const RootErrorComponent = ({ error }: { error: Error }) => {
           {t("error.title")}
         </Heading>
         <p className="mt-1 max-w-md text-base-content/70">
-          {error?.message || t("error.unexpected")}
+          {message || t("error.unexpected")}
         </p>
       </div>
       <Button
