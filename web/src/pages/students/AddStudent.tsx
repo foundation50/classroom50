@@ -7,7 +7,10 @@ import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStu
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
 import { GitHubAPIError } from "@/github-core/errors"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import { StudentAlreadyEnrolledError } from "@/domain/students"
+import {
+  RosterIdentityConflictError,
+  StudentAlreadyEnrolledError,
+} from "@/domain/students"
 import { isValidEmail } from "@/util/orgMembership"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
@@ -129,7 +132,12 @@ const AddStudent = ({
             setSuccess(
               result.kind === "email"
                 ? t("students.invited", { label: result.label })
-                : t("students.added", { label: result.label }),
+                : result.completedRow
+                  ? t("students.completedRow", {
+                      label: result.label,
+                      row: result.completedRow.label,
+                    })
+                  : t("students.added", { label: result.label }),
             )
             form.reset()
           },
@@ -141,6 +149,10 @@ const AddStudent = ({
             const label = value.username.trim() || value.email.trim()
             if (err instanceof StudentAlreadyEnrolledError) {
               setWarning(t("students.alreadyEnrolled", { label: err.login }))
+              return
+            }
+            if (err instanceof RosterIdentityConflictError) {
+              setWarning(t("students.identityConflict", { label: err.login }))
               return
             }
             setWarning(

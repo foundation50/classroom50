@@ -40,7 +40,7 @@ export type SyncRosterFromTeamResult = {
 //      onto the email row written at invite time);
 //   2. the pre-existing team sync: ensure every active member has an IDENTITY
 //      row (username + github_id) carrying their team-derived `role`, refresh
-//      changed roles, and backfill resolvable ids.
+//      changed roles, and backfill resolvable ids and the logins they name.
 // The sync NEVER removes a row. An email-only row nothing backs stays on the
 // roster and renders as "unlinked" for the teacher to link or delete by hand —
 // a failed cancel-drop or an expired invitation fails visible instead of being
@@ -253,8 +253,15 @@ export async function syncRosterFromTeam(
         .filter((m) => loginCounts.get(m.login.toLowerCase()) === 1)
         .map((m) => [m.login.toLowerCase(), String(m.id)]),
     )
+    // The mirror: login per id, to fill a row whose github_id names a team
+    // member but whose username is blank (a hand-edited file) or stale (a
+    // renamed account). Keyed by the immutable id, so it can't repoint a row.
+    const loginById = new Map(members.map((m) => [String(m.id), m.login]))
+    // Logins this pass writes, so two rows sharing one id can't both take it.
+    const filledLogins = new Set<string>()
     let roleChanges = 0
     let idBackfills = 0
+    let loginBackfills = 0
     const reconciledStudents = foldedStudents.map((s) => {
       const loginKey = s.username.trim().toLowerCase()
       const emailKey = s.email?.trim().toLowerCase()
@@ -290,6 +297,22 @@ export async function syncRosterFromTeam(
         idBackfills++
         next = { ...next, github_id: backfilledId }
       }
+      // Skipped when another row already carries the member's login: two rows
+      // answering to one login is a hand-fix, not this pass's guess.
+      const memberLogin =
+        canonicalId !== null ? loginById.get(String(canonicalId)) : undefined
+      const memberLoginKey = memberLogin?.toLowerCase()
+      if (
+        memberLogin &&
+        memberLoginKey &&
+        memberLoginKey !== loginKey &&
+        !logins.has(memberLoginKey) &&
+        !filledLogins.has(memberLoginKey)
+      ) {
+        filledLogins.add(memberLoginKey)
+        loginBackfills++
+        next = { ...next, username: memberLogin }
+      }
       return next
     })
 
@@ -316,6 +339,7 @@ export async function syncRosterFromTeam(
       missing.length === 0 &&
       roleChanges === 0 &&
       idBackfills === 0 &&
+      loginBackfills === 0 &&
       inviteFolds === 0
     ) {
       log.info("sync roster from team: completed (up to date)", {
@@ -370,6 +394,7 @@ export async function syncRosterFromTeam(
       added: addedRows.length,
       roleChanges,
       idBackfills,
+      loginBackfills,
       inviteFolds,
     })
     return {

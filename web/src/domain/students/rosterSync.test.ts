@@ -436,3 +436,85 @@ describe("syncRosterFromTeam — unlinked rows (teacher-kept, no identity)", () 
     ])
   })
 })
+
+describe("syncRosterFromTeam — username backfill from the classroom team", () => {
+  it("fills a blank username on a row whose github_id names a team member", async () => {
+    // A hand-edited file dropped the login but kept the id. The member is not
+    // "missing" (their id is claimed), so without the backfill the row would
+    // stay id-only forever.
+    getRawFile.mockResolvedValue(HEADER + ",Ada,Lovelace,,s1,42,student")
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "ada", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites(),
+    })
+
+    expect(result.noop).toBeFalsy()
+    expect(result.addedUsernames).toEqual([])
+    expect(rowsFromCommit()).toEqual([
+      {
+        username: "ada",
+        first_name: "Ada",
+        last_name: "Lovelace",
+        email: "",
+        section: "s1",
+        github_id: "42",
+        role: "student",
+      },
+    ])
+  })
+
+  it("replaces a stale username with the login the team now reports for that id", async () => {
+    getRawFile.mockResolvedValue(HEADER + "old-ada,Ada,L,,,42,student")
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "new-ada", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    await syncRosterFromTeam(client, { ...INPUT, invites: emptyInvites() })
+
+    expect(rowsFromCommit()?.map((r) => r.username)).toEqual(["new-ada"])
+  })
+
+  it("leaves the row alone when another row already carries that login", async () => {
+    // Two rows answering to one login is a hand-fix, not the sync's guess:
+    // the stale row is kept as-is and nothing else forces a commit.
+    getRawFile.mockResolvedValue(
+      HEADER + "old-ada,,,,,42,student\n" + "new-ada,,,,,42,student",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "new-ada", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      ...INPUT,
+      invites: emptyInvites(),
+    })
+
+    expect(result.noop).toBe(true)
+    expect(committed.csv).toBeNull()
+  })
+
+  it("gives a login to only one of two rows sharing a github_id", async () => {
+    getRawFile.mockResolvedValue(
+      HEADER + ",Ada,L,,,42,student\n" + ",Ada,Dup,,,42,student",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [{ id: 42, login: "ada", role: "student" }],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    await syncRosterFromTeam(client, { ...INPUT, invites: emptyInvites() })
+
+    expect(rowsFromCommit()?.map((r) => r.username)).toEqual(["ada", ""])
+  })
+})

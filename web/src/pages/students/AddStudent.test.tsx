@@ -10,7 +10,9 @@ vi.mock("react-i18next", async (importOriginal) => {
     ...actual,
     useTranslation: () => ({
       t: (key: string, opts?: Record<string, unknown>) =>
-        opts && "label" in opts ? `${key}:${opts.label}` : key,
+        opts && "label" in opts
+          ? [key, opts.label, opts.row].filter(Boolean).join(":")
+          : key,
     }),
   }
 })
@@ -110,6 +112,33 @@ describe("AddStudent — role routing", () => {
     expect(enrollMutateAsync.mock.calls[0][0]).toMatchObject({
       username: "octocat",
     })
+  })
+
+  it("confirms a completed row with the row it was linked to", async () => {
+    // The add filled in an existing row rather than appending, so the
+    // confirmation names that row instead of saying "Added".
+    resolveEnroll({
+      kind: "username",
+      label: "octocat",
+      warning: "",
+      completedRow: { key: "583231", label: "Olive Octocat" },
+    })
+    render(renderModal())
+
+    await userEvent.type(
+      screen.getByLabelText("students.usernameLabel"),
+      "octocat",
+    )
+    await userEvent.click(
+      screen.getByRole("button", { name: "students.addButton" }),
+    )
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("students.completedRow:octocat:Olive Octocat"),
+      ).toBeTruthy(),
+    )
+    expect(screen.queryByText("students.added:octocat")).toBeNull()
   })
 
   it("routes a Teacher selection to the staff backend with the role", async () => {

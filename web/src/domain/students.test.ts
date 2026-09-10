@@ -28,6 +28,7 @@ import {
   RosterCsvMalformedError,
   STUDENT_CSV_FIELDS,
   StudentAlreadyEnrolledError,
+  RosterIdentityConflictError,
 } from "./students"
 import { removeEmailInviteRow } from "./students/rosterPrimitives"
 import { inviteTeamName, marshalInviteDescription } from "@/util/inviteTeam"
@@ -247,22 +248,208 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
     ).rejects.toBeInstanceOf(StudentAlreadyEnrolledError)
   })
 
-  it("throws StudentAlreadyEnrolledError when the github_id matches a renamed login", async () => {
-    // The CSV stores a stale login but the same github_id; the current account
-    // resolves to a different login. Dedupe by id must still catch it.
-    const { client } = makeClient({
-      startingCsv: `${HEADER}old-alice,,,,,42,\n`,
+  it("corrects a stale login on the row whose github_id matches", async () => {
+    // The CSV stores the login from before a rename but the same github_id.
+    // The id is the identity, so the row is rewritten under the current login
+    // rather than refused or duplicated.
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER}old-alice,Alice,A,,sec-1,42,student\n`,
       membershipState: "active",
       user: { login: "new-alice", id: 42 },
+    })
+
+    const result = await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "new-alice",
+    })
+
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "new-alice",
+      github_id: "42",
+      first_name: "Alice",
+      section: "sec-1",
+      role: "student",
+    })
+    expect(result.completedRow).toEqual({ key: "42", label: "Alice A" })
+  })
+
+  it("fills a blank username on an id-only row, typed cells winning over kept ones", async () => {
+    // A hand-edited file left the row with only its github_id. Adding the
+    // account by login completes that row in place: the typed name replaces
+    // the stored one, the blank typed section keeps the stored one.
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER},Ada,Lovelace,,sec-2,42,\n`,
+      membershipState: "active",
+      user: { login: "ada", id: 42 },
+    })
+
+    const result = await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "ada",
+      first_name: "Augusta",
+      last_name: "",
+      section: "",
+    })
+
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "ada",
+      github_id: "42",
+      first_name: "Augusta",
+      last_name: "Lovelace",
+      section: "sec-2",
+    })
+    expect(result.completedRow).toEqual({ key: "42", label: "Ada Lovelace" })
+  })
+
+  it("fills a blank github_id on a username-only row", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER}Bob,Bob,B,bob@x.edu,,,\n`,
+      membershipState: null,
+      user: { login: "bob", id: 43 },
+    })
+
+    const result = await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "bob",
+    })
+
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      username: "bob",
+      github_id: "43",
+      email: "bob@x.edu",
+    })
+    // The pre-write key is the login: that is what the cached row is keyed by.
+    expect(result.completedRow).toEqual({ key: "Bob", label: "Bob B" })
+  })
+
+  it("refuses a username match whose github_id names a different account", async () => {
+    // The login on the row was recycled: filling it would repoint someone
+    // else's row onto the new holder of the login.
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER}alice,,,,,99,\n`,
+      membershipState: "active",
+      user: { login: "alice", id: 42 },
     })
 
     await expect(
       enrollStudentInClassroom(client, {
         org: "acme",
         classroom: "cs101",
-        username: "new-alice",
+        username: "alice",
       }),
-    ).rejects.toMatchObject({ login: "new-alice" })
+    ).rejects.toMatchObject({
+      name: "RosterIdentityConflictError",
+      login: "alice",
+    })
+    expect(committed.content).toBeNull()
+  })
+
+  it("refuses to complete an id row when another row already carries the login", async () => {
+    // Filling row 0's login would leave two rows answering to "alice".
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER}old-alice,,,,,42,\nalice,,,,,,\n`,
+      membershipState: "active",
+      user: { login: "alice", id: 42 },
+    })
+
+    await expect(
+      enrollStudentInClassroom(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "alice",
+      }),
+    ).rejects.toBeInstanceOf(RosterIdentityConflictError)
+    expect(committed.content).toBeNull()
+  })
+
+  it("labels a bare id-only row by its github_id", async () => {
+    const { client } = makeClient({
+      startingCsv: `${HEADER},,,,,42,\n`,
+      membershipState: "active",
+      user: { login: "ada", id: 42 },
+    })
+
+    const result = await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "ada",
+    })
+
+    expect(result.completedRow).toEqual({ key: "42", label: "github_id 42" })
+  })
+
+  it("fills name and email from the GitHub profile only when the caller passed nothing", async () => {
+    const profile = {
+      login: "mona",
+      id: 50,
+      name: "Mona Lisa",
+      email: "mona@x.edu",
+    }
+    const omitted = makeClient({
+      startingCsv: HEADER,
+      membershipState: "active",
+      user: profile,
+    })
+    await enrollStudentInClassroom(omitted.client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "mona",
+    })
+    expect(rowsFromCsv(omitted.committed.content!)[0]).toMatchObject({
+      first_name: "Mona",
+      last_name: "Lisa",
+      email: "mona@x.edu",
+    })
+
+    // A blank the teacher typed stays blank, even against an id-only row.
+    const typedBlank = makeClient({
+      startingCsv: `${HEADER},,,,,50,\n`,
+      membershipState: "active",
+      user: profile,
+    })
+    await enrollStudentInClassroom(typedBlank.client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "mona",
+      first_name: "",
+      last_name: "",
+      email: "",
+    })
+    expect(rowsFromCsv(typedBlank.committed.content!)[0]).toMatchObject({
+      username: "mona",
+      first_name: "",
+      last_name: "",
+      email: "",
+    })
+  })
+
+  it("lets a completed row keep the email it already holds", async () => {
+    // The email clash guard must not fire against the row being completed.
+    const { client, committed } = makeClient({
+      startingCsv: `${HEADER},Ada,L,ada@x.edu,,42,\n`,
+      membershipState: "active",
+      user: { login: "ada", id: 42 },
+    })
+
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "ada",
+      email: "ada@x.edu",
+    })
+
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ username: "ada", email: "ada@x.edu" })
   })
 
   it("refuses an email a pending invitation already claims", async () => {

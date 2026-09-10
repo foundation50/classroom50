@@ -13,6 +13,7 @@ export {
   normalizeGithubUsername,
   isLikelyGithubUsername,
   StudentAlreadyEnrolledError,
+  RosterIdentityConflictError,
   NoNewStudentsError,
   RosterCsvMalformedError,
   type ClassroomPendingInvite,
@@ -36,6 +37,7 @@ export {
   inviteByEmail,
   enrollStudentInClassroom,
   type AddStudentToClassroomResult,
+  type CompletedRosterRow,
   type InviteByEmailResult,
 } from "./students/enrollment"
 export {

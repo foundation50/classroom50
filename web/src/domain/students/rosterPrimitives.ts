@@ -452,13 +452,26 @@ export async function resolveClassroomTeamWithRetry(
   }
 }
 
-// Already on this classroom's roster (matched by login or github_id). Typed so
-// the UI can branch on it instead of string-matching this message.
+// Already on this classroom's roster with both the login and the github_id
+// recorded. Typed so the UI can branch on it instead of string-matching.
 export class StudentAlreadyEnrolledError extends Error {
   login: string
   constructor(login: string) {
     super(`Student already exists: ${login}`)
     this.name = "StudentAlreadyEnrolledError"
+    this.login = login
+  }
+}
+
+// The login is on the roster, but its row records a DIFFERENT GitHub account
+// (a recycled login), or the account's row would take a login another row
+// already carries. Either way, writing would bind one identity to two people,
+// so the teacher has to fix the other row first.
+export class RosterIdentityConflictError extends Error {
+  login: string
+  constructor(login: string) {
+    super(`Roster row conflict for ${login}`)
+    this.name = "RosterIdentityConflictError"
     this.login = login
   }
 }

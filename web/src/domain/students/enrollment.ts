@@ -24,21 +24,65 @@ import {
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { resolveGitHubId } from "@/util/students"
+import { studentKey } from "@/util/identity"
 import {
   appendEmailInviteRows,
   log,
   resolveClassroomTeam,
   resolveClassroomTeamWithRetry,
   tryAddUserToTeam,
+  RosterIdentityConflictError,
   StudentAlreadyEnrolledError,
 } from "./rosterPrimitives"
 import i18n from "@/i18n"
 import { commitRoster, readRosterForWrite } from "./rosterWrite"
 
+// The row an add completed in place rather than appending beside it.
+export type CompletedRosterRow = {
+  // studentKey of the row as it was BEFORE the write, so the roster cache can
+  // find and replace it (its key may change once the id is filled in).
+  key: string
+  // How the roster showed the row until now: name, else email, else the stale
+  // login. For the confirmation copy.
+  label: string
+}
+
 export type AddStudentToClassroomResult = CreateClassroomResult & {
   student: StudentCsvRow
   // Set when the row committed but the follow-up team add failed (non-fatal).
   teamWarning?: string
+  completedRow?: CompletedRosterRow
+}
+
+// The roster row that already names this account, if any: by immutable id
+// first (so a stale login is corrected from it), else by case-insensitive
+// login. A login match whose id cell addresses a DIFFERENT account is still
+// returned, so the caller can refuse it rather than repoint the row.
+function findRowForAccount(
+  rows: StudentCsvRow[],
+  account: { id: number; login: string },
+): { index: number; row: StudentCsvRow; by: "id" | "login" } | undefined {
+  const loginKey = account.login.toLowerCase()
+  const byId = rows.findIndex(
+    (row) => resolveGitHubId(row.github_id) === account.id,
+  )
+  if (byId !== -1) return { index: byId, row: rows[byId], by: "id" }
+  const byLogin = rows.findIndex(
+    (row) => row.username.toLowerCase() === loginKey,
+  )
+  if (byLogin !== -1) return { index: byLogin, row: rows[byLogin], by: "login" }
+  return undefined
+}
+
+// How the roster showed the row until now. An id-only row has nothing else, so
+// the id itself is the last resort rather than an empty label.
+function rowLabel(row: StudentCsvRow): string {
+  return (
+    [row.first_name, row.last_name].filter(Boolean).join(" ") ||
+    row.email ||
+    row.username ||
+    `github_id ${row.github_id}`
+  )
 }
 
 export async function addStudentToClassroom(
@@ -56,14 +100,26 @@ export async function addStudentToClassroom(
   const githubUser = await getUser(client, normalizedUsername)
   const currentStudents = parseStudentsCsv(ctx.currentCsv)
 
-  const alreadyExists = currentStudents.some(
-    (student) =>
-      student.username.toLowerCase() === githubUser.login.toLowerCase() ||
-      student.github_id === String(githubUser.id),
-  )
-
-  if (alreadyExists) {
-    throw new StudentAlreadyEnrolledError(githubUser.login)
+  // A row that already names this account is completed in place (see
+  // findRowForAccount). Refused: a row already carrying both cells (a genuine
+  // duplicate), and any write that would bind one identity to two rows.
+  const existing = findRowForAccount(currentStudents, githubUser)
+  if (existing) {
+    const loginKey = githubUser.login.toLowerCase()
+    const sameLogin = existing.row.username.toLowerCase() === loginKey
+    if (existing.by === "id") {
+      if (sameLogin) throw new StudentAlreadyEnrolledError(githubUser.login)
+      const loginHeldElsewhere = currentStudents.some(
+        (row, index) =>
+          index !== existing.index && row.username.toLowerCase() === loginKey,
+      )
+      if (loginHeldElsewhere) {
+        throw new RosterIdentityConflictError(githubUser.login)
+      }
+    } else if (resolveGitHubId(existing.row.github_id) !== null) {
+      // The login's row records another account: a recycled login.
+      throw new RosterIdentityConflictError(githubUser.login)
+    }
   }
 
   const studentEmailClaim = (input.email ?? "").trim().toLowerCase()
@@ -77,7 +133,9 @@ export async function addStudentToClassroom(
   // addresses the roster claims.)
   if (studentEmailClaim) {
     const claimant = currentStudents.find(
-      (student) => student.email.trim().toLowerCase() === studentEmailClaim,
+      (student, index) =>
+        index !== existing?.index &&
+        student.email.trim().toLowerCase() === studentEmailClaim,
     )
     if (claimant) {
       throw new Error(
@@ -92,18 +150,31 @@ export async function addStudentToClassroom(
 
   const nameParts = splitName(githubUser.name)
 
-  const studentEmail = input.email?.trim() ?? githubUser.email ?? ""
-
+  // Teacher-typed cells win, then what the row already holds. The GitHub
+  // profile fills a cell only when the caller passed nothing for it at all (a
+  // blank the teacher typed stays blank, as before). `role` rides along from
+  // the existing row.
+  const base = existing?.row
+  const fill = (
+    typed: string | undefined,
+    kept: string | undefined,
+    profile: string,
+  ) => typed?.trim() || kept?.trim() || (typed === undefined ? profile : "")
   const student: StudentCsvRow = normalizeStudentRow({
+    ...base,
     username: githubUser.login,
-    first_name: input.first_name?.trim() ?? nameParts.first_name,
-    last_name: input.last_name?.trim() ?? nameParts.last_name,
-    email: studentEmail,
-    section: input.section?.trim() ?? "",
+    first_name: fill(input.first_name, base?.first_name, nameParts.first_name),
+    last_name: fill(input.last_name, base?.last_name, nameParts.last_name),
+    email: fill(input.email, base?.email, githubUser.email ?? ""),
+    section: fill(input.section, base?.section, ""),
     github_id: String(githubUser.id),
   })
 
-  const nextStudents = [...currentStudents, student]
+  const nextStudents = existing
+    ? currentStudents.map((row, index) =>
+        index === existing.index ? student : row,
+      )
+    : [...currentStudents, student]
   const nextCsv = stringifyStudentsCsv(nextStudents)
 
   const written = await commitRoster(
@@ -111,7 +182,9 @@ export async function addStudentToClassroom(
     input.org,
     ctx,
     nextCsv,
-    `Add student: ${input.classroom}/${student.username}`,
+    existing
+      ? `Complete roster row: ${input.classroom}/${student.username}`
+      : `Add student: ${input.classroom}/${student.username}`,
   )
 
   return {
@@ -119,6 +192,14 @@ export async function addStudentToClassroom(
     baseTreeSha: ctx.baseTreeSha,
     ...written,
     student,
+    ...(existing
+      ? {
+          completedRow: {
+            key: studentKey(existing.row),
+            label: rowLabel(existing.row),
+          },
+        }
+      : {}),
   }
 }
 
