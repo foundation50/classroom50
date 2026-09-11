@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -23,6 +23,36 @@ describe("SubmitGuidance", () => {
       screen.getByText("git clone https://github.com/acme/cs-hw1-student1.git"),
     ).toBeTruthy()
     expect(screen.getByText("gh student submit")).toBeTruthy()
+  })
+
+  it("switches the clone command between HTTPS, SSH, and GitHub CLI", () => {
+    render(
+      <SubmitGuidance repoHtmlUrl="https://github.com/acme/cs-hw1-student1" />,
+    )
+    const https = screen.getByRole("button", {
+      name: "submissions.student.submitGuide.cloneMethod.https",
+    })
+    const ssh = screen.getByRole("button", {
+      name: "submissions.student.submitGuide.cloneMethod.ssh",
+    })
+    const cli = screen.getByRole("button", {
+      name: "submissions.student.submitGuide.cloneMethod.cli",
+    })
+    expect(https.getAttribute("aria-pressed")).toBe("true")
+
+    fireEvent.click(ssh)
+    expect(
+      screen.getByText("git clone git@github.com:acme/cs-hw1-student1.git"),
+    ).toBeTruthy()
+    expect(ssh.getAttribute("aria-pressed")).toBe("true")
+    expect(https.getAttribute("aria-pressed")).toBe("false")
+
+    fireEvent.click(cli)
+    expect(screen.getByText("gh repo clone acme/cs-hw1-student1")).toBeTruthy()
+    expect(cli.getAttribute("aria-pressed")).toBe("true")
+    expect(
+      screen.queryByText("git clone git@github.com:acme/cs-hw1-student1.git"),
+    ).toBeNull()
   })
 
   it("renders both copy buttons", () => {

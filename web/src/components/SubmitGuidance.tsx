@@ -1,7 +1,8 @@
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { Ref } from "react"
 
-import { CopyableCode } from "@/components/ui"
+import { Button, CopyableCode } from "@/components/ui"
 import { isGlobPattern } from "@/domain/assignments/submissionDetection"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import type { SubmissionMode } from "@/types/classroom"
@@ -12,6 +13,34 @@ import type { SubmissionMode } from "@/types/classroom"
 const exampleMilestoneTag = (submissionTags?: string[]): string => {
   const literal = submissionTags?.find((p) => !isGlobPattern(p))
   return literal ?? "milestone"
+}
+
+// Same three clone options GitHub's own Code dropdown offers. Teachers differ
+// on which they teach (discussion #966), so the student picks; nothing else in
+// the app depends on how the repo was cloned.
+type CloneMethod = "https" | "ssh" | "cli"
+const CLONE_METHODS: CloneMethod[] = ["https", "ssh", "cli"]
+
+// "owner/repo" from the API's html_url; the API only ever returns github.com
+// URLs, so a parse failure falls back to the raw string rather than throwing.
+const repoFullName = (repoHtmlUrl: string): string => {
+  try {
+    return new URL(repoHtmlUrl).pathname.replace(/^\/+|\/+$/g, "")
+  } catch {
+    return repoHtmlUrl
+  }
+}
+
+const cloneCommand = (method: CloneMethod, repoHtmlUrl: string): string => {
+  const fullName = repoFullName(repoHtmlUrl)
+  switch (method) {
+    case "https":
+      return `git clone ${repoHtmlUrl}.git`
+    case "ssh":
+      return `git clone git@github.com:${fullName}.git`
+    case "cli":
+      return `gh repo clone ${fullName}`
+  }
 }
 
 // How a student submits from a terminal. Mode-aware:
@@ -42,16 +71,17 @@ export function SubmitGuidance({
 }) {
   const { t } = useTranslation()
   const isTagMode = submissionMode === "tag"
-  const cloneUrl = `${repoHtmlUrl}.git`
-  const cloneCmd = `git clone ${cloneUrl}`
+  const [cloneMethod, setCloneMethod] = useState<CloneMethod>("https")
+  const cloneCmd = cloneCommand(cloneMethod, repoHtmlUrl)
   const submitCmd = "gh student submit"
   const milestoneTag = exampleMilestoneTag(submissionTags)
   const milestoneCmd = `git tag ${milestoneTag} && git push origin ${milestoneTag}`
 
-  const { copied: cloneCopied, copy: copyClone } = useCopyToClipboard(
-    cloneCmd,
-    1500,
-  )
+  const {
+    copied: cloneCopied,
+    copy: copyClone,
+    reset: resetCloneCopied,
+  } = useCopyToClipboard(cloneCmd, 1500)
   const { copied: submitCopied, copy: copySubmit } = useCopyToClipboard(
     submitCmd,
     1500,
@@ -82,12 +112,38 @@ export function SubmitGuidance({
           <p className="text-sm text-base-content/70">
             {t("submissions.student.submitGuide.step1")}
           </p>
+          <div
+            role="group"
+            aria-label={t("submissions.student.submitGuide.cloneMethodAria")}
+            className="join"
+          >
+            {CLONE_METHODS.map((method) => (
+              <Button
+                key={method}
+                size="xs"
+                active={cloneMethod === method}
+                aria-pressed={cloneMethod === method}
+                className="join-item"
+                onClick={() => {
+                  // Drop a lingering "copied" check so it can't read as if
+                  // the newly selected command were already on the clipboard.
+                  resetCloneCopied()
+                  setCloneMethod(method)
+                }}
+              >
+                {t(`submissions.student.submitGuide.cloneMethod.${method}`)}
+              </Button>
+            ))}
+          </div>
           <CopyableCode
             value={cloneCmd}
             copied={cloneCopied}
             onCopy={copyClone}
             label={t("submissions.student.submitGuide.copyClone")}
           />
+          <p className="text-xs text-base-content/60">
+            {t("submissions.student.submitGuide.cloneHint")}
+          </p>
         </li>
         <li className="space-y-1.5">
           <p className="text-sm text-base-content/70">

@@ -1288,7 +1288,7 @@ func forkParentRestrictedError(parentOwner string, tmpl assignments.TemplateRef,
 // human-channel progress, so this doesn't duplicate the headline onto stderr.
 func reportAccepted(u *ui.UI, out io.Writer, fullName, htmlURL string) error {
 	_, _ = fmt.Fprintf(out, "Assignment accepted: %s\n\n", fullName)
-	return printCloneInstructions(u, out, htmlURL)
+	return printCloneInstructions(u, out, fullName, htmlURL)
 }
 
 // reportBareAccepted is reportAccepted's empty_repo variant: the repo has no
@@ -1300,7 +1300,7 @@ func reportBareAccepted(u *ui.UI, out io.Writer, fullName, htmlURL string) error
 	_, _ = fmt.Fprintln(out, "This assignment uses an empty repository: it has no starter files, and")
 	_, _ = fmt.Fprintln(out, "autograding is disabled. Clone it, then create and push your own work.")
 	_, _ = fmt.Fprintln(out)
-	return printCloneInstructions(u, out, htmlURL)
+	return printCloneInstructions(u, out, fullName, htmlURL)
 }
 
 // reportAlreadyAccepted writes the re-run message; the existing repo is never
@@ -1309,25 +1309,30 @@ func reportAlreadyAccepted(u *ui.UI, out io.Writer, fullName, htmlURL string) er
 	_, _ = fmt.Fprintf(out, "Assignment already accepted: %s\n\n", fullName)
 	_, _ = fmt.Fprintln(out, "Your existing repository contains your latest submissions and commits.")
 	_, _ = fmt.Fprintln(out)
-	return printCloneInstructions(u, out, htmlURL)
+	return printCloneInstructions(u, out, fullName, htmlURL)
 }
 
 // printCloneInstructions writes the clone block on stdout (scriptable) and
 // warns on the human channel if cwd is inside a Git repo (nested clones are
-// confusing).
-func printCloneInstructions(u *ui.UI, out io.Writer, htmlURL string) error {
+// confusing). Both HTTPS and SSH forms are printed: teachers differ on which
+// they teach (discussion #966), and nothing downstream depends on the choice.
+func printCloneInstructions(u *ui.UI, out io.Writer, fullName, htmlURL string) error {
 	root, insideRepo, err := localgit.CurrentGitRoot()
 	if err != nil {
 		return err
 	}
 	if insideRepo {
 		u.Warn("you are currently inside a Git repository (%s); clone from a parent or workspace directory to avoid nesting repositories", root)
-		_, _ = fmt.Fprintln(out, "Clone from a parent or workspace directory to avoid nesting repositories:")
-	} else {
-		_, _ = fmt.Fprintln(out, "Clone it with:")
+		_, _ = fmt.Fprintln(out, "Clone from a parent or workspace directory to avoid nesting repositories.")
+		_, _ = fmt.Fprintln(out)
 	}
+	_, _ = fmt.Fprintln(out, "Clone it with HTTPS:")
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintf(out, "  git clone %s.git\n\n", htmlURL)
+	_, _ = fmt.Fprintln(out, "Or with SSH:")
+	_, _ = fmt.Fprintln(out)
+	_, _ = fmt.Fprintf(out, "  git clone git@github.com:%s.git\n\n", fullName)
+	_, _ = fmt.Fprintln(out, "Use the option your teacher told you to use.")
 	return nil
 }
 

@@ -3595,6 +3595,13 @@
         "step1": "Clone your assignment repository (once):",
         "step2": "From inside the repository, submit your work for grading:",
         "copyClone": "Copy clone command",
+        "cloneMethodAria": "Clone method",
+        "cloneMethod": {
+          "https": "HTTPS",
+          "ssh": "SSH",
+          "cli": "GitHub CLI"
+        },
+        "cloneHint": "Use the option your teacher told you to use. SSH needs an SSH key added to your GitHub account. GitHub CLI needs the gh command installed.",
         "copySubmit": "Copy submit command",
         "tagIntro": "Your teacher grades tagged snapshots of your work. Commit and push as usual, then run the submit command below. It tags your latest work for grading.",
         "tagStep2": "From inside the repository, submit your work. This pushes a submission tag that triggers grading:",
