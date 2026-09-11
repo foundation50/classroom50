@@ -57,6 +57,7 @@ import {
   orgReposReadEnabled,
   unsubmittedGroupRepos,
   withSnapshotDetected,
+  type DisplayListInputs,
   type SubmissionFilters,
   type SubmissionSort,
 } from "./dashboard"
@@ -2325,30 +2326,87 @@ describe("filterDisplayList", () => {
           page: 0,
           pageSize: 10,
         })
-        const table = paginateDisplayItems(
-          buildDisplayItems(filterDisplayList(args), students, sort),
-          10,
-          0,
+        const table = tableOwners(
+          filterDisplayList(args),
+          false,
+          students,
+          sort,
         )
-          .map(displayItemOwner)
-          .filter(Boolean)
         expect(spine, JSON.stringify({ over, sort })).toEqual(table)
+      }
+    }
+  })
+
+  it("pages a group assignment the same way, with a submitted founder in one slot", () => {
+    // The page hands both sides the unsubmitted repos only; a founder who
+    // submitted must not also occupy a group-repo slot and shift the page.
+    const allRepos = [
+      { owner: "alice", repoName: "cs101-hw1-alice" },
+      { owner: "bob", repoName: "cs101-hw1-bob" },
+      { owner: "cara", repoName: "cs101-hw1-cara" },
+    ]
+    const groupRows = [row({ owner: "alice", usernames: ["alice", "dan"] })]
+    for (const over of [
+      {},
+      { submission: "submitted" as const },
+      { submission: "not-submitted" as const },
+    ]) {
+      for (const sort of ["name-first", "recent"] as const) {
+        const args = {
+          ...base,
+          rows: groupRows,
+          nonSubmitters: [],
+          groupRepos: unsubmittedGroupRepos(allRepos, groupRows),
+          filters: filters(over),
+          sort,
+        }
+        const spine = displayPageOwners({
+          ...filterDisplayList(args),
+          isGroup: true,
+          sort,
+          students,
+          page: 0,
+          pageSize: 10,
+        })
+        const table = tableOwners(filterDisplayList(args), true, students, sort)
+        expect(spine, JSON.stringify({ over, sort })).toEqual(table)
+        expect(spine.filter((o) => o === "alice").length).toBeLessThanOrEqual(1)
       }
     }
   })
 })
 
-// The table's own display-list assembly (SubmissionsTable.displayItems) for an
-// individual assignment, so the property test above compares against what the
-// table actually renders rather than against displayPageOwners' own builders.
-function buildDisplayItems(
-  inputs: { rows: SubmissionRow[]; nonSubmitters: Student[] },
+// The table's own display-list assembly (SubmissionsTable.displayItems), so the
+// property tests above compare against what the table actually renders rather
+// than against displayPageOwners' own builders.
+function tableOwners(
+  inputs: DisplayListInputs,
+  isGroup: boolean,
   students: Student[],
   sort: SubmissionSort,
-) {
-  return sort === "name-first" || sort === "name-last"
-    ? buildRosterDisplayItems(students, inputs.rows, inputs.nonSubmitters)
-    : buildSortedDisplayItems(inputs.rows, inputs.nonSubmitters)
+): string[] {
+  const nameSort = sort === "name-first" || sort === "name-last"
+  const items = isGroup
+    ? nameSort
+      ? buildGroupRosterDisplayItems(
+          inputs.rows,
+          inputs.groupRepos,
+          students,
+          sort === "name-last" ? "last" : "first",
+          inputs.teamsWithoutRepos,
+        )
+      : buildGroupDisplayItems(
+          inputs.rows,
+          inputs.groupRepos,
+          inputs.teamsWithoutRepos,
+        )
+    : nameSort
+      ? buildRosterDisplayItems(students, inputs.rows, inputs.nonSubmitters)
+      : buildSortedDisplayItems(inputs.rows, inputs.nonSubmitters)
+  return paginateDisplayItems(items, 10, 0)
+    .filter((item) => item.kind !== "teamNoRepo")
+    .map(displayItemOwner)
+    .filter(Boolean)
 }
 
 describe("displayPageOwners", () => {

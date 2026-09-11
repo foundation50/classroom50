@@ -472,6 +472,8 @@ const SubmissionsPageContent = () => {
   // rather than blanking a populated gradebook (discussion #677: every row
   // filtered out against a roster the viewer couldn't read).
   const rosterReady = !rosterLoading && !rosterError && studentRosterKnown
+  // A background refetch keeps this true, so Refresh never blanks the table.
+  const scoresLoaded = scoresData !== undefined
   // Graded entries plus the collector's detected submitters, so a push-mode
   // submitter is credited on every page, not only the one being read (#954).
   const snapshotRows = useMemo(() => {
@@ -696,17 +698,21 @@ const SubmissionsPageContent = () => {
       missingRepoTeams,
     ],
   )
+  // The spine is the snapshot's display list, so paging it before the snapshot
+  // exists would read the first N roster repos and then the real page again.
   const livePageOwners = useMemo(
     () =>
-      displayPageOwners({
-        ...spineInputs,
-        isGroup: isGroupFlavor,
-        sort,
-        students,
-        page,
-        pageSize,
-      }),
-    [spineInputs, isGroupFlavor, sort, students, page, pageSize],
+      scoresLoaded
+        ? displayPageOwners({
+            ...spineInputs,
+            isGroup: isGroupFlavor,
+            sort,
+            students,
+            page,
+            pageSize,
+          })
+        : [],
+    [scoresLoaded, spineInputs, isGroupFlavor, sort, students, page, pageSize],
   )
   const {
     submissions: liveSubmissions,
@@ -802,7 +808,6 @@ const SubmissionsPageContent = () => {
   // reconciliation) — else a submitter flashes "not submitted" before its row
   // resolves. detectedPending matters on its own for a no_autograder
   // assignment, where detection is the ONLY thing that can credit a submitter.
-  const scoresLoaded = scoresData !== undefined
   // Empty rows before the snapshot+roster land mean "loading", not "empty" —
   // gate the empty state on this so it doesn't flash on first paint. A
   // background refetch keeps scoresLoaded true, so Refresh never blanks the table.
