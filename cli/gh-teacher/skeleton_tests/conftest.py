@@ -22,6 +22,8 @@ import pathlib
 import sys
 import urllib.error
 
+import pytest
+
 _HERE = pathlib.Path(__file__).resolve().parent
 _SCRIPTS_DIR = _HERE.parent / "skeleton" / "dotgithub" / "scripts"
 
@@ -39,6 +41,15 @@ collect_scores = _load_module("collect_scores", _SCRIPTS_DIR / "collect_scores.p
 materialize_tests = _load_module("materialize_tests", _SCRIPTS_DIR / "materialize_tests.py")
 regrade_repos = _load_module("regrade_repos", _SCRIPTS_DIR / "regrade_repos.py")
 probe_token = _load_module("probe_token", _SCRIPTS_DIR / "probe_token.py")
+
+
+@pytest.fixture(autouse=True)
+def _fresh_request_window():
+    """collect_scores paces requests per rolling minute across the process,
+    and the suite issues thousands of fake requests a second: each test starts
+    with an empty window so none of them waits a minute out."""
+    collect_scores._request_times.clear()
+    yield
 
 
 def github_http_error(
