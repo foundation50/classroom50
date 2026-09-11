@@ -244,8 +244,7 @@ export const githubKeys = {
   runAnnotations: (owner: string, runId: number) =>
     [...githubKeys.all, "run-annotations", owner, runId] as const,
 
-  // One Pages deployment's status in the config repo, keyed by the commit SHA
-  // GitHub named as blocking a later deploy.
+  // One Pages deployment's status, keyed by the sha GitHub named as blocking.
   pagesDeployment: (owner: string, deploymentId: string) =>
     [...githubKeys.all, "pages-deployment", owner, deploymentId] as const,
 

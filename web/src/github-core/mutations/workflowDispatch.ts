@@ -255,10 +255,9 @@ export async function triggerProbeToken(
 
 /**
  * Dispatches the classroom50 repo's `publish-pages.yaml` workflow, redeploying
- * the whole student site from the config repo's current default branch. No
- * inputs. Nothing is committed, so this is the recovery for a site that
- * drifted from the repo (a failed or stuck deploy, a manual edit on GitHub, a
- * Pages site that was re-enabled). Returns `sinceRunId` (see openDispatch).
+ * the student site from the default branch without a commit: the recovery for
+ * a site that drifted from the repo. No inputs. Returns `sinceRunId` (see
+ * openDispatch).
  */
 export async function triggerPublishPages(
   client: GitHubClient,
@@ -293,9 +292,8 @@ export async function rerunFailedRun(
 }
 
 // Cancel a Pages deployment in <org>/classroom50 that GitHub still holds as in
-// progress, so the next deploy can go ahead. `deploymentId` is the commit SHA
-// GitHub names in its "please cancel <sha> first" refusal. A 404 means the
-// lock already cleared, which is the outcome the caller wanted.
+// progress. `deploymentId` is the commit SHA from GitHub's 400 refusal. A 404
+// means it already cleared, which is what the caller wanted.
 // https://docs.github.com/en/rest/pages/pages#cancel-a-github-pages-deployment
 export async function cancelPagesDeployment(
   client: GitHubClient,

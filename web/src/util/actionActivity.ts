@@ -161,12 +161,10 @@ export function isFailureConclusion(
 export type TrackerPhase =
   "pending" | "running" | "success" | "failed" | "superseded"
 
-// A publish run GitHub cancelled because a newer publish run took its place.
-// The publish artifact is the whole site, so the newer run carries this run's
-// change too; reporting it as failed sends the teacher chasing a non-problem.
-// Older skeletons still queue one pending run (the default), which is where
-// these cancellations come from. A cancelled run with no newer publish run is
-// a real cancellation and stays failed.
+// A publish run GitHub cancelled because a newer publish run took its place
+// (skeletons before `queue: max` hold one pending run). The newer run carries
+// this run's change too, so it isn't a failure. A cancelled publish with no
+// newer publish run is a real cancellation and stays failed.
 export function isSupersededPublish(
   run: GitHubWorkflowRun,
   runs: readonly GitHubWorkflowRun[],
@@ -178,8 +176,7 @@ export function isSupersededPublish(
   )
 }
 
-// `runs` (the polled window) lets a cancelled publish read as superseded; a
-// caller without it gets the plain success/failed verdict.
+// Without `runs` (the polled window) a cancelled publish reads as failed.
 export function trackerPhase(
   run: GitHubWorkflowRun | null,
   runs?: readonly GitHubWorkflowRun[],
@@ -215,15 +212,15 @@ export const WORKFLOW_LABEL_KEY: Record<string, string> = {
   "probe-token.yaml": "actionsBanner.workflow.probeToken",
 }
 
-// Why a publish run's deploy failed, read from the annotations
-// actions/deploy-pages emits. Each kind maps to a different next step:
+// Why a publish run's deploy failed, from the annotations actions/deploy-pages
+// emits. Each kind has a different next step:
 //  - deployLocked:  GitHub Pages runs one deployment at a time and an earlier
-//                   one (`blockerSha`) is still marked in progress. Clears on
-//                   its own within about 10 minutes, or can be cancelled.
-//  - pagesDisabled: the config repo's Pages site is off (404 on deploy).
+//                   one (`blockerSha`) is still in progress. GitHub releases it
+//                   within about 10 minutes; it can also be cancelled.
+//  - pagesDisabled: the config repo's Pages site is off (404).
 //  - permission:    the workflow token lacks pages: write (403).
 //  - timeout:       the deployment never reported a final status.
-//  - outage:        GitHub returned a 5xx; nothing to fix locally.
+//  - outage:        GitHub returned a 5xx.
 export type PublishFailure =
   | { kind: "deployLocked"; blockerSha: string }
   | { kind: "pagesDisabled" }
@@ -231,8 +228,7 @@ export type PublishFailure =
   | { kind: "timeout" }
   | { kind: "outage" }
 
-// The wording comes from actions/deploy-pages (src/internal/deployment.js);
-// GitHub's own message supplies the "Please cancel <sha> first" part.
+// deploy-pages appends GitHub's 400 body, which names the blocking sha.
 const DEPLOY_LOCKED_RE = /in progress deployment.*?cancel\s+([0-9a-f]{7,40})/i
 
 export function classifyPublishFailure(

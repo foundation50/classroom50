@@ -2,9 +2,8 @@ import type { GitHubClient } from "../client"
 import { GitHubAPIError } from "../errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 
-// GET /repos/{owner}/{repo}/pages/deployments/{id}. The id may be the commit
-// SHA the deployment was built from, which is what GitHub names in its
-// "in progress deployment, please cancel <sha>" refusal.
+// GET /repos/{owner}/{repo}/pages/deployments/{id}. The id can be the commit
+// SHA, which is how GitHub names a blocking deployment in its 400 refusal.
 // https://docs.github.com/en/rest/pages/pages#get-the-status-of-a-github-pages-deployment
 export type PagesDeploymentStatus =
   | "deployment_in_progress"
@@ -35,9 +34,8 @@ export function isPagesDeploymentInProgress(
   return IN_PROGRESS_STATUSES.has(status)
 }
 
-// The status of one Pages deployment in <org>/classroom50, or `null` when
-// GitHub no longer has it (404): an expired lock reads the same as a cleared
-// one, and both mean the next deploy can go ahead.
+// `null` when GitHub no longer has the deployment (404): the lock is gone
+// either way.
 export async function getPagesDeploymentStatus(
   client: GitHubClient,
   org: string,

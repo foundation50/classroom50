@@ -4,12 +4,10 @@ import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { cancelPagesDeployment } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
 
-// Cancel the Pages deployment GitHub named as blocking a later publish, so the
-// failed deploy job can be re-run at once instead of waiting out GitHub's
-// ~10-minute lock. Cancelling only frees the lock; the caller re-runs the
-// failed job (rerunFailedRun) as its own step so a cancel that succeeds but a
-// retry that fails is reported as such. Optional client because the banner
-// mounts above auth, like useActionActivity.
+// Cancel the Pages deployment blocking a later publish, so the failed deploy can
+// be re-run now instead of after GitHub's ~10-minute release. Only frees the
+// lock; the caller re-runs the failed job as its own step so each outcome is
+// reported separately. Optional client because the banner mounts above auth.
 export function useCancelPagesDeployment() {
   const client = useOptionalGitHubClient()
   const queryClient = useQueryClient()
@@ -26,8 +24,7 @@ export function useCancelPagesDeployment() {
       return cancelPagesDeployment(client, org, deploymentId)
     },
     onSettled: (_data, _err, { org, deploymentId }) => {
-      // Re-read the blocker so the failure row reflects the cleared (or still
-      // held) lock, whichever way the cancel went.
+      // Re-read the blocker so the failure row reflects whichever way it went.
       void queryClient.invalidateQueries({
         queryKey: githubKeys.pagesDeployment(org, deploymentId),
       })

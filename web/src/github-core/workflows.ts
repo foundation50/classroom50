@@ -6,9 +6,8 @@ export const COLLECT_SCORES_WORKFLOW = "collect-scores.yaml"
 // follow-up collect-scores run refreshes the gradebook.
 export const REGRADE_WORKFLOW = "regrade.yaml"
 
-// The push-triggered student-site publisher in <org>/classroom50. Every config
-// commit (assignment, classroom, skeleton) triggers it; the artifact is the
-// whole site, so the newest successful run publishes every earlier change too.
+// The push-triggered student-site publisher in <org>/classroom50. Its artifact
+// is the whole site, so the newest successful run carries every earlier change.
 export const PUBLISH_PAGES_WORKFLOW = "publish-pages.yaml"
 
 // The read-only service-token health check in <org>/classroom50. Dispatched

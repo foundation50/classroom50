@@ -12,29 +12,24 @@ import {
   type PublishFailure,
 } from "@/util/actionActivity"
 
-// While a blocking Pages deployment is still in progress, re-read its status on
-// this cadence so the row flips to "cleared, retry now" on its own. GitHub
-// releases a stuck deployment within about 10 minutes.
+// Re-read a blocking deployment on this cadence so the row flips to "cleared"
+// on its own once GitHub releases it.
 const BLOCKER_POLL_MS = 15_000
 
 export type PublishFailureDetail =
   | { state: "loading" }
-  // The annotations named no known cause (or could not be read): the run link
-  // is the only detail on offer.
+  // No known cause in the annotations (or they couldn't be read).
   | { state: "unknown" }
   | {
       state: "known"
       failure: PublishFailure
-      // Only for deployLocked: whether the blocking deployment still holds the
-      // lock. `undefined` while the probe is in flight or unreadable, in which
-      // case the row keeps the cautious "still finishing" wording.
+      // deployLocked only. `undefined` while the probe is in flight or
+      // unreadable, which keeps the cautious "still finishing" wording.
       blockerInProgress?: boolean
     }
 
-// Why a failed publish run failed, from the deploy job's annotations, plus a
-// live probe of the blocking deployment when the cause is GitHub's one-at-a-
-// time Pages lock. Reads only once a run has failed; `runId` undefined
-// disables everything.
+// Why a failed publish run failed, plus a live probe of the blocking deployment
+// when the cause is the Pages lock. `runId` undefined disables both reads.
 export function usePublishFailureDetail(
   org: string | undefined,
   runId: number | undefined,
@@ -66,7 +61,6 @@ export function usePublishFailureDetail(
     staleTime: 0,
     refetchInterval: (query) => {
       const status = query.state.data
-      // null = GitHub no longer has it, so the lock is gone.
       if (status === undefined) return BLOCKER_POLL_MS
       return status !== null && isPagesDeploymentInProgress(status)
         ? BLOCKER_POLL_MS

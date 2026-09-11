@@ -21,12 +21,10 @@ permissions:
   pages: write
   id-token: write
 
-# queue: max lets every publish wait its turn. The default (one pending run)
-# cancels the middle run when a teacher saves three changes in a minute, and
-# the banner then reports that change as failed even though the newest run
-# publishes the whole site. GitHub Pages also allows one deployment at a time,
-# so cancel-in-progress must stay false: a cancelled deploy can leave its
-# Pages deployment in progress and block the next one for up to 10 minutes.
+# queue: max lets every publish wait its turn; the default single-slot queue
+# cancels the middle run when three saves land close together. Keep
+# cancel-in-progress false: a cancelled deploy can leave its Pages deployment
+# in progress, which blocks the next one for up to 10 minutes.
 concurrency:
   group: pages
   cancel-in-progress: false

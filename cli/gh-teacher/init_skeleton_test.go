@@ -97,10 +97,8 @@ func TestSkeletonFiles_Manifest(t *testing.T) {
 		t.Error("publish-pages.yaml classrooms index must include the \"active\" key so the student accept page can refuse archived classrooms")
 	}
 
-	// Publishes must queue, not cancel: with the default single-slot queue,
-	// three quick saves cancel the middle run, and the web banner reports
-	// that change as failed. A cancelled deploy can also leave its Pages
-	// deployment in progress and block the next one, so no cancel-in-progress.
+	// Publishes queue rather than cancel each other; see the comment in the
+	// workflow for why cancel-in-progress must stay false.
 	var pubDoc any
 	if err := yaml.Unmarshal([]byte(pubBody), &pubDoc); err != nil {
 		t.Fatalf("publish-pages.yaml: %v", err)

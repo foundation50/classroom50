@@ -64,8 +64,8 @@ export type Tracker = {
   htmlUrl?: string
   // Resolved run id, when known — enables retry.
   runId?: number
-  // Workflow file of the bound run (e.g., "publish-pages.yaml"); lets the banner
-  // offer workflow-specific failure detail. Absent while pending.
+  // Workflow file of the run (e.g., "publish-pages.yaml"), so the banner can
+  // show workflow-specific failure detail.
   workflow?: string
   // Terminal session-op trackers can be dismissed; discovered/non-terminal can't.
   dismissible: boolean
@@ -360,7 +360,7 @@ export function useActionActivity(): ActionActivity {
             ? workflowFile(run)
             : op.anchor.kind === "sinceRunId"
               ? op.anchor.workflow
-              : // A sha anchor is always a config-repo push, i.e. a publish.
+              : // A sha anchor is a config-repo push, i.e. a publish.
                 PUBLISH_PAGES_WORKFLOW,
         // Terminal ops persist as history and can be dismissed; running/pending can't.
         dismissible: isTerminalPhase(phase),

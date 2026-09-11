@@ -92,11 +92,9 @@ const ROW_TONE: Record<Tracker["phase"], BadgeTone> = {
   pending: "info",
 }
 
-// Why a publish failed and what to do next, under a failed publish row. Reads
-// the run's annotations once it has failed; a cause it can't name falls back to
-// the run link alone. The deploy-lock case also offers to cancel the blocking
-// Pages deployment and re-run, since waiting out GitHub's lock is otherwise
-// the teacher's only option and nothing tells them so.
+// Why a publish failed and what to do next, under a failed publish row. A cause
+// the annotations don't name shows nothing (the run link remains). The deploy-
+// lock case also offers to cancel the blocking deployment and re-run.
 const PublishFailureDetail = ({
   org,
   tracker,
@@ -136,8 +134,8 @@ const PublishFailureDetail = ({
       })
       onRetry(tracker.id)
     } catch {
-      // The row keeps showing the lock; the retry mutation's own toast covers a
-      // failed re-run, and a failed cancel is reported inline below.
+      // A failed cancel is reported inline below; a failed re-run by the retry
+      // mutation's toast.
     } finally {
       setUnsticking(false)
     }
@@ -153,8 +151,7 @@ const PublishFailureDetail = ({
         )}
       </span>
       {!cleared && (
-        // Same link-shaped affordance as the row's Retry, so the two read as
-        // one set of actions.
+        // Styled like the row's Retry so the two read as one set of actions.
         <button
           type="button"
           onClick={() => void unstick()}
@@ -203,8 +200,7 @@ const TrackerRow = ({
   compact?: boolean
 }) => {
   const { t } = useTranslation()
-  // Only a failed publish gets a second line: its deploy annotations name a
-  // cause with a distinct fix, which the other workflows' failures don't.
+  // Only a failed publish has annotations that name a cause with its own fix.
   const showPublishDetail =
     tracker.phase === "failed" &&
     tracker.workflow === PUBLISH_PAGES_WORKFLOW &&
@@ -260,7 +256,6 @@ const TrackerRow = ({
         )}
       </div>
       {showPublishDetail && (
-        // Indented past the status icon so the detail reads as the row's own.
         <div className="ps-6">
           <PublishFailureDetail
             org={org}
@@ -445,8 +440,7 @@ export function ActionsBanner() {
 
   // Tone follows the LATEST action's phase — an older failure does NOT repaint
   // the whole bar; it surfaces as the attention badge below. Solid fill. A
-  // superseded publish is neither a failure nor a success of its own, so it
-  // takes the neutral in-progress tone.
+  // superseded publish takes the neutral in-progress tone.
   const tone =
     primaryPhase === "failed"
       ? "border-error bg-error text-error-content"

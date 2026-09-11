@@ -415,10 +415,8 @@ function ClassroomFolder({
   )
 }
 
-// Owner-only "Publish again": dispatches publish-pages.yaml so the site is
-// redeployed from the repo as it stands. The only way to refresh the site
-// without committing something, which is what a teacher needs after a failed
-// or stuck deploy. The Actions banner tracks the run (registered by the hook).
+// Owner-only: redeploys the site from the repo as it stands, the only way to
+// refresh it without a commit. The hook registers the run with the banner.
 function RepublishButton({ org }: { org: string }) {
   const { t } = useTranslation()
   const { notify } = useToast()
