@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   getPagesDeploymentStatus,
   isPagesDeploymentInProgress,
+  type PagesDeploymentStatus,
 } from "./pagesDeploymentReads"
 import { GitHubAPIError } from "../errors"
 import type { GitHubClient } from "../client"
@@ -60,26 +61,28 @@ describe("getPagesDeploymentStatus", () => {
 
 describe("isPagesDeploymentInProgress", () => {
   it("treats every pre-final status, including a scheduled retry, as holding the lock", () => {
-    for (const status of [
+    const held: PagesDeploymentStatus[] = [
       "deployment_in_progress",
       "syncing_files",
       "finished_file_sync",
       "updating_pages",
       "purging_cdn",
       "deployment_attempt_error",
-    ]) {
+    ]
+    for (const status of held) {
       expect(isPagesDeploymentInProgress(status)).toBe(true)
     }
   })
 
   it("treats final statuses as released", () => {
-    for (const status of [
+    const released: PagesDeploymentStatus[] = [
       "succeed",
       "deployment_cancelled",
       "deployment_failed",
       "deployment_content_failed",
       "deployment_lost",
-    ]) {
+    ]
+    for (const status of released) {
       expect(isPagesDeploymentInProgress(status)).toBe(false)
     }
   })

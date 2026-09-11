@@ -90,8 +90,10 @@ export function workflowFile(run: GitHubWorkflowRun): string | undefined {
 const NULL_BASELINE_SKEW_MS = 60_000
 
 // Whether a run is the one an op triggered. A push run matches by head_sha; a
-// dispatch run matches by workflow file + a run id past the pre-dispatch
-// baseline.
+// dispatch run matches by workflow file + event + a run id past the
+// pre-dispatch baseline. The event check matters for publish-pages, which also
+// runs on push: the baseline is read from dispatch runs only, so a push run
+// newer than it would otherwise be claimed as the dispatch.
 //
 // Null-baseline (no prior dispatch runs at dispatch time): an id comparison
 // alone would match ANY future run, mis-attributing a later cron/other run — so
@@ -105,6 +107,7 @@ export function runMatchesOp(
     return Boolean(run.head_sha && run.head_sha === op.anchor.sha)
   }
   if (workflowFile(run) !== op.anchor.workflow) return false
+  if (run.event !== "workflow_dispatch") return false
   if (op.anchor.sinceRunId !== null) return run.id > op.anchor.sinceRunId
 
   // Null baseline: accept any run of the workflow that started no earlier than
@@ -163,8 +166,10 @@ export type TrackerPhase =
 
 // A publish run GitHub cancelled because a newer publish run took its place
 // (skeletons before `queue: max` hold one pending run). The newer run carries
-// this run's change too, so it isn't a failure. A cancelled publish with no
-// newer publish run is a real cancellation and stays failed.
+// this run's change too, so it isn't a failure, as long as that run is still
+// going or succeeded: a failed successor leaves the change unpublished, and the
+// cancelled row must stay failed so Retry is offered. A cancelled publish with
+// no newer publish run is a real cancellation and stays failed.
 export function isSupersededPublish(
   run: GitHubWorkflowRun,
   runs: readonly GitHubWorkflowRun[],
@@ -172,7 +177,10 @@ export function isSupersededPublish(
   if (run.status !== "completed" || run.conclusion !== "cancelled") return false
   if (workflowFile(run) !== PUBLISH_PAGES_WORKFLOW) return false
   return runs.some(
-    (r) => r.id > run.id && workflowFile(r) === PUBLISH_PAGES_WORKFLOW,
+    (r) =>
+      r.id > run.id &&
+      workflowFile(r) === PUBLISH_PAGES_WORKFLOW &&
+      (isRunning(r) || !isFailureConclusion(r.conclusion)),
   )
 }
 

@@ -153,6 +153,27 @@ describe("runMatchesOp", () => {
     ).toBe(false)
   })
 
+  it("never matches a dispatch op to a push run of the same workflow (publish-pages runs on both)", () => {
+    const dispatchOp = op({
+      anchor: {
+        kind: "sinceRunId",
+        workflow: "publish-pages.yaml",
+        sinceRunId: 100,
+      },
+    })
+    // The baseline is read from dispatch runs only, so a push run newer than
+    // it is not the dispatched run even though its id is past the baseline.
+    expect(
+      runMatchesOp(
+        dispatchRun(101, "publish-pages.yaml", { event: "push" }),
+        dispatchOp,
+      ),
+    ).toBe(false)
+    expect(
+      runMatchesOp(dispatchRun(102, "publish-pages.yaml"), dispatchOp),
+    ).toBe(true)
+  })
+
   it("null baseline matches a run started at/after the dispatch time", () => {
     const started = Date.now()
     const r = dispatchRun(5, "regrade.yaml", {
@@ -230,6 +251,21 @@ describe("resolveOpRun", () => {
     const claimed = new Set<number>([101])
     // 101 is taken by an earlier op, so this op binds to 102.
     expect(resolveOpRun(dispatchOp, runs, claimed)?.id).toBe(102)
+  })
+
+  it("skips a newer push publish and binds a Publish again op to the dispatch run", () => {
+    const dispatchOp = op({
+      anchor: {
+        kind: "sinceRunId",
+        workflow: "publish-pages.yaml",
+        sinceRunId: 100,
+      },
+    })
+    const runs = [
+      dispatchRun(103, "publish-pages.yaml"),
+      dispatchRun(101, "publish-pages.yaml", { event: "push" }),
+    ]
+    expect(resolveOpRun(dispatchOp, runs)?.id).toBe(103)
   })
 })
 
@@ -324,6 +360,35 @@ describe("isSupersededPublish", () => {
         [newer],
       ),
     ).toBe(false)
+  })
+
+  it("requires the newer publish to be running or to have succeeded", () => {
+    const cancelled = publishRun(10, { conclusion: "cancelled" })
+    // A successor that failed or was itself cancelled left the change
+    // unpublished, so the row stays failed and keeps Retry.
+    expect(
+      isSupersededPublish(cancelled, [
+        publishRun(11, { conclusion: "failure" }),
+      ]),
+    ).toBe(false)
+    expect(
+      isSupersededPublish(cancelled, [
+        publishRun(11, { conclusion: "cancelled" }),
+      ]),
+    ).toBe(false)
+    // Still running: it will carry the change, so the row reads superseded.
+    expect(
+      isSupersededPublish(cancelled, [
+        publishRun(11, { status: "in_progress", conclusion: null }),
+      ]),
+    ).toBe(true)
+    // One failed and one succeeded: the successful one counts.
+    expect(
+      isSupersededPublish(cancelled, [
+        publishRun(11, { conclusion: "failure" }),
+        publishRun(12, { conclusion: "success" }),
+      ]),
+    ).toBe(true)
   })
 })
 

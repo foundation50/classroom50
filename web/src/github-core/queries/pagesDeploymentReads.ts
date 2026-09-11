@@ -18,18 +18,19 @@ export type PagesDeploymentStatus =
   | "deployment_lost"
   | "succeed"
 
-const IN_PROGRESS_STATUSES: ReadonlySet<string> = new Set([
-  "deployment_in_progress",
-  "syncing_files",
-  "finished_file_sync",
-  "updating_pages",
-  "purging_cdn",
-  // GitHub schedules a retry, so the lock is still held.
-  "deployment_attempt_error",
-])
+const IN_PROGRESS_STATUSES: ReadonlySet<PagesDeploymentStatus> =
+  new Set<PagesDeploymentStatus>([
+    "deployment_in_progress",
+    "syncing_files",
+    "finished_file_sync",
+    "updating_pages",
+    "purging_cdn",
+    // GitHub schedules a retry, so the lock is still held.
+    "deployment_attempt_error",
+  ])
 
 export function isPagesDeploymentInProgress(
-  status: PagesDeploymentStatus | string,
+  status: PagesDeploymentStatus,
 ): boolean {
   return IN_PROGRESS_STATUSES.has(status)
 }

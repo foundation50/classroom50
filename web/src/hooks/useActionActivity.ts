@@ -8,11 +8,14 @@ import {
   listActiveAndRecentRuns,
 } from "@/github-core/activityRuns"
 import { rerunFailedRun } from "@/github-core/mutations"
+import { githubKeys } from "@/github-core/queries"
 import type { GitHubWorkflowRun } from "@/github-core/types"
 import { PUBLISH_PAGES_WORKFLOW } from "@/github-core/workflows"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { useOptionalToast } from "@/context/notifications/NotificationProvider"
 import { useActiveOrg } from "@/hooks/useActiveOrg"
+import { useCancelPagesDeployment } from "@/hooks/mutations/useCancelPagesDeployment"
+import { errorText } from "@/types/localizedMessage"
 import {
   isRunning,
   isTerminalPhase,
@@ -87,8 +90,13 @@ export type ActionActivity = {
   pollError: boolean
   dismiss: (id: string) => void
   retry: (id: string) => void
-  // Tracker ids with a retry in flight (spinner / disabled X).
-  retrying: ReadonlySet<string>
+  // Cancel the Pages deployment blocking a failed publish, then retry it.
+  unstick: (id: string, blockerSha: string) => void
+  // Tracker ids with a retry or an unstick in flight (spinner / disabled
+  // actions). One set so the row's Retry and unstick disable together.
+  busy: ReadonlySet<string>
+  // The subset of `busy` whose unstick (the cancel step) is in flight.
+  unsticking: ReadonlySet<string>
 }
 
 // Drives the global activity banner: one repo-wide poll advances a collection of
@@ -124,9 +132,12 @@ export function useActionActivity(): ActionActivity {
     [],
   )
 
-  // `retrying`: in-flight retry requests (spinner + double-submit guard).
-  // `optimisticRunning`: ids shown "running" right after a retry.
+  // `retrying` / `unsticking`: in-flight retry and cancel requests (spinner +
+  // double-submit guard). `optimisticRunning`: ids shown "running" right after
+  // a retry.
   const [retrying, setRetrying] = useState<Set<string>>(new Set())
+  const [unsticking, setUnsticking] = useState<Set<string>>(new Set())
+  const cancelDeployment = useCancelPagesDeployment()
   const [optimisticRunning, setOptimisticRunning] = useState<Set<string>>(
     new Set(),
   )
@@ -188,7 +199,7 @@ export function useActionActivity(): ActionActivity {
         durationMs: 8000,
       })
     },
-    onSettled: (_data, _err, { trackerId }) => {
+    onSettled: (_data, _err, { trackerId, runId }) => {
       setRetrying((prev) => {
         const next = new Set(prev)
         next.delete(trackerId)
@@ -197,6 +208,11 @@ export function useActionActivity(): ActionActivity {
       if (org) {
         void queryClient.invalidateQueries({
           queryKey: activityRunsKey(org),
+        })
+        // rerun-failed-jobs keeps the run id, so the failure detail's cached
+        // annotations would otherwise describe the previous attempt.
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.runAnnotations(org, runId),
         })
       }
     },
@@ -460,8 +476,10 @@ export function useActionActivity(): ActionActivity {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [optimisticSignature, phaseSignature])
 
-  const retry = (id: string) => {
-    if (retrying.has(id)) return
+  // The retry proper, past the busy guards. Shared by `retry` and by `unstick`
+  // once its cancel has resolved; read through a ref there so the post-await
+  // call sees the current trackers, not the click-time closure.
+  const startRetry = (id: string) => {
     const tracker = trackers.find((tr) => tr.id === id)
     if (!tracker?.retriable || tracker.runId === undefined || !org || !client) {
       return
@@ -484,6 +502,53 @@ export function useActionActivity(): ActionActivity {
     bumpExpecting()
     retryMutation.mutate({ trackerId: id, runId: tracker.runId })
   }
+  const startRetryRef = useRef(startRetry)
+  useEffect(() => {
+    startRetryRef.current = startRetry
+  })
+
+  const isBusy = (id: string) => retrying.has(id) || unsticking.has(id)
+
+  const retry = (id: string) => {
+    if (isBusy(id)) return
+    startRetry(id)
+  }
+
+  // Cancel the Pages deployment GitHub named as blocking this publish, then
+  // retry. Both steps share the busy set so the row's Retry can't fire a second
+  // re-run mid-cancel. A failed cancel is reported like a failed retry; the row
+  // keeps its lock wording and the blocker probe keeps polling.
+  const unstick = (id: string, blockerSha: string) => {
+    if (isBusy(id) || !org) return
+    const tracker = trackers.find((tr) => tr.id === id)
+    if (!tracker?.retriable) return
+    setUnsticking((prev) => new Set(prev).add(id))
+    cancelDeployment.mutate(
+      { org, deploymentId: blockerSha },
+      {
+        onSuccess: () => startRetryRef.current(id),
+        onError: (err) => {
+          toast?.notify({
+            tone: "error",
+            message: t("actionsBanner.publishFailure.unstickFailed", {
+              detail: errorText(t, err),
+            }),
+            key: `actionsBanner.unstickFailed.${id}`,
+            durationMs: 8000,
+          })
+        },
+        onSettled: () => {
+          setUnsticking((prev) => {
+            const next = new Set(prev)
+            next.delete(id)
+            return next
+          })
+        },
+      },
+    )
+  }
+
+  const busy = new Set([...retrying, ...unsticking])
 
   const anyFailed = trackers.some((tr) => tr.phase === "failed")
 
@@ -523,6 +588,8 @@ export function useActionActivity(): ActionActivity {
     pollError,
     dismiss,
     retry,
-    retrying,
+    unstick,
+    busy,
+    unsticking,
   }
 }
