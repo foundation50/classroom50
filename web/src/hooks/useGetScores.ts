@@ -58,6 +58,10 @@ type ScoreEntry = {
   team_slug?: string
   submissions: SubmissionRecord[]
   override?: boolean
+  // Collector bookkeeping (scores-v1 entry `collected_at`): when the run that
+  // last wrote this entry started reading, so the next run can skip
+  // re-downloading releases it already holds. Never shown; preserved on RMW.
+  collected_at?: string
 }
 
 type AssignmentBucket = {
