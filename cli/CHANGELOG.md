@@ -17,6 +17,18 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.49.0](https://github.com/foundation50/classroom50/compare/cli-v1.48.2...cli-v1.49.0) (2026-09-11)
+
+
+### Features
+
+* **web:** offer HTTPS, SSH, and GitHub CLI clone commands to students ([#968](https://github.com/foundation50/classroom50/issues/968)) ([04da84c](https://github.com/foundation50/classroom50/commit/04da84c4035049d1254012ceddf828897fd3f4d8))
+
+
+### Bug Fixes
+
+* **web:** explain failed publishes and recover a stuck student site ([#959](https://github.com/foundation50/classroom50/issues/959)) ([00c7f36](https://github.com/foundation50/classroom50/commit/00c7f367bb5c67c048d6f7c7d2b27f89ddab3556))
+
 ## [1.48.2](https://github.com/foundation50/classroom50/compare/cli-v1.48.1...cli-v1.48.2) (2026-09-10)
 
 

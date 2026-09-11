@@ -17,6 +17,19 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.49.0](https://github.com/foundation50/classroom50/compare/web-v1.48.2...web-v1.49.0) (2026-09-11)
+
+
+### Features
+
+* **web:** offer HTTPS, SSH, and GitHub CLI clone commands to students ([#968](https://github.com/foundation50/classroom50/issues/968)) ([04da84c](https://github.com/foundation50/classroom50/commit/04da84c4035049d1254012ceddf828897fd3f4d8))
+
+
+### Bug Fixes
+
+* **web:** credit collected push-mode submitters in the not-submitted filter ([#967](https://github.com/foundation50/classroom50/issues/967)) ([39143f0](https://github.com/foundation50/classroom50/commit/39143f02e2835032f8b7d3085a0a5c9e2ba61e6e))
+* **web:** explain failed publishes and recover a stuck student site ([#959](https://github.com/foundation50/classroom50/issues/959)) ([00c7f36](https://github.com/foundation50/classroom50/commit/00c7f367bb5c67c048d6f7c7d2b27f89ddab3556))
+
 ## [1.48.2](https://github.com/foundation50/classroom50/compare/web-v1.48.1...web-v1.48.2) (2026-09-10)
 
 
