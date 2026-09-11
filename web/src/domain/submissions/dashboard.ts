@@ -1523,6 +1523,108 @@ function ownerSortKey(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
 }
 
+// Group repos that exist but that no row credits: the "team formed, nobody
+// pushed yet" items. Owner match is case-insensitive like every other join.
+export function unsubmittedGroupRepos(
+  groupRepos: GroupRepo[],
+  rows: SubmissionRow[],
+): GroupRepo[] {
+  const submitted = new Set(rows.map((row) => row.owner.trim().toLowerCase()))
+  return groupRepos.filter(
+    (repo) => !submitted.has(repo.owner.trim().toLowerCase()),
+  )
+}
+
+// The four inputs the display-list builders take, after the search, filters,
+// and sort have been applied.
+export type DisplayListInputs = {
+  rows: SubmissionRow[]
+  nonSubmitters: Student[]
+  groupRepos: GroupRepo[]
+  teamsWithoutRepos: GroupTeamRef[]
+}
+
+// Apply the toolbar's search, filters, and sort to a row source and its
+// companions. The ONE recipe for the rendered table (over the live-merged rows)
+// and the fan-out spine (over the snapshot rows): the fan-out reads only the
+// repos on the current page, so any axis the spine applied differently would
+// have it page over different people than the table shows (#954). Any state
+// that implies a submission (a late/on-time/submitted or passing filter) hides
+// every no-submission item; "not submitted" hides every row; the accepted
+// axis splits the non-submitters. Group repos and repo-less teams match the
+// search by owner segment or display name and carry no section.
+export function filterDisplayList({
+  rows,
+  nonSubmitters,
+  groupRepos,
+  teamsWithoutRepos,
+  query,
+  filters,
+  sort,
+  students,
+  sectionByUsername,
+  thresholdFraction,
+  acceptedSet,
+  groupDisplayNames,
+}: {
+  rows: SubmissionRow[]
+  // Roster students `rows` doesn't credit (see reconcileNonSubmitters).
+  nonSubmitters: Student[]
+  // Existing group repos `rows` doesn't cover (see unsubmittedGroupRepos).
+  groupRepos: GroupRepo[]
+  teamsWithoutRepos: GroupTeamRef[]
+  query: string
+  filters: SubmissionFilters
+  sort: SubmissionSort
+  students: Student[]
+  sectionByUsername: Map<string, string>
+  thresholdFraction: number | null
+  acceptedSet: Set<string>
+  groupDisplayNames?: Map<string, string>
+}): DisplayListInputs {
+  const filteredRows = filterAndSortRows(rows, {
+    query,
+    filters,
+    sort,
+    students,
+    sectionByUsername,
+    thresholdFraction,
+  })
+  if (!showsNonSubmitters(filters)) {
+    return {
+      rows: filteredRows,
+      nonSubmitters: [],
+      groupRepos: [],
+      teamsWithoutRepos: [],
+    }
+  }
+  const q = query.trim().toLowerCase()
+  return {
+    rows: filteredRows,
+    nonSubmitters: filterNonSubmitters(
+      nonSubmitters,
+      query,
+      filters,
+      acceptedSet,
+    ),
+    groupRepos: q
+      ? groupRepos.filter((repo) => {
+          if (repo.owner.toLowerCase().includes(q)) return true
+          const name = getName(repo.owner, students).toLowerCase()
+          return name.length > 0 && name.includes(q)
+        })
+      : groupRepos,
+    teamsWithoutRepos: q
+      ? teamsWithoutRepos.filter((team) => {
+          const owner = `${GROUP_REPO_SEGMENT}${team.n}`
+          if (owner.includes(q)) return true
+          const name = groupDisplayNames?.get(owner)?.toLowerCase() ?? ""
+          return name.includes(q)
+        })
+      : teamsWithoutRepos,
+  }
+}
+
 // The repo owners on the CURRENTLY RENDERED page, in display order under the
 // active sort, so the live fan-out reads exactly the repos the user sees. Built
 // from the SNAPSHOT display list (same builders SubmissionsTable uses) — it must
