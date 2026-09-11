@@ -54,8 +54,10 @@ import {
   assignmentRepoCandidateLogins,
   assignmentFunnelCounts,
   orgReposReadEnabled,
+  withSnapshotDetected,
   type SubmissionFilters,
 } from "./dashboard"
+import type { DetectedSubmitter } from "./scores"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 
 // Minimal row factory — only the fields the dashboard logic reads.
@@ -2083,6 +2085,91 @@ describe("mergeDetectedSubmissions", () => {
   })
 })
 
+describe("withSnapshotDetected", () => {
+  const detected = (
+    over: Partial<DetectedSubmitter> = {},
+  ): DetectedSubmitter => ({
+    owner: "bob",
+    usernames: ["bob"],
+    count: 2,
+    datetime: "2026-06-21T10:00:00Z",
+    late: false,
+    ...over,
+  })
+
+  it("returns the rows untouched when the bucket carries no detected list", () => {
+    const rows = [row({ owner: "alice" })]
+    expect(withSnapshotDetected(rows, undefined)).toBe(rows)
+    expect(withSnapshotDetected(rows, [])).toBe(rows)
+  })
+
+  it("appends a pending, grade-free row per detected submitter", () => {
+    const graded = row({ owner: "alice", score: 8 })
+    const merged = withSnapshotDetected(
+      [graded],
+      [detected({ owner: "bob", count: 3, late: true })],
+    )
+    expect(merged.map((r) => r.owner)).toEqual(["alice", "bob"])
+    const bob = merged[1]
+    expect(bob.pending).toBe(true)
+    expect(bob.score).toBe(0)
+    expect(bob["max-score"]).toBe(0)
+    expect(bob.submissionCount).toBe(3)
+    expect(bob.datetime).toBe("2026-06-21T10:00:00Z")
+    expect(bob.late).toBe(true)
+    expect(merged[0]).toBe(graded)
+  })
+
+  it("credits every group member", () => {
+    const [team] = withSnapshotDetected(
+      [],
+      [detected({ owner: "group-1", usernames: ["bob", "cara"] })],
+    )
+    expect(team.usernames).toEqual(["bob", "cara"])
+  })
+
+  it("leaves datetime and late unknown when the collector recorded none", () => {
+    const [pending] = withSnapshotDetected(
+      [],
+      [detected({ datetime: undefined, late: undefined })],
+    )
+    expect(pending.datetime).toBe("")
+    expect(pending.late).toBeUndefined()
+  })
+
+  it("skips a zero count and an owner the graded entries already cover", () => {
+    const merged = withSnapshotDetected(
+      [row({ owner: "alice" })],
+      [
+        detected({ owner: "Alice", usernames: ["Alice"] }),
+        detected({ owner: "bob", count: 0 }),
+      ],
+    )
+    expect(merged.map((r) => r.owner)).toEqual(["alice"])
+  })
+
+  it("makes the snapshot credit push-mode submitters so they leave the non-submitter list", () => {
+    // The #954 shape: no graded entries, only the collector's detected list.
+    const students = [
+      student({ username: "alice" }),
+      student({ username: "bob" }),
+      student({ username: "cara" }),
+    ]
+    const snapshot = withSnapshotDetected(
+      [],
+      [
+        detected({ owner: "alice", usernames: ["alice"] }),
+        detected({ owner: "bob", usernames: ["bob"] }),
+      ],
+    )
+    expect(
+      reconcileNonSubmitters(students, snapshot, new Set()).map(
+        (s) => s.username,
+      ),
+    ).toEqual(["cara"])
+  })
+})
+
 describe("displayPageOwners", () => {
   const students = [
     student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
@@ -2104,6 +2191,44 @@ describe("displayPageOwners", () => {
     })
     // Name order: alice (non-sub), bob (row) — page of 2.
     expect(owners).toEqual(["alice", "bob"])
+  })
+
+  it("under the not-submitted filter, pages over the snapshot's non-submitters only", () => {
+    // #954: with every submitted row filtered out, the non-submitter pool alone
+    // decides the fan-out window, so it must exclude snapshot-credited students.
+    const snapshot = withSnapshotDetected(
+      [row({ owner: "alice", usernames: ["alice"] })],
+      [{ owner: "bob", usernames: ["bob"], count: 1 }],
+    )
+    const notSubmitted = filters({ submission: "not-submitted" })
+    const rows = filterAndSortRows(snapshot, {
+      query: "",
+      filters: notSubmitted,
+      sort: "name-first",
+      students,
+      sectionByUsername: new Map(),
+      thresholdFraction: null,
+    })
+    expect(rows).toEqual([])
+    const pool = filterNonSubmitters(
+      reconcileNonSubmitters(students, snapshot, new Set()),
+      "",
+      notSubmitted,
+      new Set(),
+    )
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-first",
+      students,
+      rows,
+      nonSubmitters: pool,
+      groupRepos: [],
+      page: 0,
+      pageSize: 2,
+    })
+    // alice (graded) and bob (collector-detected) are credited; only cara's
+    // repo is read.
+    expect(owners).toEqual(["cara"])
   })
 
   it("only names owners from the (pre-filtered) non-submitter pool it is given", () => {

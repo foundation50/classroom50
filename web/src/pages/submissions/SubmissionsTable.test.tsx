@@ -312,6 +312,28 @@ describe("SubmissionsTable per-row feedback PR shortcut", () => {
   })
 })
 
+describe("SubmissionsTable stale-count hint", () => {
+  const stale = () =>
+    scoreRow({
+      score: 0,
+      "max-score": 0,
+      submissionCount: 3,
+      pending: true,
+      staleCount: true,
+    })
+
+  it("shows the New hint on an autograded assignment", () => {
+    render(<SubmissionsTable {...baseProps} scores={[stale()]} />)
+    expect(screen.getByText("submissions.table.staleCount")).toBeTruthy()
+  })
+
+  it("omits it when the assignment never autogrades", () => {
+    // The hint promises a grade on re-collect, which never arrives here.
+    render(<SubmissionsTable {...baseProps} scores={[stale()]} skipsGrading />)
+    expect(screen.queryByText("submissions.table.staleCount")).toBeNull()
+  })
+})
+
 describe("SubmissionsTable initial loading", () => {
   it("shows skeleton rows and not the empty state while core data loads", () => {
     render(<SubmissionsTable {...baseProps} initialLoading />)

@@ -762,7 +762,9 @@ const SubmissionsTable = ({
             mode={assignmentMode}
             count={submissionCount}
             onOpen={openDetails}
-            staleCount={rest.staleCount}
+            // The hint promises a grade on re-collect, which a never-autograding
+            // assignment can't deliver; the raised count alone says what's new.
+            staleCount={rest.staleCount && !skipsGrading}
             settling={settling}
           />
         </td>

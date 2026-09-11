@@ -93,6 +93,7 @@ import {
   studentInSection,
   submissionRosterStudents,
   teamsWithoutRepos,
+  withSnapshotDetected,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/domain/submissions/dashboard"
@@ -476,8 +477,14 @@ const SubmissionsPageContent = () => {
   // rather than blanking a populated gradebook (discussion #677: every row
   // filtered out against a roster the viewer couldn't read).
   const rosterReady = !rosterLoading && !rosterError && studentRosterKnown
+  // Graded entries plus the collector's detected submitters, so a push-mode
+  // submitter is credited on every page, not only the one being read (#954).
   const snapshotRows = useMemo(() => {
-    return scoresData?.submissions?.[assignment ?? ""] || []
+    const slug = assignment ?? ""
+    return withSnapshotDetected(
+      scoresData?.submissions?.[slug] ?? [],
+      scoresData?.detected?.[slug],
+    )
   }, [scoresData, assignment])
 
   // Dashboard controls — all client-side over already-loaded data. Declared
@@ -620,23 +627,23 @@ const SubmissionsPageContent = () => {
       new Set(snapshotScoped.map((row) => row.owner.toLowerCase())),
     )
   }, [teamsSettled, orgRepos, groupTeams, groupRepoList, snapshotScoped])
-  // Non-submitter pool for the fan-out's display list, filtered by the SAME
-  // query + section + submission axes the rendered table applies — so the
-  // fanned page lines up with the visible page. The ACCEPTED axis is neutralized
-  // here: this pool is deliberately snapshot-independent (empty accepted set) so
-  // it can't loop on live results, and `filterNonSubmitters` would otherwise
-  // test acceptance against that empty set and wrongly drop every owner. The
-  // rendered non-submitter list (visibleNonSubmitters) applies the real
-  // acceptedSet.
+  // Non-submitter pool for the fan-out's display list: roster students the
+  // snapshot doesn't credit, under the same query/section/submission filters
+  // as the rendered table, so the fanned page names the students the table
+  // shows. Under "not submitted" `rows` is empty, so this pool alone decides
+  // the window; paging the whole roster here would read the wrong repos.
+  // Snapshot-derived, never live-derived, so it can't loop on its own output.
+  // The accepted axis is neutralized: the empty set would drop every owner.
+  // visibleNonSubmitters applies the real acceptedSet.
   const liveNonSubmitterPool = useMemo(
     () =>
       filterNonSubmitters(
-        students,
+        reconcileNonSubmitters(students, snapshotScoped, groupRepoFounders),
         query,
         { ...filters, accepted: "all" },
         EMPTY_SET,
       ),
-    [students, query, filters],
+    [students, snapshotScoped, groupRepoFounders, query, filters],
   )
   const liveOwnerArgs = useMemo(
     () => ({
@@ -963,13 +970,10 @@ const SubmissionsPageContent = () => {
     ? orgRepos != null && groupRepoList.length > 0
     : acceptedAvailable
 
-  // The progress bar's one-click jump to who hasn't submitted. On this page a
-  // "not submitted" row implies the student accepted (no repo, nothing to
-  // submit), so the set is just the not-submitted filter: a single axis the
-  // Status select represents exactly, so switching away from it never silently
-  // drops a hidden acceptance filter. The other axes reset so the surfaced set
-  // matches the label.
-  const showAcceptedNotSubmitted = () =>
+  // The progress bar's jump to everyone without a submission, never-accepted
+  // students included (their rows say "Not accepted"). One axis the Status
+  // select represents exactly, so switching away never leaves a hidden filter.
+  const showNotSubmitted = () =>
     setFilters({ ...DEFAULT_FILTERS, submission: "not-submitted" })
 
   // Rows actually rendered. When acceptance data isn't loaded, neutralize the
@@ -1259,7 +1263,7 @@ const SubmissionsPageContent = () => {
               showSubmissionProgress && (
                 <button
                   type="button"
-                  onClick={showAcceptedNotSubmitted}
+                  onClick={showNotSubmitted}
                   title={t("submissions.funnel.showNotSubmitted")}
                   className="-m-1 cursor-pointer rounded-btn p-1 hover:bg-base-200"
                 >

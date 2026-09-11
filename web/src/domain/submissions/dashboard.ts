@@ -2,7 +2,11 @@
 // over already-loaded scores/roster data — no fetches, no React, so the
 // classification is reusable and testable.
 
-import type { NormalizedScores, SubmissionRow } from "./scores"
+import type {
+  DetectedSubmitter,
+  NormalizedScores,
+  SubmissionRow,
+} from "./scores"
 import type { GitHubRepo } from "@/github-core/types"
 import { latestDetectedAt } from "@/domain/assignments/submissionDetection"
 import { existingAssignmentRepos } from "@/domain/assignments/assignmentRepoPresence"
@@ -307,6 +311,38 @@ export function mergeDetectedSubmissions(
     })
 
   return [...merged, ...detectedOnly]
+}
+
+// Fold the collector's detected submitters (pushes or tags with no graded
+// entry) into the snapshot as pending rows. Without them a never-autograding
+// assignment's snapshot has no rows, so only the page-scoped detection overlay
+// credits submitters and everyone off-page reads "Not submitted" (#954).
+export function withSnapshotDetected(
+  rows: SubmissionRow[],
+  detected: DetectedSubmitter[] | undefined,
+): SubmissionRow[] {
+  if (!detected || detected.length === 0) return rows
+  // The collector never lists an owner in both entries and detected; defensive.
+  const knownOwners = new Set(rows.map((row) => row.owner.trim().toLowerCase()))
+  const pendingRows = detected
+    .filter(
+      (d) => d.count > 0 && !knownOwners.has(d.owner.trim().toLowerCase()),
+    )
+    .map<SubmissionRow>((d) => ({
+      usernames: d.usernames,
+      owner: d.owner,
+      datetime: d.datetime ?? "",
+      commit: "",
+      release: "",
+      review: "",
+      score: 0,
+      "max-score": 0,
+      submissionCount: d.count,
+      pending: true,
+      late: d.late,
+      submissions: [],
+    }))
+  return [...rows, ...pendingRows]
 }
 
 // The newest detected time when it's strictly newer than BOTH reference
