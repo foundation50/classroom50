@@ -147,3 +147,8 @@ export {
   type RunAnnotation,
 } from "./queries/releaseRunReads"
 export { getRepoPages, type RepoPagesInfo } from "./queries/repoPagesReads"
+export {
+  getPagesDeploymentStatus,
+  isPagesDeploymentInProgress,
+  type PagesDeploymentStatus,
+} from "./queries/pagesDeploymentReads"

@@ -266,3 +266,25 @@ export async function rerunFailedRun(
     { method: "POST" },
   )
 }
+
+// Cancel a Pages deployment in <org>/classroom50 that GitHub still holds as in
+// progress, so the next deploy can go ahead. `deploymentId` is the commit SHA
+// GitHub names in its "please cancel <sha> first" refusal. A 404 means the
+// lock already cleared, which is the outcome the caller wanted.
+// https://docs.github.com/en/rest/pages/pages#cancel-a-github-pages-deployment
+export async function cancelPagesDeployment(
+  client: GitHubClient,
+  org: string,
+  deploymentId: string,
+): Promise<void> {
+  logWorkflows.info("cancelling stuck Pages deployment", { org, deploymentId })
+  try {
+    await client.request(
+      `/repos/${org}/${CONFIG_REPO}/pages/deployments/${encodeURIComponent(deploymentId)}/cancel`,
+      { method: "POST" },
+    )
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isNotFound) return
+    throw err
+  }
+}

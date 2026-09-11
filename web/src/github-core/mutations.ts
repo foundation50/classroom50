@@ -113,6 +113,7 @@ export {
   triggerRegrade,
   triggerProbeToken,
   rerunFailedRun,
+  cancelPagesDeployment,
   CollectInputsUnsupportedError,
   ProbeWorkflowMissingError,
 } from "./mutations/workflowDispatch"

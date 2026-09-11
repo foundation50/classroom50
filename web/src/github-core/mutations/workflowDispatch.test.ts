@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
+  cancelPagesDeployment,
   CollectInputsUnsupportedError,
   ProbeWorkflowMissingError,
   triggerProbeToken,
@@ -365,5 +366,55 @@ describe("triggerProbeToken", () => {
   it("requires an org", async () => {
     const { client } = makeClient(() => ({}))
     await expect(triggerProbeToken(client, undefined)).rejects.toThrow(/org/)
+  })
+})
+
+describe("cancelPagesDeployment", () => {
+  const SHA = "656e8d140b36230c9ccfe14584b9a81fa8c9c8d0"
+
+  it("POSTs the cancel for the sha GitHub named as blocking", async () => {
+    const request = vi.fn(() => Promise.resolve(undefined))
+    const client = { request } as unknown as GitHubClient
+    await cancelPagesDeployment(client, "acme", SHA)
+    expect(request).toHaveBeenCalledWith(
+      `/repos/acme/classroom50/pages/deployments/${SHA}/cancel`,
+      { method: "POST" },
+    )
+  })
+
+  it("treats a 404 as already cleared", async () => {
+    const request = vi.fn(() =>
+      Promise.reject(
+        new GitHubAPIError({
+          status: 404,
+          url: "https://api.github.com/x",
+          message: "Not Found",
+          body: null,
+          rateLimit: noRateLimit,
+        }),
+      ),
+    )
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      cancelPagesDeployment(client, "acme", SHA),
+    ).resolves.toBeUndefined()
+  })
+
+  it("rethrows a refusal (no Pages write)", async () => {
+    const request = vi.fn(() =>
+      Promise.reject(
+        new GitHubAPIError({
+          status: 403,
+          url: "https://api.github.com/x",
+          message: "Forbidden",
+          body: null,
+          rateLimit: noRateLimit,
+        }),
+      ),
+    )
+    const client = { request } as unknown as GitHubClient
+    await expect(cancelPagesDeployment(client, "acme", SHA)).rejects.toThrow(
+      /Forbidden/,
+    )
   })
 })

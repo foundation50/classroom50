@@ -1,4 +1,5 @@
 import type { GitHubWorkflowRun } from "@/github-core/types"
+import { PUBLISH_PAGES_WORKFLOW } from "@/github-core/workflows"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Pure helpers behind the activity banner, split out so run-attribution and
@@ -156,13 +157,42 @@ export function isFailureConclusion(
 }
 
 // A tracker's lifecycle phase, evaluated status-first: pending (no run bound),
-// running (in flight), failed / success (completed).
-export type TrackerPhase = "pending" | "running" | "success" | "failed"
+// running (in flight), superseded / failed / success (completed).
+export type TrackerPhase =
+  "pending" | "running" | "success" | "failed" | "superseded"
 
-export function trackerPhase(run: GitHubWorkflowRun | null): TrackerPhase {
+// A publish run GitHub cancelled because a newer publish run took its place.
+// The publish artifact is the whole site, so the newer run carries this run's
+// change too; reporting it as failed sends the teacher chasing a non-problem.
+// Older skeletons still queue one pending run (the default), which is where
+// these cancellations come from. A cancelled run with no newer publish run is
+// a real cancellation and stays failed.
+export function isSupersededPublish(
+  run: GitHubWorkflowRun,
+  runs: readonly GitHubWorkflowRun[],
+): boolean {
+  if (run.status !== "completed" || run.conclusion !== "cancelled") return false
+  if (workflowFile(run) !== PUBLISH_PAGES_WORKFLOW) return false
+  return runs.some(
+    (r) => r.id > run.id && workflowFile(r) === PUBLISH_PAGES_WORKFLOW,
+  )
+}
+
+// `runs` (the polled window) lets a cancelled publish read as superseded; a
+// caller without it gets the plain success/failed verdict.
+export function trackerPhase(
+  run: GitHubWorkflowRun | null,
+  runs?: readonly GitHubWorkflowRun[],
+): TrackerPhase {
   if (!run) return "pending"
   if (isRunning(run)) return "running"
+  if (runs && isSupersededPublish(run, runs)) return "superseded"
   return isFailureConclusion(run.conclusion) ? "failed" : "success"
+}
+
+// Whether a phase is final: the tracker is history, not something to wait on.
+export function isTerminalPhase(phase: TrackerPhase): boolean {
+  return phase === "success" || phase === "failed" || phase === "superseded"
 }
 
 // The i18n key that wraps a base action label for a given phase, so the banner
@@ -173,13 +203,55 @@ export const PHASE_LABEL_KEY: Record<TrackerPhase, string> = {
   running: "actionsBanner.state.running",
   success: "actionsBanner.state.success",
   failed: "actionsBanner.state.failed",
+  superseded: "actionsBanner.state.superseded",
 }
 
 // The i18n key for a workflow file's human label. Shared by the activity banner
 // (useActionActivity) and the org activity page so the mapping has one source.
 export const WORKFLOW_LABEL_KEY: Record<string, string> = {
-  "publish-pages.yaml": "actionsBanner.workflow.publishPages",
+  [PUBLISH_PAGES_WORKFLOW]: "actionsBanner.workflow.publishPages",
   "collect-scores.yaml": "actionsBanner.workflow.collectScores",
   "regrade.yaml": "actionsBanner.workflow.regrade",
   "probe-token.yaml": "actionsBanner.workflow.probeToken",
+}
+
+// Why a publish run's deploy failed, read from the annotations
+// actions/deploy-pages emits. Each kind maps to a different next step:
+//  - deployLocked:  GitHub Pages runs one deployment at a time and an earlier
+//                   one (`blockerSha`) is still marked in progress. Clears on
+//                   its own within about 10 minutes, or can be cancelled.
+//  - pagesDisabled: the config repo's Pages site is off (404 on deploy).
+//  - permission:    the workflow token lacks pages: write (403).
+//  - timeout:       the deployment never reported a final status.
+//  - outage:        GitHub returned a 5xx; nothing to fix locally.
+export type PublishFailure =
+  | { kind: "deployLocked"; blockerSha: string }
+  | { kind: "pagesDisabled" }
+  | { kind: "permission" }
+  | { kind: "timeout" }
+  | { kind: "outage" }
+
+// The wording comes from actions/deploy-pages (src/internal/deployment.js);
+// GitHub's own message supplies the "Please cancel <sha> first" part.
+const DEPLOY_LOCKED_RE = /in progress deployment.*?cancel\s+([0-9a-f]{7,40})/i
+
+export function classifyPublishFailure(
+  annotations: readonly { level: string; message: string }[],
+): PublishFailure | undefined {
+  for (const { level, message } of annotations) {
+    if (level !== "failure") continue
+    const locked = DEPLOY_LOCKED_RE.exec(message)
+    if (locked) return { kind: "deployLocked", blockerSha: locked[1] }
+    if (/Ensure GitHub Pages has been enabled/i.test(message)) {
+      return { kind: "pagesDisabled" }
+    }
+    if (/permission "pages: write"/i.test(message)) {
+      return { kind: "permission" }
+    }
+    if (/Timeout reached/i.test(message)) return { kind: "timeout" }
+    if (/Server error, is githubstatus\.com/i.test(message)) {
+      return { kind: "outage" }
+    }
+  }
+  return undefined
 }

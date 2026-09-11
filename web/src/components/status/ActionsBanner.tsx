@@ -6,12 +6,16 @@ import {
   AlertIcon,
   CheckCircleIcon,
   ChevronDownIcon,
+  SkipIcon,
   SyncIcon,
   XIcon,
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
+import { usePublishFailureDetail } from "@/hooks/usePublishFailureDetail"
+import { useCancelPagesDeployment } from "@/hooks/mutations/useCancelPagesDeployment"
+import { PUBLISH_PAGES_WORKFLOW } from "@/github-core/workflows"
 import { collapseVariants, DURATION, EASE_OUT } from "@/lib/motion"
 import type { BadgeTone } from "@/types/badgeTone"
 
@@ -68,6 +72,13 @@ const StatusIcon = ({
         className={`size-4 shrink-0 ${tinted ? "text-success" : ""}`}
       />
     )
+  if (phase === "superseded")
+    return (
+      <SkipIcon
+        aria-hidden="true"
+        className={`size-4 shrink-0 ${tinted ? "text-base-content/60" : ""}`}
+      />
+    )
   return <InlineSpinner className={`shrink-0 ${tinted ? "text-info" : ""}`} />
 }
 
@@ -76,12 +87,105 @@ const StatusIcon = ({
 const ROW_TONE: Record<Tracker["phase"], BadgeTone> = {
   failed: "error",
   success: "success",
+  superseded: "neutral",
   running: "info",
   pending: "info",
 }
 
+// Why a publish failed and what to do next, under a failed publish row. Reads
+// the run's annotations once it has failed; a cause it can't name falls back to
+// the run link alone. The deploy-lock case also offers to cancel the blocking
+// Pages deployment and re-run, since waiting out GitHub's lock is otherwise
+// the teacher's only option and nothing tells them so.
+const PublishFailureDetail = ({
+  org,
+  tracker,
+  onRetry,
+  retrying,
+}: {
+  org: string | undefined
+  tracker: Tracker
+  onRetry: (id: string) => void
+  retrying: boolean
+}) => {
+  const { t } = useTranslation()
+  const detail = usePublishFailureDetail(org, tracker.runId)
+  const cancelDeployment = useCancelPagesDeployment()
+  const [unsticking, setUnsticking] = useState(false)
+
+  if (detail.state !== "known") return null
+  const { failure } = detail
+
+  if (failure.kind !== "deployLocked") {
+    return (
+      <p className="text-xs opacity-90">
+        {t(`actionsBanner.publishFailure.${failure.kind}`)}
+      </p>
+    )
+  }
+
+  const cleared = detail.blockerInProgress === false
+  const busy = unsticking || retrying
+  const unstick = async () => {
+    if (!org || busy) return
+    setUnsticking(true)
+    try {
+      await cancelDeployment.mutateAsync({
+        org,
+        deploymentId: failure.blockerSha,
+      })
+      onRetry(tracker.id)
+    } catch {
+      // The row keeps showing the lock; the retry mutation's own toast covers a
+      // failed re-run, and a failed cancel is reported inline below.
+    } finally {
+      setUnsticking(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+      <span className="opacity-90">
+        {t(
+          cleared
+            ? "actionsBanner.publishFailure.deployLockCleared"
+            : "actionsBanner.publishFailure.deployLocked",
+        )}
+      </span>
+      {!cleared && (
+        // Same link-shaped affordance as the row's Retry, so the two read as
+        // one set of actions.
+        <button
+          type="button"
+          onClick={() => void unstick()}
+          disabled={busy}
+          className="flex shrink-0 cursor-pointer items-center gap-1 font-semibold underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {unsticking && <InlineSpinner />}
+          {t(
+            unsticking
+              ? "actionsBanner.publishFailure.unsticking"
+              : "actionsBanner.publishFailure.unstick",
+          )}
+        </button>
+      )}
+      {cancelDeployment.isError && (
+        <span role="alert" className="opacity-90">
+          {t("actionsBanner.publishFailure.unstickFailed", {
+            detail:
+              cancelDeployment.error instanceof Error
+                ? cancelDeployment.error.message
+                : String(cancelDeployment.error),
+          })}
+        </span>
+      )}
+    </div>
+  )
+}
+
 const TrackerRow = ({
   tracker,
+  org,
   onDismiss,
   onRetry,
   retrying,
@@ -89,6 +193,7 @@ const TrackerRow = ({
   compact,
 }: {
   tracker: Tracker
+  org: string | undefined
   onDismiss: (id: string) => void
   onRetry: (id: string) => void
   retrying: boolean
@@ -98,53 +203,72 @@ const TrackerRow = ({
   compact?: boolean
 }) => {
   const { t } = useTranslation()
+  // Only a failed publish gets a second line: its deploy annotations name a
+  // cause with a distinct fix, which the other workflows' failures don't.
+  const showPublishDetail =
+    tracker.phase === "failed" &&
+    tracker.workflow === PUBLISH_PAGES_WORKFLOW &&
+    tracker.runId !== undefined
   return (
     <div
-      className={`flex items-center gap-2 ${
+      className={`flex flex-col gap-1 ${
         compact
           ? ""
           : `rounded-selector px-2 py-1.5 ${chipToneClass[ROW_TONE[tracker.phase]]}`
       }`}
     >
-      <StatusIcon phase={tracker.phase} tinted={!compact} />
-      <span className="min-w-0 flex-1 truncate text-sm">
-        {tracker.displayLabel}
-      </span>
-      <ElapsedLabel tracker={tracker} now={now} />
-      {tracker.htmlUrl && (
-        <ExternalLink
-          href={tracker.htmlUrl}
-          variant="plain"
-          className="shrink-0 cursor-pointer text-xs font-medium opacity-80 hover:opacity-100"
-        >
-          {t("actionsBanner.viewRun")}
-        </ExternalLink>
-      )}
-      {tracker.retriable && (
-        <button
-          type="button"
-          onClick={() => onRetry(tracker.id)}
-          disabled={retrying}
-          aria-label={t("actionsBanner.retry")}
-          className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {retrying ? (
-            <InlineSpinner />
-          ) : (
-            <SyncIcon aria-hidden="true" className="size-4" />
-          )}
-          {t("actionsBanner.retry")}
-        </button>
-      )}
-      {tracker.dismissible && (
-        <button
-          type="button"
-          onClick={() => onDismiss(tracker.id)}
-          aria-label={t("actionsBanner.dismiss")}
-          className="flex shrink-0 cursor-pointer items-center opacity-70 hover:opacity-100"
-        >
-          <XIcon aria-hidden="true" className="size-4" />
-        </button>
+      <div className="flex items-center gap-2">
+        <StatusIcon phase={tracker.phase} tinted={!compact} />
+        <span className="min-w-0 flex-1 truncate text-sm">
+          {tracker.displayLabel}
+        </span>
+        <ElapsedLabel tracker={tracker} now={now} />
+        {tracker.htmlUrl && (
+          <ExternalLink
+            href={tracker.htmlUrl}
+            variant="plain"
+            className="shrink-0 cursor-pointer text-xs font-medium opacity-80 hover:opacity-100"
+          >
+            {t("actionsBanner.viewRun")}
+          </ExternalLink>
+        )}
+        {tracker.retriable && (
+          <button
+            type="button"
+            onClick={() => onRetry(tracker.id)}
+            disabled={retrying}
+            aria-label={t("actionsBanner.retry")}
+            className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {retrying ? (
+              <InlineSpinner />
+            ) : (
+              <SyncIcon aria-hidden="true" className="size-4" />
+            )}
+            {t("actionsBanner.retry")}
+          </button>
+        )}
+        {tracker.dismissible && (
+          <button
+            type="button"
+            onClick={() => onDismiss(tracker.id)}
+            aria-label={t("actionsBanner.dismiss")}
+            className="flex shrink-0 cursor-pointer items-center opacity-70 hover:opacity-100"
+          >
+            <XIcon aria-hidden="true" className="size-4" />
+          </button>
+        )}
+      </div>
+      {showPublishDetail && (
+        // Indented past the status icon so the detail reads as the row's own.
+        <div className="ps-6">
+          <PublishFailureDetail
+            org={org}
+            tracker={tracker}
+            onRetry={onRetry}
+            retrying={retrying}
+          />
+        </div>
       )}
     </div>
   )
@@ -153,6 +277,7 @@ const TrackerRow = ({
 // Inner banner content (one row, or the expandable header + list). Extracted so
 // it renders in both the hidden measuring probe and the visible bar.
 const BannerBody = ({
+  org,
   trackers,
   primary,
   primaryPhase,
@@ -165,6 +290,7 @@ const BannerBody = ({
   retrying,
   now,
 }: {
+  org: string | undefined
   trackers: Tracker[]
   primary: Tracker | undefined
   primaryPhase: Tracker["phase"]
@@ -185,6 +311,7 @@ const BannerBody = ({
       <div className="px-4 py-2.5">
         <TrackerRow
           tracker={trackers[0]}
+          org={org}
           onDismiss={dismiss}
           onRetry={retry}
           retrying={retrying.has(trackers[0].id)}
@@ -253,6 +380,7 @@ const BannerBody = ({
               <li key={tracker.id}>
                 <TrackerRow
                   tracker={tracker}
+                  org={org}
                   onDismiss={dismiss}
                   onRetry={retry}
                   retrying={retrying.has(tracker.id)}
@@ -268,7 +396,7 @@ const BannerBody = ({
 }
 
 export function ActionsBanner() {
-  const { trackers, anyFailed, pollError, dismiss, retry, retrying } =
+  const { org, trackers, anyFailed, pollError, dismiss, retry, retrying } =
     useActionActivity()
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
@@ -316,7 +444,9 @@ export function ActionsBanner() {
   const failedCount = trackers.filter((tr) => tr.phase === "failed").length
 
   // Tone follows the LATEST action's phase — an older failure does NOT repaint
-  // the whole bar; it surfaces as the attention badge below. Solid fill.
+  // the whole bar; it surfaces as the attention badge below. Solid fill. A
+  // superseded publish is neither a failure nor a success of its own, so it
+  // takes the neutral in-progress tone.
   const tone =
     primaryPhase === "failed"
       ? "border-error bg-error text-error-content"
@@ -379,6 +509,7 @@ export function ActionsBanner() {
   const body = (
     <>
       <BannerBody
+        org={org}
         trackers={trackers}
         primary={primary}
         primaryPhase={primaryPhase}

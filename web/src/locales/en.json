@@ -155,7 +155,19 @@
       "pending": "{{label}}: starting…",
       "running": "{{label}}…",
       "success": "{{label}}: done",
-      "failed": "{{label}}: failed"
+      "failed": "{{label}}: failed",
+      "superseded": "{{label}}: included in a newer publish"
+    },
+    "publishFailure": {
+      "deployLocked": "GitHub Pages is still finishing an earlier publish, so this one couldn't start. Your change is saved. The earlier publish usually clears within 10 minutes: retry then, or cancel it now.",
+      "deployLockCleared": "The earlier publish that blocked this one has finished. Your change is saved. Retry to publish it now.",
+      "unstick": "Cancel the stuck publish and retry",
+      "unsticking": "Cancelling…",
+      "unstickFailed": "Couldn't cancel the earlier publish: {{detail}}",
+      "pagesDisabled": "GitHub Pages is turned off for the classroom50 repository, so nothing can reach the student site. Your change is saved. Re-run setup in the organization's settings to turn Pages back on, then retry.",
+      "permission": "The publish workflow isn't allowed to write to GitHub Pages. Your change is saved. Update the organization's workflow files (a banner appears when an update is available), then retry.",
+      "timeout": "GitHub Pages didn't finish deploying within 10 minutes. Your change is saved. This is usually a GitHub slowdown: retry, and check githubstatus.com if it keeps happening.",
+      "outage": "GitHub Pages returned a server error. Your change is saved. Check githubstatus.com, then retry."
     },
     "workflow": {
       "publishPages": "Publishing to student site",

@@ -693,6 +693,50 @@ workflow has run." Check in order:
    invite also blocks the accept flow (see the
    [accept error table](#common-gh-student-accept-errors)).
 
+### "Publishing … to the student site: failed" with `due to in progress deployment`
+
+The red banner appears after you create or edit an assignment or classroom,
+and the run's **deploy** step (the build step passed) reports:
+
+```text
+Failed to create deployment (status: 400) … Responded with: Deployment request
+failed for <sha> due to in progress deployment. Please cancel <other sha> first
+or wait for it to complete.
+```
+
+Nothing is misconfigured, and **your change is saved** in the `classroom50`
+repository. GitHub Pages deploys one version of a site at a time, and it is
+still marking an earlier publish (the `<other sha>`) as in progress, usually
+after a slow deploy or a cancelled run. The lock clears on its own within about
+10 minutes. Because every publish deploys the whole site, the next one that
+succeeds carries every change made in the meantime.
+
+In the web app the banner names this cause under the failed row and offers two
+ways out:
+
+- **Wait, then Retry.** The row flips to "the earlier publish has finished"
+  once GitHub releases it. Click **Retry**, which re-runs only the failed
+  deploy step against the artifact the run already built.
+- **Cancel the stuck publish and retry.** Cancels the blocking Pages deployment
+  through GitHub's API, then re-runs the failed step at once. Your sign-in
+  token needs write access to Pages, which the standard teacher sign-in has.
+
+From a terminal, the same two calls are:
+
+```sh
+gh api -X POST repos/YOUR-ORGANIZATION/classroom50/pages/deployments/OTHER-SHA/cancel
+gh run rerun RUN-ID --failed -R YOUR-ORGANIZATION/classroom50
+```
+
+Creating a new classroom doesn't help: the lock belongs to the
+`YOUR-ORGANIZATION/classroom50` repository, which every classroom shares.
+
+If several publishes queued at once and one shows "included in a newer publish"
+instead of failed, that isn't an error either: GitHub cancelled it in favor of
+the newer run, which published its change too. Updating the organization's
+workflow files (the update banner) stops this happening, since the current
+`publish-pages.yaml` lets publishes queue instead of cancelling each other.
+
 ### "Couldn't load the classroom's assignments" on the accept page
 
 The accept page shows this error card, listing the URLs it tried, when the

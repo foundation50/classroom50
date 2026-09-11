@@ -91,7 +91,9 @@ const OrgActivityPage = () => {
   const items = useMemo(() => {
     const sessionItems = sessionToItems(entries)
     const commitItems = (commits.data ?? []).map(commitToItem)
-    const runItems = (runs.data ?? []).map((r) => runToItem(r, runLabel))
+    const runItems = (runs.data ?? []).map((r) =>
+      runToItem(r, runLabel, runs.data),
+    )
     const merged = mergeTimeline(
       [...sessionItems, ...commitItems, ...runItems],
       {

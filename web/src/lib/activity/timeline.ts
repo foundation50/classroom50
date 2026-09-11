@@ -107,6 +107,9 @@ const runStatusMap = {
   running: "running",
   success: "ok",
   failed: "error",
+  // A publish GitHub cancelled in favor of a newer one: neither an error nor
+  // a success of its own.
+  superseded: "info",
 } as const
 
 export function runToItem(
@@ -115,10 +118,13 @@ export function runToItem(
     file: string | undefined,
     fallback: string | undefined,
   ) => string,
+  // The listed window; lets a publish GitHub cancelled for a newer one read as
+  // superseded rather than as an error.
+  allRuns?: readonly GitHubWorkflowRun[],
 ): TimelineItem {
   const { startedAtMs } = runTimes(run)
   const createdMs = Date.parse(run.created_at)
-  const phase = trackerPhase(run)
+  const phase = trackerPhase(run, allRuns)
   return {
     id: `run-${run.id}`,
     source: "run",
