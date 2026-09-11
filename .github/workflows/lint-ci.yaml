@@ -80,9 +80,13 @@ jobs:
         # `classroom50/autograde` (literal Markdown, not a shell variable);
         # shellcheck's "expressions don't expand in single quotes" info is a
         # false positive there. It is the only finding across all workflows.
+        # `concurrency.queue` is newer than actionlint 1.7.12's schema, so its
+        # syntax check rejects the key publish-pages.yaml needs. Ignored by
+        # exact message; drop the ignore once a release accepts the key.
         run: |
           set -euo pipefail
           actionlint -shellcheck "shellcheck --exclude=SC2016" \
+            -ignore 'unexpected key "queue" for "concurrency" section' \
             .github/workflows/*.yaml \
             cli/gh-teacher/skeleton/dotgithub/workflows/*.yaml \
             cli/gh-student/embed/autograde-shim.yaml
