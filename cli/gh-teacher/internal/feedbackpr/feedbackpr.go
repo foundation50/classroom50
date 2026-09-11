@@ -159,7 +159,10 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 	// pull_request_template.md; resolved once and used for every repo. The Go
 	// teacher struct does not type the flag (it rides in Extra, like
 	// copy_about/copy_topics), so read it from Extra here.
-	tmpl := resolveFeedbackTemplateRef(entry)
+	body := feedbackBodySpec{
+		template:   resolveFeedbackTemplateRef(entry),
+		autograded: !entry.EmptyRepo && !entry.NoAutograder,
+	}
 
 	repos, err := targetRepos(client, p, branch)
 	if err != nil {
@@ -197,7 +200,7 @@ func run(client githubapi.Client, out, errOut io.Writer, p runParams) error {
 			continue
 		}
 
-		res := ensureOne(client, p.org, repo, branch, entry.Mode, tmpl)
+		res := ensureOne(client, p.org, repo, branch, entry.Mode, body)
 		results = append(results, res)
 		reportRepo(out, res, p.quiet, p.verbose)
 	}
@@ -233,8 +236,8 @@ func resolveFeedbackTemplateRef(entry assignment.AssignmentEntry) *feedbackTempl
 
 // ensureOne runs the idempotent ensure flow for one repo and classifies the
 // result into a summary bucket.
-func ensureOne(client githubapi.Client, org, repo, branch, mode string, tmpl *feedbackTemplateRef) repoResult {
-	err := ensureFeedbackPullRequest(client, org, repo, branch, mode, tmpl)
+func ensureOne(client githubapi.Client, org, repo, branch, mode string, body feedbackBodySpec) repoResult {
+	err := ensureFeedbackPullRequest(client, org, repo, branch, mode, body)
 	switch {
 	case err == nil:
 		return repoResult{repo: repo, outcome: outcomeCreated}

@@ -481,19 +481,25 @@ func TestFeedbackLabelForMode(t *testing.T) {
 // the same .md (catching a trailing-newline / line-ending regression). The one
 // copy that CAN drift in wording is the runner's hand-mirrored pr_body (Python),
 // which its own skeleton test pins to this same golden. The .md is the single
-// source of truth; regenerate the golden via
+// source of truth; regenerate the goldens via
 // `go test ./contract -run TestFeedbackPRBody -update` after editing it.
 func TestFeedbackPRBody(t *testing.T) {
-	rendered := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL")
+	rendered := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL", true)
+	renderedNoAutograder := FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL", false)
 	if *updateGolden {
-		if err := os.WriteFile(filepath.Clean(feedbackPRBodyGoldenPath), []byte(rendered), 0o644); err != nil {
-			t.Fatalf("update golden: %v", err)
+		for path, content := range map[string]string{
+			feedbackPRBodyGoldenPath:             rendered,
+			feedbackPRBodyNoAutograderGoldenPath: renderedNoAutograder,
+		} {
+			if err := os.WriteFile(filepath.Clean(path), []byte(content), 0o644); err != nil {
+				t.Fatalf("update golden: %v", err)
+			}
+			t.Logf("regenerated %s from feedbackPrBody.md", path)
 		}
-		t.Logf("regenerated %s from feedbackPrBody.md", feedbackPRBodyGoldenPath)
 		return
 	}
 
-	body := FeedbackPRBody("main", "https://github.com/o/r/releases/latest")
+	body := FeedbackPRBody("main", "https://github.com/o/r/releases/latest", true)
 	for _, want := range []string{
 		"https://github.com/o/r/releases/latest",
 		"`main`",
@@ -504,6 +510,9 @@ func TestFeedbackPRBody(t *testing.T) {
 			t.Errorf("FeedbackPRBody missing %q", want)
 		}
 	}
+	if strings.Contains(body, "<!--") {
+		t.Errorf("FeedbackPRBody leaked a marker line into the autograded body:\n%s", body)
+	}
 
 	golden, err := os.ReadFile(filepath.Clean(feedbackPRBodyGoldenPath))
 	if err != nil {
@@ -513,11 +522,63 @@ func TestFeedbackPRBody(t *testing.T) {
 		t.Errorf("FeedbackPRBody no longer matches %s; edit the canonical feedbackPrBody.md, then regenerate with `go test ./contract -run TestFeedbackPRBody -update` (the web and Python verify tests assert against the same golden)",
 			feedbackPRBodyGoldenPath)
 	}
+
+	// no_autograder: nothing may point the student at autograding or releases.
+	noAutograder := FeedbackPRBody("main", "https://github.com/o/r/releases/latest", false)
+	for _, unwanted := range []string{"autograd", "Autograd", "releases/latest", "<!--"} {
+		if strings.Contains(noAutograder, unwanted) {
+			t.Errorf("FeedbackPRBody(autograded=false) still contains %q:\n%s", unwanted, noAutograder)
+		}
+	}
+	for _, want := range []string{
+		"unless your teacher tells you to.\n\nYour teacher can leave comments",
+		"open one to see its changes.\n- This page is an overview",
+	} {
+		if !strings.Contains(noAutograder, want) {
+			t.Errorf("FeedbackPRBody(autograded=false) did not collapse cleanly around %q:\n%s", want, noAutograder)
+		}
+	}
+	goldenNoAutograder, err := os.ReadFile(filepath.Clean(feedbackPRBodyNoAutograderGoldenPath))
+	if err != nil {
+		t.Fatalf("read golden: %v", err)
+	}
+	if renderedNoAutograder != string(goldenNoAutograder) {
+		t.Errorf("FeedbackPRBody(autograded=false) no longer matches %s; regenerate with `go test ./contract -run TestFeedbackPRBody -update` (the web verify test asserts against the same golden)",
+			feedbackPRBodyNoAutograderGoldenPath)
+	}
 }
 
-// feedbackPRBodyGoldenPath locates the rendered-body golden, also consumed by
-// the Python (skeleton_tests) and TypeScript (web) mirror tests.
-const feedbackPRBodyGoldenPath = "testdata/feedback_pr_body.golden"
+// An unpaired or indented marker would silently drop (or leak) prose.
+func TestFeedbackPRBodyMarkersBalanced(t *testing.T) {
+	depth := 0
+	for i, line := range strings.Split(feedbackPRBodyTemplate, "\n") {
+		switch {
+		case line == FeedbackPRAutogradeOpen:
+			depth++
+			if depth != 1 {
+				t.Fatalf("line %d: nested %q", i+1, line)
+			}
+		case line == FeedbackPRAutogradeClose:
+			depth--
+			if depth != 0 {
+				t.Fatalf("line %d: %q without a matching open", i+1, line)
+			}
+		case strings.Contains(line, "<!--"):
+			t.Errorf("line %d: marker must be the whole line: %q", i+1, line)
+		}
+	}
+	if depth != 0 {
+		t.Errorf("unclosed %q in feedbackPrBody.md", FeedbackPRAutogradeOpen)
+	}
+}
+
+// The goldens are also consumed by the TypeScript (web) mirror tests; Python
+// (skeleton_tests) pins only the autograded one, since the runner never opens
+// a PR for a no_autograder assignment.
+const (
+	feedbackPRBodyGoldenPath             = "testdata/feedback_pr_body.golden"
+	feedbackPRBodyNoAutograderGoldenPath = "testdata/feedback_pr_body_no_autograder.golden"
+)
 
 // TestFeedbackTemplateContract pins the feedback_pr_template read contract that
 // the two Go readers (gh-student, gh-teacher) share from here and that the web

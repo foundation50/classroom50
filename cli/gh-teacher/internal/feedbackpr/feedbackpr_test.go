@@ -73,8 +73,9 @@ func classroomMux(t *testing.T, assignments string, members []string, repoStates
 
 // mountRepo registers the existence probe plus (for a "fresh" repo) the full
 // ensure sequence under /repos/o/<repo>/. "missing" 404s the probe; "existing"
-// answers the base+head PR list with one open PR (idempotent no-op).
-func mountRepo(mux *http.ServeMux, repo, state string) {
+// answers the base+head PR list with one open PR (idempotent no-op). onCreate
+// receives the decoded PR-create request body.
+func mountRepo(mux *http.ServeMux, repo, state string, onCreate ...func(body map[string]string)) {
 	base := "/repos/o/" + repo
 
 	mux.HandleFunc(base, func(w http.ResponseWriter, _ *http.Request) {
@@ -99,6 +100,11 @@ func mountRepo(mux *http.ServeMux, repo, state string) {
 			return
 		}
 		// Fresh open: head already has a diff, so the first create succeeds.
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		for _, fn := range onCreate {
+			fn(body)
+		}
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(map[string]any{"number": 1})
 	})
@@ -183,7 +189,28 @@ func TestRun_UserTargetsSingleRepo(t *testing.T) {
 	}
 }
 
-// TestRun_UserMissingRepoIsReported pins that a --user target who hasn't
+// Discussion #964, end to end: a no_autograder entry still gets its Feedback
+// PR, but the body no longer claims each commit is autograded.
+func TestRun_NoAutograderBodyOmitsAutogradingLines(t *testing.T) {
+	entry := `{"slug":"hello","name":"Hello","mode":"individual","autograder":"default","feedback_pr":true,"no_autograder":true,"template":{"owner":"o","repo":"tmpl","branch":"main"}}`
+	mux := classroomMux(t, assignmentsJSON(t, entry), nil, nil)
+	var posted map[string]string
+	mountRepo(mux, "cs-hello-alice", "fresh", func(body map[string]string) { posted = body })
+
+	if _, _, err := runCmd(t, mux, params(func(p *runParams) { p.user = "alice" })); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	body := posted["body"]
+	if !strings.Contains(body, "**Don't close or merge this pull request**") {
+		t.Fatalf("built-in body not posted: %q", body)
+	}
+	for _, unwanted := range []string{"autograd", "Autograd", "releases/latest"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("no_autograder body still mentions %q:\n%s", unwanted, body)
+		}
+	}
+}
+
 // accepted is reported (not a silent no-op): the one repo the teacher named is
 // the answer they asked for.
 func TestRun_UserMissingRepoIsReported(t *testing.T) {

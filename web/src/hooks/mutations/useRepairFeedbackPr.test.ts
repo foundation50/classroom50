@@ -46,7 +46,12 @@ describe("useRepairFeedbackPr", () => {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repo: REPO, mode: "individual" })
+    result.current.mutate({
+      org: ORG,
+      repo: REPO,
+      mode: "individual",
+      autograded: true,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(invalidate).toHaveBeenCalledWith({ queryKey: OPEN_PULLS_KEY })
@@ -60,7 +65,12 @@ describe("useRepairFeedbackPr", () => {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repo: REPO, mode: "individual" })
+    result.current.mutate({
+      org: ORG,
+      repo: REPO,
+      mode: "individual",
+      autograded: true,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: OPEN_PULLS_KEY })
@@ -78,21 +88,31 @@ describe("useRepairFeedbackPr", () => {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repo: REPO, mode: "individual" })
+    result.current.mutate({
+      org: ORG,
+      repo: REPO,
+      mode: "individual",
+      autograded: true,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(result.current.data).toMatchObject({ ok: false })
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: OPEN_PULLS_KEY })
   })
 
-  it("passes org/repo/mode through to the domain repair", async () => {
+  it("passes org/repo/mode/autograded through to the domain repair", async () => {
     repairFeedbackPullRequest.mockResolvedValue({ ok: true, created: true })
     const queryClient = freshClient()
     const { result } = renderHook(() => useRepairFeedbackPr(), {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repo: REPO, mode: "group" })
+    result.current.mutate({
+      org: ORG,
+      repo: REPO,
+      mode: "group",
+      autograded: false,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(repairFeedbackPullRequest).toHaveBeenCalledWith({
@@ -100,6 +120,7 @@ describe("useRepairFeedbackPr", () => {
       org: ORG,
       repo: REPO,
       mode: "group",
+      autograded: false,
     })
   })
 })

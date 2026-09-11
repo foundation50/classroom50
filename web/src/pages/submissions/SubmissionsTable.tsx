@@ -574,6 +574,7 @@ const SubmissionsTable = ({
         org={org}
         repo={repo}
         mode={isGroup ? "group" : "individual"}
+        autograded={!skipsGrading}
         hasRepo={hasRepo}
       />
     )

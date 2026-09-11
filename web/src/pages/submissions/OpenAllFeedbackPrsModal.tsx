@@ -50,6 +50,7 @@ export function OpenAllFeedbackPrsModal({
   org,
   assignmentName,
   mode,
+  autograded,
   repos,
 }: {
   open: boolean
@@ -57,6 +58,8 @@ export function OpenAllFeedbackPrsModal({
   org: string
   assignmentName: string
   mode: AssignmentMode
+  // !assignmentSkipsGrading(assignment)
+  autograded: boolean
   // Every existing assignment repo NAME (individual + group), enumerated by the
   // page from the org repo list.
   repos: string[]
@@ -84,7 +87,7 @@ export function OpenAllFeedbackPrsModal({
   }
 
   const handleRun = () => {
-    mutate({ org, repos, mode })
+    mutate({ org, repos, mode, autograded })
   }
 
   return (

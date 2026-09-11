@@ -687,27 +687,58 @@ func DefaultStudentPermission(mode string) string {
 // (web imports it via `?raw`), and Python (mirrored, pinned by the golden).
 // It carries three placeholder tokens — HEAD_BRANCH, RELEASE_URL, BASE_BRANCH —
 // substituted at render time. Edit this .md to change the body everywhere;
-// then regenerate the golden (`go test ./contract -run TestFeedbackPRBody -update`)
+// then regenerate the goldens (`go test ./contract -run TestFeedbackPRBody -update`)
 // and the per-language verify tests will confirm every copy still matches.
 //
 //go:embed feedbackPrBody.md
 var feedbackPRBodyTemplate string
 
+// Whole-line markers around the template's autograding-only lines. Mirrored
+// by web/src/domain/assignments/feedbackPr.ts.
+const (
+	FeedbackPRAutogradeOpen  = "<!-- autograde -->"
+	FeedbackPRAutogradeClose = "<!-- /autograde -->"
+)
+
 // FeedbackPRBody is the built-in Feedback PR body, rendered from the canonical
 // feedbackPrBody.md by substituting the head branch, the static release URL,
-// and the frozen base branch. It stays byte-identical with the output of
-// ensure_feedback_pr.py's pr_body(head, release_url) and the web GUI copy
-// (feedbackPr.ts), pinned by the cross-language golden.
+// and the frozen base branch. With autograded=true it stays byte-identical
+// with the output of ensure_feedback_pr.py's pr_body(head, release_url) and
+// the web GUI copy (feedbackPr.ts), pinned by the cross-language golden.
+//
+// autograded=false drops the marked lines (discussion #964): a no_autograder
+// repo has no shim, so there is no autograde status and nothing at the release
+// URL to point the student at.
 //
 // releaseURL is the static `https://github.com/{org}/{repo}/releases/latest`
 // pointer (not a pinned tag) so the link self-updates as submissions publish;
 // once written at PR creation it never needs rewriting.
-func FeedbackPRBody(head, releaseURL string) string {
+func FeedbackPRBody(head, releaseURL string, autograded bool) string {
 	return strings.NewReplacer(
 		"HEAD_BRANCH", head,
 		"RELEASE_URL", releaseURL,
 		"BASE_BRANCH", FeedbackBaseBranch,
-	).Replace(feedbackPRBodyTemplate)
+	).Replace(filterFeedbackPRAutogradeLines(feedbackPRBodyTemplate, autograded))
+}
+
+// Drops the marker lines, and the lines between them unless autograded.
+func filterFeedbackPRAutogradeLines(tmpl string, autograded bool) string {
+	lines := strings.Split(tmpl, "\n")
+	out := make([]string, 0, len(lines))
+	inBlock := false
+	for _, line := range lines {
+		switch line {
+		case FeedbackPRAutogradeOpen:
+			inBlock = true
+		case FeedbackPRAutogradeClose:
+			inBlock = false
+		default:
+			if autograded || !inBlock {
+				out = append(out, line)
+			}
+		}
+	}
+	return strings.Join(out, "\n")
 }
 
 // StaffRole is a per-classroom staff role backing the web GUI's in-app roles.

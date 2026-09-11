@@ -23,12 +23,15 @@ export const FeedbackPrAction = ({
   org,
   repo,
   mode,
+  autograded,
   noRepo = false,
   trigger,
 }: {
   org: string
   repo: string
   mode: AssignmentMode
+  // !assignmentSkipsGrading(assignment)
+  autograded: boolean
   // No assignment repo exists yet (never-accepted non-submitter): there can be
   // no Feedback PR to review or repair, so the trigger renders disabled.
   noRepo?: boolean
@@ -95,7 +98,7 @@ export const FeedbackPrAction = ({
 
   const handleRepair = () => {
     repair.mutate(
-      { org, repo, mode },
+      { org, repo, mode, autograded },
       {
         onSuccess: async (result) => {
           if (result.ok) {
@@ -200,11 +203,13 @@ export const ReviewButton = ({
   org,
   repo,
   mode,
+  autograded,
   noRepo = false,
 }: {
   org: string
   repo: string
   mode: AssignmentMode
+  autograded: boolean
   noRepo?: boolean
 }) => {
   const { t } = useTranslation()
@@ -213,6 +218,7 @@ export const ReviewButton = ({
       org={org}
       repo={repo}
       mode={mode}
+      autograded={autograded}
       noRepo={noRepo}
       trigger={({ onClick, resolving }) => (
         <ActionListRow
@@ -238,11 +244,13 @@ export const FeedbackPrIconButton = ({
   org,
   repo,
   mode,
+  autograded,
   hasRepo,
 }: {
   org: string
   repo: string
   mode: AssignmentMode
+  autograded: boolean
   hasRepo: boolean
 }) => {
   const { t } = useTranslation()
@@ -271,6 +279,7 @@ export const FeedbackPrIconButton = ({
       org={org}
       repo={repo}
       mode={mode}
+      autograded={autograded}
       trigger={({ onClick, resolving }) => (
         <Button
           variant="ghost"

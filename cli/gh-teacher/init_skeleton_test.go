@@ -1039,8 +1039,9 @@ func TestFeedbackPRParity_GoVsPython(t *testing.T) {
 	// (web/src/domain/assignments/feedbackPr.test.ts). What only THIS test can
 	// do is read the embedded python source, so it checks that the golden still
 	// tracks that source — regenerating it from a drifted Go copy can't pass
-	// silently.
-	body := contract.FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL")
+	// silently. Python only renders the autograded body: the runner refuses
+	// no_autograder assignments at setup.
+	body := contract.FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL", true)
 	const opening = ":wave:! Classroom 50 opened this pull request as a place for your "
 	if !strings.Contains(body, opening) {
 		t.Fatalf("contract.FeedbackPRBody lost the opening sentence %q", opening)

@@ -61,13 +61,36 @@ afterEach(() => {
 })
 
 describe("ReviewButton — repair flow", () => {
+  it("forwards autograded=false to the repair so a no_autograder body is trimmed", async () => {
+    const user = userEvent.setup()
+    mutate.mockImplementation((_vars, opts) =>
+      opts.onSuccess({ ok: true, created: true }),
+    )
+    render(
+      <ReviewButton
+        org={ORG}
+        repo={REPO}
+        mode="individual"
+        autograded={false}
+      />,
+    )
+    await openRepairModal(user)
+    refetch.mockResolvedValueOnce({ data: null })
+    await user.click(screen.getByText("submissions.repairPr.repair"))
+
+    expect(mutate).toHaveBeenCalledWith(
+      { org: ORG, repo: REPO, mode: "individual", autograded: false },
+      expect.anything(),
+    )
+  })
+
   it("on a created PR: toasts success, closes, refetches and opens the PR", async () => {
     const user = userEvent.setup()
     // The repair resolves created:true; the follow-up refetch returns the PR.
     mutate.mockImplementation((_vars, opts) =>
       opts.onSuccess({ ok: true, created: true }),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     refetch.mockResolvedValueOnce({
@@ -97,7 +120,7 @@ describe("ReviewButton — repair flow", () => {
     mutate.mockImplementation((_vars, opts) =>
       opts.onSuccess({ ok: true, created: false }),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     refetch.mockResolvedValueOnce({ data: null })
@@ -117,7 +140,7 @@ describe("ReviewButton — repair flow", () => {
     mutate.mockImplementation((_vars, opts) =>
       opts.onSuccess({ ok: false, reason: "no-baseline", unsupported: true }),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     await user.click(screen.getByText("submissions.repairPr.repair"))
@@ -139,7 +162,7 @@ describe("ReviewButton — repair flow", () => {
         unsupported: true,
       }),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     await user.click(screen.getByText("submissions.repairPr.repair"))
@@ -158,7 +181,7 @@ describe("ReviewButton — repair flow", () => {
         code: "base-mismatch",
       }),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     await user.click(screen.getByText("submissions.repairPr.repair"))
@@ -173,7 +196,7 @@ describe("ReviewButton — repair flow", () => {
     mutate.mockImplementation((_vars, opts) =>
       opts.onSuccess({ ok: false, reason: "GitHub 500", code: "transient" }),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     await user.click(screen.getByText("submissions.repairPr.repair"))
@@ -188,7 +211,7 @@ describe("ReviewButton — repair flow", () => {
     mutate.mockImplementation((_vars, opts) =>
       opts.onError(new Error("network down")),
     )
-    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
     await openRepairModal(user)
 
     await user.click(screen.getByText("submissions.repairPr.repair"))

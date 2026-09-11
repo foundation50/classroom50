@@ -14,6 +14,8 @@ export type OpenAllFeedbackPrsInput = {
   org: string
   repos: string[]
   mode: AssignmentMode
+  // !assignmentSkipsGrading(assignment)
+  autograded: boolean
 }
 
 // Bulk-open a Feedback PR on every assignment repo (issue #347). Wraps the
@@ -37,13 +39,14 @@ export function useOpenAllFeedbackPrs() {
     OpenAllFeedbackPrsInput
   >({
     meta: { keepTabOpen: true },
-    mutationFn: ({ org, repos, mode }) => {
+    mutationFn: ({ org, repos, mode, autograded }) => {
       setProgress({ done: 0, total: repos.length })
       return openAllFeedbackPullRequests({
         client,
         org,
         repos,
         mode,
+        autograded,
         onProgress: setProgress,
       })
     },

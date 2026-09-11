@@ -51,7 +51,9 @@ describe("feedback PR contract parity vs ensure_feedback_pr.py", () => {
     // upstream), so regenerating it from a drifted Go copy can't pass silently.
     const opening =
       ":wave:! Classroom 50 opened this pull request as a place for your "
-    expect(feedbackPrBody("HEAD_BRANCH", "RELEASE_URL")).toContain(opening)
+    expect(feedbackPrBody("HEAD_BRANCH", "RELEASE_URL", true)).toContain(
+      opening,
+    )
     expect(ensureFeedbackPrPySource).toContain(opening)
   })
 
@@ -64,7 +66,32 @@ describe("feedback PR contract parity vs ensure_feedback_pr.py", () => {
     const golden = (
       await import("../../../../cli/shared/contract/testdata/feedback_pr_body.golden?raw")
     ).default
-    expect(feedbackPrBody("HEAD_BRANCH", "RELEASE_URL")).toBe(golden)
+    expect(feedbackPrBody("HEAD_BRANCH", "RELEASE_URL", true)).toBe(golden)
+  })
+
+  it("renders the no_autograder body byte-identical to the Go golden", async () => {
+    // Python has no copy: the runner never opens a PR for a no_autograder
+    // assignment.
+    const golden = (
+      await import("../../../../cli/shared/contract/testdata/feedback_pr_body_no_autograder.golden?raw")
+    ).default
+    const body = feedbackPrBody("HEAD_BRANCH", "RELEASE_URL", false)
+    expect(body).toBe(golden)
+    expect(body).not.toMatch(/autograd/i)
+    expect(body).not.toContain("RELEASE_URL")
+    expect(body).not.toContain("<!--")
+    // No double blank line where the paragraph and bullets were dropped.
+    expect(body).not.toContain("\n\n\n")
+    expect(body).toContain(
+      "unless your teacher tells you to.\n\nYour teacher can leave comments",
+    )
+    expect(body).toContain(
+      "open one to see its changes.\n- This page is an overview",
+    )
+  })
+
+  it("never leaks a marker line into the autograded body", () => {
+    expect(feedbackPrBody("main", "u", true)).not.toContain("<!--")
   })
 
   it("embeds the release URL (the latest-submission link)", () => {
@@ -73,6 +100,7 @@ describe("feedback PR contract parity vs ensure_feedback_pr.py", () => {
     const body = feedbackPrBody(
       "main",
       "https://github.com/o/r/releases/latest",
+      true,
     )
     expect(body).toContain("https://github.com/o/r/releases/latest")
   })
@@ -235,6 +263,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: true })
 
@@ -271,6 +300,29 @@ describe("ensureFeedbackPullRequest", () => {
     expect(labelAdd?.body).toEqual({ labels: ["Individual Assignment"] })
   })
 
+  it("no_autograder assignment: posts the built-in body without its autograding lines", async () => {
+    const { client, calls } = fakeClient({})
+    await ensureFeedbackPullRequest({
+      client,
+      owner: "o",
+      repo: "r",
+      branch: "main",
+      acceptCommitSha: "accept-sha",
+      mode: "individual",
+      autograded: false,
+    })
+    const prCreates = calls.filter(
+      (c) => c.url === "/repos/o/r/pulls" && c.method === "POST",
+    )
+    const pr = prCreates.at(-1)?.body as Record<string, string>
+    expect(pr.body).toContain("**Don't close or merge this pull request**")
+    expect(pr.body).not.toMatch(/autograd/i)
+    expect(pr.body).not.toContain("releases/latest")
+    expect(pr.body).toBe(
+      feedbackPrBody("main", "https://github.com/o/r/releases/latest", false),
+    )
+  })
+
   it("group mode applies the Group Assignment label", async () => {
     const { client, calls } = fakeClient({})
     await ensureFeedbackPullRequest({
@@ -280,6 +332,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "group",
+      autograded: true,
     })
     const labelAdd = calls.find((c) => c.url === "/repos/o/r/issues/1/labels")
     expect(labelAdd?.body).toEqual({ labels: ["Group Assignment"] })
@@ -298,6 +351,7 @@ describe("ensureFeedbackPullRequest", () => {
         branch: "main",
         acceptCommitSha: "accept-sha",
         mode: "individual",
+        autograded: true,
       })
       expect(result).toEqual({ ok: true, created: false })
       expect(writeCalls(calls)).toHaveLength(0)
@@ -313,6 +367,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: true })
     expect(
@@ -331,6 +386,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result.ok).toBe(false)
   })
@@ -347,6 +403,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: true })
     expect(
@@ -372,6 +429,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result.ok).toBe(false)
     if (!result.ok) {
@@ -397,6 +455,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result.ok).toBe(false)
     expect(
@@ -416,6 +475,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: false })
   })
@@ -429,6 +489,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: true })
     expect(calls.some((c) => c.url === "/repos/o/r/issues/1/labels")).toBe(true)
@@ -445,6 +506,7 @@ describe("ensureFeedbackPullRequest", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     const list = calls.find((c) => c.url.startsWith("/repos/o/r/pulls?"))
     expect(list?.url).toContain("state=all")
@@ -539,6 +601,7 @@ describe("repairFeedbackPullRequest", () => {
       org: "o",
       repo: "r",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: true })
 
@@ -568,6 +631,7 @@ describe("repairFeedbackPullRequest", () => {
       org: "o",
       repo: "r",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({ ok: true, created: false })
     expect(writeCalls(calls)).toHaveLength(0)
@@ -580,6 +644,7 @@ describe("repairFeedbackPullRequest", () => {
       org: "o",
       repo: "r",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({
       ok: false,
@@ -599,6 +664,7 @@ describe("repairFeedbackPullRequest", () => {
       org: "o",
       repo: "r",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toMatchObject({ ok: false, code: "transient" })
     expect(result).not.toHaveProperty("unsupported")
@@ -612,6 +678,7 @@ describe("repairFeedbackPullRequest", () => {
       org: "o",
       repo: "r",
       mode: "individual",
+      autograded: true,
     })
     expect(result).toEqual({
       ok: false,
@@ -709,6 +776,7 @@ describe("openAllFeedbackPullRequests", () => {
       org: "o",
       repos,
       mode: "individual",
+      autograded: true,
       onProgress: (p) => progress.push(p.done),
     })
 
@@ -740,6 +808,7 @@ describe("openAllFeedbackPullRequests", () => {
       org: "o",
       repos: [],
       mode: "individual",
+      autograded: true,
     })
     expect(summary).toMatchObject({
       total: 0,
@@ -834,6 +903,7 @@ describe("ensureFeedbackPullRequest with feedbackPrTemplate", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
       feedbackPrTemplate: tmplRef,
     })
     expect(result).toEqual({ ok: true, created: true })
@@ -859,6 +929,7 @@ describe("ensureFeedbackPullRequest with feedbackPrTemplate", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
       feedbackPrTemplate: tmplRef,
     })
     expect(result).toEqual({ ok: true, created: true })
@@ -879,6 +950,7 @@ describe("ensureFeedbackPullRequest with feedbackPrTemplate", () => {
       branch: "main",
       acceptCommitSha: "accept-sha",
       mode: "individual",
+      autograded: true,
     })
     expect(calls.some((c) => c.url.includes("/repos/t/tmpl/"))).toBe(false)
   })

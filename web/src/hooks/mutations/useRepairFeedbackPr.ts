@@ -10,6 +10,8 @@ export type RepairFeedbackPrInput = {
   org: string
   repo: string
   mode: AssignmentMode
+  // !assignmentSkipsGrading(assignment)
+  autograded: boolean
 }
 
 // Teacher-side repair for a missing Feedback PR (issue #347): re-run the same
@@ -26,8 +28,8 @@ export function useRepairFeedbackPr() {
 
   return useMutation<RepairFeedbackPrResult, Error, RepairFeedbackPrInput>({
     meta: { keepTabOpen: true },
-    mutationFn: ({ org, repo, mode }) =>
-      repairFeedbackPullRequest({ client, org, repo, mode }),
+    mutationFn: ({ org, repo, mode, autograded }) =>
+      repairFeedbackPullRequest({ client, org, repo, mode, autograded }),
     onSuccess: (result, { org, repo }) => {
       if (result.ok && result.created) {
         void queryClient.invalidateQueries({

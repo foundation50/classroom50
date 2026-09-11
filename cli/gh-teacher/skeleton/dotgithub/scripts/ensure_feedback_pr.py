@@ -208,6 +208,10 @@ def pr_body(head: str, release_url: str) -> str:
     release_url is the static `.../releases/latest` link (not a pinned tag), so
     it self-updates as new submissions publish even though this body is written
     once at PR creation and only refreshed to backfill a missing link.
+
+    Always the autograded variant: the runner refuses empty_repo and
+    no_autograder assignments at setup, so unlike the Go and TypeScript
+    renderers this copy never drops the autograding lines.
     """
     return "\n".join([
         ":wave:! Classroom 50 opened this pull request as a place for your "

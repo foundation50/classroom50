@@ -65,6 +65,7 @@ const renderWith = (data: OpenAllFeedbackPrsSummary) => {
       org="acme"
       assignmentName="Homework 1"
       mode="individual"
+      autograded
       repos={["cs-hw-alice", "cs-hw-bob"]}
     />,
   )

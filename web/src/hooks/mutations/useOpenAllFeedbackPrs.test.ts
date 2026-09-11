@@ -67,7 +67,12 @@ describe("useOpenAllFeedbackPrs", () => {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repos: ["a", "b"], mode: "individual" })
+    result.current.mutate({
+      org: ORG,
+      repos: ["a", "b"],
+      mode: "individual",
+      autograded: true,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(result.current.progress).toEqual({ done: 2, total: 2 })
@@ -84,20 +89,30 @@ describe("useOpenAllFeedbackPrs", () => {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repos: ["a"], mode: "group" })
+    result.current.mutate({
+      org: ORG,
+      repos: ["a"],
+      mode: "group",
+      autograded: true,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: OPEN_PULLS_PREFIX })
   })
 
-  it("passes org/repos/mode through to the domain batch", async () => {
+  it("passes org/repos/mode/autograded through to the domain batch", async () => {
     openAllFeedbackPullRequests.mockResolvedValue(summary())
     const queryClient = freshClient()
     const { result } = renderHook(() => useOpenAllFeedbackPrs(), {
       wrapper: wrapperWith(queryClient),
     })
 
-    result.current.mutate({ org: ORG, repos: ["a", "b"], mode: "group" })
+    result.current.mutate({
+      org: ORG,
+      repos: ["a", "b"],
+      mode: "group",
+      autograded: false,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
 
     expect(openAllFeedbackPullRequests).toHaveBeenCalledWith(
@@ -105,6 +120,7 @@ describe("useOpenAllFeedbackPrs", () => {
         org: ORG,
         repos: ["a", "b"],
         mode: "group",
+        autograded: false,
         onProgress: expect.any(Function),
       }),
     )
@@ -124,7 +140,12 @@ describe("useOpenAllFeedbackPrs", () => {
     // A run's own re-renders (isPending/progress flips) must not mint a new
     // reset either — the modal keys `if (open) reset()` on this identity, and
     // an unstable one wiped the in-flight run.
-    result.current.mutate({ org: ORG, repos: ["a"], mode: "individual" })
+    result.current.mutate({
+      org: ORG,
+      repos: ["a"],
+      mode: "individual",
+      autograded: true,
+    })
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(result.current.reset).toBe(firstReset)
 

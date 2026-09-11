@@ -59,14 +59,40 @@ export function feedbackLabelForMode(mode: string): {
 
 // Renders the built-in Feedback PR body from the canonical feedbackPrBody.md by
 // substituting the head branch, the static release URL, and the frozen base.
-// Byte-identical with the Go (FeedbackPRBody) and Python (pr_body) copies,
-// pinned by the cross-language golden. releaseUrl is the static
-// `.../releases/latest` pointer; once written at creation it self-updates.
-export function feedbackPrBody(head: string, releaseUrl: string): string {
-  return feedbackPrBodyTemplate
+// With autograded=true it is byte-identical with the Go (FeedbackPRBody) and
+// Python (pr_body) copies, pinned by the cross-language golden; false drops the
+// marked autograding lines (see contract.FeedbackPRBody). releaseUrl is the
+// static `.../releases/latest` pointer; once written at creation it self-updates.
+export function feedbackPrBody(
+  head: string,
+  releaseUrl: string,
+  autograded: boolean,
+): string {
+  return filterAutogradeLines(feedbackPrBodyTemplate, autograded)
     .replaceAll("HEAD_BRANCH", head)
     .replaceAll("RELEASE_URL", releaseUrl)
     .replaceAll("BASE_BRANCH", FEEDBACK_BASE_BRANCH)
+}
+
+// Mirrors contract.FeedbackPRAutogradeOpen / FeedbackPRAutogradeClose.
+export const FEEDBACK_PR_AUTOGRADE_OPEN = "<!-- autograde -->"
+export const FEEDBACK_PR_AUTOGRADE_CLOSE = "<!-- /autograde -->"
+
+// Drops the marker lines, and the lines between them unless autograded.
+// Mirrors Go's filterFeedbackPRAutogradeLines.
+function filterAutogradeLines(template: string, autograded: boolean): string {
+  const out: string[] = []
+  let inBlock = false
+  for (const line of template.split("\n")) {
+    if (line === FEEDBACK_PR_AUTOGRADE_OPEN) {
+      inBlock = true
+    } else if (line === FEEDBACK_PR_AUTOGRADE_CLOSE) {
+      inBlock = false
+    } else if (autograded || !inBlock) {
+      out.push(line)
+    }
+  }
+  return out.join("\n")
 }
 
 // A stable, non-message reason for an ensure/repair failure, so callers can
@@ -174,6 +200,8 @@ type EnsureFeedbackPrParams = {
   branch: string
   acceptCommitSha: string
   mode: string
+  // False (empty_repo / no_autograder) drops the body's autograding lines.
+  autograded: boolean
   // When set (feedback_pr_template opt-in + a template), the PR body is read
   // verbatim from this template repo's pull_request_template.md, best-effort;
   // absent or a failed read falls back to the built-in body.
@@ -232,6 +260,7 @@ async function ensureOnce(
     branch,
     acceptCommitSha,
     mode,
+    autograded,
     feedbackPrTemplate,
   } = params
 
@@ -282,7 +311,7 @@ async function ensureOnce(
         feedbackPrTemplate.branch,
       )
     : null
-  const body = teacherBody ?? feedbackPrBody(branch, releaseUrl)
+  const body = teacherBody ?? feedbackPrBody(branch, releaseUrl, autograded)
   const create = () =>
     createPullRequest({
       client,
@@ -453,8 +482,9 @@ export async function repairFeedbackPullRequest(params: {
   org: string
   repo: string
   mode: AssignmentMode
+  autograded: boolean
 }): Promise<RepairFeedbackPrResult> {
-  const { client, org, repo, mode } = params
+  const { client, org, repo, mode, autograded } = params
 
   const repoInfo = await getRepo(client, org, repo)
   if (!repoInfo) {
@@ -498,6 +528,7 @@ export async function repairFeedbackPullRequest(params: {
     branch,
     acceptCommitSha,
     mode,
+    autograded,
   })
 }
 
@@ -553,10 +584,11 @@ export async function openAllFeedbackPullRequests(params: {
   org: string
   repos: string[]
   mode: AssignmentMode
+  autograded: boolean
   onProgress?: (progress: OpenAllProgress) => void
   signal?: AbortSignal
 }): Promise<OpenAllFeedbackPrsSummary> {
-  const { client, org, repos, mode, onProgress, signal } = params
+  const { client, org, repos, mode, autograded, onProgress, signal } = params
   const total = repos.length
   let done = 0
 
@@ -567,7 +599,13 @@ export async function openAllFeedbackPullRequests(params: {
       if (signal?.aborted) return { repo, outcome: "failed", reason: "aborted" }
       let result: OpenAllRepoResult
       try {
-        const r = await repairFeedbackPullRequest({ client, org, repo, mode })
+        const r = await repairFeedbackPullRequest({
+          client,
+          org,
+          repo,
+          mode,
+          autograded,
+        })
         if (r.ok) {
           result = { repo, outcome: r.created ? "created" : "existed" }
         } else if ("unsupported" in r) {

@@ -218,12 +218,15 @@ func runEnsureFeedbackPR(t *testing.T, s *feedbackPRServer, mode string) error {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 	var out bytes.Buffer
-	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode, nil,
+	return ensureFeedbackPullRequest(client, ui.NewForced(&out, false), false, "o", "r", "main", mode, builtInBody,
 		func() (string, error) {
 			s.acceptSHAResolves++
 			return "accept-sha", nil
 		})
 }
+
+// The ordinary autograded assignment: no teacher template.
+var builtInBody = feedbackBodySpec{autograded: true}
 
 // TestEnsureFeedbackPullRequest_FreshAccept pins the full accept-time
 // sequence: freeze the base, hit the zero-diff 422, land ONE empty commit
@@ -442,7 +445,7 @@ func TestIsNoCommitsBetween(t *testing.T) {
 	client := newTestRESTClient(t, server)
 
 	// A 403 must NOT be read as the zero-diff signal.
-	_, err := createFeedbackPR(client, "o", "r", "main", nil)
+	_, err := createFeedbackPR(client, "o", "r", "main", builtInBody)
 	if err == nil {
 		t.Fatal("want error from 403 pulls POST")
 	}
@@ -454,7 +457,7 @@ func TestIsNoCommitsBetween(t *testing.T) {
 	server2 := httptest.NewServer(s2.mux(t))
 	t.Cleanup(server2.Close)
 	client2 := newTestRESTClient(t, server2)
-	_, err = createFeedbackPR(client2, "o", "r", "main", nil)
+	_, err = createFeedbackPR(client2, "o", "r", "main", builtInBody)
 	if err == nil {
 		t.Fatal("want zero-diff 422 from first pulls POST")
 	}
@@ -599,7 +602,7 @@ func TestCreateFeedbackPR_TemplateBodyVerbatim(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
-	if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+	if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{template: tmplRef(), autograded: true}); err != nil {
 		t.Fatalf("createFeedbackPR: %v", err)
 	}
 	if (*captured)["body"] != teacher {
@@ -617,7 +620,7 @@ func TestCreateFeedbackPR_TemplateProbeOrder(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
-	if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+	if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{template: tmplRef(), autograded: true}); err != nil {
 		t.Fatalf("createFeedbackPR: %v", err)
 	}
 	if (*captured)["body"] != teacher {
@@ -652,7 +655,7 @@ func TestCreateFeedbackPR_FailsOpenToBuiltin(t *testing.T) {
 			t.Cleanup(server.Close)
 			client := newTestRESTClient(t, server)
 
-			if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+			if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{template: tmplRef(), autograded: true}); err != nil {
 				t.Fatalf("createFeedbackPR: %v", err)
 			}
 			if !strings.Contains((*captured)["body"], builtinMarker) {
@@ -675,7 +678,7 @@ func TestCreateFeedbackPR_NilRefNoProbe(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := newTestRESTClient(t, server)
 
-	if _, err := createFeedbackPR(client, "o", "r", "main", nil); err != nil {
+	if _, err := createFeedbackPR(client, "o", "r", "main", builtInBody); err != nil {
 		t.Fatalf("createFeedbackPR: %v", err)
 	}
 	if probed {
@@ -683,6 +686,51 @@ func TestCreateFeedbackPR_NilRefNoProbe(t *testing.T) {
 	}
 	if !strings.Contains((*captured)["body"], "**Don't close or merge this pull request**") {
 		t.Errorf("expected built-in body, got %q", (*captured)["body"])
+	}
+}
+
+// Discussion #964: a no_autograder body must not mention autograding or releases.
+func TestCreateFeedbackPR_NoAutograderOmitsAutogradingLines(t *testing.T) {
+	mux, captured := templatePRBodyMux(t, nil, nil)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{autograded: false}); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	body := (*captured)["body"]
+	if !strings.Contains(body, "**Don't close or merge this pull request**") {
+		t.Errorf("expected built-in body, got %q", body)
+	}
+	for _, unwanted := range []string{"autograd", "Autograd", "releases/latest"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("no_autograder body still mentions %q:\n%s", unwanted, body)
+		}
+	}
+	if want := contract.FeedbackPRBody("main", "https://github.com/o/r/releases/latest", false); body != want {
+		t.Errorf("body is not the contract's no_autograder render:\n%s", body)
+	}
+}
+
+// Only the shim-less states drop the autograding lines.
+func TestResolveFeedbackBodySpec(t *testing.T) {
+	cases := []struct {
+		name  string
+		entry assignments.Entry
+		want  bool
+	}{
+		{"default", assignments.Entry{FeedbackPR: true}, true},
+		{"init_shim", assignments.Entry{FeedbackPR: true, InitShim: true}, true},
+		{"no_autograder", assignments.Entry{FeedbackPR: true, NoAutograder: true}, false},
+		{"empty_repo", assignments.Entry{EmptyRepo: true}, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := resolveFeedbackBodySpec(c.entry).autograded; got != c.want {
+				t.Errorf("autograded = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
 

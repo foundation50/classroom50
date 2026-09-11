@@ -454,7 +454,13 @@ export const SubmissionActionList = ({
           Feedback PR and is worth managing; only a bare empty_repo omits them. */}
       {!emptyRepoAssignment && (
         <>
-          <ReviewButton org={org} repo={repo} mode={mode} noRepo={!hasRepo} />
+          <ReviewButton
+            org={org}
+            repo={repo}
+            mode={mode}
+            autograded={!skipsGrading}
+            noRepo={!hasRepo}
+          />
           {onManageAccess && (
             <ActionListRow
               icon={ShieldCheckIcon}

@@ -1870,6 +1870,7 @@ const SubmissionsPageContent = () => {
         org={org}
         assignmentName={assignmentInfo?.name ?? assignment}
         mode={isGroupFlavor ? "group" : "individual"}
+        autograded={!skipsGrading}
         repos={allAssignmentRepos}
       />
       <DownloadAllSubmissionsModal

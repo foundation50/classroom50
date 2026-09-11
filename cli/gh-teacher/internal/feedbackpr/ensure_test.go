@@ -200,8 +200,11 @@ func runEnsure(t *testing.T, s *ensureServer, mode string) error {
 	server := httptest.NewServer(s.mux(t))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
-	return ensureFeedbackPullRequest(client, "o", "r", "main", mode, nil)
+	return ensureFeedbackPullRequest(client, "o", "r", "main", mode, builtInBody)
 }
+
+// The ordinary autograded assignment: no teacher template.
+var builtInBody = feedbackBodySpec{autograded: true}
 
 // TestEnsure_FreshOpen pins the full sequence on an un-pushed repo: freeze the
 // base at the accept commit, hit the zero-diff 422, land ONE empty commit (the
@@ -475,7 +478,7 @@ func TestCreateFeedbackPR_TemplateBodyVerbatim(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+	if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{template: tmplRef(), autograded: true}); err != nil {
 		t.Fatalf("createFeedbackPR: %v", err)
 	}
 	if (*captured)["body"] != teacher {
@@ -509,7 +512,7 @@ func TestCreateFeedbackPR_FailsOpenToBuiltin(t *testing.T) {
 			t.Cleanup(server.Close)
 			client := githubtest.NewTestClient(t, server)
 
-			if _, err := createFeedbackPR(client, "o", "r", "main", tmplRef()); err != nil {
+			if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{template: tmplRef(), autograded: true}); err != nil {
 				t.Fatalf("createFeedbackPR: %v", err)
 			}
 			if !strings.Contains((*captured)["body"], builtinMarker) {
@@ -526,10 +529,31 @@ func TestCreateFeedbackPR_NilRefUsesBuiltin(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	if _, err := createFeedbackPR(client, "o", "r", "main", nil); err != nil {
+	if _, err := createFeedbackPR(client, "o", "r", "main", builtInBody); err != nil {
 		t.Fatalf("createFeedbackPR: %v", err)
 	}
 	if !strings.Contains((*captured)["body"], "**Don't close or merge this pull request**") {
 		t.Errorf("expected built-in body, got %q", (*captured)["body"])
+	}
+}
+
+// Discussion #964: a no_autograder body must not mention autograding or releases.
+func TestCreateFeedbackPR_NoAutograderOmitsAutogradingLines(t *testing.T) {
+	mux, captured := templatePRBodyMux(t, nil, nil)
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if _, err := createFeedbackPR(client, "o", "r", "main", feedbackBodySpec{autograded: false}); err != nil {
+		t.Fatalf("createFeedbackPR: %v", err)
+	}
+	body := (*captured)["body"]
+	for _, unwanted := range []string{"autograd", "Autograd", "releases/latest"} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("no_autograder body still mentions %q:\n%s", unwanted, body)
+		}
+	}
+	if want := contract.FeedbackPRBody("main", "https://github.com/o/r/releases/latest", false); body != want {
+		t.Errorf("body is not the contract's no_autograder render:\n%s", body)
 	}
 }

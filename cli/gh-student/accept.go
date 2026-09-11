@@ -671,33 +671,33 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 
 	repoName := reponame.Name(classroom, assignment, ownerSegment)
 	return acceptIntoRepo(client, u, verbose, out, acceptRepoParams{
-		org:                org,
-		classroom:          classroom,
-		assignment:         assignment,
-		mode:               entry.Mode,
-		maxGroupSize:       entry.MaxGroupSize,
-		teamFormation:      entry.TeamFormation,
-		teamSlug:           teamSlug,
-		studentPermission:  entry.StudentPermission,
-		secret:             secret,
-		username:           username,
-		ownerID:            &ownerID,
-		acceptedAt:         acceptedAt,
-		repoName:           repoName,
-		branch:             commitBranch,
-		source:             cfgSource,
-		shim:               shim,
-		autograderName:     autograderName,
-		emptyRepo:          entry.EmptyRepo,
-		initShim:           entry.InitShim,
-		feedbackPR:         entry.FeedbackPR,
-		feedbackPRTemplate: resolveFeedbackTemplateRef(entry),
-		pages:              entry.Pages,
-		fullName:           fullName,
-		htmlURL:            htmlURL,
-		alreadyExisted:     alreadyExisted,
-		createSp:           createSp,
-		createMsg:          createMsg,
+		org:               org,
+		classroom:         classroom,
+		assignment:        assignment,
+		mode:              entry.Mode,
+		maxGroupSize:      entry.MaxGroupSize,
+		teamFormation:     entry.TeamFormation,
+		teamSlug:          teamSlug,
+		studentPermission: entry.StudentPermission,
+		secret:            secret,
+		username:          username,
+		ownerID:           &ownerID,
+		acceptedAt:        acceptedAt,
+		repoName:          repoName,
+		branch:            commitBranch,
+		source:            cfgSource,
+		shim:              shim,
+		autograderName:    autograderName,
+		emptyRepo:         entry.EmptyRepo,
+		initShim:          entry.InitShim,
+		feedbackPR:        entry.FeedbackPR,
+		feedbackPRBody:    resolveFeedbackBodySpec(entry),
+		pages:             entry.Pages,
+		fullName:          fullName,
+		htmlURL:           htmlURL,
+		alreadyExisted:    alreadyExisted,
+		createSp:          createSp,
+		createMsg:         createMsg,
 	})
 }
 
@@ -738,10 +738,9 @@ type acceptRepoParams struct {
 	// #228) — best-effort, after provisioning succeeds. Never set together
 	// with emptyRepo (the entry validation fails closed on that combination).
 	feedbackPR bool
-	// feedbackPRTemplate, when set, points the accept-time Feedback PR body at
-	// the template repo's pull_request_template.md (feedback_pr_template opt-in).
-	// Nil means the built-in body. The read is best-effort (fail-open).
-	feedbackPRTemplate *feedbackTemplateRef
+	// feedbackPRBody selects the built-in body or the template repo's
+	// pull_request_template.md (feedback_pr_template opt-in, fail-open).
+	feedbackPRBody feedbackBodySpec
 	// pages, when set, configures a GitHub Pages site before the control-files
 	// commit; see enablePagesStep. Fresh create only: acceptIntoRepo clears it
 	// on the heal path.
