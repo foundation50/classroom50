@@ -477,6 +477,21 @@ class TestScoresSchema:
             })
             assert _errs(SCORES_V, doc) != []
 
+    def test_entry_collected_at_accepted(self):
+        # The per-entry stamp the collector's release reuse keys on; same
+        # timestamp shape as the bucket's.
+        doc = _scores({
+            "hello": _individual_bucket([{**_entry(), "collected_at": "2026-06-01T15:00:00Z"}]),
+        })
+        assert _errs(SCORES_V, doc) == []
+
+    def test_entry_collected_at_malformed_rejected(self):
+        for bad in ("2026-06-01", "2026-06-01T15:00:00+02:00", ""):
+            doc = _scores({
+                "hello": _individual_bucket([{**_entry(), "collected_at": bad}]),
+            })
+            assert _errs(SCORES_V, doc) != []
+
     def test_bucket_detected_accepted(self):
         # An assignment that skips grading keeps `entries` empty and records
         # presence/count in `detected` — never a score.
