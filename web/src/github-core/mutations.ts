@@ -112,6 +112,7 @@ export {
   triggerScoreCollection,
   triggerRegrade,
   triggerProbeToken,
+  triggerPublishPages,
   rerunFailedRun,
   cancelPagesDeployment,
   CollectInputsUnsupportedError,

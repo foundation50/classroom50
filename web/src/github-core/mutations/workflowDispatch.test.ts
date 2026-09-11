@@ -6,6 +6,7 @@ import {
   CollectInputsUnsupportedError,
   ProbeWorkflowMissingError,
   triggerProbeToken,
+  triggerPublishPages,
   triggerScoreCollection,
 } from "./workflowDispatch"
 import type { GitHubClient } from "../client"
@@ -366,6 +367,29 @@ describe("triggerProbeToken", () => {
   it("requires an org", async () => {
     const { client } = makeClient(() => ({}))
     await expect(triggerProbeToken(client, undefined)).rejects.toThrow(/org/)
+  })
+})
+
+describe("triggerPublishPages", () => {
+  it("dispatches publish-pages.yaml with no inputs and returns the baseline", async () => {
+    const { client, request } = makeClient(() => ({}))
+    const result = await triggerPublishPages(client, "acme")
+    expect(result.sinceRunId).toBe(41)
+    const dispatchCall = request.mock.calls.find(([url]) =>
+      (url as string).endsWith("/dispatches"),
+    )
+    expect(dispatchCall?.[0]).toBe(
+      "/repos/acme/classroom50/actions/workflows/publish-pages.yaml/dispatches",
+    )
+    expect(dispatchCall?.[1]).toEqual({
+      method: "POST",
+      body: { ref: "main" },
+    })
+  })
+
+  it("requires an org", async () => {
+    const { client } = makeClient(() => ({}))
+    await expect(triggerPublishPages(client, undefined)).rejects.toThrow(/org/)
   })
 })
 

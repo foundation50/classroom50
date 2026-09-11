@@ -1875,6 +1875,12 @@
     "fileCount_one": "{{count}} file",
     "fileCount_other": "{{count}} files",
     "siteTitle": "Your public site",
+    "republish": {
+      "button": "Publish again",
+      "help": "Redeploys the site from the classroom50 repository as it stands, without changing anything in it. Use it when a file below shows Not published or Unreachable after a failed publish.",
+      "started": "Publishing to the student site now. The banner above tracks progress.",
+      "failed": "Couldn't start the publish: {{detail}}"
+    },
     "customBase": "This classroom publishes to <path>{{base}}/</path> instead of the site above.",
     "noClassrooms": "No classrooms yet. Files appear here after a classroom publishes.",
     "status": {

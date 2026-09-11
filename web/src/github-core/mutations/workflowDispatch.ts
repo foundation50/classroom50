@@ -5,6 +5,7 @@ import { getRepo } from "../repoReads"
 import {
   COLLECT_SCORES_WORKFLOW,
   PROBE_TOKEN_WORKFLOW,
+  PUBLISH_PAGES_WORKFLOW,
   REGRADE_WORKFLOW,
 } from "../workflows"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
@@ -249,6 +250,30 @@ export async function triggerProbeToken(
   await post()
 
   logWorkflows.info("dispatched probe-token", { org, sinceRunId })
+  return { sinceRunId }
+}
+
+/**
+ * Dispatches the classroom50 repo's `publish-pages.yaml` workflow, redeploying
+ * the whole student site from the config repo's current default branch. No
+ * inputs. Nothing is committed, so this is the recovery for a site that
+ * drifted from the repo (a failed or stuck deploy, a manual edit on GitHub, a
+ * Pages site that was re-enabled). Returns `sinceRunId` (see openDispatch).
+ */
+export async function triggerPublishPages(
+  client: GitHubClient,
+  org: string | undefined,
+): Promise<{ sinceRunId: number | null }> {
+  if (!org) throw new Error("org must be specified to publish the site")
+
+  const { sinceRunId, post } = await openDispatch(
+    client,
+    org,
+    PUBLISH_PAGES_WORKFLOW,
+  )
+  await post()
+
+  logWorkflows.info("dispatched publish-pages", { org, sinceRunId })
   return { sinceRunId }
 }
 

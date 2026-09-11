@@ -11,6 +11,7 @@ import {
   GlobeIcon,
   LinkExternalIcon,
   ShieldXIcon,
+  SyncIcon,
   rtlFlip,
 } from "@/components/ui/icons"
 import { Trans, useTranslation } from "react-i18next"
@@ -33,6 +34,10 @@ import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { useRepublishSite } from "@/hooks/mutations/useRepublishSite"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
+import { useToast } from "@/context/notifications/NotificationProvider"
+import { errorText } from "@/types/localizedMessage"
 import { classroomPagesSegment } from "@/util/secret"
 import { githubOrgUrl } from "@/util/orgUrl"
 import { defaultPagesBaseUrl } from "@/github-core/queries"
@@ -410,10 +415,56 @@ function ClassroomFolder({
   )
 }
 
+// Owner-only "Publish again": dispatches publish-pages.yaml so the site is
+// redeployed from the repo as it stands. The only way to refresh the site
+// without committing something, which is what a teacher needs after a failed
+// or stuck deploy. The Actions banner tracks the run (registered by the hook).
+function RepublishButton({ org }: { org: string }) {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const republish = useRepublishSite()
+  return (
+    <div className="flex items-center gap-1">
+      <Button
+        variant="outline"
+        size="sm"
+        loading={republish.isPending}
+        busyLabel={t("published.republish.button")}
+        onClick={() =>
+          republish.mutate(
+            { org, label: t("actionsBanner.workflow.publishPages") },
+            {
+              onSuccess: () =>
+                notify({
+                  tone: "success",
+                  durationMs: 6000,
+                  message: t("published.republish.started"),
+                }),
+              onError: (err) =>
+                notify({
+                  tone: "error",
+                  durationMs: 8000,
+                  message: t("published.republish.failed", {
+                    detail: errorText(t, err),
+                  }),
+                }),
+            },
+          )
+        }
+      >
+        <SyncIcon aria-hidden="true" className="size-4" />
+        {t("published.republish.button")}
+      </Button>
+      <HelpTooltip help={t("published.republish.help")} />
+    </div>
+  )
+}
+
 export const PublishedResourcesPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   const base = defaultPagesBaseUrl(org)
   const { classes, isLoading: classesLoading } = useGetClasses(org)
+  const { isOwner } = useIsOrgOwner()
 
   // Site-root files are classroom-independent: the public index and the two
   // generic engine scripts served at the Pages site root.
@@ -468,6 +519,11 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
         <p className="mt-2 text-sm text-base-content/70">
           {t("published.publicNote")}
         </p>
+        {isOwner && (
+          <div className="mt-3">
+            <RepublishButton org={org} />
+          </div>
+        )}
       </section>
 
       <section className="divide-y divide-base-300 rounded-box border border-base-300 bg-base-100">
