@@ -1332,7 +1332,7 @@ func printCloneInstructions(u *ui.UI, out io.Writer, fullName, htmlURL string) e
 	_, _ = fmt.Fprintln(out, "Or with SSH:")
 	_, _ = fmt.Fprintln(out)
 	_, _ = fmt.Fprintf(out, "  git clone git@github.com:%s.git\n\n", fullName)
-	_, _ = fmt.Fprintln(out, "Use the option your teacher told you to use.")
+	_, _ = fmt.Fprintln(out, "Your teacher may ask you to clone or submit in a specific way. If so, follow their instructions.")
 	return nil
 }
 

@@ -107,6 +107,9 @@ export function SubmitGuidance({
           ? t("submissions.student.submitGuide.tagIntro")
           : t("submissions.student.submitGuide.intro")}
       </p>
+      <p className="mt-1 text-sm text-base-content/70">
+        {t("submissions.student.submitGuide.teacherNote")}
+      </p>
       <ol className="mt-3 space-y-3">
         <li className="space-y-1.5">
           <p className="text-sm text-base-content/70">

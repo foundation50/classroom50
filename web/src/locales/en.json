@@ -3592,6 +3592,7 @@
       "submitGuide": {
         "title": "Submit from the command line",
         "intro": "Submit your work for grading from a terminal.",
+        "teacherNote": "Your teacher may ask you to clone or submit in a specific way. If so, follow their instructions.",
         "step1": "Clone your assignment repository (once):",
         "step2": "From inside the repository, submit your work for grading:",
         "copyClone": "Copy clone command",
@@ -3601,7 +3602,7 @@
           "ssh": "SSH",
           "cli": "GitHub CLI"
         },
-        "cloneHint": "Use the option your teacher told you to use. SSH needs an SSH key added to your GitHub account. GitHub CLI needs the gh command installed.",
+        "cloneHint": "SSH needs an SSH key added to your GitHub account. GitHub CLI needs the gh command installed.",
         "copySubmit": "Copy submit command",
         "tagIntro": "Your teacher grades tagged snapshots of your work. Commit and push as usual, then run the submit command below. It tags your latest work for grading.",
         "tagStep2": "From inside the repository, submit your work. This pushes a submission tag that triggers grading:",

@@ -75,6 +75,9 @@ describe("SubmitGuidance", () => {
       screen.getByText("submissions.student.submitGuide.intro"),
     ).toBeTruthy()
     expect(
+      screen.getByText("submissions.student.submitGuide.teacherNote"),
+    ).toBeTruthy()
+    expect(
       screen.queryByLabelText("submissions.student.submitGuide.copyMilestone"),
     ).toBeNull()
   })
