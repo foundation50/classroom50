@@ -158,7 +158,7 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("README source, built-in off: plain repo, NOT no_autograder (no template)", () => {
+  it("README source, built-in off: no_autograder (marker only, no shim)", () => {
     const shape = deriveFormShape({
       ...base,
       repo_source: "none",
@@ -167,9 +167,24 @@ describe("deriveFormShape — repository source", () => {
     })
     expect(shape.repositorySource).toBe("readme")
     expect(shape.emptyRepo).toBe(false)
-    // no_autograder requires a template, so a README repo never sets it.
-    expect(shape.noAutograder).toBe(false)
+    expect(shape.initShim).toBe(false)
+    // Built-in off on an initialized repo is the no-shim wire state whether or
+    // not a template is behind it; otherwise accept would commit the shim.
+    expect(shape.noAutograder).toBe(true)
     expect(shape.autogradingState).toBe("none")
+    expect(shape.feedbackPrEnabled).toBe(true)
+  })
+
+  it("README source, built-in off under Not graded: still no_autograder", () => {
+    const shape = deriveFormShape({
+      ...base,
+      repo_source: "none",
+      add_readme: true,
+      grading_choice: "off",
+      autograding_state: "none",
+    })
+    expect(shape.noAutograder).toBe(true)
+    expect(shape.showAutogradingConfig).toBe(false)
   })
 
   it("autograding config is offered only when grading is Autograded", () => {

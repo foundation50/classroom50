@@ -2580,8 +2580,9 @@ func TestEmptyRepoChanged(t *testing.T) {
 }
 
 // TestValidateNoAutograderExclusions: no_autograder commits no shim but PERMITS
-// a template and the Feedback PR (the asymmetry vs empty_repo); it excludes the
-// grading-adjacent fields, empty_repo, and a non-default autograder.
+// a template (or none: a README repo) and the Feedback PR (the asymmetry vs
+// empty_repo); it excludes the grading-adjacent fields, empty_repo, and a
+// non-default autograder.
 func TestValidateNoAutograderExclusions(t *testing.T) {
 	base := AssignmentEntry{
 		Slug: "hw", Name: "HW", Mode: "individual", Autograder: "default",
@@ -2593,6 +2594,15 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 	ok.FeedbackPR = true
 	if err := validateNoAutograderExclusions(ok); err != nil {
 		t.Errorf("template + feedback_pr should be permitted: %v", err)
+	}
+
+	// Permitted: a template-less README repo with the built-in autograder off
+	// (marker-only provisioning). Only empty_repo is the bare shape.
+	okReadme := base
+	okReadme.Template = nil
+	okReadme.FeedbackPR = true
+	if err := validateNoAutograderExclusions(okReadme); err != nil {
+		t.Errorf("template-less no_autograder should be permitted: %v", err)
 	}
 
 	// The submission definition is permitted on a no_autograder assignment: with
@@ -2610,7 +2620,6 @@ func TestValidateNoAutograderExclusions(t *testing.T) {
 		mutate func(*AssignmentEntry)
 		want   string
 	}{
-		{"no template", func(e *AssignmentEntry) { e.Template = nil }, "requires a template"},
 		{"empty_repo", func(e *AssignmentEntry) { e.EmptyRepo = true }, "mutually exclusive with empty_repo"},
 		{"non-default autograder", func(e *AssignmentEntry) { e.Autograder = "io-suite" }, "non-default autograder"},
 		{"tests", func(e *AssignmentEntry) {

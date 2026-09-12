@@ -1135,6 +1135,29 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(shape.initShim).toBe(false)
     expect(shape.emptyRepo).toBe(false)
   })
+
+  it("round-trips a stored README-source no_autograder assignment", () => {
+    // Template-less, README-initialized, built-in off: reads back as the README
+    // source with "none", and deriveFormShape re-derives no_autograder:true so a
+    // re-save keeps the shim off.
+    const values = assignmentToFormValues({
+      slug: "reading",
+      name: "Reading response",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: true,
+      no_autograder: true,
+      grading: { mode: "off" },
+    })
+    expect(values.repo_source).toBe("none")
+    expect(values.add_readme).toBe(true)
+    expect(values.autograding_state).toBe("none")
+    const shape = deriveFormShape({ ...base, ...values })
+    expect(shape.repositorySource).toBe("readme")
+    expect(shape.noAutograder).toBe(true)
+    expect(shape.initShim).toBe(false)
+    expect(shape.emptyRepo).toBe(false)
+  })
 })
 
 describe("assignmentToFormValues — autograding tri-state", () => {

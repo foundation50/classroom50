@@ -523,8 +523,9 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		return fmt.Errorf("assignment %q is not a team assignment (mode %q), so --new-team and --team-name do not apply; run accept without them", assignment, entry.Mode)
 	}
 	// A template, when present, must be complete. A template-less assignment
-	// (no template block) is accepted as an empty repo carrying only the
-	// autograder shim — see the hasTemplate fork below.
+	// (no template block) is accepted as an auto_init repo carrying the marker
+	// and, unless no_autograder, the autograder shim — see the hasTemplate fork
+	// below.
 	hasTemplate := entry.HasTemplate()
 	if entry.Template != nil && !hasTemplate {
 		return fmt.Errorf("assignment %q has an incomplete template reference (owner=%q repo=%q branch=%q); ask your teacher to re-run `gh teacher assignment add`",
@@ -538,19 +539,11 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if entry.EmptyRepo && entry.Template != nil {
 		return fmt.Errorf("assignment %q sets both empty_repo and a template, which is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
-	// no_autograder is a templated, shim-less state; empty_repo is a bare
+	// no_autograder is an initialized, shim-less state; empty_repo is a bare
 	// shim-less state. Both being set is an invalid hand-edited entry — fail
 	// closed rather than pick one. (Mirrors the empty_repo+template guard.)
 	if entry.NoAutograder && entry.EmptyRepo {
 		return fmt.Errorf("assignment %q sets both no_autograder and empty_repo, which is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
-	}
-	// no_autograder is the TEMPLATED teacher-supplied-CI state: the template
-	// carries its own workflows. A template-less no_autograder entry (only
-	// reachable via a hand-edited manifest, since the write validators require a
-	// template) would produce a bare marker-only repo with no CI at all — use
-	// empty_repo for that. Fail closed rather than silently contradict the docs.
-	if entry.NoAutograder && !hasTemplate {
-		return fmt.Errorf("assignment %q sets no_autograder without a template: teacher-supplied CI needs a template that carries the workflows, so the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 	// init_shim is the built-in-autograder-on-an-empty-repo state: template-less,
 	// commits the default shim onto an initialized repo. A hand-edited manifest

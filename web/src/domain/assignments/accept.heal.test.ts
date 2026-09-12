@@ -177,6 +177,43 @@ afterEach(() => {
 // but unprovisioned repo, and its copy promises to keep the student's work.
 // On an init_shim repo the accept commit removes the auto_init README; that
 // must only happen while the branch is still at that seed.
+describe("acceptAssignment on a README-source no_autograder repo", () => {
+  // A README repo with the built-in autograder off gets marker-only
+  // provisioning: the auto_init README stays, and no shim is committed (the
+  // shape that used to silently commit the shim before no_autograder covered
+  // template-less repos).
+  const README_NO_AUTOGRADER: Assignment = {
+    slug: SLUG,
+    name: "Homework 1",
+    mode: "individual",
+    autograder: "default",
+    feedback_pr: false,
+    no_autograder: true,
+  }
+
+  it("commits only the .classroom50.yaml marker, keeps the README, and skips the shim", async () => {
+    mocked.assignment = README_NO_AUTOGRADER
+    const { client, treeBodies, requests } = makeClient({
+      repoExists: false,
+      markerPresent: false,
+      headParents: [],
+    })
+    const result = await acceptAssignment({
+      client,
+      org: ORG,
+      classroom: CLASSROOM,
+      assignmentSlug: SLUG,
+    })
+    expect(result.status).toBe("created")
+    expect(treeBodies).toHaveLength(1)
+    expect(treeBodies[0].tree.map((e) => e.path)).toEqual([".classroom50.yaml"])
+    expect(deletedPaths(treeBodies)).toEqual([])
+    // No Pages fetch for a shim and no template generate: a plain auto_init create.
+    expect(requests).toContain(`POST /orgs/${ORG}/repos`)
+    expect(requests.some((r) => r.includes("/generate"))).toBe(false)
+  })
+})
+
 describe("acceptAssignment heal on an init_shim repo", () => {
   it("removes the seeded README when the repo is still at its root commit", async () => {
     mocked.assignment = INIT_SHIM_ENTRY

@@ -70,8 +70,9 @@ Two related, optional settings:
   (badges, passing/failing rollups, and filters). It never changes a student's
   actual score, and leaving it off turns the passing concept off.
 - **Do not use the built-in autograder** (`no_autograder`). Accept installs
-  no autograding workflow at all; a templated assignment's own CI runs
-  instead, and score collection records who submitted but no scores. See
+  no autograding workflow at all; a template's own CI runs instead, a README
+  repository simply has no autograder, and score collection records who
+  submitted but no scores. See
   [Turning autograding off or pausing it](Managing-Actions-Cost#turning-autograding-off-or-pausing-it).
 
 ### Declarative tests

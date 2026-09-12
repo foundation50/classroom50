@@ -1164,18 +1164,16 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 // out. A narrower sibling of empty_repo: it commits no shim, and it must not
 // coexist with empty_repo (already shim-less) or a non-default autograder
 // (which fetches a teacher-authored Pages workflow — the opposite of adding
-// nothing). It REQUIRES a template (it is the teacher-supplied-CI state: the
-// template carries the workflows), and UNLIKE empty_repo it permits feedback_pr
-// (a templated repo has a baseline commit). submission_mode/submission_tags are
-// PERMITTED — with no shim they carry no trigger, but they still define what the
+// nothing). It applies to any initialized repo, templated or README (a
+// template may carry teacher-supplied CI; a README repo simply has no
+// autograder), and UNLIKE empty_repo it permits feedback_pr (an initialized
+// repo has a baseline commit). submission_mode/submission_tags are PERMITTED —
+// with no shim they carry no trigger, but they still define what the
 // submissions page counts as a submission (branch commits / milestone tags).
 // Unlike empty_repo, no_autograder has no `assignment add` flag yet (it is
 // GUI/manifest-set), so error wording names the JSON fields, not a
 // --no-autograder flag; the parse path wraps with the entry context.
 func validateNoAutograderExclusions(entry AssignmentEntry) error {
-	if entry.Template == nil {
-		return errors.New("no_autograder requires a template: it marks a templated assignment as teacher-supplied CI (the template carries its own workflows), and a template-less repo has no CI to run; use empty_repo for a bare repo instead")
-	}
 	if entry.EmptyRepo {
 		return errors.New("no_autograder is mutually exclusive with empty_repo: a bare repo already commits no shim")
 	}

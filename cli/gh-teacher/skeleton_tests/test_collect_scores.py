@@ -3513,7 +3513,7 @@ def test_runner_empty_repo_guard_uses_strict_predicate():
 
 
 def test_valid_assignment_slugs_excludes_no_autograder():
-    # A templated no_autograder assignment (teacher-supplied CI) never produces
+    # A no_autograder assignment (no built-in autograder) never produces
     # submit/* releases, so it is not collectable — same skip as empty_repo.
     assignments = {
         "assignments": [

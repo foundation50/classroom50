@@ -636,14 +636,14 @@ of every shape is in
 [Repository shapes](Assignment-Templates#repository-shapes).
 
 - **`no_autograder: true`** (web: **Do not use the built-in autograder**).
-  Accept commits the `.classroom50.yaml` marker and the template's content but
-  no autograde workflow, so the template's own CI runs instead. Requires a
-  template (it carries the workflows); keeps the feedback PR. Score collection
-  records who submitted but no scores (there are no `submit/*` releases);
-  regrade skips it. Mutually exclusive with
-  `empty_repo`, a non-default `--autograder`, and the grading-adjacent fields
-  (tests/allowed-files/release-assets/pass-threshold/submission-mode/
-  submission-tag).
+  Accept commits the `.classroom50.yaml` marker and the starter content (the
+  template's content, or the README) but no autograde workflow. With a
+  template, its own CI runs instead; without one, the assignment has no
+  autograder. Keeps the feedback PR. Score collection records who submitted
+  but no scores (there are no `submit/*` releases); regrade skips it. Mutually
+  exclusive with `empty_repo`, `init_shim`, a non-default `--autograder`, and
+  the grading-adjacent fields (tests/allowed-files/release-assets/
+  pass-threshold).
 - **`init_shim: true`** (web: **No template**, **Add a README** off, built-in
   autograder on). An initialized but README-less repo carrying only the
   control files, which autogrades and is collected like any built-in

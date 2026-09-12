@@ -14,9 +14,9 @@ export function isEmptyRepoAssignment(assignment: Assignment): boolean {
 }
 
 /**
- * True only when the assignment is teacher-supplied CI (templated, no built-in
- * autograde shim committed). Unlike empty_repo it keeps the template and the
- * Feedback PR.
+ * True when the assignment commits no built-in autograde shim on an
+ * initialized repo (templated or README). Unlike empty_repo it keeps the
+ * starter content and the Feedback PR.
  */
 export function isNoAutograderAssignment(assignment: Assignment): boolean {
   return assignment.no_autograder === true

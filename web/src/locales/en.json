@@ -2932,8 +2932,8 @@
     },
     "grading": {
       "badgeBuiltIn": "Autograded",
-      "badgeNoAutograder": "Custom autograding",
-      "titleNoAutograder": "The template ships its own grading workflow. Built-in scores and regrading are disabled; the feedback pull request still works when enabled.",
+      "badgeNoAutograder": "No built-in autograder",
+      "titleNoAutograder": "This assignment doesn't use the built-in autograder, so built-in scores and regrading are disabled. A template's own grading workflow still runs, and the feedback pull request still works when enabled.",
       "badgeEmptyRepo": "No autograding",
       "titleEmptyRepo": "This assignment uses empty repositories, so autograding, scores, and the feedback pull request are disabled. The table shows who has accepted and who has pushed."
     },

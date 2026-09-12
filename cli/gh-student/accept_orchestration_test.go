@@ -880,6 +880,77 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 	})
 
+	t.Run("template-less no_autograder -> provisions the marker only, no shim", func(t *testing.T) {
+		var (
+			refPatched bool
+			treePaths  []string
+		)
+		mux := http.NewServeMux()
+		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
+			if refPatched {
+				_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			writePermissionReadback(w, "push")
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNoContent)
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"sha": "stable"}})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
+			switch r.Method {
+			case http.MethodGet:
+				_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": "parent"}})
+			case http.MethodPatch:
+				refPatched = true
+				w.WriteHeader(http.StatusOK)
+			}
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits/parent", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"tree": map[string]string{"sha": "parent-tree"}})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/blobs", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob"})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/trees", func(w http.ResponseWriter, r *http.Request) {
+			var body struct {
+				Tree []struct {
+					Path string `json:"path"`
+				} `json:"tree"`
+			}
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &body)
+			for _, e := range body.Tree {
+				treePaths = append(treePaths, e.Path)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "tree"})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "commit"})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		// A README-source no_autograder accept resolves no shim (CommitsShim
+		// false) and no template source; the marker is the only control file.
+		p := baseParams()
+		p.shim = ""
+		p.alreadyExisted = false
+		p.feedbackPRBody = feedbackBodySpec{autograded: false}
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p); err != nil {
+			t.Fatalf("acceptIntoRepo (no_autograder): unexpected error: %v", err)
+		}
+		if len(treePaths) != 1 || treePaths[0] != classroomcfg.MetadataPath {
+			t.Errorf("no_autograder tree = %v, want only %q", treePaths, classroomcfg.MetadataPath)
+		}
+	})
+
 	t.Run("freshly created (not alreadyExisted) -> provisions with the mode's role", func(t *testing.T) {
 		cases := []struct {
 			name     string

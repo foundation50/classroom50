@@ -9,9 +9,9 @@ import type { AutogradingState } from "@/domain/assignments/autogradingState"
 //   - built-in  : the default-shim path; reveals the declarative tests and the
 //                 advanced settings (the caller gates those on
 //                 deriveFormShape().showBuiltInConfig).
-//   - none      : do NOT use the built-in autograder. Templated -> teacher-
-//                 supplied CI (no_autograder on the wire); template-less ->
-//                 there's simply no autograder (empty_repo / a plain repo).
+//   - none      : do NOT use the built-in autograder (no_autograder on the
+//                 wire for a template or README repo). A template may carry
+//                 teacher-supplied CI; a README repo simply has no autograder.
 //
 // Built-in is selectable on ANY repository source, including a no-template
 // no-README repo: on that source, picking built-in commits the shim onto an

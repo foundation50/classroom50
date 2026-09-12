@@ -166,7 +166,7 @@ export function SubmissionsActionsMenu({
       </Button>
       <DropdownMenu className="w-64">
         {/* Open all Feedback PRs leads the menu. The page owns the gate
-            (owner-only, non-empty_repo): a no_autograder repo is templated and
+            (owner-only, non-empty_repo): a no_autograder repo is initialized and
             PERMITS the PR, so no skipsGrading re-gate here. */}
         {onOpenAllPrs && (
           <>

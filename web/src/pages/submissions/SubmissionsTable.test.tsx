@@ -740,7 +740,7 @@ describe("SubmissionsTable hub action list", () => {
       />,
     )
     await openHub(user)
-    // no_autograder repos are templated: the Feedback PR and repo access are
+    // no_autograder repos are initialized: the Feedback PR and repo access are
     // real, so their actions stay — only the autograding surfaces hide.
     expect(
       screen.getByRole("button", { name: "submissions.table.reviewAria" }),

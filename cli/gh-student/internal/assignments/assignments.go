@@ -112,12 +112,13 @@ type Entry struct {
 	// existed).
 	SubmissionTags []string `json:"submission_tags,omitempty"`
 
-	// NoAutograder marks a TEMPLATED assignment as teacher-supplied CI: accept
-	// commits the .classroom50.yaml marker and the template's content but NO
-	// autograde shim (neither the default shim nor a Pages-fetched workflow),
-	// so the teacher's own .github/ CI runs instead. UNLIKE EmptyRepo it keeps
-	// the template and permits the Feedback PR. Absent reads as false (the
-	// teacher CLI omits it when false).
+	// NoAutograder marks an initialized assignment (templated or README) as
+	// having no built-in autograder: accept commits the .classroom50.yaml
+	// marker and the starter content but NO autograde shim (neither the default
+	// shim nor a Pages-fetched workflow), so a template's own .github/ CI runs
+	// instead, or nothing does. UNLIKE EmptyRepo it keeps the starter content
+	// and permits the Feedback PR. Absent reads as false (the teacher CLI omits
+	// it when false).
 	NoAutograder bool `json:"no_autograder,omitempty"`
 
 	// InitShim marks a TEMPLATE-LESS assignment whose repo is initialized with

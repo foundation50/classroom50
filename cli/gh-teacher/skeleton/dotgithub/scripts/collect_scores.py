@@ -926,7 +926,7 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
 
 def is_no_autograder(entry: dict[str, Any]) -> bool:
     """True only when no_autograder is the boolean `true` (strict, like
-    is_empty_repo). A templated no_autograder assignment commits no shim, so it
+    is_empty_repo). A no_autograder assignment commits no shim, so it
     never autogrades and produces no submit/* releases: regrade skips it and
     collection detects its submissions from repo state, exactly like empty_repo.
     Keep byte-identical across collect/regrade and the autograde-runner read
@@ -946,7 +946,7 @@ def is_init_shim(entry: dict[str, Any]) -> bool:
 
 def skips_grading(entry: dict[str, Any]) -> bool:
     """True when the assignment never autogrades: either a bare empty_repo or a
-    templated no_autograder (teacher-supplied CI). The "does not autograde"
+    no_autograder (no built-in autograder). The "does not autograde"
     predicate family; collection/regrade poll neither. NOTE: init_shim is
     deliberately EXCLUDED, since an init_shim repo commits the default shim and
     autogrades, so it must be collected/regraded like any built-in assignment."""

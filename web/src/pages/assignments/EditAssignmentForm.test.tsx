@@ -215,8 +215,11 @@ it("does not write when the provisioning-change confirmation is cancelled", () =
 
 it("saves directly (no confirm) when accepted but no provisioning setting changed", () => {
   // Two accepted repos, but the edit changes nothing provisioning-class (stored
-  // auto, submit stays auto), so the write proceeds without a prompt.
+  // auto, submit stays auto; the stored README entry with no flag is the
+  // built-in shape, so the submit keeps the built-in autograder), so the write
+  // proceeds without a prompt.
   acceptedRepoNames = ["cs101-hw1-alice", "cs101-hw1-bob"]
+  submittedOverrides = { autograding_state: "built-in" }
   render(
     <EditAssignmentForm
       org="acme"
@@ -235,6 +238,30 @@ it("saves directly (no confirm) when accepted but no provisioning setting change
   expect(mutateAsync).toHaveBeenCalledTimes(1)
   // No provisioning-class change, so the dialog was never opened.
   expect(document.querySelector("dialog[open]")).toBeNull()
+})
+
+it("confirms when a README-source edit turns the built-in autograder off", () => {
+  // The stored entry commits the shim; "none" now writes no_autograder on a
+  // README source, so already-accepted repos would diverge from new ones.
+  acceptedRepoNames = ["cs101-hw1-alice"]
+  submittedOverrides = { autograding_state: "none" }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).not.toHaveBeenCalled()
+  expect(document.querySelector("dialog[open]")).not.toBeNull()
 })
 
 it("sends locked as undefined when the toggle was not flipped", () => {

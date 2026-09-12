@@ -396,7 +396,7 @@ const SubmissionsTable = ({
   // withholds the per-row Feedback PR repair (see FeedbackPrAction).
   autograded?: boolean
   // The narrower bare-repo case (empty_repo alone): also hides the hub's repo
-  // actions (Review/Manage access). A no_autograder repo is templated and keeps
+  // actions (Review/Manage access). A no_autograder repo is initialized and keeps
   // the Feedback PR, so it must NOT set this — mirrors the page's bulk gates.
   emptyRepoAssignment?: boolean
   // The assignment's submission_mode, enabling the per-repo "Update

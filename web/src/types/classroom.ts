@@ -242,15 +242,15 @@ export type Assignment = {
   // with template/tests/feedback_pr/allowed_files/pass_threshold and IMMUTABLE
   // after creation. Omitted when false (CLI omitempty); absent reads as false.
   empty_repo?: boolean
-  // Teacher-supplied CI on a TEMPLATED assignment: accept commits the
-  // .classroom50.yaml marker and the template's content but NO autograde shim
-  // (neither the default shim nor a Pages-fetched workflow), so the teacher's
-  // own .github/ CI runs instead. UNLIKE empty_repo it permits a template and
-  // the Feedback PR (a templated repo has a baseline commit); it excludes the
-  // grading-adjacent fields and is mutually exclusive with empty_repo and a
-  // non-default autograder. IMMUTABLE after creation. Omitted when false (CLI
-  // omitempty); absent reads as false. In lockstep with the CLI's
-  // assignments-v1 schema (`no_autograder`).
+  // No built-in autograder on an INITIALIZED repo (templated or README): accept
+  // commits the .classroom50.yaml marker and the starter content but NO
+  // autograde shim (neither the default shim nor a Pages-fetched workflow), so a
+  // template's own .github/ CI runs instead, or nothing does. UNLIKE empty_repo
+  // it permits the Feedback PR (an initialized repo has a baseline commit); it
+  // excludes the grading-adjacent fields and is mutually exclusive with
+  // empty_repo, init_shim, and a non-default autograder. Mutable but never
+  // retrofitted. Omitted when false (CLI omitempty); absent reads as false. In
+  // lockstep with the CLI's assignments-v1 schema (`no_autograder`).
   no_autograder?: boolean
   // Built-in autograder on an otherwise-empty repo: a TEMPLATE-LESS assignment
   // whose repo is initialized with ONLY the marker + default autograde shim (no

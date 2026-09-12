@@ -799,11 +799,12 @@ export async function acceptAssignment(params: {
   // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
   const isEmptyRepo = assignment.empty_repo === true
 
-  // no_autograder assignment (teacher-supplied CI): a TEMPLATED repo that
-  // commits the marker + template content but NO autograde shim of either kind
-  // (neither the default shim nor a Pages-fetched workflow), so the teacher's
-  // own .github/ CI runs. Unlike empty_repo it keeps the template and permits
-  // the Feedback PR. Mirrors the CLI student accept gate (entry.CommitsShim()).
+  // no_autograder assignment: an initialized repo (template or README) that
+  // commits the marker + starter content but NO autograde shim of either kind
+  // (neither the default shim nor a Pages-fetched workflow), so a template's
+  // own .github/ CI runs, or nothing does. Unlike empty_repo it keeps the
+  // starter content and permits the Feedback PR. Mirrors the CLI student accept
+  // gate (entry.CommitsShim()).
   const isNoAutograder = assignment.no_autograder === true
 
   // init_shim assignment: a TEMPLATE-LESS repo initialized with only the marker

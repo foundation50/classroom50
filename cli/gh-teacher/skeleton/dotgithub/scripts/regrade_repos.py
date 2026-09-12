@@ -219,7 +219,7 @@ def main() -> int:
     except EmptyRepoAssignment:
         # Successful no-op, not a failure: the teacher (or a stale button)
         # targeted an assignment that never autogrades (empty_repo, or a
-        # templated no_autograder with teacher-supplied CI).
+        # no_autograder without the built-in autograder).
         print(
             f"regrade {classroom_filter}/{assignment_filter}: assignment does "
             f"not autograde (empty_repo or no_autograder), so there is nothing to regrade."
@@ -719,7 +719,7 @@ class RegradeInputError(Exception):
 
 class EmptyRepoAssignment(Exception):
     """The target assignment never autogrades: empty_repo: true (bare repos)
-    or no_autograder: true (templated, teacher-supplied CI). Student repos carry
+    or no_autograder: true (no built-in autograder). Student repos carry
     no autograde workflow, so there is nothing to re-run and no HEAD worth
     tagging (the first-grade fallback would push submit/* tags that fire
     nothing). main() treats this as a successful no-op, not an error."""
@@ -736,7 +736,7 @@ def is_empty_repo(entry: dict[str, Any]) -> bool:
 
 def is_no_autograder(entry: dict[str, Any]) -> bool:
     """True only when no_autograder is the boolean `true` (strict, like
-    is_empty_repo). A templated no_autograder assignment commits no shim, so it
+    is_empty_repo). A no_autograder assignment commits no shim, so it
     never autogrades and produces no submit/* releases, so regrade has nothing to
     re-run and no HEAD worth tagging. Keep byte-identical to collect_scores.py /
     the autograde-runner so every tool agrees."""
@@ -754,7 +754,7 @@ def is_init_shim(entry: dict[str, Any]) -> bool:
 
 def skips_grading(entry: dict[str, Any]) -> bool:
     """True when the assignment never autogrades: either a bare empty_repo or a
-    templated no_autograder (teacher-supplied CI). The "does not autograde"
+    no_autograder (no built-in autograder). The "does not autograde"
     predicate family shared with collect_scores.py. NOTE: init_shim is
     deliberately EXCLUDED; it commits the default shim and autogrades."""
     return is_empty_repo(entry) or is_no_autograder(entry)
@@ -813,8 +813,8 @@ def load_roster(
             f"assignment {assignment_slug!r} is not registered in "
             f"{classroom_dir.name}/assignments.json"
         )
-    # Assignments that never autograde (empty_repo, or a templated
-    # no_autograder with teacher-supplied CI) commit no autograde workflow, so
+    # Assignments that never autograde (empty_repo, or a
+    # no_autograder without the built-in autograder) commit no autograde workflow, so
     # skip before the team listing; otherwise the first-grade fallback would
     # push useless submit/* tags into every student repo.
     if skips_grading(entries[assignment_slug]):

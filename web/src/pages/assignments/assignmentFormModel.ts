@@ -152,14 +152,13 @@ export type CreateAssignmentFormValues = {
   copy_topics: boolean
   // UI-only autograding tri-state (never sent verbatim; mapped to wire fields
   // on submit): "empty" (bare repo — driven by empty_repo), "none" (no built-in
-  // autograder — teacher-supplied CI on a template maps to no_autograder: true,
-  // a template-less repo just carries no shim), "built-in" (the default-shim
-  // path with advanced/tests). It is the built-in-autograder toggle inside the
-  // Autograding section, offered only when grading_choice is "auto" and default
-  // "none". Read from the stored entry via deriveAutogradingState; on submit the
-  // wire no_autograder/init_shim are derived from deriveFormShape (which also
-  // requires grading_choice === "auto"). Mirrors the runtime_env
-  // UI-only-discriminator idiom.
+  // autograder — maps to no_autograder: true on any initialized repo, template
+  // or README), "built-in" (the default-shim path with advanced/tests). It is
+  // the built-in-autograder toggle inside the Autograding section, offered only
+  // when grading_choice is "auto" and default "none". Read from the stored entry
+  // via deriveAutogradingState; on submit the wire no_autograder/init_shim are
+  // derived from deriveFormShape. Mirrors the runtime_env UI-only-discriminator
+  // idiom.
   autograding_state: AutogradingState
   // UI-only: which runtime environment the teacher is configuring. Selects
   // which fields render and get written; never sent to the wire. "hosted" uses

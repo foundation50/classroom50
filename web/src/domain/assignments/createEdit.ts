@@ -417,18 +417,11 @@ async function buildAssignmentEntry(
   }
 
   // no_autograder is a narrower sibling of empty_repo: no shim, so the
-  // grading-adjacent fields are rejected — but a template and the Feedback PR
-  // are PERMITTED (a templated repo has a baseline commit). It REQUIRES a
-  // template (it is the teacher-supplied-CI state: the template carries the
-  // workflows). Mutually exclusive with empty_repo. Mirrors the CLI's
-  // validateNoAutograderExclusions; the form gates these inputs, this is the
-  // authoritative backstop.
+  // grading-adjacent fields are rejected — but the Feedback PR is PERMITTED (an
+  // initialized repo, templated or README, has a baseline commit). Mutually
+  // exclusive with empty_repo. Mirrors the CLI's validateNoAutograderExclusions;
+  // the form gates these inputs, this is the authoritative backstop.
   if (input.no_autograder) {
-    if (!input.template_repo.trim()) {
-      throw new Error(
-        "no_autograder: teacher-supplied CI requires a template — the template carries its own workflows. Use an empty repository for a bare repo instead.",
-      )
-    }
     if (input.empty_repo) {
       throw new Error(
         "no_autograder: mutually exclusive with empty_repo — a bare repo already commits no shim.",
@@ -436,22 +429,22 @@ async function buildAssignmentEntry(
     }
     if (tests.length > 0) {
       throw new Error(
-        "no_autograder: teacher-supplied CI can't have autograding tests or a setup command — no shim runs them.",
+        "no_autograder: an assignment without the built-in autograder can't have autograding tests or a setup command — no shim runs them.",
       )
     }
     if (input.allowed_files?.trim()) {
       throw new Error(
-        "no_autograder: teacher-supplied CI can't restrict allowed files — no shim enforces them.",
+        "no_autograder: an assignment without the built-in autograder can't restrict allowed files — no shim enforces them.",
       )
     }
     if (input.release_assets.trim()) {
       throw new Error(
-        "no_autograder: teacher-supplied CI can't attach submission release files — no shim autogrades.",
+        "no_autograder: an assignment without the built-in autograder can't attach submission release files — no shim autogrades.",
       )
     }
     if (input.pass_threshold !== undefined) {
       throw new Error(
-        "no_autograder: teacher-supplied CI can't have a passing threshold — no shim autogrades.",
+        "no_autograder: an assignment without the built-in autograder can't have a passing threshold — no shim autogrades.",
       )
     }
   }
