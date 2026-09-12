@@ -10,7 +10,6 @@ export type RepairFeedbackPrInput = {
   org: string
   repo: string
   mode: AssignmentMode
-  // !assignmentSkipsGrading(assignment)
   autograded: boolean
 }
 

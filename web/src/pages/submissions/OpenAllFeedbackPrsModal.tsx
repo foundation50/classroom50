@@ -58,7 +58,6 @@ export function OpenAllFeedbackPrsModal({
   org: string
   assignmentName: string
   mode: AssignmentMode
-  // !assignmentSkipsGrading(assignment)
   autograded: boolean
   // Every existing assignment repo NAME (individual + group), enumerated by the
   // page from the org repo list.

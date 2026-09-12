@@ -30,8 +30,9 @@ export const FeedbackPrAction = ({
   org: string
   repo: string
   mode: AssignmentMode
-  // !assignmentSkipsGrading(assignment)
-  autograded: boolean
+  // Undefined while the assignment entry is unresolved, which withholds Repair:
+  // the body would otherwise default to the autograded variant.
+  autograded?: boolean
   // No assignment repo exists yet (never-accepted non-submitter): there can be
   // no Feedback PR to review or repair, so the trigger renders disabled.
   noRepo?: boolean
@@ -96,7 +97,10 @@ export const FeedbackPrAction = ({
     return t("submissions.repairPr.failed", { reason: result.reason })
   }
 
+  const canRepair = autograded !== undefined
+
   const handleRepair = () => {
+    if (!canRepair) return
     repair.mutate(
       { org, repo, mode, autograded },
       {
@@ -159,7 +163,7 @@ export const FeedbackPrAction = ({
               >
                 {t("common.close")}
               </Button>
-              {!errorMsg && (
+              {!errorMsg && canRepair && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -186,9 +190,11 @@ export const FeedbackPrAction = ({
                   components={{ repo: <MonoLtr /> }}
                 />
               </p>
-              <p className="mt-3 text-sm leading-6 text-base-content/70">
-                {t("submissions.repairPr.hint")}
-              </p>
+              {canRepair && (
+                <p className="mt-3 text-sm leading-6 text-base-content/70">
+                  {t("submissions.repairPr.hint")}
+                </p>
+              )}
             </>
           )}
         </Modal>
@@ -209,7 +215,7 @@ export const ReviewButton = ({
   org: string
   repo: string
   mode: AssignmentMode
-  autograded: boolean
+  autograded?: boolean
   noRepo?: boolean
 }) => {
   const { t } = useTranslation()
@@ -250,7 +256,7 @@ export const FeedbackPrIconButton = ({
   org: string
   repo: string
   mode: AssignmentMode
-  autograded: boolean
+  autograded?: boolean
   hasRepo: boolean
 }) => {
   const { t } = useTranslation()

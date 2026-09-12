@@ -244,6 +244,7 @@ describe("SubmissionsTable per-row feedback PR shortcut", () => {
         {...baseProps}
         scores={[scoreRow()]}
         acceptedUsernames={new Set(["alice"])}
+        autograded
       />,
     )
     feedbackRefetch.mockResolvedValueOnce({ data: null, error: null })
@@ -257,6 +258,27 @@ describe("SubmissionsTable per-row feedback PR shortcut", () => {
     ).toBeTruthy()
     expect(screen.getByText("submissions.repairPr.repair")).toBeTruthy()
     expect(window.open).not.toHaveBeenCalled()
+  })
+
+  it("withholds repair until the assignment entry has resolved", async () => {
+    const user = userEvent.setup()
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    feedbackRefetch.mockResolvedValueOnce({ data: null, error: null })
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.table.openFeedbackPrLabel:cs101-hw1-alice",
+      }),
+    )
+    expect(
+      await screen.findByText("submissions.reviewModal.emptyTitle"),
+    ).toBeTruthy()
+    expect(screen.queryByText("submissions.repairPr.repair")).toBeNull()
   })
 
   it("renders an inert shortcut for a never-accepted non-submitter", () => {

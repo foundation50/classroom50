@@ -61,6 +61,16 @@ afterEach(() => {
 })
 
 describe("ReviewButton — repair flow", () => {
+  it("withholds Repair while the assignment entry is unresolved (autograded undefined)", async () => {
+    const user = userEvent.setup()
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" />)
+    await openRepairModal(user)
+
+    expect(screen.queryByText("submissions.repairPr.repair")).toBeNull()
+    expect(screen.queryByText("submissions.repairPr.hint")).toBeNull()
+    expect(mutate).not.toHaveBeenCalled()
+  })
+
   it("forwards autograded=false to the repair so a no_autograder body is trimmed", async () => {
     const user = userEvent.setup()
     mutate.mockImplementation((_vars, opts) =>

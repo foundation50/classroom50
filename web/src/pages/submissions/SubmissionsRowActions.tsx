@@ -367,6 +367,8 @@ export type SubmissionActionListProps = {
   release?: string | null
   // The assignment never autogrades (empty_repo OR no_autograder).
   skipsGrading: boolean
+  // !skipsGrading once the entry has resolved; undefined withholds PR repair.
+  autograded?: boolean
   // The narrower bare-repo case (empty_repo alone).
   emptyRepoAssignment: boolean
   displayName?: string
@@ -419,6 +421,7 @@ export const SubmissionActionList = ({
   latestCommitHref,
   release,
   skipsGrading,
+  autograded,
   emptyRepoAssignment,
   displayName,
   onManageAccess,
@@ -458,7 +461,7 @@ export const SubmissionActionList = ({
             org={org}
             repo={repo}
             mode={mode}
-            autograded={!skipsGrading}
+            autograded={autograded}
             noRepo={!hasRepo}
           />
           {onManageAccess && (

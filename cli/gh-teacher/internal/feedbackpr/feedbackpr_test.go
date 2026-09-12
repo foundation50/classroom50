@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
@@ -208,6 +209,22 @@ func TestRun_NoAutograderBodyOmitsAutogradingLines(t *testing.T) {
 		if strings.Contains(body, unwanted) {
 			t.Errorf("no_autograder body still mentions %q:\n%s", unwanted, body)
 		}
+	}
+}
+
+// The ordinary entry keeps the autograding lines: guards against the flag
+// regressing to a constant false.
+func TestRun_DefaultEntryBodyKeepsAutogradingLines(t *testing.T) {
+	mux := classroomMux(t, assignmentsJSON(t, helloEntry), nil, nil)
+	var posted map[string]string
+	mountRepo(mux, "cs-hello-alice", "fresh", func(body map[string]string) { posted = body })
+
+	if _, _, err := runCmd(t, mux, params(func(p *runParams) { p.user = "alice" })); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := contract.FeedbackPRBody("main", "https://github.com/o/cs-hello-alice/releases/latest", true)
+	if posted["body"] != want {
+		t.Errorf("default entry did not post the autograded body:\n%s", posted["body"])
 	}
 }
 

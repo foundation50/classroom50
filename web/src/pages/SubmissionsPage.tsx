@@ -1494,9 +1494,12 @@ const SubmissionsPageContent = () => {
                 // Bulk-open Feedback PRs: owner-only (needs admin on every repo,
                 // like the live reads), never for empty_repo (no PRs). A
                 // no_autograder repo is templated and PERMITS the Feedback PR, so
-                // it is gated on empty_repo only, not on skipsGrading.
+                // it is gated on empty_repo only, not on skipsGrading. Requires a
+                // resolved entry: the body's autograding lines key off it, and an
+                // unresolved entry would default to the autograded body.
                 onOpenAllPrs={
                   isOwner &&
+                  assignmentResolved &&
                   !isEmptyRepoAssignment &&
                   allAssignmentRepos.length > 0
                     ? () => setOpenAllPrsOpen(true)
@@ -1668,6 +1671,7 @@ const SubmissionsPageContent = () => {
           onClearFilters={clearFilters}
           emptyRepoAssignment={isEmptyRepoAssignment}
           skipsGrading={skipsGrading}
+          autograded={assignmentResolved ? !skipsGrading : undefined}
           // Per-row trigger retrofit: owner + default-autograder only (teacher-
           // authored shims are never rewritten). Mirrors the bulk-action gate,
           // including assignmentResolved.

@@ -14,7 +14,6 @@ export type OpenAllFeedbackPrsInput = {
   org: string
   repos: string[]
   mode: AssignmentMode
-  // !assignmentSkipsGrading(assignment)
   autograded: boolean
 }
 
