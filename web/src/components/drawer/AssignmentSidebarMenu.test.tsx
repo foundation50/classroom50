@@ -3,13 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
 
-// A protected classroom publishes its manifest under `<classroom>/<secret>/`.
-// The student sidebar reads that manifest to learn the assignment's mode
-// (team vs individual) and whether to offer Accept. Regression: for a team
-// assignment the group repo is named after the team counter, so the
-// individual-repo .classroom50.yaml can never supply the secret; the student
-// team's bootstrap record must be consulted first, or the sidebar misreads the
-// mode and offers Accept to a student whose group already has a repo.
+// Regression: in a protected classroom the sidebar learns an assignment's mode
+// from the secret-keyed Pages manifest. Resolving the secret from the
+// individual-formula repo alone misread every team assignment (the group repo
+// has a different name) and offered Accept to a group that had accepted.
 
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
   useClassroomRoleContext: () => ({

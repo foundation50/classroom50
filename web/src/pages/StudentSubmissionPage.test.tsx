@@ -95,9 +95,7 @@ vi.mock("@/hooks/useGetClassroom", () => ({
   default: () => ({ data: undefined }),
 }))
 
-// Protected-classroom secret sources: the individual repo's .classroom50.yaml
-// (keyed by the repo the page asks for) and the student team's bootstrap
-// record.
+// Secret sources: per-repo .classroom50.yaml and the student team's record.
 let repoSecrets: Record<string, string | undefined> = {}
 const dotClassroom50Spy = vi.fn()
 vi.mock("@/hooks/useDotClassroom50", () => ({
@@ -348,11 +346,8 @@ describe("StudentSubmissionPage submission type", () => {
   })
 })
 
-// A protected classroom publishes its manifest under `<classroom>/<secret>/`,
-// so the Pages read needs the secret. Regression for the team-mode case: the
-// group's repo is named after the team counter, not the login, so the
-// individual-repo .classroom50.yaml can never supply the secret there. The
-// student team's bootstrap record must be consulted first.
+// Regression: a team assignment's repo isn't named after the login, so the
+// individual-repo yaml can't supply a protected classroom's secret there.
 describe("StudentSubmissionPage protected-classroom secret sourcing", () => {
   const pagesSecret = () =>
     (submissionAssignmentSpy.mock.lastCall?.[3] as { secret?: string }).secret
@@ -362,8 +357,7 @@ describe("StudentSubmissionPage protected-classroom secret sourcing", () => {
     assignmentData = assignment({ mode: "team" })
     render(<StudentSubmissionPage />)
     expect(pagesSecret()).toBe("recordsecret")
-    // The username formula can't name a team repo; once the record answers,
-    // that read is skipped rather than fired to a guaranteed 404.
+    // Once the record answers, the doomed individual-repo read is skipped.
     expect(dotClassroom50Spy).not.toHaveBeenCalledWith(
       "acme",
       "cs101-hw1-alice",
@@ -372,8 +366,7 @@ describe("StudentSubmissionPage protected-classroom secret sourcing", () => {
   })
 
   it("falls back to the individual repo's .classroom50.yaml when the record has no secret", () => {
-    // A team created before the bootstrap record carried a secret: the
-    // accepted individual repo is still a valid source.
+    // Pre-schema team: the record carries no secret.
     repoSecrets = { "cs101-hw1-alice": "reposecret" }
     render(<StudentSubmissionPage />)
     expect(dotClassroom50Spy).toHaveBeenCalledWith("acme", "cs101-hw1-alice")

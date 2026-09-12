@@ -41,14 +41,11 @@ export const AssignmentSidebarMenu = ({
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
 
-  // A protected classroom's public Pages fetch needs the capability secret,
-  // first source that answers: the student team's bootstrap record
-  // (mode-independent), the individual repo's .classroom50.yaml (pre-schema
-  // teams only; skipped once the record answers, since the username formula
-  // can't name a team-mode repo), then classroom.json for staff. Gate the
-  // classroom.json read on the viewer's ACTUAL role (not the preview) so a
-  // teacher previewing as a student still resolves the secret for a working
-  // accept link; a real student's read stays disabled (guaranteed 404).
+  // Protected-classroom secret: the student team's record first. The
+  // individual repo's .classroom50.yaml covers only pre-schema teams and is
+  // skipped once the record answers (the username formula can't name a team
+  // repo). classroom.json is read only for actual staff (not the preview role)
+  // so a teacher previewing as a student still gets a working accept link.
   const {
     secret: teamSecret,
     pagesBaseUrl: teamPagesBaseUrl,
@@ -69,8 +66,7 @@ export const AssignmentSidebarMenu = ({
     enabled: isActuallyStaff,
   })
   const secret = teamSecret || studentSecret || classroomMeta?.secret
-  // Custom Pages base URL: team record for a real student, classroom.json for
-  // actual staff (same dual sourcing as the secret above).
+  // Same sources for a custom Pages base URL.
   const pagesBaseUrl = teamPagesBaseUrl || classroomMeta?.pages_base_url
   const { assignment: publicAssignment } = usePagesAssignments(
     org,
