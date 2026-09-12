@@ -128,7 +128,7 @@ func assignmentSubmissionModeCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&everyPush, "every-push", false, "Grade every push to the default branch (the default behavior)")
-	cmd.Flags().BoolVar(&tagMode, "tag", false, "Grade only submit/* tag pushes (submit clients push the tag; plain `git push` does not grade)")
+	cmd.Flags().BoolVar(&tagMode, "tag", false, "Grade only submit/* tag pushes (submit clients push the tag; plain 'git push' does not grade)")
 	cmd.Flags().BoolVar(&updateShims, "update-shims", true, "Retrofit each existing student repo's autograde shim to the new trigger; pass --update-shims=false to flip only the assignments.json field")
 	cmd.Flags().StringVar(&user, "user", "", "Retrofit a single student's repo (their <classroom>-<slug>-<user> repo) instead of every team member's")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Report the field flip and per-repo shim changes without writing anything")

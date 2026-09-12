@@ -282,7 +282,7 @@ func assignmentTestSetCmd() *cobra.Command {
 			return runAssignmentTestSet(client, cmd.OutOrStdout(), org, classroom, slug, parsed)
 		},
 	}
-	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file of test specs (bare array or generated tests.json envelope), or `-` to read from stdin (required)")
+	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file of test specs (bare array or generated tests.json envelope), or '-' to read from stdin (required)")
 	return cmd
 }
 
