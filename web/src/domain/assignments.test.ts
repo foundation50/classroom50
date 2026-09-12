@@ -1154,6 +1154,34 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(edited.no_autograder).toBeUndefined()
   })
 
+  it("accepts no_autograder without a template (README repo, no shim)", async () => {
+    // editInput is template-less: a README-initialized repo may turn the
+    // built-in autograder off; only empty_repo is the bare shape.
+    const { client, committedContent } = makeClient()
+    await editAssignment(
+      client,
+      editInput({ no_autograder: true, feedback_pr: true }),
+    )
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.no_autograder).toBe(true)
+    expect(edited.template).toBeUndefined()
+    expect(edited.autograder).toBe("default")
+    expect(edited.feedback_pr).toBe(true)
+  })
+
+  it("still rejects no_autograder together with empty_repo", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ no_autograder: true, empty_repo: true }),
+      ),
+    ).rejects.toThrow(/mutually exclusive with empty_repo/)
+  })
+
   it("allows flipping init_shim on after creation (mutable, UI warns)", async () => {
     // existingEntry has no init_shim; the edit enables it. No longer blocked.
     const { client, committedContent } = makeClient()
@@ -2317,6 +2345,31 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
         written.assignments.find((a) => a.slug === "hw2"),
       ).not.toHaveProperty("locked")
       expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+    })
+
+    it("create template-less no_autograder: writes the flag with no template", async () => {
+      // A README repo with the built-in autograder off (the form's default for
+      // a Not graded / Manual assignment) is a valid shape; accept then commits
+      // only the marker. No template means no template-access grants either.
+      const { client, grants, committed } = makeGrantClient({
+        classroomJson: studentOnly,
+      })
+
+      const input = {
+        ...(createInput(false) as object),
+        template_repo: "",
+        no_autograder: true,
+        feedback_pr: true,
+      } as Parameters<typeof createAssignment>[1]
+      await createAssignment(client, input)
+
+      const written = JSON.parse(committed()!) as { assignments: Assignment[] }
+      const entry = written.assignments.find((a) => a.slug === "hw2")!
+      expect(entry.no_autograder).toBe(true)
+      expect(entry.template).toBeUndefined()
+      expect(entry.autograder).toBe("default")
+      expect(entry.feedback_pr).toBe(true)
+      expect(grants()).toEqual([])
     })
 
     it("edit false-to-true: writes locked, revokes ONLY the student team, grants nothing", async () => {
