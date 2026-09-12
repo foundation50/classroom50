@@ -5,6 +5,7 @@ import { TableEmptyRow } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import {
   AlertIcon,
+  CalendarIcon,
   EyeIcon,
   LockIcon,
   PencilIcon,
@@ -431,6 +432,20 @@ const AssignmentsTable = ({
                     >
                       <LockIcon aria-hidden="true" className="size-3" />
                       {t("assignments.table.lockedBadge")}
+                    </Badge>
+                  )}
+                  {assignment.closed && (
+                    // The submission window, which the row's own actions never
+                    // flip — bulk Close/Reopen does (#912). Without it the list
+                    // would hide the one state that stops students pushing.
+                    <Badge
+                      tone="warning"
+                      size="sm"
+                      className="mt-1 gap-1 whitespace-nowrap"
+                      title={t("assignments.table.closedBadgeTitle")}
+                    >
+                      <CalendarIcon aria-hidden="true" className="size-3" />
+                      {t("assignments.table.closedBadge")}
                     </Badge>
                   )}
                   {!composedRepoNameFits(classroom, assignment.slug).fits && (

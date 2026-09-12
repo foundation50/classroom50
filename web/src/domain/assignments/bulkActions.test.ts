@@ -67,6 +67,7 @@ let file: {
   assignments: {
     slug: string
     locked?: boolean
+    closed?: boolean
     template?: { owner: string; repo: string; branch: string }
   }[]
 }
@@ -77,6 +78,7 @@ vi.mock("../queries/assignments", () => ({
 import {
   copyAssignments,
   deleteAssignments,
+  setAssignmentsClosed,
   setAssignmentsLock,
 } from "./bulkActions"
 import type { Assignment } from "@/types/classroom"
@@ -101,7 +103,7 @@ beforeEach(() => {
     schema: "classroom50/assignments/v1",
     assignments: [
       { slug: "hw1" },
-      { slug: "hw2", locked: true },
+      { slug: "hw2", locked: true, closed: true },
       { slug: "hw3" },
     ],
   }
@@ -281,6 +283,91 @@ describe("setAssignmentsLock", () => {
       { slug: "hw1", templateAccessWarning: undefined },
       { slug: "hw3", templateAccessWarning: "could not revoke" },
     ])
+  })
+})
+
+describe("setAssignmentsClosed", () => {
+  it("writes one tree and one commit for the whole selection", async () => {
+    await setAssignmentsClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1", "hw3"],
+      closed: true,
+    })
+
+    expect(createGitTree).toHaveBeenCalledTimes(1)
+    expect(createGitCommit).toHaveBeenCalledTimes(1)
+    expect(updateRef).toHaveBeenCalledTimes(1)
+
+    const next = writtenAssignments()
+    expect(next.assignments.find((a) => a.slug === "hw1")?.closed).toBe(true)
+    expect(next.assignments.find((a) => a.slug === "hw3")?.closed).toBe(true)
+  })
+
+  it("reports only the slugs whose flag actually moved", async () => {
+    const result = await setAssignmentsClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1", "hw2"],
+      closed: true,
+    })
+
+    expect(result.changed).toEqual(["hw1"])
+    expect(result.newCommitSha).toBe("NEWCOMMIT")
+  })
+
+  it("commits nothing when every selected assignment is already closed", async () => {
+    const result = await setAssignmentsClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw2"],
+      closed: true,
+    })
+
+    expect(createGitTree).not.toHaveBeenCalled()
+    expect(result.changed).toEqual([])
+    expect(result.newCommitSha).toBeNull()
+  })
+
+  // Matches the CLI's omitempty: reopening drops the key.
+  it("drops the key on reopen instead of writing false", async () => {
+    await setAssignmentsClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw2"],
+      closed: false,
+    })
+
+    const entry = writtenAssignments().assignments.find(
+      (a) => a.slug === "hw2",
+    )!
+    expect("closed" in entry).toBe(false)
+    // The unrelated flag on the same entry survives the rewrite.
+    expect(entry.locked).toBe(true)
+  })
+
+  it("reports a slug that vanished between render and submit", async () => {
+    const result = await setAssignmentsClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1", "gone"],
+      closed: true,
+    })
+
+    expect(result.missing).toEqual(["gone"])
+    expect(result.changed).toEqual(["hw1"])
+  })
+
+  // Closing ends the submission window; the template gate is the lock's job.
+  it("never touches template access", async () => {
+    await setAssignmentsClosed(client, {
+      org: ORG,
+      classroom: CLASSROOM,
+      slugs: ["hw1"],
+      closed: true,
+    })
+
+    expect(reconcileLockTemplateAccess).not.toHaveBeenCalled()
   })
 })
 

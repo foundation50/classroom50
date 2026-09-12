@@ -1255,18 +1255,32 @@ The **Actions** menu offers:
   unlock. A read that another unlocked assignment in the classroom still uses
   is kept. Each entry is disabled when it has nothing to do, so a fully locked
   selection offers only **Unlock**.
+- **Close submission** / **Reopen submission** (owners). The submission window
+  for the whole selection: closing blocks new accepts and sets every accepted
+  student's repository to read-only, reopening allows accepts again and
+  restores write access. It covers individual assignments that are not
+  empty-repository ones — a group or team assignment's repository is managed by
+  its founder — and the dialog names any selected assignment it leaves alone.
+  This is the enforcement mechanism for a due date; the due date itself only
+  marks submissions late.
 - **Reuse.** Copy the selection into another classroom in the organization,
   or back into this one; see below.
 - **Delete.** Remove the selected assignments from the classroom. Student
   repositories are kept. You type `delete` to confirm, since this is the one
   action here with no undo in the app.
 
-Each action is one commit: lock, unlock, and delete to this classroom's
-`assignments.json`, reuse to the target's. For lock, unlock, and delete, either
+Each action is one commit: lock, unlock, close, reopen, and delete to this
+classroom's `assignments.json`, reuse to the target's. For those writes, either
 every selected assignment changes or none does. An assignment deleted
 meanwhile (in another tab, say) is skipped and reported. If the template
 access change after a lock or unlock fails for some assignments, a warning
 names them; run the action on those again.
+
+Closing and reopening then do per-repository work on top of that commit, so
+they run in a dialog with a progress bar and a result list. The window flag is
+committed first: a run GitHub rate-limits still blocks new accepts, and the
+repositories it did not reach are listed. After a throttled close, **Finish
+closing** retries only those repositories without reopening the assignments.
 
 #### Reusing several assignments
 

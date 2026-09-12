@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { DropdownMenu } from "@/components/ui"
 import {
+  CalendarIcon,
   DuplicateIcon,
   LockIcon,
   TrashIcon,
@@ -10,12 +11,18 @@ import {
 } from "@/components/ui/icons"
 import { ConfirmModal } from "@/components/modals"
 import { BulkSelectionCluster } from "@/components/bulk/BulkSelectionCluster"
+import type { CloseSubmissionTarget } from "@/components/bulk/closeSubmissionFanOut"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import {
   useBulkDeleteAssignments,
   useBulkSetAssignmentLock,
 } from "@/hooks/mutations/useBulkAssignmentActions"
+import { BulkCloseSubmissionModal } from "@/components/modals/BulkCloseSubmissionModal"
 import { BulkReuseAssignmentsModal } from "@/components/modals/BulkReuseAssignmentsModal"
+import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import useGetStudents from "@/hooks/useGetStudents"
+import { useStaffCapabilities } from "@/hooks/useStaffCapabilities"
+import { acceptedUsernames } from "@/pages/submissions/dashboard"
 import type { Assignment } from "@/types/classroom"
 
 // The assignments toolbar's selection cluster (count + Actions menu + Clear),
@@ -26,6 +33,12 @@ import type { Assignment } from "@/types/classroom"
 // template access is a diagnostic, clone-submissions renders a CLI command,
 // and collect would mean N dispatches serialized on one concurrency group
 // (rejected in #719; "Collect all" already covers the classroom).
+//
+// Close/reopen submission is the exception to "one commit and done": the flag
+// is one commit, but the lockdown it stands for is per student repo, so the
+// modal owns a fan-out. Only individual, non-empty_repo assignments qualify —
+// a group/team repo's membership is founder-managed and an empty_repo
+// assignment has no student repo to downgrade (#912).
 
 type Props = {
   org: string
@@ -61,11 +74,67 @@ export function AssignmentsBulkBar({
     setLastLockVerb(pending)
   }
   const [reuseOpen, setReuseOpen] = useState(false)
+  // Latched like the lock verb, so the dialog keeps its wording while it fades.
+  const [closeMode, setCloseMode] = useState<"close" | "reopen" | null>(null)
+  const [lastCloseMode, setLastCloseMode] = useState<"close" | "reopen">(
+    "close",
+  )
+  if (closeMode && closeMode !== lastCloseMode) {
+    setLastCloseMode(closeMode)
+  }
 
   // A selection can be mixed, so both verbs are offered; one with nothing to
   // do is disabled.
   const allLocked = selected.every((a) => Boolean(a.locked))
   const noneLocked = selected.every((a) => !a.locked)
+  // Close/reopen covers the shapes whose student repos the fan-out can reach.
+  const closable = useMemo(
+    () => selected.filter((a) => a.mode === "individual" && !a.empty_repo),
+    [selected],
+  )
+  const skipped = useMemo(
+    () => selected.filter((a) => !closable.includes(a)).map((a) => a.slug),
+    [selected, closable],
+  )
+
+  const allClosed = closable.length > 0 && closable.every((a) => a.closed)
+  const noneClosed = closable.every((a) => !a.closed)
+  // Both reads are already in the page's cache (the table's Accepted column
+  // and the funnel roster), so resolving who accepted costs no extra request.
+  const {
+    data: orgRepos,
+    isPending: reposPending,
+    isError: reposError,
+  } = useGetOrgRepos(org)
+  const {
+    students,
+    isLoading: studentsLoading,
+    isError: studentsError,
+  } = useGetStudents(org, classroom)
+  // Without both, every assignment resolves to zero accepted owners: the run
+  // would commit the flag and report "0 of 0 repositories" while every student
+  // kept write. Fail closed — the entries wait rather than under-apply.
+  const ownersResolvable =
+    !reposPending && !reposError && !studentsLoading && !studentsError
+  // Reopen restores write, so it may only touch assignments that are actually
+  // closed: fanning out over the whole selection would re-grant push on repos
+  // a teacher downgraded per student in the gradebook, and overwrite a
+  // non-push student_permission. Close can cover every eligible assignment —
+  // re-asserting pull on an already-closed one changes nothing.
+  const closeTargets = useMemo<CloseSubmissionTarget[]>(
+    () =>
+      closable
+        .filter((a) => lastCloseMode !== "reopen" || a.closed)
+        .map((a) => ({
+          slug: a.slug,
+          owners: [...acceptedUsernames(orgRepos, classroom, a.slug, students)],
+        })),
+    [closable, lastCloseMode, orgRepos, classroom, students],
+  )
+  // The per-repo collaborator write needs repo admin, which only an org owner
+  // has — the same gate the single-assignment action carries.
+  const { isOwner } = useStaffCapabilities()
+
   const lock = useBulkSetAssignmentLock(org, classroom)
   const remove = useBulkDeleteAssignments(org, classroom)
   const busy = lock.isPending || remove.isPending
@@ -177,6 +246,52 @@ export function AssignmentsBulkBar({
             }
             onSelect={() => setPending("unlock")}
           />
+          {isOwner && (
+            <>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                icon={CalendarIcon}
+                label={t("assignments.bulk.closeSubmission.menuLabel")}
+                disabled={
+                  busy ||
+                  closable.length === 0 ||
+                  allClosed ||
+                  !ownersResolvable
+                }
+                title={
+                  closable.length === 0
+                    ? t("assignments.bulk.closeSubmission.noneEligible")
+                    : allClosed
+                      ? t("assignments.bulk.closeSubmission.allClosed")
+                      : !ownersResolvable
+                        ? t("assignments.bulk.closeSubmission.ownersUnknown")
+                        : t("assignments.bulk.closeSubmission.menuTitle")
+                }
+                onSelect={() => setCloseMode("close")}
+              />
+              <DropdownMenu.Item
+                icon={CalendarIcon}
+                label={t("assignments.bulk.closeSubmission.reopenMenuLabel")}
+                disabled={
+                  busy ||
+                  closable.length === 0 ||
+                  noneClosed ||
+                  !ownersResolvable
+                }
+                title={
+                  closable.length === 0
+                    ? t("assignments.bulk.closeSubmission.noneEligible")
+                    : noneClosed
+                      ? t("assignments.bulk.closeSubmission.noneClosed")
+                      : !ownersResolvable
+                        ? t("assignments.bulk.closeSubmission.ownersUnknown")
+                        : t("assignments.bulk.closeSubmission.reopenMenuTitle")
+                }
+                onSelect={() => setCloseMode("reopen")}
+              />
+              <DropdownMenu.Separator />
+            </>
+          )}
           <DropdownMenu.Item
             icon={DuplicateIcon}
             label={t("assignments.bulk.reuse")}
@@ -217,6 +332,16 @@ export function AssignmentsBulkBar({
         warning={t("assignments.bulk.deleteWarning")}
         onConfirm={runDelete}
         onClose={() => setPending(null)}
+      />
+
+      <BulkCloseSubmissionModal
+        open={closeMode !== null}
+        onClose={() => setCloseMode(null)}
+        org={org}
+        classroom={classroom}
+        mode={lastCloseMode}
+        targets={closeTargets}
+        skipped={skipped}
       />
 
       {reuseOpen && (
