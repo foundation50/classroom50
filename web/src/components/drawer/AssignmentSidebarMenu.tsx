@@ -41,15 +41,23 @@ export const AssignmentSidebarMenu = ({
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
 
-  // A protected classroom's public Pages fetch needs the capability secret. A
-  // student reads it from their own repo's .classroom50.yaml (their only
-  // source); a teacher gets it from classroom.json. Gate the classroom.json read
-  // on the viewer's ACTUAL role (not the preview) so a teacher previewing as
-  // a student still resolves the secret for a working accept link — a real
-  // student's read stays disabled (guaranteed 404).
-  const studentRepoNameForSecret = user?.login
-    ? studentRepoName(classroom, assignment, user.login)
-    : ""
+  // A protected classroom's public Pages fetch needs the capability secret,
+  // first source that answers: the student team's bootstrap record
+  // (mode-independent), the individual repo's .classroom50.yaml (pre-schema
+  // teams only; skipped once the record answers, since the username formula
+  // can't name a team-mode repo), then classroom.json for staff. Gate the
+  // classroom.json read on the viewer's ACTUAL role (not the preview) so a
+  // teacher previewing as a student still resolves the secret for a working
+  // accept link; a real student's read stays disabled (guaranteed 404).
+  const {
+    secret: teamSecret,
+    pagesBaseUrl: teamPagesBaseUrl,
+    isLoading: loadingBootstrap,
+  } = useClassroomSecret(org, classroom)
+  const studentRepoNameForSecret =
+    !teamSecret && user?.login
+      ? studentRepoName(classroom, assignment, user.login)
+      : ""
   const { secret: studentSecret } = useDotClassroom50(
     org,
     studentRepoNameForSecret,
@@ -60,11 +68,9 @@ export const AssignmentSidebarMenu = ({
   const { data: classroomMeta } = useGetClassroom(org, classroom, {
     enabled: isActuallyStaff,
   })
-  const secret = studentSecret || classroomMeta?.secret
+  const secret = teamSecret || studentSecret || classroomMeta?.secret
   // Custom Pages base URL: team record for a real student, classroom.json for
   // actual staff (same dual sourcing as the secret above).
-  const { pagesBaseUrl: teamPagesBaseUrl, isLoading: loadingBootstrap } =
-    useClassroomSecret(org, classroom)
   const pagesBaseUrl = teamPagesBaseUrl || classroomMeta?.pages_base_url
   const { assignment: publicAssignment } = usePagesAssignments(
     org,

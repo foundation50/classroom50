@@ -78,26 +78,39 @@ vi.mock("@/hooks/useMySubmissions", () => ({
 
 let assignmentData: Assignment | undefined
 let assignmentError = false
+const submissionAssignmentSpy = vi.fn()
 vi.mock("@/hooks/useSubmissionAssignment", () => ({
-  useSubmissionAssignment: () => ({
-    assignment: assignmentData,
-    assignments: assignmentData ? [assignmentData] : [],
-    isLoading: false,
-    isError: assignmentError,
-  }),
+  useSubmissionAssignment: (...args: unknown[]) => {
+    submissionAssignmentSpy(...args)
+    return {
+      assignment: assignmentData,
+      assignments: assignmentData ? [assignmentData] : [],
+      isLoading: false,
+      isError: assignmentError,
+    }
+  },
 }))
 
 vi.mock("@/hooks/useGetClassroom", () => ({
   default: () => ({ data: undefined }),
 }))
 
+// Protected-classroom secret sources: the individual repo's .classroom50.yaml
+// (keyed by the repo the page asks for) and the student team's bootstrap
+// record.
+let repoSecrets: Record<string, string | undefined> = {}
+const dotClassroom50Spy = vi.fn()
 vi.mock("@/hooks/useDotClassroom50", () => ({
-  default: () => ({ secret: undefined }),
+  default: (org: string, repo: string) => {
+    dotClassroom50Spy(org, repo)
+    return { secret: repo ? repoSecrets[repo] : undefined }
+  },
 }))
 
+let teamSecret: string | undefined
 vi.mock("@/hooks/useStudentClassrooms", () => ({
   useClassroomSecret: () => ({
-    secret: undefined,
+    secret: teamSecret,
     pagesBaseUrl: undefined,
     isLoading: false,
   }),
@@ -141,6 +154,10 @@ beforeEach(() => {
   pushData = []
   assignmentData = assignment()
   assignmentError = false
+  repoSecrets = {}
+  teamSecret = undefined
+  submissionAssignmentSpy.mockClear()
+  dotClassroom50Spy.mockClear()
 })
 
 afterEach(cleanup)
@@ -328,5 +345,43 @@ describe("StudentSubmissionPage submission type", () => {
     render(<StudentSubmissionPage />)
     expect(screen.getByText("submissions.student.loadError")).toBeTruthy()
     expect(screen.queryByText("submissions.table.colSubmissions")).toBeNull()
+  })
+})
+
+// A protected classroom publishes its manifest under `<classroom>/<secret>/`,
+// so the Pages read needs the secret. Regression for the team-mode case: the
+// group's repo is named after the team counter, not the login, so the
+// individual-repo .classroom50.yaml can never supply the secret there. The
+// student team's bootstrap record must be consulted first.
+describe("StudentSubmissionPage protected-classroom secret sourcing", () => {
+  const pagesSecret = () =>
+    (submissionAssignmentSpy.mock.lastCall?.[3] as { secret?: string }).secret
+
+  it("unlocks the Pages read with the team record's secret for a team assignment", () => {
+    teamSecret = "recordsecret"
+    assignmentData = assignment({ mode: "team" })
+    render(<StudentSubmissionPage />)
+    expect(pagesSecret()).toBe("recordsecret")
+    // The username formula can't name a team repo; once the record answers,
+    // that read is skipped rather than fired to a guaranteed 404.
+    expect(dotClassroom50Spy).not.toHaveBeenCalledWith(
+      "acme",
+      "cs101-hw1-alice",
+    )
+    expect(screen.queryByText("submissions.student.loadError")).toBeNull()
+  })
+
+  it("falls back to the individual repo's .classroom50.yaml when the record has no secret", () => {
+    // A team created before the bootstrap record carried a secret: the
+    // accepted individual repo is still a valid source.
+    repoSecrets = { "cs101-hw1-alice": "reposecret" }
+    render(<StudentSubmissionPage />)
+    expect(dotClassroom50Spy).toHaveBeenCalledWith("acme", "cs101-hw1-alice")
+    expect(pagesSecret()).toBe("reposecret")
+  })
+
+  it("passes no secret for an unprotected classroom", () => {
+    render(<StudentSubmissionPage />)
+    expect(pagesSecret()).toBeUndefined()
   })
 })
