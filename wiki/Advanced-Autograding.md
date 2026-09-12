@@ -246,7 +246,11 @@ members; a `team` bucket's entries also carry the credited group team's
 `team_slug`). Each bucket also carries a `collected_at` UTC timestamp stamped
 whenever a collection run walks that assignment (even if nothing changed), so
 per-assignment freshness is knowable; the web app's "Submission data
-collected" strip reads it. A bucket for an assignment that skips grading (no
+collected" strip reads it. Each entry carries its own `collected_at` too,
+the instant the run that last wrote it started reading: a later run credits
+a release whose `result.json` asset predates that instant from the entry
+instead of downloading it again (a regrade re-publishes the asset with newer
+timestamps, so it is re-read). A bucket for an assignment that skips grading (no
 built-in autograder or empty repositories) keeps `entries` empty and lists who
 submitted in a `detected` array (presence and count only, never a score).
 

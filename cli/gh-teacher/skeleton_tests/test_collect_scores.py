@@ -13,6 +13,9 @@ import json
 import os
 import pathlib
 import re
+import threading
+import time
+import urllib.error
 
 import pytest
 
@@ -1741,12 +1744,13 @@ class TestCollectClassroomTeamDriven:
             classroom_meta=self._meta_with_staff(), assignments=self._assignments(),
             service_token="token",
         )
-        assert seen_repos == [
+        # The walk reads repos concurrently, so the order is the scheduler's.
+        assert sorted(seen_repos) == sorted([
             "cs-principles-hello-alice",
             "cs-principles-hello-prof",
             "cs-principles-hello-headta",
             "cs-principles-hello-ta1",
-        ]
+        ])
 
     def test_dedupes_across_student_and_staff_teams(self, monkeypatch):
         # A person on both the student team and a staff team is polled once.
@@ -1881,27 +1885,19 @@ class TestCollectClassroomTeamDriven:
         })
         meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
 
-        def fake_all(api_url, org, repo, token):
-            if repo in ("cs-principles-hello-alice", "cs-principles-hello-ta1"):
-                return [{"tag_name": "submit/2026-06-01T10-00-00Z",
-                         "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}]
-            return []
-
-        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
-
-        # download_result_asset is called right after all_submit_releases for the
-        # same repo; thread the owner through the repo the loop is on.
+        # The walk reads repos concurrently, so the owner rides on the release
+        # (its asset URL) rather than on state the listing sets for the next
+        # download.
         owners = {"cs-principles-hello-alice": "alice", "cs-principles-hello-ta1": "ta1"}
-        seen = {"owner": None}
-
-        def fake_all2(api_url, org, repo, token):
-            seen["owner"] = owners.get(repo)
-            return fake_all(api_url, org, repo, token)
-
-        monkeypatch.setattr(cs, "all_submit_releases", fake_all2)
+        monkeypatch.setattr(
+            cs, "all_submit_releases",
+            lambda api_url, org, repo, token: _release_for(owners[repo]) if repo in owners else [],
+        )
         monkeypatch.setattr(
             cs, "download_result_asset",
-            lambda *a, **k: make_result(username=seen["owner"]),
+            lambda api_url, release, token: make_result(
+                username=release["assets"][0]["url"].rsplit("/", 1)[1]
+            ),
         )
         results, _, _, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
@@ -3965,6 +3961,320 @@ def test_autograded_assignment_detects_pushes_with_no_release(monkeypatch, capsy
     assert "0/2 submitted, 1 with pushes but no graded submission" in capsys.readouterr().out
 
 
+def test_collect_classroom_logs_each_repo_it_reads(monkeypatch, capsys):
+    # One stdout line per repo read, naming its outcome, so a running collect
+    # shows which repo it just handled. dave has no repo, so there is no line.
+    stub_team_members(monkeypatch, ["alice", "bob", "carol", "dave"])
+    monkeypatch.setattr(
+        cs,
+        "all_submit_releases",
+        lambda api_url, org, repo, token: _release_for("alice") if repo.endswith("-alice") else [],
+    )
+    monkeypatch.setattr(
+        cs, "download_result_asset", lambda *a, **k: make_result(assignment="hw1")
+    )
+    monkeypatch.setattr(
+        cs,
+        "detect_repo_submissions",
+        lambda api_url, org, repo, *rest, **kw: (
+            [{"sha": "c1", "datetime": "2026-06-01T10:00:00Z"}] if repo.endswith("-bob") else []
+        ),
+    )
+
+    cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual"}]},
+        service_token="token",
+        repo_index=StubIndex(
+            {"cs-principles-hw1-alice", "cs-principles-hw1-bob", "cs-principles-hw1-carol"}
+        ),
+    )
+
+    out = capsys.readouterr().out.splitlines()
+    # Reads finish in scheduler order, so compare the set of lines.
+    assert sorted(line for line in out if line.startswith("cs50/")) == [
+        "cs50/cs-principles-hw1-alice: 1 graded submission(s) collected",
+        "cs50/cs-principles-hw1-bob: 1 ungraded submission(s) detected",
+        "cs50/cs-principles-hw1-carol: no submission yet",
+    ]
+    assert not any("dave" in line for line in out)
+
+
+def _walk_hw1(monkeypatch, logins, **kwargs):
+    """collect_classroom over one individual assignment for `logins`."""
+    stub_team_members(monkeypatch, logins)
+    return cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual"}]},
+        service_token="token",
+        **kwargs,
+    )
+
+
+def _owner_from_release(api_url, release, token):
+    """download_result_asset stand-in that names the owner from the asset URL
+    (_release_for), so it needs no state shared with the listing: the walk
+    reads repos concurrently."""
+    return make_result(
+        assignment="hw1",
+        username=release["assets"][0]["url"].rsplit("/", 1)[1],
+        submission_tag=release["tag_name"],
+    )
+
+
+def test_collect_classroom_reads_repos_concurrently(monkeypatch):
+    # Both release listings must be in flight at once: each waits on a barrier
+    # only the other can release, so a sequential walk would time out here.
+    barrier = threading.Barrier(2, timeout=5)
+
+    def releases(api_url, org, repo, token):
+        barrier.wait()
+        return []
+
+    monkeypatch.setattr(cs, "all_submit_releases", releases)
+    stub_no_detections(monkeypatch)
+    _, _, _, detected = _walk_hw1(monkeypatch, ["alice", "bob"])
+    assert detected["hw1"][2] == {"alice", "bob"}
+
+
+def test_collect_classroom_keeps_owner_order_however_reads_finish(monkeypatch):
+    # alice's read finishes last; her entry still comes first, in team order,
+    # so scores.json never churns with the scheduler.
+    def releases(api_url, org, repo, token):
+        if repo.endswith("-alice"):
+            time.sleep(0.05)
+        return _release_for(repo.rsplit("-", 1)[1])
+
+    monkeypatch.setattr(cs, "all_submit_releases", releases)
+    monkeypatch.setattr(cs, "download_result_asset", _owner_from_release)
+    results, *_ = _walk_hw1(monkeypatch, ["alice", "bob", "carol"])
+    assert [row["owner"] for row in results] == ["alice", "bob", "carol"]
+
+
+def test_collect_classroom_propagates_a_fatal_read_from_a_worker(monkeypatch):
+    def releases(api_url, org, repo, token):
+        if repo.endswith("-bob"):
+            raise http_error(401)
+        return []
+
+    monkeypatch.setattr(cs, "all_submit_releases", releases)
+    stub_no_detections(monkeypatch)
+    with pytest.raises(urllib.error.HTTPError) as excinfo:
+        _walk_hw1(monkeypatch, ["alice", "bob", "carol"])
+    assert excinfo.value.code == 401
+
+
+def test_collect_classroom_stamps_entries_and_reuses_stored_releases(monkeypatch):
+    # First run: everything downloaded, every entry stamped with the walk start.
+    # Second run, handed the first run's entries: no download at all.
+    downloads: list[str] = []
+
+    def releases(api_url, org, repo, token):
+        # Uploaded well before either walk starts, as the real listing says.
+        [release] = _release_for(repo.rsplit("-", 1)[1])
+        release["assets"][0].update(
+            created_at="2026-06-01T10:01:00Z", updated_at="2026-06-01T10:01:00Z"
+        )
+        return [release]
+
+    def download(api_url, release, token):
+        downloads.append(release["assets"][0]["url"])
+        return _owner_from_release(api_url, release, token)
+
+    monkeypatch.setattr(cs, "all_submit_releases", releases)
+    monkeypatch.setattr(cs, "download_result_asset", download)
+    results, *_ = _walk_hw1(
+        monkeypatch, ["alice", "bob"], collected_at="2026-06-02T00:00:00Z"
+    )
+    assert len(downloads) == 2
+    assert [row["collected_at"] for row in results] == ["2026-06-02T00:00:00Z"] * 2
+
+    scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
+    cs.apply_updates(scores, results)
+    downloads.clear()
+    again, *_ = _walk_hw1(
+        monkeypatch, ["alice", "bob"],
+        stored=cs.stored_entries(scores), collected_at="2026-06-03T00:00:00Z",
+    )
+    assert downloads == []
+    assert cs.apply_updates(scores, again) == 0
+
+
+class TestStoredSubmissions:
+    RELEASE = {
+        "tag_name": "submit/2026-06-01T14-32-05Z",
+        "assets": [{
+            "name": "result.json", "url": "https://api.github.com/a/1",
+            "created_at": "2026-06-01T14:33:20Z", "updated_at": "2026-06-01T14:33:21Z",
+        }],
+    }
+
+    def _stored(self, as_of="2026-06-02T00:00:00Z", **overrides):
+        record = {k: v for k, v in make_result(**overrides).items() if k != "assignment"}
+        record["late"] = True
+        return cs.StoredEntry(
+            cs.parse_rfc3339(as_of) - cs.STORED_SUBMISSION_SKEW,
+            {record["submission"]: record},
+        )
+
+    def _reuse(self, stored, release=None, **overrides):
+        args = dict(
+            classroom_short="cs-principles", slug="hello", username="alice",
+            assignment_type="individual", renamed_from=None,
+        )
+        args.update(overrides)
+        return cs.reusable_submission(release or self.RELEASE, stored, **args)
+
+    def test_reuses_a_stored_record_for_an_asset_older_than_the_stamp(self):
+        candidate = self._reuse(self._stored())
+        assert candidate["assignment"] == "hello"
+        assert candidate["score"] == 10
+        # Re-derived from today's due date by the caller, like a download's.
+        assert "late" not in candidate
+
+    def test_nothing_stored_or_an_unknown_tag_downloads(self):
+        assert self._reuse(None) is None
+        assert self._reuse(self._stored(submission_tag="submit/2026-05-01T00-00-00Z")) is None
+        assert self._reuse(self._stored(), {**self.RELEASE, "tag_name": None}) is None
+
+    def test_asset_uploaded_after_the_stamp_downloads(self):
+        # A regrade re-publishes on the same tag; the asset's timestamps move.
+        assert self._reuse(self._stored(as_of="2026-06-01T14:33:00Z")) is None
+
+    def test_asset_within_the_skew_window_downloads(self):
+        assert self._reuse(self._stored(as_of="2026-06-01T14:40:00Z")) is None
+
+    def test_asset_without_timestamps_downloads(self):
+        release = {**self.RELEASE, "assets": [{"name": "result.json", "url": "u"}]}
+        assert self._reuse(self._stored(), release) is None
+
+    def test_anything_but_one_result_asset_downloads(self):
+        assert self._reuse(self._stored(), {**self.RELEASE, "assets": []}) is None
+        two = {**self.RELEASE, "assets": self.RELEASE["assets"] * 2}
+        assert self._reuse(self._stored(), two) is None
+
+    def test_a_record_that_no_longer_validates_downloads(self):
+        # The mode-flip symptom: the stored assignment_type is not today's.
+        assert self._reuse(self._stored(), assignment_type="group") is None
+
+    def test_stored_entries_reads_stamped_entries_only(self):
+        scores = {"assignments": {"hello": {"type": "individual", "entries": [
+            {"owner": "Alice", "collected_at": "2026-06-02T00:00:00Z",
+             "submissions": [{"submission": "submit/x", "score": 1}, {"nope": 1}]},
+            {"owner": "bob", "submissions": [{"submission": "submit/y"}]},
+            {"owner": "carol", "collected_at": "yesterday", "submissions": []},
+        ]}}}
+        stored = cs.stored_entries(scores)
+        assert set(stored) == {("hello", "alice")}
+        entry = stored[("hello", "alice")]
+        assert entry.by_tag == {"submit/x": {"submission": "submit/x", "score": 1}}
+        assert entry.as_of == cs.parse_rfc3339("2026-06-02T00:00:00Z") - cs.STORED_SUBMISSION_SKEW
+
+    def _history(self, monkeypatch, stored, due=None):
+        return cs.collect_release_history(
+            "https://api.github.com", "cs50", "cs-principles-hello-alice",
+            [self.RELEASE], "tok",
+            classroom_short="cs-principles", slug="hello", username="alice",
+            assignment_type="individual", renamed_from=None, due=due, stored=stored,
+        )
+
+    def test_history_credits_a_reused_release_without_a_download(self, monkeypatch):
+        monkeypatch.setattr(
+            cs, "download_result_asset", lambda *a, **k: pytest.fail("must not download")
+        )
+        history, rejected = self._history(
+            monkeypatch, self._stored(), due=cs.parse_rfc3339("2026-06-01T00:00:00Z")
+        )
+        assert rejected == 0
+        assert len(history) == 1 and "assignment" not in history[0]
+        assert history[0]["late"] is True
+
+    def test_history_downloads_when_nothing_is_stored(self, monkeypatch):
+        calls: list[str] = []
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda api_url, release, token: calls.append(release["tag_name"]) or make_result(),
+        )
+        history, _ = self._history(monkeypatch, None)
+        assert calls == [self.RELEASE["tag_name"]] and len(history) == 1
+
+
+class TestEntryStamp:
+    def _row(self, **kwargs):
+        return cs.build_entry_row(
+            "hello", "individual", "alice", cs.MemberAttribution(None, None), {}, [], **kwargs
+        )
+
+    def test_build_entry_row_carries_the_stamp_when_given(self):
+        assert self._row(collected_at="2026-06-02T00:00:00Z")["collected_at"] == "2026-06-02T00:00:00Z"
+        assert "collected_at" not in self._row()
+
+    def test_same_submission_ignores_the_stamp(self):
+        a = {"owner": "alice", "submissions": [], "collected_at": "2026-06-01T00:00:00Z"}
+        b = {"owner": "alice", "submissions": [], "collected_at": "2026-06-02T00:00:00Z"}
+        assert cs.same_submission(a, b)
+        assert not cs.same_submission(a, {**b, "submissions": [{"score": 1}]})
+
+    def _scores(self, entry):
+        return {"schema": cs.SCORES_SCHEMA_V1, "assignments": {
+            "hello": {"type": "individual", "entries": [entry]}
+        }}
+
+    def _update(self, **fields):
+        return {"_assignment": "hello", "_type": "individual", "owner": "alice",
+                "submissions": [], "collected_at": "2026-06-02T00:00:00Z", **fields}
+
+    def test_apply_updates_stamps_an_unchanged_unstamped_entry_without_counting(self):
+        scores = self._scores({"owner": "alice", "submissions": []})
+        assert cs.apply_updates(scores, [self._update()]) == 0
+        assert scores["assignments"]["hello"]["entries"][0]["collected_at"] == "2026-06-02T00:00:00Z"
+
+    def test_apply_updates_keeps_the_older_stamp_on_an_unchanged_entry(self):
+        scores = self._scores(
+            {"owner": "alice", "submissions": [], "collected_at": "2026-06-01T00:00:00Z"}
+        )
+        assert cs.apply_updates(scores, [self._update()]) == 0
+        assert scores["assignments"]["hello"]["entries"][0]["collected_at"] == "2026-06-01T00:00:00Z"
+
+    def test_apply_updates_writes_the_new_stamp_with_a_changed_entry(self):
+        scores = self._scores(
+            {"owner": "alice", "submissions": [], "collected_at": "2026-06-01T00:00:00Z"}
+        )
+        assert cs.apply_updates(scores, [self._update(submissions=[{"score": 1}])]) == 1
+        entry = scores["assignments"]["hello"]["entries"][0]
+        assert entry["collected_at"] == "2026-06-02T00:00:00Z"
+        assert entry["submissions"] == [{"score": 1}]
+
+    def test_apply_updates_leaves_an_override_entry_alone(self):
+        scores = self._scores({"owner": "alice", "submissions": [], "override": True})
+        assert cs.apply_updates(scores, [self._update()]) == 0
+        assert "collected_at" not in scores["assignments"]["hello"]["entries"][0]
+
+
+class TestRequestWindow:
+    def test_waits_out_a_full_minute(self, monkeypatch):
+        clock = {"now": 100.0}
+        slept: list[float] = []
+
+        def sleep(seconds):
+            slept.append(seconds)
+            clock["now"] += seconds
+
+        monkeypatch.setattr(cs.time, "monotonic", lambda: clock["now"])
+        monkeypatch.setattr(cs.time, "sleep", sleep)
+        cs._request_times.extend([70.0] * cs.REQUESTS_PER_MINUTE)
+        cs._wait_for_request_slot()
+        assert slept == [30.0]
+        assert list(cs._request_times) == [130.0]
+
+    def test_passes_straight_through_under_the_limit(self, monkeypatch):
+        monkeypatch.setattr(cs.time, "sleep", lambda s: pytest.fail("must not sleep"))
+        cs._wait_for_request_slot()
+        assert len(cs._request_times) == 1
+
+
 def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
     # A repo with a release is graded, full stop: detection isn't spent on it,
     # and marking it visited retires a detected record left from a run before
@@ -5105,7 +5415,7 @@ class TestPassesSkipMissingRepos:
             service_token="tok",
             repo_index=None,
         )
-        assert polled == ["cs-hw1-alice", "cs-hw1-bob"]
+        assert sorted(polled) == ["cs-hw1-alice", "cs-hw1-bob"]
 
 
 class TestBulkAccessCheck:

@@ -25,10 +25,12 @@ record carries `"late": true|false` (its `datetime` vs. `due`), advisory only;
 late submissions are still collected and scored.
 
 Single writer per scores.json. Re-runs are idempotent: unchanged submissions
-are no-ops, and `"override": true` entries are preserved verbatim so teacher
-corrections aren't overwritten. Per-classroom writes are atomic (tmp +
-os.replace). A missing release is not an error (student hasn't
-accepted/submitted); the per-assignment "X of Y submitted" log shows coverage.
+are no-ops, a release already stored is credited from scores.json instead of
+downloaded again (see reusable_submission), and `"override": true` entries are
+preserved verbatim so teacher corrections aren't overwritten. Per-classroom
+writes are atomic (tmp + os.replace). A missing release is not an error
+(student hasn't accepted/submitted); the per-assignment "X of Y submitted" log
+shows coverage.
 
 Environment (set by `collect-scores.yaml`):
   CLASSROOM50_SERVICE_TOKEN: fine-grained PAT. Needs Organization ->
@@ -52,6 +54,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import collections
 import concurrent.futures
 import csv
 import datetime
@@ -131,15 +134,28 @@ _throttle_sleep_spent = 0.0
 # deadline (kept in `_throttle_local`), never earlier.
 _throttle_sleep_until = 0.0
 _throttle_local = threading.local()
-# Guards the throttle accounting and _request_count: the bulk listings fetch
-# pages on a thread pool, so the transport runs concurrently.
+# Guards the throttle accounting, _request_count and the request window: the
+# bulk listings and the per-assignment walk run the transport on a thread pool.
 _transport_lock = threading.Lock()
 _request_count = 0
+
+# Requests the transport lets through per rolling minute, across every thread.
+# GitHub's secondary limit is 900 points a minute (a GET is one point, a PUT
+# five); the walk's workers would pass it, and each throttle then costs a
+# minute of sleep. 800 leaves room for the grant PUTs and a regrade run that
+# shares the token.
+REQUESTS_PER_MINUTE = 800
+_request_times: collections.deque[float] = collections.deque()
 
 # Pages fetched at once by the bulk listings. GitHub's secondary limit allows
 # 100 concurrent requests; a handful keeps a 90-page org listing to seconds
 # without crowding the per-repo reads that follow.
 PARALLEL_PAGE_WORKERS = 8
+
+# Repos read at once by the per-assignment walk: one release listing plus a
+# download per new release each, which is where a run spends its requests.
+# Throughput is paced by REQUESTS_PER_MINUTE, not by this count.
+PARALLEL_REPO_WORKERS = 8
 
 # Upper bound on the pages a bulk listing will fan out to (50k items). The
 # sequential walk's 100-page cap read a 10k-repo org as "unlistable" and fell
@@ -388,6 +404,12 @@ def main() -> int:
                 )
                 failed_classrooms.append(classroom_short)
 
+        # What the last run stored, so a release it already read is credited
+        # from scores.json rather than downloaded again, and the stamp every
+        # entry written this run carries: the walk starts now, so an asset
+        # uploaded before this instant is seen by this run's reads.
+        stored = stored_entries(scores)
+        walk_started = utc_now_iso()
         try:
             updates, mode_flip_assignments, collected, detected = collect_classroom(
                 api_url=api_url,
@@ -400,6 +422,8 @@ def main() -> int:
                 assignment_filter=assignment_filter,
                 repo_index=repo_index,
                 team_members=team_members,
+                stored=stored,
+                collected_at=walk_started,
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
@@ -1180,6 +1204,7 @@ class SubmissionDetector:
             )
             return None, False
         if not detections:
+            log_repo(self._org, repo_name, "no submission yet")
             return None, True
         record = detected_record(
             username, detections, self._due, trust_times=self._mode != "tag"
@@ -1201,6 +1226,9 @@ class SubmissionDetector:
                 return None, False
             record["member_usernames"] = list(members)
             record["team_slug"] = team_slug
+        log_repo(
+            self._org, repo_name, f"{record['count']} ungraded submission(s) detected"
+        )
         return record, True
 
 
@@ -1254,7 +1282,9 @@ def collect_detected(
         repo_index=repo_index,
     )
     # team_usernames arrives already case-insensitively deduped (the
-    # list_enrolled_logins union), so each repo is polled exactly once.
+    # list_enrolled_logins union), so each repo is polled exactly once. The
+    # index answers on this thread; the reads fan out (see collect_classroom).
+    targets: list[tuple[str, str]] = []
     for username in poll_owners:
         repo_name = assignment_repo_name(classroom_short, slug, username)
         if repo_index is not None and not repo_index.contains(repo_name):
@@ -1262,13 +1292,106 @@ def collect_detected(
             # not a failed read), so a stale record for it should go.
             visited.add(username.lower())
             continue
-        record, read = detector.detect(username, repo_name)
+        targets.append((username, repo_name))
+    detections = _parallel_map(
+        lambda target: detector.detect(*target), targets, workers=PARALLEL_REPO_WORKERS
+    )
+    for (username, _repo_name), (record, read) in zip(targets, detections):
         if read:
             visited.add(username.lower())
         if record is not None:
             records.append(record)
 
     return assignment_type, records, visited
+
+
+class StoredEntry(NamedTuple):
+    """One owner's entry as scores.json holds it: its submissions by tag, and
+    the instant the run that wrote it started reading (its `collected_at`,
+    less STORED_SUBMISSION_SKEW). A release whose result.json asset was
+    uploaded before that instant was read by that run, so its stored record
+    stands in for the download (see reusable_submission)."""
+
+    as_of: datetime.datetime
+    by_tag: dict[str, dict[str, Any]]
+
+
+# Slack between the runner's clock and GitHub's asset timestamps. An asset
+# uploaded this close to an entry's stamp is downloaded once more rather than
+# credited from the store.
+STORED_SUBMISSION_SKEW = datetime.timedelta(minutes=10)
+
+
+def stored_entries(scores: dict[str, Any]) -> dict[tuple[str, str], StoredEntry]:
+    """(slug, lowercased owner) -> StoredEntry for every entry that carries a
+    parseable `collected_at`. An entry without one (written before the stamp
+    existed, or hand-edited) is absent: every release of its repo is
+    downloaded, and apply_updates stamps it for the next run."""
+    stored: dict[tuple[str, str], StoredEntry] = {}
+    for slug, bucket in scores["assignments"].items():
+        for entry in bucket.get("entries") or []:
+            if not isinstance(entry, dict):
+                continue
+            owner = row_key(entry)
+            as_of = parse_rfc3339(entry.get("collected_at"))
+            if owner is None or as_of is None:
+                continue
+            by_tag = {
+                record["submission"]: record
+                for record in entry.get("submissions") or []
+                if isinstance(record, dict) and isinstance(record.get("submission"), str)
+            }
+            stored[(slug, owner)] = StoredEntry(as_of - STORED_SUBMISSION_SKEW, by_tag)
+    return stored
+
+
+def reusable_submission(
+    release: dict[str, Any],
+    stored: StoredEntry | None,
+    *,
+    classroom_short: str,
+    slug: str,
+    username: str,
+    assignment_type: str,
+    renamed_from: str | None,
+) -> dict[str, Any] | None:
+    """The stored record for `release` as a result.json candidate, when the
+    download would only fetch what scores.json already holds: the tag is
+    stored, the release carries exactly the one result.json asset the download
+    accepts, that asset was uploaded before the entry's stamp (a regrade
+    re-publishes on the same tag, and the asset's timestamps move with it),
+    and the record still validates under today's manifest. Anything else, a
+    mode flip included, is None and read from GitHub, so a stale or edited
+    stored copy never outlives the asset."""
+    tag = release.get("tag_name")
+    if stored is None or not isinstance(tag, str):
+        return None
+    record = stored.by_tag.get(tag)
+    if record is None:
+        return None
+    assets = result_assets(release)
+    if len(assets) != 1:
+        return None
+    for field in ("created_at", "updated_at"):
+        uploaded = parse_rfc3339(assets[0].get(field))
+        if uploaded is None or uploaded >= stored.as_of:
+            return None
+    # `late` is re-derived from today's due date by the caller, like a
+    # download's; the bucket-key `assignment` is what validate_result checks.
+    candidate = {k: v for k, v in record.items() if k != "late"}
+    candidate["assignment"] = slug
+    try:
+        validate_result(
+            candidate,
+            classroom_short,
+            slug,
+            username,
+            expected_type=assignment_type,
+            renamed_from=renamed_from,
+        )
+    except ValueError:
+        return None
+    return candidate
 
 
 def collect_release_history(
@@ -1284,12 +1407,15 @@ def collect_release_history(
     assignment_type: str,
     renamed_from: str | None,
     due: datetime.datetime | None,
+    stored: "StoredEntry | None" = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """One repo's creditable submissions, newest first, as
     (history, validation_rejected).
 
     Each release's result.json is downloaded and validated independently; a
     single bad/missing one warns and is skipped without dropping the others.
+    A release the last run already read is credited from `stored`, the
+    owner's entry as that run wrote it, instead (see reusable_submission).
     `validation_rejected` counts releases present and downloaded but FAILED
     validate_result (the mode-flip / identity-mismatch symptom), kept distinct
     from a benign download error or missing asset so the caller's "mode flipped"
@@ -1297,50 +1423,60 @@ def collect_release_history(
     history: list[dict[str, Any]] = []
     validation_rejected = 0
     for release in releases:
-        try:
-            candidate = download_result_asset(api_url, release, service_token)
-        except urllib.error.HTTPError as exc:
-            if classify(exc) is not SKIPPABLE:
-                raise
-            emit_warning(
-                f"{org}/{repo_name}: result.json download failed for "
-                f"{release.get('tag_name')!r}: HTTP {exc.code} "
-                f"({exc.reason or 'no reason'}); skipping that submission"
-            )
-            continue
-        except AssetMissingError as exc:
-            emit_warning(
-                f"{org}/{repo_name}: {release.get('tag_name')!r}: {exc}; "
-                f"skipping that submission"
-            )
-            continue
-        except (json.JSONDecodeError, ValueError) as exc:
-            emit_warning(
-                f"{org}/{repo_name}: result.json malformed for "
-                f"{release.get('tag_name')!r} ({exc}); skipping that submission"
-            )
-            continue
+        candidate = reusable_submission(
+            release,
+            stored,
+            classroom_short=classroom_short,
+            slug=slug,
+            username=username,
+            assignment_type=assignment_type,
+            renamed_from=renamed_from,
+        )
+        if candidate is None:
+            try:
+                candidate = download_result_asset(api_url, release, service_token)
+            except urllib.error.HTTPError as exc:
+                if classify(exc) is not SKIPPABLE:
+                    raise
+                emit_warning(
+                    f"{org}/{repo_name}: result.json download failed for "
+                    f"{release.get('tag_name')!r}: HTTP {exc.code} "
+                    f"({exc.reason or 'no reason'}); skipping that submission"
+                )
+                continue
+            except AssetMissingError as exc:
+                emit_warning(
+                    f"{org}/{repo_name}: {release.get('tag_name')!r}: {exc}; "
+                    f"skipping that submission"
+                )
+                continue
+            except (json.JSONDecodeError, ValueError) as exc:
+                emit_warning(
+                    f"{org}/{repo_name}: result.json malformed for "
+                    f"{release.get('tag_name')!r} ({exc}); skipping that submission"
+                )
+                continue
 
-        # validate_result enforces identity (owner == repo owner) AND that
-        # `assignment_type` matches the manifest mode, so a mode-flipped or
-        # mis-typed result is rejected here; no separate assignment_type
-        # cross-check needed afterward.
-        try:
-            validate_result(
-                candidate,
-                classroom_short,
-                slug,
-                username,
-                expected_type=assignment_type,
-                renamed_from=renamed_from,
-            )
-        except ValueError as exc:
-            emit_warning(
-                f"{org}/{repo_name}: invalid result.json for "
-                f"{release.get('tag_name')!r} ({exc}); skipping that submission"
-            )
-            validation_rejected += 1
-            continue
+            # validate_result enforces identity (owner == repo owner) AND that
+            # `assignment_type` matches the manifest mode, so a mode-flipped or
+            # mis-typed result is rejected here; no separate assignment_type
+            # cross-check needed afterward.
+            try:
+                validate_result(
+                    candidate,
+                    classroom_short,
+                    slug,
+                    username,
+                    expected_type=assignment_type,
+                    renamed_from=renamed_from,
+                )
+            except ValueError as exc:
+                emit_warning(
+                    f"{org}/{repo_name}: invalid result.json for "
+                    f"{release.get('tag_name')!r} ({exc}); skipping that submission"
+                )
+                validation_rejected += 1
+                continue
 
         # Lateness is advisory, marked per submission on the record itself
         # (each carries its own datetime).
@@ -1461,15 +1597,18 @@ def build_entry_row(
     attribution: MemberAttribution,
     roster_meta: dict[str, dict[str, str]],
     history: list[dict[str, Any]],
+    collected_at: str | None = None,
 ) -> dict[str, Any]:
     """The gradebook entry: identity/keying at the top, the full per-submission
     detail ONLY inside `submissions` (newest first). `owner` is the stable
     per-bucket key (repo owner from the <classroom>-<assignment>-<username>
     formula), invariant across re-collects even when a group's member set
     changes, so apply_updates replaces the entry in place. For a group or team
-    entry `member_usernames` sits right after `owner`. `_assignment` / `_type` are
-    transport-only hints for apply_updates (bucket slug + type), stripped on
-    store."""
+    entry `member_usernames` sits right after `owner`. `collected_at` is the
+    instant the run started reading, kept so the next run can tell which
+    releases it already holds (see stored_entries). `_assignment` / `_type`
+    are transport-only hints for apply_updates (bucket slug + type), stripped
+    on store."""
     entry_row: dict[str, Any] = {
         "_assignment": slug,
         "_type": assignment_type,
@@ -1479,6 +1618,8 @@ def build_entry_row(
         entry_row["member_usernames"] = list(attribution.members)
     if attribution.team_slug is not None:
         entry_row["team_slug"] = attribution.team_slug
+    if collected_at is not None:
+        entry_row["collected_at"] = collected_at
     # Best-effort roster join: attach non-blank display metadata for the owner
     # when the roster carries a row. Missing/blank is fine (the team, not the
     # roster, drives enrollment).
@@ -1490,6 +1631,21 @@ def build_entry_row(
                 entry_row[field] = value
     entry_row["submissions"] = history
     return entry_row
+
+
+class OwnerOutcome(NamedTuple):
+    """What reading one repo of an assignment produced. Workers return these
+    and the walk tallies them in owner order, so the counts and the written
+    order never depend on which read finished first."""
+
+    entry: dict[str, Any] | None = None
+    detected: dict[str, Any] | None = None
+    # Whether the repo was definitely read (see SubmissionDetector.detect).
+    visited: bool = False
+    # Releases present but none creditable, by validation (the mode-flip symptom).
+    mode_flip: bool = False
+    degraded: bool = False
+    team_read_failed: bool = False
 
 
 
@@ -1505,6 +1661,8 @@ def collect_classroom(
     assignment_filter: str = "",
     repo_index: RepoIndex | None = None,
     team_members: "TeamMembers | None" = None,
+    stored: dict[tuple[str, str], StoredEntry] | None = None,
+    collected_at: str | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     int,
@@ -1535,8 +1693,13 @@ def collect_classroom(
     `assignment_filter` (an assignment slug, empty for all) narrows the walk to
     one assignment, the web app's per-assignment "Sync now" scope. Sibling
     assignments' buckets in scores.json are untouched (apply_updates upserts).
+
+    `stored` (see stored_entries) is what the last run wrote, so a release it
+    already read is credited without a download; `collected_at` is the stamp
+    every entry written this run carries for the next run's reuse.
     """
     roster_meta = roster_meta or {}
+    stored = stored or {}
     results: list[dict[str, Any]] = []
     group_attribution_degraded = 0
     # Team submissions skipped because the group team's member list could not
@@ -1710,16 +1873,10 @@ def collect_classroom(
         # Repos under THIS assignment whose only submissions were rejected by
         # validation (mode-flip symptom); reported once per assignment below.
         mode_flip_repos: list[str] = []
-        for username in poll_owners:
-            repo_name = assignment_repo_name(classroom_short, slug, username)
-            # A name the index doesn't know has no repo, so its release poll
-            # would 404 and read as "not submitted" anyway: same outcome, one
-            # request less. A definite "not accepted" also retires any stale
-            # detected record.
-            if repo_index is not None and not repo_index.contains(repo_name):
-                detected_visited.add(username.lower())
-                continue
-
+        def read_owner(username: str, repo_name: str) -> OwnerOutcome:
+            """One repo of the walk, on a worker thread. Everything it touches
+            is per-call or read-only; the caller tallies the outcome. Bound to
+            this assignment's locals: _parallel_map returns before the next."""
             try:
                 releases = all_submit_releases(api_url, org, repo_name, service_token)
             except urllib.error.HTTPError as exc:
@@ -1729,26 +1886,23 @@ def collect_classroom(
                     f"{org}/{repo_name}: release listing failed: HTTP {exc.code} "
                     f"({exc.reason or 'no reason'}); skipping"
                 )
-                continue
+                return OwnerOutcome()
             except (json.JSONDecodeError, ValueError) as exc:
                 emit_warning(f"{org}/{repo_name}: release listing malformed ({exc}); skipping")
-                continue
+                return OwnerOutcome()
             if not releases:
                 # No graded submission: the student hasn't accepted, hasn't
                 # pushed, or pushed without the autograder publishing. Detection
                 # tells the last two apart. Individual misses are quiet; the
                 # per-assignment summary reports the gap.
                 record, read = detector.detect(username, repo_name)
-                if read:
-                    detected_visited.add(username.lower())
-                if record is not None:
-                    detected_records.append(record)
-                continue
+                return OwnerOutcome(detected=record, visited=read)
 
             history, validation_rejected = collect_release_history(
                 api_url, org, repo_name, releases, service_token,
                 classroom_short=classroom_short, slug=slug, username=username,
                 assignment_type=assignment_type, renamed_from=renamed_from, due=due,
+                stored=stored.get((slug, username.lower())),
             )
 
             if not history:
@@ -1762,9 +1916,7 @@ def collect_classroom(
                 # than one per repo), and so main() can distinguish this from a
                 # token-access problem. A benign asset-missing / transient repo
                 # does NOT count here.
-                if validation_rejected:
-                    mode_flip_repos.append(repo_name)
-                continue
+                return OwnerOutcome(mode_flip=bool(validation_rejected))
 
             # A skipped repo keeps its prior entry (see MemberAttribution.skipped).
             attribution = attribute_submission_members(
@@ -1772,19 +1924,54 @@ def collect_classroom(
                 is_team=is_team, is_group=is_group,
                 service_token=service_token, roster_logins=roster_logins,
             )
-            if attribution.degraded:
-                group_attribution_degraded += 1
             if attribution.skipped is not None:
-                if attribution.skipped == "team-read-failed":
-                    team_attribution_failed += 1
-                continue
+                return OwnerOutcome(
+                    degraded=attribution.degraded,
+                    team_read_failed=attribution.skipped == "team-read-failed",
+                )
 
             entry_row = build_entry_row(
-                slug, assignment_type, username, attribution, roster_meta, history
+                slug, assignment_type, username, attribution, roster_meta, history,
+                collected_at=collected_at,
             )
-            results.append(entry_row)
+            log_repo(org, repo_name, f"{len(history)} graded submission(s) collected")
             # Graded now, so a detected record from an earlier run is stale.
-            detected_visited.add(username.lower())
+            return OwnerOutcome(
+                entry=entry_row, visited=True, degraded=attribution.degraded
+            )
+
+        # The index answers on this thread (a name it has not resolved would
+        # probe); the reads fan out, and the outcomes are tallied in owner
+        # order, so the counts and the written order never depend on which
+        # read finished first.
+        targets: list[tuple[str, str]] = []
+        for username in poll_owners:
+            repo_name = assignment_repo_name(classroom_short, slug, username)
+            # A name the index doesn't know has no repo, so its release poll
+            # would 404 and read as "not submitted" anyway: same outcome, one
+            # request less. A definite "not accepted" also retires any stale
+            # detected record.
+            if repo_index is not None and not repo_index.contains(repo_name):
+                detected_visited.add(username.lower())
+                continue
+            targets.append((username, repo_name))
+        outcomes = _parallel_map(
+            lambda target: read_owner(*target), targets, workers=PARALLEL_REPO_WORKERS
+        )
+        for (username, repo_name), outcome in zip(targets, outcomes):
+            if outcome.visited:
+                detected_visited.add(username.lower())
+            if outcome.detected is not None:
+                detected_records.append(outcome.detected)
+            if outcome.mode_flip:
+                mode_flip_repos.append(repo_name)
+            if outcome.degraded:
+                group_attribution_degraded += 1
+            if outcome.team_read_failed:
+                team_attribution_failed += 1
+            if outcome.entry is None:
+                continue
+            results.append(outcome.entry)
             submitted += 1
             if not is_team and username.strip().lower() not in student_logins:
                 staff_submitted += 1
@@ -2639,6 +2826,11 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
         if existing.get("override") is True:
             continue
         if same_submission(existing, entry):
+            # An entry from before the stamp existed had every release read
+            # from GitHub this run (nothing was stored to reuse), so it gets
+            # one. Bookkeeping, not a change.
+            if "collected_at" not in existing and "collected_at" in entry:
+                existing["collected_at"] = entry["collected_at"]
             continue
         # A group re-collect that drops a previously-credited member (e.g., a
         # teammate who left the classroom team but is still a repo collaborator)
@@ -2720,10 +2912,16 @@ def row_key(record: dict[str, Any]) -> str | None:
     return None
 
 
+# Entry fields the collector writes for its own bookkeeping, never part of
+# what makes two entries the same submission.
+ENTRY_BOOKKEEPING_FIELDS = ("override", "collected_at")
+
+
 def same_submission(a: dict[str, Any], b: dict[str, Any]) -> bool:
-    """Field-equal comparison ignoring `override` (collect-side only)."""
-    a_copy = {k: v for k, v in a.items() if k != "override"}
-    b_copy = {k: v for k, v in b.items() if k != "override"}
+    """Field-equal comparison ignoring the bookkeeping fields (collect-side
+    only)."""
+    a_copy = {k: v for k, v in a.items() if k not in ENTRY_BOOKKEEPING_FIELDS}
+    b_copy = {k: v for k, v in b.items() if k not in ENTRY_BOOKKEEPING_FIELDS}
     return a_copy == b_copy
 
 
@@ -3309,14 +3507,18 @@ def _dict_items(batch: list[Any]) -> list[dict[str, Any]]:
     return [item for item in batch if isinstance(item, dict)]
 
 
-def _parallel_map(fn: Callable[[Any], Any], items: Sequence[Any]) -> list[Any]:
-    """`fn` over `items`, PARALLEL_PAGE_WORKERS at a time, results in input
-    order. The first failure propagates and abandons the items not yet started
-    (in-flight requests still finish, bounded by their own timeout)."""
+def _parallel_map(
+    fn: Callable[[Any], Any],
+    items: Sequence[Any],
+    workers: int = PARALLEL_PAGE_WORKERS,
+) -> list[Any]:
+    """`fn` over `items`, `workers` at a time, results in input order. The
+    first failure propagates and abandons the items not yet started (in-flight
+    requests still finish, bounded by their own timeout)."""
     if not items:
         return []
     with concurrent.futures.ThreadPoolExecutor(
-        max_workers=min(PARALLEL_PAGE_WORKERS, len(items))
+        max_workers=min(workers, len(items))
     ) as pool:
         futures = [pool.submit(fn, item) for item in items]
         try:
@@ -3761,6 +3963,15 @@ def attribute_group_members(
         )
 
 
+def result_assets(release: dict[str, Any]) -> list[dict[str, Any]]:
+    """The release's `result.json` asset records, name matched
+    case-insensitively."""
+    return [
+        c for c in (release.get("assets") or [])
+        if (c.get("name") or "").lower() == RESULT_ASSET_NAME
+    ]
+
+
 def download_result_asset(
     api_url: str, release: dict[str, Any], token: str
 ) -> dict[str, Any]:
@@ -3772,10 +3983,7 @@ def download_result_asset(
         json.JSONDecodeError if the bytes don't parse as JSON.
         ValueError if the asset is too large.
     """
-    matches = [
-        c for c in (release.get("assets") or [])
-        if (c.get("name") or "").lower() == RESULT_ASSET_NAME
-    ]
+    matches = result_assets(release)
     # Runs once per release in the history walk, so errors name THIS release.
     release_label = release.get("tag_name") or release.get("url") or "release"
     if not matches:
@@ -3899,6 +4107,7 @@ def _http_request(
         headers["Content-Type"] = "application/json"
     for attempt in range(_retries):
         req = urllib.request.Request(url, method=method, data=body, headers=headers)
+        _wait_for_request_slot()
         _count_request()
         try:
             with _OPENER.open(req, timeout=30) as resp:
@@ -3943,6 +4152,22 @@ def request_count() -> int:
     end-of-run summary."""
     with _transport_lock:
         return _request_count
+
+
+def _wait_for_request_slot() -> None:
+    """Block until the rolling minute has room for one more request
+    (REQUESTS_PER_MINUTE), so the parallel walk paces itself under GitHub's
+    secondary limit instead of tripping it and sleeping a throttle out."""
+    while True:
+        now = time.monotonic()
+        with _transport_lock:
+            while _request_times and _request_times[0] <= now - 60:
+                _request_times.popleft()
+            if len(_request_times) < REQUESTS_PER_MINUTE:
+                _request_times.append(now)
+                return
+            wait = _request_times[0] + 60 - now
+        time.sleep(wait)
 
 
 def team_has_repo_access(
@@ -4173,16 +4398,31 @@ def classify(exc: urllib.error.HTTPError) -> str:
 # Workflow-command output -----------------------------------------------------
 
 
+def _write_line(stream: Any, line: str) -> None:
+    """One write per line, flushed. The walk logs from several threads, and
+    print() writes the text and its newline separately, so two threads' lines
+    could otherwise interleave; the flush keeps a piped stdout (block-buffered)
+    in step with the warnings on stderr instead of arriving in bursts."""
+    stream.write(line + "\n")
+    stream.flush()
+
+
 def emit_error(message: str) -> None:
-    print(f"::error::{message}", file=sys.stderr)
+    _write_line(sys.stderr, f"::error::{message}")
 
 
 def emit_warning(message: str) -> None:
-    print(f"::warning::{message}", file=sys.stderr)
+    _write_line(sys.stderr, f"::warning::{message}")
 
 
 def emit_notice(message: str) -> None:
-    print(f"::notice::{message}", file=sys.stderr)
+    _write_line(sys.stderr, f"::notice::{message}")
+
+
+def log_repo(org: str, repo_name: str, outcome: str) -> None:
+    """One line per student repo the run read, so the Actions log shows which
+    repo was just collected."""
+    _write_line(sys.stdout, f"{org}/{repo_name}: {outcome}")
 
 
 # Entry point ----------------------------------------------------------------
