@@ -68,6 +68,7 @@ vi.mock("@/hooks/useDotClassroom50", () => ({
 // The published manifest is reachable only with the right secret.
 const PAGES_SECRET = "pagessecret"
 let publishedMode: "individual" | "team" = "individual"
+const pagesAssignmentsSpy = vi.fn()
 vi.mock("@/hooks/usePagesAssignments", () => ({
   default: (
     _org: string,
@@ -75,6 +76,7 @@ vi.mock("@/hooks/usePagesAssignments", () => ({
     secret: string | undefined,
     options: { assignmentSlug?: string },
   ) => {
+    pagesAssignmentsSpy(secret)
     const unlocked = secret === PAGES_SECRET
     const entry = unlocked
       ? { slug: options.assignmentSlug, mode: publishedMode }
@@ -122,6 +124,7 @@ beforeEach(() => {
   repoSecrets = {}
   publishedMode = "individual"
   dotClassroom50Spy.mockClear()
+  pagesAssignmentsSpy.mockClear()
 })
 
 afterEach(cleanup)
@@ -143,6 +146,9 @@ describe("AssignmentSidebarMenu protected-classroom secret sourcing", () => {
     repoSecrets = { "cs101-hw1-alice": PAGES_SECRET }
     renderMenu()
     expect(dotClassroom50Spy).toHaveBeenCalledWith("acme", "cs101-hw1-alice")
+    // The label alone can't prove the fallback worked (the non-team branch
+    // renders it either way), so assert the secret reached the Pages read.
+    expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(PAGES_SECRET)
     expect(screen.getByText("nav.mySubmission")).toBeTruthy()
   })
 })
