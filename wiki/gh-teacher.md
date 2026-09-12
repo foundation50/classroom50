@@ -334,9 +334,18 @@ Once the student accepts, `roster sync` fills in their username and `github_id`.
 
 A single address is non-zero on: a classroom with no usable team recorded in
 `classroom.json` (nothing is sent), an address the roster already lists **as a
-pending invitation**, or a failed invitation. An address that already belongs to an
+pending invitation** that GitHub still has open (or that was accepted but not yet
+synced), or a failed invitation. An address that already belongs to an
 organization member, or that already has a pending invitation, is reported as
 skipped and exits **0**.
+
+A pending row whose invitation has **expired** (GitHub invitations last 7 days)
+doesn't block: a new invitation is sent, the existing row is kept, and GitHub's
+expired record for the address is dismissed once the send is confirmed, the same
+as the web app's **Re-invite**. `roster invite` tells the cases apart by asking
+GitHub, never from the row's shape: an invitation still on the pending list is
+live, an invite team that already holds a member was accepted, and neither means
+the invitation died.
 
 An address that some *other* row merely carries is a shared address (a parent, a
 lab contact), so the invitation is still sent and the command exits **0**: a note
@@ -369,7 +378,9 @@ those columns are yours, and are never derived from a GitHub profile.
 Exit codes follow [`roster sync`](#roster-sync): **0** all invited or cleanly
 skipped, **2** nothing failed but a rate limit left addresses uninvited, **1** an
 address failed or the roster write failed. An address the roster already lists as
-pending is a skip here, not a failure, so it doesn't change the exit code. On a
+pending (and GitHub still has open, or that was accepted but not yet synced) is a
+skip here, not a failure, so it doesn't change the exit code; an expired one is
+re-sent against its existing row. On a
 rate limit the run stops sending, waits out `Retry-After` before recording what it
 already sent, and reports the rest; re-running is safe, since already-invited
 addresses skip.
@@ -386,8 +397,9 @@ performs, so either tool can revoke either tool's invitation.
 
 Acts only on a **pending** invitation. With none for the address it reports and
 changes nothing, exiting 0: an invitation the student already accepted looks
-identical from here. Run `roster sync` in that case. It records the student, and
-collects a genuine leftover under its own checks. For a student already on the
+identical from here. Run `roster sync` in that case to record the student. If the
+invitation expired instead (GitHub invitations last 7 days), `roster invite` sends
+a new one against the same row. For a student already on the
 roster with a username, use `roster remove` (and `gh teacher remove` for the
 organization).
 
@@ -411,8 +423,9 @@ gh teacher roster sync <org> <classroom> --write    # apply
 Catches `roster.csv` up with GitHub: records the students who accepted an email
 invitation (username and `github_id`, onto their own pending row), fills in a
 missing `github_id` from the classroom team's membership (and a blank or
-outdated username from the member's `github_id`), and deletes the
-invite teams that are done. If no row claims a recovered invitation (the
+outdated username from the member's `github_id`), deletes the
+invite teams that are done, and dismisses any expired-invitation record GitHub
+still keeps for an address that accepted a later one. If no row claims a recovered invitation (the
 pending row was deleted, or `roster invite`'s commit never landed), it appends
 a row so the address isn't lost. The web app runs this same sync when a teacher
 opens the roster; here it's explicit and script-callable. The web app's pass
@@ -423,7 +436,8 @@ missing.
 The sync **never removes a roster row**. An email-only row nothing backs (an
 expired or canceled invitation) stays on the roster for you to re-invite, link,
 or delete by hand; the web app shows it as unlinked with an **Invitation
-expired** badge and offers **Re-invite**. Its scope is the email-invite
+expired** badge and offers **Re-invite**, and [`roster invite`](#roster-invite)
+re-sends against the same row. Its scope is the email-invite
 lifecycle and `github_id`. It never rewrites a `role` already recorded on a
 row, and it doesn't add rows for organization members who were never invited
 through Classroom 50; see

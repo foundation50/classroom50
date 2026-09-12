@@ -139,6 +139,32 @@ func ListPendingOrgInvitations(client githubapi.Client, org string) ([]PendingOr
 		func(path string, err error) error { return ClassifyMembershipReadError(path, subject, err) })
 }
 
+// FailedOrgInvitation is one GET /orgs/{org}/failed_invitations element: an
+// invitation nobody accepted within GitHub's 7 days, or one GitHub couldn't
+// deliver. Keyed by login or email exactly like a pending one.
+type FailedOrgInvitation struct {
+	ID           int64  `json:"id"`
+	Login        string `json:"login"`
+	Email        string `json:"email"`
+	FailedReason string `json:"failed_reason"`
+}
+
+// ListFailedOrgInvitations walks the org's failed-invitation list, the record
+// GitHub keeps of an expired invitation once it leaves the pending list. Owner
+// only. Dismissing a record is CancelOrgInvitation on its id (the same DELETE;
+// GitHub's UI calls it "dismiss"). The raw HTTP error is preserved (not
+// classified) so a caller can read a 403/404 as "no list to sweep": these
+// records are bookkeeping, and whether a failed read matters is the caller's
+// call.
+func ListFailedOrgInvitations(client githubapi.Client, org string) ([]FailedOrgInvitation, error) {
+	base := fmt.Sprintf("orgs/%s/failed_invitations", url.PathEscape(org))
+	return githubapi.PaginateAll[FailedOrgInvitation](client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("%s?per_page=%d&page=%d", base, githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error { return fmt.Errorf("GET %s: %w", path, err) })
+}
+
 // InvitationTeamRef is one element of GET /orgs/{org}/invitations/{id}/teams:
 // the teams an invitation will add its invitee to on acceptance.
 type InvitationTeamRef struct {

@@ -46,6 +46,11 @@ func rosterInviteCmd() *cobra.Command {
 			"can never grant org ownership from a mistyped address.\n\n" +
 			"Once the student accepts, run `gh teacher roster sync` to fill in\n" +
 			"their username and github_id (the web app does this on its own).\n\n" +
+			"An address already on the roster as a pending invitation is refused\n" +
+			"while GitHub still lists that invitation, and while someone who\n" +
+			"accepted it is waiting to be synced. Once the invitation is gone\n" +
+			"(GitHub invitations expire after 7 days) a new one is sent and the\n" +
+			"existing row is kept, the same as the web app's Re-invite.\n\n" +
 			"Bulk mode: pass --file <path> instead of an email to invite a whole\n" +
 			"list.\n" +
 			"  - The file is plaintext, one address per line; blank lines and\n" +
@@ -67,12 +72,13 @@ func rosterInviteCmd() *cobra.Command {
 			"     are skipped)\n" +
 			"  1  an address genuinely failed or the roster write failed\n\n" +
 			"A single address returns non-zero on: classroom missing a GitHub team,\n" +
-			"an address the roster already lists as invited, or a failed\n" +
-			"invitation. With --file that same already-listed address is reported\n" +
-			"as skipped instead, and does not affect the exit code. An address\n" +
-			"that already belongs to a member (or already has a pending\n" +
-			"invitation) is reported as skipped and exits 0. An address some other\n" +
-			"row already carries is still invited, but gets no second row.",
+			"an address whose invitation is still pending (or accepted but not yet\n" +
+			"synced), or a failed invitation. With --file that same address is\n" +
+			"reported as skipped instead, and does not affect the exit code. An\n" +
+			"address that already belongs to a member (or already has a pending\n" +
+			"invitation GitHub knows of) is reported as skipped and exits 0. An\n" +
+			"address some other row already carries is still invited, but gets no\n" +
+			"second row.",
 		Example: "  gh teacher roster invite cs50-fall-2026 cs-principles ada@example.edu\n" +
 			"  gh teacher roster invite cs50-fall-2026 cs-principles ada@example.edu --first-name Ada --last-name Lovelace --section section-1\n" +
 			"  gh teacher roster invite cs50-fall-2026 cs-principles --file ./section-1-emails.txt",
@@ -202,9 +208,13 @@ const (
 	// outcomeSkippedAlready: GitHub's 422 — already a member or already invited.
 	// No row; a team this run created has already been torn down.
 	outcomeSkippedAlready
-	// outcomePendingBlocked: the stored roster already lists this address as a
-	// pending email invite, so nothing was sent (no API call was made).
+	// outcomePendingBlocked: the stored roster lists this address as a pending
+	// email invite AND GitHub still has that invitation, so nothing was sent.
 	outcomePendingBlocked
+	// outcomeAcceptedBlocked: the pending row's invitation is gone but its
+	// invite team has a member, so someone accepted and only a sync is missing.
+	// Nothing was sent.
+	outcomeAcceptedBlocked
 	// outcomeRateLimited: a secondary rate limit; the bulk caller stops issuing
 	// new sends and the single caller surfaces the error.
 	outcomeRateLimited
@@ -212,21 +222,112 @@ const (
 	outcomeFailed
 )
 
+// liveInvitations answers whether GitHub still lists a pending EMAIL invitation
+// for an address, reading the org's pending list once and only on first use.
+type liveInvitations struct {
+	client githubapi.Client
+	org    string
+	emails map[string]bool
+	err    error
+}
+
+func (l *liveInvitations) has(email string) (bool, error) {
+	if l.emails == nil && l.err == nil {
+		l.emails, l.err = pendingEmailInvitations(l.client, l.org)
+	}
+	if l.err != nil {
+		return false, l.err
+	}
+	return l.emails[email], nil
+}
+
+// orgInvitationLists is what a pending row is judged and cleaned up against:
+// GitHub's pending list (is the invitation live?) and its failed list (which
+// expired records to dismiss once a fresh one is out). Both are lazy, so a
+// fresh address touches neither and gains no new way to fail.
+type orgInvitationLists struct {
+	live   liveInvitations
+	failed failedInviteRecords
+}
+
+func newOrgInvitationLists(client githubapi.Client, org string) *orgInvitationLists {
+	return &orgInvitationLists{
+		live:   liveInvitations{client: client, org: org},
+		failed: failedInviteRecords{client: client, org: org},
+	}
+}
+
+// pendingRowState is what a pending roster row means once GitHub is consulted,
+// since the row's shape alone can't tell a live invitation from a dead one.
+type pendingRowState int
+
+const (
+	// pendingLive: GitHub still lists the invitation; the student can accept it.
+	pendingLive pendingRowState = iota + 1
+	// pendingAccepted: the invitation is gone but the invite team holds a
+	// member, so someone accepted and `roster sync` will record them. Sending
+	// again would only trip EnsureInviteTeam's not-empty check.
+	pendingAccepted
+	// pendingDead: nothing backs the row (expired after GitHub's 7 days, or
+	// revoked outside Classroom 50). The web renders this "unlinked" and
+	// offers Re-invite; here the address is simply invited again against the
+	// same row, with EnsureInviteTeam adopting or recreating the invite team.
+	pendingDead
+)
+
+// classifyPendingRow resolves a pending row's state from GitHub's pending list
+// and, only when the invitation is gone, the invite team's members.
+func classifyPendingRow(client githubapi.Client, org, classroom, email string, live *liveInvitations) (pendingRowState, error) {
+	isLive, err := live.has(email)
+	if err != nil {
+		return 0, err
+	}
+	if isLive {
+		return pendingLive, nil
+	}
+	members, found, err := configrepo.FindTeamMembersWithIDs(client, org, configrepo.InviteTeamName(classroom, email))
+	if err != nil {
+		return 0, err
+	}
+	if found && len(members) > 0 {
+		return pendingAccepted, nil
+	}
+	return pendingDead, nil
+}
+
 // sendOneEmailInvite runs the per-address invite sequence shared by the single
-// `roster invite` and the bulk `--file` path: pre-check the stored roster,
-// ensure the per-invite metadata team, send the org invitation carrying the
-// classroom and invite team ids, and classify the result. It never writes
+// `roster invite` and the bulk `--file` path: pre-check the stored roster (and,
+// for a pending row, GitHub), ensure the per-invite metadata team, send the org
+// invitation carrying the classroom and invite team ids, classify the result,
+// and for a re-invite dismiss the expired record GitHub kept. It never writes
 // roster.csv — the caller owns the commit — so a bulk run can append every
 // invited address in one batched commit.
 //
 // The order is load-bearing (mirrors the web's bulkInviteByEmail inviteOne):
-// every read that could refuse the send happens before the first write, and the
+// every read that could refuse the send happens before the first write, the
 // invite team's record is written before the invitation exists, so an accepted
-// invitation always has an address to recover.
-func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroom, email string, classroomTeam configrepo.TeamRef, actor string, rows []configrepo.RosterRow) (emailInviteOutcome, configrepo.TeamRef, error) {
+// invitation always has an address to recover, and the expired record is
+// dismissed only once GitHub confirms the address is covered again.
+func sendOneEmailInvite(client githubapi.Client, out, errOut io.Writer, org, classroom, email string, classroomTeam configrepo.TeamRef, actor string, rows []configrepo.RosterRow, lists *orgInvitationLists) (emailInviteOutcome, configrepo.TeamRef, error) {
 	holder, pending := rosterEmailClaim(rows, email)
+	reinvite := false
 	if pending {
-		return outcomePendingBlocked, configrepo.TeamRef{}, nil
+		state, err := classifyPendingRow(client, org, classroom, email, &lists.live)
+		if err != nil {
+			if cliutil.IsRateLimited(err) {
+				return outcomeRateLimited, configrepo.TeamRef{}, err
+			}
+			return outcomeFailed, configrepo.TeamRef{}, err
+		}
+		switch state {
+		case pendingLive:
+			return outcomePendingBlocked, configrepo.TeamRef{}, nil
+		case pendingAccepted:
+			return outcomeAcceptedBlocked, configrepo.TeamRef{}, nil
+		}
+		reinvite = true
+		_, _ = fmt.Fprintf(errOut, "Note: %s is on the %s roster as a pending invitation, but GitHub no longer lists one for the address (invitations expire after 7 days), so a new invitation is being sent. The existing row is kept.\n",
+			email, classroom)
 	}
 	if holder != "" {
 		_, _ = fmt.Fprintf(errOut, "Note: %s already appears on the %s roster on %s's row. An address can be shared (a parent or a lab contact), so the invitation is still being sent, but no second row is written for it, matching the web app. If that row is the same person, cancel this invite and run `gh teacher roster update %s %s %s` instead.\n",
@@ -262,9 +363,17 @@ func sendOneEmailInvite(client githubapi.Client, errOut io.Writer, org, classroo
 			return outcomeRateLimited, configrepo.TeamRef{}, err
 		}
 		if errors.Is(err, membership.ErrEmailAlreadyInvitedOrMember) {
+			// Something live already covers the address, so its expired record
+			// is noise either way (the web dismisses on this 422 too).
+			if reinvite {
+				lists.failed.dismiss(out, errOut, email)
+			}
 			return outcomeSkippedAlready, configrepo.TeamRef{}, nil
 		}
 		return outcomeFailed, configrepo.TeamRef{}, err
+	}
+	if reinvite {
+		lists.failed.dismiss(out, errOut, email)
 	}
 	return outcomeInvited, inviteTeam, nil
 }
@@ -292,13 +401,6 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 	if err != nil {
 		return err
 	}
-	// Refuse here rather than off outcomePendingBlocked so this path's error can
-	// name the sync/cancel-invite remedies; the helper's own check stays
-	// authoritative for the bulk path.
-	if _, pending := rosterEmailClaim(rows, email); pending {
-		return fmt.Errorf("%s is already invited to %s and nothing was sent. Run `gh teacher roster sync %s %s` if they accepted, or `gh teacher roster cancel-invite %s %s %s` to revoke it",
-			email, classroom, org, classroom, org, classroom, email)
-	}
 
 	// EnsureInviteTeam drops the creator GitHub silently adds, so it needs to
 	// know who that is.
@@ -307,7 +409,8 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 		return fmt.Errorf("resolving your GitHub login (needed to keep the invite team free of teachers): %w", err)
 	}
 
-	outcome, inviteTeam, sendErr := sendOneEmailInvite(client, errOut, org, classroom, email, classroomTeam, actor, rows)
+	lists := newOrgInvitationLists(client, org)
+	outcome, inviteTeam, sendErr := sendOneEmailInvite(client, out, errOut, org, classroom, email, classroomTeam, actor, rows, lists)
 	switch outcome {
 	case outcomeInvited:
 		_, _ = fmt.Fprintf(out, "%s: invited %s as direct_member (teams %s, %s)\n",
@@ -316,11 +419,15 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 		_, _ = fmt.Fprintf(out, "%s: skipped %s (already a member of the org or already invited)\n", org, email)
 		_, _ = fmt.Fprintf(errOut, "If they accepted an earlier invitation, run `gh teacher roster sync %s %s` to record them on the roster.\n", org, classroom)
 		return nil
+	case outcomePendingBlocked:
+		return fmt.Errorf("%s already has a pending invitation to %s, so nothing was sent. Advise them to accept it, then run `gh teacher roster sync %s %s` to record them, or run `gh teacher roster cancel-invite %s %s %s` to revoke it",
+			email, classroom, org, classroom, org, classroom, email)
+	case outcomeAcceptedBlocked:
+		return fmt.Errorf("%s accepted an earlier invitation to %s but isn't recorded on the roster yet, so nothing was sent. Run `gh teacher roster sync %s %s --write` to record their username and github_id",
+			email, classroom, org, classroom)
 	case outcomeRateLimited, outcomeFailed:
 		return sendErr
 	default:
-		// Includes outcomePendingBlocked, which the pre-check above already
-		// refused with a better message, and the unset zero value.
 		return fmt.Errorf("internal error: unhandled invite outcome %d for %s (nothing was recorded)", outcome, email)
 	}
 
@@ -374,14 +481,14 @@ func runRosterInvite(client githubapi.Client, out, errOut io.Writer, org, classr
 }
 
 // rosterEmailClaim reports how the stored roster already holds this address:
-// `pending` for an identity-less email-invite row (a second invitation would
-// duplicate it, and RosterRow.IsPendingEmailInvite is the shared rule the write
-// helpers apply), and `holder` for the username of a row that merely carries the
-// address. Only `pending` may block a SEND: the web is explicit that a claimed
-// address does NOT filter the send list, since an address can belong to someone
-// else's row — a shared family address or a lab contact — and that real person
-// still needs inviting (see UploadRoster's claimedEmails). The ROW is a separate
-// question, answered by rosterHoldsEmail.
+// `pending` for an identity-less email-invite row (RosterRow.IsPendingEmailInvite
+// is the shared rule the write helpers apply; classifyPendingRow then asks GitHub
+// whether anything still backs it), and `holder` for the username of a row that
+// merely carries the address. Only `pending` may block a SEND: the web is
+// explicit that a claimed address does NOT filter the send list, since an
+// address can belong to someone else's row — a shared family address or a lab
+// contact — and that real person still needs inviting (see UploadRoster's
+// claimedEmails). The ROW is a separate question, answered by rosterHoldsEmail.
 func rosterEmailClaim(rows []configrepo.RosterRow, email string) (holder string, pending bool) {
 	key := configrepo.NormalizeInviteEmail(email)
 	if key == "" {

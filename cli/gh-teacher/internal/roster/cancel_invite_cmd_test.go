@@ -352,7 +352,9 @@ func TestRunRosterCancelInvite_IgnoresLoginKeyedInvitation(t *testing.T) {
 
 // No pending invitation is report-only: an accepted-but-unsynced invitation
 // reads identically, and the invite team holds the only email→account mapping,
-// so deleting either artifact here could lose the address for good.
+// so deleting either artifact here could lose the address for good. The hint
+// must name BOTH ways out: the sync for an accepted one, and `roster invite` for
+// an expired one (#970), since neither this command nor the sync clears the row.
 func TestRunRosterCancelInvite_NoPendingInvitationIsReportOnly(t *testing.T) {
 	mock := newCancelMock(storedRosterHeader + ",,," + inviteTestEmail + ",,,student\n")
 	mock.pending = nil
@@ -367,8 +369,10 @@ func TestRunRosterCancelInvite_NoPendingInvitationIsReportOnly(t *testing.T) {
 	if len(mock.blobs) != 0 {
 		t.Errorf("committed %d blob(s) with nothing cancelled", len(mock.blobs))
 	}
-	if !strings.Contains(out+errOut, "roster sync") {
-		t.Errorf("output must point at `roster sync`:\n%s%s", out, errOut)
+	for _, want := range []string{"roster sync", "roster invite"} {
+		if !strings.Contains(out+errOut, want) {
+			t.Errorf("output must point at `%s`:\n%s%s", want, out, errOut)
+		}
 	}
 }
 

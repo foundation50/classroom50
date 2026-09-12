@@ -28,8 +28,10 @@ func rosterCancelInviteCmd() *cobra.Command {
 			"for the address this reports and changes nothing: an invitation the\n" +
 			"student already accepted looks exactly the same from here, and the\n" +
 			"metadata team holds the only record of which address their account\n" +
-			"came from. Run `gh teacher roster sync` in that case: it records the\n" +
-			"student, and cleans up a genuine leftover under its own checks.\n\n" +
+			"came from. Run `gh teacher roster sync` in that case to record the\n" +
+			"student. If the invitation expired instead (GitHub invitations last\n" +
+			"7 days), `gh teacher roster invite` sends a new one against the\n" +
+			"same row.\n\n" +
 			"For a student already on the roster with a username, use\n" +
 			"`gh teacher roster remove` (and `gh teacher remove` for the org).\n\n" +
 			"Exits 0 when nothing was pending; returns non-zero if the pending\n" +
@@ -76,8 +78,11 @@ func runRosterCancelInvite(client githubapi.Client, out, errOut io.Writer, org, 
 	invitationID, found := pendingEmailInvitationID(pending, email)
 	if !found {
 		_, _ = fmt.Fprintf(out, "%s: no pending invitation for %s, nothing was cancelled\n", org, email)
-		_, _ = fmt.Fprintf(errOut, "If they already accepted, run `gh teacher roster sync %s %s` to record their username and github_id. It also collects a genuine leftover invite team or pending row under its own checks, which this command deliberately won't do without a pending invitation to revoke.\n",
-			org, classroom)
+		_, _ = fmt.Fprintf(errOut, "Nothing is touched without a pending invitation to revoke, since the metadata team may hold the only record of an accepted invitation's address.\n"+
+			"  - If they already accepted, run `gh teacher roster sync %s %s --write` to record their username and github_id.\n"+
+			"  - If the invitation expired (GitHub invitations last 7 days), run `gh teacher roster invite %s %s %s` to send a new one against the same row.\n"+
+			"  - To drop the row instead, edit %s.\n",
+			org, classroom, org, classroom, email, configrepo.RosterFilePath(classroom))
 		return nil
 	}
 

@@ -33,6 +33,13 @@ type bulkInviteMock struct {
 	teamCreateRateLimitAfter int
 	// commitFails fails the tree POST after sends succeed.
 	commitFails bool
+	// pending is served as GET /orgs/o/invitations (nil → empty list).
+	pending []map[string]any
+	// failed is served as GET /orgs/o/failed_invitations (nil → empty list).
+	failed []map[string]any
+	// teamMembers holds, per email, the members its invite team's list serves;
+	// an address absent here serves an empty list.
+	teamMembers map[string][]map[string]any
 	// onAfterInvitation runs after each invitation POST is served — strictly
 	// before the commit's rebase read — so a test can make the roster the
 	// closure re-reads differ from the pre-send snapshot.
@@ -41,6 +48,7 @@ type bulkInviteMock struct {
 	calls          []inviteCall
 	invitedEmails  []string
 	deletedTeams   []string
+	dismissed      []string
 	teamRecords    map[string]string
 	invitationsPos int
 	teamCreatePos  int
@@ -104,13 +112,27 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 		case strings.HasPrefix(sub, "memberships/"):
 			w.WriteHeader(http.StatusNoContent)
 		case sub == "members":
-			_ = json.NewEncoder(w).Encode([]map[string]any{})
+			members := []map[string]any{}
+			for email, list := range m.teamMembers {
+				if configrepo.InviteTeamName(inviteTestClassroom, email) == slug {
+					members = list
+				}
+			}
+			_ = json.NewEncoder(w).Encode(members)
 		default:
 			http.NotFound(w, r)
 		}
 	})
 
 	base.HandleFunc("/orgs/o/invitations", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			pending := m.pending
+			if pending == nil {
+				pending = []map[string]any{}
+			}
+			_ = json.NewEncoder(w).Encode(pending)
+			return
+		}
 		var body struct {
 			Email string `json:"email"`
 		}
@@ -133,6 +155,17 @@ func (m *bulkInviteMock) handler(t *testing.T) http.Handler {
 		if m.onAfterInvitation != nil {
 			m.onAfterInvitation()
 		}
+	})
+	base.HandleFunc("/orgs/o/failed_invitations", func(w http.ResponseWriter, r *http.Request) {
+		failed := m.failed
+		if failed == nil {
+			failed = []map[string]any{}
+		}
+		_ = json.NewEncoder(w).Encode(failed)
+	})
+	base.HandleFunc("/orgs/o/invitations/", func(w http.ResponseWriter, r *http.Request) {
+		m.dismissed = append(m.dismissed, strings.TrimPrefix(r.URL.Path, "/orgs/o/invitations/"))
+		w.WriteHeader(http.StatusNoContent)
 	})
 
 	failing := http.Handler(base)
@@ -261,9 +294,11 @@ func TestRunRosterInviteFile_HappyPath(t *testing.T) {
 	}
 }
 
-// A pending-blocked address costs no API call; a fresh one beside it still goes.
+// A pending row whose invitation GitHub still lists costs no send; a fresh one
+// beside it still goes.
 func TestRunRosterInviteFile_PendingSkippedSecondInvited(t *testing.T) {
 	mock := newBulkMock(t, storedRosterHeader+",,,ada@uni.edu,,,student\n")
+	mock.pending = []map[string]any{{"id": 42, "email": "ada@uni.edu", "role": "direct_member"}}
 	out, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\n"))
 	if err != nil {
 		t.Fatalf("runRosterInviteFile: %v", err)
@@ -283,6 +318,74 @@ func TestRunRosterInviteFile_PendingSkippedSecondInvited(t *testing.T) {
 	}
 	if !strings.Contains(errOut, "roster sync") {
 		t.Errorf("the skip notice should point at `roster sync`:\n%s", errOut)
+	}
+	// One list read serves the whole batch.
+	if n := countCalls(mock.calls, http.MethodGet, "/orgs/o/invitations"); n != 1 {
+		t.Errorf("pending-list reads = %d, want 1 for the whole batch", n)
+	}
+}
+
+// Re-uploading a list after invitations expired (#970) is the bulk shape of the
+// web's "Send invitations" on expired rows: each dead pending row is re-sent
+// against its own row, so the batch invites all three addresses but appends only
+// the genuinely new one, and dismisses each re-sent address's expired record off
+// ONE read of the failed list.
+func TestRunRosterInviteFile_ExpiredPendingRowsAreReinvited(t *testing.T) {
+	mock := newBulkMock(t, storedRosterHeader+",,,ada@uni.edu,,,student\n,,,cam@uni.edu,,,student\n")
+	mock.pending = nil
+	mock.failed = []map[string]any{
+		{"id": 70, "email": "ada@uni.edu"},
+		{"id": 71, "email": "cam@uni.edu"},
+		{"id": 72, "email": "unrelated@uni.edu"},
+	}
+	out, _, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\ncam@uni.edu\n"))
+	if err != nil {
+		t.Fatalf("runRosterInviteFile: %v", err)
+	}
+	if len(mock.invitedEmails) != 3 {
+		t.Fatalf("invited = %v, want ada and cam re-invited plus bea", mock.invitedEmails)
+	}
+	if len(mock.blobs) != 1 {
+		t.Fatalf("want one roster commit, got %d blobs", len(mock.blobs))
+	}
+	rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("parse committed roster: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("committed %d rows, want 3 (two existing plus bea's): %#v", len(rows), rows)
+	}
+	if !strings.Contains(out, "3 invited, 1 appended as pending rows") {
+		t.Errorf("summary should show the re-sends without second rows:\n%s", out)
+	}
+	if strings.Join(mock.dismissed, ",") != "70,71" {
+		t.Errorf("dismissed = %v, want ada's 70 and cam's 71 only", mock.dismissed)
+	}
+	if n := countCalls(mock.calls, http.MethodGet, "/orgs/o/failed_invitations"); n != 1 {
+		t.Errorf("failed-list reads = %d, want 1 for the whole batch", n)
+	}
+}
+
+// An accepted-but-unsynced address in the list is a skip pointing at the sync,
+// not a send: its invite team holds the invitee, whom a re-send would strip.
+func TestRunRosterInviteFile_AcceptedUnsyncedSkipped(t *testing.T) {
+	mock := newBulkMock(t, storedRosterHeader+",,,ada@uni.edu,,,student\n")
+	mock.pending = nil
+	mock.teamMembers = map[string][]map[string]any{
+		"ada@uni.edu": {{"login": "ada", "id": 99}},
+	}
+	out, errOut, err := runInviteFile(t, mock, []byte("ada@uni.edu\nbea@uni.edu\n"))
+	if err != nil {
+		t.Fatalf("an accepted invitation is a clean skip: %v", err)
+	}
+	if len(mock.invitedEmails) != 1 || mock.invitedEmails[0] != "bea@uni.edu" {
+		t.Errorf("invited = %v, want only bea", mock.invitedEmails)
+	}
+	if !strings.Contains(out, "1 already on the roster") {
+		t.Errorf("summary should count ada as already on the roster:\n%s", out)
+	}
+	if !strings.Contains(errOut, "ada@uni.edu (line 1)") || !strings.Contains(errOut, "accepted") || !strings.Contains(errOut, "roster sync") {
+		t.Errorf("stderr should name ada, say they accepted, and point at the sync:\n%s", errOut)
 	}
 }
 

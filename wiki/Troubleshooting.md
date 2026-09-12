@@ -290,6 +290,12 @@ and the **Members** page shows the same badge. To recover:
 - **A whole class.** Upload the roster file again. Each expired address is
   marked **Resend invitation (expired)** in the preview and re-sent on import;
   addresses with a live invitation are skipped.
+- **From the CLI.** Run `gh teacher roster invite <org> <classroom> <email>`
+  again (or `--file` with the original list). A pending row whose invitation
+  GitHub no longer lists is re-sent against the same row, nothing else is
+  written, and GitHub's expired record for the address is dismissed once the
+  new invitation is confirmed. An address whose invitation is still open, or
+  that was accepted but not yet synced, is skipped with a note saying which.
 
 A failed invitation whose roster row was already removed shows up on the
 **Members** page as a **failed invitation that isn't on any roster**. Nothing
@@ -531,7 +537,12 @@ collect a record-less team for you: it skips one for the same reason.
 A fifth outcome isn't a refusal. With no pending invitation for the address at all,
 `cancel-invite` reports that and exits 0, because a student who already accepted
 looks identical from here. Run `gh teacher roster sync cs50-fall-2026
-cs-principles --write` in that case.
+cs-principles --write` in that case. If the invitation expired instead, run
+`gh teacher roster invite` for the address again: it sends a new invitation
+against the same row (see
+[A student's invitation expired before they accepted](#a-students-invitation-expired-before-they-accepted)).
+To drop the row without re-inviting, edit `roster.csv`; neither `cancel-invite`
+nor the sync removes a row nothing backs.
 
 ### A pending row shows a `github_id` that can't be an account
 

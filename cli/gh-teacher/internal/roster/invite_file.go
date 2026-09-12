@@ -101,8 +101,8 @@ var inviteFileSleep = time.Sleep
 // rate limit appears (hammering a throttled endpoint only extends the window),
 // and append every successfully-invited address in one CommitTreeChange whose
 // closure re-checks the roster under the rebase. A rate-limited or failed run is
-// safe to re-run: an already-invited address 422-skips and an already-rowed one
-// appends nothing.
+// safe to re-run: an already-invited address 422-skips (or is skipped up front
+// as still pending) and an already-rowed one appends nothing.
 //
 // Exit codes follow `roster sync`'s convention so a script can tell a retryable
 // partial run from a broken one: 0 all done, 2 nothing failed but addresses
@@ -140,20 +140,22 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 	}
 
 	var (
-		invited        []string
-		skipped        []addressEntry
-		pendingBlocked []addressEntry
-		deferredList   []addressEntry
-		failedErrs     []error
-		rateLimitErr   error
+		invited         []string
+		skipped         []addressEntry
+		pendingBlocked  []addressEntry
+		acceptedBlocked []addressEntry
+		deferredList    []addressEntry
+		failedErrs      []error
+		rateLimitErr    error
 	)
+	lists := newOrgInvitationLists(client, org)
 	for _, entry := range entries {
 		if rateLimitErr != nil {
 			// Once throttled, every remaining address is deferred without a call.
 			deferredList = append(deferredList, entry)
 			continue
 		}
-		outcome, _, sendErr := sendOneEmailInvite(client, errOut, org, classroom, entry.email, classroomTeam, actor, rows)
+		outcome, _, sendErr := sendOneEmailInvite(client, out, errOut, org, classroom, entry.email, classroomTeam, actor, rows, lists)
 		// Report each address as it resolves: a few hundred addresses take
 		// minutes, and a silent run is indistinguishable from a hang.
 		switch outcome {
@@ -165,7 +167,10 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 			_, _ = fmt.Fprintf(out, "  skipped %s (line %d): already a member of the org or already invited\n", entry.email, entry.line)
 		case outcomePendingBlocked:
 			pendingBlocked = append(pendingBlocked, entry)
-			_, _ = fmt.Fprintf(out, "  skipped %s (line %d): already a pending invitation on this roster\n", entry.email, entry.line)
+			_, _ = fmt.Fprintf(out, "  skipped %s (line %d): already has a pending invitation\n", entry.email, entry.line)
+		case outcomeAcceptedBlocked:
+			acceptedBlocked = append(acceptedBlocked, entry)
+			_, _ = fmt.Fprintf(out, "  skipped %s (line %d): accepted an earlier invitation, not yet recorded\n", entry.email, entry.line)
 		case outcomeRateLimited:
 			rateLimitErr = sendErr
 			deferredList = append(deferredList, entry)
@@ -193,14 +198,18 @@ func runRosterInviteFile(client githubapi.Client, out, errOut io.Writer, org, cl
 
 	_, _ = fmt.Fprintf(out, "%s/%s/%s: %d invited, %d appended as pending rows, %d already member/invited, %d already on the roster, %d failed, %d deferred (rate limit)\n",
 		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom),
-		len(invited), appended, len(skipped), len(pendingBlocked), len(failedErrs), len(deferredList))
+		len(invited), appended, len(skipped), len(pendingBlocked)+len(acceptedBlocked), len(failedErrs), len(deferredList))
 
 	for _, entry := range skipped {
 		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a member of the org or already invited. Run `gh teacher roster sync %s %s` if they accepted an earlier invitation.\n",
 			entry.email, entry.line, org, classroom)
 	}
 	for _, entry := range pendingBlocked {
-		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already a pending invitation on the roster. Run `gh teacher roster sync %s %s` if they accepted.\n",
+		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): already has a pending invitation. Advise them to accept it, then run `gh teacher roster sync %s %s` to record them.\n",
+			entry.email, entry.line, org, classroom)
+	}
+	for _, entry := range acceptedBlocked {
+		_, _ = fmt.Fprintf(errOut, "Skipped %s (line %d): accepted an earlier invitation but isn't recorded on the roster yet. Run `gh teacher roster sync %s %s --write` to record them.\n",
 			entry.email, entry.line, org, classroom)
 	}
 	for _, addr := range alreadyHeld {
