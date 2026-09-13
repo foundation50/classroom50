@@ -88,8 +88,11 @@ jobs:
           # autograde run (the regrade path) needs Actions: write; pushing a
           # submit/* tag for a never-graded repo (the first-grade fallback)
           # needs Contents: write; listing the classroom team (regrade is
-          # team-driven, mirroring collect) needs Members: Read. Shared with
-          # collect-scores.yaml. Rotated via `gh teacher rotate-service-token <org>`.
+          # team-driven, mirroring collect) needs Members: Read. First-grading
+          # a commit pushed before a submission-mode change additionally needs
+          # Workflows: Read and write (GitHub's workflow-file rule; the script
+          # names it when hit). Shared with collect-scores.yaml. Rotated via
+          # `gh teacher rotate-service-token <org>`.
           CLASSROOM50_SERVICE_TOKEN: ${{ secrets.CLASSROOM50_SERVICE_TOKEN }}
           CLASSROOM_FILTER: ${{ github.event.inputs.classroom }}
           ASSIGNMENT_FILTER: ${{ github.event.inputs.assignment }}

@@ -1127,8 +1127,8 @@ jobs:
           # git tag (--cleanup-tag omitted) so the submission ref is unchanged.
           #
           # Two ways GitHub forbids that refresh, both kept rather than failed:
-          # grading already posted its commit status, so record-keeping GitHub
-          # won't allow must not fail the job or lose the record.
+          # grading already posted its commit status, so a refresh GitHub
+          # forbids must not fail the job or lose the record.
           #
           # 1. The release itself is immutable (the repo/org "immutable
           #    releases" setting). GitHub ALLOWS the delete but then refuses the
@@ -1140,16 +1140,17 @@ jobs:
           #    a transient error, so re-check existence: if the release is STILL
           #    there, treat it as immutable-blocked; if it's GONE (a race removed
           #    it), proceed to create as usual.
+          KEPT_MSG="cannot be refreshed; the regraded score is in the commit status and the job summary, but gradebook collection keeps reading the OLD release's result.json for this submission (GitHub's rule, not ours)"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             IMMUTABLE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.immutable' 2>/dev/null || true)"
             if [[ "$IMMUTABLE" == "true" ]]; then
-              echo "::warning::the release at $TAG is immutable and cannot be refreshed; the regraded score is in the commit status and the job summary, but gradebook collection keeps reading the OLD release's result.json for this submission (GitHub's rule, not ours)"
+              echo "::warning::the release at $TAG is immutable and $KEPT_MSG"
               exit 0
             fi
             if ! DELETE_ERR="$(gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>&1)"; then
               if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
                 echo "$DELETE_ERR"
-                echo "::warning::the release at $TAG is immutable (org ruleset) and cannot be refreshed; the regraded score is in the commit status and the job summary, but gradebook collection keeps reading the OLD release's result.json for this submission (GitHub's rule, not ours)"
+                echo "::warning::the release at $TAG is immutable (org ruleset) and $KEPT_MSG"
                 exit 0
               fi
               # Release vanished between delete and re-check: surface why the

@@ -11,19 +11,17 @@ flag are unchanged; only the score/`graded_at` move.
 
 A re-run replays at ITS ORIGINAL submit/* commit, NOT the current `main` HEAD:
 regrade refreshes the score for an EXISTING submission; it does not grade newer
-un-submitted work. (Only the first-grade fallback below tags newer work.) Only a
-run that actually GRADED is replayed: the runner skips the acceptance commit, a
-shim retrofit, and (in tag mode) a plain branch push, and replaying one of those
-would skip again and grade nothing.
+un-submitted work. Only a run that actually graded is replayed (see
+latest_autograde_run_id for what qualifies).
 
-A repo with pushed work but no graded run is first-graded by pushing a fresh
-`submit/<UTC-timestamp>-<short-sha>` tag at the newest default-branch commit a
-tag push can fire on, which fires its autograde workflow. The tool's own
-bookkeeping commits (a submission-mode shim retrofit, the Feedback PR open)
-carry `[skip ci]`, and GitHub honors that marker for the head commit of a TAG
-push too, so a tag at one of them would fire nothing; the fallback walks past
-them to the student's latest commit. Repos with nothing pushed since the
-acceptance commit (or not accepted at all) are skipped.
+A repo with pushed work but no graded run is first-graded at the student's
+latest commit: by re-running a branch run the runner suppressed there while the
+assignment was in tag mode, else by pushing a fresh
+`submit/<UTC-timestamp>-<short-sha>` tag. The tool's own bookkeeping commits (a
+submission-mode shim retrofit, the Feedback PR open) carry `[skip ci]`, which
+GitHub honors for a TAG push too, so the fallback walks past them to the
+student's commit. Repos with nothing pushed since the acceptance commit (or not
+accepted at all) are skipped.
 
 Grading then happens ASYNCHRONOUSLY inside each student repo, so refreshed
 releases are ingested by the next `collect-scores.py` run ("Collect
@@ -43,6 +41,10 @@ Environment (set by `regrade.yaml`):
                              Organization -> Members: Read to list the classroom
                              team. Actions: write re-runs a run; Contents: write
                              pushes a submit/* tag for the first-grade case.
+                             Workflows: Read and write is needed only to
+                             first-grade a commit pushed before a submission-mode
+                             change (GitHub's workflow-file rule; the failure
+                             names it).
   CLASSROOM_FILTER:          classroom short-name (required for regrade).
   ASSIGNMENT_FILTER:         assignment slug (required for regrade).
   OWNER_FILTER:              optional single repo-owner login; empty means
@@ -94,6 +96,11 @@ _SKIP_CHECKS_TRAILER = re.compile(r"^skip-checks:\s*true\s*$", re.MULTILINE)
 # How far back the first-grade fallback looks for a commit a tag can fire on.
 # Bookkeeping commits stack a few deep at most; one page is plenty.
 COMMIT_SCAN_PAGE_SIZE = 100
+
+# Git-data reads answer 404 for a missing repo/ref and 409 for a repo whose git
+# database is still empty (accept created it, nothing pushed yet). Both mean
+# "nothing there", not an error.
+EMPTY_OR_MISSING_GIT_DATA = (404, 409)
 
 # Throttle classifier constants, hand-mirrored from collect_scores.py, which
 # documents each one and the marker set's relationship to Go's
@@ -316,7 +323,7 @@ def main() -> int:
         submission_tags = []
 
     regraded = 0   # rerun an existing run (the true regrade)
-    tagged = 0     # first-grade fallback (no prior run, tagged main HEAD)
+    tagged = 0     # first-grade fallback (no graded run, tagged the latest commit)
     skipped = 0    # nothing to do (not accepted) or benign skip
     failed: list[str] = []
     total = len(targets)
@@ -379,7 +386,7 @@ def main() -> int:
         # if the loop completes, so a job killed by the Actions timeout (a large
         # roster is a long sequential fan-out) would otherwise leave NO per-repo
         # accounting. Re-dispatching is safe (rerun is idempotent and the tag
-        # path reuses an existing submit/* tag at HEAD), so a teacher can rerun.
+        # path reuses an existing submit/* tag at that commit), so a teacher can rerun.
         if index % PROGRESS_EVERY == 0 or index == total:
             print(
                 f"regrade {classroom_filter}/{assignment_filter}: progress "
@@ -437,30 +444,39 @@ def regrade_repo(
                  nothing since the acceptance commit.
 
     Which run counts as "the latest submission" is decided by
-    latest_autograde_run_id: only a run that graded is a candidate, because the
-    runner skips the acceptance commit, a shim retrofit, and (in tag mode) a
-    plain branch push, and a rerun of any of those would skip again while
-    regrade reports success. A repo with only such runs falls through to the
-    tag path, which fires a REAL tag run (the service token's tag push fires
-    workflows).
+    latest_autograde_run_id (only a run that graded). A repo with no such run
+    is first-graded: preferably by re-running a branch run at the student's
+    latest commit that the runner suppressed while the assignment was in tag
+    mode (the runner re-reads the mode at run time, so it grades now), else by
+    a fresh submit/* tag there.
 
     Raises urllib.error.HTTPError / ValueError on a hard failure the caller
     classifies (auth/network abort; other per-repo errors warn-and-skip).
     """
     # Prefer re-running the existing run: a true "regrade the same commit" with
     # no new tag and no new submission event.
+    runs = list_autograde_runs(api_url, org, repo, token)
     run_id = latest_autograde_run_id(
-        api_url, org, repo, token, tag_only=tag_mode, submission_tags=submission_tags
+        api_url, org, repo, token, runs=runs, tag_only=tag_mode, submission_tags=submission_tags
     )
     if run_id is not None:
         rerun_workflow_run(api_url, org, repo, token, run_id)
         return "rerun"
 
-    # No graded run. Tag the student's latest commit a tag push can fire on;
+    # No graded run. Find the student's latest commit a tag push can fire on;
     # None means nothing has been pushed since acceptance (or no repo at all).
     sha = first_gradeable_sha(api_url, org, repo, token)
     if sha is None:
         return "missing"
+
+    # A push suppressed under tag mode left a green no-op run at this very
+    # commit. Re-running it grades now (every-push) without a new tag and,
+    # unlike tagging, without GitHub's workflow-file rule (see below).
+    if not tag_mode:
+        suppressed = _branch_run_at(runs, sha)
+        if suppressed is not None:
+            rerun_workflow_run(api_url, org, repo, token, suppressed)
+            return "rerun"
 
     # A submit/* tag may already sit at that commit (tagged but the run was
     # deleted or expired); reuse it rather than stacking a duplicate.
@@ -474,9 +490,8 @@ def regrade_repo(
         # GitHub refuses to create a ref whose .github/workflows/* content
         # exists on no branch unless the token holds Workflows: write (the
         # classic `workflow` scope rule). A submission-mode retrofit rewrites
-        # the shim on the default branch, so every pre-retrofit commit now
-        # trips that check; the service token was never asked for Workflows.
-        # Name the cause instead of blaming Contents: write.
+        # the shim on the default branch, so every pre-retrofit commit trips
+        # that check, and the service token was never asked for Workflows.
         if (
             exc.code == 403
             and classify(exc) is not THROTTLED
@@ -486,12 +501,26 @@ def regrade_repo(
                 f"{org}/{repo}: can't first-grade commit {sha[:7]}: its autograde "
                 f"workflow differs from the default branch's (the submission mode "
                 f"changed since it was pushed), and GitHub only lets a token with "
-                f"Workflows: Read and write tag such a commit. Add that repository "
-                f"permission to the service token (`gh teacher rotate-service-token "
-                f"{org}`) and regrade again, or have the student push once."
+                f"Workflows: Read and write tag such a commit. Either have the "
+                f"student push once (the push itself grades), or re-create the "
+                f"service token with Workflows: Read and write added to its usual "
+                f"permissions (`gh teacher rotate-service-token {org}`) and regrade "
+                f"again."
             ) from exc
         raise
     return "tagged"
+
+
+def _branch_run_at(runs: list[Any], sha: str) -> int | None:
+    """The newest branch-triggered run at commit `sha`, or None."""
+    for run in runs:
+        if not isinstance(run, dict) or run.get("head_sha") != sha:
+            continue
+        head_branch = run.get("head_branch")
+        if isinstance(head_branch, str) and head_branch.startswith(SUBMIT_TAG_PREFIX):
+            continue
+        return _run_id_of(run)
+    return None
 
 
 class _RepoFailed(Exception):
@@ -526,34 +555,12 @@ def shim_differs_from_default_branch(
     return blobs[0] != blobs[1]
 
 
-def latest_autograde_run_id(
-    api_url: str,
-    org: str,
-    repo: str,
-    token: str,
-    *,
-    tag_only: bool = False,
-    submission_tags: list[str] | None = None,
-) -> int | None:
-    """The id of the most recent autograde run on `repo` that GRADED a
-    submission, or None when there is none (or the repo/workflow doesn't exist
-    yet). Runs come newest-first from the API.
-
-    A run graded when GitHub set its head_branch to a real submission tag (the
-    canonical submit/* namespace, or a teacher-named milestone pattern from
-    `submission_tags`; the runner mints the canonical tag for those), or, in
-    every-push mode only, when a submit/* tag points at its head commit: the
-    runner mints that tag for every branch push it grades and for none it
-    skips (acceptance commit, shim retrofit, suppressed push). tag_only=True
-    (tag-mode assignments) never replays a branch run: there a branch push is a
-    suppressed no-op even when the same commit was later tagged, and its tag
-    run is the candidate instead.
-
-    One 100-run page is scanned, no pagination: if the newest graded run has
-    scrolled past 100 skipped runs, we return None and the caller's first-grade
-    fallback tags the latest commit instead, acceptable for that degenerate
-    case.
-    """
+def list_autograde_runs(api_url: str, org: str, repo: str, token: str) -> list[Any]:
+    """One newest-first page of `repo`'s autograde runs; [] when the repo or
+    workflow doesn't exist yet (404: never accepted / never ran). No pagination:
+    a graded run that scrolled past 100 skipped ones is treated as absent and
+    the caller's first-grade fallback covers it, acceptable for that degenerate
+    case."""
     url = (
         f"{_repo_url(api_url, org, repo)}/actions/workflows/"
         f"{urllib.parse.quote(AUTOGRADE_WORKFLOW)}/runs?per_page=100"
@@ -561,14 +568,44 @@ def latest_autograde_run_id(
     try:
         body = _http_get(url, token, accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
-        # 404 = repo or workflow not present yet (never accepted / never ran).
         if exc.code == 404:
-            return None
+            return []
         raise
     data = json.loads(body.decode("utf-8"))
     runs = data.get("workflow_runs") if isinstance(data, dict) else None
-    if not isinstance(runs, list) or not runs:
-        return None
+    return runs if isinstance(runs, list) else []
+
+
+def latest_autograde_run_id(
+    api_url: str,
+    org: str,
+    repo: str,
+    token: str,
+    *,
+    runs: list[Any] | None = None,
+    tag_only: bool = False,
+    submission_tags: list[str] | None = None,
+) -> int | None:
+    """The id of the most recent autograde run on `repo` that GRADED a
+    submission, or None. `runs` is the list_autograde_runs page (fetched here
+    when not supplied).
+
+    Only a graded run may be replayed: the runner skips the acceptance commit,
+    a shim retrofit, and (in tag mode) a plain branch push, and a rerun of any
+    of those skips again while regrade reports success. A run graded when:
+      - GitHub set its head_branch to a real submission tag (the canonical
+        submit/* namespace, or a teacher-named milestone pattern from
+        `submission_tags`; the runner mints the canonical tag for those); or
+      - every-push mode only: a submit/* tag points at its head commit (the
+        runner mints one for every branch push it grades and none it skips),
+        or the run ended red (every skip path ends green, so a red run is one
+        that tried to grade and failed before or after minting the tag).
+    tag_only=True (tag-mode assignments) never replays a branch run: there a
+    branch push is a suppressed no-op even when the same commit was later
+    tagged, and its tag run is the candidate instead.
+    """
+    if runs is None:
+        runs = list_autograde_runs(api_url, org, repo, token)
     patterns = submission_tags or []
     # Fetched lazily: only a branch run in every-push mode needs the tag map.
     tagged_shas: dict[str, str] | None = None
@@ -583,6 +620,12 @@ def latest_autograde_run_id(
             return _run_id_of(candidate)
         if tag_only:
             continue
+        if candidate.get("status") == "completed" and candidate.get("conclusion") not in (
+            "success",
+            "skipped",
+            None,
+        ):
+            return _run_id_of(candidate)
         head_sha = candidate.get("head_sha")
         if not isinstance(head_sha, str) or not head_sha:
             continue
@@ -710,7 +753,7 @@ def list_branch_commits(
     try:
         body = _http_get(url, token, accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
-        if exc.code == 404:
+        if exc.code in EMPTY_OR_MISSING_GIT_DATA:
             return []
         raise
     commits = json.loads(body.decode("utf-8"))
@@ -724,7 +767,8 @@ def acceptance_commit_sha(
 ) -> str | None:
     """The acceptance commit: the oldest commit on `branch` touching the accept
     marker (nothing touches it before accept creates it). None when the marker
-    has no history on the branch, so the caller doesn't stop the walk."""
+    has no history on the branch, so the caller doesn't stop the walk. One page
+    deep: more than 100 marker rewrites on one repo is out of scope."""
     commits = list_branch_commits(api_url, org, repo, token, branch, path=ACCEPT_MARKER_PATH)
     for commit in reversed(commits):
         sha = commit.get("sha") if isinstance(commit, dict) else None
@@ -760,7 +804,7 @@ def submit_tags_by_commit(api_url: str, org: str, repo: str, token: str) -> dict
     try:
         body = _http_get(url, token, accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
-        if exc.code == 404:
+        if exc.code in EMPTY_OR_MISSING_GIT_DATA:
             return {}
         raise
     refs = json.loads(body.decode("utf-8"))

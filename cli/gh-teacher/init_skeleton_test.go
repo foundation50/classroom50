@@ -530,7 +530,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 			// rejected delete re-checks existence; if the release survived,
 			// warn and keep it instead of failing the grade job.
 			`if ! DELETE_ERR="$(gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>&1)"; then`,
-			`the release at $TAG is immutable (org ruleset) and cannot be refreshed`,
+			`the release at $TAG is immutable (org ruleset) and $KEPT_MSG`,
 			`gradebook collection keeps reading the OLD release's result.json`,
 		} {
 			if !strings.Contains(releaseRun, want) {
@@ -701,10 +701,12 @@ exit 0
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, forbidden := range []string{"release delete", "release create"} {
-				if strings.Contains(string(log), forbidden) {
-					t.Errorf("immutable release must not reach `gh %s` (the tag name would be burned):\n%s", forbidden, log)
-				}
+			wantCalls := []string{
+				"release view submit/test --repo example/classroom-assignment-student",
+				"api repos/example/classroom-assignment-student/releases/tags/submit/test --jq .immutable",
+			}
+			if got := strings.Split(strings.TrimSpace(string(log)), "\n"); !reflect.DeepEqual(got, wantCalls) {
+				t.Errorf("immutable release: gh calls = %#v, want %#v (no delete, no create: the tag name would be burned)", got, wantCalls)
 			}
 		})
 
