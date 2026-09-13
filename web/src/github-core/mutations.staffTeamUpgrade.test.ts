@@ -84,7 +84,11 @@ function makeLegacyOrg(opts: { rulesetInstalled: boolean }) {
       throw new Error(`unexpected ${method} ${path}`)
     },
   )
-  const client = { request } as unknown as GitHubClient
+  // No classroom `cs101-<role>` exists: the adopt guard's sibling probe 404s.
+  const requestRaw = vi.fn(async (): Promise<string> => {
+    throw apiError(404)
+  })
+  const client = { request, requestRaw } as unknown as GitHubClient
   return { client, calls }
 }
 

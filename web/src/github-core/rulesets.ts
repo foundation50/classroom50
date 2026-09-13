@@ -542,15 +542,17 @@ export async function revokeClassroomStaffTeams(
 // config repo. The slug, not classroom.json, identifies a classroom's staff
 // team: it is what every writer creates, what a role flow that never recorded
 // a `teams` block still produced, and what a head-TA-editable ref can't
-// redirect. A missing config repo (fresh org) yields []. Any other failure,
-// including one unreadable classroom.json, throws: a shorter list would
-// rebuild a shorter bypass list, so callers fall back to what is already on
-// the ruleset instead.
+// redirect. A slug that is another classroom's student team (`ml`'s TA slug
+// when a classroom `ml-ta` exists) is left out: that team is a roster,
+// whatever an older release granted it. A missing config repo (fresh org)
+// yields []. Any other failure, including one unreadable classroom.json,
+// throws: a shorter list would rebuild a shorter bypass list, so callers fall
+// back to what is already on the ruleset instead.
 export async function collectStaffTeamSlugs(
   client: GitHubClient,
   org: string,
 ): Promise<string[]> {
-  const slugs: string[] = []
+  const classrooms: string[] = []
   await forEachClassroom(
     client,
     org,
@@ -558,11 +560,15 @@ export async function collectStaffTeamSlugs(
       throw err
     },
     (classroom) => {
-      for (const role of STAFF_ROLES)
-        slugs.push(classroomTeamSlug(classroom, role))
+      classrooms.push(classroom)
     },
   )
-  return slugs
+  const known = new Set(classrooms)
+  return classrooms.flatMap((classroom) =>
+    STAFF_ROLES.filter((role) => !known.has(`${classroom}-${role}`)).map(
+      (role) => classroomTeamSlug(classroom, role),
+    ),
+  )
 }
 
 type OrgTeamListing = Pick<GitHubTeam, "id" | "slug" | "privacy">

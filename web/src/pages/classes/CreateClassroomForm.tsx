@@ -11,6 +11,7 @@ import {
   isValidSecret,
 } from "@/util/secret"
 import { nextAvailableSlug, slugify } from "@/util/slug"
+import { STAFF_ROLES } from "@/types/classroom"
 import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   isValidShortName,
@@ -52,6 +53,21 @@ type CreateClassroomFormProps = {
   submitError?: string | null
 }
 
+// The existing classroom whose student team sits at `slug`'s staff slug (a
+// classroom named `<slug>-<role>`), or null. The counterpart of
+// reservedShortNameSuffix for the other creation order.
+function siblingClassroom(
+  slug: string,
+  classes: ReadonlyArray<{ path: string }>,
+): string | null {
+  const lower = slug.toLowerCase()
+  return (
+    classes.find((cl) =>
+      STAFF_ROLES.some((role) => cl.path.toLowerCase() === `${lower}-${role}`),
+    )?.path ?? null
+  )
+}
+
 const CreateClassroomForm = ({
   defaultValues,
   onSubmit,
@@ -86,6 +102,8 @@ const CreateClassroomForm = ({
           // value slugifying onto an existing classroom (e.g. "CS 50" ->
           // "cs-50") slip past and overwrite its roster/scores.
           const slug = slugify(value.slug)
+          const reservedEnding = reservedShortNameSuffix(slug)
+          const sibling = siblingClassroom(slug, classes)
           if (!isValidShortName(slug)) {
             errors.slug = t("validation.classroomSlugInvalid", {
               description: SHORT_NAME_PATTERN_DESCRIPTION,
@@ -98,10 +116,15 @@ const CreateClassroomForm = ({
               max: CLASSROOM_SHORT_NAME_MAX_LEN,
               limit: GITHUB_REPO_NAME_MAX_LEN,
             })
-          } else if (reservedShortNameSuffix(slug)) {
+          } else if (reservedEnding) {
             // The student team of `x-ta` would sit at `x`'s TA team slug.
             errors.slug = t("validation.classroomSlugReservedEnding", {
-              suffix: reservedShortNameSuffix(slug)!,
+              suffix: reservedEnding,
+            })
+          } else if (sibling) {
+            // The reverse: an existing `x-ta` already holds `x`'s TA slug.
+            errors.slug = t("validation.classroomSlugSiblingExists", {
+              other: sibling,
             })
           } else if (
             classes.find((cl) => cl.path.toLowerCase() === slug.toLowerCase())

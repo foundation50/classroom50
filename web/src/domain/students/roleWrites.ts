@@ -484,6 +484,15 @@ export async function applyClassroomRoleChange(
     }
   }
 
+  // 0) Resolve the target staff team before anything irreversible: the ensure
+  // can refuse deterministically (a team at the slug that isn't ours), and a
+  // refusal after the owner demote below would strand the member demoted and
+  // on no team.
+  const targetTeam =
+    toRole === "student"
+      ? undefined
+      : await ensureClassroomRoleTeam(client, org, classroom, toRole)
+
   // 1) Demote org owner FIRST when leaving teacher for a non-teacher role.
   // Doing this before any team mutation guarantees a failure here leaves the
   // member fully unchanged (still owner) rather than partially moved but still
@@ -495,9 +504,9 @@ export async function applyClassroomRoleChange(
       ownerRevoked = true
     }
 
-    // 2) Add to the target team (ensure a staff team exists + config write),
-    // then promote to org owner for a teacher target.
-    if (toRole === "student") {
+    // 2) Add to the target team (config write), then promote to org owner for
+    // a teacher target.
+    if (toRole === "student" || !targetTeam) {
       await addUserToTeam(client, {
         org,
         teamSlug: slugs.student,
@@ -505,7 +514,7 @@ export async function applyClassroomRoleChange(
         role: "member",
       })
     } else {
-      const team = await ensureClassroomRoleTeam(client, org, classroom, toRole)
+      const team = targetTeam
       await grantTeamConfigRepoAccess(client, org, team.slug, toRole)
       await addUserToTeam(client, {
         org,

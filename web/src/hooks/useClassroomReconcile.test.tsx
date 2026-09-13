@@ -33,6 +33,7 @@ import { useClassroomReconcile } from "./useClassroomReconcile"
 import { suppressedLoginsFor } from "@/hooks/useSuppressedLogins"
 import { ClassroomReconcilePermanentError } from "@/domain/reconcileClassroom"
 import { GitHubAPIError } from "@/github-core/errors"
+import { UnclaimedTeamError } from "@/github-core/mutations"
 import type { ClassroomReconcileResult } from "@/domain/reconcileClassroom"
 
 const healthy: ClassroomReconcileResult = {
@@ -328,6 +329,29 @@ describe("useClassroomReconcile", () => {
     await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
     rerender({ classroom: "cs101" })
     await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(3))
+  })
+
+  it("does NOT re-fire after an unclaimed-team refusal (fixed by hand, not by retrying)", async () => {
+    reconcile.mockRejectedValueOnce(
+      new UnclaimedTeamError({
+        org: "org",
+        slug: "classroom50-cs101-ta",
+        role: "ta",
+      }),
+    )
+    reconcile.mockResolvedValue(healthy)
+
+    const { rerender } = renderHook(
+      ({ classroom }: { classroom: string }) =>
+        useClassroomReconcile("org", classroom, true),
+      { wrapper: wrapper(), initialProps: { classroom: "cs101" } },
+    )
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1))
+    rerender({ classroom: "cs202" })
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
+    rerender({ classroom: "cs101" })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(reconcile).toHaveBeenCalledTimes(2)
   })
 
   it("does NOT re-fire after a permanent 403 the viewer can't fix", async () => {

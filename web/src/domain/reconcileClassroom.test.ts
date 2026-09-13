@@ -4,6 +4,8 @@ const getClassroomJson = vi.fn()
 const ensureClassroomTeam = vi.fn()
 const ensureStaffTeams = vi.fn()
 const grantStaffTeamsConfigRepoAccess = vi.fn()
+const deleteClassroomTeam = vi.fn()
+const revokeStaffTeams = vi.fn()
 const reconcileDescription = vi.fn()
 const projectDescription = vi.fn()
 const removeUserFromTeam = vi.fn()
@@ -21,6 +23,10 @@ vi.mock("@/github-core/mutations", () => ({
   projectTeamDescriptionFromRecord: (...a: unknown[]) =>
     projectDescription(...a),
   removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
+  deleteClassroomTeam: (...a: unknown[]) => deleteClassroomTeam(...a),
+}))
+vi.mock("@/github-core/rulesets", () => ({
+  revokeStaffTeams: (...a: unknown[]) => revokeStaffTeams(...a),
 }))
 // The roster reconciliation is exercised in reconcileRoster.test.ts; here it's
 // a spy resolving a no-op so these tests assert only the team/description
@@ -71,6 +77,10 @@ beforeEach(() => {
   reconcileDescription.mockReset()
   projectDescription.mockReset()
   removeUserFromTeam.mockReset()
+  deleteClassroomTeam.mockReset()
+  revokeStaffTeams.mockReset()
+  deleteClassroomTeam.mockResolvedValue(undefined)
+  revokeStaffTeams.mockResolvedValue(undefined)
   // Clear (not reset): the factory-baked no-op implementation must survive.
   reconcileRoster.mockClear()
   // Healthy defaults: active classroom, everything already converged.
@@ -133,6 +143,29 @@ describe("reconcileClassroom", () => {
     getClassroomJson.mockResolvedValue({ name: "CS101", active: true, teams })
     await reconcileClassroom(client, "org", "cs101")
     expect(ensureStaffTeams).toHaveBeenCalledWith(client, "org", "cs101", teams)
+  })
+
+  it("deletes the staff teams it created when their grant fails", async () => {
+    // A team created this pass and left ungranted has nothing vouching for it
+    // (the reconcile records no ids), so the next visit would refuse it as
+    // unclaimed forever. Undo the creation instead; adopted teams stay.
+    ensureStaffTeams.mockResolvedValue({
+      teams: {
+        teacher: { id: 2, slug: "classroom50-cs101-teacher" },
+        hta: { id: 3, slug: "classroom50-cs101-hta" },
+      },
+      created: ["hta"],
+      unclaimed: [],
+    })
+    grantStaffTeamsConfigRepoAccess.mockRejectedValue(new Error("500"))
+    const result = await reconcileClassroom(client, "org", "cs101")
+    expect(result.skipped).toBe(false)
+    expect(revokeStaffTeams).toHaveBeenCalledWith(client, "org", [3])
+    expect(deleteClassroomTeam).toHaveBeenCalledTimes(1)
+    expect(deleteClassroomTeam).toHaveBeenCalledWith(client, "org", {
+      id: 3,
+      slug: "classroom50-cs101-hta",
+    })
   })
 
   it("keeps healing when a staff slug is held by an unclaimed team", async () => {

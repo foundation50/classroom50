@@ -753,6 +753,7 @@ const UploadRoster = ({
         metadataWritebackMalformed: t("students.metadataWritebackMalformed"),
         metadataWritebackFailed: t("students.metadataWritebackFailed"),
         invitingEmails: t("students.invitingEmails"),
+        t,
       },
     })
 

@@ -6,6 +6,7 @@ import {
   deleteClassroom,
 } from "./classrooms"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
+import { UnclaimedTeamError } from "@/github-core/mutations"
 import type { GitHubClient, GitHubRequestOptions } from "@/github-core/client"
 
 // assertClassroomNotArchived is the authoritative write-path guard fanned out
@@ -327,6 +328,73 @@ describe("createClassroomFiles creator team cleanup", () => {
     // Owner + the unrelated team 9 survive; the rolled-back staff teams do not.
     expect(put).toBe("PUT 1,9")
     expect(ordered.filter((e) => e.startsWith("DELETE"))).toHaveLength(4)
+  })
+
+  it("refuses an unclaimed team at a staff slug and rolls back what it created", async () => {
+    // The ta slug is squatted (POST 422, no config-repo grant, no record). The
+    // students, teacher, and hta teams created moments earlier are deleted
+    // again, the squatter is left untouched, and nothing is scaffolded.
+    const ordered: string[] = []
+    let nextTeamId = 100
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        const method = options?.method ?? "GET"
+        if (method === "POST" && /\/orgs\/[^/]+\/teams$/.test(path)) {
+          const name = (options?.body as { name?: string })?.name ?? "team"
+          if (name === "classroom50-cs101-ta") throw apiError(422)
+          return { id: nextTeamId++, slug: name }
+        }
+        if (
+          method === "GET" &&
+          path === "/orgs/acme/teams/classroom50-cs101-ta"
+        )
+          return { id: 7, slug: "classroom50-cs101-ta", privacy: "secret" }
+        if (
+          method === "GET" &&
+          path.endsWith("/teams/classroom50-cs101-ta/repos/acme/classroom50")
+        )
+          throw apiError(404)
+        if (method === "PATCH" && path.includes("classroom50-cs101-ta"))
+          throw new Error("must not reshape the squatted team")
+        if (method === "GET" && path.startsWith("/orgs/acme/rulesets?"))
+          return []
+        if (method === "GET" && /\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
+          const slug = path.split("/teams/")[1]
+          return {
+            id: {
+              "classroom50-cs101": 100,
+              "classroom50-cs101-teacher": 101,
+              "classroom50-cs101-hta": 102,
+            }[slug],
+            slug,
+          }
+        }
+        if (method === "DELETE" && /\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
+          ordered.push(`DELETE ${path.split("/teams/")[1]}`)
+          return undefined
+        }
+        if (path.includes("/git/")) throw new Error("must not scaffold")
+        return undefined
+      },
+    )
+    const requestRaw = vi.fn(async () => {
+      throw apiError(404) // no sibling classroom `cs101-<role>`
+    })
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    const err = await createClassroomFiles(client, {
+      ...input,
+      creator: undefined,
+    }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(UnclaimedTeamError)
+    expect((err as UnclaimedTeamError).localized.key).toBe(
+      "staffTeams.unclaimed.staff",
+    )
+    expect(ordered).toEqual([
+      "DELETE classroom50-cs101",
+      "DELETE classroom50-cs101-teacher",
+      "DELETE classroom50-cs101-hta",
+    ])
   })
 
   it("still drops the creator from an ADOPTED students team (mixed roles aren't allowed)", async () => {

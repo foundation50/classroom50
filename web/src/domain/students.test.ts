@@ -33,6 +33,7 @@ import {
 import { removeEmailInviteRow } from "./students/rosterPrimitives"
 import { inviteTeamName, marshalInviteDescription } from "@/util/inviteTeam"
 import { GitHubAPIError } from "@/github-core/errors"
+import { UnclaimedTeamError } from "@/github-core/mutations"
 import { REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import type { GitHubClient } from "@/github-core/client"
 
@@ -4771,6 +4772,9 @@ const makeRoleChangeClient = (opts: {
   admins?: string[]
   // Make the team-add step throw (to exercise the post-demote failure path).
   failTeamAdd?: boolean
+  // A staff slug held by a team nothing vouches for: its POST 422s, the adopt
+  // GET returns it, and it has no config-repo grant.
+  squattedRole?: string
 }) => {
   const memberSet = new Set(opts.members.map((m) => m.toLowerCase()))
   const teamAdds: { slug: string; login: string }[] = []
@@ -4785,8 +4789,27 @@ const makeRoleChangeClient = (opts: {
   const admins = opts.admins ?? ["owner-a", "owner-b"]
 
   const requestRaw = vi.fn().mockImplementation((path: string) => {
-    if (path.includes("/contents/") && path.includes("classroom.json")) {
+    if (path.includes("/contents/cs101/classroom.json")) {
       return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+    }
+    if (path.includes("classroom.json")) {
+      // No sibling classroom `cs101-<role>` (the adopt guard's probe).
+      return Promise.reject(
+        new GitHubAPIError({
+          status: 404,
+          url: path,
+          message: "Not Found",
+          body: null,
+          rateLimit: {
+            limit: null,
+            remaining: null,
+            used: null,
+            reset: null,
+            resource: null,
+            retryAfter: null,
+          },
+        }),
+      )
     }
     return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
   })
@@ -4796,6 +4819,30 @@ const makeRoleChangeClient = (opts: {
     .mockImplementation(
       (path: string, options?: { method?: string; body?: unknown }) => {
         const method = options?.method ?? "GET"
+        // The adopt guard's grant probe on the squatted team: no grant. Before
+        // the config-repo read below, whose regex also matches this path.
+        if (
+          opts.squattedRole &&
+          method === "GET" &&
+          path.endsWith(`-${opts.squattedRole}/repos/acme/classroom50`)
+        ) {
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 404,
+              url: path,
+              message: "Not Found",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
         if (/\/repos\/[^/]+\/classroom50$/.test(path))
           return { default_branch: "main" }
         // Authenticated viewer (getAuthenticatedUser) for the self-demote guard.
@@ -4830,6 +4877,23 @@ const makeRoleChangeClient = (opts: {
         // Create team (ensureTeamByName): POST /orgs/{org}/teams
         if (path.endsWith("/teams") && method === "POST") {
           const name = (options?.body as { name?: string })?.name ?? ""
+          if (opts.squattedRole && name.endsWith(`-${opts.squattedRole}`))
+            return Promise.reject(
+              new GitHubAPIError({
+                status: 422,
+                url: path,
+                message: "Team already exists",
+                body: null,
+                rateLimit: {
+                  limit: null,
+                  remaining: null,
+                  used: null,
+                  reset: null,
+                  resource: null,
+                  retryAfter: null,
+                },
+              }),
+            )
           return Promise.resolve({ id: 999, slug: name, name })
         }
         // Ensure staff team (GET/adopt team by name) -> resolve an adopted team.
@@ -5121,6 +5185,26 @@ describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
     expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
   })
 
+  it("leaves the owner untouched when the target staff slug is held by an unclaimed team", async () => {
+    // The refusal is deterministic (no re-run can succeed), so it must happen
+    // before the owner demote, or the member ends up demoted on no team.
+    const { client, orgRolePuts } = makeRoleChangeClient({
+      members: ["boss"],
+      squattedRole: "ta",
+    })
+
+    await expect(
+      applyClassroomRoleChange(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "boss",
+        fromRoles: ["teacher"],
+        toRole: "ta",
+      }),
+    ).rejects.toBeInstanceOf(UnclaimedTeamError)
+    expect(orgRolePuts).toEqual([])
+  })
+
   it("surfaces an owner-revoked error when a step fails after the demote", async () => {
     // The owner demote commits, then the target team-add throws — the error
     // must say the owner was revoked so the caller re-runs, not a generic fail.
@@ -5339,9 +5423,28 @@ describe("addClassroomStaffMember — staff team-add (invites non-members)", () 
     const teamAdds: string[] = []
     const teamRemoves: string[] = []
     const requestRaw = vi.fn().mockImplementation((path: string) => {
-      if (path.includes("classroom.json")) {
+      if (path.includes("/contents/cs101/classroom.json")) {
         // Non-archived classroom for the archive guard.
         return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+      }
+      if (path.includes("classroom.json")) {
+        // No sibling classroom `cs101-<role>` (the adopt guard's probe).
+        return Promise.reject(
+          new GitHubAPIError({
+            status: 404,
+            url: path,
+            message: "Not Found",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          }),
+        )
       }
       return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
     })

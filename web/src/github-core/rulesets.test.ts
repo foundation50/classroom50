@@ -591,6 +591,22 @@ describe("collectStaffTeamSlugs", () => {
     expect(await collectStaffTeamSlugs(client, "acme")).toEqual([])
   })
 
+  it("leaves out a slug that is a sibling classroom's student team", async () => {
+    // `ml-ta`'s student team is `classroom50-ml-ta`, which is also `ml`'s TA
+    // slug: `ml` has no TA slug while `ml-ta` exists, whatever an older
+    // release granted that team. `ml-ta`'s own staff slugs are unaffected.
+    const { client } = makeConfigRepoClient({
+      classrooms: { ml: cs101, "ml-ta": cs101 },
+    })
+    expect(await collectStaffTeamSlugs(client, "acme")).toEqual([
+      "classroom50-ml-teacher",
+      "classroom50-ml-hta",
+      "classroom50-ml-ta-teacher",
+      "classroom50-ml-ta-hta",
+      "classroom50-ml-ta-ta",
+    ])
+  })
+
   it("throws on a listing or per-classroom read failure rather than returning a shorter list", async () => {
     const listing = makeConfigRepoClient({ listingError: httpError(500) })
     await expect(

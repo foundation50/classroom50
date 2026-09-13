@@ -6,7 +6,7 @@ import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
 import { GitHubAPIError } from "@/github-core/errors"
-import { getErrorMessage } from "@/github-core/errorMessage"
+import { errorText } from "@/types/localizedMessage"
 import {
   RosterIdentityConflictError,
   StudentAlreadyEnrolledError,
@@ -156,7 +156,7 @@ const AddStudent = ({
               return
             }
             setWarning(
-              t("students.addFailed", { label, message: getErrorMessage(err) }),
+              t("students.addFailed", { label, message: errorText(t, err) }),
             )
           },
         })
@@ -187,7 +187,7 @@ const AddStudent = ({
             const message =
               err instanceof GitHubAPIError && err.status === 404
                 ? t("classes.staff.noSuchUser")
-                : getErrorMessage(err)
+                : errorText(t, err)
             setWarning(t("classes.staff.addFailed", { message }))
           },
         },

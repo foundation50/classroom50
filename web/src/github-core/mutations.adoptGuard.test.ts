@@ -38,12 +38,20 @@ function apiError(status: number): GitHubAPIError {
 
 // An org where every create POST 422s (the team already exists) and the team
 // at each slug is `existing`. `granted` lists the slugs that hold a grant on the
-// config repo.
+// config repo; `classrooms` the classroom directories in the config repo.
 function makeOrg(opts: {
   existing: Record<string, { id: number; privacy: string }>
   granted: string[]
+  classrooms?: string[]
 }) {
   const calls: Call[] = []
+  const revoked: string[] = []
+  const requestRaw = vi.fn(async (path: string): Promise<string> => {
+    const m = path.match(/\/contents\/([^/]+)\/classroom\.json$/)
+    if (m && (opts.classrooms ?? []).includes(m[1]))
+      return JSON.stringify({ short_name: m[1] })
+    throw apiError(404)
+  })
   const request = vi.fn(
     async (path: string, options?: GitHubRequestOptions): Promise<unknown> => {
       calls.push({ path, options })
@@ -55,6 +63,11 @@ function makeOrg(opts: {
       if (probe && method === "GET") {
         if (opts.granted.includes(probe[1])) return undefined
         throw apiError(404)
+      }
+      if (probe && method === "DELETE") {
+        if (!opts.granted.includes(probe[1])) throw apiError(404)
+        revoked.push(probe[1])
+        return undefined
       }
       const teamGet = path.match(/^\/orgs\/acme\/teams\/([^/]+)$/)
       if (teamGet && method === "GET") {
@@ -68,9 +81,9 @@ function makeOrg(opts: {
       throw new Error(`unexpected ${method} ${path}`)
     },
   )
-  const client = { request } as unknown as GitHubClient
+  const client = { request, requestRaw } as unknown as GitHubClient
   const patches = () => calls.filter((c) => c.options?.method === "PATCH")
-  return { client, calls, patches }
+  return { client, calls, patches, revoked }
 }
 
 describe("adopting a team at a staff slug", () => {
@@ -110,6 +123,7 @@ describe("adopting a team at a staff slug", () => {
         url: "https://github.com/orgs/acme/teams/classroom50-cs101-ta",
       },
     })
+    expect((err as UnclaimedTeamError).studentOf).toBeNull()
     expect(patches()).toEqual([])
 
     // A recorded id that names some other team does not help.
@@ -130,6 +144,26 @@ describe("adopting a team at a staff slug", () => {
     })
     expect(team.id).toBe(7)
     expect(patches()).toHaveLength(1)
+  })
+
+  it("refuses a sibling classroom's student team whatever it holds or records", async () => {
+    // Classroom `cs101-ta` exists, so `cs101`'s TA slug is its student team.
+    // An older release adopted it as `cs101`'s TA team and granted it, and
+    // `cs101`'s classroom.json records its id; neither makes it staff.
+    const { client, patches } = makeOrg({
+      existing: { "classroom50-cs101-ta": { id: 7, privacy: "closed" } },
+      granted: ["classroom50-cs101-ta"],
+      classrooms: ["cs101", "cs101-ta"],
+    })
+    const err = await ensureClassroomRoleTeam(client, "acme", "cs101", "ta", {
+      ta: { id: 7, slug: "classroom50-cs101-ta" },
+    }).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(UnclaimedTeamError)
+    expect((err as UnclaimedTeamError).studentOf).toBe("cs101-ta")
+    expect((err as UnclaimedTeamError).localized.key).toBe(
+      "staffTeams.unclaimed.studentOf",
+    )
+    expect(patches()).toEqual([])
   })
 
   it("ensureStaffTeams leaves an unclaimed role out and reports it", async () => {
@@ -154,29 +188,36 @@ describe("adopting a team at a staff slug", () => {
 })
 
 describe("adopting a team at the student slug", () => {
-  it("refuses a team that holds the config-repo grant: it is another classroom's staff team", async () => {
-    // Classroom `cs101-ta`'s student slug is `cs101`'s TA slug. Adopting the TA
-    // team as students would flip it secret and write the secret onto it.
-    const { client, patches } = makeOrg({
+  it("adopts the team and strips a stale config-repo grant", async () => {
+    // Classroom `cs101-ta`'s student slug is `cs101`'s TA slug. An older
+    // release adopting it as `cs101`'s TA team granted it config-repo access,
+    // which would let students read classroom.json. The team is still this
+    // classroom's roster (the classroom directory is the authority): adopt it,
+    // reconcile it back to secret, and remove the grant.
+    const { client, patches, revoked } = makeOrg({
       existing: { "classroom50-cs101-ta": { id: 7, privacy: "closed" } },
       granted: ["classroom50-cs101-ta"],
+      classrooms: ["cs101-ta"],
     })
-    const err = await ensureClassroomTeam(client, "acme", "cs101-ta").catch(
-      (e: unknown) => e,
-    )
-    expect(err).toBeInstanceOf(UnclaimedTeamError)
-    expect((err as UnclaimedTeamError).localized.key).toBe(
-      "staffTeams.unclaimed.student",
-    )
-    expect(patches()).toEqual([])
+    const team = await ensureClassroomTeam(client, "acme", "cs101-ta")
+    expect(team).toEqual({
+      id: 7,
+      slug: "classroom50-cs101-ta",
+      created: false,
+    })
+    expect(revoked).toEqual(["classroom50-cs101-ta"])
+    expect(patches().map((c) => c.options?.body)).toEqual([
+      { privacy: "secret" },
+    ])
   })
 
   it("adopts an ungranted team as the student team", async () => {
-    const { client } = makeOrg({
+    const { client, revoked } = makeOrg({
       existing: { "classroom50-cs101": { id: 7, privacy: "secret" } },
       granted: [],
     })
     const team = await ensureClassroomTeam(client, "acme", "cs101")
     expect(team).toEqual({ id: 7, slug: "classroom50-cs101", created: false })
+    expect(revoked).toEqual([])
   })
 })

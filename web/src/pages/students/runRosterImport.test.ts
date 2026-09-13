@@ -79,6 +79,7 @@ const messages = {
   metadataWritebackMalformed: "metadata-malformed",
   metadataWritebackFailed: "metadata-failed",
   invitingEmails: "inviting-emails",
+  t: (key: string) => key,
 }
 
 const rows: ImportRosterRow[] = [

@@ -7,14 +7,17 @@ import {
   type StaffRole,
 } from "@/types/classroom"
 import {
+  deleteClassroomTeam,
   ensureClassroomTeam,
   ensureStaffTeams,
   grantStaffTeamsConfigRepoAccess,
   projectTeamDescriptionFromRecord,
   reconcileStudentTeamDescription,
   removeUserFromTeam,
+  type StaffTeamRefs,
   type TeamDescriptionReconcileResult,
 } from "@/github-core/mutations"
+import { revokeStaffTeams } from "@/github-core/rulesets"
 import { reconcileRoster } from "./students/reconcileRoster"
 import { logger } from "@/lib/logger"
 
@@ -145,9 +148,11 @@ export async function reconcileClassroom(
   ])
 
   // Grant staff-team config-repo access AFTER the drop (order is load-bearing —
-  // see ensureStaffTeams); also re-affirms the TA read-only downgrade.
-  // Best-effort: a failure leaves access unset until the next pass, never aborts
-  // the heal.
+  // see ensureStaffTeams); also re-affirms the TA read-only downgrade. A
+  // failure must not abort the heal, but a team created this pass and left
+  // ungranted would be refused as unclaimed on every later visit (nothing
+  // records it), so delete what this pass created and let the next pass
+  // recreate it cleanly; adopted teams keep their standing.
   try {
     await grantStaffTeamsConfigRepoAccess(client, org, staffTeams)
   } catch (err) {
@@ -159,6 +164,7 @@ export async function reconcileClassroom(
         err,
       },
     )
+    await rollbackCreatedStaffTeams(client, org, staffTeams, staffCreated)
   }
 
   // A 404 from the student-team read is permanent (a wrong derived slug never
@@ -242,6 +248,34 @@ async function dropCreatorFromNonTeacherTeams(
         org,
         creator,
         teamSlug,
+      })
+    }
+  }
+}
+
+// Best-effort undo of the staff teams one pass created when their grant failed
+// (see the call site). Ids were minted in this pass, so revoking by id is safe.
+async function rollbackCreatedStaffTeams(
+  client: GitHubClient,
+  org: string,
+  teams: StaffTeamRefs,
+  created: readonly StaffRole[],
+): Promise<void> {
+  const refs = created.flatMap((role) => teams[role] ?? [])
+  if (refs.length === 0) return
+  await revokeStaffTeams(
+    client,
+    org,
+    refs.map((t) => t.id),
+  )
+  for (const ref of refs) {
+    try {
+      await deleteClassroomTeam(client, org, ref)
+    } catch (err) {
+      log.warn("classroom reconcile: rollback of a created staff team failed", {
+        org,
+        teamSlug: ref.slug,
+        err,
       })
     }
   }

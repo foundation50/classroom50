@@ -18,6 +18,7 @@ import type { GitHubClient } from "@/github-core/client"
 import type { PreflightResult } from "@/util/rosterUploadPreflight"
 import type { ClassroomRole } from "@/util/teamRoster"
 import { logger } from "@/lib/logger"
+import { errorText, type TranslateFn } from "@/types/localizedMessage"
 
 const log = logger.scope("students:runRosterImport")
 
@@ -50,6 +51,9 @@ export type RosterImportMessages = {
   metadataWritebackMalformed: string
   metadataWritebackFailed: string
   invitingEmails: string
+  // Resolves an error's deferred message (errors below the view carry a key,
+  // not English); a bare `err.message` would show the key.
+  t: TranslateFn
 }
 
 // The full roster-import outcome. On a hard enroll failure (nothing written) the
@@ -177,7 +181,7 @@ export async function runRosterImport(
         log.error("roster import failed", { err, record: true })
         return {
           ok: false,
-          error: err instanceof Error ? err.message : messages.importFailed,
+          error: errorText(messages.t, err),
         }
       }
     }
@@ -269,7 +273,7 @@ export async function runRosterImport(
       // it behind the bare error screen. Keep the completed view and show the
       // invite error there — the teacher can re-run to retry the invites.
       log.error("roster invite pass failed", { err, record: true })
-      inviteError = err instanceof Error ? err.message : messages.importFailed
+      inviteError = errorText(messages.t, err)
     }
   }
 
@@ -405,7 +409,7 @@ export async function runRosterImport(
         log.error("roster role change failed", { err, record: true })
         failed.push({
           username: move.username,
-          message: err instanceof Error ? err.message : String(err),
+          message: errorText(messages.t, err),
         })
       } finally {
         done += 1
@@ -446,7 +450,7 @@ export async function runRosterImport(
       })
     } catch (err) {
       log.error("roster email invite pass failed", { err, record: true })
-      emailError = err instanceof Error ? err.message : messages.importFailed
+      emailError = errorText(messages.t, err)
     }
   }
 

@@ -916,6 +916,7 @@
     "classroomSlugInvalid": "Classroom slug must be {{description}}.",
     "classroomSlugTooLong": "Classroom slug is {{length}} characters; new classrooms are capped at {{max}}. It prefixes every student repository name, which GitHub limits to {{limit}} characters.",
     "classroomSlugReservedEnding": "Classroom slug can't end in -{{suffix}}. Classroom 50 reserves that ending for staff team names (classroom50-<slug>-{{suffix}}). Choose a slug that doesn't end in -teacher, -hta, or -ta.",
+    "classroomSlugSiblingExists": "Classroom slug would share a staff team name with the existing classroom {{other}}. Choose a different slug.",
     "assignmentSlugTaken": "An assignment \"{{slug}}\" already exists in this classroom.",
     "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}.",
     "customDomainInvalid": "Enter a domain like pages.example.edu or a full https:// URL (no query, fragment, or trailing slash)."
@@ -4109,7 +4110,7 @@
   "staffTeams": {
     "unclaimed": {
       "staff": "The team {{slug}} already exists but wasn't created by Classroom 50, so it can't be used as a staff team. Review its members at {{url}}, then either delete it or give it access to the classroom50 repository, and try again.",
-      "student": "The team {{slug}} already exists and has access to the classroom50 repository, so it belongs to another classroom's staff, not to this classroom's students. Choose a slug that doesn't end in -teacher, -hta, or -ta, or review the team at {{url}}."
+      "studentOf": "The team {{slug}} is the student team of classroom {{classroom}}, so it can't be this classroom's {{role}} team. Leave the {{role}} role unstaffed here, or rename one of the classrooms."
     }
   }
 }

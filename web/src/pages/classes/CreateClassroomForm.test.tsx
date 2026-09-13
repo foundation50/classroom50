@@ -115,6 +115,45 @@ describe("CreateClassroomForm slug validation", () => {
     expect(screen.queryByText("validation.classroomSlugTooLong")).toBeNull()
   })
 
+  // A slug ending in a staff role suffix would put its student team at another
+  // classroom's staff team name; refused live and at submit.
+  it("rejects a slug ending in a staff role suffix", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = render(<CreateClassroomForm onSubmit={onSubmit} />)
+
+    await user.type(container.querySelector<HTMLInputElement>("#name")!, "ML")
+    await user.clear(slugInput(container))
+    await user.type(slugInput(container), "ml-ta")
+    expect(
+      screen.getByText("validation.classroomSlugReservedEnding"),
+    ).not.toBeNull()
+    await user.click(submit())
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    await user.type(slugInput(container), "{backspace}")
+    expect(
+      screen.queryByText("validation.classroomSlugReservedEnding"),
+    ).toBeNull()
+  })
+
+  // The reverse order: an existing `ml-ta` already holds `ml`'s TA team name.
+  it("rejects a slug whose staff team name an existing sibling classroom holds", async () => {
+    mockClasses = [{ name: "ml-ta", path: "ml-ta", type: "dir" }]
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = render(<CreateClassroomForm onSubmit={onSubmit} />)
+
+    await user.type(container.querySelector<HTMLInputElement>("#name")!, "ML")
+    await user.clear(slugInput(container))
+    await user.type(slugInput(container), "ml")
+    await user.click(submit())
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText("validation.classroomSlugSiblingExists"),
+    ).not.toBeNull()
+  })
+
   // Collisions warn live too, comparing the SLUGIFIED value case-insensitively
   // against existing classrooms.
   it("warns live when a manual slug collides with an existing classroom", async () => {
