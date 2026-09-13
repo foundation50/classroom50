@@ -1143,8 +1143,12 @@ jobs:
           KEPT_MSG="cannot be refreshed; the regraded score is in the commit status and the job summary, but gradebook collection keeps reading the OLD release's result.json for this submission (GitHub's rule, not ours)"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             # A failed probe answers "" and is treated as immutable: guessing
-            # wrong the other way destroys the record for good.
-            IMMUTABLE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.immutable' 2>/dev/null || true)"
+            # wrong the other way destroys the record for good. The tag is a
+            # student-chosen ref name, so it is percent-encoded for the raw API
+            # path (a `#` or `%` in it would otherwise make the probe miss the
+            # release `gh release view` just found and keep it forever).
+            ENCODED_TAG="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$TAG")"
+            IMMUTABLE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${ENCODED_TAG}" --jq '.immutable' 2>/dev/null || true)"
             if [[ "$IMMUTABLE" == "true" ]]; then
               echo "::warning::the release at $TAG is immutable and $KEPT_MSG"
               exit 0

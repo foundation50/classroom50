@@ -981,7 +981,7 @@ out-of-scope repositories, indistinguishable from "no release yet".)
 
 - Confirm the token's **Repository access** is **All repositories** (not
   **Only select repositories**: student repositories are created on demand), with
-  **Contents**, **Actions**, and **Administration** set to **Read and write** and
+  **Contents**, **Actions**, **Workflows**, and **Administration** set to **Read and write** and
   **Organization permissions**, **Members** set to **Read**.
 - Re-scope and rotate with `gh teacher rotate-service-token cs50-fall-2026`, or
   use **Test token** under **Service token** in the organization's **Settings**

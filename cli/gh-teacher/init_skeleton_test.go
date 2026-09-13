@@ -767,6 +767,124 @@ exit 0
 			}
 		})
 
+		// The probe's raw API path must carry the tag percent-encoded: a
+		// student tag with `#` or `%` would otherwise truncate the URL, the
+		// probe would miss the release `gh release view` just found, and the
+		// fail-safe branch would keep that release forever.
+		t.Run("ReleaseShellEncodesTagInImmutabilityProbe", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "api repos/example/classroom-assignment-student/releases/tags/submit/x%231%2525")
+    echo false
+    ;;
+  "api "*)
+    echo "HTTP 404" >&2; exit 1
+    ;;
+esac
+exit 0
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/x#1%25",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell must exit 0 for a mutable release: %v\n%s", err, output)
+			}
+			if strings.Contains(string(output), "could not be checked") {
+				t.Errorf("an encoded probe must answer, not fall to the unchecked branch:\n%s", output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{
+				"api repos/example/classroom-assignment-student/releases/tags/submit/x%231%2525 --jq .immutable",
+				"release delete submit/x#1%25",
+				"release create submit/x#1%25",
+			} {
+				if !strings.Contains(string(log), want) {
+					t.Errorf("gh log missing %q:\n%s", want, log)
+				}
+			}
+		})
+
+		// A release object without an `immutable` field (GHES before immutable
+		// releases) answers `null`: nothing can be burned there, so the step
+		// refreshes as before rather than keeping the stale release.
+		t.Run("ReleaseShellTreatsNullImmutableAsMutable", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1" in
+  api) echo null ;;
+esac
+exit 0
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell must exit 0 when the probe answers null: %v\n%s", err, output)
+			}
+			if strings.Contains(string(output), "cannot be refreshed") || strings.Contains(string(output), "could not be checked") {
+				t.Errorf("a null probe must refresh the release, not keep it:\n%s", output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, want := range []string{"release delete submit/test", "release create submit/test"} {
+				if !strings.Contains(string(log), want) {
+					t.Errorf("gh log missing %q:\n%s", want, log)
+				}
+			}
+		})
+
 		// Immutable-release tolerance (regrade failed live 2026-08-07): when the
 		// delete is rejected AND the release still exists (immutable ruleset),
 		// the step warns, skips the create, and exits 0 — grading already

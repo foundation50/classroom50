@@ -18,6 +18,7 @@ from conftest import _load_module, _SCRIPTS_DIR
 from conftest import collect_scores as cs
 from conftest import materialize_tests as mt
 from conftest import probe_token as pt
+from conftest import regrade_repos as rr
 
 runner = _load_module("runner", _SCRIPTS_DIR / "runner.py")
 
@@ -59,6 +60,18 @@ class TestStaffRoles:
 
     def test_web_matches_go_in_value_and_order(self):
         assert _web_staff_roles() == _go_staff_roles()
+
+
+class TestAcceptMarkerPath:
+    def test_scripts_match_contract_metadata_path(self):
+        # The acceptance commit is "the one that added the accept marker" in
+        # three scripts; each spells the path by hand, so pin all of them to the
+        # Go source of truth.
+        src = _CONTRACT_GO.read_text()
+        go = re.search(r'MetadataPath\s*=\s*"([^"]+)"', src)
+        assert go, "contract.MetadataPath not found in contract.go"
+        for module in (runner, cs, rr):
+            assert module.ACCEPT_MARKER_PATH == go.group(1), module.__name__
 
 
 class TestStaffTeamSlug:
@@ -108,15 +121,41 @@ class TestTokenPermissionGuidance:
     def test_probe_and_init_remediation_name_every_permission(self):
         # probe-token's failure remediation and `gh teacher init`'s help are the
         # two other places a teacher is told what to grant when creating the
-        # token; a permission added to the Go constant must reach both.
+        # token; a permission added to the Go constant must reach both. Each is
+        # narrowed to the one literal a teacher reads, so a phrase living
+        # elsewhere in the file (a docstring, an unrelated message) can't
+        # satisfy the check for it.
         probe_src = pathlib.Path(pt.__file__).read_text()
         init_src = (_REPO_ROOT / "cli" / "gh-teacher" / "init.go").read_text()
-        # Both wrap the list across string literals; join the pieces first.
-        probe_text = " ".join(re.findall(r'f?"([^"]*)"', probe_src))
-        init_text = " ".join(re.findall(r'"([^"]*)"', init_src)).replace("\\n", " ")
+        probe_block = re.search(
+            r'emit_error\(\n((?:\s*f?"[^"]*"\n)+)\s*\)\n\s*return 1',
+            probe_src[probe_src.index("service token probe FAILED") - 200 :],
+        )
+        assert probe_block, "probe_token.py FAILED remediation literal not found"
+        probe_text = " ".join(re.findall(r'f?"([^"]*)"', probe_block.group(1)))
+        assert "service token probe FAILED" in probe_text
+        start = init_src.rfind("\n", 0, init_src.index("Create a fine-grained personal access token"))
+        end = init_src.index("\n", init_src.index("init validates the token", start))
+        init_text = " ".join(re.findall(r'"([^"]*)"', init_src[start:end])).replace("\\n", " ")
         for phrase in TOKEN_PERMISSION_PHRASES[1:]:  # "All repositories" is phrased differently
             assert phrase in " ".join(probe_text.split()), phrase
             assert phrase in " ".join(init_text.split()), phrase
+
+    def test_web_prefill_url_requests_every_permission(self):
+        # The web app prefills the PAT creation form from buildServiceTokenUrl;
+        # a permission added to the Go constant must be requested there too, or
+        # a teacher following the link creates a token the pipeline rejects.
+        src = (_REPO_ROOT / "web" / "src" / "pages" / "OrgSettingsPage.tsx").read_text()
+        fn = re.search(
+            r"function buildServiceTokenUrl\(.*?new URLSearchParams\(\{(.*?)\}\)", src, re.S
+        )
+        assert fn, "buildServiceTokenUrl URLSearchParams literal not found"
+        params = dict(re.findall(r'^\s*(\w+):\s*"(\w+)",', fn.group(1), re.M))
+        expected = {}
+        for phrase in TOKEN_PERMISSION_PHRASES[1:]:
+            name, _, access = phrase.partition(": ")
+            expected[name.lower()] = "write" if access == "Read and write" else "read"
+        assert {k: params.get(k) for k in expected} == expected
 
     def test_collect_grant_hint_names_the_settings_it_can_fix(self, monkeypatch, capsys):
         # The grant-failure hint names what a 401/403 on the staff grant means:
