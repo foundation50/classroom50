@@ -12,6 +12,7 @@ import { readFailedDetail } from "./orgChecks"
 import { forEachClassroom } from "./configRepoReads"
 import { STAFF_TEAM_PRIVACY, type GitHubTeam } from "./types"
 import { GitHubAPIError } from "./errors"
+import type { LocalizedMessage } from "@/types/localizedMessage"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { STAFF_ROLES } from "@/types/classroom"
@@ -249,6 +250,22 @@ const STAFF_TEAMS_UNREADABLE: CheckVerdict = {
   detail: { key: "orgSettings.audit.detail.rulesetStaffTeamsUnreadable" },
 }
 
+// A read failure is retryable unless one classroom.json is itself unparsable:
+// that stays broken until someone fixes the file, so the verdict names it
+// instead of asking the teacher to try again.
+function staffTeamsUnreadable(err: unknown): CheckVerdict {
+  if (err instanceof ClassroomConfigError) {
+    return {
+      state: "unreadable",
+      detail: {
+        key: "orgSettings.audit.detail.rulesetClassroomInvalid",
+        params: { classroom: err.classroom },
+      },
+    }
+  }
+  return STAFF_TEAMS_UNREADABLE
+}
+
 // The audit's one-call entry. The expected-team read and the ruleset read are
 // independent, so they run in parallel; a collector failure becomes unreadable,
 // never a green verdict against an empty expectation.
@@ -263,22 +280,35 @@ export async function auditRulesets(
       (err: unknown) => ({ error: err }),
     ),
   ])
-  if (expected === null) return STAFF_TEAMS_UNREADABLE
+  if ("error" in expected) return staffTeamsUnreadable(expected.error)
   if ("error" in state)
     return { state: "unreadable", detail: readFailedDetail(state.error) }
-  return judgeRulesets(state, expected)
+  return judgeRulesets(state, expected.ids)
 }
 
 export type RulesetsRepairResult = {
   status: "complete" | "warning"
   // Why a warning: the staff-team read failed (kept the current list, or left
   // the feedback lock alone), the ruleset listing failed, or a write was
-  // refused. The first two are transient, so the UI offers a retry.
+  // refused.
   reason?: "staff_teams_unreadable" | "list_failed" | "apply_failed"
+  // Whether a retry could succeed: every failed read, and a write GitHub
+  // refused with a rate limit or 5xx. A 403/422 is a policy block and stays
+  // non-transient so the UI can say so.
+  transient?: boolean
+  // Diagnostic (logs, tests). The setup board renders `detail` when present.
   message: string
+  detail?: LocalizedMessage
   created: string[]
   updated: string[]
   failed: string[]
+}
+
+// A refused write that a retry could still land. Anything that is not a
+// GitHub response (a dropped connection) counts too: offering a retry is
+// harmless, while pinning "needs manual setup" after one blip is not.
+function isTransientFailure(err: unknown): boolean {
+  return err instanceof GitHubAPIError ? err.isTransient : true
 }
 
 // repairRulesets: reconcile both rulesets — PUT over an existing one (by id),
@@ -300,20 +330,26 @@ export async function repairRulesets(
   const failed: string[] = []
 
   let bodies = classroomRulesetBodies(staffTeamIds ?? [])
-  let fallback: string | undefined
+  let fallback: LocalizedMessage | undefined
   if (staffTeamIds === null) {
     try {
       bodies = classroomRulesetBodies(
         await existingFeedbackBaseTeamIds(client, org),
       )
-      fallback = `${org}: could not read classroom staff teams, so the feedback-base bypass list was kept as is. Re-run setup once the classroom50 repository is readable.`
+      fallback = {
+        key: "orgSettings.steps.rulesets.staffTeamsKept",
+        params: { org },
+      }
     } catch (err) {
       log.warn(
         "could not read the current bypass list either; leaving the feedback-base ruleset unchanged",
         { org, err },
       )
       bodies = [submissionHistoryBody()]
-      fallback = `${org}: could not read classroom staff teams; the feedback-base ruleset was left unchanged. Re-run setup once the classroom50 repository is readable.`
+      fallback = {
+        key: "orgSettings.steps.rulesets.feedbackLockLeftUnchanged",
+        params: { org },
+      }
     }
   }
 
@@ -328,6 +364,7 @@ export async function repairRulesets(
     return {
       status: "warning",
       reason: "list_failed",
+      transient: true,
       message: `${org}: could not list org rulesets; apply Feedback PR branch protections manually.`,
       created,
       updated,
@@ -335,6 +372,7 @@ export async function repairRulesets(
     }
   }
 
+  let retryable = true
   for (const body of bodies) {
     const id = existing.get(body.name)
     try {
@@ -354,6 +392,7 @@ export async function repairRulesets(
     } catch (err) {
       log.warn("ruleset apply failed", { org, ruleset: body.name, err })
       failed.push(body.name)
+      if (!isTransientFailure(err)) retryable = false
     }
   }
 
@@ -361,6 +400,7 @@ export async function repairRulesets(
     return {
       status: "warning",
       reason: "apply_failed",
+      transient: retryable,
       message: `${org}: some org rulesets could not be applied (${failed.join(", ")}); review them in org settings → rules.`,
       created,
       updated,
@@ -371,7 +411,9 @@ export async function repairRulesets(
     return {
       status: "warning",
       reason: "staff_teams_unreadable",
-      message: fallback,
+      transient: true,
+      message: `${org}: could not read classroom staff teams (${fallback.key})`,
+      detail: fallback,
       created,
       updated,
       failed,
@@ -462,6 +504,18 @@ export async function revokeStaffTeams(
   }
 }
 
+// One classroom's classroom.json could be fetched but not parsed. Distinct from
+// a GitHub failure because no retry fixes it: the audit names the classroom so
+// the teacher knows which file to repair.
+export class ClassroomConfigError extends Error {
+  readonly classroom: string
+  constructor(classroom: string, cause: unknown) {
+    super(`${classroom}/classroom.json is not valid`, { cause })
+    this.name = "ClassroomConfigError"
+    this.classroom = classroom
+  }
+}
+
 // The canonical staff team slugs (teacher, hta, ta) of every classroom in the
 // config repo. The slug, not classroom.json, identifies a classroom's staff
 // team: it is what every writer creates, what a role flow that never recorded
@@ -478,7 +532,9 @@ export async function collectStaffTeamSlugs(
   await forEachClassroom(
     client,
     org,
-    (_classroom, err) => {
+    (classroom, err) => {
+      if (classroom !== null && !(err instanceof GitHubAPIError))
+        throw new ClassroomConfigError(classroom, err)
       throw err
     },
     (classroom) => {
@@ -582,23 +638,24 @@ export async function collectBypassStaffTeamIds(
 
 // The audit-side input: the ids the bypass list should hold, read without
 // writing anything (a still-secret team counts as expected; Fix it upgrades
-// it). null when either read fails.
+// it). The error is returned, not swallowed, so the verdict can tell a
+// retryable read failure from a broken classroom.json.
 async function expectedStaffTeamIds(
   client: GitHubClient,
   org: string,
-): Promise<number[] | null> {
+): Promise<{ ids: number[] } | { error: unknown }> {
   try {
     const [slugs, teams] = await Promise.all([
       collectStaffTeamSlugs(client, org),
       listOrgTeamsBySlug(client, org),
     ])
-    return resolveStaffTeams(slugs, teams).map((t) => t.id)
+    return { ids: resolveStaffTeams(slugs, teams).map((t) => t.id) }
   } catch (err) {
     log.warn("could not read classroom staff teams for the ruleset audit", {
       org,
       err,
     })
-    return null
+    return { error: err }
   }
 }
 

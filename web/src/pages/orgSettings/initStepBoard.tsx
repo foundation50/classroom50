@@ -26,6 +26,10 @@ import {
   type BadgeTone,
 } from "@/components/ui"
 import { CONFIG_REPO } from "@/util/configRepo"
+import {
+  resolveLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
 // re-run action on Org Settings. One source of truth for step order, titles,
@@ -231,6 +235,7 @@ export const InitStep = ({
   title,
   status,
   message,
+  detail,
   org,
   data,
 }: {
@@ -238,6 +243,8 @@ export const InitStep = ({
   title: string
   status: InitStepStatus
   message?: string
+  // Deferred user-facing message; wins over the diagnostic `message`.
+  detail?: LocalizedMessage
   // Without an org the per-step GitHub deep link can't be built, so it's
   // omitted; the explanation and remediation still render.
   org?: string
@@ -284,7 +291,9 @@ export const InitStep = ({
           <div className="min-w-0">
             <div className="font-semibold">{t(title)}</div>
             <p className="mt-1 text-sm text-base-content/70">
-              {message || t(meta.what)}
+              {detail
+                ? resolveLocalizedMessage(t, detail)
+                : message || t(meta.what)}
             </p>
           </div>
         </div>
@@ -359,6 +368,7 @@ export const InitStepBoard = ({
           title={step.title ?? step.id}
           status={step.status}
           message={step.message ?? step.error}
+          detail={step.detail}
           org={org}
           data={step.data}
         />

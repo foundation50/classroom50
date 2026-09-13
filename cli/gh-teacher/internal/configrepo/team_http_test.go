@@ -220,8 +220,8 @@ func TestStaffTeamName(t *testing.T) {
 		{"cs50", RoleTeacher, "classroom50-cs50-teacher"},
 	}
 	for _, tc := range cases {
-		if got := staffTeamName(tc.short, tc.role); got != tc.want {
-			t.Errorf("staffTeamName(%q, %q) = %q, want %q", tc.short, tc.role, got, tc.want)
+		if got := StaffTeamSlug(tc.short, tc.role); got != tc.want {
+			t.Errorf("StaffTeamSlug(%q, %q) = %q, want %q", tc.short, tc.role, got, tc.want)
 		}
 	}
 }

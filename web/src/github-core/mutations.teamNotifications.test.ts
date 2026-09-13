@@ -61,18 +61,25 @@ describe("ensureClassroomTeam / ensureClassroomRoleTeam create notification_sett
     await ensureClassroomTeam(client, "o", "cs101")
     const body = posts()[0]?.options?.body as {
       notification_setting?: string
+      privacy?: string
     }
     expect(body.notification_setting).toBe("notifications_disabled")
+    // The student team stays secret so students can't see each other's roster.
+    expect(body.privacy).toBe("secret")
   })
 
-  it("creates staff teams with notifications_enabled (teacher and ta)", async () => {
-    for (const role of ["teacher", "ta"] as const) {
+  it("creates staff teams with notifications_enabled (teacher, hta, ta)", async () => {
+    for (const role of ["teacher", "hta", "ta"] as const) {
       const { client, posts } = makeClient()
       await ensureClassroomRoleTeam(client, "o", "cs101", role)
       const body = posts()[0]?.options?.body as {
         notification_setting?: string
+        privacy?: string
       }
       expect(body.notification_setting).toBe("notifications_enabled")
+      // GitHub rejects a secret team as a ruleset bypass actor, so staff teams
+      // must be created closed for the feedback-base exemption to take.
+      expect(body.privacy).toBe("closed")
     }
   })
 })

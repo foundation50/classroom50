@@ -337,6 +337,28 @@ describe("repairConcern", () => {
     expect(result.unresolved?.message).toBeTruthy()
   })
 
+  it("rulesets: a 5xx on the ruleset write stays transient so one blip never pins the concern", async () => {
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { method?: string }) => {
+        const method = options?.method ?? "GET"
+        if (method === "GET" && path.includes("/rulesets")) {
+          return Promise.resolve([])
+        }
+        if (method === "POST" && path.endsWith("/rulesets")) {
+          return Promise.reject(httpError(502))
+        }
+        return Promise.resolve({})
+      })
+    const client: GitHubClient = {
+      request: request as unknown as GitHubClient["request"],
+      requestRaw: () => Promise.reject(new Error("x")),
+      fetchArchive: () => Promise.reject(new Error("x")),
+    }
+    const result = await repairConcern(client, "acme", "rulesets", "team")
+    expect(result.unresolved?.transient).toBe(true)
+  })
+
   it("every audit concern is repairable", () => {
     const ids: ConcernId[] = [
       "orgDefaults",

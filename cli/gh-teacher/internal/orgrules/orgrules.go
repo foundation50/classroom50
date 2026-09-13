@@ -392,7 +392,6 @@ func Reconcile(client githubapi.Client, out, errOut io.Writer, org string) (read
 	return ready, true, err
 }
 
-// bypassTeamIDs is CollectStaffTeamSlugs followed by PrepareStaffTeams.
 func bypassTeamIDs(client githubapi.Client, out, errOut io.Writer, org string) ([]int64, error) {
 	slugs, err := CollectStaffTeamSlugs(client, org)
 	if err != nil {
@@ -492,7 +491,6 @@ func create(client githubapi.Client, org string, body rulesetBody) error {
 	return nil
 }
 
-// update PUTs the full definition over an existing ruleset by ID.
 func update(client githubapi.Client, org string, id int64, body rulesetBody) error {
 	payload, err := json.Marshal(body)
 	if err != nil {

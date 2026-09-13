@@ -506,7 +506,9 @@ const OrgPolicyAuditPane = ({
   } = useGetOrgAudit(org, planDetails?.plan?.name)
 
   // A latched concern the audit now reports enforced is hidden and forgotten
-  // in storage (see reconcileUnresolvedConcerns).
+  // in storage (see reconcileUnresolvedConcerns). State is dropped too: the
+  // memo only hides an id while its verdict is enforced, so a later unreadable
+  // or unenforced audit would otherwise re-show the stale badge and hide Fix it.
   const {
     resolvedIds: resolvedConcernIds,
     visible: visibleUnresolvedConcerns,
@@ -516,8 +518,13 @@ const OrgPolicyAuditPane = ({
     [report, unresolvedConcerns],
   )
   useEffect(() => {
-    if (resolvedConcernIds.length > 0)
-      forgetResolvedConcerns(org, resolvedConcernIds)
+    if (resolvedConcernIds.length === 0) return
+    forgetResolvedConcerns(org, resolvedConcernIds)
+    setUnresolvedConcerns((prev) => {
+      const next = new Map(prev)
+      for (const id of resolvedConcernIds) next.delete(id)
+      return next
+    })
   }, [org, resolvedConcernIds])
 
   // Persist the classified Fix-it outcome to the per-org store — a DURABLE

@@ -2242,6 +2242,7 @@
         "rulesetStaffTeamsMissing_one": "{{count}} staff team can't merge feedback pull requests yet",
         "rulesetStaffTeamsMissing_other": "{{count}} staff teams can't merge feedback pull requests yet",
         "rulesetStaffTeamsUnreadable": "couldn't read the classroom list to check which staff teams should be exempt; try again in a moment",
+        "rulesetClassroomInvalid": "couldn't check which staff teams should be exempt because {{classroom}}/classroom.json isn't valid JSON. Fix that file in the classroom50 repository, then check again",
         "rulesetOwnerNotExempt": "organization owners still see a bypass prompt when merging feedback pull requests",
         "rulesetUnexpectedBypass_one": "{{count}} unexpected entry on the feedback branch's bypass list",
         "rulesetUnexpectedBypass_other": "{{count}} unexpected entries on the feedback branch's bypass list"
@@ -2464,6 +2465,8 @@
       "rulesets": {
         "title": "Branch protection rulesets",
         "what": "Creates organization rulesets that protect classroom and assignment repositories.",
+        "staffTeamsKept": "{{org}}: couldn't read the classroom staff teams, so the feedback branch's bypass list was kept as is. Run setup again once the classroom50 repository is readable.",
+        "feedbackLockLeftUnchanged": "{{org}}: couldn't read the classroom staff teams, so the feedback branch ruleset was left unchanged. Run setup again once the classroom50 repository is readable.",
         "why": "Rulesets enforce the classroom guardrails (protected branches, restricted deletions) across every repository the organization creates.",
         "remediation": "Open the organization rulesets page to review them, or re-run setup to re-apply. Rulesets may require GitHub Team or Enterprise."
       }

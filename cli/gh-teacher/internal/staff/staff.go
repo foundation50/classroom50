@@ -168,6 +168,15 @@ func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom,
 	if err != nil {
 		return err
 	}
+	if ok && !configrepo.IsCanonicalStaffTeamRef(classroom, role, &team) {
+		// classroom.json is head-TA-writable, and the collector and the ruleset
+		// bypass list already act on the canonical team, so a ref naming any
+		// other team is replaced rather than honored (this is the re-record
+		// step collect_scores.py points at).
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: classroom.json records %q as the %s staff team, which is not the team Classroom 50 creates for that role; re-recording %s instead.\n",
+			org, team.Slug, role, configrepo.StaffTeamSlug(classroom, role))
+		ok = false
+	}
 	if !ok {
 		// Self-heal a missing/partial `teams` block: ensure the team, grant
 		// the role's config-repo access, persist its ref, then proceed. Makes

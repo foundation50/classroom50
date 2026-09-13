@@ -186,6 +186,31 @@ describe("repairRulesets", () => {
     expect(result.status).toBe("warning")
     expect(result.failed).toHaveLength(1)
     expect(result.created).toHaveLength(1)
+    // A bare Error is a dropped connection, not a GitHub refusal: retryable.
+    expect(result.transient).toBe(true)
+  })
+
+  it("classifies a refused write by its status: 5xx retryable, 403 not", async () => {
+    for (const [status, transient] of [
+      [502, true],
+      [403, false],
+    ] as const) {
+      const request = vi
+        .fn()
+        .mockImplementation((_path: string, options?: { method?: string }) => {
+          const method = options?.method ?? "GET"
+          if (method === "GET") return Promise.resolve([])
+          return Promise.reject(httpError(status))
+        })
+      const client: GitHubClient = {
+        request: request as unknown as GitHubClient["request"],
+        requestRaw: () => Promise.reject(new Error("x")),
+        fetchArchive: () => Promise.reject(new Error("x")),
+      }
+      const result = await repairRulesets(client, "acme", [])
+      expect(result.reason).toBe("apply_failed")
+      expect(result.transient).toBe(transient)
+    }
   })
 })
 
@@ -305,6 +330,7 @@ function makeConfigRepoClient(opts: {
       const body = opts.classrooms?.[name]
       if (body === undefined || body === null) throw httpError(404)
       if (body === "BOOM") throw httpError(500)
+      if (body === "MALFORMED") return "{ not json"
       return JSON.stringify(body)
     }
     if (path.includes("/classroom50/contents")) {
@@ -470,6 +496,19 @@ describe("auditRulesets", () => {
       )
       expect(calls.some((c) => c.method !== "GET")).toBe(false)
     }
+  })
+
+  it("names the classroom when one classroom.json is not valid JSON", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101, broken: "MALFORMED" },
+      teams: cs101Teams,
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.state).toBe("unreadable")
+    expect(verdict.detail).toEqual({
+      key: "orgSettings.audit.detail.rulesetClassroomInvalid",
+      params: { classroom: "broken" },
+    })
   })
 })
 

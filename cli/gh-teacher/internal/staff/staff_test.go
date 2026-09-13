@@ -190,6 +190,32 @@ func TestRunStaffAdd(t *testing.T) {
 		}
 	})
 
+	t.Run("re-records a non-canonical staff team ref instead of honoring it", func(t *testing.T) {
+		// A head TA can edit classroom.json; a `teams.ta` entry naming another
+		// team must not receive the member, and the ref is rewritten to the
+		// canonical slug (the step collect_scores.py's warning points at).
+		mock := &staffMock{classroomJSON: `{"schema":"classroom50/classroom/v1","short_name":"cs-principles","org":"o",
+  "teams": {"ta": {"id": 9, "slug": "classroom50-other-ta"}}}`}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out, errOut bytes.Buffer
+		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "bob", configrepo.RoleTA); err != nil {
+			t.Fatalf("runStaffAdd: %v", err)
+		}
+		if !strings.Contains(errOut.String(), `records "classroom50-other-ta" as the ta staff team`) {
+			t.Errorf("stderr = %q, want a warning naming the rejected ref", errOut.String())
+		}
+		committed, ok := mock.committed["cs-principles/classroom.json"]
+		if !ok || !strings.Contains(committed, `"classroom50-cs-principles-ta"`) || strings.Contains(committed, "classroom50-other-ta") {
+			t.Errorf("committed classroom.json = %q, want teams.ta rewritten to the canonical slug", committed)
+		}
+		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-ta/memberships/bob") {
+			t.Errorf("membership PUTs = %v, want bob added to the canonical ta team only", mock.membershipPUT)
+		}
+	})
+
 	t.Run("self-heals a missing staff team: creates, grants, records, then adds", func(t *testing.T) {
 		mock := &staffMock{classroomJSON: `{"schema":"classroom50/classroom/v1","short_name":"cs-principles","org":"o"}`}
 		server := httptest.NewServer(mock.handler(t))

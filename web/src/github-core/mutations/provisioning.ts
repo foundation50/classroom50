@@ -23,6 +23,7 @@ import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
 import { prefixCommit } from "@/util/commit"
 import { collectBypassStaffTeamIds, repairRulesets } from "../rulesets"
+import type { LocalizedMessage } from "@/types/localizedMessage"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
 import { bytesToHex } from "@/util/hex"
 import { logger } from "@/lib/logger"
@@ -44,6 +45,19 @@ const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 // code) or a hard error. Callers detect the hard case via stepFailed().
 type StepOutcome =
   { status: "warning"; message: string } | { status: "error"; message: string }
+
+// A step result's deferred user-facing message, when it carries one; the board
+// renders it instead of the diagnostic `message`.
+function stepDetail(result: unknown): LocalizedMessage | undefined {
+  if (typeof result !== "object" || result === null || !("detail" in result))
+    return undefined
+  const detail = (result as { detail?: unknown }).detail
+  return typeof detail === "object" &&
+    detail !== null &&
+    typeof (detail as LocalizedMessage).key === "string"
+    ? (detail as LocalizedMessage)
+    : undefined
+}
 
 async function tryStep<T>({
   id,
@@ -92,6 +106,7 @@ async function tryStep<T>({
         typeof result.message === "string"
           ? result.message
           : undefined,
+      detail: stepDetail(result),
     })
 
     return result
@@ -1505,6 +1520,8 @@ export type InitStepUpdate = {
   status: InitStepStatus
   title?: string
   message?: string
+  // Deferred form of `message`; the board prefers it when present.
+  detail?: LocalizedMessage
   error?: string
   data?: unknown
 }

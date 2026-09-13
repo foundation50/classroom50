@@ -98,9 +98,9 @@ var ConfigRepoPermission = map[StaffRole]string{
 	RoleTA:      "pull",
 }
 
-// staffTeamName derives the staff-role team name: `classroom50-<short>-<role>`.
+// StaffTeamSlug derives the staff-role team name: `classroom50-<short>-<role>`.
 // Mirrors the web's classroomTeamSlug(short, role). The short-name is canonical, so slug == name.
-func staffTeamName(shortName string, role StaffRole) string {
+func StaffTeamSlug(shortName string, role StaffRole) string {
 	return "classroom50-" + shortName + "-" + string(role)
 }
 
@@ -233,7 +233,7 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
-	return ensureTeamByName(client, org, staffTeamName(shortName, role), "", notificationsEnabled, StaffTeamPrivacy)
+	return ensureTeamByName(client, org, StaffTeamSlug(shortName, role), "", notificationsEnabled, StaffTeamPrivacy)
 }
 
 // EnsureStaffTeams creates (or adopts) all staff teams (teacher, hta, ta) and
@@ -508,7 +508,7 @@ func ListOrgTeams(client githubapi.Client, org string) (map[string]OrgTeam, erro
 func StaffTeamSlugs(shortName string) []string {
 	slugs := make([]string, 0, len(StaffRoles))
 	for _, role := range StaffRoles {
-		slugs = append(slugs, staffTeamName(shortName, role))
+		slugs = append(slugs, StaffTeamSlug(shortName, role))
 	}
 	return slugs
 }
@@ -540,7 +540,7 @@ type StaffRoleRef struct {
 // owner-run writes (team visibility, ruleset bypass, repo grants), so any
 // other slug (the student team, an invite team, a typo) is refused.
 func IsCanonicalStaffTeamRef(shortName string, role StaffRole, ref *TeamRef) bool {
-	return ref != nil && ref.ID > 0 && ref.Slug == staffTeamName(shortName, role)
+	return ref != nil && ref.ID > 0 && ref.Slug == StaffTeamSlug(shortName, role)
 }
 
 // WalkClassrooms calls fn for every classroom directory in the config repo
