@@ -115,7 +115,8 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 // added in one place cannot go missing from another.
 const RequiredTokenPermissions = "Repository access = All repositories, " +
 	"Repository permissions Contents: Read and write, Actions: Read and write, " +
-	"and Administration: Read and write, and Organization permissions Members: Read"
+	"Workflows: Read and write, and Administration: Read and write, " +
+	"and Organization permissions Members: Read"
 
 // ValidateTokenVerbose confirms a service token can do what the pipeline needs:
 // Contents Read+Write in the org (collect reads, regrade pushes submit/* tags),
@@ -339,8 +340,9 @@ func NewRotateCmd() *cobra.Command {
 			"  - Repository access -> All repositories (a token limited to\n" +
 			"    selected repositories can't reach student repos)\n" +
 			"  - Repository permissions -> Contents: Read and write, Actions:\n" +
-			"    Read and write, and Administration: Read and write\n" +
-			"    (Metadata: Read is auto-included)\n" +
+			"    Read and write, Workflows: Read and write, and Administration:\n" +
+			"    Read and write (Metadata: Read is auto-included). Workflows lets\n" +
+			"    regrade tag a commit pushed before a submission-mode change.\n" +
 			"  - Organization permissions -> Members: Read (a separate section\n" +
 			"    shown only once the org is the Resource owner)\n\n" +
 			"Idempotent: the repository secret is replaced in place.",

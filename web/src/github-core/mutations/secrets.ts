@@ -49,10 +49,12 @@ export async function encryptSecret(publicKey: string, secret: string) {
  * reading the classroom50 repo *as the supplied token* and asserting it can
  * WRITE (permissions.push), mapping failures to actionable messages.
  *
- * The shared token needs Contents: Read and write, Actions: Read and write, AND
- * Administration: Read and write on student repos: collect-scores reads, regrade
- * (re-running an autograde run, or pushing a submit/* tag) WRITES, and collect
- * grants staff teams (e.g., TAs) repo access via PUT /orgs/{org}/teams/{slug}/repos/...
+ * The shared token needs Contents: Read and write, Actions: Read and write,
+ * Workflows: Read and write, AND Administration: Read and write on student
+ * repos: collect-scores reads, regrade (re-running an autograde run, or pushing
+ * a submit/* tag, which GitHub refuses without Workflows when the tagged
+ * commit's autograde workflow matches no branch) WRITES, and collect grants
+ * staff teams (e.g., TAs) repo access via PUT /orgs/{org}/teams/{slug}/repos/...
  * which needs Administration. We can't introspect a fine-grained PAT's Actions
  * scope via the API, so we assert the Contents write capability
  * (permissions.push) AND the admin capability (permissions.admin) here — a

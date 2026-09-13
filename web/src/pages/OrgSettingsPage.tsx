@@ -82,6 +82,10 @@ function buildServiceTokenUrl(
       expires_in: String(expiresInDays),
       contents: "write",
       actions: "write",
+      // Workflows: write — regrade may tag a commit pushed before a
+      // submission-mode change, whose autograde workflow no longer matches any
+      // branch; GitHub refuses that ref from a token without this permission.
+      workflows: "write",
       // Administration: write — collection grants staff teams read on student
       // repos/templates (PUT teams/.../repos/...), not implied by Contents.
       administration: "write",

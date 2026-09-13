@@ -121,6 +121,7 @@ own account (scope it tightly to the organization):
 | Repository access | **All repositories** ("Only select repositories" misses on-demand student repositories). |
 | Contents | **Read and write** (read: collect; write: regrade pushes `submit/*` tags). |
 | Actions | **Read and write** (regrade re-runs autograde). |
+| Workflows | **Read and write** (regrade can tag a commit pushed before a submission-mode change; GitHub refuses that tag otherwise). |
 | Administration | **Read and write** (grant staff teams read on student repositories and templates). |
 | Metadata | **Read** (auto-included; lets collection read legacy group repository collaborators). |
 | Organization permissions, **Members** | **Read** (list the classroom team; a separate section, shown only once the organization is the resource owner). |

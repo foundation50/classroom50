@@ -124,8 +124,8 @@ click **Fine-grained tokens**, then click **Generate new token**:
 4. **Repository access**: **All repositories**. Student repos are created on
    demand, so "Only select repositories" silently misses them.
 5. **Repository permissions**: **Contents: Read and write**, **Actions: Read
-   and write**, **Administration: Read and write**. (Metadata: Read is added
-   automatically.)
+   and write**, **Workflows: Read and write**, **Administration: Read and
+   write**. (Metadata: Read is added automatically.)
 6. **Organization permissions**: **Members: Read**. This is a separate section
    that appears only after you pick the org as resource owner. It lets score
    collection list the classroom team.

@@ -85,6 +85,7 @@ TOKEN_PERMISSION_PHRASES = (
     "All repositories",
     "Contents: Read and write",
     "Actions: Read and write",
+    "Workflows: Read and write",
     "Administration: Read and write",
     "Members: Read",
 )
