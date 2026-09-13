@@ -309,6 +309,10 @@ def main() -> int:
     ).rstrip("/")
 
     classroom_dirs = list(iter_classrooms(base_dir, classroom_filter))
+    # Every classroom directory, filter or not: a classroom `<short>-<role>`
+    # owns the team at `<short>`'s `<role>` slug, so the grant pass for
+    # `<short>` must know about it even when only `<short>` is collected.
+    all_classrooms = classroom_dir_names(base_dir)
     if not classroom_dirs:
         if classroom_filter:
             # An explicit filter matching nothing is a FAILED run (typo, or a
@@ -371,6 +375,7 @@ def main() -> int:
                 repo_index=repo_index,
                 team_members=team_members,
                 assignment_filter=assignment_filter,
+                all_classrooms=all_classrooms,
             )
         except GrantThrottled as exc:
             # NOT a failure: collection is untouched, the pass is idempotent, and
@@ -591,6 +596,16 @@ def main() -> int:
 
 
 # Classroom enumeration -------------------------------------------------------
+
+
+def classroom_dir_names(base_dir: pathlib.Path) -> frozenset[str]:
+    """Every directory under base_dir that holds a classroom.json: the same
+    authority the Go and web sides probe for a `<short>-<role>` classroom."""
+    if not base_dir.is_dir():
+        return frozenset()
+    return frozenset(
+        p.name for p in base_dir.iterdir() if p.is_dir() and (p / "classroom.json").is_file()
+    )
 
 
 def iter_classrooms(
@@ -2120,6 +2135,7 @@ def grant_classroom_team_access(
     repo_index: RepoIndex | None = None,
     team_members: "TeamMembers | None" = None,
     assignment_filter: str = "",
+    all_classrooms: frozenset[str] = frozenset(),
 ) -> None:
     """Grant each classroom staff team its mapped repo permission (see
     STAFF_TEAM_PERMISSIONS) on every EXISTING student assignment repo, and read
@@ -2147,11 +2163,19 @@ def grant_classroom_team_access(
     and its private template); blank grants every assignment as before.
     """
     staff_teams = resolve_staff_team_slugs(classroom_meta, classroom_short)
-    grant_teams = [
-        (role, team, STAFF_TEAM_PERMISSIONS[role])
-        for role, team in staff_teams.items()
-        if role in STAFF_TEAM_PERMISSIONS
-    ]
+    grant_teams = []
+    for role, team in staff_teams.items():
+        if role not in STAFF_TEAM_PERMISSIONS:
+            continue
+        # A classroom `<short>-<role>` puts its STUDENT team at this slug; that
+        # roster is never staff, whatever an older release granted it.
+        if f"{classroom_short}-{role}" in all_classrooms:
+            print(
+                f"{classroom_short}: {team.slug!r} is the student team of classroom "
+                f"{classroom_short}-{role}, so {classroom_short} has no {role} team to grant."
+            )
+            continue
+        grant_teams.append((role, team, STAFF_TEAM_PERMISSIONS[role]))
     if not grant_teams:
         return
 
@@ -2276,9 +2300,17 @@ def grant_classroom_team_access(
         # `classroom50-<short>-ta`, and classroom `<short>-ta`'s student team
         # sits at that very slug. Only a team Classroom 50 granted access to
         # the config repo gets push on every student repo.
-        if not staff_team_is_claimed(
+        claimed = staff_team_is_claimed(
             api_url, org, team_slug, service_token, known_repos
-        ):
+        )
+        if claimed is None:
+            emit_warning(
+                f"{classroom_short}: could not check whether team {team_slug!r} has access "
+                f"to the {CONFIG_REPO} repository, so it was not granted access to student "
+                f"repos this run; the next run retries."
+            )
+            continue
+        if not claimed:
             emit_warning(
                 f"{classroom_short}: team {team_slug!r} exists but was not created by "
                 f"Classroom 50 (it has no access to the {CONFIG_REPO} repository), so it "
@@ -2423,12 +2455,14 @@ def staff_team_is_claimed(
     team_slug: str,
     token: str,
     known_repos: dict[str, str] | None,
-) -> bool:
+) -> bool | None:
     """Whether `team_slug` holds a grant on the org's config repo, the proof that
-    Classroom 50 created it (mirrors the Go adoptGuard and the web AdoptGuard).
-    Answered from the bulk repo listing when the caller has it, else with one
-    per-repo read. Fails closed: when neither can say, the team is not staff
-    for this run rather than granted on a guess."""
+    Classroom 50 created it: the grant half of the Go adoptGuard and the web
+    AdoptGuard (the recorded-id exception does not apply here, since the
+    collector never adopts or re-grants a team). Answered from the bulk repo
+    listing when the caller has it, else with one per-repo read. None means the
+    read failed, so the caller can say "could not check" rather than "not
+    Classroom 50's"; either way nothing is granted on a guess."""
     key = f"{org}/{CONFIG_REPO}".lower()
     if known_repos is not None:
         return key in known_repos
@@ -2437,7 +2471,7 @@ def staff_team_is_claimed(
     except urllib.error.HTTPError as exc:
         if classify(exc) is not SKIPPABLE:
             raise
-        return False
+        return None
 
 
 def known_team_repos(

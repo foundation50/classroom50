@@ -598,6 +598,7 @@ def main() -> int:
     # Per-classroom: read the exact team collect-scores reads. Catches the
     # team-visibility gap the org-members proxy can miss.
     classrooms = list(iter_classroom_meta(base_dir))
+    known = {short for short, _ in classrooms}
     if classrooms:
         print("\nProbing per-classroom team reads:")
         for classroom_short, meta in classrooms:
@@ -607,6 +608,10 @@ def main() -> int:
             checks.append(check)
             # Probe each staff team the grant targets (see check_staff_team_visible).
             for role, staff_slug in resolve_staff_team_slugs(meta, classroom_short).items():
+                # A classroom `<short>-<role>` owns the team at this slug (its
+                # student team); the grant never targets it.
+                if f"{classroom_short}-{role}" in known:
+                    continue
                 staff_check = check_staff_team_visible(
                     api_url, org, token, classroom_short, role, staff_slug
                 )
