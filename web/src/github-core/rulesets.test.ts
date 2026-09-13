@@ -4,10 +4,9 @@ import {
   RULESET_NAME_FEEDBACK_BASE,
   RULESET_NAME_SUBMISSION_HISTORY,
   auditRulesets,
-  checkRulesets,
   classroomRulesetBodies,
   collectBypassStaffTeamIds,
-  collectStaffTeams,
+  collectStaffTeamSlugs,
   feedbackBaseBypassActors,
   prepareStaffTeams,
   repairRulesets,
@@ -249,102 +248,23 @@ describe("updateFeedbackBaseBypassTeams", () => {
   })
 })
 
-describe("checkRulesets", () => {
-  it("enforced when both rulesets exist and every staff team is exempt", async () => {
-    const { client } = makeClient(
-      [
-        { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-        { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
-      ],
-      [OWNER_EXEMPT, team(1), team(2)],
-    )
-    expect((await checkRulesets(client, "acme", [1, 2])).state).toBe("enforced")
-  })
-
-  it("reads the ruleset body even with no staff teams: an `always` owner is a drift", async () => {
-    const { client, calls } = makeClient(
-      [
-        { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-        { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
-      ],
-      [{ actor_id: 1, actor_type: "OrganizationAdmin", bypass_mode: "always" }],
-    )
-    const verdict = await checkRulesets(client, "acme", [])
-    expect(calls.some((c) => c.path.endsWith("/20"))).toBe(true)
-    expect(verdict.state).toBe("unenforced")
-    expect(verdict.detail?.key).toBe(
-      "orgSettings.audit.detail.rulesetOwnerNotExempt",
-    )
-  })
-
-  it("unenforced when an actor we did not install sits on the bypass list", async () => {
-    const { client } = makeClient(
-      [
-        { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-        { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
-      ],
-      [OWNER_EXEMPT, team(1), team(99)],
-    )
-    const verdict = await checkRulesets(client, "acme", [1])
-    expect(verdict.detail).toEqual({
-      key: "orgSettings.audit.detail.rulesetUnexpectedBypass",
-      params: { count: 1 },
-    })
-  })
-
-  it("unreadable, never enforced, when the classroom list could not be read", async () => {
-    const { client, calls } = makeClient([
-      { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-      { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
-    ])
-    const verdict = await checkRulesets(client, "acme", null)
-    expect(verdict.state).toBe("unreadable")
-    expect(calls).toHaveLength(0)
-  })
-
-  it("unenforced when a ruleset is missing", async () => {
-    const { client } = makeClient([
-      { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-    ])
-    const verdict = await checkRulesets(client, "acme", [])
-    expect(verdict.state).toBe("unenforced")
-    expect(verdict.detail?.key).toBe("orgSettings.audit.detail.rulesetsMissing")
-    expect(String(verdict.detail?.params?.names)).toContain(
-      RULESET_NAME_FEEDBACK_BASE,
-    )
-  })
-
-  it("unenforced when a staff team is missing from the bypass list or not exempt", async () => {
-    const { client } = makeClient(
-      [
-        { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-        { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
-      ],
-      [
-        OWNER_EXEMPT,
-        team(1),
-        { actor_id: 2, actor_type: "Team", bypass_mode: "always" },
-      ],
-    )
-    const verdict = await checkRulesets(client, "acme", [1, 2, 3])
-    expect(verdict.state).toBe("unenforced")
-    expect(verdict.detail).toEqual({
-      key: "orgSettings.audit.detail.rulesetStaffTeamsMissing",
-      params: { count: 2 },
-    })
-  })
-})
-
-// A fake org for the collector/prepare path: a config repo with classroom
-// dirs, per-classroom classroom.json bodies, live teams (slug -> {id,
-// privacy}), and an installed feedback-base ruleset.
+// A fake org for the collector/audit/repair path: a config repo with
+// classroom dirs, per-classroom classroom.json bodies, the org's live teams
+// (slug -> {id, privacy}), and the installed rulesets' feedback-base actors.
 function makeConfigRepoClient(opts: {
   classrooms?: Record<string, unknown | null> // null: dir without classroom.json
   teams?: Record<string, { id: number; privacy: string }>
+  teamsError?: Error
   listingError?: Error
-  rulesetTeams?: number[]
+  installed?: Array<{ id: number; name: string }>
+  feedbackActors?: RulesetBypassActor[]
+  rulesetsError?: Error
 }) {
   const calls: Recorded[] = []
+  const installed = opts.installed ?? [
+    { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
+    { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
+  ]
   const request = vi.fn(
     async (
       path: string,
@@ -352,25 +272,29 @@ function makeConfigRepoClient(opts: {
     ): Promise<unknown> => {
       const method = options?.method ?? "GET"
       calls.push({ method, path, body: options?.body })
-      const teamGet = path.match(/^\/orgs\/acme\/teams\/([^/]+)$/)
-      if (teamGet) {
-        const t = opts.teams?.[teamGet[1]]
-        if (!t) throw httpError(404)
-        if (method === "PATCH") return {}
-        return { id: t.id, slug: teamGet[1], privacy: t.privacy }
+      if (method === "GET" && /^\/orgs\/acme\/teams\?/.test(path)) {
+        if (opts.teamsError) throw opts.teamsError
+        // Single page; <100 ends pagination.
+        return Object.entries(opts.teams ?? {}).map(([slug, t]) => ({
+          id: t.id,
+          slug,
+          privacy: t.privacy,
+        }))
       }
-      if (method === "GET" && /\/rulesets\/\d+$/.test(path)) {
-        return {
-          id: 20,
-          name: RULESET_NAME_FEEDBACK_BASE,
-          bypass_actors: [OWNER_EXEMPT, ...(opts.rulesetTeams ?? []).map(team)],
-        }
+      if (method === "PATCH" && /^\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
+        if (path.endsWith("-stuck-teacher")) throw httpError(403)
+        return {}
       }
       if (method === "GET" && path.includes("/rulesets")) {
-        return [
-          { id: 10, name: RULESET_NAME_SUBMISSION_HISTORY },
-          { id: 20, name: RULESET_NAME_FEEDBACK_BASE },
-        ]
+        if (opts.rulesetsError) throw opts.rulesetsError
+        if (/\/rulesets\/\d+$/.test(path)) {
+          return {
+            id: 20,
+            name: RULESET_NAME_FEEDBACK_BASE,
+            bypass_actors: opts.feedbackActors ?? [OWNER_EXEMPT],
+          }
+        }
+        return installed
       }
       return {}
     },
@@ -380,6 +304,7 @@ function makeConfigRepoClient(opts: {
       const name = path.split("/contents/")[1].split("/")[0]
       const body = opts.classrooms?.[name]
       if (body === undefined || body === null) throw httpError(404)
+      if (body === "BOOM") throw httpError(500)
       return JSON.stringify(body)
     }
     if (path.includes("/classroom50/contents")) {
@@ -412,65 +337,202 @@ function httpError(status: number, rateLimited = false): GitHubAPIError {
   })
 }
 
+// A classroom whose head TA pointed `teams.ta` at the student team. The slug
+// walk never reads the teams block, so the tampering changes nothing.
 const cs101 = {
   short_name: "cs101",
   team: { id: 100, slug: "classroom50-cs101" },
   teams: {
     teacher: { id: 11, slug: "classroom50-cs101-teacher" },
     hta: { id: 12, slug: "classroom50-cs101-hta" },
-    // A head TA pointing `teams.ta` at the student team.
     ta: { id: 100, slug: "classroom50-cs101" },
   },
 }
+const CS101_SLUGS = [
+  "classroom50-cs101-teacher",
+  "classroom50-cs101-hta",
+  "classroom50-cs101-ta",
+]
+const cs101Teams = {
+  "classroom50-cs101-teacher": { id: 11, privacy: "closed" },
+  "classroom50-cs101-hta": { id: 12, privacy: "closed" },
+  "classroom50-cs101": { id: 100, privacy: "secret" },
+}
 
-describe("collectStaffTeams", () => {
-  it("keeps only canonical refs; a dir without classroom.json is skipped", async () => {
+describe("auditRulesets", () => {
+  it("enforced when both rulesets exist and every live staff team is exempt", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101 },
+      teams: cs101Teams,
+      feedbackActors: [OWNER_EXEMPT, team(11), team(12)],
+    })
+    expect((await auditRulesets(client, "acme")).state).toBe("enforced")
+  })
+
+  it("expects a staff team the classroom.json never recorded (created by a role flow)", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101: { short_name: "cs101" } },
+      teams: cs101Teams,
+      feedbackActors: [OWNER_EXEMPT, team(11)],
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.state).toBe("unenforced")
+    expect(verdict.detail).toEqual({
+      key: "orgSettings.audit.detail.rulesetStaffTeamsMissing",
+      params: { count: 1 },
+    })
+  })
+
+  it("reads the ruleset body even with no staff teams: an `always` owner is a drift", async () => {
+    const { client, calls } = makeConfigRepoClient({
+      feedbackActors: [
+        { actor_id: 1, actor_type: "OrganizationAdmin", bypass_mode: "always" },
+      ],
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(calls.some((c) => c.path.endsWith("/20"))).toBe(true)
+    expect(verdict.state).toBe("unenforced")
+    expect(verdict.detail?.key).toBe(
+      "orgSettings.audit.detail.rulesetOwnerNotExempt",
+    )
+  })
+
+  it("unenforced when an actor we did not install sits on the bypass list", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101 },
+      teams: cs101Teams,
+      feedbackActors: [OWNER_EXEMPT, team(11), team(12), team(99)],
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.detail).toEqual({
+      key: "orgSettings.audit.detail.rulesetUnexpectedBypass",
+      params: { count: 1 },
+    })
+  })
+
+  it("unenforced when a ruleset is missing", async () => {
+    const { client } = makeConfigRepoClient({
+      installed: [{ id: 10, name: RULESET_NAME_SUBMISSION_HISTORY }],
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.state).toBe("unenforced")
+    expect(verdict.detail?.key).toBe("orgSettings.audit.detail.rulesetsMissing")
+    expect(String(verdict.detail?.params?.names)).toContain(
+      RULESET_NAME_FEEDBACK_BASE,
+    )
+  })
+
+  it("unenforced when a staff team is missing from the bypass list or not exempt", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101 },
+      teams: {
+        ...cs101Teams,
+        "classroom50-cs101-ta": { id: 13, privacy: "secret" },
+      },
+      feedbackActors: [
+        OWNER_EXEMPT,
+        team(11),
+        { actor_id: 12, actor_type: "Team", bypass_mode: "always" },
+      ],
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.state).toBe("unenforced")
+    // 12 is not exempt; 13 (still secret, but live) is expected too.
+    expect(verdict.detail).toEqual({
+      key: "orgSettings.audit.detail.rulesetStaffTeamsMissing",
+      params: { count: 2 },
+    })
+  })
+
+  it("unreadable with the read-failure detail when the ruleset itself can't be read", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101 },
+      teams: cs101Teams,
+      rulesetsError: httpError(403),
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.state).toBe("unreadable")
+    expect(verdict.detail?.key).not.toBe(
+      "orgSettings.audit.detail.rulesetStaffTeamsUnreadable",
+    )
+  })
+
+  it("unreadable, never enforced, when the classroom list or the team listing fails", async () => {
+    for (const opts of [
+      { listingError: httpError(500) },
+      { classrooms: { cs101 }, teamsError: httpError(500) },
+    ]) {
+      const { client, calls } = makeConfigRepoClient(opts)
+      const verdict = await auditRulesets(client, "acme")
+      expect(verdict.state).toBe("unreadable")
+      expect(verdict.detail?.key).toBe(
+        "orgSettings.audit.detail.rulesetStaffTeamsUnreadable",
+      )
+      expect(calls.some((c) => c.method !== "GET")).toBe(false)
+    }
+  })
+})
+
+describe("collectStaffTeamSlugs", () => {
+  it("derives every role's slug per classroom; a dir without classroom.json is skipped", async () => {
     const { client } = makeConfigRepoClient({
       classrooms: { cs101, empty: null },
     })
-    expect(await collectStaffTeams(client, "acme")).toEqual([
-      { id: 11, slug: "classroom50-cs101-teacher" },
-      { id: 12, slug: "classroom50-cs101-hta" },
-    ])
+    expect(await collectStaffTeamSlugs(client, "acme")).toEqual(CS101_SLUGS)
   })
 
   it("resolves to [] on a fresh org (no config repo)", async () => {
     const { client } = makeConfigRepoClient({})
-    expect(await collectStaffTeams(client, "acme")).toEqual([])
+    expect(await collectStaffTeamSlugs(client, "acme")).toEqual([])
   })
 
-  it("throws on any other listing failure rather than returning a shorter list", async () => {
-    const { client } = makeConfigRepoClient({ listingError: httpError(500) })
-    await expect(collectStaffTeams(client, "acme")).rejects.toThrow()
+  it("throws on a listing or per-classroom read failure rather than returning a shorter list", async () => {
+    const listing = makeConfigRepoClient({ listingError: httpError(500) })
+    await expect(
+      collectStaffTeamSlugs(listing.client, "acme"),
+    ).rejects.toThrow()
+    const oneBad = makeConfigRepoClient({ classrooms: { cs101, bad: "BOOM" } })
+    await expect(collectStaffTeamSlugs(oneBad.client, "acme")).rejects.toThrow()
   })
 })
 
 describe("prepareStaffTeams", () => {
-  it("patches secret teams, uses live ids, and leaves a deleted team out", async () => {
+  it("patches secret teams, uses live ids, and leaves an unstaffed role out", async () => {
     const { client, calls } = makeConfigRepoClient({
       teams: {
         "classroom50-cs101-teacher": { id: 11, privacy: "secret" },
-        // Re-created under the same slug: live id differs from the record.
+        // Re-created under the same slug: live id is what counts.
         "classroom50-cs101-hta": { id: 120, privacy: "closed" },
+        "classroom50-stuck-teacher": { id: 31, privacy: "secret" }, // PATCH refused
       },
     })
     const ids = await prepareStaffTeams(client, "acme", [
-      { id: 11, slug: "classroom50-cs101-teacher" },
-      { id: 12, slug: "classroom50-cs101-hta" },
-      { id: 13, slug: "classroom50-cs101-ta" }, // gone on GitHub
+      ...CS101_SLUGS,
+      "classroom50-stuck-teacher",
     ])
+    // A team that stays secret is left off: GitHub would 422 the PUT.
     expect(ids).toEqual([11, 120])
     const patches = calls.filter((c) => c.method === "PATCH").map((c) => c.path)
-    expect(patches).toEqual(["/orgs/acme/teams/classroom50-cs101-teacher"])
+    expect(patches).toEqual([
+      "/orgs/acme/teams/classroom50-cs101-teacher",
+      "/orgs/acme/teams/classroom50-stuck-teacher",
+    ])
   })
 
-  it("propagates a rate limit instead of silently shrinking the list", async () => {
-    const request = vi.fn(async () => {
+  it("propagates a listing failure or rate limit instead of silently shrinking the list", async () => {
+    const listing = makeConfigRepoClient({ teamsError: httpError(500) })
+    await expect(
+      prepareStaffTeams(listing.client, "acme", CS101_SLUGS),
+    ).rejects.toThrow()
+
+    const request = vi.fn(async (path: string) => {
+      if (path.includes("/teams?"))
+        return [{ id: 1, slug: "classroom50-x-ta", privacy: "secret" }]
       throw httpError(403, true)
     })
     const client = { request } as unknown as GitHubClient
     await expect(
-      prepareStaffTeams(client, "acme", [{ id: 1, slug: "classroom50-x-ta" }]),
+      prepareStaffTeams(client, "acme", ["classroom50-x-ta"]),
     ).rejects.toThrow()
   })
 })
@@ -479,20 +541,62 @@ describe("collectBypassStaffTeamIds -> repairRulesets fail-closed", () => {
   it("returns null when the classroom list can't be read, and repair keeps the current teams", async () => {
     const { client, calls } = makeConfigRepoClient({
       listingError: httpError(500),
-      rulesetTeams: [7, 8],
+      feedbackActors: [OWNER_EXEMPT, team(7), team(8)],
     })
     const ids = await collectBypassStaffTeamIds(client, "acme")
     expect(ids).toBeNull()
     const result = await repairRulesets(client, "acme", ids)
     expect(result.status).toBe("warning")
+    expect(result.reason).toBe("staff_teams_unreadable")
+    expect(result.updated).toEqual([
+      RULESET_NAME_SUBMISSION_HISTORY,
+      RULESET_NAME_FEEDBACK_BASE,
+    ])
     const put = calls.find((c) => c.method === "PUT" && c.path.endsWith("/20"))
     expect(
       (put?.body as { bypass_actors: RulesetBypassActor[] }).bypass_actors,
     ).toEqual([OWNER_EXEMPT, team(7), team(8)])
   })
 
-  it("auditRulesets reports unreadable on a collector failure", async () => {
-    const { client } = makeConfigRepoClient({ listingError: httpError(500) })
-    expect((await auditRulesets(client, "acme")).state).toBe("unreadable")
+  it("still reconciles submission-history when neither source is readable, leaving the feedback lock alone", async () => {
+    const { client, calls } = makeConfigRepoClient({
+      listingError: httpError(500),
+    })
+    // Rulesets list fine, but the feedback-base body read fails.
+    let bodyReads = 0
+    const inner = client.request
+    client.request = ((path: string, options?: unknown) => {
+      if (
+        /\/rulesets\/20$/.test(path) &&
+        !(options as { method?: string })?.method
+      ) {
+        bodyReads++
+        return Promise.reject(httpError(500))
+      }
+      return inner(path, options as never)
+    }) as GitHubClient["request"]
+    const result = await repairRulesets(client, "acme", null)
+    expect(bodyReads).toBe(1)
+    expect(result.status).toBe("warning")
+    expect(result.reason).toBe("staff_teams_unreadable")
+    expect(result.updated).toEqual([RULESET_NAME_SUBMISSION_HISTORY])
+    expect(
+      calls.some((c) => c.method === "PUT" && c.path.endsWith("/20")),
+    ).toBe(false)
+  })
+
+  it("Fix it exempts a live staff team the classroom.json never recorded", async () => {
+    const { client, calls } = makeConfigRepoClient({
+      classrooms: { cs101: { short_name: "cs101" } },
+      teams: cs101Teams,
+      feedbackActors: [OWNER_EXEMPT],
+    })
+    const ids = await collectBypassStaffTeamIds(client, "acme")
+    expect(ids).toEqual([11, 12])
+    await repairRulesets(client, "acme", ids)
+    const put = calls.find((c) => c.method === "PUT" && c.path.endsWith("/20"))
+    expect(
+      (put?.body as { bypass_actors: RulesetBypassActor[] }).bypass_actors,
+    ).toEqual([OWNER_EXEMPT, team(11), team(12)])
   })
 })

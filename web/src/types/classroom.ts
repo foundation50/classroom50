@@ -13,7 +13,7 @@ export type Classroom = {
   // Per-classroom GitHub team granting rostered students read on private org
   // templates. Absent on classrooms created before this feature.
   team?: TeamRef
-  // Per-classroom GitHub staff teams backing in-app roles. Each is a `secret`
+  // Per-classroom GitHub staff teams backing in-app roles. Each is a `closed`
   // team `classroom50-<short_name>-<role>`. Teacher and head-TA (`hta`) teams
   // are granted config-repo write; the `ta` team is read-only. Ensured on
   // touch. Absent on classrooms created before this feature.

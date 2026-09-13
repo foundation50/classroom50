@@ -12,7 +12,7 @@ import { GitHubAPIError } from "@/github-core/errors"
 import {
   deleteClassroomTeam,
   deleteRepo,
-  isDeletableClassroomTeamRef,
+  ownedClassroomTeamRefs,
   type ClassroomTeamRef,
 } from "@/github-core/mutations"
 import { getOrgRepos, sleep } from "@/github-core/queries"
@@ -159,21 +159,13 @@ async function collectClassroomTeams(
         err,
       })
     },
-    (_classroom, json) => {
+    (classroom, json) => {
       // classroom.json is anyone-with-config-repo-write authored and parsed
       // without schema validation, so its team refs are untrusted input to a
-      // destructive bulk DELETE. Only queue refs the app owns and can safely
-      // delete — see isDeletableClassroomTeamRef.
-      const candidates = [
-        json.team,
-        json.teams?.teacher,
-        json.teams?.hta,
-        json.teams?.ta,
-      ]
-      for (const team of candidates) {
-        if (isDeletableClassroomTeamRef(team)) {
-          bySlug.set(team.slug, { id: team.id, slug: team.slug })
-        }
+      // destructive bulk DELETE. Only queue the teams the app itself created
+      // for this classroom — see isOwnedClassroomTeamRef.
+      for (const team of ownedClassroomTeamRefs(classroom, json)) {
+        bySlug.set(team.slug, team)
       }
     },
   )

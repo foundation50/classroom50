@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   deleteClassroomTeam,
   isDeletableClassroomTeamRef,
+  ownedClassroomTeamRefs,
   TeamIdMismatchError,
 } from "./mutations"
 import { GitHubAPIError } from "./errors"
@@ -82,6 +83,37 @@ describe("isDeletableClassroomTeamRef", () => {
       false,
     )
     expect(isDeletableClassroomTeamRef({ id: 11 })).toBe(false)
+  })
+})
+
+describe("ownedClassroomTeamRefs", () => {
+  it("keeps only the refs naming the team this app creates for that classroom and role", () => {
+    expect(
+      ownedClassroomTeamRefs("cs101", {
+        team: { id: 100, slug: "classroom50-cs101" },
+        teams: {
+          teacher: { id: 11, slug: "classroom50-cs101-teacher" },
+          // Another classroom's staff team: in the namespace, real id, but
+          // not ours to revoke or delete.
+          hta: { id: 21, slug: "classroom50-cs102-hta" },
+          // The student team pointed at as a staff team.
+          ta: { id: 100, slug: "classroom50-cs101" },
+        },
+      }),
+    ).toEqual([
+      { id: 100, slug: "classroom50-cs101" },
+      { id: 11, slug: "classroom50-cs101-teacher" },
+    ])
+  })
+
+  it("tolerates a missing team block or a malformed ref", () => {
+    expect(ownedClassroomTeamRefs("cs101", {})).toEqual([])
+    expect(
+      ownedClassroomTeamRefs("cs101", {
+        team: { slug: "classroom50-cs101" },
+        teams: { ta: null },
+      }),
+    ).toEqual([])
   })
 })
 

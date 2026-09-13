@@ -242,27 +242,7 @@ func initCmd() *cobra.Command {
 			// feedback-base bypass list is rebuilt from every classroom's
 			// staff teams, so a re-run also repairs a list that drifted.
 			step(initStepLabels[4])
-			var (
-				rulesetsReady bool
-				staffTeamIDs  []int64
-				keepFeedback  bool
-			)
-			if staffTeams, err := orgrules.CollectStaffTeams(client, stepErr, org); err != nil {
-				_, _ = fmt.Fprintf(stepErr, "Warning: %s: could not read classroom staff teams (%v); the feedback-base bypass list keeps its current teams. Re-run init once the classroom50 repository is readable.\n", org, err)
-				if staffTeamIDs, err = orgrules.ExistingFeedbackBaseTeamIDs(client, org); err != nil {
-					// Neither source is readable: rebuilding would wipe every
-					// staff exemption, so leave that ruleset untouched.
-					_, _ = fmt.Fprintf(stepErr, "Warning: %s: could not read the current bypass list either (%v); the feedback-base ruleset was left unchanged.\n", org, err)
-					keepFeedback = true
-				}
-			} else {
-				staffTeamIDs = orgrules.PrepareStaffTeams(client, stepOut, stepErr, org, staffTeams)
-			}
-			if keepFeedback {
-				_, err = orgrules.EnsureSubmissionHistoryOnly(client, stepOut, stepErr, org)
-			} else {
-				rulesetsReady, err = orgrules.Ensure(client, stepOut, stepErr, org, staffTeamIDs)
-			}
+			rulesetsReady, feedbackKept, err := orgrules.Reconcile(client, stepOut, stepErr, org)
 			if err != nil {
 				prog.Abort()
 				return err
@@ -349,6 +329,11 @@ func initCmd() *cobra.Command {
 				}
 				summary.addWarning("%s: Feedback PR prerequisites are incomplete: %s could not be applied. Assignments created with `--feedback-pr` may not open PRs or may leave submissions unprotected until you apply these at https://github.com/organizations/%s/settings, then re-run `gh teacher init`.",
 					org, strings.Join(missing, " and "), org)
+			}
+			if feedbackKept {
+				// Not a failure to apply: the lock is in place with whatever
+				// staff teams it already had. The step's warnings say why.
+				summary.addNote("%s: the feedback-base ruleset was left unchanged because the classroom staff teams could not be read. Re-run `gh teacher init` once the classroom50 repository is readable to refresh which staff can merge feedback PRs.", org)
 			}
 
 			// Pages takes a few seconds after the first publish-pages run

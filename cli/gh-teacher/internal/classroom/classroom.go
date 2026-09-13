@@ -308,7 +308,8 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 		return nil, "", fmt.Errorf("create staff teams: %w", err)
 	}
 	// Exempt the new teams from the feedback-base lock so staff can merge
-	// feedback PRs. Best-effort; init rebuilds the list from classroom.json.
+	// feedback PRs. Best-effort; init rebuilds the list from every classroom's
+	// live staff teams.
 	orgrules.ExemptStaffTeams(client, errOut, org, orgrules.CanonicalStaffTeamRefs(shortName, staffTeams))
 	if staffTeams.Teacher == nil {
 		return staffTeams, "", nil
@@ -793,8 +794,9 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	// Resolve the team refs BEFORE the commit deletes classroom.json.
 	// DeleteClassroomTeam deletes by the persisted slug and verifies the id,
 	// so a re-slugged team is still removed and an unrelated occupant never
-	// touched. No team block → empty ref (no-op). Staff teams swept the same
-	// way, mirroring the web.
+	// touched. No team block → empty ref (no-op). Staff refs are head-TA
+	// writable and steer an owner-run revoke + delete, so only a ref naming
+	// this classroom's own staff team for that role is acted on.
 	var team configrepo.TeamRef
 	if t, ok, terr := configrepo.ResolveClassroomTeam(client, org, shortName, branch); terr != nil {
 		return terr
@@ -803,11 +805,19 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	}
 	var staffTeams []configrepo.TeamRef
 	for _, role := range configrepo.StaffRoles {
-		if t, ok, terr := configrepo.ResolveClassroomStaffTeam(client, org, shortName, branch, role); terr != nil {
+		t, ok, terr := configrepo.ResolveClassroomStaffTeam(client, org, shortName, branch, role)
+		if terr != nil {
 			return terr
-		} else if ok {
-			staffTeams = append(staffTeams, t)
 		}
+		if !ok {
+			continue
+		}
+		if !configrepo.IsCanonicalStaffTeamRef(shortName, role, &t) {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: classroom %s records %q as its %s team, which is not the team Classroom 50 created for that role; leaving it alone. Delete it by hand at https://github.com/orgs/%s/teams if it is unused.\n",
+				org, shortName, t.Slug, role, org)
+			continue
+		}
+		staffTeams = append(staffTeams, t)
 	}
 
 	var deleted int

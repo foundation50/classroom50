@@ -60,6 +60,10 @@ function makeClient(configRepoBranch = "main"): {
       if (method === "GET" && path === "/repos/acme/classroom50") {
         return Promise.resolve({ default_branch: configRepoBranch })
       }
+      // The org team listing the ruleset repair resolves staff slugs against.
+      if (method === "GET" && path.startsWith("/orgs/acme/teams?")) {
+        return Promise.resolve([])
+      }
       if (method === "GET" && path.includes("/rulesets")) {
         return Promise.resolve([
           { id: 1, name: RULESET_NAME_SUBMISSION_HISTORY },
@@ -289,6 +293,16 @@ describe("repairConcern", () => {
     expect(
       writePaths(calls).filter((p) => p.startsWith("PUT /orgs/acme/rulesets/")),
     ).toHaveLength(2)
+  })
+
+  it("rulesets: a failed staff-team read is transient, so Fix it stays offered", async () => {
+    const { client } = makeClient()
+    const failing: GitHubClient = {
+      ...client,
+      requestRaw: () => Promise.reject(httpError(500)),
+    }
+    const result = await repairConcern(failing, "acme", "rulesets", "team")
+    expect(result.unresolved?.transient).toBe(true)
   })
 
   it("rulesets success returns no unresolved outcome", async () => {

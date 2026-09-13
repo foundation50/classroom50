@@ -12,6 +12,7 @@ import (
 
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 	"github.com/foundation50/gh-teacher/internal/output"
 )
 
@@ -25,6 +26,10 @@ type configRepoMock struct {
 	blobs            []string
 	teamDeleted      bool     // set when DELETE /orgs/o/teams/classroom50-cs-principles is received
 	staffTeamDeleted []string // staff-team slugs that received a DELETE
+	// The feedback-base ruleset's Team actors as last PUT (nil: never PUT), and
+	// how many staff-team DELETEs had landed by then (revoke must come first).
+	rulesetTeams     []int64
+	rulesetPUTBefore int
 }
 
 func (m *configRepoMock) handler(t *testing.T) http.Handler {
@@ -139,14 +144,47 @@ func (m *configRepoMock) handler(t *testing.T) http.Handler {
 		}
 	})
 
+	// The installed feedback-base ruleset, exempting this classroom's staff
+	// teams plus another classroom's (77) that a remove must leave alone.
+	mux.HandleFunc("/orgs/o/rulesets", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`[{"id":22,"name":"` + orgrules.NameFeedbackBase + `"}]`))
+	})
+	mux.HandleFunc("/orgs/o/rulesets/22", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			_, _ = w.Write([]byte(`{"id":22,"bypass_actors":[{"actor_id":1,"actor_type":"OrganizationAdmin","bypass_mode":"exempt"},{"actor_id":4243,"actor_type":"Team","bypass_mode":"exempt"},{"actor_id":4244,"actor_type":"Team","bypass_mode":"exempt"},{"actor_id":77,"actor_type":"Team","bypass_mode":"exempt"}]}`))
+		case http.MethodPut:
+			var body struct {
+				BypassActors []struct {
+					ActorID   int64  `json:"actor_id"`
+					ActorType string `json:"actor_type"`
+				} `json:"bypass_actors"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			m.rulesetTeams = []int64{}
+			for _, a := range body.BypassActors {
+				if a.ActorType == "Team" {
+					m.rulesetTeams = append(m.rulesetTeams, a.ActorID)
+				}
+			}
+			m.rulesetPUTBefore = len(m.staffTeamDeleted)
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+
 	// Staff-team verify+delete routes (teacher, ta), keyed by the
-	// slug + recorded ids the classroomJSONWithStaffTeams helper sets.
+	// slug + recorded ids the classroomJSONWithStaffTeams helper sets. The
+	// third is another classroom's teacher team (id 77) a tampered ref can
+	// point at.
 	for _, st := range []struct {
 		slug string
 		id   int64
 	}{
 		{"classroom50-cs-principles-teacher", 4243},
 		{"classroom50-cs-principles-ta", 4244},
+		{"classroom50-cs-victim-teacher", 77},
 	} {
 		st := st
 		mux.HandleFunc("/orgs/o/teams/"+st.slug, func(w http.ResponseWriter, r *http.Request) {
@@ -425,6 +463,48 @@ func TestRemoveClassroom(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), "deleted staff team classroom50-cs-principles-teacher") {
 			t.Errorf("stdout = %q, want teacher staff-team delete confirmation", out.String())
+		}
+		// Revoke before delete: the ruleset PUT drops exactly this classroom's
+		// staff teams, keeps the other classroom's, and lands before any DELETE.
+		if len(mock.rulesetTeams) != 1 || mock.rulesetTeams[0] != 77 {
+			t.Errorf("ruleset PUT Team actors = %v, want [77]", mock.rulesetTeams)
+		}
+		if mock.rulesetPUTBefore != 0 {
+			t.Errorf("ruleset PUT landed after %d staff-team DELETEs, want before the first", mock.rulesetPUTBefore)
+		}
+	})
+
+	t.Run("a staff ref naming another classroom's team is neither revoked nor deleted", func(t *testing.T) {
+		// A head TA pointed teams.hta at cs-victim's teacher team: in the
+		// classroom50- namespace, live id matches, but not this classroom's.
+		b, err := output.JSONPretty(configrepo.ClassroomJSON{
+			Schema:    classroomSchemaV1,
+			ShortName: "cs-principles",
+			Org:       "o",
+			Teams: &configrepo.StaffTeamsRef{
+				Teacher: &configrepo.TeamRef{ID: 4243, Slug: "classroom50-cs-principles-teacher"},
+				HeadTA:  &configrepo.TeamRef{ID: 77, Slug: "classroom50-cs-victim-teacher"},
+			},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		mock := &configRepoMock{files: map[string]string{"cs-principles/classroom.json": string(b)}}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+
+		var out, errOut bytes.Buffer
+		if err := removeClassroom(githubtest.NewTestClient(t, server), strings.NewReader(""), &out, &errOut, "o", "cs-principles", true); err != nil {
+			t.Fatalf("removeClassroom: %v", err)
+		}
+		if len(mock.staffTeamDeleted) != 1 || mock.staffTeamDeleted[0] != "classroom50-cs-principles-teacher" {
+			t.Errorf("staff deletes = %v, want only this classroom's teacher team", mock.staffTeamDeleted)
+		}
+		if len(mock.rulesetTeams) != 2 || mock.rulesetTeams[0] != 77 || mock.rulesetTeams[1] != 4244 {
+			t.Errorf("ruleset PUT Team actors = %v, want [77 4244] (victim kept, sorted)", mock.rulesetTeams)
+		}
+		if !strings.Contains(errOut.String(), `"classroom50-cs-victim-teacher" as its hta team`) {
+			t.Errorf("expected a warning naming the refused ref, got %q", errOut.String())
 		}
 	})
 

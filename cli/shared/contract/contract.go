@@ -742,7 +742,8 @@ func filterFeedbackPRAutogradeLines(tmpl string, autograded bool) string {
 }
 
 // StaffRole is a per-classroom staff role backing the web GUI's in-app roles.
-// Each maps to a `secret` GitHub team named `classroom50-<short>-<role>`.
+// Each maps to a `closed` GitHub team named `classroom50-<short>-<role>`
+// (visible to the org, as a ruleset bypass actor must be).
 // Mirrors web StaffRole (web/src/types/classroom.ts) and gh-teacher
 // configrepo.StaffRole — a cross-tool contract with no compile-time link.
 type StaffRole string

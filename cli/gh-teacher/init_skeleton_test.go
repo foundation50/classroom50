@@ -1323,7 +1323,7 @@ func TestStaffPermsParity_GoVsInlinePython(t *testing.T) {
 		t.Fatal("configrepo.StaffTeamRepoPermissions is empty; the parity check would be vacuous")
 	}
 	for role, perm := range configrepo.StaffTeamRepoPermissions {
-		// The Python literal is `"ta": "pull"` (double-quoted, per the mirror
+		// The Python literal is `"ta": "push"` (double-quoted, per the mirror
 		// in collect_scores.py). A Go-side role/perm change that isn't mirrored
 		// drops its literal from the script and fails here.
 		want := fmt.Sprintf("%q: %q", string(role), perm)

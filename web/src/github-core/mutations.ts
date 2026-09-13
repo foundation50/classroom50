@@ -33,6 +33,8 @@ export {
 } from "./mutations/repoCommit"
 export {
   isDeletableClassroomTeamRef,
+  isOwnedClassroomTeamRef,
+  ownedClassroomTeamRefs,
   ensureClassroomTeam,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoWrite,

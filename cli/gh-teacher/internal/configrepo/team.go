@@ -40,8 +40,9 @@ type TeamRef struct {
 }
 
 // StaffRole is a per-classroom staff role backing the web GUI's in-app
-// roles. Each maps to a `secret` GitHub team named
-// `classroom50-<short>-<role>` granted write on the classroom50 repository.
+// roles. Each maps to a `closed` GitHub team named
+// `classroom50-<short>-<role>` (see StaffTeamPrivacy) granted access to the
+// classroom50 repository.
 type StaffRole string
 
 const (
@@ -452,39 +453,64 @@ func adoptTeamByName(client githubapi.Client, org, name, description, notificati
 	return TeamRef{ID: existing.ID, Slug: existing.Slug}, nil
 }
 
-// EnsureStaffTeamVisible PATCHes a staff team created by an older release
-// (as `secret`) to StaffTeamPrivacy, which GitHub requires before the team can
-// be a ruleset bypass actor. Returns the live team (ID from GitHub, not from
-// classroom.json) and whether a PATCH was applied; found=false means the team
-// is gone (404), which the caller must treat as "not a bypass actor".
-func EnsureStaffTeamVisible(client githubapi.Client, org, slug string) (live TeamRef, found, changed bool, err error) {
-	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
-	var existing struct {
-		ID      int64  `json:"id"`
-		Slug    string `json:"slug"`
-		Privacy string `json:"privacy"`
-	}
-	if err := client.Get(getPath, &existing); err != nil {
-		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return TeamRef{}, false, false, nil
-		}
-		return TeamRef{}, false, false, fmt.Errorf("GET %s: %w", getPath, err)
-	}
-	live = TeamRef{ID: existing.ID, Slug: existing.Slug}
-	if existing.Privacy == StaffTeamPrivacy {
-		return live, true, false, nil
-	}
-	body, err := json.Marshal(map[string]any{"privacy": StaffTeamPrivacy})
+// SetTeamPrivacy PATCHes a team's visibility.
+func SetTeamPrivacy(client githubapi.Client, org, slug, privacy string) error {
+	body, err := json.Marshal(map[string]any{"privacy": privacy})
 	if err != nil {
-		return live, true, false, fmt.Errorf("encode team patch: %w", err)
+		return fmt.Errorf("encode team patch: %w", err)
 	}
-	resp, err := client.Request(http.MethodPatch, getPath, bytes.NewReader(body))
+	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
+	resp, err := client.Request(http.MethodPatch, path, bytes.NewReader(body))
 	if err != nil {
-		return live, true, false, fmt.Errorf("PATCH %s (make staff team visible): %w", getPath, err)
+		return fmt.Errorf("PATCH %s (set team privacy): %w", path, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	return live, true, true, nil
+	return nil
+}
+
+// OrgTeam is the slice of GitHub's team object the org-wide listing readers
+// need.
+type OrgTeam struct {
+	ID      int64  `json:"id"`
+	Slug    string `json:"slug"`
+	Privacy string `json:"privacy"`
+}
+
+// ListOrgTeams returns every team in the org keyed by slug, in one paginated
+// read. An org owner sees secret teams too, so the map is complete for the
+// callers that run as one (init, org audit). A read failure propagates.
+func ListOrgTeams(client githubapi.Client, org string) (map[string]OrgTeam, error) {
+	teams, err := githubapi.PaginateAll[OrgTeam](
+		client, githubapi.ListPerPage, githubapi.ListMaxPages,
+		func(page int) string {
+			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
+				url.PathEscape(org), githubapi.ListPerPage, page)
+		},
+		func(path string, err error) error {
+			return fmt.Errorf("GET %s: %w", path, err)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	bySlug := make(map[string]OrgTeam, len(teams))
+	for _, t := range teams {
+		bySlug[t.Slug] = t
+	}
+	return bySlug, nil
+}
+
+// StaffTeamSlugs are the canonical staff team slugs for a classroom, in role
+// order. The slug, not classroom.json, is what identifies a classroom's staff
+// team to GitHub: a team a web role flow created without recording it is still
+// found, and a classroom.json edit can't point at another team.
+func StaffTeamSlugs(shortName string) []string {
+	slugs := make([]string, 0, len(StaffRoles))
+	for _, role := range StaffRoles {
+		slugs = append(slugs, staffTeamName(shortName, role))
+	}
+	return slugs
 }
 
 // StaffRoleRefs pairs each recorded staff team ref with its role, in role

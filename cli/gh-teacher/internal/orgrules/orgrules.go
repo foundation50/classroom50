@@ -114,48 +114,49 @@ func uniqueSortedIDs(ids []int64) []int64 {
 // teacher/head-TA/TA team IDs of every classroom in the org; they only affect
 // the feedback-base lock's bypass list.
 func bodies(staffTeamIDs []int64) []rulesetBody {
-	allRepos := refPattern{Include: []string{"~ALL"}, Exclude: []string{}}
-	return []rulesetBody{
-		{
-			Name:        NameSubmissionHistory,
-			Target:      "branch",
-			Enforcement: "active",
-			Conditions: conditions{
-				// ~DEFAULT_BRANCH follows each repo's actual default branch
-				// (not hardcoded `main`) so it still covers repos renamed by
-				// org policy — and matches the branch the Feedback PR opens
-				// against.
-				RefName:        refPattern{Include: []string{"~DEFAULT_BRANCH"}, Exclude: []string{}},
-				RepositoryName: allRepos,
-			},
-			// `always`, not exempt: an owner rewriting a student's history
-			// should be a deliberate, audited bypass.
-			BypassActors: []bypassActor{{ActorID: orgAdminActorID, ActorType: actorTypeOrgAdmin, BypassMode: bypassAlways}},
-			// non_fast_forward blocks force-push; deletion blocks delete.
-			// Neither blocks a normal fast-forward submit.
-			Rules: []rule{{Type: "non_fast_forward"}, {Type: "deletion"}},
+	return []rulesetBody{submissionHistoryBody(), feedbackBaseBody(staffTeamIDs)}
+}
+
+var allRepos = refPattern{Include: []string{"~ALL"}, Exclude: []string{}}
+
+// submissionHistoryBody locks the default branch's history: non_fast_forward
+// blocks force-push, deletion blocks delete, and neither blocks a normal
+// fast-forward submit.
+func submissionHistoryBody() rulesetBody {
+	return rulesetBody{
+		Name:        NameSubmissionHistory,
+		Target:      "branch",
+		Enforcement: "active",
+		Conditions: conditions{
+			// ~DEFAULT_BRANCH follows each repo's actual default branch (not
+			// hardcoded `main`) so it still covers repos renamed by org policy,
+			// and matches the branch the Feedback PR opens against.
+			RefName:        refPattern{Include: []string{"~DEFAULT_BRANCH"}, Exclude: []string{}},
+			RepositoryName: allRepos,
 		},
-		{
-			Name:        NameFeedbackBase,
-			Target:      "branch",
-			Enforcement: "active",
-			Conditions: conditions{
-				RefName:        refPattern{Include: []string{"refs/heads/" + contract.FeedbackBaseBranch}, Exclude: []string{}},
-				RepositoryName: allRepos,
-			},
-			BypassActors: feedbackBaseBypassActors(staffTeamIDs),
-			// `update` restricts pushes/merges to bypass actors (owners and
-			// staff teams); `deletion` blocks delete. Creation stays allowed
-			// so accept or the runner can land the branch once.
-			Rules: []rule{{Type: "update"}, {Type: "deletion"}},
-		},
+		// `always`, not exempt: an owner rewriting a student's history should
+		// be a deliberate, audited bypass.
+		BypassActors: []bypassActor{{ActorID: orgAdminActorID, ActorType: actorTypeOrgAdmin, BypassMode: bypassAlways}},
+		Rules:        []rule{{Type: "non_fast_forward"}, {Type: "deletion"}},
 	}
 }
 
-// feedbackBaseBody is the feedback-base lock alone, for the incremental
-// bypass-list update.
+// feedbackBaseBody locks the feedback branch: `update` restricts pushes and
+// merges to the bypass actors (owners and staff teams), `deletion` blocks
+// delete. Creation stays allowed so accept or the runner can land the branch
+// once. Also the body the incremental bypass-list update PUTs.
 func feedbackBaseBody(staffTeamIDs []int64) rulesetBody {
-	return bodies(staffTeamIDs)[1]
+	return rulesetBody{
+		Name:        NameFeedbackBase,
+		Target:      "branch",
+		Enforcement: "active",
+		Conditions: conditions{
+			RefName:        refPattern{Include: []string{"refs/heads/" + contract.FeedbackBaseBranch}, Exclude: []string{}},
+			RepositoryName: allRepos,
+		},
+		BypassActors: feedbackBaseBypassActors(staffTeamIDs),
+		Rules:        []rule{{Type: "update"}, {Type: "deletion"}},
+	}
 }
 
 // Ensure installs two org-level branch rulesets covering every current and
@@ -184,7 +185,7 @@ func Ensure(client githubapi.Client, out, errOut io.Writer, org string, staffTea
 // exemption, so it is left as it is (mirrors the web's repairRulesets with a
 // null team list).
 func EnsureSubmissionHistoryOnly(client githubapi.Client, out, errOut io.Writer, org string) (bool, error) {
-	return ensure(client, out, errOut, org, bodies(nil)[:1])
+	return ensure(client, out, errOut, org, []rulesetBody{submissionHistoryBody()})
 }
 
 func ensure(client githubapi.Client, out, errOut io.Writer, org string, rulesets []rulesetBody) (bool, error) {
@@ -367,17 +368,48 @@ func feedbackBaseActors(client githubapi.Client, org string) (int64, []bypassAct
 	return id, current.BypassActors, nil
 }
 
-// CollectStaffTeams reads every classroom.json in the org's config repo and
-// returns the recorded teacher/head-TA/TA team refs, the input Ensure needs to
-// rebuild the bypass list. Only canonical refs count (see
-// configrepo.IsCanonicalStaffTeamRef): classroom.json is head-TA-writable and
-// these refs steer owner-run writes, so a ref naming any other team is warned
-// about and dropped. A missing config repo (fresh org) yields no refs and no
-// error. A per-classroom read failure is an error: the caller falls back to
-// the list already on the ruleset rather than rebuilding a shorter one.
-func CollectStaffTeams(client githubapi.Client, errOut io.Writer, org string) ([]configrepo.TeamRef, error) {
-	var refs []configrepo.TeamRef
-	seen := map[int64]bool{}
+// Reconcile is init's ruleset step: rebuild the feedback-base bypass list from
+// the live staff teams of every classroom, then Ensure both rulesets. When the
+// classrooms or the org's teams can't be read, the list already on the ruleset
+// is kept instead; when that can't be read either, the feedback-base ruleset is
+// left untouched and only submission-history is reconciled (rebuilding would
+// wipe every staff exemption). Returns whether every ruleset it attempted is
+// in place and whether the feedback-base lock had to be left as is.
+func Reconcile(client githubapi.Client, out, errOut io.Writer, org string) (ready, feedbackKept bool, err error) {
+	staffTeamIDs, err := bypassTeamIDs(client, out, errOut, org)
+	if err == nil {
+		ready, err = Ensure(client, out, errOut, org, staffTeamIDs)
+		return ready, false, err
+	}
+	_, _ = fmt.Fprintf(errOut, "Warning: %s: could not read classroom staff teams (%v); the feedback-base bypass list keeps its current teams. Re-run init once the classroom50 repository is readable.\n", org, err)
+	staffTeamIDs, err = ExistingFeedbackBaseTeamIDs(client, org)
+	if err == nil {
+		ready, err = Ensure(client, out, errOut, org, staffTeamIDs)
+		return ready, false, err
+	}
+	_, _ = fmt.Fprintf(errOut, "Warning: %s: could not read the current bypass list either (%v); the feedback-base ruleset was left unchanged. Re-run init once the classroom50 repository is readable.\n", org, err)
+	ready, err = EnsureSubmissionHistoryOnly(client, out, errOut, org)
+	return ready, true, err
+}
+
+// bypassTeamIDs is CollectStaffTeamSlugs followed by PrepareStaffTeams.
+func bypassTeamIDs(client githubapi.Client, out, errOut io.Writer, org string) ([]int64, error) {
+	slugs, err := CollectStaffTeamSlugs(client, org)
+	if err != nil {
+		return nil, err
+	}
+	return PrepareStaffTeams(client, out, errOut, org, slugs)
+}
+
+// CollectStaffTeamSlugs lists every classroom in the org's config repo and
+// returns the canonical staff team slugs (teacher, head-TA, TA) each one owns.
+// The slug is the identity: it is what every writer creates, what a web role
+// flow that never wrote classroom.json still produced, and what a
+// head-TA-editable `teams` block cannot redirect. A missing config repo (fresh
+// org) yields none; any read failure propagates so the caller keeps the list
+// already on the ruleset rather than rebuilding a shorter one.
+func CollectStaffTeamSlugs(client githubapi.Client, org string) ([]string, error) {
+	var slugs []string
 	var readErr error
 	err := configrepo.WalkClassrooms(client, org,
 		func(shortName string, err error) {
@@ -385,71 +417,54 @@ func CollectStaffTeams(client githubapi.Client, errOut io.Writer, org string) ([
 				readErr = fmt.Errorf("read %s/classroom.json: %w", shortName, err)
 			}
 		},
-		func(shortName string, c *configrepo.ClassroomJSON) {
-			for _, ref := range canonicalStaffTeamRefs(shortName, c.Teams, func(rr configrepo.StaffRoleRef) {
-				_, _ = fmt.Fprintf(errOut, "Warning: %s: %s/classroom.json records %q as the %s staff team, which is not the team Classroom 50 creates for that role; it was left off the feedback-base ruleset bypass list. Fix the `teams.%s` entry or run `gh teacher staff add` to re-record it.\n",
-					org, shortName, rr.Ref.Slug, rr.Role, rr.Role)
-			}) {
-				if !seen[ref.ID] {
-					seen[ref.ID] = true
-					refs = append(refs, ref)
-				}
-			}
+		func(shortName string, _ *configrepo.ClassroomJSON) {
+			slugs = append(slugs, configrepo.StaffTeamSlugs(shortName)...)
 		})
 	if err != nil {
 		return nil, err
 	}
-	return refs, readErr
+	return slugs, readErr
 }
 
-// PrepareStaffTeams makes every staff team a valid bypass actor (GitHub
-// rejects a `secret` team) and returns the live IDs for Ensure. Teams created
-// by an older release were secret; the PATCH here is the one-time upgrade. A
-// team that is gone, or can't be read or patched, is reported and left out,
-// so one bad team can't sink the whole ruleset PUT. IDs come from GitHub, not
-// from classroom.json, so a re-created team under the same slug is exempted
-// rather than its dead predecessor.
-func PrepareStaffTeams(client githubapi.Client, out, errOut io.Writer, org string, teams []configrepo.TeamRef) []int64 {
-	ids := make([]int64, 0, len(teams))
-	for _, t := range teams {
-		live, found, changed, err := configrepo.EnsureStaffTeamVisible(client, org, t.Slug)
-		if err != nil {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not make staff team %q visible to the organization (%v); its members can't merge feedback PRs until it is. Set the team's visibility to \"Visible\" at https://github.com/orgs/%s/teams/%s/edit and re-run init.\n",
-				org, t.Slug, err, org, t.Slug)
-			continue
-		}
-		if !found {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: staff team %q is recorded in classroom.json but no longer exists on GitHub; it was left off the feedback-base ruleset bypass list. Run `gh teacher staff add` for that classroom and role to re-create it.\n",
-				org, t.Slug)
-			continue
-		}
-		if changed {
-			_, _ = fmt.Fprintf(out, "%s: staff team %s is now visible to the organization (required to exempt it from the feedback-base ruleset)\n", org, t.Slug)
-		}
-		if live.ID != t.ID {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: staff team %q has id %d on GitHub but classroom.json records %d; the live team was exempted. Run `gh teacher staff add` for that classroom and role to re-record it.\n",
-				org, t.Slug, live.ID, t.ID)
-		}
-		ids = append(ids, live.ID)
+// PrepareStaffTeams resolves the canonical slugs to live teams in one org-wide
+// listing, makes each a valid bypass actor (GitHub rejects a `secret` team; the
+// PATCH is the one-time upgrade for teams an older release created), and
+// returns their IDs for Ensure. A slug with no team (a role never staffed) is
+// simply absent. A listing failure propagates so the caller falls back to the
+// current list; a PATCH failure warns and leaves that team out, since a secret
+// team can't be an actor anyway.
+func PrepareStaffTeams(client githubapi.Client, out, errOut io.Writer, org string, slugs []string) ([]int64, error) {
+	teams, err := configrepo.ListOrgTeams(client, org)
+	if err != nil {
+		return nil, err
 	}
-	return ids
+	ids := make([]int64, 0, len(slugs))
+	for _, slug := range slugs {
+		team, ok := teams[slug]
+		if !ok {
+			continue
+		}
+		if team.Privacy != configrepo.StaffTeamPrivacy {
+			if err := configrepo.SetTeamPrivacy(client, org, slug, configrepo.StaffTeamPrivacy); err != nil {
+				_, _ = fmt.Fprintf(errOut, "Warning: %s: could not make staff team %q visible to the organization (%v); its members can't merge feedback PRs until it is. Set the team's visibility to \"Visible\" at https://github.com/orgs/%s/teams/%s/edit and re-run init.\n",
+					org, slug, err, org, slug)
+				continue
+			}
+			_, _ = fmt.Fprintf(out, "%s: staff team %s is now visible to the organization (required to exempt it from the feedback-base ruleset)\n", org, slug)
+		}
+		ids = append(ids, team.ID)
+	}
+	return ids, nil
 }
 
 // CanonicalStaffTeamRefs are the staff team refs recorded in a classroom's
 // `teams` block that name the team Classroom 50 creates for that role, in
-// role order. Non-canonical entries are dropped silently here; CollectStaffTeams
-// is the site that warns.
+// role order. Non-canonical entries are dropped.
 func CanonicalStaffTeamRefs(shortName string, teams *configrepo.StaffTeamsRef) []configrepo.TeamRef {
-	return canonicalStaffTeamRefs(shortName, teams, nil)
-}
-
-func canonicalStaffTeamRefs(shortName string, teams *configrepo.StaffTeamsRef, onReject func(configrepo.StaffRoleRef)) []configrepo.TeamRef {
 	var refs []configrepo.TeamRef
 	for _, rr := range teams.StaffRoleRefs() {
 		if configrepo.IsCanonicalStaffTeamRef(shortName, rr.Role, &rr.Ref) {
 			refs = append(refs, rr.Ref)
-		} else if onReject != nil {
-			onReject(rr)
 		}
 	}
 	return refs

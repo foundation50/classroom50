@@ -185,7 +185,7 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 		classroom50Exists: true,
 		repos:             []string{"classroom50", "cs-principles-hello-alice"},
 		failOnDelete:      map[string]int{},
-		classroomDirs:     []string{"cs-principles"},
+		classroomDirs:     []string{"cs-principles", "cs-other"},
 		classroomJSON: map[string]string{
 			"cs-principles/classroom.json": jsonBase64Body(`{
   "schema": "classroom50/classroom/v1",
@@ -198,12 +198,22 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
     "ta": {"id": 3, "slug": "classroom50-cs-principles-ta"}
   }
 }`),
+			// A head TA pointed this classroom's ta ref at another classroom's
+			// teacher team (in the namespace, live id matches): the sweep must
+			// neither revoke nor delete it.
+			"cs-other/classroom.json": jsonBase64Body(`{
+  "schema": "classroom50/classroom/v1",
+  "short_name": "cs-other",
+  "org": "classroom50-test",
+  "teams": {"ta": {"id": 9, "slug": "classroom50-cs-victim-teacher"}}
+}`),
 		},
 		teamGET: map[string]string{
 			"/orgs/classroom50-test/teams/classroom50-cs-principles":         `{"id":1}`,
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-teacher": `{"id":2}`,
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-hta":     `{"id":4}`,
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":      `{"id":3}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-victim-teacher":     `{"id":9}`,
 		},
 		// Staff teams 2, 3, 4 are exempt on the feedback-base ruleset; 9 is
 		// another classroom's team that must survive the sweep.
@@ -228,7 +238,7 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 		"classroom50-cs-principles-ta":      true,
 	}
 	if len(teams) != 4 {
-		t.Fatalf("deleted teams = %v, want the 4 classroom teams", teams)
+		t.Fatalf("deleted teams = %v, want the 4 classroom teams (never the tampered ref's target)", teams)
 	}
 	for _, slug := range teams {
 		if !want[slug] {

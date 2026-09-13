@@ -10,12 +10,11 @@ import { paginateAll } from "./paginate"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
 import { forEachClassroom } from "./configRepoReads"
-import { STAFF_TEAM_PRIVACY } from "./types"
+import { STAFF_TEAM_PRIVACY, type GitHubTeam } from "./types"
 import { GitHubAPIError } from "./errors"
-import type { ClassroomTeamRef } from "./mutations/teams"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { classroomTeamSlug } from "@/util/teamSlug"
-import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
+import { STAFF_ROLES } from "@/types/classroom"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
@@ -88,51 +87,55 @@ export function feedbackBaseBypassActors(
 export function classroomRulesetBodies(
   staffTeamIds: readonly number[],
 ): OrgRulesetBody[] {
-  return [
-    {
-      name: RULESET_NAME_SUBMISSION_HISTORY,
-      target: "branch",
-      enforcement: "active",
-      conditions: {
-        // ~DEFAULT_BRANCH follows each repo's actual default branch.
-        ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] },
-        repository_name: ALL_REPOS,
-      },
-      // `always`, not exempt: an owner rewriting a student's history should
-      // be a deliberate, audited bypass.
-      bypass_actors: [
-        {
-          actor_id: ORG_ADMIN_ACTOR_ID,
-          actor_type: "OrganizationAdmin",
-          bypass_mode: "always",
-        },
-      ],
-      // non_fast_forward blocks force-push; deletion blocks delete.
-      rules: [{ type: "non_fast_forward" }, { type: "deletion" }],
-    },
-    {
-      name: RULESET_NAME_FEEDBACK_BASE,
-      target: "branch",
-      enforcement: "active",
-      conditions: {
-        ref_name: {
-          include: [`refs/heads/${FEEDBACK_BASE_BRANCH}`],
-          exclude: [],
-        },
-        repository_name: ALL_REPOS,
-      },
-      bypass_actors: feedbackBaseBypassActors(staffTeamIds),
-      // update restricts pushes/merges to bypass actors (owners and staff
-      // teams); deletion blocks delete. Creation stays allowed so accept or
-      // the runner can land the branch once.
-      rules: [{ type: "update" }, { type: "deletion" }],
-    },
-  ]
+  return [submissionHistoryBody(), feedbackBaseBody(staffTeamIds)]
 }
 
-// The feedback-base lock alone, for the incremental bypass-list update.
-function feedbackBaseBody(staffTeamIds: readonly number[]): OrgRulesetBody {
-  return classroomRulesetBodies(staffTeamIds)[1]
+// Locks the default branch's history: non_fast_forward blocks force-push,
+// deletion blocks delete, neither blocks a normal fast-forward submit.
+export function submissionHistoryBody(): OrgRulesetBody {
+  return {
+    name: RULESET_NAME_SUBMISSION_HISTORY,
+    target: "branch",
+    enforcement: "active",
+    conditions: {
+      // ~DEFAULT_BRANCH follows each repo's actual default branch.
+      ref_name: { include: ["~DEFAULT_BRANCH"], exclude: [] },
+      repository_name: ALL_REPOS,
+    },
+    // `always`, not exempt: an owner rewriting a student's history should
+    // be a deliberate, audited bypass.
+    bypass_actors: [
+      {
+        actor_id: ORG_ADMIN_ACTOR_ID,
+        actor_type: "OrganizationAdmin",
+        bypass_mode: "always",
+      },
+    ],
+    rules: [{ type: "non_fast_forward" }, { type: "deletion" }],
+  }
+}
+
+// Locks the feedback branch: `update` restricts pushes and merges to the
+// bypass actors (owners and staff teams), `deletion` blocks delete. Creation
+// stays allowed so accept or the runner can land the branch once. Also the
+// body the incremental bypass-list update PUTs.
+export function feedbackBaseBody(
+  staffTeamIds: readonly number[],
+): OrgRulesetBody {
+  return {
+    name: RULESET_NAME_FEEDBACK_BASE,
+    target: "branch",
+    enforcement: "active",
+    conditions: {
+      ref_name: {
+        include: [`refs/heads/${FEEDBACK_BASE_BRANCH}`],
+        exclude: [],
+      },
+      repository_name: ALL_REPOS,
+    },
+    bypass_actors: feedbackBaseBypassActors(staffTeamIds),
+    rules: [{ type: "update" }, { type: "deletion" }],
+  }
 }
 
 type OrgRuleset = { id: number; name: string }
@@ -246,26 +249,7 @@ const STAFF_TEAMS_UNREADABLE: CheckVerdict = {
   detail: { key: "orgSettings.audit.detail.rulesetStaffTeamsUnreadable" },
 }
 
-// checkRulesets: read, then judge. `expectedStaffTeamIds === null` means the
-// classroom list could not be read, which is reported as unreadable rather
-// than judged against an empty list.
-export async function checkRulesets(
-  client: GitHubClient,
-  org: string,
-  expectedStaffTeamIds: readonly number[] | null,
-): Promise<CheckVerdict> {
-  if (expectedStaffTeamIds === null) return STAFF_TEAMS_UNREADABLE
-  try {
-    return judgeRulesets(
-      await readRulesetState(client, org),
-      expectedStaffTeamIds,
-    )
-  } catch (err) {
-    return { state: "unreadable", detail: readFailedDetail(err) }
-  }
-}
-
-// The audit's one-call entry. The classroom walk and the ruleset read are
+// The audit's one-call entry. The expected-team read and the ruleset read are
 // independent, so they run in parallel; a collector failure becomes unreadable,
 // never a green verdict against an empty expectation.
 export async function auditRulesets(
@@ -273,16 +257,7 @@ export async function auditRulesets(
   org: string,
 ): Promise<CheckVerdict> {
   const [expected, state] = await Promise.all([
-    collectStaffTeams(client, org).then(
-      (teams) => teams.map((t) => t.id),
-      (err: unknown) => {
-        log.warn("could not read classroom staff teams for the ruleset audit", {
-          org,
-          err,
-        })
-        return null
-      },
-    ),
+    expectedStaffTeamIds(client, org),
     readRulesetState(client, org).then(
       (s) => s,
       (err: unknown) => ({ error: err }),
@@ -296,6 +271,10 @@ export async function auditRulesets(
 
 export type RulesetsRepairResult = {
   status: "complete" | "warning"
+  // Why a warning: the staff-team read failed (kept the current list, or left
+  // the feedback lock alone), the ruleset listing failed, or a write was
+  // refused. The first two are transient, so the UI offers a retry.
+  reason?: "staff_teams_unreadable" | "list_failed" | "apply_failed"
   message: string
   created: string[]
   updated: string[]
@@ -305,11 +284,12 @@ export type RulesetsRepairResult = {
 // repairRulesets: reconcile both rulesets — PUT over an existing one (by id),
 // else POST to create. staffTeamIds are every classroom's staff team ids, so
 // the PUT rebuilds the feedback-base bypass list from scratch (a team deleted
-// out of band drops off). null means the classroom list could not be read: the
-// Team actors already on the ruleset are kept and the result is a warning, so
-// a transient failure never wipes staff exemptions. Warn-and-continue on any
-// single failure (init never fails on a ruleset error), mirroring the CLI's
-// orgrules.Ensure.
+// out of band drops off). null means the staff teams could not be read: the
+// Team actors already on the ruleset are kept, or, when those can't be read
+// either, the feedback-base ruleset is left untouched, and the result is a
+// warning; a transient failure never wipes staff exemptions. Submission-history
+// is reconciled in every case. Warn-and-continue on any single failure (init
+// never fails on a ruleset error), mirroring the CLI's orgrules.Reconcile.
 export async function repairRulesets(
   client: GitHubClient,
   org: string,
@@ -319,24 +299,21 @@ export async function repairRulesets(
   const updated: string[] = []
   const failed: string[] = []
 
-  let teamIds: readonly number[] = staffTeamIds ?? []
-  let keptExisting = false
+  let bodies = classroomRulesetBodies(staffTeamIds ?? [])
+  let fallback: string | undefined
   if (staffTeamIds === null) {
     try {
-      teamIds = await existingFeedbackBaseTeamIds(client, org)
-      keptExisting = true
+      bodies = classroomRulesetBodies(
+        await existingFeedbackBaseTeamIds(client, org),
+      )
+      fallback = `${org}: could not read classroom staff teams, so the feedback-base bypass list was kept as is. Re-run setup once the classroom50 repository is readable.`
     } catch (err) {
       log.warn(
-        "could not read the current bypass list either; skipping the feedback-base ruleset",
+        "could not read the current bypass list either; leaving the feedback-base ruleset unchanged",
         { org, err },
       )
-      return {
-        status: "warning",
-        message: `${org}: could not read classroom staff teams; the feedback-base ruleset was left unchanged. Re-run setup once the classroom50 repository is readable.`,
-        created,
-        updated,
-        failed: [RULESET_NAME_FEEDBACK_BASE],
-      }
+      bodies = [submissionHistoryBody()]
+      fallback = `${org}: could not read classroom staff teams; the feedback-base ruleset was left unchanged. Re-run setup once the classroom50 repository is readable.`
     }
   }
 
@@ -350,6 +327,7 @@ export async function repairRulesets(
     })
     return {
       status: "warning",
+      reason: "list_failed",
       message: `${org}: could not list org rulesets; apply Feedback PR branch protections manually.`,
       created,
       updated,
@@ -357,7 +335,7 @@ export async function repairRulesets(
     }
   }
 
-  for (const body of classroomRulesetBodies(teamIds)) {
+  for (const body of bodies) {
     const id = existing.get(body.name)
     try {
       if (id !== undefined) {
@@ -379,21 +357,29 @@ export async function repairRulesets(
     }
   }
 
-  if (failed.length === 0 && keptExisting) {
+  if (failed.length > 0) {
     return {
       status: "warning",
-      message: `${org}: could not read classroom staff teams, so the feedback-base bypass list was kept as is. Re-run setup once the classroom50 repository is readable.`,
+      reason: "apply_failed",
+      message: `${org}: some org rulesets could not be applied (${failed.join(", ")}); review them in org settings → rules.`,
+      created,
+      updated,
+      failed,
+    }
+  }
+  if (fallback !== undefined) {
+    return {
+      status: "warning",
+      reason: "staff_teams_unreadable",
+      message: fallback,
       created,
       updated,
       failed,
     }
   }
   return {
-    status: failed.length === 0 ? "complete" : "warning",
-    message:
-      failed.length === 0
-        ? `${org}: org rulesets reconciled.`
-        : `${org}: some org rulesets could not be applied (${failed.join(", ")}); review them in org settings → rules.`,
+    status: "complete",
+    message: `${org}: org rulesets reconciled.`,
     created,
     updated,
     failed,
@@ -476,122 +462,102 @@ export async function revokeStaffTeams(
   }
 }
 
-// Every classroom's recorded staff team refs (teacher, hta, ta), read from
-// each classroom.json in the config repo: the input repairRulesets and
-// checkRulesets need. Only canonical refs count: classroom.json is writable by
-// head TAs and these refs steer owner-run writes (team visibility, ruleset
-// bypass), so a `teams.<role>` entry naming any other team (the student team,
-// an invite team, a typo) is logged and dropped. A missing config repo (fresh
-// org) yields []. Any other failure, including one unreadable classroom.json,
-// throws: a shorter list would rebuild a shorter bypass list, so callers must
-// fall back to what is already on the ruleset instead.
-export async function collectStaffTeams(
+// The canonical staff team slugs (teacher, hta, ta) of every classroom in the
+// config repo. The slug, not classroom.json, identifies a classroom's staff
+// team: it is what every writer creates, what a role flow that never recorded
+// a `teams` block still produced, and what a head-TA-editable ref can't
+// redirect. A missing config repo (fresh org) yields []. Any other failure,
+// including one unreadable classroom.json, throws: a shorter list would
+// rebuild a shorter bypass list, so callers fall back to what is already on
+// the ruleset instead.
+export async function collectStaffTeamSlugs(
   client: GitHubClient,
   org: string,
-): Promise<ClassroomTeamRef[]> {
-  const byId = new Map<number, ClassroomTeamRef>()
+): Promise<string[]> {
+  const slugs: string[] = []
   await forEachClassroom(
     client,
     org,
     (_classroom, err) => {
       throw err
     },
-    (classroom, json) => {
-      for (const role of STAFF_ROLES) {
-        const ref = json.teams?.[role]
-        if (!ref) continue
-        if (!isCanonicalClassroomTeamRef(classroom, role, ref)) {
-          log.warn("classroom.json names a non-canonical staff team; ignored", {
-            org,
-            classroom,
-            role,
-            slug: ref.slug,
-          })
-          continue
-        }
-        byId.set(ref.id, { id: ref.id, slug: ref.slug })
-      }
+    (classroom) => {
+      for (const role of STAFF_ROLES)
+        slugs.push(classroomTeamSlug(classroom, role))
     },
   )
-  return [...byId.values()].sort((a, b) => a.id - b.id)
+  return slugs
 }
 
-// A classroom.json `teams.<role>` ref is trusted only when it names the team
-// Classroom 50 itself creates for that classroom and role. Mirrors the CLI's
-// configrepo.IsCanonicalClassroomTeamRef.
-export function isCanonicalClassroomTeamRef(
-  classroom: string,
-  role: StaffRole,
-  ref: { id?: unknown; slug?: unknown },
-): boolean {
-  return (
-    Number.isInteger(ref.id) &&
-    (ref.id as number) > 0 &&
-    ref.slug === classroomTeamSlug(classroom, role)
+type OrgTeamListing = Pick<GitHubTeam, "id" | "slug" | "privacy">
+
+// One paginated read of the org's teams, keyed by slug. Strict, unlike
+// queries/teamReads.listOrgTeams: a failure here must not read as "no teams".
+// The caller runs as an owner, so secret teams are listed too.
+async function listOrgTeamsBySlug(
+  client: GitHubClient,
+  org: string,
+): Promise<Map<string, OrgTeamListing>> {
+  const teams = await paginateAll<OrgTeamListing>(
+    client,
+    (page) =>
+      `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
   )
+  return new Map(teams.map((t) => [t.slug, t]))
 }
 
-// Make every staff team a valid bypass actor (GitHub rejects a `secret` team)
-// and return the LIVE ids to hand repairRulesets. Teams created by an older
-// release were secret; the PATCH here is the one-time upgrade. Ids come from
-// GitHub, not classroom.json, so a team re-created under the same slug is
-// exempted rather than its dead predecessor; a team that is gone is left out
-// so the PUT can't 422 on it. A rate limit propagates (the caller must not
-// rebuild the list from a partial pass); any other per-team failure is logged
-// and that team left out, where the audit keeps flagging it.
+// The live staff teams behind the slugs; a slug with no team (a role never
+// staffed) is simply absent.
+function resolveStaffTeams(
+  slugs: readonly string[],
+  teams: ReadonlyMap<string, OrgTeamListing>,
+): OrgTeamListing[] {
+  return slugs.flatMap((slug) => {
+    const t = teams.get(slug)
+    return t ? [t] : []
+  })
+}
+
+// Make every live staff team a valid bypass actor (GitHub rejects a `secret`
+// team; the PATCH is the one-time upgrade for teams an older release created)
+// and return their ids for repairRulesets. Ids come from GitHub, so a team
+// re-created under the same slug is exempted rather than its dead
+// predecessor. A listing failure or rate limit propagates (the caller must not
+// rebuild the list from a partial pass); a per-team PATCH failure is logged
+// and that team left out, since a secret team can't be an actor anyway and
+// the audit keeps flagging it.
 export async function prepareStaffTeams(
   client: GitHubClient,
   org: string,
-  teams: readonly ClassroomTeamRef[],
+  slugs: readonly string[],
 ): Promise<number[]> {
+  const teams = resolveStaffTeams(slugs, await listOrgTeamsBySlug(client, org))
   const ids: number[] = []
   await mapWithConcurrency(teams, 4, async (team) => {
-    try {
-      const existing = await client.request<{ id: number; privacy?: string }>(
-        `/orgs/${org}/teams/${team.slug}`,
-      )
-      if (existing.privacy !== STAFF_TEAM_PRIVACY) {
+    if (team.privacy !== STAFF_TEAM_PRIVACY) {
+      try {
         await client.request(`/orgs/${org}/teams/${team.slug}`, {
           method: "PATCH",
           body: { privacy: STAFF_TEAM_PRIVACY },
         })
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.isRateLimited) throw err
+        log.warn("could not make staff team visible for the ruleset bypass", {
+          org,
+          team: team.slug,
+          err,
+        })
+        return
       }
-      if (existing.id !== team.id) {
-        log.warn(
-          "staff team id drifted from classroom.json; using the live id",
-          {
-            org,
-            team: team.slug,
-            recorded: team.id,
-            live: existing.id,
-          },
-        )
-      }
-      ids.push(existing.id)
-    } catch (err) {
-      if (err instanceof GitHubAPIError) {
-        if (err.isRateLimited) throw err
-        if (err.isNotFound) {
-          log.warn("staff team recorded in classroom.json no longer exists", {
-            org,
-            team: team.slug,
-          })
-          return
-        }
-      }
-      log.warn("could not make staff team visible for the ruleset bypass", {
-        org,
-        team: team.slug,
-        err,
-      })
     }
+    ids.push(team.id)
   })
   return ids.sort((a, b) => a - b)
 }
 
 // The repair-side input: collect, make visible, return live ids. Resolves to
-// null when the classroom list can't be read, so repairRulesets keeps the
-// bypass list it finds rather than rebuilding a shorter one.
+// null when the classrooms or the org's teams can't be read, so repairRulesets
+// keeps the bypass list it finds rather than rebuilding a shorter one.
 export async function collectBypassStaffTeamIds(
   client: GitHubClient,
   org: string,
@@ -600,7 +566,7 @@ export async function collectBypassStaffTeamIds(
     return await prepareStaffTeams(
       client,
       org,
-      await collectStaffTeams(client, org),
+      await collectStaffTeamSlugs(client, org),
     )
   } catch (err) {
     log.warn(
@@ -610,6 +576,28 @@ export async function collectBypassStaffTeamIds(
         err,
       },
     )
+    return null
+  }
+}
+
+// The audit-side input: the ids the bypass list should hold, read without
+// writing anything (a still-secret team counts as expected; Fix it upgrades
+// it). null when either read fails.
+async function expectedStaffTeamIds(
+  client: GitHubClient,
+  org: string,
+): Promise<number[] | null> {
+  try {
+    const [slugs, teams] = await Promise.all([
+      collectStaffTeamSlugs(client, org),
+      listOrgTeamsBySlug(client, org),
+    ])
+    return resolveStaffTeams(slugs, teams).map((t) => t.id)
+  } catch (err) {
+    log.warn("could not read classroom staff teams for the ruleset audit", {
+      org,
+      err,
+    })
     return null
   }
 }

@@ -16,7 +16,7 @@ import {
   grantStaffTeamsConfigRepoAccess,
   addUserToTeam,
   removeUserFromTeam,
-  isDeletableClassroomTeamRef,
+  ownedClassroomTeamRefs,
   isNonFastForward,
   purgeClassroomInviteTeams,
   type ClassroomTeamRef,
@@ -393,17 +393,16 @@ export async function deleteClassroom(
   )
 
   // Delete the per-classroom teams (idempotent; 404 = already gone): students
-  // plus staff. Filtered through the shared guard so a drifted/hand-edited ref
-  // outside the classroom50- namespace never enters the delete set. A delete
-  // failure must NOT undo the already-committed config removal — surface it as a
-  // non-fatal warning. Each delete retries a transient blip; a permanent refusal
-  // is recorded without retrying.
-  const refsToDelete = [
+  // plus staff. Each ref must name the team this app created for that role, so
+  // a drifted or hand-edited ref (even one pointing at another classroom's
+  // staff team) never enters the delete set. A delete failure must NOT undo
+  // the already-committed config removal — surface it as a non-fatal warning.
+  // Each delete retries a transient blip; a permanent refusal is recorded
+  // without retrying.
+  const refsToDelete = ownedClassroomTeamRefs(classroom, {
     team,
-    staffTeams.teacher,
-    staffTeams.hta,
-    staffTeams.ta,
-  ].filter(isDeletableClassroomTeamRef)
+    teams: staffTeams,
+  })
   // Drop the teams from the feedback-base bypass list first, so the ruleset
   // never references a team GitHub no longer knows.
   await revokeStaffTeams(

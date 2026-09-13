@@ -90,6 +90,8 @@ function makeClient(overrides: Routes = {}): GitHubClient {
           },
         )
       }
+      // The org team listing the ruleset audit resolves staff slugs against.
+      if (path.startsWith("/orgs/acme/teams?")) return ok([])
       if (path.includes("/actions/permissions/repositories"))
         return ok({
           total_count: 1,

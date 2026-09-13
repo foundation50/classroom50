@@ -782,48 +782,6 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 	}
 }
 
-// TestEnsureStaffTeamVisible: a secret staff team is PATCHed to closed; an
-// already-closed one is left alone; a missing one reports found=false so the
-// caller never puts a dead id on the ruleset. The live id comes from GitHub.
-func TestEnsureStaffTeamVisible(t *testing.T) {
-	privacy := map[string]string{"secret-team": "secret", "closed-team": "closed"}
-	var patched []string
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		slug := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
-		p, ok := privacy[slug]
-		switch {
-		case !ok:
-			w.WriteHeader(http.StatusNotFound)
-			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
-		case r.Method == http.MethodGet:
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 77, "slug": slug, "privacy": p})
-		case r.Method == http.MethodPatch:
-			var body map[string]any
-			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body["privacy"] != "closed" {
-				t.Errorf("PATCH %s body = %v, want privacy closed", slug, body)
-			}
-			patched = append(patched, slug)
-			w.WriteHeader(http.StatusOK)
-		}
-	}))
-	t.Cleanup(server.Close)
-	client := githubtest.NewTestClient(t, server)
-
-	if live, found, changed, err := EnsureStaffTeamVisible(client, "o", "secret-team"); err != nil || !found || !changed || live.ID != 77 {
-		t.Errorf("secret-team: live=%+v found=%v changed=%v err=%v, want id 77/true/true/nil", live, found, changed, err)
-	}
-	if _, found, changed, err := EnsureStaffTeamVisible(client, "o", "closed-team"); err != nil || !found || changed {
-		t.Errorf("closed-team: found=%v changed=%v err=%v, want true/false/nil", found, changed, err)
-	}
-	if _, found, changed, err := EnsureStaffTeamVisible(client, "o", "gone-team"); err != nil || found || changed {
-		t.Errorf("gone-team: found=%v changed=%v err=%v, want false/false/nil (404 is not an error)", found, changed, err)
-	}
-	if len(patched) != 1 || patched[0] != "secret-team" {
-		t.Errorf("patched = %v, want only secret-team", patched)
-	}
-}
-
 // TestIsCanonicalStaffTeamRef pins the gate that keeps a head-TA-edited
 // classroom.json from steering owner-run writes at the wrong team.
 func TestIsCanonicalStaffTeamRef(t *testing.T) {

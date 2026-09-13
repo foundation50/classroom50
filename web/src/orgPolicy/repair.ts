@@ -140,11 +140,15 @@ export async function repairConcern(
         await collectBypassStaffTeamIds(client, org),
       )
       if (result.status === "warning") {
-        // Can't distinguish a policy block from a validation error, so
-        // non-transient but cause-neutral.
+        // A failed read (staff teams, ruleset listing) succeeds on retry, so
+        // the UI keeps offering Fix it. A refused write can't be told apart
+        // from a policy block, so that one is non-transient but cause-neutral.
         return {
           unfixableFields: [],
-          unresolved: { message: result.message, transient: false },
+          unresolved: {
+            message: result.message,
+            transient: result.reason !== "apply_failed",
+          },
         }
       }
       return { unfixableFields: [] }

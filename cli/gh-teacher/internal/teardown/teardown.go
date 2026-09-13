@@ -264,8 +264,12 @@ func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer
 	err := configrepo.WalkClassrooms(client, org, nil, func(shortName string, c *configrepo.ClassroomJSON) {
 		classrooms = append(classrooms, shortName)
 		add(c.Team)
+		// Staff refs are head-TA writable and drive an owner-run revoke +
+		// delete, so only the team Classroom 50 created for that role counts.
 		for _, rr := range c.Teams.StaffRoleRefs() {
-			add(&rr.Ref)
+			if configrepo.IsCanonicalStaffTeamRef(shortName, rr.Role, &rr.Ref) {
+				add(&rr.Ref)
+			}
 		}
 	})
 	if err != nil {

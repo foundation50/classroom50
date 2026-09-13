@@ -12,7 +12,7 @@ import { createTeam, type TeamNotificationSetting } from "../teamWrites"
 import { exemptStaffTeams } from "../rulesets"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { isCanonicalTeamShortName } from "@/util/shortName"
-import { classroomTeamSlug } from "@/util/teamSlug"
+import { classroomTeamSlug, type ClassroomTeamRole } from "@/util/teamSlug"
 
 // Minimal team identity persisted in classroom.json. The slug is authoritative
 // for team ops (GitHub may slugify a name differently on collision); the id is
@@ -37,6 +37,44 @@ export function isDeletableClassroomTeamRef(
     Number.isInteger(team.id) &&
     (team.id as number) > 0
   )
+}
+
+// The stricter gate for a classroom's own `teams.<role>` ref: it must name the
+// team this app creates for that classroom and role, not merely a
+// `classroom50-` team. Staff refs are head-TA writable and drive an owner-run
+// bypass revoke plus delete, so a ref pointed at another classroom's staff team
+// (which would pass the namespace check and the live-id check) is refused.
+// Mirrors the CLI's configrepo.IsCanonicalStaffTeamRef.
+export function isOwnedClassroomTeamRef(
+  classroom: string,
+  role: ClassroomTeamRole,
+  team: { id?: unknown; slug?: unknown } | undefined | null,
+): team is ClassroomTeamRef {
+  return (
+    isDeletableClassroomTeamRef(team) &&
+    team.slug === classroomTeamSlug(classroom, role)
+  )
+}
+
+// A classroom's deletable team refs (student plus staff), each gated by
+// isOwnedClassroomTeamRef for its role.
+export function ownedClassroomTeamRefs(
+  classroom: string,
+  refs: {
+    team?: { id?: unknown; slug?: unknown } | null
+    teams?: Partial<
+      Record<StaffRole, { id?: unknown; slug?: unknown } | null | undefined>
+    > | null
+  },
+): ClassroomTeamRef[] {
+  const out: ClassroomTeamRef[] = []
+  if (isOwnedClassroomTeamRef(classroom, "student", refs.team))
+    out.push(refs.team)
+  for (const role of STAFF_ROLES) {
+    const ref = refs.teams?.[role]
+    if (isOwnedClassroomTeamRef(classroom, role, ref)) out.push(ref)
+  }
+  return out
 }
 
 // Create (or adopt) a team by exact name at the given privacy. Idempotent:

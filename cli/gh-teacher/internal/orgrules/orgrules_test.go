@@ -471,3 +471,99 @@ func equalStringSet(a, b []string) bool {
 	}
 	return true
 }
+
+func TestUpdateFeedbackBaseBypassTeams_UpgradesAlwaysEntry(t *testing.T) {
+	// Team 10 is listed but `always`, the owner is `always` too: both are
+	// rebuilt as exempt even though 10 is "already on the list".
+	var (
+		mu  sync.Mutex
+		put *rulesetBody
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/orgs/"+org+"/rulesets":
+			_, _ = w.Write([]byte(`[{"id":22,"name":"` + NameFeedbackBase + `"}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/orgs/"+org+"/rulesets/22":
+			_, _ = w.Write([]byte(`{"id":22,"bypass_actors":[{"actor_id":1,"actor_type":"OrganizationAdmin","bypass_mode":"always"},{"actor_id":10,"actor_type":"Team","bypass_mode":"always"}]}`))
+		case r.Method == http.MethodPut && r.URL.Path == "/orgs/"+org+"/rulesets/22":
+			var b rulesetBody
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &b)
+			put = &b
+			_, _ = w.Write([]byte(`{}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	ok, err := updateFeedbackBaseBypassTeams(client, org, teamChange{add: []int64{10}})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v, want true/nil", ok, err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if put == nil {
+		t.Fatal("expected a PUT: the listed team is not exempt")
+	}
+	want := []bypassActor{
+		{ActorID: 1, ActorType: "OrganizationAdmin", BypassMode: "exempt"},
+		{ActorID: 10, ActorType: "Team", BypassMode: "exempt"},
+	}
+	if !equalActors(put.BypassActors, want) {
+		t.Errorf("PUT actors = %+v, want %+v", put.BypassActors, want)
+	}
+}
+
+func TestUpdateFeedbackBaseBypassTeams_RemoveAbsentIsANoop(t *testing.T) {
+	server, put := bypassServer(t, []int64{10}, true)
+	client := githubtest.NewTestClient(t, server)
+	ok, err := updateFeedbackBaseBypassTeams(client, org, teamChange{remove: []int64{99}})
+	if err != nil || !ok {
+		t.Fatalf("ok=%v err=%v, want true/nil", ok, err)
+	}
+	if put() != nil {
+		t.Error("no PUT expected when the team to drop was never listed")
+	}
+}
+
+func TestExemptAndRevokeStaffTeams_Warnings(t *testing.T) {
+	teams := []configrepo.TeamRef{{ID: 5, Slug: "classroom50-cs-ta"}}
+
+	// Not installed: a warning pointing at init, no PUT.
+	server, put := bypassServer(t, nil, false)
+	client := githubtest.NewTestClient(t, server)
+	var errOut bytes.Buffer
+	ExemptStaffTeams(client, &errOut, org, teams)
+	if !strings.Contains(errOut.String(), "not installed") || put() != nil {
+		t.Errorf("not-installed: errOut=%q put=%v", errOut.String(), put() != nil)
+	}
+
+	// Listing fails: a warning carrying the error, never a panic or exit.
+	failing := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"message":"boom"}`))
+	}))
+	t.Cleanup(failing.Close)
+	client = githubtest.NewTestClient(t, failing)
+	errOut.Reset()
+	ExemptStaffTeams(client, &errOut, org, teams)
+	if !strings.Contains(errOut.String(), "could not add") {
+		t.Errorf("exempt failure warning missing: %q", errOut.String())
+	}
+	errOut.Reset()
+	RevokeStaffTeams(client, &errOut, org, teams)
+	if !strings.Contains(errOut.String(), "could not drop") {
+		t.Errorf("revoke failure warning missing: %q", errOut.String())
+	}
+
+	// Empty input never touches the network.
+	client = githubtest.NewTestClient(t, httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+	})))
+	ExemptStaffTeams(client, &errOut, org, nil)
+	RevokeStaffTeams(client, &errOut, org, []configrepo.TeamRef{{ID: 0, Slug: "x"}})
+}
