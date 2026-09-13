@@ -1142,9 +1142,14 @@ jobs:
           #    it), proceed to create as usual.
           KEPT_MSG="cannot be refreshed; the regraded score is in the commit status and the job summary, but gradebook collection keeps reading the OLD release's result.json for this submission (GitHub's rule, not ours)"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # A failed probe answers "" and is treated as immutable: guessing
+            # wrong the other way destroys the record for good.
             IMMUTABLE="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${TAG}" --jq '.immutable' 2>/dev/null || true)"
             if [[ "$IMMUTABLE" == "true" ]]; then
               echo "::warning::the release at $TAG is immutable and $KEPT_MSG"
+              exit 0
+            elif [[ "$IMMUTABLE" != "false" && "$IMMUTABLE" != "null" ]]; then
+              echo "::warning::the release at $TAG could not be checked for immutability, so it is kept as is; it $KEPT_MSG"
               exit 0
             fi
             if ! DELETE_ERR="$(gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes 2>&1)"; then

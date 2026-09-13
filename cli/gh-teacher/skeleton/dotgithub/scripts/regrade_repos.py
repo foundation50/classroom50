@@ -356,8 +356,8 @@ def main() -> int:
                 emit_error(
                     f"{org}/{repo_name}: regrade aborted: service token rejected or network "
                     f"unavailable (HTTP {exc.code} {exc.reason or 'no reason'}){body_note(exc)}. "
-                    f"Re-scope the PAT to Contents: Read and write AND Actions: Read and write "
-                    f"with `gh teacher rotate-service-token {org}`"
+                    f"Re-scope the PAT to Contents: Read and write, Actions: Read and write, "
+                    f"AND Workflows: Read and write with `gh teacher rotate-service-token {org}`"
                 )
                 return 1
             emit_warning(
@@ -465,18 +465,24 @@ def regrade_repo(
 
     # No graded run. Find the student's latest commit a tag push can fire on;
     # None means nothing has been pushed since acceptance (or no repo at all).
-    sha = first_gradeable_sha(api_url, org, repo, token)
-    if sha is None:
+    found = first_gradeable_commit(api_url, org, repo, token)
+    if found is None:
         return "missing"
+    sha, branch = found
 
     # A push suppressed under tag mode left a green no-op run at this very
     # commit. Re-running it grades now (every-push) without a new tag and,
-    # unlike tagging, without GitHub's workflow-file rule (see below).
+    # unlike tagging, without GitHub's workflow-file rule (see below). A run
+    # that can't be re-run (in progress, or past GitHub's rerun window) falls
+    # through to the tag path rather than leaving the repo ungraded.
     if not tag_mode:
-        suppressed = _branch_run_at(runs, sha)
+        suppressed = _branch_run_at(runs, sha, branch)
         if suppressed is not None:
-            rerun_workflow_run(api_url, org, repo, token, suppressed)
-            return "rerun"
+            try:
+                rerun_workflow_run(api_url, org, repo, token, suppressed)
+                return "rerun"
+            except _SkipRepo:
+                pass
 
     # A submit/* tag may already sit at that commit (tagged but the run was
     # deleted or expired); reuse it rather than stacking a duplicate.
@@ -495,10 +501,10 @@ def regrade_repo(
         if (
             exc.code == 403
             and classify(exc) is not THROTTLED
-            and shim_differs_from_default_branch(api_url, org, repo, token, sha)
+            and shim_differs_from_default_branch(api_url, org, repo, token, sha, branch)
         ):
             raise _RepoFailed(
-                f"{org}/{repo}: can't first-grade commit {sha[:7]}: its autograde "
+                f"{org}/{repo}: can't start grading commit {sha[:7]}: its autograde "
                 f"workflow differs from the default branch's (the submission mode "
                 f"changed since it was pushed), and GitHub only lets a token with "
                 f"Workflows: Read and write tag such a commit. Either have the "
@@ -511,13 +517,14 @@ def regrade_repo(
     return "tagged"
 
 
-def _branch_run_at(runs: list[Any], sha: str) -> int | None:
-    """The newest branch-triggered run at commit `sha`, or None."""
+def _branch_run_at(runs: list[Any], sha: str, branch: str) -> int | None:
+    """The newest run at commit `sha` triggered by a push to `branch`, or None.
+    Tag runs and other branches are excluded: only a default-branch push can
+    be the suppressed run worth replaying."""
     for run in runs:
         if not isinstance(run, dict) or run.get("head_sha") != sha:
             continue
-        head_branch = run.get("head_branch")
-        if isinstance(head_branch, str) and head_branch.startswith(SUBMIT_TAG_PREFIX):
+        if run.get("head_branch") != branch:
             continue
         return _run_id_of(run)
     return None
@@ -529,14 +536,11 @@ class _RepoFailed(Exception):
 
 
 def shim_differs_from_default_branch(
-    api_url: str, org: str, repo: str, token: str, sha: str
+    api_url: str, org: str, repo: str, token: str, sha: str, branch: str
 ) -> bool:
-    """Whether the autograde shim at `sha` differs from the default branch's.
-    Conservative: any read failure reports False so the caller falls back to
-    the generic 403 handling."""
-    branch = repo_default_branch(api_url, org, repo, token)
-    if branch is None:
-        return False
+    """Whether the autograde shim at `sha` differs from `branch`'s (the default
+    branch). Conservative: any read failure reports False so the caller falls
+    back to the generic 403 handling."""
     blobs = []
     for ref in (sha, branch):
         url = (
@@ -599,7 +603,10 @@ def latest_autograde_run_id(
       - every-push mode only: a submit/* tag points at its head commit (the
         runner mints one for every branch push it grades and none it skips),
         or the run ended red (every skip path ends green, so a red run is one
-        that tried to grade and failed before or after minting the tag).
+        that tried to grade and failed before or after minting the tag). A red
+        run at the acceptance commit or at a `[skip ci]` commit is the
+        exception: the runner's skip detection failed open that time (Pages
+        outage) and a rerun skips again, so those are passed over.
     tag_only=True (tag-mode assignments) never replays a branch run: there a
     branch push is a suppressed no-op even when the same commit was later
     tagged, and its tag run is the candidate instead.
@@ -607,8 +614,10 @@ def latest_autograde_run_id(
     if runs is None:
         runs = list_autograde_runs(api_url, org, repo, token)
     patterns = submission_tags or []
-    # Fetched lazily: only a branch run in every-push mode needs the tag map.
+    # Both fetched lazily: only a branch run in every-push mode needs them.
     tagged_shas: dict[str, str] | None = None
+    accept_sha: str | None = None
+    accept_resolved = False
     for candidate in runs:
         if not isinstance(candidate, dict):
             continue
@@ -620,15 +629,25 @@ def latest_autograde_run_id(
             return _run_id_of(candidate)
         if tag_only:
             continue
+        head_sha = candidate.get("head_sha")
+        if not isinstance(head_sha, str) or not head_sha:
+            continue
         if candidate.get("status") == "completed" and candidate.get("conclusion") not in (
             "success",
             "skipped",
             None,
         ):
-            return _run_id_of(candidate)
-        head_sha = candidate.get("head_sha")
-        if not isinstance(head_sha, str) or not head_sha:
-            continue
+            head_commit = candidate.get("head_commit")
+            message = head_commit.get("message") if isinstance(head_commit, dict) else None
+            if isinstance(message, str) and has_ci_skip_marker(message):
+                continue
+            if not accept_resolved:
+                accept_resolved = True
+                branch = repo_default_branch(api_url, org, repo, token)
+                if branch is not None:
+                    accept_sha = acceptance_commit_sha(api_url, org, repo, token, branch)
+            if head_sha != accept_sha:
+                return _run_id_of(candidate)
         if tagged_shas is None:
             tagged_shas = submit_tags_by_commit(api_url, org, repo, token)
         if head_sha in tagged_shas:
@@ -701,10 +720,13 @@ def repo_default_branch(api_url: str, org: str, repo: str, token: str) -> str | 
     return SUBMISSION_BRANCH
 
 
-def first_gradeable_sha(api_url: str, org: str, repo: str, token: str) -> str | None:
-    """The newest default-branch commit a submit/* tag push can fire on, or None
-    when there is nothing to first-grade: the repo doesn't exist (student hasn't
-    accepted), or nothing was pushed since the acceptance commit.
+def first_gradeable_commit(
+    api_url: str, org: str, repo: str, token: str
+) -> tuple[str, str] | None:
+    """(sha, default branch) of the newest default-branch commit a submit/* tag
+    push can fire on, or None when there is nothing to first-grade: the repo
+    doesn't exist (student hasn't accepted), or nothing was pushed since the
+    acceptance commit.
 
     Walks the branch newest-first, skipping commits whose message carries a CI
     skip marker: GitHub fires no workflow for a tag whose commit says
@@ -729,7 +751,7 @@ def first_gradeable_sha(api_url: str, org: str, repo: str, token: str) -> str | 
         message = meta.get("message") if isinstance(meta, dict) else None
         if isinstance(message, str) and has_ci_skip_marker(message):
             continue
-        return sha
+        return sha, branch
     return None
 
 

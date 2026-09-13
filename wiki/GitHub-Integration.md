@@ -502,7 +502,8 @@ Exercises every permission with read-only calls GitHub gates behind the write
 permission: `/orgs/{org}/members`, `/orgs/{org}/teams/{slug}/members`,
 `/repos/{org}/classroom50` (its `permissions.push` and `permissions.admin`),
 `/repos/{org}/classroom50/actions/permissions`, and
-`/repos/{org}/classroom50/collaborators`.
+`/repos/{org}/classroom50/collaborators`. Workflows: Read and write has no
+read-only probe, so a token missing it passes here and is caught by regrade.
 
 ### `autograde-runner.yaml` (reusable, runs in student repositories)
 

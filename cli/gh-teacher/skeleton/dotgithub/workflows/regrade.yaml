@@ -16,10 +16,12 @@ name: Regrade
 # a run that actually graded is replayed (the runner skips the acceptance
 # commit, a shim retrofit, and a tag-mode branch push, and would skip again).
 #
-# Fallback: a repo with pushed work but no graded run is first-graded by
-# pushing a fresh `submit/<ts>-<sha>` tag at the student's latest commit,
-# skipping past the tool's `[skip ci]` bookkeeping commits (a tag at one of
-# those fires nothing). Nothing pushed since acceptance means nothing to grade.
+# Fallback: a repo with pushed work but no graded run is first-graded at the
+# student's latest commit, skipping past the tool's `[skip ci]` bookkeeping
+# commits (a tag at one of those fires nothing): by re-running a branch run
+# the runner suppressed there while in tag mode, else by pushing a fresh
+# `submit/<ts>-<sha>` tag. Nothing pushed since acceptance means nothing to
+# grade.
 #
 # Re-run/tag only by design: grading then runs ASYNCHRONOUSLY inside each
 # student repo (it can take minutes), so this workflow does NOT collect

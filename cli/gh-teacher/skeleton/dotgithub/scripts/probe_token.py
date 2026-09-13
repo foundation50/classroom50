@@ -607,9 +607,9 @@ def main() -> int:
         emit_error(
             f"service token probe FAILED: {len(failed)} scope check(s) did not pass "
             f"({', '.join(c.name for c in failed)}). Re-create the fine-grained PAT with "
-            f"Contents: Read and write, Actions: Read and write, Administration: Read and "
-            f"write, and Organization -> Members: Read, then "
-            f"`gh teacher rotate-service-token {org}`."
+            f"Contents: Read and write, Actions: Read and write, Workflows: Read and "
+            f"write, Administration: Read and write, and Organization -> Members: Read, "
+            f"then `gh teacher rotate-service-token {org}`."
         )
         return 1
 

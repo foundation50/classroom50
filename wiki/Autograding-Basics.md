@@ -584,8 +584,9 @@ Students sometimes ask you to grade a particular commit, not their latest:
   submission at that commit.
 - **Regrade** (per row, or **Regrade all** in the **Actions** menu) re-runs
   each repository's **latest** submission **at its original commit**, which is
-  useful after fixing a broken test. A never-graded repository is graded at its
-  current HEAD instead (a new submission). On a re-run, `datetime` (the
+  useful after fixing a broken test. A never-graded repository is graded at the
+  student's latest commit instead (a new submission); a repository with nothing
+  pushed since accepting is skipped. On a re-run, `datetime` (the
   submission instant) stays fixed so late-marking never changes; `graded_at`
   records the re-run. The refreshed scores reach the submissions page on the
   next collection.

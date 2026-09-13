@@ -401,9 +401,10 @@ failed uploads warn without changing the score.
 > [!NOTE]
 > Submission publishing doesn't support GitHub immutable releases: a rerun
 > deletes and recreates the Release so the current result and files attach
-> together. To roll this out to an existing organization, run `gh teacher
-> init`, approve the workflow-files refresh, and wait for `publish-pages` to
-> finish.
+> together, and an immutable Release is left in place instead (its tag name
+> could never be reused). To roll this out to an existing organization, run
+> `gh teacher init`, approve the workflow-files refresh, and wait for
+> `publish-pages` to finish.
 
 ## Custom runner workflow (rare)
 

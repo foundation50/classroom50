@@ -105,6 +105,19 @@ class TestTokenPermissionGuidance:
         for phrase in TOKEN_PERMISSION_PHRASES:
             assert phrase in text
 
+    def test_probe_and_init_remediation_name_every_permission(self):
+        # probe-token's failure remediation and `gh teacher init`'s help are the
+        # two other places a teacher is told what to grant when creating the
+        # token; a permission added to the Go constant must reach both.
+        probe_src = pathlib.Path(pt.__file__).read_text()
+        init_src = (_REPO_ROOT / "cli" / "gh-teacher" / "init.go").read_text()
+        # Both wrap the list across string literals; join the pieces first.
+        probe_text = " ".join(re.findall(r'f?"([^"]*)"', probe_src))
+        init_text = " ".join(re.findall(r'"([^"]*)"', init_src)).replace("\\n", " ")
+        for phrase in TOKEN_PERMISSION_PHRASES[1:]:  # "All repositories" is phrased differently
+            assert phrase in " ".join(probe_text.split()), phrase
+            assert phrase in " ".join(init_text.split()), phrase
+
     def test_collect_grant_hint_names_the_settings_it_can_fix(self, monkeypatch, capsys):
         # The grant-failure hint names what a 401/403 on the staff grant means:
         # the token cannot reach the student repos, or cannot administer them.

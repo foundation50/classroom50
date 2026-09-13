@@ -552,7 +552,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 			if err := os.MkdirAll(binDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte("#!/bin/sh\ncase \"$1\" in api) echo false ;; esac\nexit 0\n"), 0o700); err != nil {
 				t.Fatal(err)
 			}
 			for _, name := range []string{"result.json", "release-body.md"} {
@@ -582,9 +582,13 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 				t.Fatal(err)
 			}
 			ghLog := filepath.Join(tmp, "gh.log")
-			// `release view` succeeds so the exists/delete-then-recreate path runs.
+			// `release view` succeeds and the immutable probe answers false, so
+			// the exists/delete-then-recreate path runs.
 			fakeGH := []byte(`#!/bin/sh
 printf '%s\n' "$*" >> "$GH_LOG"
+case "$1" in
+  api) echo false; exit 0 ;;
+esac
 `)
 			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
 				t.Fatal(err)
@@ -710,6 +714,59 @@ exit 0
 			}
 		})
 
+		// A failed immutability probe must fail safe: guessing "mutable" and
+		// deleting would burn the tag name if the guess is wrong.
+		t.Run("ReleaseShellKeepsReleaseWhenProbeFails", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1" in
+  api) echo "HTTP 502" >&2; exit 1 ;;
+esac
+exit 0
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell must exit 0 when the probe fails: %v\n%s", err, output)
+			}
+			if !strings.Contains(string(output), "could not be checked") {
+				t.Errorf("Release shell output missing the unchecked-immutability warning:\n%s", output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, forbidden := range []string{"release delete", "release create"} {
+				if strings.Contains(string(log), forbidden) {
+					t.Errorf("failed probe must not reach `gh %s`:\n%s", forbidden, log)
+				}
+			}
+		})
+
 		// Immutable-release tolerance (regrade failed live 2026-08-07): when the
 		// delete is rejected AND the release still exists (immutable ruleset),
 		// the step warns, skips the create, and exits 0 — grading already
@@ -731,6 +788,9 @@ case "$1 $2" in
     echo "HTTP 422: Release is immutable (ruleset)" >&2
     exit 1
     ;;
+esac
+case "$1" in
+  api) echo false; exit 0 ;;
 esac
 exit 0
 `)
@@ -795,6 +855,9 @@ case "$1 $2" in
     echo "HTTP 500: something transient" >&2
     exit 1
     ;;
+esac
+case "$1" in
+  api) echo false; exit 0 ;;
 esac
 exit 0
 `)
@@ -953,7 +1016,7 @@ func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInse
 				t.Fatal(err)
 			}
 			ghLog := filepath.Join(tmp, "gh.log")
-			fakeGH := []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GH_LOG\"\n")
+			fakeGH := []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GH_LOG\"\ncase \"$1\" in api) echo false ;; esac\n")
 			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
 				t.Fatal(err)
 			}
