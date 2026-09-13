@@ -7,6 +7,7 @@ import {
 } from "../types"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 import { getClassroomJson } from "../configRepoReads"
+import { liveTeamId } from "../queries/teamReads"
 import type { StaffRole } from "@/types/classroom"
 import { STAFF_ROLES } from "@/types/classroom"
 import { createTeam, type TeamNotificationSetting } from "../teamWrites"
@@ -541,23 +542,15 @@ export async function deleteClassroomTeam(
   // doesn't own. A non-conforming ref is a no-op.
   if (!isDeletableClassroomTeamRef(team)) return
 
-  try {
-    const live = await client.request<{ id: number }>(
-      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
-    )
-    if (live.id !== team.id) {
-      throw new TeamIdMismatchError({
-        org,
-        slug: team.slug,
-        recordedId: team.id,
-        liveId: live.id,
-      })
-    }
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return
-    }
-    throw err
+  const liveId = await liveTeamId(client, org, team.slug)
+  if (liveId === null) return
+  if (liveId !== team.id) {
+    throw new TeamIdMismatchError({
+      org,
+      slug: team.slug,
+      recordedId: team.id,
+      liveId,
+    })
   }
 
   await tolerateGitHubError(

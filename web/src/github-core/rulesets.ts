@@ -10,6 +10,7 @@ import { paginateAll } from "./paginate"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
 import { ClassroomConfigError, forEachClassroom } from "./configRepoReads"
+import { liveTeamId } from "./queries/teamReads"
 import { STAFF_TEAM_PRIVACY, type GitHubTeam } from "./types"
 import { GitHubAPIError } from "./errors"
 import type { LocalizedMessage } from "@/types/localizedMessage"
@@ -522,12 +523,9 @@ export async function revokeClassroomStaffTeams(
   const ids: number[] = []
   await mapWithConcurrency(slugs, 4, async (slug) => {
     try {
-      const live = await client.request<{ id: number }>(
-        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,
-      )
-      ids.push(live.id)
+      const id = await liveTeamId(client, org, slug)
+      if (id !== null) ids.push(id)
     } catch (err) {
-      if (err instanceof GitHubAPIError && err.isNotFound) return
       log.warn("could not look up a staff team to drop it from the lock", {
         org,
         slug,
@@ -574,13 +572,11 @@ export async function collectStaffTeamSlugs(
 type OrgTeamListing = Pick<GitHubTeam, "id" | "slug" | "privacy">
 
 // One paginated read of the teams that hold a grant on the org's `classroom50`
-// config repo, keyed by slug. Only an owner-run Classroom 50 flow grants a team
-// access to that repo, and it does so for every staff team it creates, so this
-// listing is the set of teams Classroom 50 owns: a team any member created at a
-// staff slug, or another classroom's student team sitting at one (`ml-ta`'s
-// students at `ml`'s TA slug), is absent. Strict, unlike
-// queries/teamReads.listOrgTeams: a failure here must not read as "no teams".
-// A missing config repo (fresh org) is the one 404 that means exactly that.
+// config repo, keyed by slug: the set of teams Classroom 50 owns (see
+// mutations/teams.ts AdoptGuard for why the grant is the proof). Strict on
+// purpose, unlike queries/teamReads.listRepoTeams, which swallows failures: a
+// failure here must not read as "no teams", or the bypass list is rebuilt
+// empty. A missing config repo (fresh org) is the one 404 that means that.
 async function listConfigRepoTeamsBySlug(
   client: GitHubClient,
   org: string,

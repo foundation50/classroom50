@@ -335,15 +335,18 @@ organization:
 
 A staff team is the team named `classroom50-<short-name>-<role>` **that has
 access to the `classroom50` repository**. Classroom 50 grants that access when
-it creates the team, and only an organization owner can grant it, so the grant
-is what tells a real staff team from any other team that happens to sit at the
-same name. A team an organization member created at a staff name, or the
-student team of a classroom whose short name ends in `-teacher`, `-hta`, or
-`-ta`, is never exempted, made visible, or granted access to student
-repositories. Setup, **Fix it**, score collection, and the classroom page all
-apply the same rule, and Classroom 50 warns about such a team instead of
-adopting it. New classroom short names can't end in a role suffix for the same
-reason.
+it creates the team, and only an organization owner (or someone an owner made
+an admin of that repository, or a maintainer of an already-granted team) can
+grant it, so the grant is what tells a real staff team from any other team
+that happens to sit at the same name. A team an organization member created at
+a staff name is never exempted, made visible, or granted access to student
+repositories; Classroom 50 warns about it instead of adopting it. One case
+outranks the grant: if a classroom named `<short-name>-<role>` exists, the
+team at that name is its **student** team, whatever access an older release
+gave it, and Classroom 50 removes that access on the next visit. Setup, **Fix
+it**, score collection, and the classroom page all apply the same rules. New
+classroom short names can't end in a role suffix, and a new classroom can't
+take a name whose staff team name an existing classroom already holds.
 
 Both rulesets include an organization-owner bypass, so teachers keep full
 control. Separately, the `classroom50` repository's default branch has classic

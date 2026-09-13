@@ -1078,10 +1078,14 @@ anyone in the organization could have created it. Open the linked team page:
   repository under **Repositories**, then try again. Classroom 50 adopts it.
 - Otherwise delete the team and try again. Classroom 50 creates a fresh one.
 
-A classroom whose short name ends in `-teacher`, `-hta`, or `-ta` hits the
-reverse case: its student team name is another classroom's staff name. New
-classrooms can't take such a name; an existing one keeps working, but its
-student team is never treated as staff.
+A classroom whose short name ends in `-teacher`, `-hta`, or `-ta` is the
+reverse case: its student team name is another classroom's staff name. When
+both `ml` and `ml-ta` exist, the message says the team "is the student team of
+classroom ml-ta": `ml` has no TA team and can't get one while `ml-ta` exists.
+Leave that role unstaffed on `ml`, or rename one of the classrooms. New
+classrooms can't take either name of such a pair; existing ones keep working,
+and `ml-ta`'s student team is never treated as staff again, even if an older
+release had granted it access.
 
 ### "The collection run failed."
 
