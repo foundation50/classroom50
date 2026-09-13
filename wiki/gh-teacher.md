@@ -577,8 +577,10 @@ gh teacher staff remove <org> <classroom> <username> [--role teacher|hta|ta]
 ```
 
 `--role` defaults to `teacher`. `add` self-heals a classroom that predates staff
-teams (creating and recording the missing team). `remove` doesn't touch org
-membership and is idempotent.
+teams (creating and recording the missing team), and replaces a `teams.<role>`
+entry in `classroom.json` that names any other team, with a warning. `remove`
+acts on the classroom's own team even if the record names another one, doesn't
+touch org membership, and is idempotent.
 
 ### Dual roles (staff who are also students)
 

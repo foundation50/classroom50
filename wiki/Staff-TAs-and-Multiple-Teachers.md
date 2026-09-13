@@ -107,10 +107,12 @@ With that access, TAs and head TAs open each student's work, leave reviews on
 the [feedback pull request](Autograding-Basics#feedback-pull-requests), and
 merge it when grading is done. The `feedback` branch is locked by an
 organization ruleset that exempts the classroom's staff teams, so staff see the
-normal **Merge** button and students never do. There is no automatic reviewer
-assignment yet; TAs pick up repositories from the submissions page. (**Open all
-feedback PRs**, which opens any missing feedback pull requests in bulk, is
-owner-only.)
+normal **Merge** button and students never do. Because the exemption skips the
+lock entirely, staff can also push to or delete a student's `feedback` branch;
+the lock protects the frozen base from students, not from staff. There is no
+automatic reviewer assignment yet; TAs pick up repositories from the
+submissions page. (**Open all feedback PRs**, which opens any missing feedback
+pull requests in bulk, is owner-only.)
 
 Because TAs and head TAs are ordinary organization members, graders don't
 need owner rights to do their work. Both roles can push to student

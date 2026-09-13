@@ -982,7 +982,10 @@ normal **Merge** button. What you see tells you what's missing:
   checkbox.** The ruleset was installed by an older release. Re-run
   `gh teacher init`, or open the organization's settings in the web app and
   click **Fix it** on the rulesets check. The checkbox still works in the
-  meantime.
+  meantime. If it comes back, a co-teacher is still running an older
+  `gh teacher`: its `init` reinstalls the old ruleset and drops the staff
+  exemptions again. Have every teacher run `gh extension upgrade gh-teacher`
+  before re-running `init`.
 - **TA or head TA with no merge button at all.** Staff get write access to
   student repositories from the score-collection workflow, not at accept
   time. Run **Collect now** (or wait for the scheduled run), then reload the
@@ -1045,6 +1048,12 @@ level tells you whether anything needs fixing:
 - A **warning** means a staff team exists but has no members, or a team
   recorded in `classroom.json` is missing or couldn't be read. Check each TA's
   role on the roster page, then run collection again.
+- A **warning that `classroom.json` records another team** as a staff role
+  means the `teams.<role>` entry names a team Classroom 50 didn't create for
+  that classroom. Collection grants the classroom's own team
+  (`classroom50-<classroom>-<role>`) regardless. To fix the record, run
+  `gh teacher staff add <org> <classroom> <username> --role <role>` with any
+  current member of that role; it rewrites the entry to the right team.
 
 ### "The collection run failed."
 

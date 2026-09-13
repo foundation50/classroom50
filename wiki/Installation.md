@@ -37,6 +37,13 @@ Or update everything at once with `gh extension upgrade --all`. `gh` also checks
 for new releases in the background and tells you when an extension is out of
 date.
 
+Teachers who share an organization should upgrade together. `gh teacher init`
+reinstalls the organization rulesets to whatever the running version expects,
+so an older release re-running `init` undoes protections a newer one installed
+(for example, the staff exemption on the `feedback` branch lock) until someone
+runs the newer `init` or clicks **Fix it** in the web app's organization
+settings.
+
 To pin a version, pass `--pin` with a release tag:
 
 ```sh

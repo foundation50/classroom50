@@ -87,6 +87,12 @@ func classroomServer(t *testing.T, classrooms map[string]*string, teams map[stri
 				_, _ = w.Write([]byte(`{"message":"nope"}`))
 				return
 			}
+			if slug == "classroom50-throttled-teacher" {
+				w.Header().Set("Retry-After", "60")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"message":"You have exceeded a secondary rate limit"}`))
+				return
+			}
 			patched = append(patched, slug)
 			_, _ = w.Write([]byte(`{}`))
 		default:
@@ -177,6 +183,19 @@ func TestPrepareStaffTeams(t *testing.T) {
 	if !strings.Contains(errOut.String(), `could not make staff team "classroom50-stuck-teacher" visible`) {
 		t.Errorf("missing PATCH-failure warning: %q", errOut.String())
 	}
+
+	t.Run("a rate-limited PATCH is an error, not a shorter list", func(t *testing.T) {
+		// Mirrors the web: a throttled PATCH says nothing about the team, so
+		// Reconcile must fall back to the current list rather than drop it.
+		server, _ := classroomServer(t, nil, map[string]struct {
+			id      int64
+			privacy string
+		}{"classroom50-throttled-teacher": {41, "secret"}}, false)
+		_, err := PrepareStaffTeams(githubtest.NewTestClient(t, server), &out, &errOut, org, []string{"classroom50-throttled-teacher"})
+		if err == nil || !strings.Contains(err.Error(), "classroom50-throttled-teacher") {
+			t.Errorf("err = %v, want a propagated rate-limit error naming the team", err)
+		}
+	})
 
 	t.Run("a listing failure is an error, not an empty list", func(t *testing.T) {
 		server, _ := classroomServer(t, nil, nil, false)

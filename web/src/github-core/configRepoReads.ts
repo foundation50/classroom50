@@ -61,7 +61,23 @@ export async function getClassroomJson(
     `/repos/${input.org}/${CONFIG_REPO}/contents/${path}${query}`,
   )
 
-  return JSON.parse(raw)
+  try {
+    return JSON.parse(raw)
+  } catch (cause) {
+    throw new ClassroomConfigError(input.classroom, cause)
+  }
+}
+
+// classroom.json was fetched but could not be parsed. Distinct from a GitHub
+// failure because no retry fixes it, so callers can name the file to repair
+// instead of asking the teacher to try again.
+export class ClassroomConfigError extends Error {
+  readonly classroom: string
+  constructor(classroom: string, cause: unknown) {
+    super(`${classroom}/classroom.json is not valid JSON`, { cause })
+    this.name = "ClassroomConfigError"
+    this.classroom = classroom
+  }
 }
 
 // Visit every classroom directory in the config repo that holds a readable

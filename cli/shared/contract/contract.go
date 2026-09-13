@@ -771,8 +771,8 @@ func ClassroomStudentTeamSlug(shortName string) string {
 }
 
 // StaffTeamSlug is the single source of a staff-role team slug
-// `classroom50-<short>-<role>`. Byte-mirrors web classroomTeamSlug(short, role)
-// and gh-teacher staffTeamName.
+// `classroom50-<short>-<role>`. Byte-mirrors web classroomTeamSlug(short, role);
+// gh-teacher configrepo.StaffTeamSlug delegates here.
 func StaffTeamSlug(shortName string, role StaffRole) string {
 	return ConfigRepoName + "-" + shortName + "-" + string(role)
 }

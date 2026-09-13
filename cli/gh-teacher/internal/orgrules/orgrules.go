@@ -16,6 +16,7 @@ import (
 	"slices"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -445,6 +446,12 @@ func PrepareStaffTeams(client githubapi.Client, out, errOut io.Writer, org strin
 		}
 		if team.Privacy != configrepo.StaffTeamPrivacy {
 			if err := configrepo.SetTeamPrivacy(client, org, slug, configrepo.StaffTeamPrivacy); err != nil {
+				// A throttled PATCH says nothing about the team; propagate so
+				// the caller keeps the current list instead of rebuilding a
+				// shorter one (mirrors the web's isRateLimited rethrow).
+				if cliutil.IsRateLimited(err) {
+					return nil, fmt.Errorf("PATCH team %s privacy: %w", slug, err)
+				}
 				_, _ = fmt.Fprintf(errOut, "Warning: %s: could not make staff team %q visible to the organization (%v); its members can't merge feedback PRs until it is. Set the team's visibility to \"Visible\" at https://github.com/orgs/%s/teams/%s/edit and re-run init.\n",
 					org, slug, err, org, slug)
 				continue

@@ -265,8 +265,8 @@ func TestRunStaffRemove(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	var out bytes.Buffer
-	if err := runStaffRemove(client, &out, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
+	var out, errOut bytes.Buffer
+	if err := runStaffRemove(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
 		t.Fatalf("runStaffRemove: %v", err)
 	}
 	if len(mock.membershipDEL) != 1 || !strings.Contains(mock.membershipDEL[0], "classroom50-cs-principles-ta/memberships/alice") {
@@ -274,6 +274,27 @@ func TestRunStaffRemove(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "removed alice from ta team") {
 		t.Errorf("stdout = %q, want a ta remove confirmation", out.String())
+	}
+}
+
+func TestRunStaffRemove_NonCanonicalRef(t *testing.T) {
+	// The recorded ta ref names another team; the removal must hit the
+	// canonical team, never the recorded one.
+	mock := &staffMock{classroomJSON: `{"schema":"classroom50/classroom/v1","short_name":"cs-principles","org":"o",
+  "teams": {"ta": {"id": 9, "slug": "classroom50-other-ta"}}}`}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runStaffRemove(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
+		t.Fatalf("runStaffRemove: %v", err)
+	}
+	if !strings.Contains(errOut.String(), `records "classroom50-other-ta" as the ta staff team`) {
+		t.Errorf("stderr = %q, want a warning naming the rejected ref", errOut.String())
+	}
+	if len(mock.membershipDEL) != 1 || !strings.Contains(mock.membershipDEL[0], "classroom50-cs-principles-ta/memberships/alice") {
+		t.Errorf("membership DELETEs = %v, want alice removed from the canonical ta team only", mock.membershipDEL)
 	}
 }
 

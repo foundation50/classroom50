@@ -331,6 +331,8 @@ function makeConfigRepoClient(opts: {
       if (body === undefined || body === null) throw httpError(404)
       if (body === "BOOM") throw httpError(500)
       if (body === "MALFORMED") return "{ not json"
+      if (body === "TIMEOUT")
+        throw new DOMException("timed out", "TimeoutError")
       return JSON.stringify(body)
     }
     if (path.includes("/classroom50/contents")) {
@@ -509,6 +511,18 @@ describe("auditRulesets", () => {
       key: "orgSettings.audit.detail.rulesetClassroomInvalid",
       params: { classroom: "broken" },
     })
+  })
+
+  it("a timed-out classroom.json read stays retryable, never 'invalid JSON'", async () => {
+    const { client } = makeConfigRepoClient({
+      classrooms: { cs101, slow: "TIMEOUT" },
+      teams: cs101Teams,
+    })
+    const verdict = await auditRulesets(client, "acme")
+    expect(verdict.state).toBe("unreadable")
+    expect(verdict.detail?.key).toBe(
+      "orgSettings.audit.detail.rulesetStaffTeamsUnreadable",
+    )
   })
 })
 

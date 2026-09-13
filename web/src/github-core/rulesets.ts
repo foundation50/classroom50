@@ -9,7 +9,7 @@ import type { GitHubClient } from "./client"
 import { paginateAll } from "./paginate"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
-import { forEachClassroom } from "./configRepoReads"
+import { ClassroomConfigError, forEachClassroom } from "./configRepoReads"
 import { STAFF_TEAM_PRIVACY, type GitHubTeam } from "./types"
 import { GitHubAPIError } from "./errors"
 import type { LocalizedMessage } from "@/types/localizedMessage"
@@ -504,18 +504,6 @@ export async function revokeStaffTeams(
   }
 }
 
-// One classroom's classroom.json could be fetched but not parsed. Distinct from
-// a GitHub failure because no retry fixes it: the audit names the classroom so
-// the teacher knows which file to repair.
-export class ClassroomConfigError extends Error {
-  readonly classroom: string
-  constructor(classroom: string, cause: unknown) {
-    super(`${classroom}/classroom.json is not valid`, { cause })
-    this.name = "ClassroomConfigError"
-    this.classroom = classroom
-  }
-}
-
 // The canonical staff team slugs (teacher, hta, ta) of every classroom in the
 // config repo. The slug, not classroom.json, identifies a classroom's staff
 // team: it is what every writer creates, what a role flow that never recorded
@@ -532,9 +520,7 @@ export async function collectStaffTeamSlugs(
   await forEachClassroom(
     client,
     org,
-    (classroom, err) => {
-      if (classroom !== null && !(err instanceof GitHubAPIError))
-        throw new ClassroomConfigError(classroom, err)
+    (_classroom, err) => {
       throw err
     },
     (classroom) => {

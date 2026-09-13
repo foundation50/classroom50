@@ -98,10 +98,10 @@ var ConfigRepoPermission = map[StaffRole]string{
 	RoleTA:      "pull",
 }
 
-// StaffTeamSlug derives the staff-role team name: `classroom50-<short>-<role>`.
-// Mirrors the web's classroomTeamSlug(short, role). The short-name is canonical, so slug == name.
+// StaffTeamSlug is the staff-role team name `classroom50-<short>-<role>`; the
+// short-name is canonical, so slug == name.
 func StaffTeamSlug(shortName string, role StaffRole) string {
-	return "classroom50-" + shortName + "-" + string(role)
+	return contract.StaffTeamSlug(shortName, contract.StaffRole(role))
 }
 
 // StaffTeamsRef holds the per-classroom staff team refs the web GUI persists
