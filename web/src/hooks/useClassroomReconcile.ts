@@ -9,6 +9,7 @@ import {
 import { suppressedLoginsFor } from "@/hooks/useSuppressedLogins"
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
+import { UnclaimedTeamError } from "@/github-core/mutations"
 import { logger } from "@/lib/logger"
 import { useBestEffortOwnerReconcile } from "@/hooks/useBestEffortOwnerReconcile"
 
@@ -75,13 +76,15 @@ export function useClassroomReconcile(
         })
       }
     },
-    // Latch as permanent only a 403 the viewer can't fix or the description
-    // step's wrong-slug team 404 (a derived slug that never converges). Every
-    // other 404 in the pass — a propagating config commit — is transient and
-    // releases the key for a later retry, so
-    // one blip can't disable the whole classroom heal for the mount.
+    // Latch as permanent only a 403 the viewer can't fix, the description
+    // step's wrong-slug team 404 (a derived slug that never converges), or a
+    // student slug held by another classroom's staff team (fixed by hand, not
+    // by retrying). Every other 404 in the pass — a propagating config commit —
+    // is transient and releases the key for a later retry, so one blip can't
+    // disable the whole classroom heal for the mount.
     isPermanent: (err) =>
       err instanceof ClassroomReconcilePermanentError ||
+      err instanceof UnclaimedTeamError ||
       (err instanceof GitHubAPIError && err.isForbidden && !err.isRateLimited),
     logSkip: (err, { org, classroom }) =>
       log.warn("classroom reconcile skipped", { org, classroom, err }),

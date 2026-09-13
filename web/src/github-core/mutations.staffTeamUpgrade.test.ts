@@ -54,6 +54,14 @@ function makeLegacyOrg(opts: { rulesetInstalled: boolean }) {
         }
       }
       if (teamGet && method === "PATCH") return undefined
+      // Every legacy staff team holds its config-repo grant: that is what
+      // proves it is Classroom 50's and lets the adopt reshape it.
+      if (
+        /^\/orgs\/acme\/teams\/[^/]+\/repos\/acme\/classroom50$/.test(path) &&
+        method === "GET"
+      ) {
+        return undefined
+      }
       if (path.startsWith("/orgs/acme/rulesets?") && method === "GET") {
         return opts.rulesetInstalled
           ? [{ id: 7, name: RULESET_NAME_FEEDBACK_BASE }]

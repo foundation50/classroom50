@@ -46,6 +46,7 @@ const planResult = vi.fn<() => TeardownPlan>(() => ({
   org: "acme",
   repoNames: ["classroom50"],
   teams: [],
+  classrooms: [],
 }))
 const executeError = vi.fn<() => unknown>(() => null)
 vi.mock("@/hooks/mutations/usePlanTeardown", () => ({

@@ -33,7 +33,9 @@ function apiError(status: number): GitHubAPIError {
 }
 
 // A fake client recording every request. `adoptGet` (when set) is returned for
-// the adopt GET and forces the POST to 422 so the adopt path runs.
+// the adopt GET and forces the POST to 422 so the adopt path runs. The adopt
+// guard's config-repo access probe answers by slug shape: a staff-slug team
+// holds the grant (it is Classroom 50's), a student-slug team does not.
 function makeClient(adoptGet?: Record<string, unknown>) {
   const calls: Call[] = []
   const request = vi.fn(
@@ -43,6 +45,14 @@ function makeClient(adoptGet?: Record<string, unknown>) {
       if (path.endsWith("/teams") && method === "POST") {
         if (adoptGet) throw apiError(422)
         return { id: 1, slug: "created" }
+      }
+      if (
+        method === "GET" &&
+        /\/teams\/[^/]+\/repos\/o\/classroom50$/.test(path)
+      ) {
+        const slug = String(adoptGet?.slug ?? "")
+        if (/-(teacher|hta|ta)$/.test(slug)) return undefined
+        throw apiError(404)
       }
       if (method === "GET") return adoptGet
       if (method === "PATCH") return undefined

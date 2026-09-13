@@ -111,18 +111,29 @@ export async function reconcileClassroom(
   // pass must not resurrect (see useSuppressedLogins).
   excludeLogins?: () => Set<string>,
 ): Promise<ClassroomReconcileResult> {
-  const archivedRecord = await readArchivedRecord(client, org, classroom)
-  if (archivedRecord) {
-    return reconcileArchivedClassroom(client, org, classroom, archivedRecord)
+  const record = await readClassroomRecord(client, org, classroom)
+  if (record && isClassroomArchived(record)) {
+    return reconcileArchivedClassroom(client, org, classroom, record)
   }
 
   const { slug: studentTeamSlug, created: studentTeamCreated } =
     await ensureClassroomTeam(client, org, classroom)
-  const { teams: staffTeams, created: staffCreated } = await ensureStaffTeams(
-    client,
-    org,
-    classroom,
-  )
+  const {
+    teams: staffTeams,
+    created: staffCreated,
+    unclaimed,
+  } = await ensureStaffTeams(client, org, classroom, record?.teams)
+  // A team someone else created at a staff slug is left alone (not reshaped,
+  // exempted, or granted) and the rest of the pass still converges. Recorded so
+  // the gap is visible; the owner sees the fix when they next act on that role.
+  for (const err of unclaimed) {
+    log.warn("classroom reconcile: staff slug held by an unclaimed team", {
+      org,
+      classroom,
+      slug: err.slug,
+      record: true,
+    })
+  }
 
   // Clear the owner off every non-teacher team we just touched. Best-effort and
   // idempotent (404 = already absent); a failure leaves them on a team where the
@@ -236,18 +247,18 @@ async function dropCreatorFromNonTeacherTeams(
   }
 }
 
-// The classroom.json record when the classroom positively records
-// active: false, else null. A missing classroom.json (404, legacy) reads as
-// active; a transient read failure rethrows so the caller's latch retries
-// rather than reconciling blind.
-async function readArchivedRecord(
+// Reads classroom.json once for the pass: the archived flag decides which
+// branch runs, and the recorded `teams` block lets ensureStaffTeams re-adopt a
+// team whose config-repo grant was lost. A missing classroom.json (404, legacy)
+// reads as active with nothing recorded; a transient read failure rethrows so
+// the caller's latch retries rather than reconciling blind.
+async function readClassroomRecord(
   client: GitHubClient,
   org: string,
   classroom: string,
 ): Promise<Classroom | null> {
   try {
-    const record = await getClassroomJson(client, { org, classroom })
-    return isClassroomArchived(record) ? record : null
+    return await getClassroomJson(client, { org, classroom })
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isNotFound) return null
     throw err

@@ -17,7 +17,7 @@ import {
 } from "@/github-core/mutations"
 import { getOrgRepos, sleep } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
-import { revokeStaffTeams } from "@/github-core/rulesets"
+import { revokeClassroomStaffTeams } from "@/github-core/rulesets"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { DELETE_REPO_SCOPE } from "@/auth/constants"
@@ -134,6 +134,9 @@ export type TeardownPlan = {
   // Only teams a classroom actually links to are deleted — a manually created
   // team is never touched, even if it shares the classroom50- naming.
   teams: ClassroomTeamRef[]
+  // The classroom short names walked, for the ruleset revoke: it resolves each
+  // classroom's staff slugs live rather than trusting the recorded refs.
+  classrooms: string[]
 }
 
 // Read each classroom's classroom.json and collect its team ref, deduped by
@@ -144,8 +147,9 @@ export type TeardownPlan = {
 async function collectClassroomTeams(
   client: GitHubClient,
   org: string,
-): Promise<ClassroomTeamRef[]> {
+): Promise<{ teams: ClassroomTeamRef[]; classrooms: string[] }> {
   const bySlug = new Map<string, ClassroomTeamRef>()
+  const classrooms: string[] = []
   await forEachClassroom(
     client,
     org,
@@ -160,6 +164,7 @@ async function collectClassroomTeams(
       })
     },
     (classroom, json) => {
+      classrooms.push(classroom)
       // classroom.json is anyone-with-config-repo-write authored and parsed
       // without schema validation, so its team refs are untrusted input to a
       // destructive bulk DELETE. Only queue the teams the app itself created
@@ -169,7 +174,7 @@ async function collectClassroomTeams(
       }
     },
   )
-  return [...bySlug.values()]
+  return { teams: [...bySlug.values()], classrooms }
 }
 
 // Enumerate the deletion plan: every repo in the org (marker last so an
@@ -190,9 +195,9 @@ export async function planTeardown(
   const repos = await getOrgRepos(client, org)
   const names = (repos ?? []).map((r) => r.name)
   const nonMarker = names.filter((n) => n !== CONFIG_REPO)
-  const teams = await collectClassroomTeams(client, org)
+  const { teams, classrooms } = await collectClassroomTeams(client, org)
   // Marker last so a partial run stays re-runnable.
-  return { org, repoNames: [...nonMarker, CONFIG_REPO], teams }
+  return { org, repoNames: [...nonMarker, CONFIG_REPO], teams, classrooms }
 }
 
 export type TeardownResult = {
@@ -328,6 +333,7 @@ async function deleteClassroomTeams(
   client: GitHubClient,
   org: string,
   teams: ClassroomTeamRef[],
+  classrooms: readonly string[],
 ): Promise<{
   teamsDeleted: string[]
   teamsFailed: string[]
@@ -337,13 +343,10 @@ async function deleteClassroomTeams(
   const teamsFailed: string[] = []
   let teamsRecoverable = false
 
-  // The feedback-base ruleset outlives teardown; drop the teams from its
-  // bypass list rather than leave it pointing at deleted ones.
-  await revokeStaffTeams(
-    client,
-    org,
-    teams.map((t) => t.id),
-  )
+  // The feedback-base ruleset outlives teardown; drop the staff teams from its
+  // bypass list rather than leave it pointing at deleted ones. By live slug, so
+  // an unrecorded staff team is dropped too.
+  await revokeClassroomStaffTeams(client, org, classrooms)
 
   await mapWithConcurrency(teams, 4, async (team) => {
     const outcome = await deleteClassroomTeamWithRetry(client, org, team)
@@ -502,7 +505,12 @@ export async function executeTeardown(
   // re-enumerating planTeardown above (not the stale modal plan). Best-effort: a
   // team failure never blocks the marker.
   const { teamsDeleted, teamsFailed, teamsRecoverable } =
-    await deleteClassroomTeams(client, plan.org, current.teams)
+    await deleteClassroomTeams(
+      client,
+      plan.org,
+      current.teams,
+      current.classrooms,
+    )
 
   // Marker deleted only on a fully-successful run; otherwise left behind so
   // planTeardown's gate still passes and the run stays re-runnable. A

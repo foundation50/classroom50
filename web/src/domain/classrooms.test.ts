@@ -151,6 +151,13 @@ describe("createClassroomFiles creator team cleanup", () => {
         ) {
           return { id: 7, slug: "classroom50-cs101", privacy: "secret" }
         }
+        // The adopt guard's config-repo probe: a student team holds no grant.
+        if (
+          method === "GET" &&
+          /\/teams\/[^/]+\/repos\/acme\/classroom50$/.test(path)
+        ) {
+          throw apiError(404)
+        }
         // Team create/adopt -> { id, slug } derived from the POSTed name. When
         // adoptStudentsTeam is set, the students team POST 422s (already exists).
         if (method === "POST" && /\/orgs\/[^/]+\/teams$/.test(path)) {

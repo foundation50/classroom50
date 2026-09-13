@@ -14,6 +14,7 @@ import { nextAvailableSlug, slugify } from "@/util/slug"
 import {
   SHORT_NAME_PATTERN_DESCRIPTION,
   isValidShortName,
+  reservedShortNameSuffix,
 } from "@/util/shortName"
 import {
   CLASSROOM_SHORT_NAME_MAX_LEN,
@@ -96,6 +97,11 @@ const CreateClassroomForm = ({
               length: slug.length,
               max: CLASSROOM_SHORT_NAME_MAX_LEN,
               limit: GITHUB_REPO_NAME_MAX_LEN,
+            })
+          } else if (reservedShortNameSuffix(slug)) {
+            // The student team of `x-ta` would sit at `x`'s TA team slug.
+            errors.slug = t("validation.classroomSlugReservedEnding", {
+              suffix: reservedShortNameSuffix(slug) as string,
             })
           } else if (
             classes.find((cl) => cl.path.toLowerCase() === slug.toLowerCase())

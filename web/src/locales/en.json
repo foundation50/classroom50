@@ -915,6 +915,7 @@
     "classroomSlugTaken": "Classroom slug is already taken.",
     "classroomSlugInvalid": "Classroom slug must be {{description}}.",
     "classroomSlugTooLong": "Classroom slug is {{length}} characters; new classrooms are capped at {{max}}. It prefixes every student repository name, which GitHub limits to {{limit}} characters.",
+    "classroomSlugReservedEnding": "Classroom slug can't end in -{{suffix}}. Classroom 50 reserves that ending for staff team names (classroom50-<slug>-{{suffix}}). Choose a slug that doesn't end in -teacher, -hta, or -ta.",
     "assignmentSlugTaken": "An assignment \"{{slug}}\" already exists in this classroom.",
     "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}.",
     "customDomainInvalid": "Enter a domain like pages.example.edu or a full https:// URL (no query, fragment, or trailing slash)."
@@ -4103,6 +4104,12 @@
       "recordMismatch": "The team {{slug}} doesn't carry this assignment's group record, so it wasn't deleted. Remove it on GitHub if you're sure.",
       "leaveForbidden": "GitHub blocked leaving the group. The team's membership may be managed by your school. Ask your teacher to remove you, or leave from the team's page on GitHub.",
       "maintainerCannotLeave": "You maintain this group, so you can't leave it. Ask your teacher to move you."
+    }
+  },
+  "staffTeams": {
+    "unclaimed": {
+      "staff": "The team {{slug}} already exists but wasn't created by Classroom 50, so it can't be used as a staff team. Review its members at {{url}}, then either delete it or give it access to the classroom50 repository, and try again.",
+      "student": "The team {{slug}} already exists and has access to the classroom50 repository, so it belongs to another classroom's staff, not to this classroom's students. Choose a slug that doesn't end in -teacher, -hta, or -ta, or review the team at {{url}}."
     }
   }
 }

@@ -29,7 +29,12 @@ import { useExecuteTeardown } from "./useExecuteTeardown"
 import { TeardownRateLimitError } from "@/domain/teardown"
 
 const ORG = "cs50"
-const PLAN: TeardownPlan = { org: ORG, repoNames: ["classroom50"], teams: [] }
+const PLAN: TeardownPlan = {
+  org: ORG,
+  repoNames: ["classroom50"],
+  teams: [],
+  classrooms: [],
+}
 const TOKEN_KEY = githubKeys.serviceToken(ORG)
 const STATUS_KEY = orgClassroom50StatusKey(ORG)
 

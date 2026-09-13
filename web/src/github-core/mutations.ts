@@ -47,6 +47,7 @@ export {
   addUserToTeam,
   removeUserFromTeam,
   TeamIdMismatchError,
+  UnclaimedTeamError,
   type ClassroomTeamRef,
   type StaffTeamRefs,
 } from "./mutations/teams"

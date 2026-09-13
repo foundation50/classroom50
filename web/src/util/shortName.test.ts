@@ -3,6 +3,7 @@ import {
   SHORT_NAME_PATTERN,
   isCanonicalTeamShortName,
   isValidShortName,
+  reservedShortNameSuffix,
 } from "./shortName"
 
 describe("SHORT_NAME_PATTERN", () => {
@@ -39,5 +40,21 @@ describe("isValidShortName", () => {
     expect(isValidShortName("a".repeat(101))).toBe(false) // over cap
     expect(isValidShortName("cs--50")).toBe(false) // non-canonical
     expect(isValidShortName("CS-50")).toBe(false) // uppercase
+  })
+})
+
+describe("reservedShortNameSuffix", () => {
+  it("names the staff role a short name ends in, as a whole hyphen segment", () => {
+    // `ml-ta`'s student team would sit at `ml`'s TA slug.
+    expect(reservedShortNameSuffix("ml-ta")).toBe("ta")
+    expect(reservedShortNameSuffix("ml-hta")).toBe("hta")
+    expect(reservedShortNameSuffix("ml-teacher")).toBe("teacher")
+    expect(reservedShortNameSuffix("cs-101-ta")).toBe("ta")
+  })
+
+  it("leaves a name that merely contains or ends in the letters alone", () => {
+    for (const ok of ["cs", "data", "delta-tab", "teachers", "hta1", "ta-cs"]) {
+      expect(reservedShortNameSuffix(ok), ok).toBeNull()
+    }
   })
 })

@@ -60,8 +60,12 @@ function makeClient(configRepoBranch = "main"): {
       if (method === "GET" && path === "/repos/acme/classroom50") {
         return Promise.resolve({ default_branch: configRepoBranch })
       }
-      // The org team listing the ruleset repair resolves staff slugs against.
-      if (method === "GET" && path.startsWith("/orgs/acme/teams?")) {
+      // The config-repo team listing the ruleset repair resolves staff slugs
+      // against.
+      if (
+        method === "GET" &&
+        path.startsWith("/repos/acme/classroom50/teams?")
+      ) {
         return Promise.resolve([])
       }
       if (method === "GET" && path.includes("/rulesets")) {

@@ -14,6 +14,7 @@ import { STAFF_TEAM_PRIVACY, type GitHubTeam } from "./types"
 import { GitHubAPIError } from "./errors"
 import type { LocalizedMessage } from "@/types/localizedMessage"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { STAFF_ROLES } from "@/types/classroom"
 import { mapWithConcurrency } from "@/util/concurrency"
@@ -486,7 +487,8 @@ export async function exemptStaffTeams(
 
 // Best-effort: drop staff teams about to be deleted from the feedback-base
 // bypass list, so the ruleset never references an actor GitHub no longer
-// knows. Run before the team delete.
+// knows. Run before the team delete. Takes ids the caller just minted (the
+// create rollback); a delete flow uses revokeClassroomStaffTeams instead.
 export async function revokeStaffTeams(
   client: GitHubClient,
   org: string,
@@ -502,6 +504,38 @@ export async function revokeStaffTeams(
       err,
     })
   }
+}
+
+// Best-effort: drop the given classrooms' staff teams from the feedback-base
+// bypass list by resolving each canonical slug to the live team, so the
+// recorded `teams` block (head-TA-writable, and absent for a team a role flow
+// created without recording it) never decides which id is dropped. Run before
+// the team deletes.
+export async function revokeClassroomStaffTeams(
+  client: GitHubClient,
+  org: string,
+  classrooms: readonly string[],
+): Promise<void> {
+  const slugs = classrooms.flatMap((classroom) =>
+    STAFF_ROLES.map((role) => classroomTeamSlug(classroom, role)),
+  )
+  const ids: number[] = []
+  await mapWithConcurrency(slugs, 4, async (slug) => {
+    try {
+      const live = await client.request<{ id: number }>(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(slug)}`,
+      )
+      ids.push(live.id)
+    } catch (err) {
+      if (err instanceof GitHubAPIError && err.isNotFound) return
+      log.warn("could not look up a staff team to drop it from the lock", {
+        org,
+        slug,
+        err,
+      })
+    }
+  })
+  await revokeStaffTeams(client, org, ids)
 }
 
 // The canonical staff team slugs (teacher, hta, ta) of every classroom in the
@@ -533,23 +567,35 @@ export async function collectStaffTeamSlugs(
 
 type OrgTeamListing = Pick<GitHubTeam, "id" | "slug" | "privacy">
 
-// One paginated read of the org's teams, keyed by slug. Strict, unlike
+// One paginated read of the teams that hold a grant on the org's `classroom50`
+// config repo, keyed by slug. Only an owner-run Classroom 50 flow grants a team
+// access to that repo, and it does so for every staff team it creates, so this
+// listing is the set of teams Classroom 50 owns: a team any member created at a
+// staff slug, or another classroom's student team sitting at one (`ml-ta`'s
+// students at `ml`'s TA slug), is absent. Strict, unlike
 // queries/teamReads.listOrgTeams: a failure here must not read as "no teams".
-// The caller runs as an owner, so secret teams are listed too.
-async function listOrgTeamsBySlug(
+// A missing config repo (fresh org) is the one 404 that means exactly that.
+async function listConfigRepoTeamsBySlug(
   client: GitHubClient,
   org: string,
 ): Promise<Map<string, OrgTeamListing>> {
-  const teams = await paginateAll<OrgTeamListing>(
-    client,
-    (page) =>
-      `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
-  )
+  let teams: OrgTeamListing[]
+  try {
+    teams = await paginateAll<OrgTeamListing>(
+      client,
+      (page) =>
+        `/repos/${encodeURIComponent(org)}/${CONFIG_REPO}/teams?per_page=100&page=${page}`,
+    )
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isNotFound) return new Map()
+    throw err
+  }
   return new Map(teams.map((t) => [t.slug, t]))
 }
 
-// The live staff teams behind the slugs; a slug with no team (a role never
-// staffed) is simply absent.
+// The live staff teams behind the slugs; a slug with no team in the listing (a
+// role never staffed, or a team at the slug Classroom 50 did not create) is
+// simply absent.
 function resolveStaffTeams(
   slugs: readonly string[],
   teams: ReadonlyMap<string, OrgTeamListing>,
@@ -573,7 +619,10 @@ export async function prepareStaffTeams(
   org: string,
   slugs: readonly string[],
 ): Promise<number[]> {
-  const teams = resolveStaffTeams(slugs, await listOrgTeamsBySlug(client, org))
+  const teams = resolveStaffTeams(
+    slugs,
+    await listConfigRepoTeamsBySlug(client, org),
+  )
   const ids: number[] = []
   await mapWithConcurrency(teams, 4, async (team) => {
     if (team.privacy !== STAFF_TEAM_PRIVACY) {
@@ -633,7 +682,7 @@ async function expectedStaffTeamIds(
   try {
     const [slugs, teams] = await Promise.all([
       collectStaffTeamSlugs(client, org),
-      listOrgTeamsBySlug(client, org),
+      listConfigRepoTeamsBySlug(client, org),
     ])
     return { ids: resolveStaffTeams(slugs, teams).map((t) => t.id) }
   } catch (err) {
