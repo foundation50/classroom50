@@ -309,7 +309,7 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 	}
 	// Exempt the new teams from the feedback-base lock so staff can merge
 	// feedback PRs. Best-effort; init rebuilds the list from classroom.json.
-	orgrules.ExemptStaffTeams(client, errOut, org, orgrules.StaffTeamRefs(shortName, staffTeams))
+	orgrules.ExemptStaffTeams(client, errOut, org, orgrules.CanonicalStaffTeamRefs(shortName, staffTeams))
 	if staffTeams.Teacher == nil {
 		return staffTeams, "", nil
 	}

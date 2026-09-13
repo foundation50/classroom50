@@ -12,6 +12,7 @@ import { readFailedDetail } from "./orgChecks"
 import { forEachClassroom } from "./configRepoReads"
 import { STAFF_TEAM_PRIVACY } from "./types"
 import { GitHubAPIError } from "./errors"
+import type { ClassroomTeamRef } from "./mutations/teams"
 import { FEEDBACK_BASE_BRANCH } from "@/util/feedbackPr"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
@@ -129,14 +130,26 @@ export function classroomRulesetBodies(
   ]
 }
 
+// The feedback-base lock alone, for the incremental bypass-list update.
+function feedbackBaseBody(staffTeamIds: readonly number[]): OrgRulesetBody {
+  return classroomRulesetBodies(staffTeamIds)[1]
+}
+
 type OrgRuleset = { id: number; name: string }
 
 type OrgRulesetWithActors = OrgRuleset & {
   bypass_actors?: RulesetBypassActor[]
 }
 
-// The names never depend on team ids.
-const RULESET_NAMES = classroomRulesetBodies([]).map((r) => r.name)
+const RULESET_NAMES = [
+  RULESET_NAME_SUBMISSION_HISTORY,
+  RULESET_NAME_FEEDBACK_BASE,
+] as const
+
+const isExemptOwner = (a: RulesetBypassActor) =>
+  a.actor_type === "OrganizationAdmin" && a.bypass_mode === "exempt"
+const isExemptTeam = (a: RulesetBypassActor) =>
+  a.actor_type === "Team" && a.bypass_mode === "exempt"
 
 // List existing org rulesets, mapping name -> id (paginated to exhaustion).
 async function listOrgRulesets(
@@ -152,105 +165,133 @@ async function listOrgRulesets(
   return ids
 }
 
-// checkRulesets: enforced only when both classroom rulesets are present and
+// What the org has today: which classroom rulesets exist, and the feedback-base
+// lock's bypass list when it does. One read shared by the audit, the repair
+// fallback, and the incremental update (mirrors Go's feedbackBaseActors).
+type RulesetState = {
+  existing: Map<string, number>
+  feedback: { id: number; actors: RulesetBypassActor[] } | null
+}
+
+async function readRulesetState(
+  client: GitHubClient,
+  org: string,
+): Promise<RulesetState> {
+  const existing = await listOrgRulesets(client, org)
+  const id = existing.get(RULESET_NAME_FEEDBACK_BASE)
+  if (id === undefined) return { existing, feedback: null }
+  const current = await client.request<OrgRulesetWithActors>(
+    `/orgs/${org}/rulesets/${id}`,
+  )
+  return { existing, feedback: { id, actors: current.bypass_actors ?? [] } }
+}
+
+// Pure judgment: enforced only when both classroom rulesets are present and
 // the feedback-base lock's bypass list is exactly what we'd install: owners
 // exempt, every expected staff team exempt, nothing else. A missing or `always`
 // staff entry leaves staff unable to merge feedback PRs; a foreign actor is a
 // hole in the lock. Both are what Fix it (repairRulesets) rebuilds.
-// `expectedStaffTeamIds === null` means the classroom list could not be read,
-// which is reported as unreadable rather than judged against an empty list.
+function judgeRulesets(
+  state: RulesetState,
+  expectedStaffTeamIds: readonly number[],
+): CheckVerdict {
+  const missing = RULESET_NAMES.filter((name) => !state.existing.has(name))
+  if (missing.length > 0 || state.feedback === null) {
+    return {
+      state: "unenforced",
+      detail: {
+        key: "orgSettings.audit.detail.rulesetsMissing",
+        params: { names: missing.join(", ") },
+      },
+    }
+  }
+  const { actors } = state.feedback
+  if (!actors.some(isExemptOwner)) {
+    return {
+      state: "unenforced",
+      detail: { key: "orgSettings.audit.detail.rulesetOwnerNotExempt" },
+    }
+  }
+  const exempt = new Set(actors.filter(isExemptTeam).map((a) => a.actor_id))
+  const unlisted = expectedStaffTeamIds.filter((id) => !exempt.has(id))
+  if (unlisted.length > 0) {
+    return {
+      state: "unenforced",
+      detail: {
+        key: "orgSettings.audit.detail.rulesetStaffTeamsMissing",
+        params: { count: unlisted.length },
+      },
+    }
+  }
+  const expected = new Set(expectedStaffTeamIds)
+  const unexpected = actors.filter(
+    (a) =>
+      !isExemptOwner(a) &&
+      !(a.actor_type === "Team" && expected.has(a.actor_id)),
+  )
+  if (unexpected.length > 0) {
+    return {
+      state: "unenforced",
+      detail: {
+        key: "orgSettings.audit.detail.rulesetUnexpectedBypass",
+        params: { count: unexpected.length },
+      },
+    }
+  }
+  return { state: "enforced" }
+}
+
+const STAFF_TEAMS_UNREADABLE: CheckVerdict = {
+  state: "unreadable",
+  detail: { key: "orgSettings.audit.detail.rulesetStaffTeamsUnreadable" },
+}
+
+// checkRulesets: read, then judge. `expectedStaffTeamIds === null` means the
+// classroom list could not be read, which is reported as unreadable rather
+// than judged against an empty list.
 export async function checkRulesets(
   client: GitHubClient,
   org: string,
-  expectedStaffTeamIds: readonly number[] | null = [],
+  expectedStaffTeamIds: readonly number[] | null,
 ): Promise<CheckVerdict> {
-  if (expectedStaffTeamIds === null) {
-    return {
-      state: "unreadable",
-      detail: { key: "orgSettings.audit.detail.rulesetStaffTeamsUnreadable" },
-    }
-  }
+  if (expectedStaffTeamIds === null) return STAFF_TEAMS_UNREADABLE
   try {
-    const existing = await listOrgRulesets(client, org)
-    const missing = RULESET_NAMES.filter((name) => !existing.has(name))
-    if (missing.length > 0) {
-      return {
-        state: "unenforced",
-        detail: {
-          key: "orgSettings.audit.detail.rulesetsMissing",
-          params: { names: missing.join(", ") },
-        },
-      }
-    }
-    const feedbackId = existing.get(RULESET_NAME_FEEDBACK_BASE)
-    if (feedbackId === undefined) return { state: "enforced" }
-    const current = await client.request<OrgRulesetWithActors>(
-      `/orgs/${org}/rulesets/${feedbackId}`,
+    return judgeRulesets(
+      await readRulesetState(client, org),
+      expectedStaffTeamIds,
     )
-    const actors = current.bypass_actors ?? []
-    const ownerExempt = actors.some(
-      (a) => a.actor_type === "OrganizationAdmin" && a.bypass_mode === "exempt",
-    )
-    if (!ownerExempt) {
-      return {
-        state: "unenforced",
-        detail: { key: "orgSettings.audit.detail.rulesetOwnerNotExempt" },
-      }
-    }
-    const expected = new Set(expectedStaffTeamIds)
-    const exempt = new Set(
-      actors
-        .filter((a) => a.actor_type === "Team" && a.bypass_mode === "exempt")
-        .map((a) => a.actor_id),
-    )
-    const unlisted = expectedStaffTeamIds.filter((id) => !exempt.has(id))
-    if (unlisted.length > 0) {
-      return {
-        state: "unenforced",
-        detail: {
-          key: "orgSettings.audit.detail.rulesetStaffTeamsMissing",
-          params: { count: unlisted.length },
-        },
-      }
-    }
-    const unexpected = actors.filter(
-      (a) =>
-        !(a.actor_type === "OrganizationAdmin" && a.bypass_mode === "exempt") &&
-        !(a.actor_type === "Team" && expected.has(a.actor_id)),
-    )
-    if (unexpected.length > 0) {
-      return {
-        state: "unenforced",
-        detail: {
-          key: "orgSettings.audit.detail.rulesetUnexpectedBypass",
-          params: { count: unexpected.length },
-        },
-      }
-    }
-    return { state: "enforced" }
   } catch (err) {
     return { state: "unreadable", detail: readFailedDetail(err) }
   }
 }
 
-// The audit's one-call entry: read the classrooms, then judge the ruleset. A
-// collector failure becomes unreadable, never a green verdict against an empty
-// expectation.
+// The audit's one-call entry. The classroom walk and the ruleset read are
+// independent, so they run in parallel; a collector failure becomes unreadable,
+// never a green verdict against an empty expectation.
 export async function auditRulesets(
   client: GitHubClient,
   org: string,
 ): Promise<CheckVerdict> {
-  let expected: number[] | null
-  try {
-    expected = await collectStaffTeamIds(client, org)
-  } catch (err) {
-    log.warn("could not read classroom staff teams for the ruleset audit", {
-      org,
-      err,
-    })
-    expected = null
-  }
-  return checkRulesets(client, org, expected)
+  const [expected, state] = await Promise.all([
+    collectStaffTeams(client, org).then(
+      (teams) => teams.map((t) => t.id),
+      (err: unknown) => {
+        log.warn("could not read classroom staff teams for the ruleset audit", {
+          org,
+          err,
+        })
+        return null
+      },
+    ),
+    readRulesetState(client, org).then(
+      (s) => s,
+      (err: unknown) => ({ error: err }),
+    ),
+  ])
+  if (expected === null) return STAFF_TEAMS_UNREADABLE
+  if ("error" in state)
+    return { state: "unreadable", detail: readFailedDetail(state.error) }
+  return judgeRulesets(state, expected)
 }
 
 export type RulesetsRepairResult = {
@@ -370,37 +411,25 @@ export async function updateFeedbackBaseBypassTeams(
   org: string,
   change: { add?: readonly number[]; remove?: readonly number[] },
 ): Promise<boolean> {
-  const existing = await listOrgRulesets(client, org)
-  const id = existing.get(RULESET_NAME_FEEDBACK_BASE)
-  if (id === undefined) {
+  const { feedback } = await readRulesetState(client, org)
+  if (feedback === null) {
     log.warn("feedback-base ruleset not installed; staff team bypass skipped", {
       org,
     })
     return false
   }
-  const current = await client.request<OrgRulesetWithActors>(
-    `/orgs/${org}/rulesets/${id}`,
-  )
   const remove = new Set(change.remove ?? [])
-  const actors = current.bypass_actors ?? []
   const exempt = new Set(
-    actors
-      .filter((a) => a.actor_type === "Team" && a.bypass_mode === "exempt")
-      .map((a) => a.actor_id),
-  )
-  const ownerExempt = actors.some(
-    (a) => a.actor_type === "OrganizationAdmin" && a.bypass_mode === "exempt",
+    feedback.actors.filter(isExemptTeam).map((a) => a.actor_id),
   )
   const keep = [...exempt].filter((teamId) => !remove.has(teamId))
   const missing = (change.add ?? []).filter((teamId) => !exempt.has(teamId))
   const dropping = [...exempt].some((teamId) => remove.has(teamId))
-  if (ownerExempt && missing.length === 0 && !dropping) return true
-  const body = classroomRulesetBodies([...keep, ...missing]).find(
-    (r) => r.name === RULESET_NAME_FEEDBACK_BASE,
-  )
-  await client.request(`/orgs/${org}/rulesets/${id}`, {
+  if (feedback.actors.some(isExemptOwner) && missing.length === 0 && !dropping)
+    return true
+  await client.request(`/orgs/${org}/rulesets/${feedback.id}`, {
     method: "PUT",
-    body,
+    body: feedbackBaseBody([...keep, ...missing]),
   })
   return true
 }
@@ -447,8 +476,6 @@ export async function revokeStaffTeams(
   }
 }
 
-type StaffTeamRef = { id: number; slug: string }
-
 // Every classroom's recorded staff team refs (teacher, hta, ta), read from
 // each classroom.json in the config repo: the input repairRulesets and
 // checkRulesets need. Only canonical refs count: classroom.json is writable by
@@ -461,12 +488,11 @@ type StaffTeamRef = { id: number; slug: string }
 export async function collectStaffTeams(
   client: GitHubClient,
   org: string,
-): Promise<StaffTeamRef[]> {
-  const byId = new Map<number, StaffTeamRef>()
+): Promise<ClassroomTeamRef[]> {
+  const byId = new Map<number, ClassroomTeamRef>()
   await forEachClassroom(
     client,
     org,
-    // Fail closed: any read failure means the caller must not rebuild.
     (_classroom, err) => {
       throw err
     },
@@ -474,7 +500,7 @@ export async function collectStaffTeams(
       for (const role of STAFF_ROLES) {
         const ref = json.teams?.[role]
         if (!ref) continue
-        if (!isCanonicalStaffTeamRef(classroom, role, ref)) {
+        if (!isCanonicalClassroomTeamRef(classroom, role, ref)) {
           log.warn("classroom.json names a non-canonical staff team; ignored", {
             org,
             classroom,
@@ -492,8 +518,8 @@ export async function collectStaffTeams(
 
 // A classroom.json `teams.<role>` ref is trusted only when it names the team
 // Classroom 50 itself creates for that classroom and role. Mirrors the CLI's
-// configrepo.IsCanonicalStaffTeamRef.
-export function isCanonicalStaffTeamRef(
+// configrepo.IsCanonicalClassroomTeamRef.
+export function isCanonicalClassroomTeamRef(
   classroom: string,
   role: StaffRole,
   ref: { id?: unknown; slug?: unknown },
@@ -503,14 +529,6 @@ export function isCanonicalStaffTeamRef(
     (ref.id as number) > 0 &&
     ref.slug === classroomTeamSlug(classroom, role)
   )
-}
-
-// The audit-side input: ids only, no writes. Throws like collectStaffTeams.
-export async function collectStaffTeamIds(
-  client: GitHubClient,
-  org: string,
-): Promise<number[]> {
-  return (await collectStaffTeams(client, org)).map((t) => t.id)
 }
 
 // Make every staff team a valid bypass actor (GitHub rejects a `secret` team)
@@ -524,7 +542,7 @@ export async function collectStaffTeamIds(
 export async function prepareStaffTeams(
   client: GitHubClient,
   org: string,
-  teams: readonly StaffTeamRef[],
+  teams: readonly ClassroomTeamRef[],
 ): Promise<number[]> {
   const ids: number[] = []
   await mapWithConcurrency(teams, 4, async (team) => {
@@ -603,13 +621,8 @@ async function existingFeedbackBaseTeamIds(
   client: GitHubClient,
   org: string,
 ): Promise<number[]> {
-  const existing = await listOrgRulesets(client, org)
-  const id = existing.get(RULESET_NAME_FEEDBACK_BASE)
-  if (id === undefined) return []
-  const current = await client.request<OrgRulesetWithActors>(
-    `/orgs/${org}/rulesets/${id}`,
-  )
-  return (current.bypass_actors ?? [])
+  const { feedback } = await readRulesetState(client, org)
+  return (feedback?.actors ?? [])
     .filter((a) => a.actor_type === "Team")
     .map((a) => a.actor_id)
 }

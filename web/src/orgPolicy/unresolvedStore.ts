@@ -47,6 +47,14 @@ export function readUnresolved(org: string): UnresolvedRecord {
   }
 }
 
+function writeUnresolved(ls: Storage, org: string, record: UnresolvedRecord) {
+  const stored: StoredShape = {
+    fields: [...record.fields],
+    concerns: [...record.concerns],
+  }
+  ls.setItem(keyFor(org), JSON.stringify(stored))
+}
+
 // Union the given fields/concerns into the org's stored record and write it
 // back. Merging (not replacing) means a later Fix-it on a different concern
 // doesn't drop an earlier unresolved outcome.
@@ -59,11 +67,7 @@ export function mergeUnresolved(
   const current = readUnresolved(org)
   for (const f of add.fields ?? []) current.fields.add(f)
   for (const c of add.concerns ?? []) current.concerns.add(c)
-  const stored: StoredShape = {
-    fields: [...current.fields],
-    concerns: [...current.concerns],
-  }
-  ls.setItem(keyFor(org), JSON.stringify(stored))
+  writeUnresolved(ls, org, current)
 }
 
 export function clearUnresolved(org: string): void {
@@ -82,18 +86,13 @@ export function forgetResolvedConcerns(
   const current = readUnresolved(org)
   let changed = false
   for (const c of concerns) changed = current.concerns.delete(c) || changed
-  if (!changed) return
-  const stored: StoredShape = {
-    fields: [...current.fields],
-    concerns: [...current.concerns],
-  }
-  ls.setItem(keyFor(org), JSON.stringify(stored))
+  if (changed) writeUnresolved(ls, org, current)
 }
 
 // A concern latched as unresolved that a later audit finds enforced (fixed by
 // re-run setup, or by hand) is dropped from the visible set; the caller also
 // forgets it in storage, so the pane doesn't show "couldn't set this
-// automatically" beside a green OK. Pure so it is testable without the pane.
+// automatically" beside a green OK.
 export function reconcileUnresolvedConcerns<K extends string, V>(
   unresolved: ReadonlyMap<K, V>,
   concerns: ReadonlyArray<{ id: K; verdict: { state: string } }>,

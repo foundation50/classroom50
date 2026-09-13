@@ -10,6 +10,7 @@ import { classroomFilePath } from "@/util/configRepoPaths"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { GitHubAPIError } from "./errors"
 import { listClassroomDirs } from "./queries/orgReads"
+import { REPO_READ_CONCURRENCY } from "./queries/shared"
 
 // Low-level config-repo read primitives, consumed downward by the domain
 // operations in domain/ (framework-free engines above github-core).
@@ -74,7 +75,7 @@ export async function forEachClassroom(
   org: string,
   onError: (classroom: string | null, err: unknown) => void,
   fn: (classroom: string, json: Classroom) => void,
-  concurrency = 8,
+  concurrency = REPO_READ_CONCURRENCY,
 ): Promise<void> {
   let dirs: { name: string }[]
   try {

@@ -2036,17 +2036,15 @@ def resolve_staff_team_slugs(
         derived = staff_team_slug(classroom_short, role)
         ref = recorded.get(role)
         slug = ref.get("slug") if isinstance(ref, dict) else None
-        if isinstance(slug, str) and slug.strip() == derived:
-            out[role] = StaffTeam(derived, recorded=True)
-            continue
-        if isinstance(slug, str) and slug.strip():
+        recorded_slug = slug.strip() if isinstance(slug, str) else ""
+        if recorded_slug and recorded_slug != derived:
             emit_warning(
-                f"{classroom_short}: classroom.json records {slug.strip()!r} as the {role} "
+                f"{classroom_short}: classroom.json records {recorded_slug!r} as the {role} "
                 f"staff team, which is not the team Classroom 50 creates for that role; "
                 f"using {derived!r} instead. Fix the `teams.{role}` entry or run "
                 f"`gh teacher staff add` to re-record it."
             )
-        out[role] = StaffTeam(derived, recorded=False)
+        out[role] = StaffTeam(derived, recorded=recorded_slug == derived)
     return out
 
 
@@ -4007,8 +4005,8 @@ def team_repo_permission(
     """The permission level `team_slug` holds on <repo_owner>/<repo>, or None
     when it has none (404). The `repository+json` media type makes GitHub
     return the repo with its `permissions` flags instead of an empty 204.
-    Keeps grant_team_repo idempotent. Mirrors Go's EnsureStaffTeamVisible
-    read (configrepo/team.go); the Go grant path still uses teamHasRepoAccess."""
+    Keeps grant_team_repo idempotent. No Go mirror: the Go grant path
+    (teamHasRepoAccess) only checks presence."""
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/repos/"

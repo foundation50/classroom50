@@ -15,11 +15,7 @@ import {
   isDeletableClassroomTeamRef,
   type ClassroomTeamRef,
 } from "@/github-core/mutations"
-import {
-  getOrgRepos,
-  REPO_READ_CONCURRENCY,
-  sleep,
-} from "@/github-core/queries"
+import { getOrgRepos, sleep } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
 import { revokeStaffTeams } from "@/github-core/rulesets"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -180,7 +176,6 @@ async function collectClassroomTeams(
         }
       }
     },
-    REPO_READ_CONCURRENCY,
   )
   return [...bySlug.values()]
 }

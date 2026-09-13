@@ -14,6 +14,13 @@ import type { GitHubClient } from "@/github-core/client"
 // setting. The fake client records write paths/methods so each case can assert
 // it hit the right GitHub endpoint.
 
+// An org with no classrooms: the config-repo listing is empty and nothing else
+// is read raw.
+const noClassroomsRequestRaw = (path: string) =>
+  path.includes("/classroom50/contents")
+    ? Promise.resolve("[]")
+    : Promise.reject(new Error("unexpected requestRaw"))
+
 type Recorded = { method: string; path: string }
 
 function httpError(status: number): GitHubAPIError {
@@ -70,10 +77,7 @@ function makeClient(configRepoBranch = "main"): {
   return {
     client: {
       request: request as unknown as GitHubClient["request"],
-      requestRaw: (path: string) =>
-        path.includes("/classroom50/contents")
-          ? Promise.resolve("[]")
-          : Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: noClassroomsRequestRaw,
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     },
     calls,
@@ -105,10 +109,7 @@ describe("repairConcern", () => {
           allowed_actions: "all",
         })
       }) as unknown as GitHubClient["request"],
-      requestRaw: (path: string) =>
-        path.includes("/classroom50/contents")
-          ? Promise.resolve("[]")
-          : Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: noClassroomsRequestRaw,
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
@@ -125,10 +126,7 @@ describe("repairConcern", () => {
           })
         return Promise.reject(httpError(403))
       }) as unknown as GitHubClient["request"],
-      requestRaw: (path: string) =>
-        path.includes("/classroom50/contents")
-          ? Promise.resolve("[]")
-          : Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: noClassroomsRequestRaw,
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
@@ -160,10 +158,7 @@ describe("repairConcern", () => {
           })
         return Promise.reject(rateLimited)
       }) as unknown as GitHubClient["request"],
-      requestRaw: (path: string) =>
-        path.includes("/classroom50/contents")
-          ? Promise.resolve("[]")
-          : Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: noClassroomsRequestRaw,
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")

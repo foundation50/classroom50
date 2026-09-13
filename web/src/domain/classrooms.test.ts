@@ -288,14 +288,12 @@ describe("createClassroomFiles creator team cleanup", () => {
         }
         if (method === "GET" && /\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
           const slug = path.split("/teams/")[1]
-          const id = slug.endsWith("-teacher")
-            ? 101
-            : slug.endsWith("-hta")
-              ? 102
-              : slug.endsWith("-ta")
-                ? 103
-                : 100
-          return { id, slug }
+          const staffIds: Record<string, number> = {
+            teacher: 101,
+            hta: 102,
+            ta: 103,
+          }
+          return { id: staffIds[slug.split("-").pop() ?? ""] ?? 100, slug }
         }
         if (method === "DELETE" && /\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
           ordered.push(`DELETE ${path.split("/teams/")[1]}`)

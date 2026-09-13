@@ -15,17 +15,12 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubtest"
 )
 
-// The cases the first review found missing: a Team left at `always` by an
-// older release, a recorded team that no longer exists or whose live id
-// drifted, a classroom.json that names the wrong team, and the fresh-org and
-// read-failure paths of the classroom walk.
-
 func TestUpdateFeedbackBaseBypassTeams_UpgradesAlwaysEntry(t *testing.T) {
 	// Team 10 is listed but `always`, the owner is `always` too: both are
 	// rebuilt as exempt even though 10 is "already on the list".
 	var (
 		mu  sync.Mutex
-		put *body
+		put *rulesetBody
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -36,7 +31,7 @@ func TestUpdateFeedbackBaseBypassTeams_UpgradesAlwaysEntry(t *testing.T) {
 		case r.Method == http.MethodGet && r.URL.Path == "/orgs/"+org+"/rulesets/22":
 			_, _ = w.Write([]byte(`{"id":22,"bypass_actors":[{"actor_id":1,"actor_type":"OrganizationAdmin","bypass_mode":"always"},{"actor_id":10,"actor_type":"Team","bypass_mode":"always"}]}`))
 		case r.Method == http.MethodPut && r.URL.Path == "/orgs/"+org+"/rulesets/22":
-			var b body
+			var b rulesetBody
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &b)
 			put = &b

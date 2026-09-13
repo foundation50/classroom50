@@ -18,7 +18,7 @@ const org = "cs50-fall-2026"
 
 func TestBodies_FeedbackBaseIsAHardLockWithExemptStaff(t *testing.T) {
 	bodies := bodies([]int64{30, 10, 20, 10, 0, -1})
-	byName := map[string]body{}
+	byName := map[string]rulesetBody{}
 	for _, b := range bodies {
 		byName[b.Name] = b
 		if b.Target != "branch" || b.Enforcement != "active" {
@@ -79,7 +79,7 @@ func TestEnsure_CreatesBoth(t *testing.T) {
 	// No existing rulesets → one POST per ruleset carrying the staff teams.
 	var (
 		mu       sync.Mutex
-		posted   []body
+		posted   []rulesetBody
 		listHits int
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +94,7 @@ func TestEnsure_CreatesBoth(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`[]`))
 		case http.MethodPost:
-			var body body
+			var body rulesetBody
 			raw, _ := io.ReadAll(r.Body)
 			if err := json.Unmarshal(raw, &body); err != nil {
 				t.Errorf("bad POST body: %v", err)
@@ -146,7 +146,7 @@ func TestEnsure_UpdatesExistingAndRebuildsBypassList(t *testing.T) {
 		mu        sync.Mutex
 		posts     int
 		putPaths  []string
-		putBodies []body
+		putBodies []rulesetBody
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -157,7 +157,7 @@ func TestEnsure_UpdatesExistingAndRebuildsBypassList(t *testing.T) {
 			_, _ = w.Write([]byte(`[{"id":11,"name":"` + NameSubmissionHistory + `"},{"id":22,"name":"` + NameFeedbackBase + `"}]`))
 		case http.MethodPut:
 			putPaths = append(putPaths, r.URL.Path)
-			var body body
+			var body rulesetBody
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &body)
 			putBodies = append(putBodies, body)
@@ -277,11 +277,11 @@ func TestEnsure_ListFailsWarnsButSucceeds(t *testing.T) {
 
 // bypassServer fakes an org with the feedback-base ruleset installed carrying
 // `teams` on its bypass list and records the PUT body.
-func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server, func() *body) {
+func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server, func() *rulesetBody) {
 	t.Helper()
 	var (
 		mu  sync.Mutex
-		put *body
+		put *rulesetBody
 	)
 	actors := feedbackBaseBypassActors(teams)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -300,7 +300,7 @@ func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(payload)
 		case r.Method == http.MethodPut && r.URL.Path == "/orgs/"+org+"/rulesets/22":
-			var body body
+			var body rulesetBody
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &body)
 			put = &body
@@ -312,7 +312,7 @@ func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server
 		}
 	}))
 	t.Cleanup(server.Close)
-	return server, func() *body {
+	return server, func() *rulesetBody {
 		mu.Lock()
 		defer mu.Unlock()
 		return put
@@ -393,8 +393,8 @@ func TestExistingFeedbackBaseTeamIDs(t *testing.T) {
 	}
 }
 
-func TestStaffTeamRefs_OnlyCanonicalSlugs(t *testing.T) {
-	if got := StaffTeamRefs("cs", nil); got != nil {
+func TestCanonicalStaffTeamRefs(t *testing.T) {
+	if got := CanonicalStaffTeamRefs("cs", nil); got != nil {
 		t.Errorf("nil teams → %v, want nil", got)
 	}
 	refs := &configrepo.StaffTeamsRef{
@@ -405,7 +405,7 @@ func TestStaffTeamRefs_OnlyCanonicalSlugs(t *testing.T) {
 		// the student team into a bypass actor.
 		TA: &configrepo.TeamRef{ID: 3, Slug: "classroom50-cs"},
 	}
-	got := StaffTeamRefs("cs", refs)
+	got := CanonicalStaffTeamRefs("cs", refs)
 	if len(got) != 1 || got[0].ID != 1 {
 		t.Errorf("refs = %+v, want only the canonical teacher team", got)
 	}

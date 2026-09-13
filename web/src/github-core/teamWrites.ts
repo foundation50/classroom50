@@ -1,5 +1,5 @@
 import type { GitHubClient } from "./client"
-import type { GitHubTeam, TeamNotificationSetting } from "./types"
+import type { GitHubTeam, TeamNotificationSetting, TeamPrivacy } from "./types"
 
 // Re-exported for callers; the type lives in types.ts to avoid an import cycle.
 export type { TeamNotificationSetting }
@@ -8,7 +8,7 @@ export type CreateTeamInput = {
   org: string
   name: string
   description?: string
-  privacy?: "secret" | "closed"
+  privacy?: TeamPrivacy
   notification_setting?: TeamNotificationSetting
   maintainers?: string[]
   repo_names?: string[]
