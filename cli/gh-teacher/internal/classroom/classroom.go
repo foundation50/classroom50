@@ -119,6 +119,9 @@ func classroomAddCmd() *cobra.Command {
 			if err := validate.ClassroomShortNameBudget(shortName); err != nil {
 				return err
 			}
+			if err := validate.ClassroomShortNameSuffix(shortName); err != nil {
+				return err
+			}
 
 			// Resolve the optional capability-URL key before any API call so
 			// an invalid --key fails fast. An explicit --key implies opt-in
@@ -303,7 +306,9 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 // teams. The maintainer add is best-effort: a CurrentUser/membership failure
 // warns but doesn't fail creation (the teacher can self-add via the web).
 func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, string, error) {
-	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName)
+	// A new classroom has no recorded refs, so an existing team at a staff
+	// slug is adopted only if it already holds the config-repo grant.
+	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("create staff teams: %w", err)
 	}
@@ -843,8 +848,9 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	_, _ = fmt.Fprintf(out, "%s/%s: removed classroom %s (%d files)\n", org, configrepo.ConfigRepoName, shortName, deleted)
 
 	// Drop the staff teams from the feedback-base bypass list before deleting
-	// them, so the ruleset never references a team GitHub no longer knows.
-	orgrules.RevokeStaffTeams(client, errOut, org, staffTeams)
+	// them, so the ruleset never references a team GitHub no longer knows. By
+	// live slug, not the recorded refs: an unrecorded staff team is dropped too.
+	orgrules.RevokeClassroomStaffTeams(client, errOut, org, shortName)
 
 	// Delete the per-classroom team (idempotent; 404 = gone). Its grants +
 	// memberships go with it. A delete failure is surfaced but doesn't undo

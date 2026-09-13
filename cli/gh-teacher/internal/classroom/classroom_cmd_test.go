@@ -477,6 +477,7 @@ func TestRemoveClassroom(t *testing.T) {
 	t.Run("a staff ref naming another classroom's team is neither revoked nor deleted", func(t *testing.T) {
 		// A head TA pointed teams.hta at cs-victim's teacher team: in the
 		// classroom50- namespace, live id matches, but not this classroom's.
+		// The ta team exists on GitHub but is unrecorded here.
 		b, err := output.JSONPretty(configrepo.ClassroomJSON{
 			Schema:    classroomSchemaV1,
 			ShortName: "cs-principles",
@@ -500,8 +501,11 @@ func TestRemoveClassroom(t *testing.T) {
 		if len(mock.staffTeamDeleted) != 1 || mock.staffTeamDeleted[0] != "classroom50-cs-principles-teacher" {
 			t.Errorf("staff deletes = %v, want only this classroom's teacher team", mock.staffTeamDeleted)
 		}
-		if len(mock.rulesetTeams) != 2 || mock.rulesetTeams[0] != 77 || mock.rulesetTeams[1] != 4244 {
-			t.Errorf("ruleset PUT Team actors = %v, want [77 4244] (victim kept, sorted)", mock.rulesetTeams)
+		// Revoke goes by the live team at each canonical slug, not the recorded
+		// refs: the victim (77) is kept, and the unrecorded ta team (4244) at
+		// this classroom's slug is dropped along with the teacher team.
+		if len(mock.rulesetTeams) != 1 || mock.rulesetTeams[0] != 77 {
+			t.Errorf("ruleset PUT Team actors = %v, want [77] (victim kept)", mock.rulesetTeams)
 		}
 		if !strings.Contains(errOut.String(), `"classroom50-cs-victim-teacher" as its hta team`) {
 			t.Errorf("expected a warning naming the refused ref, got %q", errOut.String())

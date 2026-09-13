@@ -208,7 +208,7 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
 	}
-	return ensureTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled, studentTeamPrivacy)
+	return ensureTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled, studentTeamPrivacy, adoptGuard{})
 }
 
 // Team privacy per kind. The student team is `secret`: its description carries
@@ -227,18 +227,24 @@ const (
 // ensureClassroomRoleTeam. Idempotent; safe as a preflight before any staff op.
 // Staff teams create `notificationsEnabled` so @mentions reach TAs/teachers
 // (#335).
-func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole) (TeamRef, error) {
+//
+// `recordedID` is the id classroom.json `teams.<role>` holds for this role (0
+// when absent). An existing team at the slug is adopted only when Classroom 50
+// can tell it is its own (see adoptGuard); otherwise *UnclaimedTeamError.
+func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole, recordedID int64) (TeamRef, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
-	return ensureTeamByName(client, org, StaffTeamSlug(shortName, role), "", notificationsEnabled, StaffTeamPrivacy)
+	return ensureTeamByName(client, org, StaffTeamSlug(shortName, role), "", notificationsEnabled, StaffTeamPrivacy, adoptGuard{staff: true, recordedID: recordedID})
 }
 
 // EnsureStaffTeams creates (or adopts) all staff teams (teacher, hta, ta) and
 // returns the refs to record under classroom.json `teams`. Mirrors the web's
-// ensureStaffTeams.
+// ensureStaffTeams. `recorded` is the classroom's current `teams` block (nil
+// for a classroom being created), consulted only to adopt a team whose
+// config-repo grant was lost.
 //
 // This does NOT grant config-repo access — callers must invoke
 // GrantStaffTeamsConfigRepoAccess separately, AFTER dropping the auto-added
@@ -247,10 +253,10 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 // them a "removed from team" alert; granting only once the owner is gone keeps
 // that drop silent (the notification_setting toggle can't — it governs only
 // @mentions).
-func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTeamsRef, error) {
+func EnsureStaffTeams(client githubapi.Client, org, shortName string, recorded *StaffTeamsRef) (*StaffTeamsRef, error) {
 	refs := &StaffTeamsRef{}
 	for _, role := range StaffRoles {
-		team, err := EnsureClassroomStaffTeam(client, org, shortName, role)
+		team, err := EnsureClassroomStaffTeam(client, org, shortName, role, recordedStaffTeamID(shortName, role, recorded))
 		if err != nil {
 			return nil, fmt.Errorf("ensure %s staff team: %w", role, err)
 		}
@@ -264,6 +270,16 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 		}
 	}
 	return refs, nil
+}
+
+// recordedStaffTeamID is the id classroom.json records for the role's canonical
+// team, or 0 when the block is absent or names some other team.
+func recordedStaffTeamID(shortName string, role StaffRole, recorded *StaffTeamsRef) int64 {
+	ref := recorded.RefForRole(role)
+	if !IsCanonicalStaffTeamRef(shortName, role, ref) {
+		return 0
+	}
+	return ref.ID
 }
 
 // GrantStaffTeamsConfigRepoAccess grants each recorded staff team its role's
@@ -367,7 +383,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 //
 // The org's `members_can_create_teams` setting is irrelevant here — the
 // teacher authenticates as an org owner.
-func ensureTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string) (TeamRef, error) {
+func ensureTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string, guard adoptGuard) (TeamRef, error) {
 	teamBody := map[string]any{
 		"name":                 name,
 		"privacy":              privacy,
@@ -387,7 +403,7 @@ func ensureTeamByName(client githubapi.Client, org, name, description, notificat
 		// re-run reconciles. If the adopt read 404s, the 422 wasn't a name
 		// collision — surface the original create error.
 		if cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			adopted, adoptErr := adoptTeamByName(client, org, name, description, notificationSetting, privacy)
+			adopted, adoptErr := adoptTeamByName(client, org, name, description, notificationSetting, privacy, guard)
 			if adoptErr != nil {
 				if cliutil.IsHTTPStatus(adoptErr, http.StatusNotFound) {
 					return TeamRef{}, fmt.Errorf("POST %s: %w", createPath, err)
@@ -401,11 +417,60 @@ func ensureTeamByName(client githubapi.Client, org, name, description, notificat
 	return created, nil
 }
 
+// adoptGuard decides whether an existing team at a canonical slug may be
+// adopted. The slug alone proves nothing: any org member can create a team
+// (members_can_create_teams is on for student groups), and a classroom whose
+// short name ends in a role suffix puts its student team at another
+// classroom's staff slug. What only an owner-run Classroom 50 flow does is
+// grant a team access to the `classroom50` config repo, so that grant is the
+// ownership proof: a staff team must hold it (or match the id classroom.json
+// recorded when the team was created and the grant step failed), and a student
+// team must not, since a team that holds it is some classroom's staff team.
+type adoptGuard struct {
+	staff      bool
+	recordedID int64
+}
+
+func (g adoptGuard) check(client githubapi.Client, org, slug string, liveID int64) error {
+	granted, err := teamHasRepoAccess(client, org, slug, org, ConfigRepoName)
+	if err != nil {
+		return fmt.Errorf("check %s access to the classroom50 repository: %w", slug, err)
+	}
+	if g.staff {
+		if granted || (g.recordedID > 0 && g.recordedID == liveID) {
+			return nil
+		}
+	} else if !granted {
+		return nil
+	}
+	return &UnclaimedTeamError{Org: org, Slug: slug, Staff: g.staff}
+}
+
+// UnclaimedTeamError reports a team at a canonical slug that Classroom 50 did
+// not create and so refuses to adopt, PATCH, grant, or exempt. Staff is the
+// role kind the caller wanted the slug for.
+type UnclaimedTeamError struct {
+	Org   string
+	Slug  string
+	Staff bool
+}
+
+func (e *UnclaimedTeamError) Error() string {
+	link := fmt.Sprintf("https://github.com/orgs/%s/teams/%s", e.Org, e.Slug)
+	if e.Staff {
+		return fmt.Sprintf("team %q already exists in %s but was not created by Classroom 50 (it has no access to the classroom50 repository); review its members at %s, then either delete it or grant it access to the classroom50 repository to use it as this classroom's staff team, and re-run",
+			e.Slug, e.Org, link)
+	}
+	return fmt.Sprintf("team %q already exists in %s with access to the classroom50 repository, so it is another classroom's staff team, not this classroom's student team; choose a short name that does not end in -teacher, -hta, or -ta, or review the team at %s",
+		e.Slug, e.Org, link)
+}
+
 // adoptTeamByName reads an existing team by slug (== name, given the
-// canonical short-name guard) and reconciles drift toward the desired state:
-// the privacy, the notification setting, and (when non-empty and differing)
-// the description. Used on the 422 already-exists path.
-func adoptTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string) (TeamRef, error) {
+// canonical short-name guard), checks it against `guard`, and reconciles drift
+// toward the desired state: the privacy, the notification setting, and (when
+// non-empty and differing) the description. Used on the 422 already-exists
+// path.
+func adoptTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string, guard adoptGuard) (TeamRef, error) {
 	slug := name
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var existing struct {
@@ -417,6 +482,10 @@ func adoptTeamByName(client githubapi.Client, org, name, description, notificati
 	}
 	if err := client.Get(getPath, &existing); err != nil {
 		return TeamRef{}, fmt.Errorf("GET %s (adopting existing team): %w", getPath, err)
+	}
+	// Before any write: a team that isn't ours must not be reshaped.
+	if err := guard.check(client, org, existing.Slug, existing.ID); err != nil {
+		return TeamRef{}, err
 	}
 	// Batch every drifted field into one PATCH (description only drifts for the
 	// student team, which carries the bootstrap record). GitHub returns
@@ -469,29 +538,36 @@ func SetTeamPrivacy(client githubapi.Client, org, slug, privacy string) error {
 	return nil
 }
 
-// OrgTeam is the slice of GitHub's team object the org-wide listing readers
-// need.
+// OrgTeam is the slice of GitHub's team object the team listing readers need.
 type OrgTeam struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
 	Privacy string `json:"privacy"`
 }
 
-// ListOrgTeams returns every team in the org keyed by slug, in one paginated
-// read. An org owner sees secret teams too, so the map is complete for the
-// callers that run as one (init, org audit). A read failure propagates.
-func ListOrgTeams(client githubapi.Client, org string) (map[string]OrgTeam, error) {
+// ListConfigRepoTeams returns every team that holds a grant on the org's
+// `classroom50` config repo, keyed by slug, in one paginated read. Only an
+// owner-run Classroom 50 flow grants a team access to that repo, and it does so
+// for every staff team it creates, so this listing is the set of teams
+// Classroom 50 owns: a team any member created at a staff slug, or another
+// classroom's student team sitting at one (`ml-ta`'s students at `ml`'s TA
+// slug), is absent. A missing config repo (fresh org) yields an empty map; any
+// other read failure propagates.
+func ListConfigRepoTeams(client githubapi.Client, org string) (map[string]OrgTeam, error) {
 	teams, err := githubapi.PaginateAll[OrgTeam](
 		client, githubapi.ListPerPage, githubapi.ListMaxPages,
 		func(page int) string {
-			return fmt.Sprintf("orgs/%s/teams?per_page=%d&page=%d",
-				url.PathEscape(org), githubapi.ListPerPage, page)
+			return fmt.Sprintf("repos/%s/%s/teams?per_page=%d&page=%d",
+				url.PathEscape(org), ConfigRepoName, githubapi.ListPerPage, page)
 		},
 		func(path string, err error) error {
 			return fmt.Errorf("GET %s: %w", path, err)
 		},
 	)
 	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return map[string]OrgTeam{}, nil
+		}
 		return nil, err
 	}
 	bySlug := make(map[string]OrgTeam, len(teams))
@@ -590,6 +666,23 @@ func IsDeletableClassroomTeamRef(team TeamRef) bool {
 	return strings.HasPrefix(team.Slug, "classroom50-") && team.ID > 0
 }
 
+// LiveTeamID returns the id of the team at `slug`, or 0 when no team exists
+// there. The slug-to-id read behind every path that must act on the team GitHub
+// actually has at a canonical slug rather than a recorded ref.
+func LiveTeamID(client githubapi.Client, org, slug string) (int64, error) {
+	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
+	var live struct {
+		ID int64 `json:"id"`
+	}
+	if err := client.Get(getPath, &live); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("GET %s: %w", getPath, err)
+	}
+	return live.ID, nil
+}
+
 // DeleteClassroomTeam removes the classroom team by its persisted ref. Deletes
 // via the SLUG — GitHub's DELETE endpoint is slug-addressed (a numeric value in
 // the slug position 404s). The persisted slug is authoritative; as
@@ -616,19 +709,16 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 	}
 	// Defense-in-depth: confirm the team at this slug is the one we recorded
 	// (same id) before deleting.
-	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(team.Slug))
-	var live struct {
-		ID int64 `json:"id"`
+	liveID, err := LiveTeamID(client, org, team.Slug)
+	if err != nil {
+		return fmt.Errorf("verify team before delete: %w", err)
 	}
-	if err := client.Get(getPath, &live); err != nil {
-		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return nil // already gone
-		}
-		return fmt.Errorf("GET %s (verify team before delete): %w", getPath, err)
+	if liveID == 0 {
+		return nil // already gone
 	}
-	if live.ID != team.ID {
+	if liveID != team.ID {
 		return fmt.Errorf("team %q at %s now has id %d, not the recorded %d: refusing to delete a team that isn't the one this classroom created; remove it by hand if intended",
-			team.Slug, org, live.ID, team.ID)
+			team.Slug, org, liveID, team.ID)
 	}
 	path := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(team.Slug))
 	resp, err := client.Request(http.MethodDelete, path, nil)

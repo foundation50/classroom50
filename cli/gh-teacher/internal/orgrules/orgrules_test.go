@@ -3,6 +3,7 @@ package orgrules
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -278,6 +279,12 @@ func TestEnsure_ListFailsWarnsButSucceeds(t *testing.T) {
 // bypassServer fakes an org with the feedback-base ruleset installed carrying
 // `teams` on its bypass list and records the PUT body.
 func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server, func() *rulesetBody) {
+	return bypassServerWithTeams(t, teams, installed, nil)
+}
+
+// bypassServerWithTeams also serves GET /orgs/{org}/teams/{slug} from
+// liveTeams (slug -> id); an unlisted slug 404s.
+func bypassServerWithTeams(t *testing.T, teams []int64, installed bool, liveTeams map[string]int64) (*httptest.Server, func() *rulesetBody) {
 	t.Helper()
 	var (
 		mu  sync.Mutex
@@ -288,6 +295,15 @@ func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server
 		mu.Lock()
 		defer mu.Unlock()
 		switch {
+		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/orgs/"+org+"/teams/"):
+			slug := strings.TrimPrefix(r.URL.Path, "/orgs/"+org+"/teams/")
+			id, ok := liveTeams[slug]
+			if !ok {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+				return
+			}
+			_, _ = fmt.Fprintf(w, `{"id":%d,"slug":%q}`, id, slug)
 		case r.Method == http.MethodGet && r.URL.Path == "/orgs/"+org+"/rulesets":
 			w.WriteHeader(http.StatusOK)
 			if installed {
@@ -555,9 +571,9 @@ func TestExemptAndRevokeStaffTeams_Warnings(t *testing.T) {
 		t.Errorf("exempt failure warning missing: %q", errOut.String())
 	}
 	errOut.Reset()
-	RevokeStaffTeams(client, &errOut, org, teams)
-	if !strings.Contains(errOut.String(), "could not drop") {
-		t.Errorf("revoke failure warning missing: %q", errOut.String())
+	RevokeClassroomStaffTeams(client, &errOut, org, "cs")
+	if !strings.Contains(errOut.String(), "could not look up staff team") {
+		t.Errorf("revoke lookup-failure warning missing: %q", errOut.String())
 	}
 
 	// Empty input never touches the network.
@@ -565,5 +581,40 @@ func TestExemptAndRevokeStaffTeams_Warnings(t *testing.T) {
 		t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
 	})))
 	ExemptStaffTeams(client, &errOut, org, nil)
-	RevokeStaffTeams(client, &errOut, org, []configrepo.TeamRef{{ID: 0, Slug: "x"}})
+	RevokeClassroomStaffTeams(client, &errOut, org)
+}
+
+// TestRevokeClassroomStaffTeams_UsesLiveTeams: the classroom's canonical slugs
+// are resolved to the teams GitHub has there, so the ids dropped are the live
+// ones — not whatever classroom.json recorded (head-TA-writable, and absent
+// for a team a web role flow created without recording it). A role with no
+// team is skipped.
+func TestRevokeClassroomStaffTeams_UsesLiveTeams(t *testing.T) {
+	server, put := bypassServerWithTeams(t, []int64{10, 20, 30}, true, map[string]int64{
+		"classroom50-cs-teacher": 10,
+		"classroom50-cs-ta":      30, // unrecorded, still dropped
+		// no hta team
+		"classroom50-other-teacher": 20,
+	})
+	client := githubtest.NewTestClient(t, server)
+	var errOut bytes.Buffer
+	RevokeClassroomStaffTeams(client, &errOut, org, "cs")
+	if errOut.Len() != 0 {
+		t.Errorf("unexpected warnings: %q", errOut.String())
+	}
+	body := put()
+	if body == nil {
+		t.Fatal("expected a PUT dropping the classroom's live staff teams")
+	}
+	if got := actorTeamIDs(body.BypassActors); !equalInt64s(got, []int64{20}) {
+		t.Errorf("remaining team actors = %v, want only the other classroom's [20]", got)
+	}
+
+	t.Run("nothing live at any slug is a no-op", func(t *testing.T) {
+		server, put := bypassServerWithTeams(t, []int64{10}, true, nil)
+		RevokeClassroomStaffTeams(githubtest.NewTestClient(t, server), &errOut, org, "cs")
+		if put() != nil {
+			t.Error("no PUT expected when no team exists at the classroom's slugs")
+		}
+	})
 }

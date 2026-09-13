@@ -210,13 +210,20 @@ func canonicalOrWarn(errOut io.Writer, org, classroom string, role configrepo.St
 // commit. Confirms the classroom exists first (so a typo doesn't mint a stray
 // team); no-op-safe if already recorded.
 func ensureStaffTeamRecorded(client githubapi.Client, out, errOut io.Writer, org, classroom, branch string, role configrepo.StaffRole) (configrepo.TeamRef, error) {
-	if _, ok, err := configrepo.LoadClassroom(client, org, classroom, branch); err != nil {
+	c, ok, err := configrepo.LoadClassroom(client, org, classroom, branch)
+	if err != nil {
 		return configrepo.TeamRef{}, err
 	} else if !ok {
 		return configrepo.TeamRef{}, fmt.Errorf("%s: classroom %s not found in %s: run `gh teacher classroom add %s %s` first",
 			org, classroom, configrepo.ConfigRepoName, org, classroom)
 	}
-	team, err := configrepo.EnsureClassroomStaffTeam(client, org, classroom, role)
+	// The recorded id lets a team Classroom 50 created, but whose config-repo
+	// grant was lost, be adopted and re-granted rather than refused.
+	var recordedID int64
+	if ref := c.Teams.RefForRole(role); configrepo.IsCanonicalStaffTeamRef(classroom, role, ref) {
+		recordedID = ref.ID
+	}
+	team, err := configrepo.EnsureClassroomStaffTeam(client, org, classroom, role, recordedID)
 	if err != nil {
 		return configrepo.TeamRef{}, err
 	}

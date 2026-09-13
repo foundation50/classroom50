@@ -173,7 +173,7 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	// stranding write-granted staff teams when a stuck repo blocks a clean
 	// re-run. The feedback-base ruleset outlives teardown, so drop the teams
 	// from its bypass list first rather than leave it pointing at deleted ones.
-	orgrules.RevokeStaffTeams(client, errOut, org, teams)
+	orgrules.RevokeClassroomStaffTeams(client, errOut, org, classrooms...)
 	for _, t := range teams {
 		if err := configrepo.DeleteClassroomTeam(client, org, t); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not delete classroom team %q (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",

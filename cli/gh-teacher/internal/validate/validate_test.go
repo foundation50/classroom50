@@ -179,6 +179,26 @@ func TestClassroomShortNameBudget(t *testing.T) {
 	}
 }
 
+func TestClassroomShortNameSuffix(t *testing.T) {
+	// A role suffix only counts as a whole hyphen-delimited segment: `data`
+	// ends in "ta" and `delta-tab` merely contains one.
+	for _, ok := range []string{"cs", "cs-principles", "data", "delta-tab", "teachers", "hta1", "ta-cs"} {
+		if err := ClassroomShortNameSuffix(ok); err != nil {
+			t.Errorf("%q must pass, got %v", ok, err)
+		}
+	}
+	for _, bad := range []string{"ml-ta", "ml-hta", "ml-teacher", "cs-101-ta"} {
+		err := ClassroomShortNameSuffix(bad)
+		if err == nil {
+			t.Errorf("%q must fail: its student team sits at another classroom's staff slug", bad)
+			continue
+		}
+		if !strings.Contains(err.Error(), "reserves") || !strings.Contains(err.Error(), "-teacher, -hta, or -ta") {
+			t.Errorf("err = %q, want the reservation and the alternatives named", err.Error())
+		}
+	}
+}
+
 func TestComposedRepoNameBudget(t *testing.T) {
 	// Exactly at the limit: classroom(30) + 1 + slug(29) + 1 + 39 = 100.
 	if err := ComposedRepoNameBudget(strings.Repeat("a", 30), strings.Repeat("b", 29)); err != nil {
