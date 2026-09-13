@@ -101,7 +101,7 @@ const CreateClassroomForm = ({
           } else if (reservedShortNameSuffix(slug)) {
             // The student team of `x-ta` would sit at `x`'s TA team slug.
             errors.slug = t("validation.classroomSlugReservedEnding", {
-              suffix: reservedShortNameSuffix(slug) as string,
+              suffix: reservedShortNameSuffix(slug)!,
             })
           } else if (
             classes.find((cl) => cl.path.toLowerCase() === slug.toLowerCase())
@@ -217,6 +217,7 @@ const CreateClassroomForm = ({
             // as-you-type rather than only at submit. The submit validator
             // stays authoritative (pattern, cap, collision).
             const liveSlug = slugify(field.state.value)
+            const reservedEnding = reservedShortNameSuffix(liveSlug)
             const liveError =
               liveSlug.length > CLASSROOM_SHORT_NAME_MAX_LEN
                 ? t("validation.classroomSlugTooLong", {
@@ -224,12 +225,17 @@ const CreateClassroomForm = ({
                     max: CLASSROOM_SHORT_NAME_MAX_LEN,
                     limit: GITHUB_REPO_NAME_MAX_LEN,
                   })
-                : liveSlug &&
-                    classes.some(
-                      (cl) => cl.path.toLowerCase() === liveSlug.toLowerCase(),
-                    )
-                  ? t("validation.classroomSlugTaken")
-                  : undefined
+                : reservedEnding
+                  ? t("validation.classroomSlugReservedEnding", {
+                      suffix: reservedEnding,
+                    })
+                  : liveSlug &&
+                      classes.some(
+                        (cl) =>
+                          cl.path.toLowerCase() === liveSlug.toLowerCase(),
+                      )
+                    ? t("validation.classroomSlugTaken")
+                    : undefined
             return (
               <FormField
                 label={t("classes.form.slug")}
