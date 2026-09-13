@@ -630,11 +630,13 @@ printf '%s\n' "$*" >> "$GH_LOG"
 			if strings.Contains(string(log), "result..json") {
 				t.Errorf("invalid staged basename reached gh:\n%s", log)
 			}
-			// Immutable-safe: view -> delete (exists) -> create with result.json
-			// plus the two valid extras attached atomically. No post-create upload.
+			// Immutable-safe: view -> immutable probe -> delete (exists, mutable)
+			// -> create with result.json plus the two valid extras attached
+			// atomically. No post-create upload.
 			gotCalls := strings.Split(strings.TrimSpace(string(log)), "\n")
 			wantCalls := []string{
 				"release view submit/test --repo example/classroom-assignment-student",
+				"api repos/example/classroom-assignment-student/releases/tags/submit/test --jq .immutable",
 				"release delete submit/test --repo example/classroom-assignment-student --yes",
 				"release create submit/test result.json " +
 					filepath.Join(assetsDir, "first.pdf") + " " +
@@ -646,6 +648,63 @@ printf '%s\n' "$*" >> "$GH_LOG"
 			}
 			if !strings.Contains(string(output), "::warning::release_assets: invalid staged basename (skipped)") {
 				t.Errorf("Release shell output missing invalid-basename warning:\n%s", output)
+			}
+		})
+
+		// Immutable release (the repo/org setting, regrade lost a release live
+		// 2026-09-12): GitHub lets the delete through but then refuses the tag
+		// name forever, so the step must not touch the release at all: no
+		// delete, no create, warn, exit 0.
+		t.Run("ReleaseShellKeepsImmutableRelease", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "api repos/example/classroom-assignment-student/releases/tags/submit/test")
+    echo true
+    ;;
+esac
+exit 0
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell must exit 0 for an immutable release: %v\n%s", err, output)
+			}
+			if !strings.Contains(string(output), "::warning::the release at submit/test is immutable and cannot be refreshed") {
+				t.Errorf("Release shell output missing the immutable-release warning:\n%s", output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, forbidden := range []string{"release delete", "release create"} {
+				if strings.Contains(string(log), forbidden) {
+					t.Errorf("immutable release must not reach `gh %s` (the tag name would be burned):\n%s", forbidden, log)
+				}
 			}
 		})
 

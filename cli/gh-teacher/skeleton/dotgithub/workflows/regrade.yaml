@@ -13,11 +13,13 @@ name: Regrade
 # new commit to main after the run being re-run, regrade still grades the
 # earlier (already-submitted) commit, by design: regrade refreshes the score
 # for an existing submission, it does not grade newer un-submitted work. Only
-# the first-grade fallback below (a never-graded repo) tags the current `main`
-# HEAD.
+# a run that actually graded is replayed (the runner skips the acceptance
+# commit, a shim retrofit, and a tag-mode branch push, and would skip again).
 #
-# Fallback: a repo that has a `main` HEAD but no prior autograde run (never
-# graded) is first-graded by pushing a fresh `submit/<ts>-<sha>` tag instead.
+# Fallback: a repo with pushed work but no graded run is first-graded by
+# pushing a fresh `submit/<ts>-<sha>` tag at the student's latest commit,
+# skipping past the tool's `[skip ci]` bookkeeping commits (a tag at one of
+# those fires nothing). Nothing pushed since acceptance means nothing to grade.
 #
 # Re-run/tag only by design: grading then runs ASYNCHRONOUSLY inside each
 # student repo (it can take minutes), so this workflow does NOT collect
