@@ -209,6 +209,14 @@ async function rollbackCreatedTeams(
     ...args.staffCreated.map((role) => args.staff[role]),
   ].filter((t): t is { id: number; slug: string } => Boolean(t?.slug))
 
+  // ensureStaffTeams already exempted these teams; drop them from the ruleset
+  // before deleting so it never references a team GitHub no longer knows.
+  await revokeStaffTeams(
+    client,
+    org,
+    toDelete.map((t) => t.id),
+  )
+
   for (const t of toDelete) {
     try {
       await deleteClassroomTeam(client, org, t)

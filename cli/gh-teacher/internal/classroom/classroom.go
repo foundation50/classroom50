@@ -309,7 +309,7 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 	}
 	// Exempt the new teams from the feedback-base lock so staff can merge
 	// feedback PRs. Best-effort; init rebuilds the list from classroom.json.
-	orgrules.ExemptStaffTeams(client, errOut, org, orgrules.StaffTeamIDs(staffTeams))
+	orgrules.ExemptStaffTeams(client, errOut, org, orgrules.StaffTeamRefs(shortName, staffTeams))
 	if staffTeams.Teacher == nil {
 		return staffTeams, "", nil
 	}
@@ -834,11 +834,7 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 
 	// Drop the staff teams from the feedback-base bypass list before deleting
 	// them, so the ruleset never references a team GitHub no longer knows.
-	staffIDs := make([]int64, 0, len(staffTeams))
-	for _, st := range staffTeams {
-		staffIDs = append(staffIDs, st.ID)
-	}
-	orgrules.RevokeStaffTeams(client, errOut, org, staffIDs)
+	orgrules.RevokeStaffTeams(client, errOut, org, staffTeams)
 
 	// Delete the per-classroom team (idempotent; 404 = gone). Its grants +
 	// memberships go with it. A delete failure is surfaced but doesn't undo

@@ -2240,7 +2240,11 @@
         "workflowOrgManaged": "Organization policy defaults workflows to read; the Classroom 50 workflows declare their own permissions",
         "rulesetsMissing": "missing: {{names}}",
         "rulesetStaffTeamsMissing_one": "{{count}} staff team can't merge feedback pull requests yet",
-        "rulesetStaffTeamsMissing_other": "{{count}} staff teams can't merge feedback pull requests yet"
+        "rulesetStaffTeamsMissing_other": "{{count}} staff teams can't merge feedback pull requests yet",
+        "rulesetStaffTeamsUnreadable": "couldn't read the classroom list to check which staff teams should be exempt; try again in a moment",
+        "rulesetOwnerNotExempt": "organization owners still see a bypass prompt when merging feedback pull requests",
+        "rulesetUnexpectedBypass_one": "{{count}} unexpected entry on the feedback branch's bypass list",
+        "rulesetUnexpectedBypass_other": "{{count}} unexpected entries on the feedback branch's bypass list"
       },
       "title": "Organization policy",
       "planBadgeTitle": "GitHub plan: determines which policies are in scope. Enterprise unlocks additional member-privilege fields.",

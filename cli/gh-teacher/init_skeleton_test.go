@@ -174,9 +174,10 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 
 	// Cross-binary literal parity: the `feedback` base-branch name now
 	// lives in ensure_feedback_pr.py (BASE_BRANCH), fetched from Pages by
-	// the Feedback PR step. It must match the Go `feedbackBaseBranch` const
-	// that the org ruleset targets — a drift would point the runner and the
-	// ruleset at different branches, silently breaking the frozen-base lock.
+	// the Feedback PR step. It must match contract.FeedbackBaseBranch, the
+	// branch the org ruleset (internal/orgrules) targets — a drift would point
+	// the runner and the ruleset at different branches, silently breaking the
+	// frozen-base lock.
 	// This is the enforced single-source the "keep in lockstep" comment asks
 	// for (Phase 1; moved to the script in Phase 2).
 	fbScript, ok := files[".github/scripts/ensure_feedback_pr.py"]

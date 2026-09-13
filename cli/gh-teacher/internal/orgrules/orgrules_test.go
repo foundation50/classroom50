@@ -17,8 +17,8 @@ import (
 const org = "cs50-fall-2026"
 
 func TestBodies_FeedbackBaseIsAHardLockWithExemptStaff(t *testing.T) {
-	bodies := Bodies([]int64{30, 10, 20, 10, 0, -1})
-	byName := map[string]Body{}
+	bodies := bodies([]int64{30, 10, 20, 10, 0, -1})
+	byName := map[string]body{}
 	for _, b := range bodies {
 		byName[b.Name] = b
 		if b.Target != "branch" || b.Enforcement != "active" {
@@ -37,7 +37,7 @@ func TestBodies_FeedbackBaseIsAHardLockWithExemptStaff(t *testing.T) {
 		t.Errorf("submission-history ref = %v, want ~DEFAULT_BRANCH", main.Conditions.RefName.Include)
 	}
 	// Rewriting a student's history stays a deliberate, audited bypass.
-	wantMain := []BypassActor{{ActorID: 1, ActorType: "OrganizationAdmin", BypassMode: "always"}}
+	wantMain := []bypassActor{{ActorID: 1, ActorType: "OrganizationAdmin", BypassMode: "always"}}
 	if !equalActors(main.BypassActors, wantMain) {
 		t.Errorf("submission-history bypass = %+v, want %+v", main.BypassActors, wantMain)
 	}
@@ -53,7 +53,7 @@ func TestBodies_FeedbackBaseIsAHardLockWithExemptStaff(t *testing.T) {
 	}
 	// Owners and staff teams are exempt (rules not evaluated → plain Merge
 	// button); team IDs deduped, sorted, non-positive dropped.
-	wantFB := []BypassActor{
+	wantFB := []bypassActor{
 		{ActorID: 1, ActorType: "OrganizationAdmin", BypassMode: "exempt"},
 		{ActorID: 10, ActorType: "Team", BypassMode: "exempt"},
 		{ActorID: 20, ActorType: "Team", BypassMode: "exempt"},
@@ -65,9 +65,9 @@ func TestBodies_FeedbackBaseIsAHardLockWithExemptStaff(t *testing.T) {
 }
 
 func TestBodies_NoStaffTeamsStillExemptsOwners(t *testing.T) {
-	for _, b := range Bodies(nil) {
+	for _, b := range bodies(nil) {
 		if b.Name == NameFeedbackBase {
-			want := []BypassActor{{ActorID: 1, ActorType: "OrganizationAdmin", BypassMode: "exempt"}}
+			want := []bypassActor{{ActorID: 1, ActorType: "OrganizationAdmin", BypassMode: "exempt"}}
 			if !equalActors(b.BypassActors, want) {
 				t.Errorf("bypass = %+v, want owners only", b.BypassActors)
 			}
@@ -79,7 +79,7 @@ func TestEnsure_CreatesBoth(t *testing.T) {
 	// No existing rulesets → one POST per ruleset carrying the staff teams.
 	var (
 		mu       sync.Mutex
-		posted   []Body
+		posted   []body
 		listHits int
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -94,7 +94,7 @@ func TestEnsure_CreatesBoth(t *testing.T) {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte(`[]`))
 		case http.MethodPost:
-			var body Body
+			var body body
 			raw, _ := io.ReadAll(r.Body)
 			if err := json.Unmarshal(raw, &body); err != nil {
 				t.Errorf("bad POST body: %v", err)
@@ -129,7 +129,7 @@ func TestEnsure_CreatesBoth(t *testing.T) {
 		if rs.Name != NameFeedbackBase {
 			continue
 		}
-		if got := teamIDs(rs.BypassActors); !equalInt64s(got, []int64{7, 8}) {
+		if got := actorTeamIDs(rs.BypassActors); !equalInt64s(got, []int64{7, 8}) {
 			t.Errorf("POSTed feedback-base team actors = %v, want [7 8]", got)
 		}
 	}
@@ -146,7 +146,7 @@ func TestEnsure_UpdatesExistingAndRebuildsBypassList(t *testing.T) {
 		mu        sync.Mutex
 		posts     int
 		putPaths  []string
-		putBodies []Body
+		putBodies []body
 	)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
@@ -157,7 +157,7 @@ func TestEnsure_UpdatesExistingAndRebuildsBypassList(t *testing.T) {
 			_, _ = w.Write([]byte(`[{"id":11,"name":"` + NameSubmissionHistory + `"},{"id":22,"name":"` + NameFeedbackBase + `"}]`))
 		case http.MethodPut:
 			putPaths = append(putPaths, r.URL.Path)
-			var body Body
+			var body body
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &body)
 			putBodies = append(putBodies, body)
@@ -201,7 +201,7 @@ func TestEnsure_UpdatesExistingAndRebuildsBypassList(t *testing.T) {
 	}
 	for _, b := range putBodies {
 		if b.Name == NameFeedbackBase {
-			if got := teamIDs(b.BypassActors); !equalInt64s(got, []int64{5}) {
+			if got := actorTeamIDs(b.BypassActors); !equalInt64s(got, []int64{5}) {
 				t.Errorf("PUT feedback-base team actors = %v, want [5]", got)
 			}
 			if b.Conditions.RefName.Include[0] != "refs/heads/feedback" {
@@ -277,13 +277,13 @@ func TestEnsure_ListFailsWarnsButSucceeds(t *testing.T) {
 
 // bypassServer fakes an org with the feedback-base ruleset installed carrying
 // `teams` on its bypass list and records the PUT body.
-func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server, func() *Body) {
+func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server, func() *body) {
 	t.Helper()
 	var (
 		mu  sync.Mutex
-		put *Body
+		put *body
 	)
-	actors := FeedbackBaseBypassActors(teams)
+	actors := feedbackBaseBypassActors(teams)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		defer mu.Unlock()
@@ -300,7 +300,7 @@ func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(payload)
 		case r.Method == http.MethodPut && r.URL.Path == "/orgs/"+org+"/rulesets/22":
-			var body Body
+			var body body
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &body)
 			put = &body
@@ -312,7 +312,7 @@ func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server
 		}
 	}))
 	t.Cleanup(server.Close)
-	return server, func() *Body {
+	return server, func() *body {
 		mu.Lock()
 		defer mu.Unlock()
 		return put
@@ -325,7 +325,7 @@ func TestUpdateFeedbackBaseBypassTeams_MergesAddAndRemove(t *testing.T) {
 	server, put := bypassServer(t, []int64{10, 20}, true)
 	client := githubtest.NewTestClient(t, server)
 
-	ok, err := UpdateFeedbackBaseBypassTeams(client, org, TeamChange{Add: []int64{30}, Remove: []int64{10}})
+	ok, err := updateFeedbackBaseBypassTeams(client, org, teamChange{add: []int64{30}, remove: []int64{10}})
 	if err != nil {
 		t.Fatalf("UpdateFeedbackBaseBypassTeams: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestUpdateFeedbackBaseBypassTeams_MergesAddAndRemove(t *testing.T) {
 	if body == nil {
 		t.Fatal("no PUT recorded")
 	}
-	if got := teamIDs(body.BypassActors); !equalInt64s(got, []int64{20, 30}) {
+	if got := actorTeamIDs(body.BypassActors); !equalInt64s(got, []int64{20, 30}) {
 		t.Errorf("team actors = %v, want [20 30]", got)
 	}
 	if body.BypassActors[0].ActorType != "OrganizationAdmin" || body.BypassActors[0].BypassMode != "exempt" {
@@ -353,7 +353,7 @@ func TestUpdateFeedbackBaseBypassTeams_AlreadyExemptSkipsThePut(t *testing.T) {
 	server, put := bypassServer(t, []int64{10, 20}, true)
 	client := githubtest.NewTestClient(t, server)
 
-	ok, err := UpdateFeedbackBaseBypassTeams(client, org, TeamChange{Add: []int64{20, 10}})
+	ok, err := updateFeedbackBaseBypassTeams(client, org, teamChange{add: []int64{20, 10}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -369,7 +369,7 @@ func TestUpdateFeedbackBaseBypassTeams_NotInstalledIsANoop(t *testing.T) {
 	server, put := bypassServer(t, nil, false)
 	client := githubtest.NewTestClient(t, server)
 
-	ok, err := UpdateFeedbackBaseBypassTeams(client, org, TeamChange{Add: []int64{30}})
+	ok, err := updateFeedbackBaseBypassTeams(client, org, teamChange{add: []int64{30}})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -393,21 +393,25 @@ func TestExistingFeedbackBaseTeamIDs(t *testing.T) {
 	}
 }
 
-func TestStaffTeamIDs(t *testing.T) {
-	if got := StaffTeamIDs(nil); got != nil {
+func TestStaffTeamRefs_OnlyCanonicalSlugs(t *testing.T) {
+	if got := StaffTeamRefs("cs", nil); got != nil {
 		t.Errorf("nil teams → %v, want nil", got)
 	}
 	refs := &configrepo.StaffTeamsRef{
-		Teacher: &configrepo.TeamRef{ID: 1, Slug: "a"},
-		HeadTA:  &configrepo.TeamRef{ID: 0, Slug: "b"},
-		TA:      &configrepo.TeamRef{ID: 3, Slug: "c"},
+		Teacher: &configrepo.TeamRef{ID: 1, Slug: "classroom50-cs-teacher"},
+		// Zero id: never a valid actor.
+		HeadTA: &configrepo.TeamRef{ID: 0, Slug: "classroom50-cs-hta"},
+		// A head TA pointing `teams.ta` at the student team must not turn
+		// the student team into a bypass actor.
+		TA: &configrepo.TeamRef{ID: 3, Slug: "classroom50-cs"},
 	}
-	if got := StaffTeamIDs(refs); !equalInt64s(got, []int64{1, 3}) {
-		t.Errorf("ids = %v, want [1 3] (non-positive dropped)", got)
+	got := StaffTeamRefs("cs", refs)
+	if len(got) != 1 || got[0].ID != 1 {
+		t.Errorf("refs = %+v, want only the canonical teacher team", got)
 	}
 }
 
-func ruleTypes(rules []Rule) []string {
+func ruleTypes(rules []rule) []string {
 	out := make([]string, len(rules))
 	for i, r := range rules {
 		out[i] = r.Type
@@ -415,7 +419,7 @@ func ruleTypes(rules []Rule) []string {
 	return out
 }
 
-func teamIDs(actors []BypassActor) []int64 {
+func actorTeamIDs(actors []bypassActor) []int64 {
 	var out []int64
 	for _, a := range actors {
 		if a.ActorType == "Team" {
@@ -425,7 +429,7 @@ func teamIDs(actors []BypassActor) []int64 {
 	return out
 }
 
-func equalActors(a, b []BypassActor) bool {
+func equalActors(a, b []bypassActor) bool {
 	if len(a) != len(b) {
 		return false
 	}

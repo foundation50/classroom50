@@ -115,7 +115,8 @@ describe("assertClassroomNotArchived", () => {
   })
 })
 
-// createClassroomFiles provisions three secret teams (students, teacher, ta).
+// createClassroomFiles provisions the secret students team plus the closed
+// teacher and ta staff teams.
 // GitHub auto-adds the authenticated creator as a maintainer of every team it
 // creates, so the flow must drop the creator from the students + ta teams
 // (leaving them only on teacher) — else the team-driven roster counts the
@@ -239,6 +240,88 @@ describe("createClassroomFiles creator team cleanup", () => {
     await createClassroomFiles(client, { ...input, creator: undefined })
 
     expect(deleted).toHaveLength(0)
+  })
+
+  it("rollback revokes the just-exempted staff teams before deleting them", async () => {
+    // ensureStaffTeams exempts the new teams on the feedback-base ruleset;
+    // when scaffolding then fails, rollback must drop them from that list
+    // BEFORE the team DELETEs so the ruleset never names a team GitHub no
+    // longer knows.
+    const ordered: string[] = []
+    let nextTeamId = 100
+    const request = vi.fn(
+      async (path: string, options?: GitHubRequestOptions) => {
+        const method = options?.method ?? "GET"
+        if (method === "POST" && /\/orgs\/[^/]+\/teams$/.test(path)) {
+          const name = (options?.body as { name?: string })?.name ?? "team"
+          return { id: nextTeamId++, slug: name }
+        }
+        if (method === "GET" && path.startsWith("/orgs/acme/rulesets?")) {
+          return [{ id: 20, name: "classroom50-feedback-base-lock" }]
+        }
+        if (method === "GET" && path === "/orgs/acme/rulesets/20") {
+          return {
+            id: 20,
+            bypass_actors: [
+              {
+                actor_id: 1,
+                actor_type: "OrganizationAdmin",
+                bypass_mode: "exempt",
+              },
+              { actor_id: 9, actor_type: "Team", bypass_mode: "exempt" },
+              // Whatever ensureStaffTeams added is re-read here; the fake keeps
+              // it simple by reporting the created ids as already exempt.
+              ...[101, 102, 103].map((id) => ({
+                actor_id: id,
+                actor_type: "Team",
+                bypass_mode: "exempt",
+              })),
+            ],
+          }
+        }
+        if (method === "PUT" && path === "/orgs/acme/rulesets/20") {
+          const actors = (
+            options?.body as { bypass_actors: { actor_id: number }[] }
+          ).bypass_actors
+          ordered.push(`PUT ${actors.map((a) => a.actor_id).join(",")}`)
+          return {}
+        }
+        if (method === "GET" && /\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
+          const slug = path.split("/teams/")[1]
+          const id = slug.endsWith("-teacher")
+            ? 101
+            : slug.endsWith("-hta")
+              ? 102
+              : slug.endsWith("-ta")
+                ? 103
+                : 100
+          return { id, slug }
+        }
+        if (method === "DELETE" && /\/orgs\/acme\/teams\/[^/]+$/.test(path)) {
+          ordered.push(`DELETE ${path.split("/teams/")[1]}`)
+          return undefined
+        }
+        if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(path)) {
+          return { default_branch: "main" }
+        }
+        // Scaffolding fails at the first git read.
+        if (path.includes("/git/ref/heads/")) throw apiError(500)
+        return undefined
+      },
+    )
+    const client = { request, requestRaw: vi.fn() } as unknown as GitHubClient
+
+    await expect(
+      createClassroomFiles(client, { ...input, creator: undefined }),
+    ).rejects.toThrow()
+
+    const firstDelete = ordered.findIndex((e) => e.startsWith("DELETE"))
+    const put = ordered.find((e) => e.startsWith("PUT"))
+    expect(put, "rollback must revoke on the ruleset").toBeDefined()
+    expect(ordered.indexOf(put!)).toBeLessThan(firstDelete)
+    // Owner + the unrelated team 9 survive; the rolled-back staff teams do not.
+    expect(put).toBe("PUT 1,9")
+    expect(ordered.filter((e) => e.startsWith("DELETE"))).toHaveLength(4)
   })
 
   it("still drops the creator from an ADOPTED students team (mixed roles aren't allowed)", async () => {

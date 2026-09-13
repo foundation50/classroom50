@@ -89,3 +89,21 @@ export function forgetResolvedConcerns(
   }
   ls.setItem(keyFor(org), JSON.stringify(stored))
 }
+
+// A concern latched as unresolved that a later audit finds enforced (fixed by
+// re-run setup, or by hand) is dropped from the visible set; the caller also
+// forgets it in storage, so the pane doesn't show "couldn't set this
+// automatically" beside a green OK. Pure so it is testable without the pane.
+export function reconcileUnresolvedConcerns<K extends string, V>(
+  unresolved: ReadonlyMap<K, V>,
+  concerns: ReadonlyArray<{ id: K; verdict: { state: string } }>,
+): { resolvedIds: K[]; visible: ReadonlyMap<K, V> } {
+  const resolvedIds = concerns
+    .filter((c) => c.verdict.state === "enforced")
+    .map((c) => c.id)
+    .filter((id) => unresolved.has(id))
+  if (resolvedIds.length === 0) return { resolvedIds, visible: unresolved }
+  const visible = new Map(unresolved)
+  for (const id of resolvedIds) visible.delete(id)
+  return { resolvedIds, visible }
+}

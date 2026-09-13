@@ -207,7 +207,7 @@ func ensureStaffTeamRecorded(client githubapi.Client, out, errOut io.Writer, org
 	}
 	// A team minted here (rather than at classroom add) still needs the
 	// feedback-base exemption to merge feedback PRs.
-	orgrules.ExemptStaffTeams(client, errOut, org, []int64{team.ID})
+	orgrules.ExemptStaffTeams(client, errOut, org, []configrepo.TeamRef{team})
 	// Persist the ref so future resolves and the delete/teardown sweeps find
 	// it. RMW classroom.json in one commit.
 	path := configrepo.ClassroomFilePath(classroom)

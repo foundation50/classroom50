@@ -108,6 +108,18 @@ function makeClient(overrides: Routes = {}): GitHubClient {
         return ok({ access_level: "organization" })
       if (path.includes("/pages"))
         return ok({ build_type: "workflow", public: true })
+      if (/\/rulesets\/\d+$/.test(path))
+        return ok({
+          id: 2,
+          name: RULESET_NAME_FEEDBACK_BASE,
+          bypass_actors: [
+            {
+              actor_id: 1,
+              actor_type: "OrganizationAdmin",
+              bypass_mode: "exempt",
+            },
+          ],
+        })
       if (path.includes("/rulesets"))
         return ok([
           { id: 1, name: RULESET_NAME_SUBMISSION_HISTORY },
@@ -115,7 +127,10 @@ function makeClient(overrides: Routes = {}): GitHubClient {
         ])
       return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
     },
-    requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    requestRaw: (path: string) =>
+      path.includes("/classroom50/contents")
+        ? Promise.resolve("[]")
+        : Promise.reject(new Error("unexpected requestRaw")),
     fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
   }
 }
@@ -247,7 +262,10 @@ describe("buildOrgAuditReport", () => {
             ])
           return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
         },
-        requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        requestRaw: (path: string) =>
+          path.includes("/classroom50/contents")
+            ? Promise.resolve("[]")
+            : Promise.reject(new Error("unexpected requestRaw")),
         fetchArchive: () =>
           Promise.reject(new Error("unexpected fetchArchive")),
       },
@@ -426,7 +444,10 @@ describe("buildOrgAuditReport", () => {
             ])
           return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
         },
-        requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        requestRaw: (path: string) =>
+          path.includes("/classroom50/contents")
+            ? Promise.resolve("[]")
+            : Promise.reject(new Error("unexpected requestRaw")),
         fetchArchive: () =>
           Promise.reject(new Error("unexpected fetchArchive")),
       },
@@ -472,7 +493,10 @@ describe("buildOrgAuditReport", () => {
             ])
           return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
         },
-        requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+        requestRaw: (path: string) =>
+          path.includes("/classroom50/contents")
+            ? Promise.resolve("[]")
+            : Promise.reject(new Error("unexpected requestRaw")),
         fetchArchive: () =>
           Promise.reject(new Error("unexpected fetchArchive")),
       },

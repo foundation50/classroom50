@@ -4161,17 +4161,22 @@ class TestPermissionLevels:
 
 
 class TestResolveStaffTeamSlugs:
-    def test_recorded_slugs_are_authoritative(self):
+    def test_recorded_slug_must_be_the_canonical_one(self, capsys):
+        # This map hands out push on every student repo, and classroom.json is
+        # head-TA-writable: a recorded slug that isn't the derived one (here
+        # the student team) is refused with a warning and the derived slug
+        # used instead. A matching record is kept and marked recorded.
         meta = {
             "teams": {
-                "teacher": {"id": 1, "slug": "classroom50-cs-teacher-1"},
+                "teacher": {"id": 1, "slug": "classroom50-cs"},
                 "ta": {"id": 2, "slug": "classroom50-cs-ta"},
             }
         }
         out = cs.resolve_staff_team_slugs(meta, "cs")
-        # A GitHub re-slug on collision (`-1`) is kept verbatim, never re-derived.
-        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher-1", recorded=True)
+        assert out["teacher"] == cs.StaffTeam("classroom50-cs-teacher", recorded=False)
         assert out["ta"] == cs.StaffTeam("classroom50-cs-ta", recorded=True)
+        err = capsys.readouterr().err
+        assert "::warning::" in err and "'classroom50-cs' as the teacher staff team" in err
 
     def test_missing_roles_fall_back_to_derived_slug(self):
         # hta is absent from a `teams` block written before the role existed:

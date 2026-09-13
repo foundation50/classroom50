@@ -243,7 +243,7 @@ func initCmd() *cobra.Command {
 			// staff teams, so a re-run also repairs a list that drifted.
 			step(initStepLabels[4])
 			var staffTeamIDs []int64
-			if staffTeams, err := orgrules.CollectStaffTeams(client, org); err != nil {
+			if staffTeams, err := orgrules.CollectStaffTeams(client, stepErr, org); err != nil {
 				_, _ = fmt.Fprintf(stepErr, "Warning: %s: could not read classroom staff teams (%v); the feedback-base bypass list keeps its current teams. Re-run init once the classroom50 repository is readable.\n", org, err)
 				// Best-effort: keep what's there rather than wipe it.
 				staffTeamIDs, _ = orgrules.ExistingFeedbackBaseTeamIDs(client, org)

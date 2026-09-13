@@ -14,6 +14,7 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 )
 
 // teardownTestServer is a stateful in-memory backing for end-to-end
@@ -29,6 +30,9 @@ type teardownTestServer struct {
 	classroomJSON     map[string]string // "<dir>/classroom.json" → contents-API JSON body
 	teamGET           map[string]string // "/orgs/{org}/teams/{slug}" → GET body (id verify)
 	deletedTeams      []string          // team slugs that received DELETE
+	rulesetTeams      []int64           // Team actors on the installed feedback-base ruleset (nil = not installed)
+	rulesetPUT        []int64           // Team actors in the last ruleset PUT (nil = none yet)
+	rulesetPUTBefore  int               // len(deletedTeams) when the PUT landed (ordering evidence)
 	orgTeams          []string          // GET /orgs/{org}/teams slugs (invite/group sweeps)
 	orgTeamBodies     map[string]string // slug → extra JSON fields (e.g. description) for the listing
 	failOrgTeamsList  bool              // when true, GET /orgs/{org}/teams 500s
@@ -81,7 +85,33 @@ func (s *teardownTestServer) handler(t *testing.T, org string) http.Handler {
 		case path == "/orgs/"+org+"/rulesets" && r.Method == http.MethodGet:
 			// The team sweep drops the teams from the feedback-base bypass
 			// list first; an org that never ran init has no ruleset.
-			_, _ = w.Write([]byte(`[]`))
+			if s.rulesetTeams == nil {
+				_, _ = w.Write([]byte(`[]`))
+				return
+			}
+			_, _ = w.Write([]byte(`[{"id":22,"name":"` + orgrules.NameFeedbackBase + `"}]`))
+		case path == "/orgs/"+org+"/rulesets/22" && r.Method == http.MethodGet:
+			actors := []map[string]any{{"actor_id": 1, "actor_type": "OrganizationAdmin", "bypass_mode": "exempt"}}
+			for _, id := range s.rulesetTeams {
+				actors = append(actors, map[string]any{"actor_id": id, "actor_type": "Team", "bypass_mode": "exempt"})
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 22, "bypass_actors": actors})
+		case path == "/orgs/"+org+"/rulesets/22" && r.Method == http.MethodPut:
+			var body struct {
+				BypassActors []struct {
+					ActorID   int64  `json:"actor_id"`
+					ActorType string `json:"actor_type"`
+				} `json:"bypass_actors"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			s.rulesetPUT = []int64{}
+			for _, a := range body.BypassActors {
+				if a.ActorType == "Team" {
+					s.rulesetPUT = append(s.rulesetPUT, a.ActorID)
+				}
+			}
+			s.rulesetPUTBefore = len(s.deletedTeams)
+			_, _ = w.Write([]byte(`{}`))
 		case strings.HasPrefix(path, "/repos/"+org+"/classroom50/contents/") && r.Method == http.MethodGet:
 			// A per-classroom classroom.json read during the team sweep.
 			// Return whatever the test staged for this path, else 404 (a
@@ -175,6 +205,9 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-hta":     `{"id":4}`,
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":      `{"id":3}`,
 		},
+		// Staff teams 2, 3, 4 are exempt on the feedback-base ruleset; 9 is
+		// another classroom's team that must survive the sweep.
+		rulesetTeams: []int64{2, 3, 4, 9},
 	}
 	server := httptest.NewServer(state.handler(t, "classroom50-test"))
 	defer server.Close()
@@ -186,6 +219,7 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 
 	state.mu.Lock()
 	teams := append([]string(nil), state.deletedTeams...)
+	rulesetPUT, putBefore := state.rulesetPUT, state.rulesetPUTBefore
 	state.mu.Unlock()
 	want := map[string]bool{
 		"classroom50-cs-principles":         true,
@@ -200,6 +234,18 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 		if !want[slug] {
 			t.Errorf("deleted unexpected team %q", slug)
 		}
+	}
+	// Revoke before delete: the ruleset PUT drops exactly this classroom's
+	// staff teams, keeps the other classroom's, and lands before any DELETE
+	// so GitHub never sees an actor it no longer knows.
+	if len(rulesetPUT) != 1 || rulesetPUT[0] != 9 {
+		t.Errorf("ruleset PUT Team actors = %v, want [9]", rulesetPUT)
+	}
+	if putBefore != 0 {
+		t.Errorf("ruleset PUT landed after %d team DELETEs, want before the first", putBefore)
+	}
+	if strings.Contains(errOut.String(), "Warning:") {
+		t.Errorf("happy path should not warn:\n%s", errOut.String())
 	}
 }
 

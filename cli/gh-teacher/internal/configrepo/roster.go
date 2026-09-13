@@ -1,6 +1,7 @@
 package configrepo
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -25,14 +26,25 @@ func RosterFilePath(classroom string) string {
 	return classroom + "/" + contract.RosterFilename
 }
 
+// ErrConfigRepoMissing marks the 404 from ResolveConfigRepoBranch so callers
+// that tolerate a fresh org (no `gh teacher init` yet) can tell it from a
+// real failure with errors.Is. The user-facing message stays the plain
+// "run init first" hint.
+var ErrConfigRepoMissing = errors.New("classroom50 repository not found")
+
+type configRepoMissingError struct{ msg string }
+
+func (e *configRepoMissingError) Error() string        { return e.msg }
+func (e *configRepoMissingError) Is(target error) bool { return target == ErrConfigRepoMissing }
+
 // ResolveConfigRepoBranch fetches <org>/classroom50's default branch.
-// 404 → "run `gh teacher init` first".
+// 404 → "run `gh teacher init` first" (matches ErrConfigRepoMissing).
 func ResolveConfigRepoBranch(client githubapi.Client, org string) (string, error) {
 	repoPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), ConfigRepoName)
 	var repo ConfigRepo
 	if err := client.Get(repoPath, &repo); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return "", fmt.Errorf("%s/%s not found: run `gh teacher init %s` first", org, ConfigRepoName, org)
+			return "", &configRepoMissingError{fmt.Sprintf("%s/%s not found: run `gh teacher init %s` first", org, ConfigRepoName, org)}
 		}
 		return "", fmt.Errorf("GET %s: %w", repoPath, err)
 	}

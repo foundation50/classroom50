@@ -70,7 +70,10 @@ function makeClient(configRepoBranch = "main"): {
   return {
     client: {
       request: request as unknown as GitHubClient["request"],
-      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: (path: string) =>
+        path.includes("/classroom50/contents")
+          ? Promise.resolve("[]")
+          : Promise.reject(new Error("unexpected requestRaw")),
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     },
     calls,
@@ -102,7 +105,10 @@ describe("repairConcern", () => {
           allowed_actions: "all",
         })
       }) as unknown as GitHubClient["request"],
-      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: (path: string) =>
+        path.includes("/classroom50/contents")
+          ? Promise.resolve("[]")
+          : Promise.reject(new Error("unexpected requestRaw")),
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
@@ -119,7 +125,10 @@ describe("repairConcern", () => {
           })
         return Promise.reject(httpError(403))
       }) as unknown as GitHubClient["request"],
-      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: (path: string) =>
+        path.includes("/classroom50/contents")
+          ? Promise.resolve("[]")
+          : Promise.reject(new Error("unexpected requestRaw")),
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")
@@ -151,7 +160,10 @@ describe("repairConcern", () => {
           })
         return Promise.reject(rateLimited)
       }) as unknown as GitHubClient["request"],
-      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      requestRaw: (path: string) =>
+        path.includes("/classroom50/contents")
+          ? Promise.resolve("[]")
+          : Promise.reject(new Error("unexpected requestRaw")),
       fetchArchive: () => Promise.reject(new Error("unexpected fetchArchive")),
     }
     const result = await repairConcern(client, "acme", "orgActions", "team")

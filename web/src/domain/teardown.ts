@@ -7,7 +7,7 @@
 // lists exactly what will be deleted.
 
 import type { GitHubClient } from "@/github-core/client"
-import { getClassroomJson } from "@/github-core/configRepoReads"
+import { forEachClassroom } from "@/github-core/configRepoReads"
 import { GitHubAPIError } from "@/github-core/errors"
 import {
   deleteClassroomTeam,
@@ -17,7 +17,6 @@ import {
 } from "@/github-core/mutations"
 import {
   getOrgRepos,
-  listClassroomDirs,
   REPO_READ_CONCURRENCY,
   sleep,
 } from "@/github-core/queries"
@@ -150,25 +149,21 @@ async function collectClassroomTeams(
   client: GitHubClient,
   org: string,
 ): Promise<ClassroomTeamRef[]> {
-  let dirs: { name: string }[]
-  try {
-    dirs = await listClassroomDirs(client, org)
-  } catch {
-    log.debug(
-      "teardown: no readable classroom dirs, skipping team collection",
-      {
-        org,
-      },
-    )
-    // No readable classroom dirs (e.g., marker already partially gone) — nothing
-    // to resolve; let the repo flow proceed.
-    return []
-  }
-
   const bySlug = new Map<string, ClassroomTeamRef>()
-  await mapWithConcurrency(dirs, REPO_READ_CONCURRENCY, async (dir) => {
-    try {
-      const json = await getClassroomJson(client, { org, classroom: dir.name })
+  await forEachClassroom(
+    client,
+    org,
+    // Best-effort: a classroom whose classroom.json can't be read contributes
+    // nothing, and an unlistable config repo (marker partially gone) lets the
+    // repo flow proceed with no teams to sweep.
+    (classroom, err) => {
+      log.debug("teardown: classroom.json unreadable, no team ref", {
+        org,
+        classroom,
+        err,
+      })
+    },
+    (_classroom, json) => {
       // classroom.json is anyone-with-config-repo-write authored and parsed
       // without schema validation, so its team refs are untrusted input to a
       // destructive bulk DELETE. Only queue refs the app owns and can safely
@@ -184,15 +179,9 @@ async function collectClassroomTeams(
           bySlug.set(team.slug, { id: team.id, slug: team.slug })
         }
       }
-    } catch {
-      log.debug("teardown: classroom.json unreadable, no team ref", {
-        org,
-        classroom: dir.name,
-      })
-      // Missing/unreadable classroom.json or no team block: contributes nothing.
-    }
-  })
-
+    },
+    REPO_READ_CONCURRENCY,
+  )
   return [...bySlug.values()]
 }
 

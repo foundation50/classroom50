@@ -93,10 +93,12 @@ STAFF_TEAM_PERMISSIONS = {"hta": "push", "ta": "push"}
 # side hardcodes for the eager grant at assignment add/reuse.
 TEMPLATE_STAFF_PERMISSION = "pull"
 
-# GitHub repo permission levels, weakest first, so a grant can tell "already
-# has at least this" from "has some lesser access" (a staff team granted pull
-# by an older collector must be upgraded to push, not skipped).
-_PERMISSION_RANK = {"pull": 0, "triage": 1, "push": 2, "maintain": 3, "admin": 4}
+# GitHub repo permission levels, weakest first. Drives both the ranking a grant
+# uses to tell "already has at least this" from "has some lesser access" (a
+# staff team granted pull by an older collector must be upgraded to push, not
+# skipped) and the flag scan in repo_permission_level.
+_PERMISSION_LEVELS = ("pull", "triage", "push", "maintain", "admin")
+_PERMISSION_RANK = {level: i for i, level in enumerate(_PERMISSION_LEVELS)}
 
 # Every staff role that has a classroom team. Mirrors Go contract.StaffRoles and
 # the web STAFF_ROLES; the derived slug for each is `classroom50-<short>-<role>`.
@@ -2012,29 +2014,39 @@ class StaffTeam(NamedTuple):
 def resolve_staff_team_slugs(
     classroom_meta: dict[str, Any], classroom_short: str
 ) -> dict[str, StaffTeam]:
-    """Map each staff role to its GitHub team (role -> StaffTeam). A slug
-    recorded in classroom.json `teams` is authoritative (GitHub may re-slug on a
-    name collision); every other role in STAFF_ROLES falls back to the derived
-    `classroom50-<short>-<role>`, the same fallback the web app applies.
+    """Map each staff role to its GitHub team (role -> StaffTeam). Every role in
+    STAFF_ROLES resolves to the derived `classroom50-<short>-<role>`, the slug
+    both writers create (the canonical short-name guard rules out GitHub
+    re-slugging), so a classroom whose `teams` block predates a role, or was
+    never written, still grants that role's team.
 
-    The fallback matters for classrooms whose `teams` block predates a role or
-    was never written: the web creates and populates that role's team on first
-    use without recording it, and without the fallback the grant pass would
-    never see it and the classroom's TAs would silently get no access.
+    A recorded `teams.<role>` entry is trusted only when its slug IS that
+    derived slug: classroom.json is head-TA-writable and this map decides
+    which teams get push on every student repo, so an entry naming any other
+    team (the student team, an invite team, a typo) is warned about and
+    replaced by the derived slug. Matching entries are marked `recorded` so a
+    404 on the team is reported as an inconsistency rather than "never set up".
 
-    Roles recorded under `teams` that aren't in STAFF_ROLES are kept as-is."""
+    Roles recorded under `teams` that aren't in STAFF_ROLES are ignored: the
+    grant map has no permission for them anyway."""
     out: dict[str, StaffTeam] = {}
     teams = classroom_meta.get("teams")
-    if isinstance(teams, dict):
-        for role, ref in teams.items():
-            if not isinstance(ref, dict):
-                continue
-            slug = ref.get("slug")
-            if isinstance(slug, str) and slug.strip():
-                out[role] = StaffTeam(slug.strip(), recorded=True)
+    recorded = teams if isinstance(teams, dict) else {}
     for role in STAFF_ROLES:
-        if role not in out:
-            out[role] = StaffTeam(staff_team_slug(classroom_short, role), recorded=False)
+        derived = staff_team_slug(classroom_short, role)
+        ref = recorded.get(role)
+        slug = ref.get("slug") if isinstance(ref, dict) else None
+        if isinstance(slug, str) and slug.strip() == derived:
+            out[role] = StaffTeam(derived, recorded=True)
+            continue
+        if isinstance(slug, str) and slug.strip():
+            emit_warning(
+                f"{classroom_short}: classroom.json records {slug.strip()!r} as the {role} "
+                f"staff team, which is not the team Classroom 50 creates for that role; "
+                f"using {derived!r} instead. Fix the `teams.{role}` entry or run "
+                f"`gh teacher staff add` to re-record it."
+            )
+        out[role] = StaffTeam(derived, recorded=False)
     return out
 
 
@@ -3698,7 +3710,7 @@ def repo_permission_level(repo: dict[str, Any]) -> str:
     with neither is treated as bare read, the least any listed repo implies."""
     flags = repo.get("permissions")
     if isinstance(flags, dict):
-        for level in ("admin", "maintain", "push", "triage", "pull"):
+        for level in reversed(_PERMISSION_LEVELS):
             if flags.get(level) is True:
                 return level
     role = repo.get("role_name")
@@ -3995,7 +4007,8 @@ def team_repo_permission(
     """The permission level `team_slug` holds on <repo_owner>/<repo>, or None
     when it has none (404). The `repository+json` media type makes GitHub
     return the repo with its `permissions` flags instead of an empty 204.
-    Keeps grant_team_repo idempotent. Mirrors Go's teamHasRepoAccess."""
+    Keeps grant_team_repo idempotent. Mirrors Go's EnsureStaffTeamVisible
+    read (configrepo/team.go); the Go grant path still uses teamHasRepoAccess."""
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/repos/"

@@ -407,11 +407,6 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 // and TemplateReadStaffRoles for why the teacher team is omitted.
 func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, org, classroom, branch, tmplOwner, tmplRepo string) {
 	for _, role := range configrepo.TemplateReadStaffRoles {
-		// StaffTeamRepoPermissions is a presence gate: grant read only for a role
-		// mapped to a student-repo/template permission.
-		if _, ok := configrepo.StaffTeamRepoPermissions[role]; !ok {
-			continue
-		}
 		team, ok, err := configrepo.ResolveClassroomStaffTeam(client, org, classroom, branch, role)
 		if err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: could not read the %s staff team to grant read on private template %s/%s (%v); staff get read at the next collect-scores run.\n", role, tmplOwner, tmplRepo, err)

@@ -11,6 +11,7 @@ import (
 
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubtest"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 )
 
 // staffMock serves the minimal <org>/classroom50 surface the staff
@@ -45,7 +46,7 @@ func (m *staffMock) handler(t *testing.T) http.Handler {
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
 		// --- feedback-base ruleset: the self-healed team gets exempted ---
 		case path == "/orgs/o/rulesets" && r.Method == http.MethodGet:
-			_, _ = w.Write([]byte(`[{"id":22,"name":"classroom50-feedback-base-lock"}]`))
+			_, _ = w.Write([]byte(`[{"id":22,"name":"` + orgrules.NameFeedbackBase + `"}]`))
 		case path == "/orgs/o/rulesets/22" && r.Method == http.MethodGet:
 			_, _ = w.Write([]byte(`{"id":22,"bypass_actors":[{"actor_id":1,"actor_type":"OrganizationAdmin","bypass_mode":"exempt"}]}`))
 		case path == "/orgs/o/rulesets/22" && r.Method == http.MethodPut:

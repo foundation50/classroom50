@@ -37,6 +37,7 @@ import {
   forgetResolvedConcerns,
   mergeUnresolved,
   readUnresolved,
+  reconcileUnresolvedConcerns,
 } from "@/orgPolicy/unresolvedStore"
 import type { CheckState } from "@/github-core/orgChecks"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
@@ -298,7 +299,7 @@ function AuditBody({
   fixingId: ConcernId | null
   fixingConfigBranch: boolean
   enterprisePinned: Set<string>
-  unresolvedConcerns: Map<ConcernId, string>
+  unresolvedConcerns: ReadonlyMap<ConcernId, string>
   onFix: (id: ConcernId) => void
   onRenameConfigRepo: () => void
 }) {
@@ -504,26 +505,20 @@ const OrgPolicyAuditPane = ({
     isError,
   } = useGetOrgAudit(org, planDetails?.plan?.name)
 
-  // A concern latched as unresolved that a later audit finds enforced (fixed by
-  // re-run setup, or by hand) is hidden and forgotten in storage, so the pane
-  // doesn't show "couldn't set this automatically" beside a green OK.
-  const resolvedConcernIds = useMemo(() => {
-    if (!report) return []
-    return report.concerns
-      .filter((c) => c.verdict.state === "enforced")
-      .map((c) => c.id)
-      .filter((id) => unresolvedConcerns.has(id))
-  }, [report, unresolvedConcerns])
+  // A latched concern the audit now reports enforced is hidden and forgotten
+  // in storage (see reconcileUnresolvedConcerns).
+  const {
+    resolvedIds: resolvedConcernIds,
+    visible: visibleUnresolvedConcerns,
+  } = useMemo(
+    () =>
+      reconcileUnresolvedConcerns(unresolvedConcerns, report?.concerns ?? []),
+    [report, unresolvedConcerns],
+  )
   useEffect(() => {
     if (resolvedConcernIds.length > 0)
       forgetResolvedConcerns(org, resolvedConcernIds)
   }, [org, resolvedConcernIds])
-  const visibleUnresolvedConcerns = useMemo(() => {
-    if (resolvedConcernIds.length === 0) return unresolvedConcerns
-    const next = new Map(unresolvedConcerns)
-    for (const id of resolvedConcernIds) next.delete(id)
-    return next
-  }, [unresolvedConcerns, resolvedConcernIds])
 
   // Persist the classified Fix-it outcome to the per-org store — a DURABLE
   // write, so it runs in the hook's onSuccess (via onRepaired below), NOT the

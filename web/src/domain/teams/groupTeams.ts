@@ -1,5 +1,5 @@
 import type { GitHubClient } from "@/github-core/client"
-import type { GitHubTeam, MyTeam } from "@/github-core/types"
+import type { GitHubTeam, MyTeam, TeamPrivacy } from "@/github-core/types"
 import { GitHubAPIError, tolerateGitHubError } from "@/github-core/errors"
 import { createTeam } from "@/github-core/teamWrites"
 import {
@@ -29,7 +29,7 @@ const log = logger.scope("domain:groupTeams")
 // GitHub's two team privacy levels as group teams use them: `closed` is
 // browsable by every org member (and carries the native request-to-join flow),
 // `secret` is visible only to its members and org owners.
-export type GroupTeamPrivacy = "secret" | "closed"
+export type GroupTeamPrivacy = TeamPrivacy
 
 // The privacy an assignment's formation implies for its group teams: a
 // student-formed team is `closed` (browsable, so classmates can find it and

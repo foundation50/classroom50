@@ -3,6 +3,7 @@ package configrepo
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -68,13 +69,10 @@ const (
 // Source of truth for the collector's hand-mirrored STAFF_TEAM_PERMISSIONS
 // (collect_scores.py) — keep in lockstep.
 //
-// Private in-org templates are a separate, read-only grant: eager at
-// assignment add/reuse (grantStaffTeamTemplateRead, GrantTeamRepoRead) and
-// re-affirmed at collect time (TEMPLATE_STAFF_PERMISSION in the collector).
-// Those sites use this map only as a presence gate.
-//
-// A role absent from this map is granted nothing here. The teacher team is
-// omitted (its members are org owners with repo access via ownership).
+// Private in-org templates are a separate, read-only grant (TemplateReadStaffRoles
+// below; TEMPLATE_STAFF_PERMISSION in the collector). A role absent from this
+// map is granted nothing here. The teacher team is omitted (its members are
+// org owners with repo access via ownership).
 var StaffTeamRepoPermissions = map[StaffRole]string{
 	RoleHeadTA: "push",
 	RoleTA:     "push",
@@ -82,10 +80,9 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 
 // TemplateReadStaffRoles is the ordered set of non-owner staff roles that get an
 // eager read grant on a private in-org template (head-TA, then TA; teacher
-// omitted per StaffTeamRepoPermissions above). Single-sources the loop in
+// omitted, as in StaffTeamRepoPermissions). Single-sources the loop in
 // grantStaffTeamTemplateRead (reuse.go) so a future non-owner staff role is
-// one line here. Still presence-gated against
-// StaffTeamRepoPermissions at each call site.
+// one line here.
 var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 
 // ConfigRepoPermission is the permission a staff role's team gets on the org's
@@ -457,33 +454,105 @@ func adoptTeamByName(client githubapi.Client, org, name, description, notificati
 
 // EnsureStaffTeamVisible PATCHes a staff team created by an older release
 // (as `secret`) to StaffTeamPrivacy, which GitHub requires before the team can
-// be a ruleset bypass actor. Reports whether a PATCH was applied; a 404 (team
-// gone) is a no-op.
-func EnsureStaffTeamVisible(client githubapi.Client, org, slug string) (bool, error) {
+// be a ruleset bypass actor. Returns the live team (ID from GitHub, not from
+// classroom.json) and whether a PATCH was applied; found=false means the team
+// is gone (404), which the caller must treat as "not a bypass actor".
+func EnsureStaffTeamVisible(client githubapi.Client, org, slug string) (live TeamRef, found, changed bool, err error) {
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var existing struct {
+		ID      int64  `json:"id"`
+		Slug    string `json:"slug"`
 		Privacy string `json:"privacy"`
 	}
 	if err := client.Get(getPath, &existing); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
-			return false, nil
+			return TeamRef{}, false, false, nil
 		}
-		return false, fmt.Errorf("GET %s: %w", getPath, err)
+		return TeamRef{}, false, false, fmt.Errorf("GET %s: %w", getPath, err)
 	}
+	live = TeamRef{ID: existing.ID, Slug: existing.Slug}
 	if existing.Privacy == StaffTeamPrivacy {
-		return false, nil
+		return live, true, false, nil
 	}
 	body, err := json.Marshal(map[string]any{"privacy": StaffTeamPrivacy})
 	if err != nil {
-		return false, fmt.Errorf("encode team patch: %w", err)
+		return live, true, false, fmt.Errorf("encode team patch: %w", err)
 	}
 	resp, err := client.Request(http.MethodPatch, getPath, bytes.NewReader(body))
 	if err != nil {
-		return false, fmt.Errorf("PATCH %s (make staff team visible): %w", getPath, err)
+		return live, true, false, fmt.Errorf("PATCH %s (make staff team visible): %w", getPath, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	return true, nil
+	return live, true, true, nil
+}
+
+// StaffRoleRefs pairs each recorded staff team ref with its role, in role
+// order, skipping absent slots.
+func (r *StaffTeamsRef) StaffRoleRefs() []StaffRoleRef {
+	if r == nil {
+		return nil
+	}
+	var out []StaffRoleRef
+	for _, role := range StaffRoles {
+		if ref := r.RefForRole(role); ref != nil {
+			out = append(out, StaffRoleRef{Role: role, Ref: *ref})
+		}
+	}
+	return out
+}
+
+// StaffRoleRef is one classroom.json `teams.<role>` entry with its role.
+type StaffRoleRef struct {
+	Role StaffRole
+	Ref  TeamRef
+}
+
+// IsCanonicalStaffTeamRef reports whether a classroom.json `teams.<role>` ref
+// names the team Classroom 50 itself would create for that classroom and
+// role. classroom.json is writable by head TAs, and these refs steer
+// owner-run writes (team visibility, ruleset bypass, repo grants), so any
+// other slug (the student team, an invite team, a typo) is refused.
+func IsCanonicalStaffTeamRef(shortName string, role StaffRole, ref *TeamRef) bool {
+	return ref != nil && ref.ID > 0 && ref.Slug == staffTeamName(shortName, role)
+}
+
+// WalkClassrooms calls fn for every classroom directory in the config repo
+// that holds a readable classroom.json. A missing config repo (fresh org) is a
+// clean no-op. A per-classroom read failure is reported through onError
+// (nil to ignore) and the walk continues, so one bad file never hides the
+// rest; any listing failure propagates.
+func WalkClassrooms(client githubapi.Client, org string, onError func(shortName string, err error), fn func(shortName string, c *ClassroomJSON)) error {
+	branch, err := ResolveConfigRepoBranch(client, org)
+	if err != nil {
+		if errors.Is(err, ErrConfigRepoMissing) {
+			return nil
+		}
+		return err
+	}
+	entries, _, err := ListDirContents(client, org, ConfigRepoName, "", branch)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return nil
+		}
+		return err
+	}
+	for _, e := range entries {
+		if e.Type != "dir" {
+			continue
+		}
+		c, ok, err := LoadClassroom(client, org, e.Name, branch)
+		if err != nil {
+			if onError != nil {
+				onError(e.Name, err)
+			}
+			continue
+		}
+		if ok {
+			fn(e.Name, c)
+		}
+	}
+	return nil
 }
 
 // IsDeletableClassroomTeamRef reports whether a persisted team ref is safe to

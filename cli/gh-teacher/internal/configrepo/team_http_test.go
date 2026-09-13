@@ -249,7 +249,7 @@ func TestStaffTeamRepoPermissions(t *testing.T) {
 	}
 }
 
-// TestEnsureStaffTeams verifies all three staff teams are created as `secret`
+// TestEnsureStaffTeams verifies all three staff teams are created as `closed`
 // with notifications_enabled (#335), the returned refs carry the created
 // ids/slugs, and NO config-repo grant is issued — the grant is now a separate
 // step (GrantStaffTeamsConfigRepoAccess) callers run AFTER the creator drop so
@@ -783,7 +783,8 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 }
 
 // TestEnsureStaffTeamVisible: a secret staff team is PATCHed to closed; an
-// already-closed one and a missing one are no-ops.
+// already-closed one is left alone; a missing one reports found=false so the
+// caller never puts a dead id on the ruleset. The live id comes from GitHub.
 func TestEnsureStaffTeamVisible(t *testing.T) {
 	privacy := map[string]string{"secret-team": "secret", "closed-team": "closed"}
 	var patched []string
@@ -795,7 +796,7 @@ func TestEnsureStaffTeamVisible(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
 		case r.Method == http.MethodGet:
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "slug": slug, "privacy": p})
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 77, "slug": slug, "privacy": p})
 		case r.Method == http.MethodPatch:
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -809,17 +810,37 @@ func TestEnsureStaffTeamVisible(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	if changed, err := EnsureStaffTeamVisible(client, "o", "secret-team"); err != nil || !changed {
-		t.Errorf("secret-team: changed=%v err=%v, want true/nil", changed, err)
+	if live, found, changed, err := EnsureStaffTeamVisible(client, "o", "secret-team"); err != nil || !found || !changed || live.ID != 77 {
+		t.Errorf("secret-team: live=%+v found=%v changed=%v err=%v, want id 77/true/true/nil", live, found, changed, err)
 	}
-	if changed, err := EnsureStaffTeamVisible(client, "o", "closed-team"); err != nil || changed {
-		t.Errorf("closed-team: changed=%v err=%v, want false/nil", changed, err)
+	if _, found, changed, err := EnsureStaffTeamVisible(client, "o", "closed-team"); err != nil || !found || changed {
+		t.Errorf("closed-team: found=%v changed=%v err=%v, want true/false/nil", found, changed, err)
 	}
-	if changed, err := EnsureStaffTeamVisible(client, "o", "gone-team"); err != nil || changed {
-		t.Errorf("gone-team: changed=%v err=%v, want false/nil (404 is a no-op)", changed, err)
+	if _, found, changed, err := EnsureStaffTeamVisible(client, "o", "gone-team"); err != nil || found || changed {
+		t.Errorf("gone-team: found=%v changed=%v err=%v, want false/false/nil (404 is not an error)", found, changed, err)
 	}
 	if len(patched) != 1 || patched[0] != "secret-team" {
 		t.Errorf("patched = %v, want only secret-team", patched)
+	}
+}
+
+// TestIsCanonicalStaffTeamRef pins the gate that keeps a head-TA-edited
+// classroom.json from steering owner-run writes at the wrong team.
+func TestIsCanonicalStaffTeamRef(t *testing.T) {
+	ok := &TeamRef{ID: 5, Slug: "classroom50-cs-ta"}
+	if !IsCanonicalStaffTeamRef("cs", RoleTA, ok) {
+		t.Error("canonical ta ref rejected")
+	}
+	for name, ref := range map[string]*TeamRef{
+		"nil":          nil,
+		"zero id":      {ID: 0, Slug: "classroom50-cs-ta"},
+		"student team": {ID: 5, Slug: "classroom50-cs"},
+		"other role":   {ID: 5, Slug: "classroom50-cs-hta"},
+		"other class":  {ID: 5, Slug: "classroom50-ds-ta"},
+	} {
+		if IsCanonicalStaffTeamRef("cs", RoleTA, ref) {
+			t.Errorf("%s: accepted %+v as the cs ta team", name, ref)
+		}
 	}
 }
 

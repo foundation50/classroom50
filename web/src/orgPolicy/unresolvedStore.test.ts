@@ -1,11 +1,12 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   clearUnresolved,
   forgetResolvedConcerns,
   mergeUnresolved,
   readUnresolved,
+  reconcileUnresolvedConcerns,
 } from "./unresolvedStore"
 
 // happy-dom (v15) doesn't back window.localStorage here, so install a minimal
@@ -89,8 +90,14 @@ describe("unresolvedStore", () => {
     const rec = readUnresolved("acme")
     expect(rec.concerns).toEqual(new Set(["branchProtection"]))
     expect(rec.fields).toEqual(new Set(["members_can_create_repositories"]))
-    // Nothing to forget: no write, no throw.
-    expect(() => forgetResolvedConcerns("acme", ["rulesets"])).not.toThrow()
+  })
+
+  it("forgetResolvedConcerns does not write when nothing is left to forget", () => {
+    mergeUnresolved("acme", { concerns: ["branchProtection"] })
+    const setItem = vi.spyOn(window.localStorage, "setItem")
+    forgetResolvedConcerns("acme", ["rulesets"])
+    expect(setItem).not.toHaveBeenCalled()
+    setItem.mockRestore()
   })
 
   // A sandboxed iframe or blocked cookies makes the getter throw, and the audit
@@ -107,5 +114,30 @@ describe("unresolvedStore", () => {
       mergeUnresolved("acme", { concerns: ["rulesets"] }),
     ).not.toThrow()
     expect(() => clearUnresolved("acme")).not.toThrow()
+  })
+})
+
+describe("reconcileUnresolvedConcerns", () => {
+  const latched = new Map([
+    ["rulesets", ""],
+    ["branchProtection", "tried PUT"],
+  ])
+
+  it("drops latched concerns the audit now reports enforced, keeps the rest", () => {
+    const { resolvedIds, visible } = reconcileUnresolvedConcerns(latched, [
+      { id: "rulesets", verdict: { state: "enforced" } },
+      { id: "branchProtection", verdict: { state: "unenforced" } },
+      { id: "pages", verdict: { state: "enforced" } }, // never latched
+    ])
+    expect(resolvedIds).toEqual(["rulesets"])
+    expect([...visible.keys()]).toEqual(["branchProtection"])
+  })
+
+  it("returns the same map when nothing resolved (no re-render churn)", () => {
+    const { resolvedIds, visible } = reconcileUnresolvedConcerns(latched, [
+      { id: "rulesets", verdict: { state: "unenforced" } },
+    ])
+    expect(resolvedIds).toEqual([])
+    expect(visible).toBe(latched)
   })
 })

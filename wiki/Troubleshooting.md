@@ -976,21 +976,21 @@ command**. On a Windows runner, write `%CLASSROOM50_BUNDLE_DIR%` instead. See
 The `feedback` branch is locked by the `classroom50-feedback-base-lock`
 ruleset so a student can never merge or move it. Organization owners and the
 classroom's teacher, head TA, and TA teams are exempt from the lock and see the
-normal **Merge** button. If you don't:
+normal **Merge** button. What you see tells you what's missing:
 
-- **You're an owner and see a "Merge without waiting for requirements to be
-  met" checkbox.** The ruleset was installed by an older release. Re-run
+- **Owner with a "Merge without waiting for requirements to be met"
+  checkbox.** The ruleset was installed by an older release. Re-run
   `gh teacher init`, or open the organization's settings in the web app and
   click **Fix it** on the rulesets check. The checkbox still works in the
   meantime.
-- **You're a TA or head TA and see no merge button at all.** Staff get write
-  access to student repositories from the score-collection workflow, not at
-  accept time. Run **Collect now** (or wait for the scheduled run), then
-  reload the pull request.
-- **You're a TA or head TA and merging is blocked.** Your staff team isn't on
-  the ruleset's exemption list yet (a classroom created before this release,
-  or a team added outside Classroom 50). The organization settings page flags
-  this under the rulesets check; a teacher clicks **Fix it** there or re-runs
+- **TA or head TA with no merge button at all.** Staff get write access to
+  student repositories from the score-collection workflow, not at accept
+  time. Run **Collect now** (or wait for the scheduled run), then reload the
+  pull request.
+- **TA or head TA with merging blocked.** Your staff team isn't on the
+  ruleset's exemption list yet (a classroom created before this release, or a
+  team added outside Classroom 50). The organization settings page flags this
+  under the rulesets check; a teacher clicks **Fix it** there or re-runs
   `gh teacher init`, which rebuilds the list from every classroom.
 
 ## Collecting scores and downloading submissions
