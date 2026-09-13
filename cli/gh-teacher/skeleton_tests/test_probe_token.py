@@ -246,19 +246,25 @@ def test_team_members_403_fails(monkeypatch):
 # Scope checks — staff-team visibility (collect-time grant target) ------------
 
 
-def test_resolve_staff_team_slugs_recorded_and_derived():
+def test_resolve_staff_team_slugs_always_derived():
     meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1-ta-1"}, "teacher": {"id": 1, "slug": "classroom50-cs1-teacher"}}}
-    # Recorded slugs win verbatim; the unrecorded hta falls back to the derived
-    # slug, mirroring collect_scores.py so the probe reads what the grant targets.
+    # A recorded slug naming another team is ignored, exactly as the collector
+    # ignores it (classroom.json is head-TA-writable), so the probe reads the
+    # teams the grant actually targets.
     assert pt.resolve_staff_team_slugs(meta, "cs1") == {
-        "ta": "classroom50-cs1-ta-1",
-        "teacher": "classroom50-cs1-teacher",
-        "hta": "classroom50-cs1-hta",
+        role: f"classroom50-cs1-{role}" for role in pt.STAFF_ROLES
     }
     assert pt.resolve_staff_team_slugs({}, "cs1") == {
         role: f"classroom50-cs1-{role}" for role in pt.STAFF_ROLES
     }
-    assert pt.resolve_staff_team_slugs({"teams": {"ta": {"id": 2}}}, "cs1")["ta"] == "classroom50-cs1-ta"
+
+
+def test_resolve_staff_team_slugs_matches_collect_scores():
+    from conftest import collect_scores as cs
+
+    meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1"}}}
+    theirs = {role: t.slug for role, t in cs.resolve_staff_team_slugs(meta, "cs1").items()}
+    assert pt.resolve_staff_team_slugs(meta, "cs1") == theirs
 
 
 def test_staff_roles_mirror_collect_scores():
@@ -268,9 +274,29 @@ def test_staff_roles_mirror_collect_scores():
 
 
 def test_staff_team_visible_ok(monkeypatch):
+    # Both reads succeed: the members probe (visible) and the config-repo grant
+    # probe (Classroom 50's team).
     monkeypatch.setattr(pt, "http_get", lambda *a, **k: (200, b"[]"))
     check = pt.check_staff_team_visible("https://api", "cs50", "tok", "cs1", "ta", "classroom50-cs1-ta")
     assert check.ok is True and check.skipped is False
+    assert "config-repo grant" in check.message
+
+
+def test_staff_team_without_config_repo_grant_is_skip_with_fix(monkeypatch):
+    # Visible, but no grant on the config repo: not Classroom 50's team, so the
+    # collect-time grant skips it. Not a token problem, but the teacher must
+    # hear about it.
+    def get(url, *a, **k):
+        if url.endswith("/repos/cs50/classroom50"):
+            raise _http_error(404)
+        return (200, b"[]")
+
+    monkeypatch.setattr(pt, "http_get", get)
+    check = pt.check_staff_team_visible("https://api", "cs50", "tok", "cs1", "ta", "classroom50-cs1-ta")
+    assert check.ok is True
+    assert check.skipped is True
+    assert "not created by Classroom 50" in check.message
+    assert "https://github.com/orgs/cs50/teams/classroom50-cs1-ta" in check.message
 
 
 def test_staff_team_404_is_skip_not_fail(monkeypatch):

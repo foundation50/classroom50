@@ -405,24 +405,15 @@ def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> s
 def resolve_staff_team_slugs(
     classroom_meta: dict[str, Any], classroom_short: str
 ) -> dict[str, str]:
-    """role -> slug for each staff team the grant pass targets: a slug recorded
-    in classroom.json `teams` is authoritative; every other role in STAFF_ROLES
-    falls back to the derived `classroom50-<short>-<role>`. Mirrors
+    """role -> slug for each staff team the grant pass targets: always the
+    derived `classroom50-<short>-<role>`, the slug both writers create. Mirrors
     collect_scores.py's resolve_staff_team_slugs so the probe reads the EXACT
-    staff teams the grant pass targets (a derived team that doesn't exist reads
-    as a 404, which check_staff_team_visible already treats as a skip)."""
-    out: dict[str, str] = {}
-    teams = classroom_meta.get("teams")
-    if isinstance(teams, dict):
-        for role, ref in teams.items():
-            if not isinstance(ref, dict):
-                continue
-            slug = ref.get("slug")
-            if isinstance(slug, str) and slug.strip():
-                out[role] = slug.strip()
-    for role in STAFF_ROLES:
-        out.setdefault(role, f"{CONFIG_REPO}-{classroom_short}-{role}")
-    return out
+    staff teams the grant pass targets: a recorded `teams.<role>` naming any
+    other team is ignored there (classroom.json is head-TA-writable), so it is
+    ignored here too (a derived team that doesn't exist reads as a 404, which
+    check_staff_team_visible already treats as a skip)."""
+    del classroom_meta  # same signature as the collector; the record is not consulted
+    return {role: f"{CONFIG_REPO}-{classroom_short}-{role}" for role in STAFF_ROLES}
 
 
 def iter_classroom_meta(base_dir: pathlib.Path):
@@ -487,7 +478,12 @@ def check_staff_team_visible(
     check can't prove. Without this probe, a secret/invisible staff team passes
     every other check, then the grant soft-skips its 404 and TAs silently get NO
     access while the run reports success. Reading the team's members is the same
-    visibility proxy used for the student team, against the exact grant slug."""
+    visibility proxy used for the student team, against the exact grant slug.
+
+    A visible team is then checked for the grant that makes it Classroom 50's
+    (access to the config repo, see collect_scores.staff_team_is_claimed): the
+    collect-time grant skips a team without it, so the probe says so up front
+    rather than letting a squatted or mis-named team look like a healthy role."""
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/members?per_page=1"
@@ -512,10 +508,35 @@ def check_staff_team_visible(
             f"The grant can't see this staff team, so it would silently grant TAs no "
             f"access (Members: Read, and the team must be visible to the token)",
         )
+    claim_url = (
+        f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
+        f"{urllib.parse.quote(team_slug, safe='')}/repos/"
+        f"{urllib.parse.quote(org, safe='')}/{CONFIG_REPO}"
+    )
+    try:
+        http_get(claim_url, token)
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return Check(
+                label,
+                True,
+                f"staff team exists but was not created by Classroom 50 (no access to the "
+                f"{CONFIG_REPO} repository), so the collect-time grant skips it. Review it at "
+                f"https://github.com/orgs/{org}/teams/{team_slug}, then delete it or grant it "
+                f"access to the {CONFIG_REPO} repository",
+                skipped=True,
+            )
+        return Check(
+            label,
+            False,
+            f"GET orgs/{org}/teams/{team_slug}/repos/{org}/{CONFIG_REPO}: "
+            f"{_classify_repo_read(exc)}. The grant can't tell whether this staff team is "
+            f"Classroom 50's, so it would skip it",
+        )
     return Check(
         label,
         True,
-        "staff team is visible (the collect-time grant can target it)",
+        "staff team is visible and holds its config-repo grant (the collect-time grant can target it)",
     )
 
 

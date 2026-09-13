@@ -4334,6 +4334,9 @@ class TestGrantClassroomTeamAccess:
         # The bulk read of the team's current repos is network; "unknown" (None)
         # is the fallback that leaves grant_team_repo deciding per repo.
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         return grants
 
     def test_grants_ta_push_on_each_student_repo(self, monkeypatch):
@@ -4464,6 +4467,9 @@ class TestGrantClassroomTeamAccess:
         # pass must not report any new grant.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice"])
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: False)
         cs.grant_classroom_team_access(
             api_url="https://api.github.com", org="cs50", classroom_short="cs",
@@ -4478,6 +4484,9 @@ class TestGrantClassroomTeamAccess:
         # still get granted.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         seen: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -4501,6 +4510,9 @@ class TestGrantClassroomTeamAccess:
         # pass so main() fails — see TestGrantThrottled for the other 403.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice"])
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
 
         def fake_grant(*a, **k):
             raise cs.urllib.error.HTTPError(url="u", code=403, msg="forbidden", hdrs=None, fp=None)
@@ -4538,6 +4550,9 @@ class TestGrantClassroomTeamAccess:
             return None
 
         monkeypatch.setattr(cs, "known_team_repos", fake_known)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         stub_team_members_by_slug(
             monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": []}
         )
@@ -4627,6 +4642,9 @@ class TestGrantClassroomTeamAccess:
         # An idempotent re-run grants nothing new; the log still names the team
         # so "no output" never means "no staff access".
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: False)
         stub_team_members_by_slug(
             monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
@@ -4997,6 +5015,9 @@ class TestGrantThrottled:
         # 2 assignments x 3 members = 6 targets; the third call is throttled.
         monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: ["alice", "bob", "carol"])
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         calls: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -5144,6 +5165,9 @@ class TestPassesSkipMissingRepos:
             monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
         )
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
+        # The team holds its config-repo grant (it is Classroom 50's); the
+        # ownership gate has its own tests.
+        monkeypatch.setattr(cs, "staff_team_is_claimed", lambda *a, **k: True)
         seen: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -5198,6 +5222,104 @@ class TestPassesSkipMissingRepos:
             repo_index=None,
         )
         assert polled == ["cs-hw1-alice", "cs-hw1-bob"]
+
+
+class TestStaffTeamOwnership:
+    """A team at `classroom50-<short>-<role>` is granted push on every student
+    repo only when it holds a grant on the config repo, the one thing only an
+    owner-run Classroom 50 flow does. Any member can create a team at that slug,
+    and classroom `<short>-ta`'s student team sits at it."""
+
+    META = TestGrantClassroomTeamAccess.META
+    ASSIGNMENTS = TestGrantClassroomTeamAccess.ASSIGNMENTS
+
+    def test_claimed_from_the_bulk_listing_without_a_request(self, monkeypatch):
+        monkeypatch.setattr(
+            cs, "_http_send", lambda *a, **k: pytest.fail("no request expected")
+        )
+        # Keys are lowercased `owner/repo`; the org's casing must not matter.
+        assert cs.staff_team_is_claimed(
+            "https://api.github.com", "CS50", "classroom50-cs-ta", "tok",
+            {"cs50/classroom50": "pull", "cs50/cs-hw1-alice": "push"},
+        ) is True
+        assert cs.staff_team_is_claimed(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "tok",
+            {"cs50/cs-hw1-alice": "push"},
+        ) is False
+
+    def test_unknown_listing_reads_the_config_repo_permission(self, monkeypatch):
+        checked: list[str] = []
+
+        def fake_permission(api_url, org, team_slug, owner, repo, token):
+            checked.append(f"{owner}/{repo}")
+            return "pull"
+
+        monkeypatch.setattr(cs, "team_repo_permission", fake_permission)
+        assert cs.staff_team_is_claimed(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", None
+        ) is True
+        assert checked == ["cs50/classroom50"]
+
+        monkeypatch.setattr(cs, "team_repo_permission", lambda *a, **k: None)
+        assert cs.staff_team_is_claimed(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", None
+        ) is False
+
+    def test_unreadable_permission_fails_closed(self, monkeypatch):
+        # A skippable read failure means "cannot tell", never "granted".
+        def fail(*a, **k):
+            raise http_error(422, {}, b"nope")
+
+        monkeypatch.setattr(cs, "team_repo_permission", fail)
+        assert cs.staff_team_is_claimed(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", None
+        ) is False
+
+        def hard(*a, **k):
+            raise http_error(401, {}, b"bad credentials")
+
+        monkeypatch.setattr(cs, "team_repo_permission", hard)
+        with pytest.raises(cs.urllib.error.HTTPError):
+            cs.staff_team_is_claimed(
+                "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", None
+            )
+
+    def test_unclaimed_team_gets_no_grant_and_a_warning_with_the_fix(self, monkeypatch, capsys):
+        # A populated team sits at the ta slug but has no grant on the config
+        # repo: nothing is PUT for it, and the warning names the team page and
+        # what to do. The claimed hta team is granted as usual.
+        grants: list[str] = []
+
+        def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
+            grants.append(team_slug)
+            return True
+
+        monkeypatch.setattr(cs, "grant_team_repo", fake_grant)
+        monkeypatch.setattr(
+            cs,
+            "known_team_repos",
+            lambda api_url, org, team_slug, token, short: (
+                {"cs50/classroom50": "push"} if team_slug.endswith("-hta") else {}
+            ),
+        )
+        stub_team_members_by_slug(
+            monkeypatch,
+            {
+                "classroom50-cs": ["alice"],
+                "classroom50-cs-ta": ["squatter"],
+                "classroom50-cs-hta": ["prof"],
+            },
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
+        )
+        assert set(grants) == {"classroom50-cs-hta"}
+        err = capsys.readouterr().err
+        assert "::warning::" in err
+        assert "'classroom50-cs-ta' exists but was not created by Classroom 50" in err
+        assert "https://github.com/orgs/cs50/teams/classroom50-cs-ta" in err
+        assert "grant it access to the classroom50 repository" in err
 
 
 class TestBulkAccessCheck:

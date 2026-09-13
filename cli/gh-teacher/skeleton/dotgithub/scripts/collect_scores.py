@@ -104,6 +104,12 @@ _PERMISSION_RANK = {level: i for i, level in enumerate(_PERMISSION_LEVELS)}
 # the web STAFF_ROLES; the derived slug for each is `classroom50-<short>-<role>`.
 STAFF_ROLES = ("teacher", "hta", "ta")
 
+# The org's config repo. A staff team is granted access to it when Classroom 50
+# creates the team, and only an owner-run Classroom 50 flow can do that, so the
+# grant is what tells a real staff team from any other team at its slug (see
+# staff_team_is_claimed).
+CONFIG_REPO = "classroom50"
+
 # Body markers that identify a rate-limit response, for the cases no header
 # names: GitHub words the secondary limit and the abuse detector differently.
 # "abuse" is the bare stem on purpose: it catches every "abuse detection
@@ -2266,6 +2272,22 @@ def grant_classroom_team_access(
         known_repos = known_team_repos(
             api_url, org, team_slug, service_token, classroom_short
         )
+        # The slug alone does not make a team staff: any member can create
+        # `classroom50-<short>-ta`, and classroom `<short>-ta`'s student team
+        # sits at that very slug. Only a team Classroom 50 granted access to
+        # the config repo gets push on every student repo.
+        if not staff_team_is_claimed(
+            api_url, org, team_slug, service_token, known_repos
+        ):
+            emit_warning(
+                f"{classroom_short}: team {team_slug!r} exists but was not created by "
+                f"Classroom 50 (it has no access to the {CONFIG_REPO} repository), so it "
+                f"was not granted access to student repos. Review its members at "
+                f"https://github.com/orgs/{org}/teams/{team_slug}, then either delete it "
+                f"or grant it access to the {CONFIG_REPO} repository to use it as the "
+                f"{role} team."
+            )
+            continue
         granted = 0
         for index, (t_owner, t_repo, t_permission) in enumerate(targets):
             try:
@@ -2393,6 +2415,29 @@ def private_template_targets(
             continue
         targets.append((t_owner, t_repo))
     return targets
+
+
+def staff_team_is_claimed(
+    api_url: str,
+    org: str,
+    team_slug: str,
+    token: str,
+    known_repos: dict[str, str] | None,
+) -> bool:
+    """Whether `team_slug` holds a grant on the org's config repo, the proof that
+    Classroom 50 created it (mirrors the Go adoptGuard and the web AdoptGuard).
+    Answered from the bulk repo listing when the caller has it, else with one
+    per-repo read. Fails closed: when neither can say, the team is not staff
+    for this run rather than granted on a guess."""
+    key = f"{org}/{CONFIG_REPO}".lower()
+    if known_repos is not None:
+        return key in known_repos
+    try:
+        return team_repo_permission(api_url, org, team_slug, org, CONFIG_REPO, token) is not None
+    except urllib.error.HTTPError as exc:
+        if classify(exc) is not SKIPPABLE:
+            raise
+        return False
 
 
 def known_team_repos(
