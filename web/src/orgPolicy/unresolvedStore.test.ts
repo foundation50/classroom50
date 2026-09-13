@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
   clearUnresolved,
+  forgetResolvedConcerns,
   mergeUnresolved,
   readUnresolved,
 } from "./unresolvedStore"
@@ -77,6 +78,19 @@ describe("unresolvedStore", () => {
     mergeUnresolved("acme", { concerns: ["rulesets"] })
     clearUnresolved("acme")
     expect(readUnresolved("acme").concerns.size).toBe(0)
+  })
+
+  it("forgetResolvedConcerns drops only the given concerns, keeping fields", () => {
+    mergeUnresolved("acme", {
+      fields: ["members_can_create_repositories"],
+      concerns: ["branchProtection", "rulesets"],
+    })
+    forgetResolvedConcerns("acme", ["rulesets", "never-stored"])
+    const rec = readUnresolved("acme")
+    expect(rec.concerns).toEqual(new Set(["branchProtection"]))
+    expect(rec.fields).toEqual(new Set(["members_can_create_repositories"]))
+    // Nothing to forget: no write, no throw.
+    expect(() => forgetResolvedConcerns("acme", ["rulesets"])).not.toThrow()
   })
 
   // A sandboxed iframe or blocked cookies makes the getter throw, and the audit

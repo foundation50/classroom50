@@ -20,6 +20,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/orgrepos"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 )
 
 // NewCmd implements `gh teacher teardown <org>`: deletes every repo in an org
@@ -170,7 +171,13 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	// marker was preserved: the refs were captured up-front, DeleteClassroomTeam
 	// is idempotent, and a re-run harmlessly no-ops. Sweeping now avoids
 	// stranding write-granted staff teams when a stuck repo blocks a clean
-	// re-run.
+	// re-run. The feedback-base ruleset outlives teardown, so drop the teams
+	// from its bypass list first rather than leave it pointing at deleted ones.
+	teamIDs := make([]int64, 0, len(teams))
+	for _, t := range teams {
+		teamIDs = append(teamIDs, t.ID)
+	}
+	orgrules.RevokeStaffTeams(client, errOut, org, teamIDs)
 	for _, t := range teams {
 		if err := configrepo.DeleteClassroomTeam(client, org, t); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not delete classroom team %q (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",

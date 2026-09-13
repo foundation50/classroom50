@@ -246,8 +246,8 @@ def pr_body(head: str, release_url: str) -> str:
         "",
         f"The base branch (`{BASE_BRANCH}`) is frozen at the starter so the diff "
         f"always reflects the full body of work. The PR is kept up to date "
-        f"automatically; merging it is the teacher-side "
-        f"\"grading done\" signal.",
+        f"automatically. Merging it is the \"grading done\" signal: teachers "
+        f"and TAs can merge, students can't.",
         "</details>",
     ])
 

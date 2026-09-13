@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   AlertIcon,
@@ -33,7 +33,11 @@ import type {
 } from "@/orgPolicy/audit"
 import { REPAIRABLE_CONCERNS } from "@/orgPolicy/repair"
 import type { RepairResult } from "@/orgPolicy/repair"
-import { mergeUnresolved, readUnresolved } from "@/orgPolicy/unresolvedStore"
+import {
+  forgetResolvedConcerns,
+  mergeUnresolved,
+  readUnresolved,
+} from "@/orgPolicy/unresolvedStore"
 import type { CheckState } from "@/github-core/orgChecks"
 import { sectionHighlightClass } from "@/hooks/useHashSectionHighlight"
 import SettingsSection from "./SettingsSection"
@@ -500,6 +504,27 @@ const OrgPolicyAuditPane = ({
     isError,
   } = useGetOrgAudit(org, planDetails?.plan?.name)
 
+  // A concern latched as unresolved that a later audit finds enforced (fixed by
+  // re-run setup, or by hand) is hidden and forgotten in storage, so the pane
+  // doesn't show "couldn't set this automatically" beside a green OK.
+  const resolvedConcernIds = useMemo(() => {
+    if (!report) return []
+    return report.concerns
+      .filter((c) => c.verdict.state === "enforced")
+      .map((c) => c.id)
+      .filter((id) => unresolvedConcerns.has(id))
+  }, [report, unresolvedConcerns])
+  useEffect(() => {
+    if (resolvedConcernIds.length > 0)
+      forgetResolvedConcerns(org, resolvedConcernIds)
+  }, [org, resolvedConcernIds])
+  const visibleUnresolvedConcerns = useMemo(() => {
+    if (resolvedConcernIds.length === 0) return unresolvedConcerns
+    const next = new Map(unresolvedConcerns)
+    for (const id of resolvedConcernIds) next.delete(id)
+    return next
+  }, [unresolvedConcerns, resolvedConcernIds])
+
   // Persist the classified Fix-it outcome to the per-org store — a DURABLE
   // write, so it runs in the hook's onSuccess (via onRepaired below), NOT the
   // call site, to survive a mid-repair unmount.
@@ -617,7 +642,7 @@ const OrgPolicyAuditPane = ({
           fixingId={fixingId}
           fixingConfigBranch={renameMutation.isPending}
           enterprisePinned={enterprisePinned}
-          unresolvedConcerns={unresolvedConcerns}
+          unresolvedConcerns={visibleUnresolvedConcerns}
           onFix={(id) => {
             if (!fixMutation.isPending)
               void runFix(() =>

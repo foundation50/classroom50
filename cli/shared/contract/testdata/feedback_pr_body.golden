@@ -17,5 +17,5 @@ Use this PR to leave feedback:
 - The [latest autograding result](RELEASE_URL) has the per-test detail behind that status.
 - This page is an overview: commits, line comments, and a general comment box below.
 
-The base branch (`feedback`) is frozen at the starter so the diff always reflects the full body of work. The PR is kept up to date automatically; merging it is the teacher-side "grading done" signal.
+The base branch (`feedback`) is frozen at the starter so the diff always reflects the full body of work. The PR is kept up to date automatically. Merging it is the "grading done" signal: teachers and TAs can merge, students can't.
 </details>

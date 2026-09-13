@@ -122,7 +122,7 @@ own account (scope it tightly to the organization):
 | Contents | **Read and write** (read: collect; write: regrade pushes `submit/*` tags). |
 | Actions | **Read and write** (regrade re-runs autograde). |
 | Workflows | **Read and write** (regrade can tag a commit pushed before a submission-mode change; GitHub refuses that tag otherwise). |
-| Administration | **Read and write** (grant staff teams read on student repositories and templates). |
+| Administration | **Read and write** (grant staff teams write on student repositories and read on templates). |
 | Metadata | **Read** (auto-included; lets collection read legacy group repository collaborators). |
 | Organization permissions, **Members** | **Read** (list the classroom team; a separate section, shown only once the organization is the resource owner). |
 | Expiry | Up to 1 year; set a rotation reminder. |
@@ -494,7 +494,7 @@ every call.
 | GET | `/orgs/{org}/repos` | List the organization's repositories once, to find accepted repositories and pushes without a release. | **Metadata: Read** |
 | GET | `/repos/{owner}/{repo}/releases` + `/releases/assets/{id}` | Collect submissions and `result.json`. | **Contents: Read** |
 | GET | `/repos/{owner}/{repo}/collaborators` | Fan a legacy group score to teammates. | **Metadata: Read** |
-| GET / PUT | `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Grant staff teams read on student repositories and templates. | **Administration: Read and write** |
+| GET / PUT | `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Grant staff teams write on student repositories and read on templates. | **Administration: Read and write** |
 
 ### `probe_token.py` (Actions, read-only)
 

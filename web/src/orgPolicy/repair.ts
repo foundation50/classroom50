@@ -16,7 +16,10 @@ import {
 } from "@/github-core/mutations"
 import { repairOrgDefaults } from "@/github-core/orgChecks"
 import { CONFIG_REPO } from "@/util/configRepo"
-import { repairRulesets } from "@/github-core/rulesets"
+import {
+  collectBypassStaffTeamIds,
+  repairRulesets,
+} from "@/github-core/rulesets"
 import type { ConcernId } from "./audit"
 
 // Whether a concern can be repaired by an API call. The four manual-only
@@ -131,7 +134,11 @@ export async function repairConcern(
       await ensurePages(client, org, CONFIG_REPO)
       return { unfixableFields: [] }
     case "rulesets": {
-      const result = await repairRulesets(client, org)
+      const result = await repairRulesets(
+        client,
+        org,
+        await collectBypassStaffTeamIds(client, org),
+      )
       if (result.status === "warning") {
         // Can't distinguish a policy block from a validation error, so
         // non-transient but cause-neutral.

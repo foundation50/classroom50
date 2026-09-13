@@ -22,7 +22,7 @@ import {
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
 import { prefixCommit } from "@/util/commit"
-import { repairRulesets } from "../rulesets"
+import { collectBypassStaffTeamIds, repairRulesets } from "../rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
 import { bytesToHex } from "@/util/hex"
 import { logger } from "@/lib/logger"
@@ -1642,7 +1642,8 @@ export async function initClassroom50({
   results.rulesets = await tryStep({
     id: "rulesets",
     onStepUpdate,
-    fn: () => repairRulesets(client, org),
+    fn: async () =>
+      repairRulesets(client, org, await collectBypassStaffTeamIds(client, org)),
   })
 
   logSetup.info("org setup: completed", { org })

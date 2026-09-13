@@ -19,6 +19,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 	"github.com/foundation50/gh-teacher/internal/output"
 	"github.com/foundation50/gh-teacher/internal/scores"
 	"github.com/foundation50/gh-teacher/internal/validate"
@@ -306,6 +307,9 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 	if err != nil {
 		return nil, "", fmt.Errorf("create staff teams: %w", err)
 	}
+	// Exempt the new teams from the feedback-base lock so staff can merge
+	// feedback PRs. Best-effort; init rebuilds the list from classroom.json.
+	orgrules.ExemptStaffTeams(client, errOut, org, orgrules.StaffTeamIDs(staffTeams))
 	if staffTeams.Teacher == nil {
 		return staffTeams, "", nil
 	}
@@ -827,6 +831,14 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 		return nil
 	}
 	_, _ = fmt.Fprintf(out, "%s/%s: removed classroom %s (%d files)\n", org, configrepo.ConfigRepoName, shortName, deleted)
+
+	// Drop the staff teams from the feedback-base bypass list before deleting
+	// them, so the ruleset never references a team GitHub no longer knows.
+	staffIDs := make([]int64, 0, len(staffTeams))
+	for _, st := range staffTeams {
+		staffIDs = append(staffIDs, st.ID)
+	}
+	orgrules.RevokeStaffTeams(client, errOut, org, staffIDs)
 
 	// Delete the per-classroom team (idempotent; 404 = gone). Its grants +
 	// memberships go with it. A delete failure is surfaced but doesn't undo

@@ -143,7 +143,7 @@ func TestEnsureClassroomTeam_AdoptSkipsPatchWhenDescriptionMatches(t *testing.T)
 // TestEnsureClassroomStaffTeam_AdoptSkipsPatchWhenNotificationOmitted: GitHub
 // returns notification_setting only to org members, so it can be absent from
 // the adopt GET. An absent value must read as "unknown, not read" — not as
-// drift — so an already-secret team issues no PATCH (#335 guard).
+// drift — so an already-closed staff team issues no PATCH (#335 guard).
 func TestEnsureClassroomStaffTeam_AdoptSkipsPatchWhenNotificationOmitted(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -153,7 +153,7 @@ func TestEnsureClassroomStaffTeam_AdoptSkipsPatchWhenNotificationOmitted(t *test
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodGet:
 			// notification_setting omitted (not visible to this token).
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "secret",
+				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "closed",
 			})
 		case r.Method == http.MethodPatch:
 			t.Errorf("must not PATCH when notification_setting is absent from the GET (unknown, not drifted)")
@@ -183,7 +183,7 @@ func TestEnsureClassroomStaffTeam_AdoptReconcilesNotification(t *testing.T) {
 			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "secret",
+				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "closed",
 				"notification_setting": "notifications_disabled",
 			})
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodPatch:
@@ -226,17 +226,17 @@ func TestStaffTeamName(t *testing.T) {
 	}
 }
 
-// TestStaffTeamRepoPermissions pins the collect-time grant map: the non-owner
-// staff teams (head-TA and TA) get read (pull), and the teacher role is
-// intentionally absent (owners get repo access via ownership, not the
-// collector). This map is the source of truth the collector's
-// STAFF_TEAM_PERMISSIONS mirror must match in lockstep.
+// TestStaffTeamRepoPermissions pins the collect-time grant map: both non-owner
+// staff teams (head-TA and TA) get push, since merging the Feedback PR needs
+// write on the student repo; the teacher role is intentionally absent (owners
+// get repo access via ownership, not the collector). This map is the source of
+// truth the collector's STAFF_TEAM_PERMISSIONS mirror must match in lockstep.
 func TestStaffTeamRepoPermissions(t *testing.T) {
-	if got := StaffTeamRepoPermissions[RoleHeadTA]; got != "pull" {
-		t.Errorf("StaffTeamRepoPermissions[hta] = %q, want %q", got, "pull")
+	if got := StaffTeamRepoPermissions[RoleHeadTA]; got != "push" {
+		t.Errorf("StaffTeamRepoPermissions[hta] = %q, want %q", got, "push")
 	}
-	if got := StaffTeamRepoPermissions[RoleTA]; got != "pull" {
-		t.Errorf("StaffTeamRepoPermissions[ta] = %q, want %q", got, "pull")
+	if got := StaffTeamRepoPermissions[RoleTA]; got != "push" {
+		t.Errorf("StaffTeamRepoPermissions[ta] = %q, want %q", got, "push")
 	}
 	if _, ok := StaffTeamRepoPermissions[RoleTeacher]; ok {
 		t.Error("teacher must NOT be in StaffTeamRepoPermissions — owners get repo access via ownership")
@@ -266,8 +266,10 @@ func TestEnsureStaffTeams(t *testing.T) {
 				NotificationSetting string `json:"notification_setting"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
-			if body.Privacy != "secret" {
-				t.Errorf("team %q created with privacy %q, want secret", body.Name, body.Privacy)
+			// Staff teams are visible to the org: GitHub refuses a secret
+			// team as a ruleset bypass actor.
+			if body.Privacy != "closed" {
+				t.Errorf("team %q created with privacy %q, want closed", body.Name, body.Privacy)
 			}
 			if body.NotificationSetting != "notifications_enabled" {
 				t.Errorf("staff team %q created with notification_setting %q, want notifications_enabled (#335)", body.Name, body.NotificationSetting)
@@ -745,19 +747,20 @@ func TestIsDeletableClassroomTeamRef(t *testing.T) {
 }
 
 // TestEnsureClassroomStaffTeam_AdoptsExisting422 covers the adopt path:
-// a 422 name-collision reads the existing team and reconciles a non-secret
-// privacy to secret.
+// a 422 name-collision reads the existing team and reconciles a secret staff
+// team (created by an older release) to closed, the visibility a ruleset
+// bypass actor needs.
 func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
-	var patched bool
+	var patched map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs-teacher" && r.Method == http.MethodGet:
-			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "slug": "classroom50-cs-teacher", "privacy": "closed"})
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "slug": "classroom50-cs-teacher", "privacy": "secret"})
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs-teacher" && r.Method == http.MethodPatch:
-			patched = true
+			_ = json.NewDecoder(r.Body).Decode(&patched)
 			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -774,8 +777,49 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 	if ref.ID != 7 || ref.Slug != "classroom50-cs-teacher" {
 		t.Errorf("adopted ref = %+v, want id 7 / classroom50-cs-teacher", ref)
 	}
-	if !patched {
-		t.Errorf("expected a PATCH reconciling privacy to secret on the closed team")
+	if patched["privacy"] != "closed" {
+		t.Errorf("PATCH = %v, want privacy reconciled to closed on the secret staff team", patched)
+	}
+}
+
+// TestEnsureStaffTeamVisible: a secret staff team is PATCHed to closed; an
+// already-closed one and a missing one are no-ops.
+func TestEnsureStaffTeamVisible(t *testing.T) {
+	privacy := map[string]string{"secret-team": "secret", "closed-team": "closed"}
+	var patched []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		slug := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
+		p, ok := privacy[slug]
+		switch {
+		case !ok:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+		case r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 1, "slug": slug, "privacy": p})
+		case r.Method == http.MethodPatch:
+			var body map[string]any
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body["privacy"] != "closed" {
+				t.Errorf("PATCH %s body = %v, want privacy closed", slug, body)
+			}
+			patched = append(patched, slug)
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if changed, err := EnsureStaffTeamVisible(client, "o", "secret-team"); err != nil || !changed {
+		t.Errorf("secret-team: changed=%v err=%v, want true/nil", changed, err)
+	}
+	if changed, err := EnsureStaffTeamVisible(client, "o", "closed-team"); err != nil || changed {
+		t.Errorf("closed-team: changed=%v err=%v, want false/nil", changed, err)
+	}
+	if changed, err := EnsureStaffTeamVisible(client, "o", "gone-team"); err != nil || changed {
+		t.Errorf("gone-team: changed=%v err=%v, want false/nil (404 is a no-op)", changed, err)
+	}
+	if len(patched) != 1 || patched[0] != "secret-team" {
+		t.Errorf("patched = %v, want only secret-team", patched)
 	}
 }
 

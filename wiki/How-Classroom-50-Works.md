@@ -25,7 +25,7 @@ state is represented by ordinary GitHub data:
 | --- | --- |
 | Your classrooms, assignments, scores | Configuration files in the private `classroom50` repository in your organization: one directory per classroom holding `classroom.json`, `assignments.json`, `roster.csv`, `scores.json`, and (for group assignments) `teams.json` |
 | Who's enrolled | GitHub organization and team membership |
-| Who's staff (teacher, head TA, TA) | Membership in `secret` GitHub teams |
+| Who's staff (teacher, head TA, TA) | Membership in GitHub teams visible to the organization |
 | Who's in which group | Membership in per-group GitHub Teams, with a teacher-committed snapshot in `teams.json` |
 | An address you invited, before that person joins | A `secret` per-invite team, removed once they're on the roster |
 | A student's submissions | Commit history and Releases in their repository |
@@ -125,11 +125,11 @@ Classroom 50 has four roles, and each maps directly onto a GitHub construct:
 | Role | On GitHub | Can |
 | --- | --- | --- |
 | **Teacher** | Organization **owner**, on the `-teacher` team | Everything, including organization and classroom settings |
-| **Head TA** | Organization **member**, on the `-hta` team | Write the `classroom50` repository; manage the classroom; not an owner |
-| **TA** | Organization **member**, on the `-ta` team | Read the `classroom50` repository; view submissions |
+| **Head TA** | Organization **member**, on the `-hta` team | Write the `classroom50` repository; manage the classroom; merge feedback pull requests; not an owner |
+| **TA** | Organization **member**, on the `-ta` team | Read the `classroom50` repository; view submissions; merge feedback pull requests |
 | **Student** | Organization **member**, on the classroom team | Accept and submit assignments |
 
-Every classroom has a set of `secret` GitHub teams
+Every classroom has a set of GitHub teams
 (`classroom50-<classroom>-{teacher,hta,ta}` plus the student team
 `classroom50-<classroom>`). Membership in these teams *is* the role; there's no
 separate role database. That's why staff you invite show up as GitHub team
@@ -137,12 +137,19 @@ invitations, and why the classroom's **team is the source of truth for who's
 enrolled** (not the `roster.csv`, which carries details GitHub can't store,
 such as names, sections, and the address of a student who hasn't joined yet).
 
+The student team is `secret`, so no other organization member can read the
+roster from it. The staff teams are visible to organization members: GitHub
+only accepts a visible team on a ruleset's bypass list, and that list is what
+lets staff merge feedback pull requests (see
+[How student repositories are protected](#how-student-repositories-are-protected)).
+A student can therefore see who the course staff are, and @mention them.
+
 ### From invitation to enrollment
 
 Enrollment is team membership, and the chain from invitation to enrollment has
 three steps:
 
-1. Creating a classroom creates its secret GitHub teams, including the student
+1. Creating a classroom creates its GitHub teams, including the secret student
    team `classroom50-<classroom>`.
 2. Inviting a student through Classroom 50 sends a GitHub organization
    invitation that carries the classroom team.
@@ -304,9 +311,10 @@ cross-repository access). The generous per-repository access and the strict
 organization policy work together.
 
 > [!NOTE]
-> TAs and head TAs get read access to student repositories through the
-> score-collection workflow, not at accept time. A newly accepted repository
-> therefore has no staff team attached to it, which is expected.
+> TAs and head TAs get write access to student repositories through the
+> score-collection workflow, not at accept time, so they can review and merge
+> feedback pull requests. A newly accepted repository therefore has no staff
+> team attached to it, which is expected.
 
 ## How student repositories are protected
 
@@ -319,8 +327,13 @@ organization:
 - **`classroom50-feedback-base-lock`** targets the `feedback` branch and blocks
   updates and deletion, keeping the frozen base of the
   [feedback pull request](Autograding-Basics#feedback-pull-requests) in place.
+  Organization owners and every classroom's staff teams (teacher, head TA, and
+  TA) are exempt from this ruleset, so they merge the feedback pull request
+  with the normal **Merge** button while a student never can. Classroom 50
+  adds each staff team to the exemption list when it creates the team;
+  re-running setup rebuilds the list from every classroom.
 
-Both rulesets include an organization-admin bypass, so teachers keep full
+Both rulesets include an organization-owner bypass, so teachers keep full
 control. Separately, the `classroom50` repository's default branch has classic
 branch protection with force pushes and deletion disabled.
 

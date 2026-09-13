@@ -12,6 +12,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/orgpolicy"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 	"github.com/foundation50/gh-teacher/internal/ui"
 )
 
@@ -66,7 +67,7 @@ func initCmd() *cobra.Command {
 			"    write pushes submit/* tags; Actions write re-runs autograde\n" +
 			"    workflows when regrading; Workflows write lets regrade tag a\n" +
 			"    commit pushed before a submission-mode change; Administration\n" +
-			"    write lets collection grant staff teams read access to student\n" +
+			"    write lets collection grant staff teams access to student\n" +
 			"    repos; Members read lists the classroom team (collection is\n" +
 			"    team-driven).\n" +
 			"  - init validates the token before storing it. A re-run leaves an\n" +
@@ -237,9 +238,19 @@ func initCmd() *cobra.Command {
 
 			// Install the org-level rulesets protecting submission history and
 			// the Feedback PR base. Org-level so they auto-cover every
-			// current/future student repo; warn-and-continue if blocked.
+			// current/future student repo; warn-and-continue if blocked. The
+			// feedback-base bypass list is rebuilt from every classroom's
+			// staff teams, so a re-run also repairs a list that drifted.
 			step(initStepLabels[4])
-			rulesetsReady, err := ensureClassroomRulesets(client, stepOut, stepErr, org)
+			var staffTeamIDs []int64
+			if staffTeams, err := orgrules.CollectStaffTeams(client, org); err != nil {
+				_, _ = fmt.Fprintf(stepErr, "Warning: %s: could not read classroom staff teams (%v); the feedback-base bypass list keeps its current teams. Re-run init once the classroom50 repository is readable.\n", org, err)
+				// Best-effort: keep what's there rather than wipe it.
+				staffTeamIDs, _ = orgrules.ExistingFeedbackBaseTeamIDs(client, org)
+			} else {
+				staffTeamIDs = orgrules.PrepareStaffTeams(client, stepOut, stepErr, org, staffTeams)
+			}
+			rulesetsReady, err := orgrules.Ensure(client, stepOut, stepErr, org, staffTeamIDs)
 			if err != nil {
 				prog.Abort()
 				return err

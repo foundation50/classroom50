@@ -4116,13 +4116,17 @@ def test_main_writes_detected_for_autograded_bucket_beside_entries(tmp_path, mon
 
 
 class TestStaffTeamPermissions:
-    def test_ta_maps_to_pull(self):
-        assert cs.STAFF_TEAM_PERMISSIONS["ta"] == "pull"
+    def test_ta_maps_to_push(self):
+        # Merging the Feedback PR needs write on the repo; the feedback-base
+        # ruleset exempts every staff team, so TAs merge like head TAs.
+        assert cs.STAFF_TEAM_PERMISSIONS["ta"] == "push"
 
-    def test_hta_maps_to_pull(self):
-        # The head-TA team, like the TA team, is a non-owner staff team that needs
-        # explicit read on private in-org templates/student repos.
-        assert cs.STAFF_TEAM_PERMISSIONS["hta"] == "pull"
+    def test_hta_maps_to_push(self):
+        assert cs.STAFF_TEAM_PERMISSIONS["hta"] == "push"
+
+    def test_templates_stay_read_for_every_role(self):
+        # A student-repo grant must never turn into write on the starter code.
+        assert cs.TEMPLATE_STAFF_PERMISSION == "pull"
 
     def test_teacher_not_granted_at_collect_time(self):
         # The teacher team's members are org owners with repo access via
@@ -4133,6 +4137,27 @@ class TestStaffTeamPermissions:
     def test_all_permissions_are_valid_github_values(self):
         valid = {"pull", "triage", "push", "maintain", "admin"}
         assert set(cs.STAFF_TEAM_PERMISSIONS.values()) <= valid
+        assert cs.TEMPLATE_STAFF_PERMISSION in valid
+
+
+class TestPermissionLevels:
+    def test_level_is_the_highest_true_flag(self):
+        assert cs.repo_permission_level(
+            {"permissions": {"admin": False, "maintain": False, "push": True, "triage": True, "pull": True}}
+        ) == "push"
+        assert cs.repo_permission_level({"permissions": {"admin": True, "pull": True}}) == "admin"
+
+    def test_role_name_is_the_fallback_and_custom_roles_rank_as_read(self):
+        assert cs.repo_permission_level({"role_name": "maintain"}) == "maintain"
+        # A custom org role has no rank; the listing still proves read.
+        assert cs.repo_permission_level({"role_name": "grader"}) == "pull"
+        assert cs.repo_permission_level({}) == "pull"
+
+    def test_satisfies_is_at_least(self):
+        assert cs.permission_satisfies("push", "pull") is True
+        assert cs.permission_satisfies("push", "push") is True
+        assert cs.permission_satisfies("pull", "push") is False
+        assert cs.permission_satisfies(None, "pull") is False
 
 
 class TestResolveStaffTeamSlugs:
@@ -4197,8 +4222,8 @@ class TestGrantTeamRepo:
 
         def fake_send(method, url, token, *, accept, body, _retries=3):
             calls.append((method, url))
-            # GET pre-check: 2xx means already has access.
-            return 200, b"{}"
+            # GET pre-check: the team already holds the wanted level.
+            return 200, json.dumps({"permissions": {"pull": True}}).encode()
 
         monkeypatch.setattr(cs, "_http_send", fake_send)
         granted = cs.grant_team_repo(
@@ -4207,6 +4232,37 @@ class TestGrantTeamRepo:
         assert granted is False
         # Only the GET pre-check ran; no PUT.
         assert [m for m, _ in calls] == ["GET"]
+
+    def test_upgrades_a_lesser_grant(self, monkeypatch):
+        # A head-TA team granted pull by an older collector must be raised to
+        # push, or it could never approve the Feedback PR.
+        calls: list[tuple[str, bytes | None]] = []
+
+        def fake_send(method, url, token, *, accept, body, _retries=3):
+            calls.append((method, body))
+            if method == "GET":
+                return 200, json.dumps({"permissions": {"pull": True, "push": False}}).encode()
+            return 204, b""
+
+        monkeypatch.setattr(cs, "_http_send", fake_send)
+        granted = cs.grant_team_repo(
+            "https://api.github.com", "cs50", "classroom50-cs-hta", "cs50", "cs-hw-alice", "push", "tok"
+        )
+        assert granted is True
+        assert [m for m, _ in calls] == ["GET", "PUT"]
+        put_body = next(b for m, b in calls if m == "PUT")
+        assert json.loads(put_body.decode()) == {"permission": "push"}
+
+    def test_never_downgrades_a_greater_grant(self, monkeypatch):
+        def fake_send(method, url, token, *, accept, body, _retries=3):
+            if method == "GET":
+                return 200, json.dumps({"permissions": {"admin": True, "pull": True}}).encode()
+            pytest.fail("no PUT expected")
+
+        monkeypatch.setattr(cs, "_http_send", fake_send)
+        assert cs.grant_team_repo(
+            "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw-alice", "pull", "tok"
+        ) is False
 
     def test_puts_when_not_yet_granted(self, monkeypatch):
         calls: list[tuple[str, str, bytes | None]] = []
@@ -4275,7 +4331,7 @@ class TestGrantClassroomTeamAccess:
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)
         return grants
 
-    def test_grants_ta_pull_on_each_student_repo(self, monkeypatch):
+    def test_grants_ta_push_on_each_student_repo(self, monkeypatch):
         grants = self._capture_grants(monkeypatch)
         stub_team_members_by_slug(
             monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
@@ -4285,11 +4341,11 @@ class TestGrantClassroomTeamAccess:
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
         )
         student_grants = {(r, p) for _, _, r, p in grants}
-        # 2 assignments x 2 members = 4 student repos, all TA pull.
-        assert ("cs-hw1-alice", "pull") in student_grants
-        assert ("cs-hw2-bob", "pull") in student_grants
+        # 2 assignments x 2 members = 4 student repos, all TA push.
+        assert ("cs-hw1-alice", "push") in student_grants
+        assert ("cs-hw2-bob", "push") in student_grants
         assert len([g for g in grants if g[2].startswith("cs-")]) == 4
-        assert all(team == "classroom50-cs-ta" and perm == "pull" for team, _, _, perm in grants)
+        assert all(team == "classroom50-cs-ta" and perm == "push" for team, _, _, perm in grants)
 
     def test_no_teams_block_grants_via_derived_slugs(self, monkeypatch):
         # A legacy classroom.json with no `teams` block: the pass still targets
@@ -4366,6 +4422,37 @@ class TestGrantClassroomTeamAccess:
         )
         template_grants = {repo for _, _, repo, _ in grants}
         assert template_grants == {"priv-tmpl"}  # public + out-of-org skipped
+
+    def test_staff_get_push_on_student_repos_and_read_on_templates(self, monkeypatch):
+        # Push on the student repo is what lets staff merge the Feedback PR;
+        # the starter template is never opened to writes.
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch,
+            {
+                "classroom50-cs": ["alice"],
+                "classroom50-cs-ta": ["ta1"],
+                "classroom50-cs-hta": ["hta1"],
+            },
+        )
+        assignments = {
+            "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+            "assignments": [
+                {"slug": "hw1", "mode": "individual", "template": {"owner": "cs50", "repo": "hw1-tmpl"}},
+            ],
+        }
+        monkeypatch.setattr(cs, "get_repo", lambda *a, **k: {"private": True})
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META_TA_HTA, assignments=assignments, service_token="tok",
+        )
+        by_team = {(team, repo): perm for team, _, repo, perm in grants}
+        assert by_team == {
+            ("classroom50-cs-hta", "cs-hw1-alice"): "push",
+            ("classroom50-cs-hta", "hw1-tmpl"): "pull",
+            ("classroom50-cs-ta", "cs-hw1-alice"): "push",
+            ("classroom50-cs-ta", "hw1-tmpl"): "pull",
+        }
 
     def test_idempotent_skip_grants_nothing_new(self, monkeypatch, capsys):
         # grant_team_repo returns False when the team already has access; the
@@ -4544,7 +4631,7 @@ class TestGrantClassroomTeamAccess:
             classroom_meta=self.META, assignments=self.ASSIGNMENTS, service_token="tok",
         )
         out, err = capsys.readouterr()
-        assert "cs: classroom50-cs-ta needed no new pull grant (2 target repo(s) checked)" in out
+        assert "cs: classroom50-cs-ta needed no new push grant (2 target repo(s) checked)" in out
         assert "::warning::" not in err
 
     def test_empty_team_skip_is_per_slug_not_all_or_nothing(self, monkeypatch):
@@ -4837,7 +4924,7 @@ class TestThrottlePropagatesInsteadOfDegrading:
         def throttled(*a, **k):
             raise http_error(429, {"Retry-After": "60"})
 
-        monkeypatch.setattr(cs, "list_team_repo_full_names", throttled)
+        monkeypatch.setattr(cs, "list_team_repo_permissions", throttled)
         with pytest.raises(cs.urllib.error.HTTPError):
             cs.known_team_repos(
                 "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
@@ -5113,11 +5200,27 @@ class TestBulkAccessCheck:
         monkeypatch.setattr(
             cs, "_http_send", lambda *a, **k: pytest.fail("no request expected")
         )
-        # Set is lowercased; the target's casing must not matter.
+        # Keys are lowercased; the target's casing must not matter.
         assert cs.grant_team_repo(
             "https://api.github.com", "cs50", "classroom50-cs-ta", "CS50", "CS-HW1-Alice",
-            "pull", "tok", known_repos={"cs50/cs-hw1-alice"},
+            "pull", "tok", known_repos={"cs50/cs-hw1-alice": "pull"},
         ) is False
+
+    def test_known_lesser_level_puts_without_a_precheck(self, monkeypatch):
+        # The bulk listing already says the team only has pull; the upgrade to
+        # push goes straight to the PUT.
+        calls: list[str] = []
+
+        def fake_send(method, url, token, *, accept, body, _retries=3):
+            calls.append(method)
+            return 204, b""
+
+        monkeypatch.setattr(cs, "_http_send", fake_send)
+        assert cs.grant_team_repo(
+            "https://api.github.com", "cs50", "classroom50-cs-hta", "cs50", "cs-hw1-alice",
+            "push", "tok", known_repos={"cs50/cs-hw1-alice": "pull"},
+        ) is True
+        assert calls == ["PUT"]
 
     def test_repo_absent_from_known_set_puts_without_a_precheck(self, monkeypatch):
         calls: list[str] = []
@@ -5129,7 +5232,7 @@ class TestBulkAccessCheck:
         monkeypatch.setattr(cs, "_http_send", fake_send)
         assert cs.grant_team_repo(
             "https://api.github.com", "cs50", "classroom50-cs-ta", "cs50", "cs-hw1-bob",
-            "pull", "tok", known_repos={"cs50/cs-hw1-alice"},
+            "pull", "tok", known_repos={"cs50/cs-hw1-alice": "pull"},
         ) is True
         assert calls == ["PUT"]
 
@@ -5137,7 +5240,7 @@ class TestBulkAccessCheck:
         def fail(*a, **k):
             raise http_error(404, {}, b"no team")
 
-        monkeypatch.setattr(cs, "list_team_repo_full_names", fail)
+        monkeypatch.setattr(cs, "list_team_repo_permissions", fail)
         assert cs.known_team_repos(
             "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
         ) is None
@@ -5147,7 +5250,7 @@ class TestBulkAccessCheck:
         def fail(*a, **k):
             raise http_error(401, {}, b"bad credentials")
 
-        monkeypatch.setattr(cs, "list_team_repo_full_names", fail)
+        monkeypatch.setattr(cs, "list_team_repo_permissions", fail)
         with pytest.raises(cs.urllib.error.HTTPError):
             cs.known_team_repos(
                 "https://api.github.com", "cs50", "classroom50-cs-ta", "tok", "cs"
@@ -5157,8 +5260,8 @@ class TestBulkAccessCheck:
         checked: list[str] = []
         monkeypatch.setattr(
             cs,
-            "team_has_repo_access",
-            lambda a, o, t, owner, repo, tok: checked.append(repo) or True,
+            "team_repo_permission",
+            lambda a, o, t, owner, repo, tok: checked.append(repo) or "pull",
         )
         monkeypatch.setattr(
             cs, "_http_send", lambda *a, **k: pytest.fail("no PUT expected")
@@ -5312,16 +5415,19 @@ class TestOrgAndTeamListings:
         # index would call every private repo missing and skip its poll.
         assert "type=all" in self.seen_url and "per_page=100" in self.seen_url
 
-    def test_team_repo_full_names_are_lowercased(self, monkeypatch):
+    def test_team_repo_permissions_are_lowercased_and_leveled(self, monkeypatch):
         monkeypatch.setattr(
             cs,
             "_http_get_with_headers",
-            self._fake_page([{"full_name": "CS50/CS-HW1-Alice"}]),
+            self._fake_page([
+                {"full_name": "CS50/CS-HW1-Alice", "permissions": {"push": True, "pull": True}},
+                {"full_name": "CS50/starter", "permissions": {"pull": True}},
+            ]),
         )
-        full = cs.list_team_repo_full_names(
-            "https://api.github.com", "CS50", "classroom50-cs-ta", "tok"
+        levels = cs.list_team_repo_permissions(
+            "https://api.github.com", "CS50", "classroom50-cs-hta", "tok"
         )
-        assert full == {"cs50/cs-hw1-alice"}
+        assert levels == {"cs50/cs-hw1-alice": "push", "cs50/starter": "pull"}
 
     def test_mixed_case_listing_still_matches_the_index(self, monkeypatch):
         # The end-to-end reason the .lower() matters: a repo GitHub reports as
@@ -5570,7 +5676,7 @@ class TestParallelPagination:
 
         monkeypatch.setattr(cs, "_paginate_objects_parallel", fake_parallel)
         cs.list_team_member_logins("https://api.github.com", "cs50", "students", "tok")
-        cs.list_team_repo_full_names("https://api.github.com", "cs50", "tas", "tok")
+        cs.list_team_repo_permissions("https://api.github.com", "cs50", "tas", "tok")
         cs.list_org_repos("https://api.github.com", "cs50", "tok")
         assert walks == [
             "orgs/cs50/teams/students/members",

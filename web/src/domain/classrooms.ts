@@ -24,6 +24,7 @@ import {
   type GitTreeFileMode,
   type StaffTeamRefs,
 } from "@/github-core/mutations"
+import { revokeStaffTeams } from "@/github-core/rulesets"
 import type { StaffRole } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 
@@ -395,6 +396,13 @@ export async function deleteClassroom(
     staffTeams.hta,
     staffTeams.ta,
   ].filter(isDeletableClassroomTeamRef)
+  // Drop the teams from the feedback-base bypass list first, so the ruleset
+  // never references a team GitHub no longer knows.
+  await revokeStaffTeams(
+    client,
+    org,
+    refsToDelete.map((t) => t.id),
+  )
   const failedTeamSlugs: string[] = []
   for (const teamRef of refsToDelete) {
     try {

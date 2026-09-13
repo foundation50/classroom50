@@ -19,6 +19,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/configwrite"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/membership"
+	"github.com/foundation50/gh-teacher/internal/orgrules"
 	"github.com/foundation50/gh-teacher/internal/output"
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
@@ -104,7 +105,7 @@ func staffAddCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runStaffAdd(client, cmd.OutOrStdout(), org, classroom, username, r)
+			return runStaffAdd(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, username, r)
 		},
 	}
 	cmd.Flags().StringVar(&role, "role", "teacher", `Staff role: "teacher", "hta", or "ta"`)
@@ -153,7 +154,7 @@ func staffRemoveCmd() *cobra.Command {
 // runStaffAdd resolves the staff team from classroom.json and adds the
 // canonical-login user. If the `teams` block is missing/partial, it self-heals
 // (create/adopt the team, grant the role's config-repo access, record the ref).
-func runStaffAdd(client githubapi.Client, out io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
+func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
@@ -173,7 +174,7 @@ func runStaffAdd(client githubapi.Client, out io.Writer, org, classroom, usernam
 		// `staff add` idempotent for pre-feature classrooms rather than
 		// dead-ending at `classroom add` (which can't repair an existing
 		// classroom).
-		team, err = ensureStaffTeamRecorded(client, out, org, classroom, branch, role)
+		team, err = ensureStaffTeamRecorded(client, out, errOut, org, classroom, branch, role)
 		if err != nil {
 			return err
 		}
@@ -190,7 +191,7 @@ func runStaffAdd(client githubapi.Client, out io.Writer, org, classroom, usernam
 // read for ta), and records its ref under classroom.json `teams.<role>` in one
 // commit. Confirms the classroom exists first (so a typo doesn't mint a stray
 // team); no-op-safe if already recorded.
-func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classroom, branch string, role configrepo.StaffRole) (configrepo.TeamRef, error) {
+func ensureStaffTeamRecorded(client githubapi.Client, out, errOut io.Writer, org, classroom, branch string, role configrepo.StaffRole) (configrepo.TeamRef, error) {
 	if _, ok, err := configrepo.LoadClassroom(client, org, classroom, branch); err != nil {
 		return configrepo.TeamRef{}, err
 	} else if !ok {
@@ -204,6 +205,9 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 	if _, err := configrepo.GrantTeamConfigRepoAccess(client, org, team.Slug, role); err != nil {
 		return configrepo.TeamRef{}, fmt.Errorf("grant %s staff team access to the classroom50 repository: %w", role, err)
 	}
+	// A team minted here (rather than at classroom add) still needs the
+	// feedback-base exemption to merge feedback PRs.
+	orgrules.ExemptStaffTeams(client, errOut, org, []int64{team.ID})
 	// Persist the ref so future resolves and the delete/teardown sweeps find
 	// it. RMW classroom.json in one commit.
 	path := configrepo.ClassroomFilePath(classroom)

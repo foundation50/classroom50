@@ -62,24 +62,22 @@ const (
 )
 
 // StaffTeamRepoPermissions maps a staff role to the repo permission a staff
-// team gets on each student assignment repo and on private in-org templates.
-// The head-TA/TA-team template read is applied at TWO points: eagerly at
-// assignment add/reuse (see grantStaffTeamTemplateRead), and again as an
-// idempotent re-affirm at collect-scores. The eager sites use this map only
-// as a presence gate and hardcode read
-// (GrantTeamRepoRead); collect-scores reads the value. Source of truth for the
-// collector's hand-mirrored STAFF_TEAM_PERMISSIONS (collect_scores.py) — keep in
-// lockstep.
+// team gets on each student assignment repo, granted at collect-scores. Both
+// non-owner staff roles get push: merging the Feedback PR needs write on the
+// repo, and the feedback-base ruleset exempts every staff team from its lock.
+// Source of truth for the collector's hand-mirrored STAFF_TEAM_PERMISSIONS
+// (collect_scores.py) — keep in lockstep.
+//
+// Private in-org templates are a separate, read-only grant: eager at
+// assignment add/reuse (grantStaffTeamTemplateRead, GrantTeamRepoRead) and
+// re-affirmed at collect time (TEMPLATE_STAFF_PERMISSION in the collector).
+// Those sites use this map only as a presence gate.
 //
 // A role absent from this map is granted nothing here. The teacher team is
-// omitted (its members are org owners with repo access via ownership); head-TA
-// and TA are plain members that need an explicit read grant.
-// Adding a future non-read staff permission is a one-line addition here and in
-// the mirror, but would also need the eager sites to consume the value instead
-// of hardcoding read.
+// omitted (its members are org owners with repo access via ownership).
 var StaffTeamRepoPermissions = map[StaffRole]string{
-	RoleHeadTA: "pull",
-	RoleTA:     "pull",
+	RoleHeadTA: "push",
+	RoleTA:     "push",
 }
 
 // TemplateReadStaffRoles is the ordered set of non-owner staff roles that get an
@@ -94,8 +92,8 @@ var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 // `classroom50` config repo. Teacher and the head-TA can author assignments →
 // `push`; a plain TA is read-only → `pull`.
 // This is a SEPARATE axis from StaffTeamRepoPermissions above, which governs
-// student assignment repos and private templates. A role absent here is granted
-// nothing on the classroom50 repository.
+// student assignment repos. A role absent here is granted nothing on the
+// classroom50 repository.
 var ConfigRepoPermission = map[StaffRole]string{
 	RoleTeacher: "push",
 	RoleHeadTA:  "push",
@@ -212,11 +210,22 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
 	}
-	return ensureSecretTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled)
+	return ensureTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled, studentTeamPrivacy)
 }
 
+// Team privacy per kind. The student team is `secret`: its description carries
+// the capability secret and its membership is the roster, neither of which
+// other org members may read. Staff teams are `closed` (visible to org
+// members) because GitHub refuses a secret team as an org ruleset bypass
+// actor, and the feedback-base lock exempts every staff team so staff can
+// merge Feedback PRs. Mirrored by the web's STAFF_TEAM_PRIVACY.
+const (
+	studentTeamPrivacy = "secret"
+	StaffTeamPrivacy   = "closed"
+)
+
 // EnsureClassroomStaffTeam creates (or adopts) the per-classroom STAFF team for
-// `role` — a `secret` team `classroom50-<short>-<role>`. Mirrors the web's
+// `role` — a `closed` team `classroom50-<short>-<role>`. Mirrors the web's
 // ensureClassroomRoleTeam. Idempotent; safe as a preflight before any staff op.
 // Staff teams create `notificationsEnabled` so @mentions reach TAs/teachers
 // (#335).
@@ -226,7 +235,7 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
-	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role), "", notificationsEnabled)
+	return ensureTeamByName(client, org, staffTeamName(shortName, role), "", notificationsEnabled, StaffTeamPrivacy)
 }
 
 // EnsureStaffTeams creates (or adopts) all staff teams (teacher, hta, ta) and
@@ -352,7 +361,7 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 	return true, nil
 }
 
-// ensureSecretTeamByName creates a `secret` GitHub team named `name`,
+// ensureTeamByName creates a GitHub team named `name` at `privacy`,
 // adopting an existing team of the same name rather than failing. `name` is a
 // canonical short-name-derived value, so its slug equals the name. A non-empty
 // `description` is written on create AND reconciled on adopt so a rotated
@@ -360,10 +369,10 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 //
 // The org's `members_can_create_teams` setting is irrelevant here — the
 // teacher authenticates as an org owner.
-func ensureSecretTeamByName(client githubapi.Client, org, name, description, notificationSetting string) (TeamRef, error) {
+func ensureTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string) (TeamRef, error) {
 	teamBody := map[string]any{
 		"name":                 name,
-		"privacy":              "secret",
+		"privacy":              privacy,
 		"notification_setting": notificationSetting,
 	}
 	if description != "" {
@@ -380,7 +389,7 @@ func ensureSecretTeamByName(client githubapi.Client, org, name, description, not
 		// re-run reconciles. If the adopt read 404s, the 422 wasn't a name
 		// collision — surface the original create error.
 		if cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			adopted, adoptErr := adoptSecretTeamByName(client, org, name, description, notificationSetting)
+			adopted, adoptErr := adoptTeamByName(client, org, name, description, notificationSetting, privacy)
 			if adoptErr != nil {
 				if cliutil.IsHTTPStatus(adoptErr, http.StatusNotFound) {
 					return TeamRef{}, fmt.Errorf("POST %s: %w", createPath, err)
@@ -394,11 +403,11 @@ func ensureSecretTeamByName(client githubapi.Client, org, name, description, not
 	return created, nil
 }
 
-// adoptSecretTeamByName reads an existing team by slug (== name, given the
+// adoptTeamByName reads an existing team by slug (== name, given the
 // canonical short-name guard) and reconciles drift toward the desired state:
-// privacy `secret`, the notification setting, and (when non-empty and differing)
+// the privacy, the notification setting, and (when non-empty and differing)
 // the description. Used on the 422 already-exists path.
-func adoptSecretTeamByName(client githubapi.Client, org, name, description, notificationSetting string) (TeamRef, error) {
+func adoptTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string) (TeamRef, error) {
 	slug := name
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var existing struct {
@@ -417,13 +426,13 @@ func adoptSecretTeamByName(client githubapi.Client, org, name, description, noti
 	// not read" — skip it rather than force a PATCH every reconcile. A concrete
 	// value that differs is reconciled on purpose (e.g., a student team left
 	// enabled gets disabled — #335).
-	needPrivacy := existing.Privacy != "secret"
+	needPrivacy := existing.Privacy != privacy
 	needNotification := existing.NotificationSetting != "" && existing.NotificationSetting != notificationSetting
 	needDescription := description != "" && existing.Description != description
 	if needPrivacy || needNotification || needDescription {
 		patch := map[string]any{}
 		if needPrivacy {
-			patch["privacy"] = "secret"
+			patch["privacy"] = privacy
 		}
 		if needNotification {
 			patch["notification_setting"] = notificationSetting
@@ -444,6 +453,37 @@ func adoptSecretTeamByName(client githubapi.Client, org, name, description, noti
 		_, _ = io.Copy(io.Discard, resp.Body)
 	}
 	return TeamRef{ID: existing.ID, Slug: existing.Slug}, nil
+}
+
+// EnsureStaffTeamVisible PATCHes a staff team created by an older release
+// (as `secret`) to StaffTeamPrivacy, which GitHub requires before the team can
+// be a ruleset bypass actor. Reports whether a PATCH was applied; a 404 (team
+// gone) is a no-op.
+func EnsureStaffTeamVisible(client githubapi.Client, org, slug string) (bool, error) {
+	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
+	var existing struct {
+		Privacy string `json:"privacy"`
+	}
+	if err := client.Get(getPath, &existing); err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("GET %s: %w", getPath, err)
+	}
+	if existing.Privacy == StaffTeamPrivacy {
+		return false, nil
+	}
+	body, err := json.Marshal(map[string]any{"privacy": StaffTeamPrivacy})
+	if err != nil {
+		return false, fmt.Errorf("encode team patch: %w", err)
+	}
+	resp, err := client.Request(http.MethodPatch, getPath, bytes.NewReader(body))
+	if err != nil {
+		return false, fmt.Errorf("PATCH %s (make staff team visible): %w", getPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return true, nil
 }
 
 // IsDeletableClassroomTeamRef reports whether a persisted team ref is safe to

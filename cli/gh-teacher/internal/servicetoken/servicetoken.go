@@ -196,7 +196,7 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 	// Administration (not implied by Contents); reject an admin-less PAT here
 	// rather than as a collect-time 403 on the first grant.
 	if !repo.Permissions.Admin {
-		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write): collecting scores grants staff teams (TAs, for example) read access to student repos, which needs the Administration permission. Re-create the fine-grained personal access token with Resource owner = %q and %s", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions)
+		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write): collecting scores grants staff teams (TAs, for example) access to student repos, which needs the Administration permission. Re-create the fine-grained personal access token with Resource owner = %q and %s", org, configrepo.ConfigRepoName, org, RequiredTokenPermissions)
 	}
 
 	// Contents is proven, but collection is team-driven: it lists the

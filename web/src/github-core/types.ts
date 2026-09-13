@@ -189,11 +189,23 @@ export type GitHubFileListing = {
 export type TeamNotificationSetting =
   "notifications_enabled" | "notifications_disabled"
 
+export type TeamPrivacy = "secret" | "closed"
+
+// Team privacy per kind. The student team is `secret`: its description carries
+// the capability secret and its membership is the roster, neither of which
+// other org members may read. Staff teams are `closed` (visible to org
+// members) because GitHub refuses a secret team as an org ruleset bypass
+// actor, and the feedback-base lock exempts every staff team so staff can
+// merge feedback PRs. Mirrors the CLI's configrepo.StaffTeamPrivacy. Lives
+// here (a leaf module) so mutations/teams and rulesets share it without a cycle.
+export const STAFF_TEAM_PRIVACY: TeamPrivacy = "closed"
+export const STUDENT_TEAM_PRIVACY: TeamPrivacy = "secret"
+
 export type GitHubTeam = {
   id: number
   name: string
   slug: string
-  privacy: "secret" | "closed"
+  privacy: TeamPrivacy
   // Only returned by GET/POST/PATCH .../teams to org members; read defensively.
   notification_setting?: TeamNotificationSetting
   description: string | null

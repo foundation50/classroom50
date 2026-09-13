@@ -189,7 +189,7 @@ describe("useAssignmentRepos", () => {
 
   it("re-probes after an invalidation instead of serving the invalidated full listing", async () => {
     // A finished collect invalidates the org repo list because it just granted
-    // the staff teams read on repos this viewer could not see. The full listing
+    // the staff teams access to repos this viewer could not see. The full listing
     // is still within staleTime, but it predates that grant, so the probe must
     // not short-circuit to it (the user would need a reload to see "Accepted").
     const { probed } = serveOrg({ lastPage: 20, existing: ["cs101-hw1-alice"] })

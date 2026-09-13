@@ -21,5 +21,5 @@ Use this PR to leave feedback:
 <!-- /autograde -->
 - This page is an overview: commits, line comments, and a general comment box below.
 
-The base branch (`BASE_BRANCH`) is frozen at the starter so the diff always reflects the full body of work. The PR is kept up to date automatically; merging it is the teacher-side "grading done" signal.
+The base branch (`BASE_BRANCH`) is frozen at the starter so the diff always reflects the full body of work. The PR is kept up to date automatically. Merging it is the "grading done" signal: teachers and TAs can merge, students can't.
 </details>

@@ -26,6 +26,7 @@ type staffMock struct {
 	teamsCreated  []string          // team names POSTed to /orgs/o/teams
 	grantedRepo   map[string]string // team slug -> permission granted on config repo
 	committed     map[string]string // committed tree path -> content (self-heal RMW)
+	bypassTeamIDs []int64           // Team actors PUT onto the feedback-base ruleset
 }
 
 func (m *staffMock) handler(t *testing.T) http.Handler {
@@ -42,6 +43,25 @@ func (m *staffMock) handler(t *testing.T) http.Handler {
 		switch {
 		case path == "/repos/o/classroom50" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "main"})
+		// --- feedback-base ruleset: the self-healed team gets exempted ---
+		case path == "/orgs/o/rulesets" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`[{"id":22,"name":"classroom50-feedback-base-lock"}]`))
+		case path == "/orgs/o/rulesets/22" && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"id":22,"bypass_actors":[{"actor_id":1,"actor_type":"OrganizationAdmin","bypass_mode":"exempt"}]}`))
+		case path == "/orgs/o/rulesets/22" && r.Method == http.MethodPut:
+			var body struct {
+				BypassActors []struct {
+					ActorID   int64  `json:"actor_id"`
+					ActorType string `json:"actor_type"`
+				} `json:"bypass_actors"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			for _, a := range body.BypassActors {
+				if a.ActorType == "Team" {
+					m.bypassTeamIDs = append(m.bypassTeamIDs, a.ActorID)
+				}
+			}
+			_, _ = w.Write([]byte(`{}`))
 		case strings.HasPrefix(path, "/users/") && r.Method == http.MethodGet:
 			if m.userNotFound {
 				w.WriteHeader(http.StatusNotFound)
@@ -142,8 +162,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out bytes.Buffer
-		if err := runStaffAdd(client, &out, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
+		var out, errOut bytes.Buffer
+		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
 			t.Fatalf("runStaffAdd: %v", err)
 		}
 		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-teacher/memberships/alice") {
@@ -160,8 +180,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out bytes.Buffer
-		if err := runStaffAdd(client, &out, "o", "cs-principles", "bob", configrepo.RoleTA); err != nil {
+		var out, errOut bytes.Buffer
+		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "bob", configrepo.RoleTA); err != nil {
 			t.Fatalf("runStaffAdd ta: %v", err)
 		}
 		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-ta/memberships/bob") {
@@ -175,8 +195,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out bytes.Buffer
-		if err := runStaffAdd(client, &out, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
+		var out, errOut bytes.Buffer
+		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
 			t.Fatalf("runStaffAdd should self-heal, got err = %v", err)
 		}
 		if len(mock.teamsCreated) != 1 || mock.teamsCreated[0] != "classroom50-cs-principles-teacher" {
@@ -184,6 +204,11 @@ func TestRunStaffAdd(t *testing.T) {
 		}
 		if mock.grantedRepo["classroom50-cs-principles-teacher"] != "push" {
 			t.Errorf("grantedRepo = %v, want push on the teacher team", mock.grantedRepo)
+		}
+		// The minted team (id 101, per the mock) must be exempt from the
+		// feedback-base lock or its members can't merge feedback PRs.
+		if len(mock.bypassTeamIDs) != 1 || mock.bypassTeamIDs[0] != 101 {
+			t.Errorf("feedback-base bypass Team actors = %v, want [101]", mock.bypassTeamIDs)
 		}
 		if _, ok := mock.committed["cs-principles/classroom.json"]; !ok {
 			t.Errorf("committed = %v, want a classroom.json write recording the team ref", mock.committed)
@@ -199,8 +224,8 @@ func TestRunStaffAdd(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		var out bytes.Buffer
-		err := runStaffAdd(client, &out, "o", "cs-principles", "ghost", configrepo.RoleTeacher)
+		var out, errOut bytes.Buffer
+		err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "ghost", configrepo.RoleTeacher)
 		if err == nil || !strings.Contains(err.Error(), "not found") {
 			t.Fatalf("err = %v, want a user-not-found error", err)
 		}

@@ -2222,7 +2222,7 @@
         "unreachable": "Couldn't reach GitHub to verify the token. Check your connection and try again. ({{reason}})",
         "unverified": "Couldn't verify the token against {{org}}/{{repo}}: {{reason}}",
         "readOnly": "This token can read {{org}}/{{repo}} but can't write to it. Collecting scores needs read access, and regrading needs write access. {{hint}}",
-        "noAdmin": "This token can read and write {{org}}/{{repo}} but can't administer it. Collecting scores grants staff teams, such as TAs, read access to student repositories, which needs Administration set to Read and write. {{hint}}",
+        "noAdmin": "This token can read and write {{org}}/{{repo}} but can't administer it. Collecting scores grants staff teams, such as TAs, access to student repositories, which needs Administration set to Read and write. {{hint}}",
         "noMembersRead": "This token can read {{org}}/{{repo}} but can't read the organization's members. Collecting scores lists the classroom team, which needs Members set to Read under Organization permissions. {{hint}}",
         "selectedRepos": "This token can read {{org}}/{{repo}} but not {{org}}/{{probe}}, so its Repository access is limited to selected repositories, or its Resource owner isn't {{org}}. Collecting scores reads every student repository and grants staff teams access to them. Create the token again with Resource owner set to {{org}} and Repository access set to All repositories, keeping the same permissions."
       }
@@ -2238,7 +2238,9 @@
         "budgetMissing": "no $0 hard-stop Actions budget",
         "budgetUnreadable": "couldn't verify the Actions spending cap. Read failed: {{reason}}. Likely enterprise-managed billing or a plan without organization budgets. Confirm a $0 hard-stop cap manually.",
         "workflowOrgManaged": "Organization policy defaults workflows to read; the Classroom 50 workflows declare their own permissions",
-        "rulesetsMissing": "missing: {{names}}"
+        "rulesetsMissing": "missing: {{names}}",
+        "rulesetStaffTeamsMissing_one": "{{count}} staff team can't merge feedback pull requests yet",
+        "rulesetStaffTeamsMissing_other": "{{count}} staff teams can't merge feedback pull requests yet"
       },
       "title": "Organization policy",
       "planBadgeTitle": "GitHub plan: determines which policies are in scope. Enterprise unlocks additional member-privilege fields.",
@@ -2684,8 +2686,8 @@
       "roleTaPlural": "TAs",
       "roleHeadTaPlural": "Head TAs",
       "accessTeacher": "Organization owner. Write access to the classroom50 repository.",
-      "accessHeadTa": "Organization member. Write access to the classroom50 repository.",
-      "accessTa": "Organization member. Read-only access to the classroom50 repository.",
+      "accessHeadTa": "Organization member. Write access to the classroom50 repository and to student repositories, so they can merge feedback pull requests.",
+      "accessTa": "Organization member. Read-only access to the classroom50 repository; write access to student repositories, so they can merge feedback pull requests.",
       "viewTeamTitle": "Open the {{role}} team on GitHub",
       "pendingCount_one": "{{count}} pending",
       "pendingCount_other": "{{count}} pending",

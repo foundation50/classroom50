@@ -22,6 +22,7 @@ import {
   sleep,
 } from "@/github-core/queries"
 import { getRepo } from "@/github-core/repoReads"
+import { revokeStaffTeams } from "@/github-core/rulesets"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { DELETE_REPO_SCOPE } from "@/auth/constants"
@@ -359,6 +360,14 @@ async function deleteClassroomTeams(
   const teamsDeleted: string[] = []
   const teamsFailed: string[] = []
   let teamsRecoverable = false
+
+  // The feedback-base ruleset outlives teardown; drop the teams from its
+  // bypass list rather than leave it pointing at deleted ones.
+  await revokeStaffTeams(
+    client,
+    org,
+    teams.map((t) => t.id),
+  )
 
   await mapWithConcurrency(teams, 4, async (team) => {
     const outcome = await deleteClassroomTeamWithRetry(client, org, team)

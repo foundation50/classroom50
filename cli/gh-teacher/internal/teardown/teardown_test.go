@@ -78,6 +78,10 @@ func (s *teardownTestServer) handler(t *testing.T, org string) http.Handler {
 			}
 			sb.WriteByte(']')
 			_, _ = w.Write([]byte(sb.String()))
+		case path == "/orgs/"+org+"/rulesets" && r.Method == http.MethodGet:
+			// The team sweep drops the teams from the feedback-base bypass
+			// list first; an org that never ran init has no ruleset.
+			_, _ = w.Write([]byte(`[]`))
 		case strings.HasPrefix(path, "/repos/"+org+"/classroom50/contents/") && r.Method == http.MethodGet:
 			// A per-classroom classroom.json read during the team sweep.
 			// Return whatever the test staged for this path, else 404 (a

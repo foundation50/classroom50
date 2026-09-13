@@ -86,8 +86,9 @@ function buildServiceTokenUrl(
       // submission-mode change, whose autograde workflow no longer matches any
       // branch; GitHub refuses that ref from a token without this permission.
       workflows: "write",
-      // Administration: write — collection grants staff teams read on student
-      // repos/templates (PUT teams/.../repos/...), not implied by Contents.
+      // Administration: write — collection grants staff teams write on student
+      // repos and read on templates (PUT teams/.../repos/...), not implied by
+      // Contents.
       administration: "write",
       // Members: Read — collection lists the classroom team; an org permission,
       // honored only when target_name is an org (it is).

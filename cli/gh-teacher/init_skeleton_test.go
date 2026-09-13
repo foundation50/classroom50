@@ -183,9 +183,9 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	if !ok {
 		t.Fatal("ensure_feedback_pr.py missing from skeleton")
 	}
-	wantBaseBranch := "BASE_BRANCH = \"" + feedbackBaseBranch + "\""
+	wantBaseBranch := "BASE_BRANCH = \"" + contract.FeedbackBaseBranch + "\""
 	if !strings.Contains(fbScript, wantBaseBranch) {
-		t.Errorf("ensure_feedback_pr.py does not pin %s (feedbackBaseBranch drift vs the org ruleset)", wantBaseBranch)
+		t.Errorf("ensure_feedback_pr.py does not pin %s (FeedbackBaseBranch drift vs the org ruleset)", wantBaseBranch)
 	}
 
 	// F1: the grade job must pass MODE through to runner.py so a group
@@ -1301,15 +1301,14 @@ func TestFeedbackPRParity_GoVsPython(t *testing.T) {
 
 // TestStaffPermsParity_GoVsInlinePython pins the Go->Python leg of the
 // staff-team repo-permission mirror. configrepo.StaffTeamRepoPermissions (the
-// student-assignment-repo / private-template axis) is the source of truth;
-// collect_scores.py hand-mirrors it as STAFF_TEAM_PERMISSIONS with no
-// compile-time link, so a role added on only one side would otherwise pass CI
-// while the collector silently grants the wrong set. The non-owner staff roles
-// (head-TA and TA) map to `pull` here; the teacher role is absent
-// (owners get repo access via ownership). Note this template-repo axis is
-// SEPARATE from configrepo.ConfigRepoPermission (config-repo write), which the
-// collector does not manage. Assert every Go entry appears verbatim as a Python
-// dict literal in the embedded script.
+// student-assignment-repo axis) is the source of truth; collect_scores.py
+// hand-mirrors it as STAFF_TEAM_PERMISSIONS with no compile-time link, so a
+// role added on only one side would otherwise pass CI while the collector
+// silently grants the wrong set. Head-TA and TA both map to `push`; the
+// teacher role is absent (owners get repo access via ownership). Note this
+// axis is SEPARATE from configrepo.ConfigRepoPermission (config-repo write),
+// which the collector does not manage. Assert every Go entry appears verbatim
+// as a Python dict literal in the embedded script.
 func TestStaffPermsParity_GoVsInlinePython(t *testing.T) {
 	files, err := skeletonFiles("main")
 	if err != nil {

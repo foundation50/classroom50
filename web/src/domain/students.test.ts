@@ -4827,7 +4827,7 @@ const makeRoleChangeClient = (opts: {
             }),
           )
         }
-        // Create team (ensureSecretTeamByName): POST /orgs/{org}/teams
+        // Create team (ensureTeamByName): POST /orgs/{org}/teams
         if (path.endsWith("/teams") && method === "POST") {
           const name = (options?.body as { name?: string })?.name ?? ""
           return Promise.resolve({ id: 999, slug: name, name })
@@ -5361,12 +5361,13 @@ describe("addClassroomStaffMember — staff team-add (invites non-members)", () 
         if (path.endsWith("/teams") && options?.method === "POST") {
           if (opts.teamExists) return Promise.reject(conflict(path))
           const name = (options as { body?: { name?: string } }).body?.name
-          return Promise.resolve({ id: 500, slug: name, privacy: "secret" })
+          return Promise.resolve({ id: 500, slug: name, privacy: "closed" })
         }
         if (/\/orgs\/[^/]+\/teams\/[^/]+$/.test(path) && !options?.method) {
-          // Adopt read (GET team by name) — already secret so no PATCH follows.
+          // Adopt read (GET team by name) — already closed (staff visibility)
+          // so no PATCH follows.
           const slug = path.split("/teams/")[1]
-          return Promise.resolve({ id: 500, slug, privacy: "secret" })
+          return Promise.resolve({ id: 500, slug, privacy: "closed" })
         }
         // Config-repo grant: PUT .../teams/{slug}/repos/{owner}/{repo}.
         if (path.includes("/teams/") && path.includes("/repos/")) {

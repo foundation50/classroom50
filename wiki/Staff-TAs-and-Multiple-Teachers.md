@@ -9,18 +9,22 @@ when several teachers are involved.
 | Role | On GitHub | Can |
 | --- | --- | --- |
 | **Teacher** | Organization **owner**, on the classroom's teacher team | Everything, including organization and classroom settings |
-| **Head TA** | Organization member, on the head-TA team | Write the `classroom50` repository; manage the classroom; not an owner |
-| **TA** | Organization member, on the TA team | Read the `classroom50` repository; view submissions and scores |
+| **Head TA** | Organization member, on the head-TA team | Write the `classroom50` repository; manage the classroom; review and merge feedback pull requests; not an owner |
+| **TA** | Organization member, on the TA team | Read the `classroom50` repository; view submissions and scores; review and merge feedback pull requests |
 | **Student** | Organization member, on the classroom team | Accept and submit assignments |
 
-A role is membership in one of the classroom's `secret` GitHub teams; there is
+A role is membership in one of the classroom's GitHub teams; there is
 no separate role database, so staff you add show up as GitHub team
-invitations. For the underlying model, see
+invitations. The staff teams are visible to organization members (GitHub
+requires that for the ruleset exemption that lets staff merge feedback pull
+requests), so students can see who the course staff are; the student team
+stays secret. For the underlying model, see
 [Roles are GitHub organization roles and teams](How-Classroom-50-Works#roles-are-github-organization-roles-and-teams).
 
 The head TA role covers a trusted grader who manages the classroom (edits
 assignments, runs collection) without holding organization-owner power. TAs
-who only grade need the read-only TA role.
+who only grade need the TA role: they can review, merge feedback pull requests,
+and push to student repositories, but not change the classroom.
 
 ## Adding staff
 
@@ -80,37 +84,41 @@ assignments, submissions, and scores. The differences:
   owners read pending invitations, so a TA's roster view can't show who has
   been invited but hasn't joined yet; the app notes this instead of showing
   an incomplete list.
-- **The student list comes from the roster file.** The classroom's GitHub
-  teams are secret, so a TA or head TA who isn't on the student team can't
-  read its membership. Their roster, submissions, and student counts use
+- **The student list comes from the roster file.** The classroom's student
+  team is secret, so a TA or head TA who isn't on it can't read its
+  membership. Their roster, submissions, and student counts use
   `roster.csv` as of its last sync instead, and the page says so. A student
   enrolled since then appears after a teacher opens the roster (which syncs
   the file). Organization owners always see live membership.
 - **Collecting and regrading are for teachers and head TAs.** Both run
   workflows in the `classroom50` repository, which needs write access.
   Head TAs have it and can use **Collect now** to refresh submission data
-  themselves. TAs have read-only access, so they see a **Refresh** button
-  that re-reads the latest collected data and live repository status, plus a
-  note on who to ask for a new collection.
+  themselves. TAs have read-only access to that repository, so they see a
+  **Refresh** button that re-reads the latest collected data and live
+  repository status, plus a note on who to ask for a new collection.
 - **Access to student repositories arrives with collection.** The
-  score-collection workflow grants the staff teams read access to student
+  score-collection workflow grants the staff teams write access to student
   repositories as it runs. A freshly accepted repository has no staff access
-  yet, which is expected; it appears after the next collection run. Until
-  then that student shows as **Not visible** for staff (they may or
-  may not have accepted), while the teacher sees the repository.
+  yet, which is expected; it appears after the next collection run. Until then
+  that student shows as **Not visible** for staff (they may or may not have
+  accepted), while the teacher sees the repository.
 
-With read access, TAs can open each student's work and leave reviews on the
-[feedback pull request](Autograding-Basics#feedback-pull-requests). There is no
-automatic reviewer assignment yet; TAs pick up repositories from the
-submissions page. (**Open all feedback PRs**, which opens any missing feedback
-pull requests in bulk, is owner-only.)
+With that access, TAs and head TAs open each student's work, leave reviews on
+the [feedback pull request](Autograding-Basics#feedback-pull-requests), and
+merge it when grading is done. The `feedback` branch is locked by an
+organization ruleset that exempts the classroom's staff teams, so staff see the
+normal **Merge** button and students never do. There is no automatic reviewer
+assignment yet; TAs pick up repositories from the submissions page. (**Open all
+feedback PRs**, which opens any missing feedback pull requests in bulk, is
+owner-only.)
 
 Because TAs and head TAs are ordinary organization members, graders don't
-need owner rights to do their work. If your institution's privacy rules (such
-as FERPA) require limiting who holds administrative access to student data,
-keep the teacher role small and use head TA and TA for everyone else. For
-where student data lives and what leaves the browser, see
-[Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
+need owner rights to do their work. Both roles can push to student
+repositories, so give them to graders you trust with student work. If your
+institution's privacy rules (such as FERPA) require limiting who holds
+administrative access to student data, keep the teacher role small and use
+head TA and TA for everyone else. For where student data lives and what leaves
+the browser, see [Privacy and FERPA](GitHub-Integration#privacy-and-ferpa).
 
 ## Staff who are also students (dual roles)
 

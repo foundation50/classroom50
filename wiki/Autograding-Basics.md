@@ -718,6 +718,12 @@ scored Release.
 - **One PR, reused** across submissions, labeled **Individual Assignment** or
   **Group Assignment**. A student closing it reopens it; a teacher merge is
   left alone.
+- **Merge when grading is done.** Only staff can merge: the `feedback` branch
+  is locked by an organization ruleset that exempts owners and the classroom's
+  teacher, head TA, and TA teams, so they see the normal **Merge** button
+  while a student never can. Staff get the write access this needs from the
+  score-collection workflow, so a freshly accepted repository shows them the
+  button after the next collection run.
 - **Default body.** The PR opens with Classroom 50's built-in "here is where
   your teacher leaves feedback" text by default. Set
   `feedback_pr_template: true` (or check the box on the web form) to use the
@@ -752,8 +758,11 @@ untrusted; if no baseline resolves at all, it **skips** with a warning.
 **Prerequisites (handled by `gh teacher init`):** the organization setting
 "Allow GitHub Actions to create and approve pull requests" must be on, and two
 organization rulesets protect submission history and the frozen `feedback`
-branch. If you enable feedback on an organization set up before this feature,
-**re-run `gh teacher init`**.
+branch (see
+[How student repositories are protected](How-Classroom-50-Works#how-student-repositories-are-protected)).
+If you enable feedback on an organization set up before this feature, or
+staff see **Merging is blocked** on a feedback PR, **re-run
+`gh teacher init`** to bring the rulesets up to date.
 
 **Student repositories accepted before this feature** use an older workflow
 and must be re-created (delete, then re-accept) to pick up the new one.

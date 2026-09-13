@@ -69,3 +69,23 @@ export function mergeUnresolved(
 export function clearUnresolved(org: string): void {
   localStorageOrNull()?.removeItem(keyFor(org))
 }
+
+// Drop concerns a later audit found enforced (a repair that failed once, then
+// succeeded through re-run setup or by hand). Leaving them would keep showing
+// "couldn't set this automatically" next to a green OK.
+export function forgetResolvedConcerns(
+  org: string,
+  concerns: Iterable<string>,
+): void {
+  const ls = localStorageOrNull()
+  if (ls === null) return
+  const current = readUnresolved(org)
+  let changed = false
+  for (const c of concerns) changed = current.concerns.delete(c) || changed
+  if (!changed) return
+  const stored: StoredShape = {
+    fields: [...current.fields],
+    concerns: [...current.concerns],
+  }
+  ls.setItem(keyFor(org), JSON.stringify(stored))
+}

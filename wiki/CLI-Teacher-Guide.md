@@ -801,7 +801,7 @@ assignment's bucket in `scores.json` gets a `collected_at` UTC timestamp, so
 you (and the web app's freshness strip) can tell when each assignment was last
 walked; a scoped run leaves sibling assignments' buckets untouched. The
 staff-team access grant that rides along with collection is scoped the same
-way: an `assignment=` run grants the staff teams read on only that
+way: an `assignment=` run grants the staff teams access to only that
 assignment's repositories and template, and staff teams with no members are
 skipped.
 
