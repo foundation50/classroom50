@@ -284,9 +284,8 @@ describe("updateFeedbackBaseBypassTeams", () => {
 
 describe("revokeClassroomStaffTeams", () => {
   it("drops the live team at each of the classroom's staff slugs, recorded or not", async () => {
-    // The recorded `teams` block is never consulted: the unrecorded ta team is
-    // dropped, the other classroom's team is kept, and an unstaffed role (no
-    // hta team) is skipped.
+    // The unrecorded ta team is dropped, the other classroom's team is kept,
+    // and an unstaffed role (no hta team) is skipped.
     const { client, calls } = makeClient(
       [{ id: 20, name: RULESET_NAME_FEEDBACK_BASE }],
       [OWNER_EXEMPT, team(10), team(20), team(30)],
@@ -316,8 +315,7 @@ describe("revokeClassroomStaffTeams", () => {
 // A fake org for the collector/audit/repair path: a config repo with
 // classroom dirs, per-classroom classroom.json bodies, the teams that hold a
 // grant on the config repo (slug -> {id, privacy}), and the installed
-// rulesets' feedback-base actors. A team with no grant is simply not listed,
-// whatever slug it sits at; the org-wide team listing is never consulted.
+// rulesets' feedback-base actors. The org-wide team listing is never consulted.
 function makeConfigRepoClient(opts: {
   classrooms?: Record<string, unknown | null> // null: dir without classroom.json
   teams?: Record<string, { id: number; privacy: string }>
@@ -592,9 +590,8 @@ describe("collectStaffTeamSlugs", () => {
   })
 
   it("leaves out a slug that is a sibling classroom's student team", async () => {
-    // `ml-ta`'s student team is `classroom50-ml-ta`, which is also `ml`'s TA
-    // slug: `ml` has no TA slug while `ml-ta` exists, whatever an older
-    // release granted that team. `ml-ta`'s own staff slugs are unaffected.
+    // `classroom50-ml-ta` is `ml-ta`'s student team, so `ml` has no TA slug;
+    // `ml-ta`'s own staff slugs are unaffected.
     const { client } = makeConfigRepoClient({
       classrooms: { ml: cs101, "ml-ta": cs101 },
     })
@@ -658,10 +655,8 @@ describe("prepareStaffTeams", () => {
   })
 
   it("a team at a staff slug without the config-repo grant is not staff", async () => {
-    // Classroom `cs101-ta`'s student team sits at `cs101`'s TA slug, and any
-    // member can create `classroom50-cs101-hta`. Neither holds a grant on the
-    // config repo, so neither is listed: no PATCH, no id, whatever the org's
-    // team listing would have shown.
+    // A sibling's student team and a squatted team hold no config-repo grant,
+    // so neither is listed: no PATCH, no id.
     const { client, calls } = makeConfigRepoClient({
       teams: { "classroom50-cs101-teacher": { id: 11, privacy: "closed" } },
     })

@@ -248,9 +248,8 @@ def test_team_members_403_fails(monkeypatch):
 
 def test_resolve_staff_team_slugs_always_derived():
     meta = {"teams": {"ta": {"id": 2, "slug": "classroom50-cs1-ta-1"}, "teacher": {"id": 1, "slug": "classroom50-cs1-teacher"}}}
-    # A recorded slug naming another team is ignored, exactly as the collector
-    # ignores it (classroom.json is head-TA-writable), so the probe reads the
-    # teams the grant actually targets.
+    # A recorded slug naming another team is ignored, as the collector ignores
+    # it, so the probe reads the teams the grant targets.
     assert pt.resolve_staff_team_slugs(meta, "cs1") == {
         role: f"classroom50-cs1-{role}" for role in pt.STAFF_ROLES
     }
@@ -283,9 +282,8 @@ def test_staff_team_visible_ok(monkeypatch):
 
 
 def test_staff_team_without_config_repo_grant_is_skip_with_fix(monkeypatch):
-    # Visible, but no grant on the config repo: not Classroom 50's team, so the
-    # collect-time grant skips it. Not a token problem, but the teacher must
-    # hear about it.
+    # Visible but ungranted: the grant skips it. Not a token problem, but the
+    # teacher must hear about it.
     def get(url, *a, **k):
         if url.endswith("/repos/cs50/classroom50"):
             raise _http_error(404)

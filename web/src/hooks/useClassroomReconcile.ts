@@ -78,10 +78,9 @@ export function useClassroomReconcile(
     },
     // Latch as permanent only a 403 the viewer can't fix, the description
     // step's wrong-slug team 404 (a derived slug that never converges), or a
-    // student slug held by another classroom's staff team (fixed by hand, not
-    // by retrying). Every other 404 in the pass — a propagating config commit —
-    // is transient and releases the key for a later retry, so one blip can't
-    // disable the whole classroom heal for the mount.
+    // team refusal (fixed by hand, not by retrying). Every other 404 in the
+    // pass — a propagating config commit — is transient and releases the key
+    // for a later retry, so one blip can't disable the classroom heal.
     isPermanent: (err) =>
       err instanceof ClassroomReconcilePermanentError ||
       err instanceof UnclaimedTeamError ||

@@ -501,9 +501,8 @@ func TestRemoveClassroom(t *testing.T) {
 		if len(mock.staffTeamDeleted) != 1 || mock.staffTeamDeleted[0] != "classroom50-cs-principles-teacher" {
 			t.Errorf("staff deletes = %v, want only this classroom's teacher team", mock.staffTeamDeleted)
 		}
-		// Revoke goes by the live team at each canonical slug, not the recorded
-		// refs: the victim (77) is kept, and the unrecorded ta team (4244) at
-		// this classroom's slug is dropped along with the teacher team.
+		// Revoke goes by live slug: the victim (77) is kept, the unrecorded ta
+		// team (4244) is dropped with the teacher team.
 		if len(mock.rulesetTeams) != 1 || mock.rulesetTeams[0] != 77 {
 			t.Errorf("ruleset PUT Team actors = %v, want [77] (victim kept)", mock.rulesetTeams)
 		}

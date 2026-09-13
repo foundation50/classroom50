@@ -1,11 +1,7 @@
 package configrepo
 
-// Which GitHub team is a classroom's own. The slug convention alone can't say:
-// any org member can create a team at a staff slug, and a classroom named
-// `<short>-<role>` puts its student team at `<short>`'s `<role>` slug. This
-// file holds the two proofs (the classroom directory, then the config-repo
-// grant) and the reads the write paths make against them. Mirrored by the
-// web's AdoptGuard and the collector's staff_team_is_claimed.
+// Which team at a canonical slug is really the classroom's own. Mirrored by
+// the web's AdoptGuard and the collector's staff_team_is_claimed.
 
 import (
 	"fmt"
@@ -17,18 +13,11 @@ import (
 )
 
 // adoptGuard decides whether an existing team at a canonical slug may be
-// adopted. The slug alone proves nothing: any org member can create a team
-// (members_can_create_teams is on for student groups), and a classroom whose
-// short name ends in a role suffix puts its student team at another
-// classroom's staff slug. Two facts settle it. A classroom directory
-// `<short>-<role>` in the config repo means the team at `<short>`'s `<role>`
-// slug is that classroom's student team, whatever it holds. Otherwise, what
-// only an owner-run Classroom 50 flow does is grant a team access to the
-// `classroom50` config repo, so a staff team must hold that grant (or match
-// the id classroom.json recorded when the team was created and the grant step
-// failed). A student team is always the classroom's own: its slug can only be
-// a staff slug when the classroom itself is the `<short>-<role>` directory.
-// Mirrored by the web's AdoptGuard.
+// adopted. A slug proves nothing: any org member can create a team there, and
+// classroom `<short>-<role>`'s student team sits at `<short>`'s `<role>` slug.
+// So a staff team must not be a sibling classroom's student team, and must hold
+// the config-repo grant only an owner-run flow gives (or match the id recorded
+// when the grant step failed). A student team is always the classroom's own.
 type adoptGuard struct {
 	staff      bool
 	shortName  string
@@ -55,10 +44,8 @@ func (g adoptGuard) check(client githubapi.Client, org, slug string, liveID int6
 	return &UnclaimedTeamError{Org: org, Slug: slug, Role: g.role}
 }
 
-// StudentTeamOwner returns the short name of the classroom whose STUDENT team
-// sits at `shortName`'s `role` slug (the classroom `<shortName>-<role>`), or ""
-// when no such classroom exists. One contents probe on the config repo; the
-// default branch is used so callers need no ref.
+// StudentTeamOwner returns the classroom whose student team sits at
+// `shortName`'s `role` slug (the classroom `<shortName>-<role>`), or "".
 func StudentTeamOwner(client githubapi.Client, org, shortName string, role StaffRole) (string, error) {
 	other := shortName + "-" + string(role)
 	exists, err := ContentsExists(client, org, ConfigRepoName, other+"/classroom.json", "")
@@ -72,9 +59,9 @@ func StudentTeamOwner(client githubapi.Client, org, shortName string, role Staff
 }
 
 // UnclaimedTeamError reports a team at a staff slug that is not this
-// classroom's staff team and so is neither adopted, PATCHed, granted, nor
-// exempted. StudentOf names the classroom whose student team it is, when the
-// slug collision is the reason; otherwise the team lacks the config-repo grant.
+// classroom's, so nothing adopts, reshapes, grants, or exempts it. StudentOf is
+// set when it is a sibling classroom's student team; otherwise it lacks the
+// config-repo grant.
 type UnclaimedTeamError struct {
 	Org       string
 	Slug      string
@@ -92,7 +79,7 @@ func (e *UnclaimedTeamError) Error() string {
 }
 
 // RecordedStaffTeamID is the id classroom.json records for the role's canonical
-// team, or 0 when the block is absent or names some other team.
+// team, or 0 when absent or naming another team.
 func RecordedStaffTeamID(shortName string, role StaffRole, recorded *StaffTeamsRef) int64 {
 	ref := recorded.RefForRole(role)
 	if !IsCanonicalStaffTeamRef(shortName, role, ref) {
@@ -101,18 +88,16 @@ func RecordedStaffTeamID(shortName string, role StaffRole, recorded *StaffTeamsR
 	return ref.ID
 }
 
-// OrgTeam is the slice of GitHub's team object the team listing readers need.
+// OrgTeam is the slice of GitHub's team object the listing readers need.
 type OrgTeam struct {
 	ID      int64  `json:"id"`
 	Slug    string `json:"slug"`
 	Privacy string `json:"privacy"`
 }
 
-// ListConfigRepoTeams returns every team that holds a grant on the org's
-// `classroom50` config repo, keyed by slug, in one paginated read: the set of
-// teams Classroom 50 owns (see adoptGuard for why the grant is the proof). A
-// missing config repo (fresh org) yields an empty map; any other read failure
-// propagates.
+// ListConfigRepoTeams returns the teams with a grant on the config repo, keyed
+// by slug: the teams Classroom 50 owns (see adoptGuard). A missing config repo
+// (fresh org) yields an empty map; any other failure propagates.
 func ListConfigRepoTeams(client githubapi.Client, org string) (map[string]OrgTeam, error) {
 	teams, err := githubapi.PaginateAll[OrgTeam](
 		client, githubapi.ListPerPage, githubapi.ListMaxPages,
@@ -137,9 +122,7 @@ func ListConfigRepoTeams(client githubapi.Client, org string) (map[string]OrgTea
 	return bySlug, nil
 }
 
-// LiveTeamID returns the id of the team at `slug`, or 0 when no team exists
-// there. The slug-to-id read behind every path that must act on the team GitHub
-// actually has at a canonical slug rather than a recorded ref.
+// LiveTeamID returns the id of the team at `slug`, or 0 when none exists.
 func LiveTeamID(client githubapi.Client, org, slug string) (int64, error) {
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var live struct {

@@ -4772,8 +4772,7 @@ const makeRoleChangeClient = (opts: {
   admins?: string[]
   // Make the team-add step throw (to exercise the post-demote failure path).
   failTeamAdd?: boolean
-  // A staff slug held by a team nothing vouches for: its POST 422s, the adopt
-  // GET returns it, and it has no config-repo grant.
+  // A staff slug held by a squatted team: POST 422s, no config-repo grant.
   squattedRole?: string
 }) => {
   const memberSet = new Set(opts.members.map((m) => m.toLowerCase()))
@@ -4819,8 +4818,8 @@ const makeRoleChangeClient = (opts: {
     .mockImplementation(
       (path: string, options?: { method?: string; body?: unknown }) => {
         const method = options?.method ?? "GET"
-        // The adopt guard's grant probe on the squatted team: no grant. Before
-        // the config-repo read below, whose regex also matches this path.
+        // The squatted team's grant probe (no grant); the config-repo read
+        // below would otherwise match this path too.
         if (
           opts.squattedRole &&
           method === "GET" &&

@@ -227,18 +227,15 @@ const (
 // `role` — a `closed` team `classroom50-<short>-<role>`. Mirrors the web's
 // ensureClassroomRoleTeam. Idempotent; safe as a preflight before any staff op.
 // Staff teams create `notificationsEnabled` so @mentions reach TAs/teachers
-// (#335).
-//
-// `recordedID` is the id classroom.json `teams.<role>` holds for this role (0
-// when absent). An existing team at the slug is adopted only when Classroom 50
-// can tell it is its own (see adoptGuard); otherwise *UnclaimedTeamError.
+// (#335). `recordedID` is classroom.json's id for the role (0 when absent); an
+// existing team is adopted only when adoptGuard accepts it.
 func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, role StaffRole, recordedID int64) (TeamRef, error) {
 	team, _, err := ensureStaffTeam(client, org, shortName, role, recordedID)
 	return team, err
 }
 
-// ensureStaffTeam is EnsureClassroomStaffTeam plus whether this call created
-// the team, which EnsureStaffTeams needs to roll back a partial run.
+// ensureStaffTeam also reports whether this call created the team, so a
+// partial run can be rolled back.
 func ensureStaffTeam(client githubapi.Client, org, shortName string, role StaffRole, recordedID int64) (TeamRef, bool, error) {
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, false, fmt.Errorf("classroom short-name %q can't back a GitHub team: remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and classroom50 repository access)", shortName)
@@ -251,12 +248,9 @@ func ensureStaffTeam(client githubapi.Client, org, shortName string, role StaffR
 
 // EnsureStaffTeams creates (or adopts) all staff teams (teacher, hta, ta) and
 // returns the refs to record under classroom.json `teams`. Mirrors the web's
-// ensureStaffTeams. `recorded` is the classroom's current `teams` block (nil
-// for a classroom being created), consulted only to adopt a team whose
-// config-repo grant was lost. When a later role fails, the teams this call
-// created are deleted again: nothing records or grants them yet, so a re-run
-// would otherwise refuse them as unclaimed (mirrors the web's
-// rollbackCreatedTeams).
+// ensureStaffTeams. `recorded` is the current `teams` block (nil at create).
+// When a later role fails, the teams this call created are deleted again:
+// unrecorded and ungranted, a re-run would refuse them as unclaimed.
 //
 // This does NOT grant config-repo access — callers must invoke
 // GrantStaffTeamsConfigRepoAccess separately, AFTER dropping the auto-added
@@ -427,12 +421,10 @@ func ensureTeamByName(client githubapi.Client, org, name, description, notificat
 }
 
 // adoptTeamByName reads an existing team by slug (== name, given the
-// canonical short-name guard), checks it against `guard`, and reconciles drift
-// toward the desired state: the privacy, the notification setting, and (when
-// non-empty and differing) the description. A student team that holds a
-// config-repo grant (left by an older release that adopted it as another
-// classroom's staff team) has the grant removed, since that access would let
-// students read classroom.json. Used on the 422 already-exists path.
+// canonical short-name guard), checks it against `guard`, and reconciles
+// privacy, notification setting, and (when non-empty) description. A student
+// team also loses any config-repo grant an older release gave it: that access
+// would let students read classroom.json. Used on the 422 already-exists path.
 func adoptTeamByName(client githubapi.Client, org, name, description, notificationSetting, privacy string, guard adoptGuard) (TeamRef, error) {
 	slug := name
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))

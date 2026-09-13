@@ -146,9 +146,8 @@ describe("reconcileClassroom", () => {
   })
 
   it("deletes the staff teams it created when their grant fails", async () => {
-    // A team created this pass and left ungranted has nothing vouching for it
-    // (the reconcile records no ids), so the next visit would refuse it as
-    // unclaimed forever. Undo the creation instead; adopted teams stay.
+    // A team created here and left ungranted would be refused forever (nothing
+    // records it), so the creation is undone; adopted teams stay.
     ensureStaffTeams.mockResolvedValue({
       teams: {
         teacher: { id: 2, slug: "classroom50-cs101-teacher" },

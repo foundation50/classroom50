@@ -151,12 +151,10 @@ func staffRemoveCmd() *cobra.Command {
 	return cmd
 }
 
-// runStaffAdd adds the canonical-login user to the classroom's staff team for
-// `role`, after making sure that team exists, holds the role's config-repo
-// access, is exempt from the feedback-base lock, and is recorded in
-// classroom.json. The pass is idempotent (no write when already so), which is
-// what lets `staff add` heal a pre-feature classroom, a hand-edited `teams`
-// block, or a recorded team whose grant was lost.
+// runStaffAdd adds the user to the classroom's staff team for `role`, after an
+// idempotent ensure pass (team exists, holds its config-repo access, is exempt
+// from the feedback-base lock, is recorded). Always running the pass is what
+// heals a pre-feature classroom, a hand-edited `teams` block, or a lost grant.
 func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -211,15 +209,13 @@ func ensureStaffTeamRecorded(client githubapi.Client, out, errOut io.Writer, org
 		return configrepo.TeamRef{}, fmt.Errorf("%s: classroom %s not found in %s: run `gh teacher classroom add %s %s` first",
 			org, classroom, configrepo.ConfigRepoName, org, classroom)
 	}
-	// The recorded id lets a team Classroom 50 created, but whose config-repo
-	// grant was lost, be adopted and re-granted rather than refused.
+	// The recorded id lets a team whose grant was lost be re-adopted.
 	team, err := configrepo.EnsureClassroomStaffTeam(client, org, classroom, role, configrepo.RecordedStaffTeamID(classroom, role, c.Teams))
 	if err != nil {
 		return configrepo.TeamRef{}, err
 	}
-	// Record before granting: if the grant fails, the re-run then adopts the
-	// team by its recorded id and retries the grant instead of refusing a team
-	// nothing vouches for.
+	// Record before granting, so a failed grant leaves a team the re-run can
+	// re-adopt by id rather than one nothing vouches for.
 	if err := recordStaffTeam(client, out, org, classroom, branch, role, team); err != nil {
 		return configrepo.TeamRef{}, err
 	}
@@ -232,9 +228,8 @@ func ensureStaffTeamRecorded(client githubapi.Client, out, errOut io.Writer, org
 	return team, nil
 }
 
-// recordStaffTeam persists the ref under classroom.json `teams.<role>` so
-// future resolves and the delete/teardown sweeps find it. RMW in one commit;
-// no commit when already recorded.
+// recordStaffTeam persists the ref under classroom.json `teams.<role>` in one
+// RMW commit; no commit when already recorded.
 func recordStaffTeam(client githubapi.Client, out io.Writer, org, classroom, branch string, role configrepo.StaffRole, team configrepo.TeamRef) error {
 	path := configrepo.ClassroomFilePath(classroom)
 	message := contract.PrefixCommit(fmt.Sprintf("Record %s staff team for %s (gh teacher staff add)", role, classroom))

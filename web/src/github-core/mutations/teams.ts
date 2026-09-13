@@ -119,18 +119,13 @@ async function ensureTeamByName(
   }
 }
 
-// Decides whether an existing team at a canonical slug may be adopted. The slug
-// alone proves nothing: any org member can create a team
-// (members_can_create_teams is on for student groups), and a classroom whose
-// short name ends in a role suffix puts its student team at another classroom's
-// staff slug. Two facts settle it. A classroom directory `<short>-<role>` in the
-// config repo means the team at `<short>`'s `<role>` slug is that classroom's
-// student team, whatever it holds. Otherwise, what only an owner-run Classroom
-// 50 flow does is grant a team access to the `classroom50` config repo, so a
-// staff team must hold that grant (or match the id classroom.json recorded when
-// the team was created and the grant step failed). A student team is always
-// the classroom's own: its slug can only be a staff slug when the classroom
-// itself is the `<short>-<role>` directory. Mirrors the CLI's adoptGuard.
+// Decides whether an existing team at a canonical slug may be adopted. A slug
+// proves nothing: any org member can create a team there, and classroom
+// `<short>-<role>`'s student team sits at `<short>`'s `<role>` slug. So a staff
+// team must not be a sibling classroom's student team, and must hold the
+// config-repo grant only an owner-run flow gives (or match the id recorded when
+// the grant step failed). A student team is always the classroom's own.
+// Mirrors the CLI's adoptGuard.
 type AdoptGuard =
   | { kind: "student" }
   | { kind: "staff"; classroom: string; role: StaffRole; recordedId?: number }
@@ -151,9 +146,8 @@ async function teamHasConfigRepoAccess(
   }
 }
 
-// The classroom whose STUDENT team sits at `classroom`'s `role` slug (the
-// classroom `<classroom>-<role>`), or null when no such classroom exists. One
-// config-repo read. Mirrors the CLI's StudentTeamOwner.
+// The classroom whose student team sits at `classroom`'s `role` slug (the
+// classroom `<classroom>-<role>`), or null. Mirrors the CLI's StudentTeamOwner.
 export async function studentTeamOwner(
   client: GitHubClient,
   org: string,
@@ -170,11 +164,10 @@ export async function studentTeamOwner(
   }
 }
 
-// Thrown when a team at a staff slug is not this classroom's staff team and so
-// is neither adopted nor reshaped. `studentOf` names the classroom whose
-// student team it is when the slug collision is the reason; otherwise the team
-// lacks the config-repo grant. A dedicated type lets the reconcile surface it
-// as a classroom warning with a fix rather than as a transient failure.
+// Thrown when a team at a staff slug is not this classroom's, so nothing adopts
+// or reshapes it. `studentOf` is set when it is a sibling classroom's student
+// team; otherwise it lacks the config-repo grant. A dedicated type lets the
+// reconcile latch it as permanent rather than retry it.
 export class UnclaimedTeamError extends Error {
   org: string
   slug: string
@@ -211,8 +204,7 @@ export class UnclaimedTeamError extends Error {
 }
 
 // Adopt an existing same-named team: read its { id, slug }, confirm it is ours
-// (see AdoptGuard), then reconcile drift (privacy, notification setting, and
-// for a student team a stale config-repo grant). Names are slug-safe (guarded
+// (see AdoptGuard), then reconcile drift. Names are slug-safe (guarded
 // upstream), so the name doubles as the lookup slug.
 async function adoptTeamByName(
   client: GitHubClient,
@@ -252,9 +244,8 @@ async function adoptTeamByName(
       })
     }
   } else {
-    // A student team never holds config-repo access (it would let students
-    // read classroom.json); an older release adopting it as another
-    // classroom's staff team may have granted it. Removing is idempotent.
+    // A student team must never hold config-repo access (students could read
+    // classroom.json); an older release may have granted it. Idempotent.
     await removeRepositoryFromTeam(client, {
       org,
       teamSlug: existing.slug,
@@ -324,7 +315,7 @@ export type StaffTeamRefs = {
 }
 
 // The id classroom.json records for the role's canonical team, or undefined
-// when the block is absent or names some other team.
+// when absent or naming another team.
 function recordedStaffTeamId(
   classroom: string,
   role: StaffRole,
@@ -347,11 +338,9 @@ const CONFIG_REPO_PERMISSION: Partial<Record<StaffRole, "pull" | "push">> = {
 // named `classroom50-<classroom>-<role>`. Idempotent — safe as a preflight
 // before any role op. A newly minted team is exempted from the feedback-base
 // lock so its members can merge feedback PRs (best-effort). `recorded` is the
-// classroom's current `teams` block, consulted only to adopt a team whose
-// config-repo grant was lost (see AdoptGuard). The role flows omit it on
-// purpose: the per-visit reconcile (reconcileClassroom) runs before a teacher
-// can act on a role and re-adopts such a team by its recorded id, so those
-// flows only ever meet a team the reconcile already healed or refused.
+// current `teams` block, consulted only to re-adopt a team whose grant was
+// lost; the role flows omit it because the per-visit reconcile has already
+// healed or refused such a team before a teacher can act on the role.
 export async function ensureClassroomRoleTeam(
   client: GitHubClient,
   org: string,
@@ -442,12 +431,10 @@ export async function grantTeamConfigRepoAccess(
 // maintainer, and removing a member from a team that HOLDS repo access emails
 // them a "removed from team" alert; doing the grant only once the owner is gone
 // keeps that drop silent (the notification_setting toggle can't — it governs
-// only @mentions). `recorded` is the classroom's current `teams` block (absent
-// for a classroom being created), consulted only to adopt a team whose
-// config-repo grant was lost (see AdoptGuard). A role whose slug is held by a
-// team Classroom 50 did not create is left out of `teams` and reported in
-// `unclaimed`, so the caller decides whether that fails the flow (create) or is
-// surfaced and worked around (the per-visit reconcile).
+// only @mentions). `recorded` is the current `teams` block (absent at create).
+// A role whose slug is held by a team that isn't ours is left out of `teams`
+// and reported in `unclaimed`: create fails on it, the reconcile works around
+// it.
 export async function ensureStaffTeams(
   client: GitHubClient,
   org: string,

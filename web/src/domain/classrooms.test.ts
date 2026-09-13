@@ -331,9 +331,8 @@ describe("createClassroomFiles creator team cleanup", () => {
   })
 
   it("refuses an unclaimed team at a staff slug and rolls back what it created", async () => {
-    // The ta slug is squatted (POST 422, no config-repo grant, no record). The
-    // students, teacher, and hta teams created moments earlier are deleted
-    // again, the squatter is left untouched, and nothing is scaffolded.
+    // The ta slug is squatted: the teams created moments earlier are deleted
+    // again, the squatter is untouched, nothing is scaffolded.
     const ordered: string[] = []
     let nextTeamId = 100
     const request = vi.fn(

@@ -60,9 +60,8 @@ func ReadFileContents(client githubapi.Client, owner, repo, path, ref string) ([
 	return data, true, nil
 }
 
-// ContentsExists reports whether path exists at ref via a contents GET (an
-// empty ref means the repo's default branch). Distinguishes a real 404 (false,
-// nil) from a transport error.
+// ContentsExists reports whether path exists at ref (empty: the default
+// branch). Distinguishes a real 404 (false, nil) from a transport error.
 func ContentsExists(client githubapi.Client, owner, repo, path, ref string) (bool, error) {
 	segs := strings.Split(path, "/")
 	for i := range segs {

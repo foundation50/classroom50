@@ -5276,9 +5276,8 @@ class TestStaffTeamOwnership:
             )
 
     def test_unclaimed_team_gets_no_grant_and_a_warning_with_the_fix(self, monkeypatch, capsys):
-        # A populated team sits at the ta slug but has no grant on the config
-        # repo: nothing is PUT for it, and the warning names the team page and
-        # what to do. The claimed hta team is granted as usual.
+        # A populated but ungranted team at the ta slug gets nothing, and the
+        # warning names the fix; the claimed hta team is granted as usual.
         grants: list[str] = []
 
         def fake_grant(api_url, org, team_slug, owner, repo, permission, token, **kwargs):
@@ -5313,8 +5312,7 @@ class TestStaffTeamOwnership:
         assert "grant it access to the classroom50 repository" in err
 
     def test_unreadable_ownership_warns_could_not_check_and_grants_nothing(self, monkeypatch, capsys):
-        # The bulk listing failed and the per-repo read fails too: say so, and
-        # do not accuse the team of being someone else's.
+        # Both reads failed: say so, without accusing the team.
         grants: list[str] = []
         monkeypatch.setattr(cs, "grant_team_repo", lambda *a, **k: grants.append(a[2]) or True)
         monkeypatch.setattr(cs, "known_team_repos", lambda *a, **k: None)

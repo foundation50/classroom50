@@ -33,9 +33,7 @@ function apiError(status: number): GitHubAPIError {
 }
 
 // A fake client recording every request. `adoptGet` (when set) is returned for
-// the adopt GET and forces the POST to 422 so the adopt path runs. The adopt
-// guard's config-repo access probe answers by slug shape: a staff-slug team
-// holds the grant (it is Classroom 50's), a student-slug team does not.
+// the adopt GET and forces the POST to 422 so the adopt path runs.
 function makeClient(adoptGet?: Record<string, unknown>) {
   const calls: Call[] = []
   const request = vi.fn(

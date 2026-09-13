@@ -206,8 +206,8 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 			shortName, org, configrepo.ConfigRepoName,
 			org, configrepo.ConfigRepoName, branch, shortName)
 	}
-	// A classroom `<short>-<role>` puts its student team at this classroom's
-	// staff slug for that role; the two can't share an org.
+	// Classroom `<short>-<role>`'s student team would sit at this classroom's
+	// staff slug for that role.
 	for _, role := range configrepo.StaffRoles {
 		other, err := configrepo.StudentTeamOwner(client, org, shortName, role)
 		if err != nil {
@@ -318,8 +318,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 // teams. The maintainer add is best-effort: a CurrentUser/membership failure
 // warns but doesn't fail creation (the teacher can self-add via the web).
 func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, string, error) {
-	// A new classroom has no recorded refs, so an existing team at a staff
-	// slug is adopted only if it already holds the config-repo grant.
+	// No recorded refs yet: an existing team is adopted only if already granted.
 	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName, nil)
 	if err != nil {
 		return nil, "", fmt.Errorf("create staff teams: %w", err)
@@ -834,8 +833,8 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 				org, shortName, t.Slug, role, org)
 			continue
 		}
-		// An older release could record a sibling classroom's student team
-		// here (`ml-ta`'s roster under `ml`'s teams.ta); never delete that.
+		// An older release could record `ml-ta`'s student team as `ml`'s TA
+		// team; never delete a sibling classroom's roster.
 		if other, oerr := configrepo.StudentTeamOwner(client, org, shortName, role); oerr != nil {
 			return oerr
 		} else if other != "" {
@@ -869,8 +868,7 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	_, _ = fmt.Fprintf(out, "%s/%s: removed classroom %s (%d files)\n", org, configrepo.ConfigRepoName, shortName, deleted)
 
 	// Drop the staff teams from the feedback-base bypass list before deleting
-	// them, so the ruleset never references a team GitHub no longer knows. By
-	// live slug, not the recorded refs: an unrecorded staff team is dropped too.
+	// them, so the ruleset never references a team GitHub no longer knows.
 	orgrules.RevokeClassroomStaffTeams(client, errOut, org, shortName)
 
 	// Delete the per-classroom team (idempotent; 404 = gone). Its grants +

@@ -484,10 +484,9 @@ export async function applyClassroomRoleChange(
     }
   }
 
-  // 0) Resolve the target staff team before anything irreversible: the ensure
-  // can refuse deterministically (a team at the slug that isn't ours), and a
-  // refusal after the owner demote below would strand the member demoted and
-  // on no team.
+  // 0) Resolve the target staff team before anything irreversible: a refusal
+  // (a team at the slug that isn't ours) after the owner demote would strand
+  // the member demoted and on no team.
   const targetTeam =
     toRole === "student"
       ? undefined

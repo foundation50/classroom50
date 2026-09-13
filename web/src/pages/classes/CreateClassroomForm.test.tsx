@@ -115,8 +115,8 @@ describe("CreateClassroomForm slug validation", () => {
     expect(screen.queryByText("validation.classroomSlugTooLong")).toBeNull()
   })
 
-  // A slug ending in a staff role suffix would put its student team at another
-  // classroom's staff team name; refused live and at submit.
+  // `ml-ta`'s student team would sit at `ml`'s TA slug; refused live and at
+  // submit.
   it("rejects a slug ending in a staff role suffix", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()

@@ -53,9 +53,8 @@ type CreateClassroomFormProps = {
   submitError?: string | null
 }
 
-// The existing classroom whose student team sits at `slug`'s staff slug (a
-// classroom named `<slug>-<role>`), or null. The counterpart of
-// reservedShortNameSuffix for the other creation order.
+// The existing classroom `<slug>-<role>`, whose student team sits at `slug`'s
+// staff slug, or null. reservedShortNameSuffix covers the other creation order.
 function siblingClassroom(
   slug: string,
   classes: ReadonlyArray<{ path: string }>,

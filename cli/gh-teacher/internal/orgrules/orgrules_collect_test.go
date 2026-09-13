@@ -148,9 +148,8 @@ func TestCollectStaffTeamSlugs(t *testing.T) {
 	})
 
 	t.Run("a sibling classroom's student slug is not a staff slug", func(t *testing.T) {
-		// `ml-ta`'s student team is `classroom50-ml-ta`, which is also `ml`'s
-		// TA slug: `ml` has no TA slug while `ml-ta` exists, whatever an older
-		// release granted that team. `ml-ta`'s own staff slugs are unaffected.
+		// `classroom50-ml-ta` is `ml-ta`'s student team, so `ml` has no TA slug;
+		// `ml-ta`'s own staff slugs are unaffected.
 		server, _ := classroomServer(t, map[string]*string{"ml": str(csClassroom), "ml-ta": str(csClassroom)}, nil, false)
 		slugs, err := CollectStaffTeamSlugs(githubtest.NewTestClient(t, server), org)
 		if err != nil {
@@ -234,9 +233,8 @@ func TestPrepareStaffTeams(t *testing.T) {
 	})
 
 	t.Run("a team at a staff slug without the config-repo grant is not staff", func(t *testing.T) {
-		// Classroom `cs-ta`'s student team sits at `cs`'s TA slug, and any
-		// member can create `classroom50-cs-hta`. Neither holds a grant on the
-		// config repo, so neither is in the listing: no PATCH, no id.
+		// A sibling's student team and a squatted team hold no config-repo
+		// grant, so neither is listed: no PATCH, no id.
 		server, patched := classroomServer(t, nil, map[string]struct {
 			id      int64
 			privacy string

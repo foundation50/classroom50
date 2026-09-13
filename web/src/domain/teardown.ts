@@ -134,8 +134,8 @@ export type TeardownPlan = {
   // Only teams a classroom actually links to are deleted — a manually created
   // team is never touched, even if it shares the classroom50- naming.
   teams: ClassroomTeamRef[]
-  // The classroom short names walked, for the ruleset revoke: it resolves each
-  // classroom's staff slugs live rather than trusting the recorded refs.
+  // The classroom short names walked; the ruleset revoke resolves their staff
+  // slugs live rather than trusting the recorded refs.
   classrooms: string[]
 }
 
@@ -344,8 +344,7 @@ async function deleteClassroomTeams(
   let teamsRecoverable = false
 
   // The feedback-base ruleset outlives teardown; drop the staff teams from its
-  // bypass list rather than leave it pointing at deleted ones. By live slug, so
-  // an unrecorded staff team is dropped too.
+  // bypass list rather than leave it pointing at deleted ones.
   await revokeClassroomStaffTeams(client, org, classrooms)
 
   await mapWithConcurrency(teams, 4, async (team) => {

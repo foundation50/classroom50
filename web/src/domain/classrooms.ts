@@ -80,9 +80,8 @@ export async function createClassroomFiles(
     created: staffCreated,
     unclaimed,
   } = await ensureStaffTeams(client, input.org, input.classroom)
-  // A new classroom cannot claim a team someone else created at its staff slug;
-  // fail before scaffolding so the teacher sees what to do, and roll back the
-  // teams this run did create.
+  // Fail before scaffolding so the teacher sees what to do, and undo the teams
+  // this run did create.
   if (unclaimed.length > 0) {
     await rollbackCreatedTeams(client, input.org, {
       students: teamCreated ? team : undefined,
@@ -418,8 +417,7 @@ export async function deleteClassroom(
     teams: staffTeams,
   })
   // Drop the teams from the feedback-base bypass list first, so the ruleset
-  // never references a team GitHub no longer knows. By live slug, not the
-  // recorded refs: an unrecorded staff team is dropped too.
+  // never references a team GitHub no longer knows.
   await revokeClassroomStaffTeams(client, org, [classroom])
   const failedTeamSlugs: string[] = []
   for (const teamRef of refsToDelete) {

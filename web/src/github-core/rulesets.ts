@@ -507,11 +507,10 @@ export async function revokeStaffTeams(
   }
 }
 
-// Best-effort: drop the given classrooms' staff teams from the feedback-base
-// bypass list by resolving each canonical slug to the live team, so the
-// recorded `teams` block (head-TA-writable, and absent for a team a role flow
-// created without recording it) never decides which id is dropped. Run before
-// the team deletes.
+// Best-effort: drop the classrooms' staff teams from the feedback-base bypass
+// list. Resolves each canonical slug to the live team rather than trusting the
+// head-TA-writable `teams` block, so an unrecorded team is dropped too. Run
+// before the team deletes.
 export async function revokeClassroomStaffTeams(
   client: GitHubClient,
   org: string,
@@ -536,16 +535,12 @@ export async function revokeClassroomStaffTeams(
   await revokeStaffTeams(client, org, ids)
 }
 
-// The canonical staff team slugs (teacher, hta, ta) of every classroom in the
-// config repo. The slug, not classroom.json, identifies a classroom's staff
-// team: it is what every writer creates, what a role flow that never recorded
-// a `teams` block still produced, and what a head-TA-editable ref can't
-// redirect. A slug that is another classroom's student team (`ml`'s TA slug
-// when a classroom `ml-ta` exists) is left out: that team is a roster,
-// whatever an older release granted it. A missing config repo (fresh org)
-// yields []. Any other failure, including one unreadable classroom.json,
-// throws: a shorter list would rebuild a shorter bypass list, so callers fall
-// back to what is already on the ruleset instead.
+// The canonical staff team slugs of every classroom in the config repo. The
+// slug is the identity: it is what every writer creates and what a
+// head-TA-editable `teams` block can't redirect. A slug that is a sibling
+// classroom's student team (`ml`'s TA slug when `ml-ta` exists) is left out. A
+// missing config repo yields []; any other failure throws, so callers keep the
+// current bypass list rather than rebuilding a shorter one.
 export async function collectStaffTeamSlugs(
   client: GitHubClient,
   org: string,
@@ -571,12 +566,10 @@ export async function collectStaffTeamSlugs(
 
 type OrgTeamListing = Pick<GitHubTeam, "id" | "slug" | "privacy">
 
-// One paginated read of the teams that hold a grant on the org's `classroom50`
-// config repo, keyed by slug: the set of teams Classroom 50 owns (see
-// mutations/teams.ts AdoptGuard for why the grant is the proof). Strict on
-// purpose, unlike queries/teamReads.listRepoTeams, which swallows failures: a
-// failure here must not read as "no teams", or the bypass list is rebuilt
-// empty. A missing config repo (fresh org) is the one 404 that means that.
+// The teams with a grant on the config repo, keyed by slug: the teams Classroom
+// 50 owns (see AdoptGuard). Strict on purpose, unlike listRepoTeams, which
+// swallows failures: a failure here must not rebuild the bypass list empty. A
+// missing config repo (fresh org) is the one 404 that means "no teams".
 async function listConfigRepoTeamsBySlug(
   client: GitHubClient,
   org: string,
@@ -595,9 +588,8 @@ async function listConfigRepoTeamsBySlug(
   return new Map(teams.map((t) => [t.slug, t]))
 }
 
-// The live staff teams behind the slugs; a slug with no team in the listing (a
-// role never staffed, or a team at the slug Classroom 50 did not create) is
-// simply absent.
+// The live staff teams behind the slugs; a slug with no granted team (a role
+// never staffed, or a team that isn't ours) is simply absent.
 function resolveStaffTeams(
   slugs: readonly string[],
   teams: ReadonlyMap<string, OrgTeamListing>,

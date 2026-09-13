@@ -9,13 +9,8 @@ import {
 import { GitHubAPIError } from "./errors"
 import type { GitHubClient, GitHubRequestOptions } from "./client"
 
-// A team at a canonical slug proves nothing by itself: any org member can
-// create one (members_can_create_teams is on for student groups), and a
-// classroom `cs101-ta` puts its student team at `cs101`'s TA slug. Only an
-// owner-run Classroom 50 flow grants a team access to the `classroom50` config
-// repo, so that grant is what the adopt path checks before it reshapes,
-// exempts, or records anything. These tests pin that gate and its one
-// exception (a recorded team whose grant step failed).
+// Pins the adopt guard (see AdoptGuard in mutations/teams.ts): the sibling
+// classroom check, the config-repo grant, and the recorded-id exception.
 
 type Call = { path: string; options?: GitHubRequestOptions }
 
@@ -36,9 +31,8 @@ function apiError(status: number): GitHubAPIError {
   })
 }
 
-// An org where every create POST 422s (the team already exists) and the team
-// at each slug is `existing`. `granted` lists the slugs that hold a grant on the
-// config repo; `classrooms` the classroom directories in the config repo.
+// An org where every create POST 422s and the team at each slug is `existing`;
+// `granted` slugs hold a config-repo grant, `classrooms` are config-repo dirs.
 function makeOrg(opts: {
   existing: Record<string, { id: number; privacy: string }>
   granted: string[]
@@ -147,9 +141,8 @@ describe("adopting a team at a staff slug", () => {
   })
 
   it("refuses a sibling classroom's student team whatever it holds or records", async () => {
-    // Classroom `cs101-ta` exists, so `cs101`'s TA slug is its student team.
-    // An older release adopted it as `cs101`'s TA team and granted it, and
-    // `cs101`'s classroom.json records its id; neither makes it staff.
+    // `cs101-ta` exists, so `cs101`'s TA slug is its student team; a stale
+    // grant and a recorded id do not make it staff.
     const { client, patches } = makeOrg({
       existing: { "classroom50-cs101-ta": { id: 7, privacy: "closed" } },
       granted: ["classroom50-cs101-ta"],
@@ -189,11 +182,9 @@ describe("adopting a team at a staff slug", () => {
 
 describe("adopting a team at the student slug", () => {
   it("adopts the team and strips a stale config-repo grant", async () => {
-    // Classroom `cs101-ta`'s student slug is `cs101`'s TA slug. An older
-    // release adopting it as `cs101`'s TA team granted it config-repo access,
-    // which would let students read classroom.json. The team is still this
-    // classroom's roster (the classroom directory is the authority): adopt it,
-    // reconcile it back to secret, and remove the grant.
+    // An older release adopted `cs101-ta`'s student team as `cs101`'s TA team
+    // and granted it. It is still the roster: adopt, back to secret, grant
+    // removed.
     const { client, patches, revoked } = makeOrg({
       existing: { "classroom50-cs101-ta": { id: 7, privacy: "closed" } },
       granted: ["classroom50-cs101-ta"],

@@ -54,8 +54,7 @@ function makeLegacyOrg(opts: { rulesetInstalled: boolean }) {
         }
       }
       if (teamGet && method === "PATCH") return undefined
-      // Every legacy staff team holds its config-repo grant: that is what
-      // proves it is Classroom 50's and lets the adopt reshape it.
+      // Every legacy staff team holds its config-repo grant (it is ours).
       if (
         /^\/orgs\/acme\/teams\/[^/]+\/repos\/acme\/classroom50$/.test(path) &&
         method === "GET"

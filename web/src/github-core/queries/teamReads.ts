@@ -154,9 +154,8 @@ export function orgTeamsQuery(client: GitHubClient, org: string) {
 // Needs only the token's repo scope (not repo-admin), but GitHub returns only
 // teams VISIBLE to the viewer — a non-owner may see a subset. 404 (repo gone /
 // invisible) -> [] so the caller degrades to "no teams listed".
-// The id of the team at `slug`, or null when none exists there. The read
-// behind every path that acts on the team GitHub actually has at a canonical
-// slug rather than a recorded ref. Mirrors the CLI's configrepo.LiveTeamID.
+// The id of the team at `slug`, or null when none exists. Mirrors the CLI's
+// configrepo.LiveTeamID.
 export async function liveTeamId(
   client: GitHubClient,
   org: string,

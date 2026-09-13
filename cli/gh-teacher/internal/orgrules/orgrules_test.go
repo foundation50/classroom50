@@ -594,11 +594,8 @@ func TestExemptAndRevokeStaffTeams_Warnings(t *testing.T) {
 	RevokeClassroomStaffTeams(client, &errOut, org)
 }
 
-// TestRevokeClassroomStaffTeams_UsesLiveTeams: the classroom's canonical slugs
-// are resolved to the teams GitHub has there, so the ids dropped are the live
-// ones — not whatever classroom.json recorded (head-TA-writable, and absent
-// for a team a web role flow created without recording it). A role with no
-// team is skipped.
+// The ids dropped are those of the live teams at the canonical slugs, not
+// whatever classroom.json recorded; a role with no team is skipped.
 func TestRevokeClassroomStaffTeams_UsesLiveTeams(t *testing.T) {
 	server, put := bypassServerWithTeams(t, []int64{10, 20, 30}, true, map[string]int64{
 		"classroom50-cs-teacher": 10,

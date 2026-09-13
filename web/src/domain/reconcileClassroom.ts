@@ -126,9 +126,9 @@ export async function reconcileClassroom(
     created: staffCreated,
     unclaimed,
   } = await ensureStaffTeams(client, org, classroom, record?.teams)
-  // A team someone else created at a staff slug is left alone (not reshaped,
-  // exempted, or granted) and the rest of the pass still converges. Recorded so
-  // the gap is visible; the owner sees the fix when they next act on that role.
+  // A team that isn't ours is left alone and the rest of the pass converges.
+  // Recorded so the gap is visible; the owner sees the fix on their next staff
+  // action.
   for (const err of unclaimed) {
     log.warn("classroom reconcile: staff slug held by an unclaimed team", {
       org,
@@ -149,10 +149,9 @@ export async function reconcileClassroom(
 
   // Grant staff-team config-repo access AFTER the drop (order is load-bearing —
   // see ensureStaffTeams); also re-affirms the TA read-only downgrade. A
-  // failure must not abort the heal, but a team created this pass and left
-  // ungranted would be refused as unclaimed on every later visit (nothing
-  // records it), so delete what this pass created and let the next pass
-  // recreate it cleanly; adopted teams keep their standing.
+  // failure must not abort the heal, but a team created here and left
+  // ungranted would be refused on every later visit (nothing records it), so
+  // undo the creation and let the next pass recreate it.
   try {
     await grantStaffTeamsConfigRepoAccess(client, org, staffTeams)
   } catch (err) {
@@ -253,8 +252,8 @@ async function dropCreatorFromNonTeacherTeams(
   }
 }
 
-// Best-effort undo of the staff teams one pass created when their grant failed
-// (see the call site). Ids were minted in this pass, so revoking by id is safe.
+// Best-effort undo of the staff teams this pass created. Their ids were just
+// minted, so revoking by id is safe.
 async function rollbackCreatedStaffTeams(
   client: GitHubClient,
   org: string,
@@ -281,11 +280,10 @@ async function rollbackCreatedStaffTeams(
   }
 }
 
-// Reads classroom.json once for the pass: the archived flag decides which
-// branch runs, and the recorded `teams` block lets ensureStaffTeams re-adopt a
-// team whose config-repo grant was lost. A missing classroom.json (404, legacy)
-// reads as active with nothing recorded; a transient read failure rethrows so
-// the caller's latch retries rather than reconciling blind.
+// classroom.json, read once per pass: the archived flag picks the branch and
+// the `teams` block lets ensureStaffTeams re-adopt a team whose grant was lost.
+// A 404 (legacy) reads as active with nothing recorded; a transient failure
+// rethrows so the caller retries rather than reconciling blind.
 async function readClassroomRecord(
   client: GitHubClient,
   org: string,

@@ -405,14 +405,11 @@ def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> s
 def resolve_staff_team_slugs(
     classroom_meta: dict[str, Any], classroom_short: str
 ) -> dict[str, str]:
-    """role -> slug for each staff team the grant pass targets: always the
-    derived `classroom50-<short>-<role>`, the slug both writers create. Mirrors
-    collect_scores.py's resolve_staff_team_slugs so the probe reads the EXACT
-    staff teams the grant pass targets: a recorded `teams.<role>` naming any
-    other team is ignored there (classroom.json is head-TA-writable), so it is
-    ignored here too (a derived team that doesn't exist reads as a 404, which
-    check_staff_team_visible already treats as a skip)."""
-    del classroom_meta  # same signature as the collector; the record is not consulted
+    """role -> derived `classroom50-<short>-<role>` for each staff role. Mirrors
+    collect_scores.py's resolve_staff_team_slugs so the probe reads exactly the
+    teams the grant pass targets; a recorded `teams.<role>` naming another team
+    is ignored there (classroom.json is head-TA-writable), so here too."""
+    del classroom_meta  # same signature as the collector
     return {role: f"{CONFIG_REPO}-{classroom_short}-{role}" for role in STAFF_ROLES}
 
 
@@ -608,8 +605,8 @@ def main() -> int:
             checks.append(check)
             # Probe each staff team the grant targets (see check_staff_team_visible).
             for role, staff_slug in resolve_staff_team_slugs(meta, classroom_short).items():
-                # A classroom `<short>-<role>` owns the team at this slug (its
-                # student team); the grant never targets it.
+                # Classroom `<short>-<role>`'s student team; the grant never
+                # targets it.
                 if f"{classroom_short}-{role}" in known:
                     continue
                 staff_check = check_staff_team_visible(

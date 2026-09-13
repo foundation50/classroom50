@@ -104,12 +104,9 @@ func ClassroomShortNameBudget(shortName string) error {
 	return nil
 }
 
-// ClassroomShortNameSuffix rejects a NEW classroom short-name ending in a staff
-// role suffix (`-teacher`, `-hta`, `-ta`). Such a classroom's student team
-// `classroom50-<short>` sits at another classroom's staff slug
-// (`ml-ta` -> `classroom50-ml-ta`, which is `ml`'s TA team), so every path that
-// derives a staff team from a slug would have to disambiguate the two.
-// Creation-time only — an existing classroom with such a name stays operable.
+// ClassroomShortNameSuffix rejects a NEW short-name ending in a staff role
+// suffix: `ml-ta`'s student team would sit at `ml`'s TA slug. Creation-time
+// only; an existing classroom with such a name stays operable.
 func ClassroomShortNameSuffix(shortName string) error {
 	for _, role := range contract.StaffRoles {
 		if strings.HasSuffix(shortName, "-"+string(role)) {

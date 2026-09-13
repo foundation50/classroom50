@@ -24,12 +24,10 @@ export function isValidShortName(shortName: string): boolean {
   )
 }
 
-// The staff role suffix a NEW classroom short-name must not end in, or null.
-// Such a classroom's student team `classroom50-<short>` would sit at another
-// classroom's staff slug (`ml-ta` -> `classroom50-ml-ta`, which is `ml`'s TA
-// team), so every path that derives a staff team from a slug would have to
-// disambiguate the two. Creation-time only: an existing classroom with such a
-// name stays operable. Mirrors the CLI's validate.ClassroomShortNameSuffix.
+// The staff role suffix a NEW short-name must not end in, or null: `ml-ta`'s
+// student team would sit at `ml`'s TA slug. Creation-time only; an existing
+// classroom with such a name stays operable. Mirrors the CLI's
+// validate.ClassroomShortNameSuffix.
 export function reservedShortNameSuffix(shortName: string): StaffRole | null {
   return STAFF_ROLES.find((role) => shortName.endsWith(`-${role}`)) ?? null
 }

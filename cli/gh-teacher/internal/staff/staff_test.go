@@ -29,9 +29,8 @@ type staffMock struct {
 	grantedRepo   map[string]string // team slug -> permission granted on config repo
 	committed     map[string]string // committed tree path -> content (self-heal RMW)
 	bypassTeamIDs []int64           // Team actors PUT onto the feedback-base ruleset
-	// A team already at a staff slug: its POST 422s and the adopt GET returns
-	// this id. It holds no config-repo grant, so only a matching recorded id
-	// lets the adopt through.
+	// A team already at a staff slug (POST 422s, GET returns this id) with no
+	// config-repo grant: only a matching recorded id lets the adopt through.
 	existingTeamSlug string
 	existingTeamID   int64
 }
@@ -263,9 +262,8 @@ func TestRunStaffAdd(t *testing.T) {
 	})
 
 	t.Run("re-adopts a recorded team whose config-repo grant was lost", func(t *testing.T) {
-		// classroom.json records the ta team (id 55); the team exists but has no
-		// grant (a failed grant step, or removed by hand). The recorded id is
-		// what vouches for it: adopt, then re-grant.
+		// The recorded ta team (id 55) exists but lost its grant; the id vouches
+		// for it: adopt, then re-grant.
 		mock := &staffMock{
 			classroomJSON:    `{"schema":"classroom50/classroom/v1","short_name":"cs-principles","org":"o","teams":{"ta":{"id":55,"slug":"classroom50-cs-principles-ta"}}}`,
 			existingTeamSlug: "classroom50-cs-principles-ta", existingTeamID: 55,

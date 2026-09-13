@@ -51,8 +51,7 @@ export type RosterImportMessages = {
   metadataWritebackMalformed: string
   metadataWritebackFailed: string
   invitingEmails: string
-  // Resolves an error's deferred message (errors below the view carry a key,
-  // not English); a bare `err.message` would show the key.
+  // Errors below the view carry a key, not English; `err.message` would show it.
   t: TranslateFn
 }
 

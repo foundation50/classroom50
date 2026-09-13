@@ -192,10 +192,8 @@ func siblingClassroomPath(other string) string {
 	return "/repos/o/classroom50/contents/" + other + "/classroom.json"
 }
 
-// TestEnsureClassroomStaffTeam_RefusesUnclaimedTeam: a team at the staff slug
-// with no config-repo grant and no matching recorded id was not created by
-// Classroom 50 (a member squatted the slug, or it is `cs101-teacher`'s student
-// team). It must not be adopted, and above all not reshaped: no PATCH.
+// A team at the staff slug with no config-repo grant and no matching recorded
+// id (a squatter) is neither adopted nor reshaped: no PATCH.
 func TestEnsureClassroomStaffTeam_RefusesUnclaimedTeam(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -245,10 +243,8 @@ func TestEnsureClassroomStaffTeam_RefusesUnclaimedTeam(t *testing.T) {
 	})
 }
 
-// TestEnsureClassroomStaffTeam_AdoptsRecordedTeamWithoutGrant: a team
-// Classroom 50 created and recorded, whose config-repo grant step failed or
-// was undone by hand, is still ours (the recorded id matches) and is adopted so
-// the caller can re-grant it.
+// A recorded team whose grant step failed is still ours (the id matches) and is
+// adopted so the caller can re-grant it.
 func TestEnsureClassroomStaffTeam_AdoptsRecordedTeamWithoutGrant(t *testing.T) {
 	var patched map[string]any
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -287,12 +283,9 @@ func TestEnsureClassroomStaffTeam_AdoptsRecordedTeamWithoutGrant(t *testing.T) {
 	}
 }
 
-// TestEnsureClassroomTeam_AdoptStripsStaleConfigRepoGrant: the student slug of
-// classroom `cs101-ta` is `cs101`'s TA slug, and an older release adopting it
-// as `cs101`'s TA team granted it config-repo access. The student team is still
-// this classroom's own (the classroom directory is the authority), so it is
-// adopted and reshaped; the grant, which would let students read
-// classroom.json, is removed.
+// `cs101-ta`'s student team sits at `cs101`'s TA slug, and an older release
+// adopting it as `cs101`'s TA team granted it config-repo access. It is still
+// `cs101-ta`'s roster: adopted, reshaped, and stripped of the grant.
 func TestEnsureClassroomTeam_AdoptStripsStaleConfigRepoGrant(t *testing.T) {
 	var patched map[string]any
 	var revoked bool
@@ -331,11 +324,8 @@ func TestEnsureClassroomTeam_AdoptStripsStaleConfigRepoGrant(t *testing.T) {
 	}
 }
 
-// TestEnsureClassroomStaffTeam_RefusesSiblingStudentTeam: a classroom `cs101-ta`
-// exists, so the team at `cs101`'s TA slug is its student team. Whatever that
-// team holds (an older release granted it config-repo access) and whatever
-// `cs101`'s classroom.json recorded, it is refused before any read of the grant
-// or any write.
+// Classroom `cs101-ta` exists, so the team at `cs101`'s TA slug is its student
+// team: refused before any grant read or write, whatever it holds or records.
 func TestEnsureClassroomStaffTeam_RefusesSiblingStudentTeam(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
@@ -364,9 +354,8 @@ func TestEnsureClassroomStaffTeam_RefusesSiblingStudentTeam(t *testing.T) {
 	}
 }
 
-// TestEnsureStaffTeams_RollsBackCreatedOnRefusal: teacher and hta are created,
-// the ta slug is squatted. Nothing records or grants the two new teams yet, so
-// a re-run would refuse them; they are deleted again before the error returns.
+// Teacher and hta are created, the ta slug is squatted: the two new teams
+// (unrecorded, ungranted, so a re-run would refuse them) are deleted again.
 func TestEnsureStaffTeams_RollsBackCreatedOnRefusal(t *testing.T) {
 	var deleted []string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

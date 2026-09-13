@@ -104,10 +104,8 @@ _PERMISSION_RANK = {level: i for i, level in enumerate(_PERMISSION_LEVELS)}
 # the web STAFF_ROLES; the derived slug for each is `classroom50-<short>-<role>`.
 STAFF_ROLES = ("teacher", "hta", "ta")
 
-# The org's config repo. A staff team is granted access to it when Classroom 50
-# creates the team, and only an owner-run Classroom 50 flow can do that, so the
-# grant is what tells a real staff team from any other team at its slug (see
-# staff_team_is_claimed).
+# The org's config repo. Only an owner-run Classroom 50 flow grants a team
+# access to it, so the grant marks a real staff team (see staff_team_is_claimed).
 CONFIG_REPO = "classroom50"
 
 # Body markers that identify a rate-limit response, for the cases no header
@@ -309,9 +307,8 @@ def main() -> int:
     ).rstrip("/")
 
     classroom_dirs = list(iter_classrooms(base_dir, classroom_filter))
-    # Every classroom directory, filter or not: a classroom `<short>-<role>`
-    # owns the team at `<short>`'s `<role>` slug, so the grant pass for
-    # `<short>` must know about it even when only `<short>` is collected.
+    # Every classroom, filter or not: `<short>`'s grant pass must know a
+    # classroom `<short>-<role>` exists even when only `<short>` is collected.
     all_classrooms = classroom_dir_names(base_dir)
     if not classroom_dirs:
         if classroom_filter:
@@ -599,8 +596,8 @@ def main() -> int:
 
 
 def classroom_dir_names(base_dir: pathlib.Path) -> frozenset[str]:
-    """Every directory under base_dir that holds a classroom.json: the same
-    authority the Go and web sides probe for a `<short>-<role>` classroom."""
+    """Every directory under base_dir holding a classroom.json (the same
+    authority the Go and web sides probe for a sibling classroom)."""
     if not base_dir.is_dir():
         return frozenset()
     return frozenset(
@@ -2167,8 +2164,8 @@ def grant_classroom_team_access(
     for role, team in staff_teams.items():
         if role not in STAFF_TEAM_PERMISSIONS:
             continue
-        # A classroom `<short>-<role>` puts its STUDENT team at this slug; that
-        # roster is never staff, whatever an older release granted it.
+        # Classroom `<short>-<role>`'s student team sits at this slug; a roster
+        # is never staff, whatever an older release granted it.
         if f"{classroom_short}-{role}" in all_classrooms:
             print(
                 f"{classroom_short}: {team.slug!r} is the student team of classroom "
@@ -2296,10 +2293,8 @@ def grant_classroom_team_access(
         known_repos = known_team_repos(
             api_url, org, team_slug, service_token, classroom_short
         )
-        # The slug alone does not make a team staff: any member can create
-        # `classroom50-<short>-ta`, and classroom `<short>-ta`'s student team
-        # sits at that very slug. Only a team Classroom 50 granted access to
-        # the config repo gets push on every student repo.
+        # Any member can create a team at this slug; only one Classroom 50
+        # granted config-repo access gets push on every student repo.
         claimed = staff_team_is_claimed(
             api_url, org, team_slug, service_token, known_repos
         )
@@ -2456,13 +2451,12 @@ def staff_team_is_claimed(
     token: str,
     known_repos: dict[str, str] | None,
 ) -> bool | None:
-    """Whether `team_slug` holds a grant on the org's config repo, the proof that
-    Classroom 50 created it: the grant half of the Go adoptGuard and the web
-    AdoptGuard (the recorded-id exception does not apply here, since the
-    collector never adopts or re-grants a team). Answered from the bulk repo
-    listing when the caller has it, else with one per-repo read. None means the
-    read failed, so the caller can say "could not check" rather than "not
-    Classroom 50's"; either way nothing is granted on a guess."""
+    """Whether `team_slug` holds a grant on the config repo, the proof Classroom
+    50 created it (the grant half of the Go/web adopt guard; the collector never
+    adopts, so the recorded-id exception does not apply). Read from the bulk repo
+    listing when available, else one per-repo read. None means the read failed:
+    the caller says "could not check" rather than "not Classroom 50's", and
+    grants nothing either way."""
     key = f"{org}/{CONFIG_REPO}".lower()
     if known_repos is not None:
         return key in known_repos
