@@ -4248,7 +4248,11 @@ def throttle_sleep_budget_spent(delay: float) -> bool:
     with _transport_lock:
         start = max(now, getattr(_throttle_local, "sleep_until", 0.0))
         end = start + delay
-        charge = max(0.0, end - max(start, _throttle_sleep_until))
+        # Charge `delay` less the overlap, not `end - start`: subtracting two
+        # large monotonic readings loses ULPs, and five 60s waits then overshoot
+        # a 300s budget.
+        overlap = min(delay, max(0.0, _throttle_sleep_until - start))
+        charge = delay - overlap
         if _throttle_sleep_spent + charge > MAX_TOTAL_THROTTLE_SLEEP_SECONDS:
             return True
         _throttle_sleep_spent += charge

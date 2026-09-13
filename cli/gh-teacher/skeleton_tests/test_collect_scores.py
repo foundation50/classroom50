@@ -6197,9 +6197,18 @@ class TestThrottleBudgetUnderConcurrency:
     def test_sequential_waits_on_one_thread_each_count(self):
         for _ in range(5):
             assert cs.throttle_sleep_budget_spent(60) is False
-        # (start + 60) - start on a large monotonic clock loses a few ULPs.
-        assert cs._throttle_sleep_spent == pytest.approx(300)
+        assert cs._throttle_sleep_spent == 300
         assert cs.throttle_sleep_budget_spent(1) is True
+
+    def test_charge_is_exact_on_a_large_monotonic_clock(self, monkeypatch):
+        # A Linux monotonic clock reads in the billions; `(start + 60) - start`
+        # there is 60 plus a few ULPs, and five such waits overshot the budget.
+        monkeypatch.setattr(cs.time, "monotonic", lambda: 4.2e9)
+        grants = 0
+        while not cs.throttle_sleep_budget_spent(60):
+            grants += 1
+        assert grants == 5
+        assert cs._throttle_sleep_spent == 300
 
 
 class TestProbeOrgRepos:
