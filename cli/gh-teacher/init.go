@@ -242,15 +242,27 @@ func initCmd() *cobra.Command {
 			// feedback-base bypass list is rebuilt from every classroom's
 			// staff teams, so a re-run also repairs a list that drifted.
 			step(initStepLabels[4])
-			var staffTeamIDs []int64
+			var (
+				rulesetsReady bool
+				staffTeamIDs  []int64
+				keepFeedback  bool
+			)
 			if staffTeams, err := orgrules.CollectStaffTeams(client, stepErr, org); err != nil {
 				_, _ = fmt.Fprintf(stepErr, "Warning: %s: could not read classroom staff teams (%v); the feedback-base bypass list keeps its current teams. Re-run init once the classroom50 repository is readable.\n", org, err)
-				// Best-effort: keep what's there rather than wipe it.
-				staffTeamIDs, _ = orgrules.ExistingFeedbackBaseTeamIDs(client, org)
+				if staffTeamIDs, err = orgrules.ExistingFeedbackBaseTeamIDs(client, org); err != nil {
+					// Neither source is readable: rebuilding would wipe every
+					// staff exemption, so leave that ruleset untouched.
+					_, _ = fmt.Fprintf(stepErr, "Warning: %s: could not read the current bypass list either (%v); the feedback-base ruleset was left unchanged.\n", org, err)
+					keepFeedback = true
+				}
 			} else {
 				staffTeamIDs = orgrules.PrepareStaffTeams(client, stepOut, stepErr, org, staffTeams)
 			}
-			rulesetsReady, err := orgrules.Ensure(client, stepOut, stepErr, org, staffTeamIDs)
+			if keepFeedback {
+				_, err = orgrules.EnsureSubmissionHistoryOnly(client, stepOut, stepErr, org)
+			} else {
+				rulesetsReady, err = orgrules.Ensure(client, stepOut, stepErr, org, staffTeamIDs)
+			}
 			if err != nil {
 				prog.Abort()
 				return err
