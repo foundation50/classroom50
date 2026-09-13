@@ -285,6 +285,11 @@ func bypassServer(t *testing.T, teams []int64, installed bool) (*httptest.Server
 // bypassServerWithTeams also serves GET /orgs/{org}/teams/{slug} from
 // liveTeams (slug -> id); an unlisted slug 404s.
 func bypassServerWithTeams(t *testing.T, teams []int64, installed bool, liveTeams map[string]int64) (*httptest.Server, func() *rulesetBody) {
+	return bypassServerFull(t, teams, installed, liveTeams, false)
+}
+
+// bypassServerFull additionally makes the ruleset PUT fail when putFails is set.
+func bypassServerFull(t *testing.T, teams []int64, installed bool, liveTeams map[string]int64, putFails bool) (*httptest.Server, func() *rulesetBody) {
 	t.Helper()
 	var (
 		mu  sync.Mutex
@@ -316,6 +321,11 @@ func bypassServerWithTeams(t *testing.T, teams []int64, installed bool, liveTeam
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write(payload)
 		case r.Method == http.MethodPut && r.URL.Path == "/orgs/"+org+"/rulesets/22":
+			if putFails {
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"message":"boom"}`))
+				return
+			}
 			var body rulesetBody
 			raw, _ := io.ReadAll(r.Body)
 			_ = json.Unmarshal(raw, &body)
@@ -609,6 +619,15 @@ func TestRevokeClassroomStaffTeams_UsesLiveTeams(t *testing.T) {
 	if got := actorTeamIDs(body.BypassActors); !equalInt64s(got, []int64{20}) {
 		t.Errorf("remaining team actors = %v, want only the other classroom's [20]", got)
 	}
+
+	t.Run("a failed ruleset PUT warns and points at init", func(t *testing.T) {
+		server, _ := bypassServerFull(t, []int64{10}, true, map[string]int64{"classroom50-cs-teacher": 10}, true)
+		var errOut bytes.Buffer
+		RevokeClassroomStaffTeams(githubtest.NewTestClient(t, server), &errOut, org, "cs")
+		if !strings.Contains(errOut.String(), "could not drop") {
+			t.Errorf("revoke PUT-failure warning missing: %q", errOut.String())
+		}
+	})
 
 	t.Run("nothing live at any slug is a no-op", func(t *testing.T) {
 		server, put := bypassServerWithTeams(t, []int64{10}, true, nil)

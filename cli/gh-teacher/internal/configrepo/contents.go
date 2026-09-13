@@ -60,16 +60,19 @@ func ReadFileContents(client githubapi.Client, owner, repo, path, ref string) ([
 	return data, true, nil
 }
 
-// ContentsExists reports whether path exists at ref via a contents GET.
-// Distinguishes a real 404 (false, nil) from a transport error.
+// ContentsExists reports whether path exists at ref via a contents GET (an
+// empty ref means the repo's default branch). Distinguishes a real 404 (false,
+// nil) from a transport error.
 func ContentsExists(client githubapi.Client, owner, repo, path, ref string) (bool, error) {
 	segs := strings.Split(path, "/")
 	for i := range segs {
 		segs[i] = url.PathEscape(segs[i])
 	}
-	apiPath := fmt.Sprintf("repos/%s/%s/contents/%s?ref=%s",
-		url.PathEscape(owner), url.PathEscape(repo),
-		strings.Join(segs, "/"), url.PathEscape(ref))
+	apiPath := fmt.Sprintf("repos/%s/%s/contents/%s",
+		url.PathEscape(owner), url.PathEscape(repo), strings.Join(segs, "/"))
+	if ref != "" {
+		apiPath += "?ref=" + url.PathEscape(ref)
+	}
 	if err := client.Get(apiPath, nil); err != nil {
 		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
 			return false, nil

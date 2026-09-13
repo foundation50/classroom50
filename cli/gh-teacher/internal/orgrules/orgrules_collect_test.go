@@ -147,6 +147,26 @@ func TestCollectStaffTeamSlugs(t *testing.T) {
 		}
 	})
 
+	t.Run("a sibling classroom's student slug is not a staff slug", func(t *testing.T) {
+		// `ml-ta`'s student team is `classroom50-ml-ta`, which is also `ml`'s
+		// TA slug: `ml` has no TA slug while `ml-ta` exists, whatever an older
+		// release granted that team. `ml-ta`'s own staff slugs are unaffected.
+		server, _ := classroomServer(t, map[string]*string{"ml": str(csClassroom), "ml-ta": str(csClassroom)}, nil, false)
+		slugs, err := CollectStaffTeamSlugs(githubtest.NewTestClient(t, server), org)
+		if err != nil {
+			t.Fatalf("CollectStaffTeamSlugs: %v", err)
+		}
+		got := strings.Join(slugs, ",")
+		if strings.Contains(got, "classroom50-ml-ta,") || strings.HasSuffix(got, "classroom50-ml-ta") {
+			t.Errorf("slugs = %v, must not include ml-ta's student team as ml's TA team", slugs)
+		}
+		for _, want := range []string{"classroom50-ml-teacher", "classroom50-ml-hta", "classroom50-ml-ta-teacher", "classroom50-ml-ta-hta", "classroom50-ml-ta-ta"} {
+			if !strings.Contains(got, want) {
+				t.Errorf("slugs = %v, missing %s", slugs, want)
+			}
+		}
+	})
+
 	t.Run("a classroom.json read failure is an error, not a shorter list", func(t *testing.T) {
 		server, _ := classroomServer(t, map[string]*string{"cs": str(csClassroom), "bad": str("BOOM")}, nil, false)
 		_, err := CollectStaffTeamSlugs(githubtest.NewTestClient(t, server), org)

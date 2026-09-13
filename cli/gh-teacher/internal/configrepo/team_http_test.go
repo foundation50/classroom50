@@ -81,8 +81,8 @@ func TestEnsureClassroomTeam_AdoptReconcilesDescription(t *testing.T) {
 				"id": 7, "slug": "classroom50-cs101", "privacy": "secret",
 				"description": `{"schema":"classroom50/team/v1","name":"Intro CS","secret":"oldsecret"}`,
 			})
-		case r.URL.Path == configRepoAccessPath("classroom50-cs101") && r.Method == http.MethodGet:
-			http.NotFound(w, r) // no config-repo grant: a student team, adoptable
+		case r.URL.Path == configRepoAccessPath("classroom50-cs101") && r.Method == http.MethodDelete:
+			http.NotFound(w, r) // no stale config-repo grant to remove
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101" && r.Method == http.MethodPatch:
 			_ = json.NewDecoder(r.Body).Decode(&patched)
 			w.WriteHeader(http.StatusOK)
@@ -127,7 +127,7 @@ func TestEnsureClassroomTeam_AdoptSkipsPatchWhenDescriptionMatches(t *testing.T)
 				"id": 7, "slug": "classroom50-cs101", "privacy": "secret",
 				"notification_setting": "notifications_disabled", "description": desc,
 			})
-		case r.URL.Path == configRepoAccessPath("classroom50-cs101") && r.Method == http.MethodGet:
+		case r.URL.Path == configRepoAccessPath("classroom50-cs101") && r.Method == http.MethodDelete:
 			http.NotFound(w, r)
 		case r.Method == http.MethodPatch:
 			t.Errorf("must not PATCH when privacy, notification setting, and description already match")
@@ -160,6 +160,8 @@ func TestEnsureClassroomStaffTeam_AdoptSkipsPatchWhenNotificationOmitted(t *test
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "closed",
 			})
+		case r.URL.Path == siblingClassroomPath("cs101-teacher") && r.Method == http.MethodGet:
+			http.NotFound(w, r) // no classroom `cs101-teacher`: the slug is not a student team
 		case r.URL.Path == configRepoAccessPath("classroom50-cs101-teacher") && r.Method == http.MethodGet:
 			w.WriteHeader(http.StatusNoContent) // holds the config-repo grant: ours
 		case r.Method == http.MethodPatch:
@@ -184,6 +186,12 @@ func configRepoAccessPath(slug string) string {
 	return "/orgs/o/teams/" + slug + "/repos/o/classroom50"
 }
 
+// siblingClassroomPath is the config-repo probe the staff adopt guard reads
+// first: a classroom `<short>-<role>` means the slug is its student team.
+func siblingClassroomPath(other string) string {
+	return "/repos/o/classroom50/contents/" + other + "/classroom.json"
+}
+
 // TestEnsureClassroomStaffTeam_RefusesUnclaimedTeam: a team at the staff slug
 // with no config-repo grant and no matching recorded id was not created by
 // Classroom 50 (a member squatted the slug, or it is `cs101-teacher`'s student
@@ -199,6 +207,8 @@ func TestEnsureClassroomStaffTeam_RefusesUnclaimedTeam(t *testing.T) {
 				"id": 7, "slug": "classroom50-cs101-ta", "privacy": "secret",
 				"notification_setting": "notifications_disabled",
 			})
+		case r.URL.Path == siblingClassroomPath("cs101-ta") && r.Method == http.MethodGet:
+			http.NotFound(w, r)
 		case r.URL.Path == configRepoAccessPath("classroom50-cs101-ta") && r.Method == http.MethodGet:
 			http.NotFound(w, r)
 		case r.Method == http.MethodPatch:
@@ -218,7 +228,7 @@ func TestEnsureClassroomStaffTeam_RefusesUnclaimedTeam(t *testing.T) {
 		if !errors.As(err, &unclaimed) {
 			t.Fatalf("err = %v, want *UnclaimedTeamError", err)
 		}
-		if unclaimed.Slug != "classroom50-cs101-ta" || !unclaimed.Staff {
+		if unclaimed.Slug != "classroom50-cs101-ta" || unclaimed.StudentOf != "" {
 			t.Errorf("unclaimed = %+v", unclaimed)
 		}
 		for _, want := range []string{"not created by Classroom 50", "https://github.com/orgs/o/teams/classroom50-cs101-ta", "grant it access to the classroom50 repository"} {
@@ -250,6 +260,8 @@ func TestEnsureClassroomStaffTeam_AdoptsRecordedTeamWithoutGrant(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id": 7, "slug": "classroom50-cs101-ta", "privacy": "secret",
 			})
+		case r.URL.Path == siblingClassroomPath("cs101-ta") && r.Method == http.MethodGet:
+			http.NotFound(w, r)
 		case r.URL.Path == configRepoAccessPath("classroom50-cs101-ta") && r.Method == http.MethodGet:
 			http.NotFound(w, r)
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-ta" && r.Method == http.MethodPatch:
@@ -275,11 +287,15 @@ func TestEnsureClassroomStaffTeam_AdoptsRecordedTeamWithoutGrant(t *testing.T) {
 	}
 }
 
-// TestEnsureClassroomTeam_RefusesStaffTeamAtStudentSlug: the student slug of a
-// classroom `cs101-ta` is `cs101`'s TA slug. A team there that holds the
-// config-repo grant is that staff team; adopting it as the student team would
-// flip it secret and write the capability secret onto it.
-func TestEnsureClassroomTeam_RefusesStaffTeamAtStudentSlug(t *testing.T) {
+// TestEnsureClassroomTeam_AdoptStripsStaleConfigRepoGrant: the student slug of
+// classroom `cs101-ta` is `cs101`'s TA slug, and an older release adopting it
+// as `cs101`'s TA team granted it config-repo access. The student team is still
+// this classroom's own (the classroom directory is the authority), so it is
+// adopted and reshaped; the grant, which would let students read
+// classroom.json, is removed.
+func TestEnsureClassroomTeam_AdoptStripsStaleConfigRepoGrant(t *testing.T) {
+	var patched map[string]any
+	var revoked bool
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
@@ -289,10 +305,11 @@ func TestEnsureClassroomTeam_RefusesStaffTeamAtStudentSlug(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"id": 7, "slug": "classroom50-cs101-ta", "privacy": "closed",
 			})
-		case r.URL.Path == configRepoAccessPath("classroom50-cs101-ta") && r.Method == http.MethodGet:
+		case r.URL.Path == configRepoAccessPath("classroom50-cs101-ta") && r.Method == http.MethodDelete:
+			revoked = true
 			w.WriteHeader(http.StatusNoContent)
-		case r.Method == http.MethodPatch:
-			t.Errorf("must not PATCH another classroom's staff team")
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-ta" && r.Method == http.MethodPatch:
+			_ = json.NewDecoder(r.Body).Decode(&patched)
 			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -302,13 +319,96 @@ func TestEnsureClassroomTeam_RefusesStaffTeamAtStudentSlug(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	_, err := EnsureClassroomTeam(client, "o", "cs101-ta", "")
-	var unclaimed *UnclaimedTeamError
-	if !errors.As(err, &unclaimed) || unclaimed.Staff {
-		t.Fatalf("err = %v, want a student-kind *UnclaimedTeamError", err)
+	ref, err := EnsureClassroomTeam(client, "o", "cs101-ta", "")
+	if err != nil {
+		t.Fatalf("EnsureClassroomTeam adopt: %v", err)
 	}
-	if !strings.Contains(err.Error(), "another classroom's staff team") {
-		t.Errorf("error %q should explain the slug is a staff team", err.Error())
+	if ref.ID != 7 || !revoked {
+		t.Errorf("ref = %+v revoked = %v, want the team adopted and its config-repo grant removed", ref, revoked)
+	}
+	if patched["privacy"] != studentTeamPrivacy {
+		t.Errorf("PATCH = %v, want privacy back to %s", patched, studentTeamPrivacy)
+	}
+}
+
+// TestEnsureClassroomStaffTeam_RefusesSiblingStudentTeam: a classroom `cs101-ta`
+// exists, so the team at `cs101`'s TA slug is its student team. Whatever that
+// team holds (an older release granted it config-repo access) and whatever
+// `cs101`'s classroom.json recorded, it is refused before any read of the grant
+// or any write.
+func TestEnsureClassroomStaffTeam_RefusesSiblingStudentTeam(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-ta" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "slug": "classroom50-cs101-ta", "privacy": "secret"})
+		case r.URL.Path == siblingClassroomPath("cs101-ta") && r.Method == http.MethodGet:
+			_, _ = w.Write([]byte(`{"name":"classroom.json"}`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	_, err := EnsureClassroomStaffTeam(client, "o", "cs101", RoleTA, 7) // recorded id matches, still refused
+	var unclaimed *UnclaimedTeamError
+	if !errors.As(err, &unclaimed) || unclaimed.StudentOf != "cs101-ta" {
+		t.Fatalf("err = %v, want *UnclaimedTeamError naming classroom cs101-ta", err)
+	}
+	if !strings.Contains(err.Error(), "student team of classroom cs101-ta") {
+		t.Errorf("error %q should name the owning classroom", err.Error())
+	}
+}
+
+// TestEnsureStaffTeams_RollsBackCreatedOnRefusal: teacher and hta are created,
+// the ta slug is squatted. Nothing records or grants the two new teams yet, so
+// a re-run would refuse them; they are deleted again before the error returns.
+func TestEnsureStaffTeams_RollsBackCreatedOnRefusal(t *testing.T) {
+	var deleted []string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
+			var body struct {
+				Name string `json:"name"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Name == "classroom50-cs-ta" {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = w.Write([]byte(`{"message":"name already taken"}`))
+				return
+			}
+			id := map[string]int64{"classroom50-cs-teacher": 1, "classroom50-cs-hta": 2}[body.Name]
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "slug": body.Name})
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs-ta" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": 9, "slug": "classroom50-cs-ta", "privacy": "secret"})
+		case r.URL.Path == siblingClassroomPath("cs-ta") && r.Method == http.MethodGet:
+			http.NotFound(w, r)
+		case r.URL.Path == configRepoAccessPath("classroom50-cs-ta") && r.Method == http.MethodGet:
+			http.NotFound(w, r)
+		case strings.HasPrefix(r.URL.Path, "/orgs/o/teams/classroom50-cs-") && r.Method == http.MethodGet:
+			slug := strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/")
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": map[string]int64{"classroom50-cs-teacher": 1, "classroom50-cs-hta": 2}[slug]})
+		case strings.HasPrefix(r.URL.Path, "/orgs/o/teams/classroom50-cs-") && r.Method == http.MethodDelete:
+			deleted = append(deleted, strings.TrimPrefix(r.URL.Path, "/orgs/o/teams/"))
+			w.WriteHeader(http.StatusNoContent)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	_, err := EnsureStaffTeams(githubtest.NewTestClient(t, server), "o", "cs", nil)
+	var unclaimed *UnclaimedTeamError
+	if !errors.As(err, &unclaimed) {
+		t.Fatalf("err = %v, want *UnclaimedTeamError", err)
+	}
+	if strings.Join(deleted, ",") != "classroom50-cs-teacher,classroom50-cs-hta" {
+		t.Errorf("deleted = %v, want the two teams this run created and not the squatted one", deleted)
 	}
 }
 
@@ -327,6 +427,8 @@ func TestEnsureClassroomStaffTeam_AdoptReconcilesNotification(t *testing.T) {
 				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "closed",
 				"notification_setting": "notifications_disabled",
 			})
+		case r.URL.Path == siblingClassroomPath("cs101-teacher") && r.Method == http.MethodGet:
+			http.NotFound(w, r)
 		case r.URL.Path == configRepoAccessPath("classroom50-cs101-teacher") && r.Method == http.MethodGet:
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodPatch:
@@ -902,6 +1004,8 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs-teacher" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": 7, "slug": "classroom50-cs-teacher", "privacy": "secret"})
+		case r.URL.Path == siblingClassroomPath("cs-teacher") && r.Method == http.MethodGet:
+			http.NotFound(w, r)
 		case r.URL.Path == configRepoAccessPath("classroom50-cs-teacher") && r.Method == http.MethodGet:
 			w.WriteHeader(http.StatusNoContent)
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs-teacher" && r.Method == http.MethodPatch:

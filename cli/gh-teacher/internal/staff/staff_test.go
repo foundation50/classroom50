@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -28,6 +29,11 @@ type staffMock struct {
 	grantedRepo   map[string]string // team slug -> permission granted on config repo
 	committed     map[string]string // committed tree path -> content (self-heal RMW)
 	bypassTeamIDs []int64           // Team actors PUT onto the feedback-base ruleset
+	// A team already at a staff slug: its POST 422s and the adopt GET returns
+	// this id. It holds no config-repo grant, so only a matching recorded id
+	// lets the adopt through.
+	existingTeamSlug string
+	existingTeamID   int64
 }
 
 func (m *staffMock) handler(t *testing.T) http.Handler {
@@ -71,7 +77,9 @@ func (m *staffMock) handler(t *testing.T) http.Handler {
 			name := strings.TrimPrefix(path, "/users/")
 			_ = json.NewEncoder(w).Encode(map[string]any{"login": name, "id": 42})
 		case strings.HasPrefix(path, "/repos/o/classroom50/contents/") && r.Method == http.MethodGet:
-			if m.classroomJSON == "" {
+			// Only the classroom's own file exists; the adopt guard's probe for a
+			// sibling `<short>-<role>/classroom.json` 404s.
+			if m.classroomJSON == "" || path != "/repos/o/classroom50/contents/cs-principles/classroom.json" {
 				w.WriteHeader(http.StatusNotFound)
 				return
 			}
@@ -92,10 +100,19 @@ func (m *staffMock) handler(t *testing.T) http.Handler {
 				Name string `json:"name"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Name == m.existingTeamSlug {
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = w.Write([]byte(`{"message":"name already taken"}`))
+				return
+			}
 			m.teamsCreated = append(m.teamsCreated, body.Name)
 			_ = json.NewEncoder(w).Encode(map[string]any{"id": int64(len(m.teamsCreated) + 100), "slug": body.Name})
 		case strings.HasPrefix(path, "/orgs/o/teams/") && strings.Contains(path, "/repos/") && r.Method == http.MethodGet:
 			w.WriteHeader(http.StatusNotFound) // no access yet
+		case path == "/orgs/o/teams/"+m.existingTeamSlug && m.existingTeamSlug != "" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{"id": m.existingTeamID, "slug": m.existingTeamSlug, "privacy": "closed"})
+		case path == "/orgs/o/teams/"+m.existingTeamSlug && m.existingTeamSlug != "" && r.Method == http.MethodPatch:
+			w.WriteHeader(http.StatusOK)
 		case strings.HasPrefix(path, "/orgs/o/teams/") && strings.Contains(path, "/repos/") && r.Method == http.MethodPut:
 			var body struct {
 				Permission string `json:"permission"`
@@ -242,6 +259,44 @@ func TestRunStaffAdd(t *testing.T) {
 		}
 		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-teacher/memberships/alice") {
 			t.Errorf("membership PUTs = %v, want alice added to the teacher team", mock.membershipPUT)
+		}
+	})
+
+	t.Run("re-adopts a recorded team whose config-repo grant was lost", func(t *testing.T) {
+		// classroom.json records the ta team (id 55); the team exists but has no
+		// grant (a failed grant step, or removed by hand). The recorded id is
+		// what vouches for it: adopt, then re-grant.
+		mock := &staffMock{
+			classroomJSON:    `{"schema":"classroom50/classroom/v1","short_name":"cs-principles","org":"o","teams":{"ta":{"id":55,"slug":"classroom50-cs-principles-ta"}}}`,
+			existingTeamSlug: "classroom50-cs-principles-ta", existingTeamID: 55,
+		}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		var out, errOut bytes.Buffer
+		if err := runStaffAdd(githubtest.NewTestClient(t, server), &out, &errOut, "o", "cs-principles", "bob", configrepo.RoleTA); err != nil {
+			t.Fatalf("runStaffAdd: %v", err)
+		}
+		if len(mock.teamsCreated) != 0 || mock.grantedRepo["classroom50-cs-principles-ta"] != "pull" {
+			t.Errorf("created = %v granted = %v, want the recorded team adopted and re-granted pull", mock.teamsCreated, mock.grantedRepo)
+		}
+	})
+
+	t.Run("refuses a team at the slug that nothing vouches for", func(t *testing.T) {
+		// Recorded id 56, live team 55, no grant: someone else's team.
+		mock := &staffMock{
+			classroomJSON:    `{"schema":"classroom50/classroom/v1","short_name":"cs-principles","org":"o","teams":{"ta":{"id":56,"slug":"classroom50-cs-principles-ta"}}}`,
+			existingTeamSlug: "classroom50-cs-principles-ta", existingTeamID: 55,
+		}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		var out, errOut bytes.Buffer
+		err := runStaffAdd(githubtest.NewTestClient(t, server), &out, &errOut, "o", "cs-principles", "bob", configrepo.RoleTA)
+		var unclaimed *configrepo.UnclaimedTeamError
+		if !errors.As(err, &unclaimed) {
+			t.Fatalf("err = %v, want *configrepo.UnclaimedTeamError", err)
+		}
+		if len(mock.grantedRepo) != 0 || len(mock.membershipPUT) != 0 {
+			t.Errorf("granted = %v membership = %v, want no writes to a refused team", mock.grantedRepo, mock.membershipPUT)
 		}
 	})
 

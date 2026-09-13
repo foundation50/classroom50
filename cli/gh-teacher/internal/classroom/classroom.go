@@ -206,6 +206,18 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 			shortName, org, configrepo.ConfigRepoName,
 			org, configrepo.ConfigRepoName, branch, shortName)
 	}
+	// A classroom `<short>-<role>` puts its student team at this classroom's
+	// staff slug for that role; the two can't share an org.
+	for _, role := range configrepo.StaffRoles {
+		other, err := configrepo.StudentTeamOwner(client, org, shortName, role)
+		if err != nil {
+			return err
+		}
+		if other != "" {
+			return fmt.Errorf("classroom %q would share its %s team name (%s) with the student team of the existing classroom %q; choose a different short-name",
+				shortName, role, configrepo.StaffTeamSlug(shortName, role), other)
+		}
+	}
 
 	// Create (or adopt) the per-classroom team before scaffolding so its
 	// id/slug can be recorded in classroom.json. This team later lets rostered
@@ -820,6 +832,15 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 		if !configrepo.IsCanonicalStaffTeamRef(shortName, role, &t) {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: classroom %s records %q as its %s team, which is not the team Classroom 50 created for that role; leaving it alone. Delete it by hand at https://github.com/orgs/%s/teams if it is unused.\n",
 				org, shortName, t.Slug, role, org)
+			continue
+		}
+		// An older release could record a sibling classroom's student team
+		// here (`ml-ta`'s roster under `ml`'s teams.ta); never delete that.
+		if other, oerr := configrepo.StudentTeamOwner(client, org, shortName, role); oerr != nil {
+			return oerr
+		} else if other != "" {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: %q is the student team of classroom %s, not %s's %s team; leaving it alone.\n",
+				org, t.Slug, other, shortName, role)
 			continue
 		}
 		staffTeams = append(staffTeams, t)

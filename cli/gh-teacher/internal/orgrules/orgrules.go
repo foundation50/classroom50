@@ -420,11 +420,14 @@ func bypassTeamIDs(client githubapi.Client, out, errOut io.Writer, org string) (
 // returns the canonical staff team slugs (teacher, head-TA, TA) each one owns.
 // The slug is the identity: it is what every writer creates, what a web role
 // flow that never wrote classroom.json still produced, and what a
-// head-TA-editable `teams` block cannot redirect. A missing config repo (fresh
-// org) yields none; any read failure propagates so the caller keeps the list
-// already on the ruleset rather than rebuilding a shorter one.
+// head-TA-editable `teams` block cannot redirect. A slug that is another
+// classroom's student team (`ml`'s TA slug when a classroom `ml-ta` exists) is
+// left out: that team is a roster, whatever an older release granted it. A
+// missing config repo (fresh org) yields none; any read failure propagates so
+// the caller keeps the list already on the ruleset rather than rebuilding a
+// shorter one.
 func CollectStaffTeamSlugs(client githubapi.Client, org string) ([]string, error) {
-	var slugs []string
+	var shortNames []string
 	var readErr error
 	err := configrepo.WalkClassrooms(client, org,
 		func(shortName string, err error) {
@@ -433,10 +436,23 @@ func CollectStaffTeamSlugs(client githubapi.Client, org string) ([]string, error
 			}
 		},
 		func(shortName string, _ *configrepo.ClassroomJSON) {
-			slugs = append(slugs, configrepo.StaffTeamSlugs(shortName)...)
+			shortNames = append(shortNames, shortName)
 		})
 	if err != nil {
 		return nil, err
+	}
+	classrooms := make(map[string]bool, len(shortNames))
+	for _, s := range shortNames {
+		classrooms[s] = true
+	}
+	var slugs []string
+	for _, s := range shortNames {
+		for _, role := range configrepo.StaffRoles {
+			if classrooms[s+"-"+string(role)] {
+				continue
+			}
+			slugs = append(slugs, configrepo.StaffTeamSlug(s, role))
+		}
 	}
 	return slugs, readErr
 }
