@@ -190,7 +190,9 @@ and hyphens, starting with a letter or digit), and at most 40 characters for a
 new classroom. The short-name flows into student repo names
 (`<short-name>-<assignment>-<username>`), which GitHub caps at 100 characters,
 so the 40-character cap leaves room for the assignment slug and any username.
-Existing classrooms with longer short-names stay readable and operable.
+Existing classrooms with longer short-names stay readable and operable. A new
+short-name also can't end in `-teacher`, `-hta`, or `-ta`: its student team
+`classroom50-<short-name>` would sit at another classroom's staff team name.
 
 `--unlisted` publishes the classroom's resources at an unguessable URL path
 segment (the web app's **Use an unlisted link for this classroom** option).
@@ -581,6 +583,12 @@ teams (creating and recording the missing team), and replaces a `teams.<role>`
 entry in `classroom.json` that names any other team, with a warning. `remove`
 acts on the classroom's own team even if the record names another one, doesn't
 touch org membership, and is idempotent.
+
+A team that already sits at the staff name is adopted only if it has access to
+the `classroom50` repository (every team Classroom 50 creates does) or is the
+team `classroom.json` recorded for that role. Otherwise `add` stops and names
+the team: someone created it outside Classroom 50. Review its members, then
+either delete it or grant it access to the `classroom50` repository, and re-run.
 
 ### Dual roles (staff who are also students)
 

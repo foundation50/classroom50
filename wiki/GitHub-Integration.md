@@ -460,7 +460,8 @@ every call.
 | GET / POST / PATCH | `/repos/{owner}/{repo}/git/{refs,commits,blobs,trees}` | Tree-commit configuration files (with rebase retry). |
 | GET / POST / PATCH / DELETE | `/orgs/{org}/teams`, `/orgs/{org}/teams/{slug}` | Create, read, update, and delete classroom, staff, invite, and group teams. |
 | GET / PUT / DELETE | `/orgs/{org}/teams/{slug}/members`, `/orgs/{org}/teams/{slug}/memberships/{username}` | Team membership (enrollment, staff roles, groups). |
-| PUT / DELETE | `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Grant staff teams the `classroom50` repository and grant the classroom team a private template. |
+| GET / PUT / DELETE | `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Grant staff teams the `classroom50` repository (and read it back: the grant is what proves a team at a staff name is Classroom 50's) and grant the classroom team a private template. |
+| GET | `/repos/{owner}/{repo}/teams` | List the teams with access to the `classroom50` repository: the staff teams the feedback-base ruleset exempts. |
 | GET | `/users/{username}` | Resolve a login to its numeric ID. |
 | GET / POST / DELETE | `/orgs/{org}/invitations`, `/orgs/{org}/invitations/{id}` | Send, list, and cancel organization invitations (email invitations carry teams). |
 | GET / DELETE | `/orgs/{org}/memberships/{username}` | Check and remove organization membership. |
@@ -495,11 +496,14 @@ every call.
 | GET | `/repos/{owner}/{repo}/releases` + `/releases/assets/{id}` | Collect submissions and `result.json`. | **Contents: Read** |
 | GET | `/repos/{owner}/{repo}/collaborators` | Fan a legacy group score to teammates. | **Metadata: Read** |
 | GET / PUT | `/orgs/{org}/teams/{slug}/repos/{owner}/{repo}` | Grant staff teams write on student repositories and read on templates. | **Administration: Read and write** |
+| GET | `/orgs/{org}/teams/{slug}/repos` | List a staff team's repositories once per run: skips already-granted repositories, and shows whether the team has access to `classroom50` (a team without it was not created by Classroom 50 and is granted nothing). | **Metadata: Read** |
 
 ### `probe_token.py` (Actions, read-only)
 
 Exercises every permission with read-only calls GitHub gates behind the write
 permission: `/orgs/{org}/members`, `/orgs/{org}/teams/{slug}/members`,
+`/orgs/{org}/teams/{slug}/repos/{org}/classroom50` (whether each staff team
+is Classroom 50's),
 `/repos/{org}/classroom50` (its `permissions.push` and `permissions.admin`),
 `/repos/{org}/classroom50/actions/permissions`, and
 `/repos/{org}/classroom50/collaborators`. Workflows: Read and write has no

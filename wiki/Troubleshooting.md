@@ -991,10 +991,12 @@ normal **Merge** button. What you see tells you what's missing:
   time. Run **Collect now** (or wait for the scheduled run), then reload the
   pull request.
 - **TA or head TA with merging blocked.** Your staff team isn't on the
-  ruleset's exemption list yet (a classroom created before this release, or a
-  team added outside Classroom 50). The organization settings page flags this
-  under the rulesets check; a teacher clicks **Fix it** there or re-runs
-  `gh teacher init`, which rebuilds the list from every classroom.
+  ruleset's exemption list yet (a classroom created before this release). The
+  organization settings page flags this under the rulesets check; a teacher
+  clicks **Fix it** there or re-runs `gh teacher init`, which rebuilds the list
+  from every classroom. A team created outside Classroom 50 at a staff name is
+  never added; see
+  [A team "already exists but wasn't created by Classroom 50"](#a-team-already-exists-but-wasnt-created-by-classroom-50).
 
 ## Collecting scores and downloading submissions
 
@@ -1054,6 +1056,32 @@ level tells you whether anything needs fixing:
   (`classroom50-<classroom>-<role>`) regardless. To fix the record, run
   `gh teacher staff add <org> <classroom> <username> --role <role>` with any
   current member of that role; it rewrites the entry to the right team.
+- A **warning that a team "was not created by Classroom 50"** means a team
+  sits at the staff name (`classroom50-<classroom>-<role>`) but has no access
+  to the `classroom50` repository, which every team Classroom 50 creates gets.
+  Someone created it by hand, or it's the student team of a classroom whose
+  short name ends in that role. Collection grants it nothing. Open the team
+  page the warning links to and check its members. If it's yours, give it
+  access to the `classroom50` repository (**Repositories** on the team page)
+  and it's treated as the staff team from then on; otherwise delete it and let
+  Classroom 50 create the real one the next time you add staff.
+
+### A team "already exists but wasn't created by Classroom 50"
+
+Adding staff, creating a classroom, or `gh teacher staff add` stops with this
+message when a team already sits at the staff name Classroom 50 wants
+(`classroom50-<classroom>-<role>`) but doesn't have access to the
+`classroom50` repository. Classroom 50 won't make that team staff, because
+anyone in the organization could have created it. Open the linked team page:
+
+- If the members are your staff, give the team access to the `classroom50`
+  repository under **Repositories**, then try again. Classroom 50 adopts it.
+- Otherwise delete the team and try again. Classroom 50 creates a fresh one.
+
+A classroom whose short name ends in `-teacher`, `-hta`, or `-ta` hits the
+reverse case: its student team name is another classroom's staff name. New
+classrooms can't take such a name; an existing one keeps working, but its
+student team is never treated as staff.
 
 ### "The collection run failed."
 
