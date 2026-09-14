@@ -47,9 +47,8 @@ describe("vitest browser-project wiring (a11y layout guards)", () => {
     expect(files.length).toBeGreaterThanOrEqual(4)
   })
 
-  // A project added later (a second engine, a single-file lane) hard-codes its
-  // own include list; renaming that file would leave it collecting nothing
-  // while the other projects keep CI green.
+  // Covers a future single-file lane too: a renamed file would leave that
+  // project collecting nothing while the others keep CI green.
   it("every project's include patterns match at least one file", () => {
     const includes = [...config.matchAll(/include:\s*\[([^\]]*)\]/g)].map((m) =>
       [...m[1].matchAll(/"([^"]+)"/g)].map((p) => p[1]),

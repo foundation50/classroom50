@@ -6,9 +6,7 @@ import { DropdownMenu, type DropdownTriggerProps } from "./DropdownMenu"
 
 afterEach(() => cleanup())
 
-// daisyUI opens the menu on focus, and Safari only focuses a button on click
-// when tabindex is set explicitly (#987). The trigger recipe owns that
-// attribute so no call site has to remember it.
+// Pins the tabindex the trigger recipe owns (see DropdownMenu.tsx, #987).
 describe("DropdownMenu.Trigger", () => {
   it("renders a Button with an explicit tabindex", () => {
     render(
@@ -34,8 +32,7 @@ describe("DropdownMenu.Trigger", () => {
   })
 
   it("wins over a tabIndex smuggled in through a spread", () => {
-    // The prop type omits tabIndex, but a spread of a wider object still
-    // compiles; the recipe must apply its value last.
+    // A spread bypasses the Omit at compile time, so the recipe must apply last.
     const smuggled = { tabIndex: -1 } as DropdownTriggerProps
     render(<DropdownMenu.Trigger {...smuggled}>Actions</DropdownMenu.Trigger>)
     expect(
@@ -44,7 +41,6 @@ describe("DropdownMenu.Trigger", () => {
   })
 
   it("rejects tabIndex as a direct prop", () => {
-    // Type-level guard only; never rendered.
     const rejected = () => (
       // @ts-expect-error tabIndex is owned by the recipe
       <DropdownMenu.Trigger tabIndex={-1}>Actions</DropdownMenu.Trigger>

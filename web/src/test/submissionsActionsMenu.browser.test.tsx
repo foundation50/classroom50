@@ -68,17 +68,13 @@ describe("SubmissionsActionsMenu pointer interaction", () => {
     await expect.element(menu).toBeVisible()
   })
 
-  // The menu is focus-driven, so keyboard users open it by tabbing onto the
-  // trigger; tabbing on moves through the list into the items, and Enter on an
-  // item selects it.
   it("opens when tabbed onto and selects an item with Enter", async () => {
     const onLockToggle = vi.fn()
     const { menu } = renderMenu({ onLockToggle })
     await page.getByRole("button", { name: "Outside", exact: true }).click()
     await userEvent.tab()
     await expect.element(menu).toBeVisible()
-    // The list itself is focusable, so one Tab lands on it and the next on
-    // the first item (Lock, given these props).
+    // The list is itself a tab stop, so the first item is two Tabs away.
     await userEvent.tab()
     await userEvent.tab()
     await expect
