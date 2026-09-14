@@ -182,6 +182,7 @@ on this page, replace `CLASSROOM` with the classroom's short name and
 | `points` | Required, 0 to 1000. A 0-point test does not affect the numeric score; a failure still sets the autograde status to `failure`. |
 | `failure-details` | Optional. How much failure detail students see: `full` (default), `actual-only`, or `none`. See [Report options](#report-options). |
 | `show-output` | Optional. `true` includes the test's captured output in the report even when it passes. See [Report options](#report-options). |
+| `show-command` | Optional. `true` prints the test's `setup` and `run` command lines in the report. See [Report options](#report-options). |
 
 At most 100 tests per assignment. Put large fixtures in files
 (`input-file` / `expected-file`) under `CLASSROOM/autograders/ASSIGNMENT/`, not
@@ -190,8 +191,8 @@ directory, and what doesn't.
 
 #### Report options
 
-Two per-test fields control what a submission's report shows, in the Release
-body, the grade job log, and the run Summary. Both can also be set once for
+Three per-test fields control what a submission's report shows, in the Release
+body, the grade job log, and the run Summary. Each can also be set once for
 the whole assignment in a `test_defaults` block on the assignment entry (the
 web form's **Report defaults** panel below the tests table); a test's own
 value overrides the default.
@@ -208,17 +209,31 @@ value overrides the default.
 | `actual-only` | The student's own stdout/stderr only, never the expected output and never a diff, since either would reveal the answer. |
 | `none` | Only the failure kind: wrong output, wrong exit code, timeout, or setup failed. |
 
+A failed `setup` command shows both of its streams, labelled `setup stdout`
+and `setup stderr`, since an install or build step reports on stdout.
+
 **`show-output`** set to `true` adds a passing test's captured setup and run
 output to the report and the GitHub Actions log, in a collapsed section. Off by
 default (passing output is discarded). Turn it on while authoring or
 debugging an autograder; an explicit `false` on one test opts it out of a
-`show-output: true` default.
+`show-output: true` default. On a test that fails in its `run` step,
+`show-output` also adds the setup output to the failure details, so an
+`apt-get install` or `make deps` in `setup` stays debuggable.
 
-In the web app, the per-test selects (**Failure details shown to students**
-and **Output when passing**) sit under **Report options** in the test editor.
-The **Report defaults** panel has the matching **Default failure details** and
-**Include passing test output** controls. From the CLI, pass
-`--failure-details` and `--show-output` to
+**`show-command`** set to `true` prints the test's `setup` and `run` command
+lines, as written, at the top of its failure details and its `show-output`
+block. When `setup` itself fails, only the setup command is printed, since the
+run command never ran. Off by default: students can read the report, and a
+command can reveal how a test checks the work (a hidden script name, an inline
+assertion). Turn it on for tests whose command is not a secret, such as
+`make test`, so students can reproduce the run locally.
+
+In the web app, the per-test selects (**Failure details shown to students**,
+**Output when passing**, and **Command lines**) sit under **Report options**
+in the test editor. The **Report defaults** panel has the matching **Default
+failure details**, **Include passing test output**, and **Show command
+lines** controls. From the CLI, pass `--failure-details`, `--show-output`,
+and `--show-command` to
 [`gh teacher assignment test add`](gh-teacher#assignment-test).
 
 ### Setup commands, dependencies, and environment variables

@@ -1,3 +1,4 @@
+import { cx } from "./cx"
 import { fieldLabelClass, HelpTooltip } from "./FormField"
 import { Toggle } from "./Toggle"
 
@@ -15,6 +16,7 @@ export function ToggleField({
   onBlur,
   label,
   help,
+  disabled = false,
 }: {
   id: string
   checked: boolean
@@ -22,12 +24,20 @@ export function ToggleField({
   onBlur?: () => void
   label: string
   help?: string
+  disabled?: boolean
 }) {
   return (
-    <label htmlFor={id} className="flex cursor-pointer items-center gap-3">
+    <label
+      htmlFor={id}
+      className={cx(
+        "flex items-center gap-3",
+        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+      )}
+    >
       <Toggle
         id={id}
         checked={checked}
+        disabled={disabled}
         onBlur={onBlur}
         onChange={(e) => onChange(e.target.checked)}
       />

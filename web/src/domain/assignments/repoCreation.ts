@@ -460,6 +460,8 @@ export type CreateAssignmentInput = {
   runtime_rust?: string
   // Raw comma/space-separated apt packages; parsed to string[] on save.
   runtime_apt?: string
+  // Opt back in to apt-get's recommended packages; written only with packages.
+  runtime_apt_recommends?: boolean
   setup_command?: string
   // Web transport state for the synthesized leading setup test. This is not an
   // assignments.json field.
@@ -500,7 +502,7 @@ export type CreateAssignmentInput = {
   pages?: AssignmentPages
   tests: AssignmentTestDraft[]
   // Assignment-level defaults for the per-test reporting options
-  // (failure-details / show-output); per-test values override.
+  // (failure-details / show-output / show-command); per-test values override.
   // buildAssignmentEntry omits the block when undefined or when the
   // assignment carries no tests. Mirrors the CLI's test_defaults object.
   test_defaults?: AssignmentTestDefaults

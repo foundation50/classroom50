@@ -18,9 +18,10 @@
       "additionalProperties": false,
       "properties": {
         "failure-details": { "enum": ["full", "actual-only", "none"] },
-        "show-output": { "type": "boolean" }
+        "show-output": { "type": "boolean" },
+        "show-command": { "type": "boolean" }
       },
-      "description": "Assignment-level defaults for the per-test reporting options, copied verbatim from the assignment's `test_defaults` by materialize_tests.py. A test's own `failure-details` / `show-output` value overrides the default. Absent means the built-in defaults (failure-details `full`, show-output `false`)."
+      "description": "Assignment-level defaults for the per-test reporting options, copied verbatim from the assignment's `test_defaults` by materialize_tests.py. A test's own `failure-details` / `show-output` / `show-command` value overrides the default. Absent means the built-in defaults (failure-details `full`, show-output `false`, show-command `false`)."
     }
   },
   "$defs": {
@@ -63,7 +64,11 @@
         },
         "show-output": {
           "type": "boolean",
-          "description": "Include the captured stdout/stderr of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
+          "description": "Include the captured output of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. On a test that fails in its run step, also adds the setup command's output to the failure details. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
+        },
+        "show-command": {
+          "type": "boolean",
+          "description": "Print the test's `setup` and `run` command lines, as written, at the top of its failure details and its show-output block. Off by default because a command can reveal how a test checks the work (a hidden script name, an inline assertion). Suppressed when the effective `failure-details` is `none`; on a setup failure only the setup command is printed. Overrides the assignment's `test_defaults`. On the wire it is collapsed like `show-output`: writers omit the field when false, so readers must treat an absent field as `false`."
         }
       },
       "allOf": [

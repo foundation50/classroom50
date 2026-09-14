@@ -37,6 +37,7 @@ const defaults: CreateAssignmentFormValues = {
   runtime_go: "",
   runtime_rust: "",
   runtime_apt: "",
+  runtime_apt_recommends: false,
   setup_command: "",
   setup_timeout: 120,
   allowed_files: "",
@@ -59,6 +60,7 @@ const defaults: CreateAssignmentFormValues = {
   tests: [],
   test_failure_details: "",
   test_show_output: false,
+  test_show_command: false,
 }
 
 describe("sectionIsConfigured", () => {

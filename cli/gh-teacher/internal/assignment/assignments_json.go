@@ -652,17 +652,22 @@ type TemplateRef struct {
 // label; each is only injection-checked (RunsOnLabelPattern) since it flows
 // verbatim into the workflow.
 //
+// AptRecommends opts back in to apt-get's default of installing recommended
+// packages; absent/false keeps the runner's --no-install-recommends. It never
+// reaches the apt-get line itself: the runner maps the bool to a fixed flag.
+//
 // All fields optional; an absent RuntimeRef means defaults (ubuntu-latest +
 // Python 3.14, no extra packages).
 type RuntimeRef struct {
-	RunsOn    RunsOn         `json:"runs-on,omitempty"`
-	Container *ContainerSpec `json:"container,omitempty"`
-	Python    string         `json:"python,omitempty"`
-	Node      string         `json:"node,omitempty"`
-	Java      string         `json:"java,omitempty"`
-	Go        string         `json:"go,omitempty"`
-	Rust      string         `json:"rust,omitempty"`
-	Apt       []string       `json:"apt,omitempty"`
+	RunsOn        RunsOn         `json:"runs-on,omitempty"`
+	Container     *ContainerSpec `json:"container,omitempty"`
+	Python        string         `json:"python,omitempty"`
+	Node          string         `json:"node,omitempty"`
+	Java          string         `json:"java,omitempty"`
+	Go            string         `json:"go,omitempty"`
+	Rust          string         `json:"rust,omitempty"`
+	Apt           []string       `json:"apt,omitempty"`
+	AptRecommends bool           `json:"apt-recommends,omitempty"`
 }
 
 // RunsOn models Actions' polymorphic `runs-on` (single label or array),

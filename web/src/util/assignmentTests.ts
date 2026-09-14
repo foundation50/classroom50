@@ -8,9 +8,9 @@ import type {
 // Form-side draft for one declarative test. Camel-cased and all-fields-present
 // so it plugs into @tanstack/react-form cleanly; `draftToTest` converts to the
 // kebab-case v1 wire shape and drops fields that don't apply to the type.
-// failureDetails/showOutput use "" for "inherit the assignment default" —
-// an explicit showOutput false still reaches the wire, where it overrides a
-// test_defaults show-output=true.
+// failureDetails/showOutput/showCommand use "" for "inherit the assignment
+// default" — an explicit false still reaches the wire, where it overrides a
+// test_defaults true.
 export type AssignmentTestDraft = {
   name: string
   type: AssignmentTestType
@@ -26,6 +26,7 @@ export type AssignmentTestDraft = {
   points: number
   failureDetails: AssignmentTestFailureDetails | ""
   showOutput: boolean | ""
+  showCommand: boolean | ""
 }
 
 // A setup command is encoded as a leading 0-point `run` test with this reserved
@@ -83,6 +84,7 @@ export const emptyTestDraft = (): AssignmentTestDraft => ({
   points: 10,
   failureDetails: "",
   showOutput: "",
+  showCommand: "",
 })
 
 export const testToDraft = (test: AssignmentTest): AssignmentTestDraft => ({
@@ -100,6 +102,7 @@ export const testToDraft = (test: AssignmentTest): AssignmentTestDraft => ({
   points: test.points,
   failureDetails: test["failure-details"] ?? "",
   showOutput: test["show-output"] ?? "",
+  showCommand: test["show-command"] ?? "",
 })
 
 // draftToTest serializes a draft into the exact v1 wire shape: kebab-case keys,
@@ -137,8 +140,9 @@ export function draftToTest(draft: AssignmentTestDraft): AssignmentTest {
   if (draft.failureDetails !== "")
     test["failure-details"] = draft.failureDetails
   // An explicit false is written (not collapsed): it overrides a
-  // test_defaults show-output=true for this one test.
+  // test_defaults true for this one test.
   if (draft.showOutput !== "") test["show-output"] = draft.showOutput
+  if (draft.showCommand !== "") test["show-command"] = draft.showCommand
 
   return test
 }

@@ -14,6 +14,7 @@ import json
 import os
 import re
 import shlex
+import subprocess
 import sys
 
 import pytest
@@ -464,6 +465,7 @@ class TestLoadTests:
         {"name": "a", "type": "run", "run": "true", "points": 1, "failure-details": "loud"},
         {"name": "a", "type": "run", "run": "true", "points": 1, "failure-details": 3},
         {"name": "a", "type": "run", "run": "true", "points": 1, "show-output": "yes"},
+        {"name": "a", "type": "run", "run": "true", "points": 1, "show-command": "yes"},
     ])
     def test_rejects_wrongly_typed_optional_fields(self, tmp_path, bad_field):
         # These fields aren't checked by the schema sentinel but are
@@ -475,24 +477,30 @@ class TestLoadTests:
 
     def test_defaults_fold_into_specs(self, tmp_path):
         # The envelope's `defaults` supply assignment-level failure-details /
-        # show-output; a spec's own value (including an explicit false) wins.
+        # show-output / show-command; a spec's own value (including an explicit
+        # false) wins.
         p = self._write(tmp_path, {
             "schema": "classroom50/tests/v1",
-            "defaults": {"failure-details": "none", "show-output": True},
+            "defaults": {"failure-details": "none", "show-output": True,
+                         "show-command": True},
             "tests": [
                 {"name": "inherits", "type": "run", "run": "true", "points": 1},
                 {"name": "overrides", "type": "run", "run": "true", "points": 1,
-                 "failure-details": "full", "show-output": False},
+                 "failure-details": "full", "show-output": False,
+                 "show-command": False},
             ],
         })
         tests = ag.load_tests(p)
         assert tests[0]["failure-details"] == "none"
         assert tests[0]["show-output"] is True
+        assert tests[0]["show-command"] is True
         assert tests[1]["failure-details"] == "full"
         assert tests[1]["show-output"] is False
+        assert tests[1]["show-command"] is False
 
     @pytest.mark.parametrize("bad_defaults", [
         "none", ["none"], {"failure-details": "loud"}, {"show-output": "yes"},
+        {"show-command": 1},
     ])
     def test_bad_defaults_rejected(self, tmp_path, bad_defaults):
         p = self._write(tmp_path, {
@@ -561,6 +569,101 @@ class TestComposeDetail:
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert "oops" in ag.compose_detail(o)
 
+    def test_setup_failure_shows_both_streams_labelled(self, tmp_path):
+        # An apt-get or make step reports on stdout, so a setup failure that
+        # showed stderr alone hid the half a teacher needs to debug it.
+        spec = {"name": "t", "type": "run", "setup": "echo dep-out; echo dep-err >&2; false",
+                "run": "true", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert detail == ("setup exited 1\n--- setup stdout ---\ndep-out\n\n"
+                          "--- setup stderr ---\ndep-err\n")
+
+    def test_setup_failure_with_show_command_omits_the_run_command(self, tmp_path):
+        # The run step never executed, so listing its command above the error
+        # would blame the wrong step.
+        spec = {"name": "t", "type": "run", "setup": "echo dep-err >&2; false",
+                "run": "make test", "points": 1, "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert detail == ("setup exited 1\n--- setup command ---\necho dep-err >&2; false\n"
+                          "--- setup stderr ---\ndep-err\n")
+        assert "run command" not in detail
+
+    def test_run_failure_hides_setup_output_by_default(self, tmp_path):
+        spec = {"name": "t", "type": "run", "setup": "echo installing", "run": "false",
+                "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "installing" not in ag.compose_detail(o)
+
+    def test_run_failure_shows_setup_output_under_show_output(self, tmp_path):
+        # A failing test skips the output section, so without this the setup's
+        # output (an apt-get install, say) is unreachable.
+        spec = {"name": "t", "type": "run", "setup": "echo installing",
+                "run": "echo broke >&2; false", "points": 1, "show-output": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert "--- setup stdout ---\ninstalling" in detail
+        assert detail.index("installing") < detail.index("broke")
+
+    def test_io_failure_shows_setup_output_under_show_output(self, tmp_path):
+        spec = {"name": "t", "type": "io", "setup": "echo prep >&2",
+                "run": "echo nope", "expected": "yes", "comparison": "exact",
+                "points": 1, "show-output": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert "--- setup stderr ---\nprep" in detail
+        assert detail.index("prep") < detail.index("nope")
+
+    def test_show_command_prepends_commands(self, tmp_path):
+        spec = {"name": "t", "type": "run", "setup": "echo prep",
+                "run": "echo nope >&2; false", "points": 1, "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert ("exit 1 (wanted 0)\n--- setup command ---\necho prep\n"
+                "--- run command ---\necho nope >&2; false\n") in detail
+        assert detail.index("run command") < detail.index("nope\n")
+
+    def test_show_command_omits_absent_setup(self, tmp_path):
+        spec = {"name": "t", "type": "run", "run": "false", "points": 1,
+                "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        detail = ag.compose_detail(o)
+        assert "--- setup command ---" not in detail
+        assert "--- run command ---\nfalse" in detail
+
+    def test_command_hidden_by_default(self, tmp_path):
+        spec = {"name": "t", "type": "run", "run": "python3 -c 'exit(1)'", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "python3 -c" not in ag.compose_detail(o)
+
+    def test_none_hides_command_too(self, tmp_path):
+        # failure-details none is the "say nothing" level; show-command must
+        # not punch through it.
+        spec = {"name": "t", "type": "run", "run": "false", "points": 1,
+                "show-command": True, "failure-details": "none"}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert ag.compose_detail(o) == "exit 1 (wanted 0)"
+
+    def test_python_shows_teachers_run_not_augmented_one(self, tmp_path, monkeypatch):
+        seen = {}
+
+        def fake_run(command, cwd, timeout, stdin="", bundle_dir=None):
+            seen["command"] = command
+            return subprocess.CompletedProcess(args="", returncode=1,
+                                               stdout="boom\n", stderr="")
+
+        monkeypatch.setattr(ag, "_ensure_pytest", lambda cwd, timeout: None)
+        monkeypatch.setattr(ag, "_run_command", fake_run)
+        spec = {"name": "t", "type": "python", "run": "pytest -q", "points": 1,
+                "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert "--json-report" in seen["command"]
+        detail = ag.compose_detail(o)
+        assert "--- run command ---\npytest -q\n" in detail
+        assert "--json-report" not in detail
+        assert "boom" in detail
+
     def test_surface_limits_clip_independently(self, tmp_path):
         # #612: the same outcome renders clipped for the release body but far
         # roomier for the Actions log — clipping happens at render, not capture.
@@ -588,6 +691,21 @@ class TestComposeOutput:
         assert "--- setup stderr ---\nsetup-err" in output
         assert "--- stdout ---\nrun-out" in output
         assert "--- stderr ---\nrun-err" in output
+
+    def test_show_command_leads_the_output(self, tmp_path):
+        spec = {"name": "t", "type": "run", "setup": "echo prep", "run": "echo go",
+                "points": 1, "show-output": True, "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        output = ag.compose_output(o)
+        assert output.startswith("--- setup command ---\necho prep\n"
+                                 "--- run command ---\necho go\n")
+        assert "--- setup stdout ---\nprep" in output
+
+    def test_show_command_with_silent_pass(self, tmp_path):
+        spec = {"name": "t", "type": "run", "run": "true", "points": 1,
+                "show-output": True, "show-command": True}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert ag.compose_output(o) == "--- run command ---\ntrue\n(no output captured)"
 
     def test_silent_pass_notes_no_output(self, tmp_path):
         spec = {"name": "t", "type": "run", "run": "true", "points": 1,

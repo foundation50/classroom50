@@ -50,6 +50,7 @@ export const SECTION_FIELDS: Record<
     "runtime_go",
     "runtime_rust",
     "runtime_apt",
+    "runtime_apt_recommends",
     "setup_command",
     "setup_timeout",
     "allowed_files",
@@ -59,6 +60,7 @@ export const SECTION_FIELDS: Record<
     "tests",
     "test_failure_details",
     "test_show_output",
+    "test_show_command",
   ],
   schedule: ["available_from_date", "due_date", "locked"],
 }

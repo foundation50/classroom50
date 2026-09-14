@@ -326,6 +326,11 @@ export type Assignment = {
     go?: string
     rust?: string
     apt?: string[]
+    // Install each apt package's recommended packages too (apt-get's own
+    // default). Absent/false keeps the runner's --no-install-recommends.
+    // Requires apt; excluded with container. Collapsed on the wire like the
+    // other opt-in booleans: omit when false.
+    "apt-recommends"?: boolean
   }
   // Ordered .gitignore-style allowlist (last match wins, `!` re-includes).
   // Empty/absent = all files allowed. Enforced server-side.
@@ -410,7 +415,7 @@ export type Assignment = {
   pages?: AssignmentPages
   tests?: AssignmentTest[]
   // Assignment-level defaults for the per-test reporting options
-  // (failure-details / show-output); per-test values override. Only
+  // (failure-details / show-output / show-command); per-test values override. Only
   // meaningful alongside `tests`. In lockstep with the CLI's assignments-v1
   // schema (`test_defaults`) and the Go TestDefaults struct.
   test_defaults?: AssignmentTestDefaults
@@ -511,6 +516,9 @@ export type AssignmentTest = {
   // explicit false overrides a test_defaults show-output=true, so absent and
   // false are distinct on the wire.
   "show-output"?: boolean
+  // Print the setup/run command lines in the report. Same absent-vs-false
+  // contract as show-output.
+  "show-command"?: boolean
 }
 
 // Assignment-level defaults for the per-test reporting options; a test's own
@@ -520,6 +528,7 @@ export type AssignmentTest = {
 export type AssignmentTestDefaults = {
   "failure-details"?: AssignmentTestFailureDetails
   "show-output"?: boolean
+  "show-command"?: boolean
 }
 
 // The roster's identity/metadata columns — the classroom GitHub team is the

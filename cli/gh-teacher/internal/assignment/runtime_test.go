@@ -30,6 +30,15 @@ func TestValidateRuntime_HostPaths(t *testing.T) {
 			runtime: RuntimeRef{Apt: []string{"build-essential", "valgrind", "lib-fake.dev"}},
 		},
 		{
+			name:    "apt-recommends with apt accepted",
+			runtime: RuntimeRef{Apt: []string{"pandoc", "texlive"}, AptRecommends: true},
+		},
+		{
+			name:    "apt-recommends without apt rejected",
+			runtime: RuntimeRef{AptRecommends: true},
+			wantErr: "runtime.apt-recommends requires runtime.apt",
+		},
+		{
 			name:    "self-hosted single label accepted",
 			runtime: RuntimeRef{RunsOn: RunsOn{"self-hosted"}},
 		},
@@ -135,6 +144,14 @@ func TestValidateRuntime_ContainerPaths(t *testing.T) {
 				Apt:       []string{"build-essential"},
 			},
 			wantErr: "runtime.apt is not allowed when runtime.container",
+		},
+		{
+			name: "image with apt-recommends rejected",
+			runtime: RuntimeRef{
+				Container:     &ContainerSpec{Image: "ubuntu:24.04"},
+				AptRecommends: true,
+			},
+			wantErr: "runtime.apt-recommends is not allowed when runtime.container",
 		},
 		{
 			name: "macos runs-on with container rejected",

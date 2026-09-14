@@ -44,6 +44,9 @@ type TestSpec struct {
 	// *bool, not bool: an explicit false must survive the wire so a single
 	// test can opt out of a test_defaults show-output=true.
 	ShowOutput *bool `json:"show-output,omitempty"`
+	// Same shape as ShowOutput: prints the setup/run command lines in the
+	// report. Opt-in because a command can reveal how the test checks the work.
+	ShowCommand *bool `json:"show-command,omitempty"`
 }
 
 // TestDefaults is an assignment's `test_defaults` block: assignment-level
@@ -53,6 +56,7 @@ type TestSpec struct {
 type TestDefaults struct {
 	FailureDetails string `json:"failure-details,omitempty"`
 	ShowOutput     *bool  `json:"show-output,omitempty"`
+	ShowCommand    *bool  `json:"show-command,omitempty"`
 }
 
 const (

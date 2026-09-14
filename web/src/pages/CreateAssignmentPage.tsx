@@ -153,6 +153,7 @@ const CreateAssignmentPage = () => {
                 runtime_go: values.runtime_go,
                 runtime_rust: values.runtime_rust,
                 runtime_apt: values.runtime_apt,
+                runtime_apt_recommends: values.runtime_apt_recommends,
                 setup_command: values.setup_command,
                 setup_timeout: values.setup_timeout,
                 allowed_files: values.allowed_files,

@@ -172,6 +172,15 @@ func TestValidateTestSpec(t *testing.T) {
 			spec: TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, ShowOutput: boolPtr(false)},
 		},
 		{
+			name: "show-command true accepted",
+			spec: TestSpec{Name: "t", Type: "io", Run: "x", Expected: "y", Comparison: "exact",
+				Points: 1, ShowCommand: boolPtr(true)},
+		},
+		{
+			name: "explicit show-command false accepted",
+			spec: TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, ShowCommand: boolPtr(false)},
+		},
+		{
 			name:    "invalid failure-details",
 			spec:    TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, FailureDetails: "loud"},
 			wantErr: "failure-details",
@@ -466,7 +475,7 @@ func TestValidateTestDefaults(t *testing.T) {
 		wantErr  string
 	}{
 		{name: "empty is valid", defaults: TestDefaults{}},
-		{name: "valid values", defaults: TestDefaults{FailureDetails: "none", ShowOutput: boolPtr(true)}},
+		{name: "valid values", defaults: TestDefaults{FailureDetails: "none", ShowOutput: boolPtr(true), ShowCommand: boolPtr(true)}},
 		{name: "explicit full", defaults: TestDefaults{FailureDetails: "full"}},
 		{
 			name:     "invalid failure-details",
@@ -492,12 +501,13 @@ func TestValidateTestDefaults(t *testing.T) {
 
 // TestParseTestsFile_ShowOutputFalseRoundTrips pins the *bool contract: an
 // explicit show-output:false must survive a parse (it overrides a
-// test_defaults show-output:true), while an absent field stays nil.
+// test_defaults show-output:true), while an absent field stays nil. The same
+// contract holds for show-command.
 func TestParseTestsFile_ShowOutputFalseRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tests.json")
 	body := `[
-  {"name":"opts-out","type":"run","run":"x","points":1,"show-output":false,"failure-details":"actual-only"},
+  {"name":"opts-out","type":"run","run":"x","points":1,"show-output":false,"show-command":false,"failure-details":"actual-only"},
   {"name":"inherits","type":"run","run":"x","points":1}
 ]`
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -511,21 +521,29 @@ func TestParseTestsFile_ShowOutputFalseRoundTrips(t *testing.T) {
 	if got[0].ShowOutput == nil || *got[0].ShowOutput {
 		t.Errorf("explicit show-output:false lost: %#v", got[0].ShowOutput)
 	}
+	if got[0].ShowCommand == nil || *got[0].ShowCommand {
+		t.Errorf("explicit show-command:false lost: %#v", got[0].ShowCommand)
+	}
 	if got[0].FailureDetails != "actual-only" {
 		t.Errorf("failure-details lost: %q", got[0].FailureDetails)
 	}
 	if got[1].ShowOutput != nil {
 		t.Errorf("absent show-output must stay nil, got %#v", got[1].ShowOutput)
 	}
+	if got[1].ShowCommand != nil {
+		t.Errorf("absent show-command must stay nil, got %#v", got[1].ShowCommand)
+	}
 	raw, err := json.Marshal(got)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
-	if !strings.Contains(string(raw), `"show-output":false`) {
-		t.Errorf("explicit false must re-emit on the wire, got %s", raw)
-	}
-	if strings.Count(string(raw), `"show-output"`) != 1 {
-		t.Errorf("absent show-output must stay omitted on the wire, got %s", raw)
+	for _, key := range []string{"show-output", "show-command"} {
+		if !strings.Contains(string(raw), `"`+key+`":false`) {
+			t.Errorf("explicit %s false must re-emit on the wire, got %s", key, raw)
+		}
+		if strings.Count(string(raw), `"`+key+`"`) != 1 {
+			t.Errorf("absent %s must stay omitted on the wire, got %s", key, raw)
+		}
 	}
 }
 

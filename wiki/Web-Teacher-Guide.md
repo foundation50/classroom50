@@ -464,7 +464,10 @@ documented defaults.
   3.14 on the hosted runner. Ignored on a self-hosted runner, which uses its own
   toolchains.
 - **Extra apt packages** (hosted runner only): Ubuntu packages installed before
-  grading, comma- or space-separated.
+  grading, comma- or space-separated. They install with
+  `--no-install-recommends`; turn on **Install recommended packages too** when
+  a package only works with its recommended extras (pandoc with texlive, for
+  example).
 - **Setup command** and **Setup timeout (seconds)**: a shell command run once
   before the other tests, to compile code or install dependencies. A non-zero
   exit or timeout marks the autograde run as failed without changing the

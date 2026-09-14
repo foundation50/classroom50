@@ -29,6 +29,7 @@ export const RUNTIME_WIRE_KEYS = [
   "container",
   ...RUNTIME_LANGUAGES,
   "apt",
+  "apt-recommends",
 ] as const
 
 // Identical to the CLI's LanguageVersionPattern (permissive but injection-safe:

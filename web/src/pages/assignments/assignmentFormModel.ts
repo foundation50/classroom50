@@ -176,6 +176,8 @@ export type CreateAssignmentFormValues = {
   runtime_rust: string
   // Raw text (comma/space-separated); parsed to string[] on save.
   runtime_apt: string
+  // Maps to runtime["apt-recommends"], omitted when false or when no packages.
+  runtime_apt_recommends: boolean
   setup_command: string
   setup_timeout: number
   // Raw textarea text; parsed to string[] on save, joined back on read.
@@ -245,6 +247,9 @@ export type CreateAssignmentFormValues = {
   // Assignment-level default for including passing-test output in the report.
   // Maps to test_defaults["show-output"], omitted when false.
   test_show_output: boolean
+  // Assignment-level default for printing the setup/run command lines.
+  // Maps to test_defaults["show-command"], omitted when false.
+  test_show_command: boolean
 }
 
 // A single repo-feature control's value. "inherit" is the default and omits the
@@ -328,14 +333,15 @@ export function formValuesToRepoFeatures(
   return Object.keys(result).length > 0 ? result : undefined
 }
 
-// Write mapping: the two defaults controls -> the wire test_defaults object,
-// omitting the grader-default values ("" failure details, show-output off).
-// Returns undefined when both are default so the caller omits the block
-// entirely (matching buildAssignmentEntry's omit-when-empty rule).
+// Write mapping: the defaults controls -> the wire test_defaults object,
+// omitting the grader-default values ("" failure details, show-output and
+// show-command off). Returns undefined when all are default so the caller
+// omits the block entirely (matching buildAssignmentEntry's omit-when-empty
+// rule).
 export function formValuesToTestDefaults(
   value: Pick<
     CreateAssignmentFormValues,
-    "test_failure_details" | "test_show_output"
+    "test_failure_details" | "test_show_output" | "test_show_command"
   >,
 ): AssignmentTestDefaults | undefined {
   const result: AssignmentTestDefaults = {}
@@ -344,6 +350,9 @@ export function formValuesToTestDefaults(
   }
   if (value.test_show_output) {
     result["show-output"] = true
+  }
+  if (value.test_show_command) {
+    result["show-command"] = true
   }
   return Object.keys(result).length > 0 ? result : undefined
 }
@@ -761,6 +770,12 @@ export function toSubmitValues(
     runtime_go: value.runtime_go.trim(),
     runtime_rust: value.runtime_rust.trim(),
     runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
+    // Only meaningful with packages to install, so a leftover checkbox from
+    // an emptied field never reaches the wire.
+    runtime_apt_recommends:
+      !isContainer &&
+      parseAptPackages(value.runtime_apt).length > 0 &&
+      value.runtime_apt_recommends,
     setup_command: noBuiltIn ? "" : value.setup_command.trim(),
     setup_timeout: noBuiltIn ? 0 : value.setup_timeout,
     allowed_files: noBuiltIn ? "" : value.allowed_files,
@@ -810,6 +825,7 @@ export function toSubmitValues(
     // autograder no report is rendered, so clear stale defaults on submit.
     test_failure_details: noBuiltIn ? "" : value.test_failure_details,
     test_show_output: noBuiltIn ? false : value.test_show_output,
+    test_show_command: noBuiltIn ? false : value.test_show_command,
   }
 }
 
@@ -863,6 +879,7 @@ export const useAssignmentForm = (
       runtime_go: defaultValues?.runtime_go || "",
       runtime_rust: defaultValues?.runtime_rust || "",
       runtime_apt: defaultValues?.runtime_apt || "",
+      runtime_apt_recommends: defaultValues?.runtime_apt_recommends ?? false,
       setup_command: defaultValues?.setup_command || "",
       setup_timeout:
         defaultValues?.setup_timeout ?? DEFAULT_SETUP_TIMEOUT_SECONDS,
@@ -891,6 +908,7 @@ export const useAssignmentForm = (
       tests: defaultValues?.tests || [],
       test_failure_details: defaultValues?.test_failure_details ?? "",
       test_show_output: defaultValues?.test_show_output ?? false,
+      test_show_command: defaultValues?.test_show_command ?? false,
     } satisfies CreateAssignmentFormValues,
     validators: {
       onSubmit: ({ value }) => {
@@ -991,6 +1009,9 @@ export const assignmentToFormValues = (
     runtime_apt: assignment.runtime?.container
       ? ""
       : aptPackagesToText(assignment.runtime?.apt),
+    runtime_apt_recommends: assignment.runtime?.container
+      ? false
+      : (assignment.runtime?.["apt-recommends"] ?? false),
     setup_command: setupCommand,
     setup_timeout: setupTimeout,
     pass_threshold_enabled: typeof assignment.pass_threshold === "number",
@@ -1027,5 +1048,6 @@ export const assignmentToFormValues = (
       assignment.test_defaults?.["failure-details"],
     ),
     test_show_output: assignment.test_defaults?.["show-output"] ?? false,
+    test_show_command: assignment.test_defaults?.["show-command"] ?? false,
   }
 }

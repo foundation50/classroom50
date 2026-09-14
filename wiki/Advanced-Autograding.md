@@ -279,7 +279,8 @@ the image owns the toolchain unless you set `python` explicitly.
 | `runs-on` | A single runner label (`"ubuntu-latest"`) or an array (`["self-hosted", "gpu"]`). No allow-list: you own the label; each is injection-checked (1 to 10 labels). |
 | `python` / `node` / `java` / `go` | Version passed to the matching `setup-*` action. Skipped when unset (`python` defaults to 3.14 on the host path). |
 | `rust` | Rustup toolchain (`stable`, `1.79`, and so on) through `dtolnay/rust-toolchain`. |
-| `apt` | Debian/Ubuntu package names. Linux runners only. Mutually exclusive with `container`. |
+| `apt` | Debian/Ubuntu package names. Linux runners only. Mutually exclusive with `container`. Installed with `apt-get install -y --no-install-recommends`. |
+| `apt-recommends` | `true` drops `--no-install-recommends`, so each `apt` package's recommended packages install too (apt-get's own default). Use it when a package only works with its recommended extras, such as `pandoc` with `texlive`. Requires `apt`; mutually exclusive with `container`. |
 | `container` | Escape hatch. See the custom container details below. |
 
 <details>

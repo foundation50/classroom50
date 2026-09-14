@@ -127,9 +127,10 @@
           "additionalProperties": false,
           "properties": {
             "failure-details": { "enum": ["full", "actual-only", "none"] },
-            "show-output": { "type": "boolean" }
+            "show-output": { "type": "boolean" },
+            "show-command": { "type": "boolean" }
           },
-          "description": "Assignment-level defaults for the per-test reporting options `failure-details` and `show-output` (see #/$defs/test for their semantics); a test's own value overrides. Only meaningful alongside `tests` — the materializer copies it into tests.json's `defaults` and it is otherwise ignored. Omit entirely for the built-in defaults (failure-details `full`, show-output `false`); like `runtime` it is a CLOSED sub-object, so a new sub-key must ship in lockstep across this schema, the Go TestDefaults struct, and the web Assignment['test_defaults'] type in the same release."
+          "description": "Assignment-level defaults for the per-test reporting options `failure-details`, `show-output`, and `show-command` (see #/$defs/test for their semantics); a test's own value overrides. Only meaningful alongside `tests` — the materializer copies it into tests.json's `defaults` and it is otherwise ignored. Omit entirely for the built-in defaults (failure-details `full`, show-output `false`, show-command `false`); like `runtime` it is a CLOSED sub-object, so a new sub-key must ship in lockstep across this schema, the Go TestDefaults struct, and the web Assignment['test_defaults'] type in the same release."
         },
         "feedback_pr": {
           "type": "boolean",
@@ -433,12 +434,17 @@
         "apt": {
           "type": "array",
           "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.+-]{0,63}$" }
+        },
+        "apt-recommends": {
+          "type": "boolean",
+          "description": "Install the recommended packages of each `apt` entry too (apt-get's own default). Absent or false installs with --no-install-recommends, the smaller and faster choice, which is what every assignment did before this field existed. Requires `apt`; forbidden with `container` (the image owns its packages)."
         }
       },
+      "dependentRequired": { "apt-recommends": ["apt"] },
       "allOf": [
         {
           "if": { "required": ["container"] },
-          "then": { "not": { "required": ["apt"] } }
+          "then": { "not": { "anyOf": [{ "required": ["apt"] }, { "required": ["apt-recommends"] }] } }
         }
       ]
     },
@@ -485,7 +491,11 @@
         },
         "show-output": {
           "type": "boolean",
-          "description": "Include the captured stdout/stderr of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
+          "description": "Include the captured output of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. On a test that fails in its run step, also adds the setup command's output to the failure details. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
+        },
+        "show-command": {
+          "type": "boolean",
+          "description": "Print the test's `setup` and `run` command lines, as written, at the top of its failure details and its show-output block. Off by default because a command can reveal how a test checks the work (a hidden script name, an inline assertion). Suppressed when the effective `failure-details` is `none`; on a setup failure only the setup command is printed. Overrides the assignment's `test_defaults`. On the wire it is collapsed like `show-output`: writers omit the field when false, so readers must treat an absent field as `false`."
         }
       },
       "allOf": [

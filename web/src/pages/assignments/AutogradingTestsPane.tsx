@@ -75,10 +75,49 @@ const FAILURE_DETAILS_OPTIONS = [
   labelKey: string
 }[]
 
-const SHOW_OUTPUT_OPTIONS = [
-  { on: true, labelKey: "assignments.autograder.showOutputOn" },
-  { on: false, labelKey: "assignments.autograder.showOutputOff" },
-] as const
+// A boolean report option whose "" draft value means "inherit the assignment
+// default". The select shows the resolved value, marks the default option, and
+// collapses a pick equal to the default back to "" so a later change to the
+// default still cascades to this test. The single source for that recipe.
+const InheritableBoolSelect = ({
+  id,
+  value,
+  defaultValue,
+  onChange,
+  onLabelKey,
+  offLabelKey,
+}: {
+  id: string
+  value: boolean | ""
+  defaultValue: boolean
+  onChange: (value: boolean | "") => void
+  onLabelKey: string
+  offLabelKey: string
+}) => {
+  const { t } = useTranslation()
+  const resolved = value === "" ? defaultValue : value
+  return (
+    <Select
+      id={id}
+      value={resolved ? "on" : "off"}
+      onChange={(e) => {
+        const on = e.target.value === "on"
+        onChange(on === defaultValue ? "" : on)
+      }}
+    >
+      {[
+        { on: true, labelKey: onLabelKey },
+        { on: false, labelKey: offLabelKey },
+      ].map(({ on, labelKey }) => (
+        <option key={labelKey} value={on ? "on" : "off"}>
+          {on === defaultValue
+            ? t("assignments.autograder.defaultOption", { label: t(labelKey) })
+            : t(labelKey)}
+        </option>
+      ))}
+    </Select>
+  )
+}
 
 // The assignment's resolved report defaults, threaded into the test editor so
 // its selects can mark the current default option instead of offering an
@@ -86,6 +125,7 @@ const SHOW_OUTPUT_OPTIONS = [
 type TestReportDefaults = {
   failureDetails: AssignmentTestFailureDetails
   showOutput: boolean
+  showCommand: boolean
 }
 
 type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
@@ -469,32 +509,31 @@ const AutogradingTestModal = ({
               hint={t("assignments.autograder.showOutputHint")}
             >
               {({ id }) => (
-                <Select
+                <InheritableBoolSelect
                   id={id}
-                  value={
-                    (
-                      draft.showOutput === ""
-                        ? defaults.showOutput
-                        : draft.showOutput
-                    )
-                      ? "on"
-                      : "off"
-                  }
-                  onChange={(e) => {
-                    const on = e.target.value === "on"
-                    set("showOutput", on === defaults.showOutput ? "" : on)
-                  }}
-                >
-                  {SHOW_OUTPUT_OPTIONS.map(({ on, labelKey }) => (
-                    <option key={labelKey} value={on ? "on" : "off"}>
-                      {on === defaults.showOutput
-                        ? t("assignments.autograder.defaultOption", {
-                            label: t(labelKey),
-                          })
-                        : t(labelKey)}
-                    </option>
-                  ))}
-                </Select>
+                  value={draft.showOutput}
+                  defaultValue={defaults.showOutput}
+                  onChange={(value) => set("showOutput", value)}
+                  onLabelKey="assignments.autograder.showOutputOn"
+                  offLabelKey="assignments.autograder.showOutputOff"
+                />
+              )}
+            </FormField>
+
+            <FormField
+              htmlFor={field("showCommand")}
+              label={t("assignments.autograder.showCommand")}
+              hint={t("assignments.autograder.showCommandHint")}
+            >
+              {({ id }) => (
+                <InheritableBoolSelect
+                  id={id}
+                  value={draft.showCommand}
+                  defaultValue={defaults.showCommand}
+                  onChange={(value) => set("showCommand", value)}
+                  onLabelKey="assignments.autograder.showCommandOn"
+                  offLabelKey="assignments.autograder.showCommandOff"
+                />
               )}
             </FormField>
           </div>
@@ -830,6 +869,20 @@ const AutogradingTestsPane = ({
                       />
                     )}
                   </form.Field>
+
+                  <form.Field name="test_show_command">
+                    {(defaultsField) => (
+                      <ToggleField
+                        id={`${paneFieldId}-show-command`}
+                        checked={defaultsField.state.value}
+                        onChange={defaultsField.handleChange}
+                        label={t("assignments.autograder.defaults.showCommand")}
+                        help={t(
+                          "assignments.autograder.defaults.showCommandHelp",
+                        )}
+                      />
+                    )}
+                  </form.Field>
                 </div>
               </div>
             </Collapse>
@@ -849,6 +902,7 @@ const AutogradingTestsPane = ({
                   failureDetails:
                     state.values.test_failure_details || ("full" as const),
                   showOutput: state.values.test_show_output,
+                  showCommand: state.values.test_show_command,
                 })}
               >
                 {(defaults) => (

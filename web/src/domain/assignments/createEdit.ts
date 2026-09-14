@@ -756,6 +756,11 @@ async function buildAssignmentEntry(
       throw new Error(`runtime.apt: ${aptError}`)
     }
     runtime.apt = aptPackages
+    // Collapsed like the other opt-in booleans: only true is written, and only
+    // next to the packages it applies to (the schema requires `apt`).
+    if (input.runtime_apt_recommends) {
+      runtime["apt-recommends"] = true
+    }
   }
   if (Object.keys(runtime).length > 0) {
     entry.runtime = runtime

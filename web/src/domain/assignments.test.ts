@@ -308,6 +308,7 @@ describe("buildReusedEntry", () => {
         java: "21",
         go: "1.23",
         apt: ["cmake", "valgrind"],
+        "apt-recommends": true,
       },
     }
     const entry = buildReusedEntry(source, {
@@ -320,6 +321,7 @@ describe("buildReusedEntry", () => {
       java: "21",
       go: "1.23",
       apt: ["cmake", "valgrind"],
+      "apt-recommends": true,
     })
     // apt is re-cloned, not shared, so mutating the copy can't leak back.
     expect(entry.runtime?.apt).not.toBe(source.runtime?.apt)
@@ -330,16 +332,33 @@ describe("buildReusedEntry", () => {
   it("self-heals a container+apt source by dropping apt (mirrors the edit path)", () => {
     // A legacy source illegally carrying both container and apt would produce an
     // assignments.json the CLI rejects; reuse drops apt so the copy is valid.
+    // apt-recommends rides on apt and goes with it.
     const source = {
       slug: "c",
       name: "Container + apt",
       mode: "individual",
       autograder: "default",
-      runtime: { container: { image: "ubuntu:24.04" }, apt: ["cmake"] },
+      runtime: {
+        container: { image: "ubuntu:24.04" },
+        apt: ["cmake"],
+        "apt-recommends": true,
+      },
     } as unknown as Assignment
     const entry = buildReusedEntry(source, { slug: "c2", name: "Copy" })
     expect(entry.runtime).toEqual({ container: { image: "ubuntu:24.04" } })
     expect("apt" in (entry.runtime ?? {})).toBe(false)
+  })
+
+  it("drops a lone apt-recommends the schema would reject", () => {
+    const source = {
+      slug: "r",
+      name: "Recommends without apt",
+      mode: "individual",
+      autograder: "default",
+      runtime: { python: "3.14", "apt-recommends": true },
+    } as unknown as Assignment
+    const entry = buildReusedEntry(source, { slug: "r2", name: "Copy" })
+    expect(entry.runtime).toEqual({ python: "3.14" })
   })
 })
 
@@ -1065,6 +1084,46 @@ describe("editAssignment (preserved-entry integration)", () => {
       python: "3.14",
       apt: ["cmake"],
     })
+  })
+
+  it("writes apt-recommends only when on and only next to packages", async () => {
+    const { client, committedContent } = makeClient()
+
+    await editAssignment(
+      client,
+      editInput({
+        runtime_apt: "pandoc, texlive",
+        runtime_apt_recommends: true,
+      }),
+    )
+    let edited = (
+      JSON.parse(committedContent()) as { assignments: Assignment[] }
+    ).assignments.find((a) => a.slug === SLUG)!
+    expect(edited.runtime).toEqual({
+      apt: ["pandoc", "texlive"],
+      "apt-recommends": true,
+    })
+
+    // false collapses away (absent means --no-install-recommends).
+    await editAssignment(
+      client,
+      editInput({ runtime_apt: "pandoc", runtime_apt_recommends: false }),
+    )
+    edited = (
+      JSON.parse(committedContent()) as { assignments: Assignment[] }
+    ).assignments.find((a) => a.slug === SLUG)!
+    expect(edited.runtime).toEqual({ apt: ["pandoc"] })
+
+    // Without packages there is nothing to recommend: the schema forbids a
+    // lone apt-recommends, so the writer drops it.
+    await editAssignment(
+      client,
+      editInput({ runtime_apt: "", runtime_apt_recommends: true }),
+    )
+    edited = (
+      JSON.parse(committedContent()) as { assignments: Assignment[] }
+    ).assignments.find((a) => a.slug === SLUG)!
+    expect(edited.runtime).toBeUndefined()
   })
 
   it("rejects apt packages combined with a container image", async () => {

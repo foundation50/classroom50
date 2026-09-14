@@ -243,7 +243,45 @@ class TestValidatorHappyPaths:
         assert outputs["runs-on"] == '["ubuntu-22.04"]'
         assert outputs["python"] == "3.11"
         assert outputs["apt"] == "build-essential valgrind"
+        assert outputs["apt-install-flags"] == "--no-install-recommends"
         assert outputs["container"] == "null"
+
+    def test_apt_recommends_drops_the_no_install_recommends_flag(self, inline_script, tmp_path):
+        # #815: opt back in to apt-get's own default of pulling recommended
+        # packages. The emitted flag string comes from a fixed choice, so
+        # the file can never put anything else on the apt-get line.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(runtime={"apt": ["pandoc"], "apt-recommends": True}),
+        )
+        assert rc == 0
+        assert outputs["apt"] == "pandoc"
+        assert outputs["apt-install-flags"] == ""
+
+    def test_apt_recommends_false_keeps_the_default(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(runtime={"apt": ["pandoc"], "apt-recommends": False}),
+        )
+        assert rc == 0
+        assert outputs["apt-install-flags"] == "--no-install-recommends"
+
+    @pytest.mark.parametrize("runtime, message", [
+        ({"apt": ["pandoc"], "apt-recommends": "yes"}, "apt-recommends must be a boolean"),
+        ({"apt-recommends": True}, "apt-recommends requires runtime.apt"),
+        ({"container": {"image": "x"}, "apt-recommends": True},
+         "apt-recommends is not allowed when runtime.container is set"),
+    ])
+    def test_bad_apt_recommends_rejected(self, inline_script, tmp_path, runtime, message):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(runtime=runtime),
+        )
+        assert rc != 0
+        assert message in stderr
 
     def test_host_runtime_with_rust_emitted(self, inline_script, tmp_path):
         # Rust has no first-party setup action (provisioned via
@@ -572,10 +610,35 @@ class TestDeclarativeTestsValidation:
         assert rc != 0
         assert "show-output" in stderr
 
+    def test_non_boolean_show_command_rejected(self, inline_script, tmp_path):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(tests=[
+                {"name": "a", "type": "run", "run": "true", "points": 1,
+                 "show-command": "yes"},
+            ]),
+        )
+        assert rc != 0
+        assert "show-command" in stderr
+
+    def test_show_command_accepted_on_tests_and_defaults(self, inline_script, tmp_path):
+        rc, _stdout, _stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(
+                test_defaults={"show-command": True},
+                tests=[{"name": "a", "type": "run", "run": "true", "points": 1,
+                        "show-command": False}],
+            ),
+        )
+        assert rc == 0
+
     @pytest.mark.parametrize("bad_defaults", [
         "none",
         {"failure-details": "loud"},
         {"show-output": "yes"},
+        {"show-command": "yes"},
         {"unknown-key": True},
     ])
     def test_bad_test_defaults_rejected(self, inline_script, tmp_path, bad_defaults):

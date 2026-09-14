@@ -82,7 +82,7 @@ def materialize(root: pathlib.Path) -> int:
                       f"`gh teacher assignment test set --tests FILE`.")
             payload = {"schema": TESTS_SCHEMA_V1, "tests": tests}
             # Assignment-level defaults for the per-test reporting options
-            # (failure-details / show-output) ride the envelope; runner.py's
+            # (failure-details / show-output / show-command) ride the envelope; runner.py's
             # load_tests folds them into each spec at grade time.
             defaults = entry.get("test_defaults")
             if isinstance(defaults, dict) and defaults:

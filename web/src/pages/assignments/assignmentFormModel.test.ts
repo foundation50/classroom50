@@ -37,6 +37,7 @@ const draft = (
   points: 10,
   failureDetails: "",
   showOutput: "",
+  showCommand: "",
   ...over,
 })
 
@@ -70,6 +71,7 @@ const base: CreateAssignmentFormValues = {
   runtime_go: "",
   runtime_rust: "",
   runtime_apt: "",
+  runtime_apt_recommends: false,
   setup_command: "",
   setup_timeout: 120,
   allowed_files: "",
@@ -92,6 +94,7 @@ const base: CreateAssignmentFormValues = {
   tests: [],
   test_failure_details: "",
   test_show_output: false,
+  test_show_command: false,
 }
 
 describe("validateAssignmentForm — happy paths", () => {
@@ -770,10 +773,33 @@ describe("toSubmitValues — runtime field clearing", () => {
       container_image: " python:3.14 ",
       container_user: " root ",
       runtime_apt: "make",
+      runtime_apt_recommends: true,
     })
     expect(out.runtime_apt).toBe("")
+    expect(out.runtime_apt_recommends).toBe(false)
     expect(out.container_image).toBe("python:3.14")
     expect(out.container_user).toBe("root")
+  })
+
+  it("keeps apt-recommends only next to packages", () => {
+    // A stale toggle from an emptied packages field must not reach the wire:
+    // the schema requires `apt` alongside `apt-recommends`.
+    expect(
+      toSubmitValues({
+        ...base,
+        runtime_env: "hosted",
+        runtime_apt: "pandoc",
+        runtime_apt_recommends: true,
+      }).runtime_apt_recommends,
+    ).toBe(true)
+    expect(
+      toSubmitValues({
+        ...base,
+        runtime_env: "hosted",
+        runtime_apt: "  ",
+        runtime_apt_recommends: true,
+      }).runtime_apt_recommends,
+    ).toBe(false)
   })
 
   it("clears every grading-adjacent field for an empty repo", () => {
@@ -1405,12 +1431,13 @@ describe("shouldSeedBuiltInAutograder", () => {
   })
 })
 
-describe("test_defaults form mapping (failure-details / show-output)", () => {
+describe("test_defaults form mapping (failure-details / show-output / show-command)", () => {
   it("collapses the grader defaults to an omitted block", () => {
     expect(
       formValuesToTestDefaults({
         test_failure_details: "",
         test_show_output: false,
+        test_show_command: false,
       }),
     ).toBeUndefined()
   })
@@ -1420,20 +1447,34 @@ describe("test_defaults form mapping (failure-details / show-output)", () => {
       formValuesToTestDefaults({
         test_failure_details: "none",
         test_show_output: false,
+        test_show_command: false,
       }),
     ).toEqual({ "failure-details": "none" })
     expect(
       formValuesToTestDefaults({
         test_failure_details: "",
         test_show_output: true,
+        test_show_command: false,
       }),
     ).toEqual({ "show-output": true })
     expect(
       formValuesToTestDefaults({
+        test_failure_details: "",
+        test_show_output: false,
+        test_show_command: true,
+      }),
+    ).toEqual({ "show-command": true })
+    expect(
+      formValuesToTestDefaults({
         test_failure_details: "actual-only",
         test_show_output: true,
+        test_show_command: true,
       }),
-    ).toEqual({ "failure-details": "actual-only", "show-output": true })
+    ).toEqual({
+      "failure-details": "actual-only",
+      "show-output": true,
+      "show-command": true,
+    })
   })
 
   it("reads a stored explicit 'full' as the default choice", () => {
@@ -1452,10 +1493,47 @@ describe("test_defaults form mapping (failure-details / show-output)", () => {
       mode: "individual",
       autograder: "default",
       tests: [{ name: "t", type: "run", run: "true", points: 1 }],
-      test_defaults: { "failure-details": "none", "show-output": true },
+      test_defaults: {
+        "failure-details": "none",
+        "show-output": true,
+        "show-command": true,
+      },
     })
     expect(values.test_failure_details).toBe("none")
     expect(values.test_show_output).toBe(true)
+    expect(values.test_show_command).toBe(true)
+  })
+
+  it("assignmentToFormValues seeds apt-recommends only on the hosted path", () => {
+    expect(
+      assignmentToFormValues({
+        slug: "hw1",
+        name: "HW1",
+        mode: "individual",
+        autograder: "default",
+        runtime: { apt: ["pandoc"], "apt-recommends": true },
+      }).runtime_apt_recommends,
+    ).toBe(true)
+    // A container owns its packages, so a legacy container + apt-recommends
+    // entry reads as off, matching how runtime_apt is blanked.
+    expect(
+      assignmentToFormValues({
+        slug: "hw1",
+        name: "HW1",
+        mode: "individual",
+        autograder: "default",
+        runtime: { container: { image: "gcc:13" }, "apt-recommends": true },
+      }).runtime_apt_recommends,
+    ).toBe(false)
+    expect(
+      assignmentToFormValues({
+        slug: "hw1",
+        name: "HW1",
+        mode: "individual",
+        autograder: "default",
+        runtime: { apt: ["pandoc"] },
+      }).runtime_apt_recommends,
+    ).toBe(false)
   })
 
   it("toSubmitValues clears the defaults without the built-in autograder", () => {
@@ -1464,9 +1542,11 @@ describe("test_defaults form mapping (failure-details / show-output)", () => {
       autograding_state: "none",
       test_failure_details: "none",
       test_show_output: true,
+      test_show_command: true,
     })
     expect(submitted.test_failure_details).toBe("")
     expect(submitted.test_show_output).toBe(false)
+    expect(submitted.test_show_command).toBe(false)
   })
 
   it("toSubmitValues keeps the defaults with the built-in autograder", () => {
@@ -1474,8 +1554,10 @@ describe("test_defaults form mapping (failure-details / show-output)", () => {
       ...base,
       test_failure_details: "actual-only",
       test_show_output: true,
+      test_show_command: true,
     })
     expect(submitted.test_failure_details).toBe("actual-only")
     expect(submitted.test_show_output).toBe(true)
+    expect(submitted.test_show_command).toBe(true)
   })
 })

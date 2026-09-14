@@ -90,14 +90,17 @@ class TestSchemaAccepts:
         # show-output: false is legal — it overrides a true default.
         tests = [
             {"name": "a", "type": "run", "run": "x", "points": 1,
-             "failure-details": "actual-only", "show-output": True},
+             "failure-details": "actual-only", "show-output": True,
+             "show-command": True},
             {"name": "b", "type": "run", "run": "x", "points": 1,
-             "failure-details": "none", "show-output": False},
+             "failure-details": "none", "show-output": False,
+             "show-command": False},
             {"name": "c", "type": "run", "run": "x", "points": 1,
              "failure-details": "full"},
         ]
         entry = _entry(tests=tests)
-        entry["test_defaults"] = {"failure-details": "none", "show-output": True}
+        entry["test_defaults"] = {"failure-details": "none", "show-output": True,
+                                  "show-command": True}
         assert _errors(_manifest(entry)) == []
 
     def test_bad_reporting_options_rejected(self):
@@ -107,8 +110,13 @@ class TestSchemaAccepts:
         tests = [{"name": "a", "type": "run", "run": "x", "points": 1,
                   "show-output": "yes"}]
         assert _errors(_manifest(_entry(tests=tests))) != []
+        tests = [{"name": "a", "type": "run", "run": "x", "points": 1,
+                  "show-command": "yes"}]
+        assert _errors(_manifest(_entry(tests=tests))) != []
         entry = _entry()
         entry["test_defaults"] = {"failure-details": "loud"}
+        assert _errors(_manifest(entry)) != []
+        entry["test_defaults"] = {"show-command": 1}
         assert _errors(_manifest(entry)) != []
         entry["test_defaults"] = {"unknown-key": True}
         assert _errors(_manifest(entry)) != []
@@ -368,6 +376,19 @@ class TestSchemaRejects:
     def test_apt_forbidden_with_container(self):
         entry = _entry(runtime={"container": {"image": "x"}, "apt": ["gcc"]})
         assert _errors(_manifest(entry)) != []
+
+    def test_apt_recommends_accepted_with_apt(self):
+        for flag in (True, False):
+            entry = _entry(runtime={"apt": ["pandoc"], "apt-recommends": flag})
+            assert _errors(_manifest(entry)) == []
+
+    @pytest.mark.parametrize("runtime", [
+        {"apt": ["pandoc"], "apt-recommends": "yes"},       # wrong type
+        {"apt-recommends": True},                            # needs apt
+        {"container": {"image": "x"}, "apt-recommends": True},  # image owns packages
+    ])
+    def test_bad_apt_recommends_rejected(self, runtime):
+        assert _errors(_manifest(_entry(runtime=runtime))) != []
 
     def test_non_ubuntu_runs_on_with_container_passes_schema(self):
         # The Ubuntu-only-with-container rule is enforced by the

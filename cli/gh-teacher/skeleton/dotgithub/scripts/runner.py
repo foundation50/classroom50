@@ -1829,6 +1829,10 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
         outcome["comparison"] = spec.get("comparison")
     outcome["failure-details"] = spec.get("failure-details") or FAILURE_DETAILS_FULL
     outcome["show-output"] = bool(spec.get("show-output"))
+    # The teacher's commands as written (not the pytest-augmented one), for the
+    # opt-in show-command rendering.
+    outcome["show-command"] = bool(spec.get("show-command"))
+    outcome["commands"] = {"setup": setup, "run": spec["run"]}
     return outcome
 
 
@@ -1929,6 +1933,9 @@ def _validate_test_spec(t: Any) -> str | None:
     so = t.get("show-output")
     if so is not None and not isinstance(so, bool):
         return "show-output must be a boolean"
+    sc = t.get("show-command")
+    if sc is not None and not isinstance(sc, bool):
+        return "show-command must be a boolean"
     return None
 
 
@@ -1943,6 +1950,9 @@ def _validate_test_defaults(d: Any) -> str | None:
     so = d.get("show-output")
     if so is not None and not isinstance(so, bool):
         return "show-output must be a boolean"
+    sc = d.get("show-command")
+    if sc is not None and not isinstance(sc, bool):
+        return "show-command must be a boolean"
     return None
 
 
@@ -1960,9 +1970,9 @@ HAND_WRITTEN_TESTS_HINT = (
 
 def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
     """Parse + re-validate a materialized tests.json, folding the envelope's
-    `defaults` (assignment-level failure-details / show-output) into each spec
-    that doesn't set its own. Raises TestsConfigError on any structural
-    problem."""
+    `defaults` (assignment-level failure-details / show-output / show-command)
+    into each spec that doesn't set its own. Raises TestsConfigError on any
+    structural problem."""
     data = json.loads(path.read_text(encoding="utf-8"))
     if isinstance(data, list):
         # The predictable mistake: the bare array `gh teacher assignment add
@@ -1997,26 +2007,68 @@ def load_tests(path: pathlib.Path) -> list[dict[str, Any]]:
         if t["name"] in seen:
             raise TestsConfigError(f"{TESTS_FILENAME} tests[{i}]: duplicate test name {t['name']!r}")
         seen.add(t["name"])
-        for key in ("failure-details", "show-output"):
+        for key in ("failure-details", "show-output", "show-command"):
             if key not in t and key in defaults:
                 t[key] = defaults[key]
     return tests
+
+
+def _command_lines(outcome: dict[str, Any], *, include_run: bool = True) -> str:
+    """The `--- setup command --- / --- run command ---` blocks for a test that
+    opted in via show-command; empty otherwise. A setup failure passes
+    include_run=False: its run command never executed, and listing it above
+    the error would blame the wrong step."""
+    if not outcome.get("show-command"):
+        return ""
+    commands = outcome.get("commands") or {}
+    parts = []
+    for key, label in (("setup", "setup command"), ("run", "run command")):
+        if key == "run" and not include_run:
+            continue
+        text = (commands.get(key) or "").rstrip()
+        if text:
+            parts.append(f"--- {label} ---\n{text}")
+    return "\n".join(parts)
+
+
+def _setup_stream_blocks(outcome: dict[str, Any], limit: int) -> str:
+    """The labelled `--- setup stdout --- / --- setup stderr ---` blocks of an
+    outcome's setup command; empty when neither stream has content."""
+    cap = outcome.get("capture") or {}
+    parts = []
+    for key, label in (("setup-stdout", "setup stdout"), ("setup-stderr", "setup stderr")):
+        text = cap.get(key) or ""
+        if text.strip():
+            parts.append(f"--- {label} ---\n{_clip(text, limit)}")
+    return "\n".join(parts)
 
 
 def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) -> str:
     """Failure text for one failing outcome, clipped to the surface's limit
     and honoring the test's failure-details level: `none` stops at the
     failure-kind summary line, `actual-only` adds only the student's own
-    streams, and `full` (the default) also shows the expected side."""
+    streams, and `full` (the default) also shows the expected side. The
+    commands are prepended when the test opted in via show-command."""
     level = outcome.get("failure-details") or FAILURE_DETAILS_FULL
     detail = (outcome.get("detail") or "").rstrip()
     if level == FAILURE_DETAILS_NONE:
         return detail
     cap = outcome.get("capture") or {}
     kind = outcome.get("failure-kind")
+    commands = _command_lines(outcome, include_run=kind != "setup")
+    if commands:
+        detail += f"\n{commands}"
     if kind == "setup":
-        out = cap.get("setup-stderr") or cap.get("setup-stdout") or ""
-        return detail + (f"\n{_clip(out, limit)}" if out else "")
+        # Both setup streams, labelled: an `apt-get install` or `make deps`
+        # reports on stdout, so showing stderr alone hid the useful half.
+        blocks = _setup_stream_blocks(outcome, limit)
+        return detail + (f"\n{blocks}" if blocks else "")
+    # A test that fails in its run phase skips the output section, so under
+    # show-output the setup streams ride along here instead of vanishing.
+    if outcome.get("show-output"):
+        blocks = _setup_stream_blocks(outcome, limit)
+        if blocks:
+            detail += f"\n{blocks}"
     if kind == "cases":
         out = cap.get("stdout") or cap.get("stderr") or ""
         return detail + (f"\n{_clip(out, limit)}" if out else "")
@@ -2059,17 +2111,21 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
 def compose_output(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) -> str:
     """Captured setup/run streams of one outcome for the opt-in show-output
     section (#764) -- rendered for passing tests, since failing ones already
-    surface their output through the failure details."""
+    surface their output through the failure details. The commands lead when
+    the test also opted in via show-command."""
     cap = outcome.get("capture") or {}
-    parts = []
+    outputs = []
     for key, label in (("setup-stdout", "setup stdout"),
                        ("setup-stderr", "setup stderr"),
                        ("stdout", "stdout"),
                        ("stderr", "stderr")):
         text = cap.get(key) or ""
         if text.strip():
-            parts.append(f"--- {label} ---\n{_clip(text, limit)}")
-    return "\n".join(parts) or "(no output captured)"
+            outputs.append(f"--- {label} ---\n{_clip(text, limit)}")
+    if not outputs:
+        outputs.append("(no output captured)")
+    commands = _command_lines(outcome)
+    return "\n".join(([commands] if commands else []) + outputs)
 
 
 def render_declarative_body(result: dict[str, Any], outcomes: list[dict[str, Any]],

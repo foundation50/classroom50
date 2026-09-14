@@ -107,9 +107,15 @@ func ValidateRuntime(r RuntimeRef) error {
 		if len(r.Apt) > 0 {
 			return errors.New("runtime.apt is not allowed when runtime.container is set: install packages in the container image instead")
 		}
+		if r.AptRecommends {
+			return errors.New("runtime.apt-recommends is not allowed when runtime.container is set: install packages in the container image instead")
+		}
 		if err := ValidateContainer(*r.Container); err != nil {
 			return err
 		}
+	}
+	if r.AptRecommends && len(r.Apt) == 0 {
+		return errors.New("runtime.apt-recommends requires runtime.apt: list the packages to install")
 	}
 
 	for _, pair := range []struct{ field, value string }{

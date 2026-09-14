@@ -69,6 +69,7 @@ func assignmentTestAddCmd() *cobra.Command {
 		points         int
 		failureDetails string
 		showOutput     bool
+		showCommand    bool
 	)
 
 	cmd := &cobra.Command{
@@ -147,6 +148,10 @@ func assignmentTestAddCmd() *cobra.Command {
 				so := showOutput
 				spec.ShowOutput = &so
 			}
+			if cmd.Flags().Changed("show-command") {
+				sc := showCommand
+				spec.ShowCommand = &sc
+			}
 			if err := assignment.ValidateTestSpec(spec); err != nil {
 				return err
 			}
@@ -173,6 +178,7 @@ func assignmentTestAddCmd() *cobra.Command {
 	cmd.Flags().IntVar(&points, "points", 0, "Points the test is worth")
 	cmd.Flags().StringVar(&failureDetails, "failure-details", "", "How much failure detail students see: full | actual-only | none (empty = the assignment default)")
 	cmd.Flags().BoolVar(&showOutput, "show-output", false, "Include captured setup/run output in the report even when the test passes")
+	cmd.Flags().BoolVar(&showCommand, "show-command", false, "Print the setup and run command lines in the report (off by default: a command can reveal how the test checks the work)")
 	return cmd
 }
 

@@ -230,7 +230,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	outputsMap, _ := setupOutputs.(map[string]any)
 	for _, out := range []string{
 		"submission-tag", "runs-on", "container",
-		"python", "node", "java", "go", "rust", "apt",
+		"python", "node", "java", "go", "rust", "apt", "apt-install-flags",
 		"base-url", "classroom", "assignment",
 		// is-acceptance gates the whole skip-the-acceptance-commit path;
 		// a dropped output would make every gate below read empty and
@@ -433,7 +433,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// and `user` are container keys — private registry auth is out of
 	// scope for this model, so images must be publicly pullable.
 	for _, want := range []string{
-		`_RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "rust", "apt"}`,
+		`_RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "rust", "apt", "apt-recommends"}`,
 		`_CONTAINER_KEYS = {"image", "user"}`,
 		`emitted = {"image": image}`,
 		`emitted["options"] = f"--user {user}"`,
@@ -459,10 +459,16 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		"if: needs.setup.outputs.rust != '' && needs.setup.outputs.no-autograder != 'true' && runner.environment != 'self-hosted'",
 		"dtolnay/rust-toolchain@master",
 		"if: needs.setup.outputs.apt != '' && needs.setup.outputs.no-autograder != 'true' && runner.os == 'Linux' && runner.environment != 'self-hosted'",
+		// The install line takes its flags from the validator's fixed-choice
+		// output; a hardcoded flag here would silently ignore apt-recommends.
+		"sudo apt-get install -y ${{ needs.setup.outputs.apt-install-flags }} ${{ needs.setup.outputs.apt }}",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("autograde-runner.yaml missing toolchain dispatch %q", want)
 		}
+	}
+	if strings.Contains(body, "apt-get install -y --no-install-recommends") {
+		t.Errorf("autograde-runner.yaml hardcodes --no-install-recommends; the flag must come from needs.setup.outputs.apt-install-flags")
 	}
 
 	// runner.py is fetched at the org-level URL on every run, with

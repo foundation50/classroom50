@@ -945,6 +945,7 @@ creating an assignment; unlike `test set`, it rewrites the whole entry.
 | `--exit-code <N>` | `run` only: required exit code (default `0`). |
 | `--failure-details full\|actual-only\|none` | How much failure detail students see; omit for the assignment default. |
 | `--show-output` | Include captured setup/run output in the report even when the test passes (`--show-output=false` opts one test out of a `show-output` default). |
+| `--show-command` | Print the setup and run command lines in the report. Off by default: a command can reveal how the test checks the work (`--show-command=false` opts one test out of a `show-command` default). |
 
 `--input-file` and `--expected-file` name a fixture you committed alongside the
 assignment at `<classroom>/autograders/<slug>/`; it's bundled and read at grade

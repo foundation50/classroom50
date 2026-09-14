@@ -17,6 +17,7 @@ import {
   fieldLabelClass,
   HelpTooltip,
   Input,
+  ToggleField,
 } from "@/components/ui"
 import type { HelpTooltipPosition } from "@/components/ui"
 import {
@@ -367,6 +368,22 @@ export const AptField = ({
                 </p>
               )
             )}
+            <form.Field name="runtime_apt_recommends">
+              {(recommendsField) => (
+                <div className="mt-3">
+                  <ToggleField
+                    id={recommendsField.name}
+                    checked={recommendsField.state.value}
+                    // Meaningless without packages; the submit path also clears
+                    // it, so the control follows the input rather than hiding.
+                    disabled={disabled || packages.length === 0}
+                    onChange={recommendsField.handleChange}
+                    label={t("assignments.form.runtime.aptRecommends")}
+                    help={t("assignments.form.runtime.aptRecommendsTip")}
+                  />
+                </div>
+              )}
+            </form.Field>
           </div>
         )
       }}

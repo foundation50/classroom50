@@ -1444,9 +1444,11 @@
         "versionMenu": "Choose a {{language}} version",
         "aptLabel": "Extra apt packages",
         "aptPlaceholder": "cmake, valgrind",
-        "aptTip": "Extra Ubuntu packages installed (apt-get) before grading, comma- or space-separated. Lowercase Debian package names.",
+        "aptTip": "Extra Ubuntu packages installed (apt-get) before grading, comma- or space-separated. Lowercase Debian package names. Installed with --no-install-recommends unless you turn on recommended packages below.",
         "aptCount_one": "{{count}} package",
         "aptCount_other": "{{count}} packages",
+        "aptRecommends": "Install recommended packages too",
+        "aptRecommendsTip": "Run apt-get without --no-install-recommends, the way a plain apt-get install works on your own machine. Turn this on when a package only works with its recommended extras (pandoc with texlive, for example). Off is smaller and faster.",
         "runnerContainerError": "\"{{label}}\" is a macOS/Windows runner; a Docker image needs an Ubuntu (or custom/self-hosted) runner."
       },
       "validation": {
@@ -1525,16 +1527,22 @@
       "showOutputHint": "Include the captured setup/run output in the report even when the test passes, inside a collapsed section.",
       "showOutputOn": "Include output",
       "showOutputOff": "Discard output",
+      "showCommand": "Command lines",
+      "showCommandHint": "Print the setup and run commands at the top of this test's report entry. Keep this off when the command reveals how the test checks the work.",
+      "showCommandOn": "Show commands",
+      "showCommandOff": "Hide commands",
       "defaultOption": "{{label}} (default)",
       "reportOptions": "Report options",
-      "reportOptionsHint": "What the submission report shows for this test. Both options start at the assignment's report defaults; pick another value to override it for this test only.",
+      "reportOptionsHint": "What the submission report shows for this test. Every option starts at the assignment's report defaults; pick another value to override it for this test only.",
       "defaults": {
         "heading": "Report defaults",
         "hint": "Defaults for every test; a test's own report options override them.",
         "failureDetails": "Default failure details",
         "failureDetailsFull": "Full: diff or expected and actual output",
         "showOutput": "Include passing test output",
-        "showOutputHelp": "Adds each passing test's captured setup/run output to the submission report and workflow log, collapsed by default. Useful when authoring or debugging an autograder."
+        "showOutputHelp": "Adds each passing test's captured setup/run output to the submission report and workflow log, collapsed by default. Useful when authoring or debugging an autograder.",
+        "showCommand": "Show command lines",
+        "showCommandHelp": "Prints each test's setup and run commands at the top of its report entry, so students see what was run. Students can read the report, so keep this off when a command reveals how a test checks the work."
       },
       "teacherFiles": {
         "button": "Upload test files",
