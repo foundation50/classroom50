@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
-import { page } from "vitest/browser"
+import { page, userEvent } from "vitest/browser"
 import { render, screen } from "@testing-library/react"
 
 import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMenu"
@@ -66,6 +66,33 @@ describe("SubmissionsActionsMenu pointer interaction", () => {
     await expect.element(menu).not.toBeVisible()
     await trigger.click()
     await expect.element(menu).toBeVisible()
+  })
+
+  // The menu is focus-driven, so keyboard users open it by tabbing onto the
+  // trigger; tabbing on moves through the list into the items, and Enter on an
+  // item selects it.
+  it("opens when tabbed onto and selects an item with Enter", async () => {
+    const onLockToggle = vi.fn()
+    const { menu } = renderMenu({ onLockToggle })
+    await page.getByRole("button", { name: "Outside", exact: true }).click()
+    await userEvent.tab()
+    await expect.element(menu).toBeVisible()
+    // The list itself is focusable, so one Tab lands on it and the next on
+    // the first item (Lock, given these props).
+    await userEvent.tab()
+    await userEvent.tab()
+    await expect
+      .element(
+        page.getByRole("button", {
+          name: "submissions.lock.lockLabel",
+          exact: true,
+        }),
+      )
+      .toHaveFocus()
+    await expect.element(menu).toBeVisible()
+    await userEvent.keyboard("{Enter}")
+    expect(onLockToggle).toHaveBeenCalledOnce()
+    await expect.element(menu).not.toBeVisible()
   })
 
   it("keeps the trigger unavailable while regrading", async () => {

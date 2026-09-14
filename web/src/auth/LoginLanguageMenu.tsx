@@ -3,7 +3,7 @@ import { InlineSpinner } from "@/components/Spinner"
 import { CheckIcon, GlobeIcon, SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Button, DropdownMenu, cx } from "@/components/ui"
+import { DropdownMenu, cx } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
@@ -85,18 +85,17 @@ export function LoginLanguageMenu() {
 
   return (
     <div className="dropdown dropdown-end">
-      <Button
+      <DropdownMenu.Trigger
         variant="ghost"
         size="sm"
         shape="circle"
         className="text-base-content/70"
-        tabIndex={0}
         aria-label={t("language.switcherLabel")}
         title={t("language.switcherLabel")}
         onClick={() => void loadRegistry()}
       >
         <GlobeIcon aria-hidden="true" className="size-4" />
-      </Button>{" "}
+      </DropdownMenu.Trigger>{" "}
       <DropdownMenu className="max-h-80 w-60 flex-nowrap overflow-y-auto">
         <li className="menu-title text-xs">
           {t("language.switcherInstalled")}

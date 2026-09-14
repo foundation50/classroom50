@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Button, DropdownMenu } from "@/components/ui"
+import { DropdownMenu } from "@/components/ui"
 
 // Consolidates the workflow actions (Collect now / Regrade all / View workflow)
 // plus the CSV export and Metrics into one dropdown so the toolbar stays
@@ -151,12 +151,9 @@ export function SubmissionsActionsMenu({
           collect is indicated by the toolbar's Collect now button, so the
           menu stays open for business (exports, View run) meanwhile; its
           workflow items are still gated via disabledActions. */}
-      <Button
+      <DropdownMenu.Trigger
         variant="primary"
         size="sm"
-        // Safari only focuses a button on click when tabindex is set
-        // explicitly, and daisyUI opens the menu on focus (#987).
-        tabIndex={0}
         loading={regrading}
         loadingLabel={t("submissions.regradeAll.active")}
       >
@@ -166,7 +163,7 @@ export function SubmissionsActionsMenu({
         {!regrading && (
           <TriangleDownIcon aria-hidden="true" className="size-4" />
         )}
-      </Button>
+      </DropdownMenu.Trigger>
       <DropdownMenu className="w-64">
         {/* Open all Feedback PRs leads the menu. The page owns the gate
             (owner-only, non-empty_repo): a no_autograder repo is initialized and

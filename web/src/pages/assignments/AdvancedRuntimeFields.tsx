@@ -12,7 +12,6 @@ import {
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import {
-  Button,
   DropdownMenu,
   fieldLabelClass,
   HelpTooltip,
@@ -120,9 +119,8 @@ export const LanguageVersionField = ({
                   onBlur={normalizeOnBlur(field)}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                <Button
+                <DropdownMenu.Trigger
                   shape="square"
-                  tabIndex={0}
                   disabled={disabled}
                   className="join-item border-base-content/20"
                   aria-label={t("assignments.form.runtime.versionMenu", {
@@ -130,7 +128,7 @@ export const LanguageVersionField = ({
                   })}
                 >
                   <TriangleDownIcon aria-hidden="true" className="size-4" />
-                </Button>
+                </DropdownMenu.Trigger>
               </div>
               {!disabled && (
                 <DropdownMenu className="w-full">

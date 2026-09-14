@@ -4,15 +4,15 @@ import path from "node:path"
 
 import { describe, expect, it } from "vitest"
 
-// Guards the vitest two-project wiring so the browser-only a11y layout guards
+// Guards the vitest project wiring so the browser-only a11y layout guards
 // (2.5.8 target size, 1.4.10 reflow) can't silently stop running. Two silent-pass
 // surfaces this closes (code review findings #1, #2):
 //   1. `npm test` runs both projects only while `test.projects` stays configured;
 //      a revert to a single `test` block would drop the browser guards and CI
 //      would still pass.
-//   2. If the `*.browser.test.tsx` glob ever matched zero files, the browser
-//      project would run empty (0 tests = green) with the two flipped VPAT
-//      criteria losing their backing.
+//   2. If a project's `include` ever matched zero files, that project would run
+//      empty (0 tests = green) with its guards losing their backing. vitest does
+//      not fail when one of several projects collects nothing.
 // Lives in the node project (no browser needed): it reads the config + globs the
 // tree, so it runs in the fast suite and fails loudly if the wiring regresses.
 
@@ -45,5 +45,23 @@ describe("vitest browser-project wiring (a11y layout guards)", () => {
     // Fewer means a guard was renamed out of the collected glob and its VPAT
     // criterion lost its backing check.
     expect(files.length).toBeGreaterThanOrEqual(4)
+  })
+
+  // A project added later (a second engine, a single-file lane) hard-codes its
+  // own include list; renaming that file would leave it collecting nothing
+  // while the other projects keep CI green.
+  it("every project's include patterns match at least one file", () => {
+    const includes = [...config.matchAll(/include:\s*\[([^\]]*)\]/g)].map((m) =>
+      [...m[1].matchAll(/"([^"]+)"/g)].map((p) => p[1]),
+    )
+    expect(includes.length).toBeGreaterThanOrEqual(2)
+    for (const patterns of includes) {
+      for (const pattern of patterns) {
+        expect(
+          globSync(pattern, { cwd: webRoot }).length,
+          `include pattern matches no files: ${pattern}`,
+        ).toBeGreaterThan(0)
+      }
+    }
   })
 })

@@ -1,5 +1,6 @@
 import type { ComponentPropsWithRef, ComponentType, ReactNode } from "react"
 
+import { Button, type ButtonProps } from "./Button"
 import { cx } from "./cx"
 
 // Single source for the DaisyUI dropdown menu surface so the popover chrome
@@ -37,6 +38,17 @@ function DropdownMenuSeparator() {
   )
 }
 DropdownMenu.Separator = DropdownMenuSeparator
+
+export type DropdownTriggerProps = Omit<ButtonProps, "tabIndex">
+
+// The one trigger recipe: a Button that daisyUI's focus-driven dropdown can
+// actually open everywhere. Safari only focuses a button on click when
+// tabindex is set explicitly (#987), so it is fixed here rather than
+// remembered per call site.
+function DropdownTrigger(props: DropdownTriggerProps) {
+  return <Button tabIndex={0} {...props} />
+}
+DropdownMenu.Trigger = DropdownTrigger
 
 // daisyUI dropdowns are focus-driven, so "close the menu" is "blur the focused
 // item". The single helper for every menu item's onClick.

@@ -55,7 +55,7 @@ export {
   closeDropdownMenu,
   popoverPanelClass,
 } from "./DropdownMenu"
-export type { DropdownMenuProps } from "./DropdownMenu"
+export type { DropdownMenuProps, DropdownTriggerProps } from "./DropdownMenu"
 export { SelectAllCheckbox } from "./SelectAllCheckbox"
 
 export { Alert, ALERT_TONE_ICON, alertToneClass, alertToneRole } from "./Alert"

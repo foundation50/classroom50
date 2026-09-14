@@ -1,6 +1,5 @@
 import type { ReactNode } from "react"
 
-import { Button } from "./Button"
 import { DropdownMenu } from "./DropdownMenu"
 import { TriangleDownIcon } from "./icons"
 
@@ -28,16 +27,15 @@ export function SplitButton({
     <div className="join">
       {primary}
       <div className="dropdown dropdown-end -ms-px">
-        <Button
+        <DropdownMenu.Trigger
           variant="primary"
           size={size}
-          tabIndex={0}
           disabled={disabled}
           className="join-item h-full border-s border-primary-content/20 px-2"
           aria-label={caretLabel}
         >
           <TriangleDownIcon aria-hidden="true" className="size-4" />
-        </Button>
+        </DropdownMenu.Trigger>
         <DropdownMenu className="w-max">{children}</DropdownMenu>
       </div>
     </div>
