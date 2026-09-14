@@ -561,6 +561,18 @@ class TestComposeDetail:
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert "oops" in ag.compose_detail(o)
 
+    def test_exit_shows_both_stdout_and_stderr(self, tmp_path):
+        # #910: a run command commonly prints its verdict (a diff, a self-check
+        # message) to stdout while stderr carries tool noise. A failure must show
+        # BOTH, not drop stdout because stderr is non-empty.
+        spec = {"name": "t", "type": "run",
+                "run": "echo the-diff; echo tool-noise >&2; false", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"] and o["failure-kind"] == "exit"
+        detail = ag.compose_detail(o)
+        assert "--- stdout ---" in detail and "the-diff" in detail
+        assert "--- stderr ---" in detail and "tool-noise" in detail
+
     def test_surface_limits_clip_independently(self, tmp_path):
         # #612: the same outcome renders clipped for the release body but far
         # roomier for the Actions log — clipping happens at render, not capture.

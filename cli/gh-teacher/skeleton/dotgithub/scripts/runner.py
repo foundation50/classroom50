@@ -2021,8 +2021,20 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
         out = cap.get("stdout") or cap.get("stderr") or ""
         return detail + (f"\n{_clip(out, limit)}" if out else "")
     if kind == "exit":
-        out = cap.get("stderr") or cap.get("stdout") or ""
-        return detail + (f"\n{_clip(out, limit)}" if out else "")
+        # A run test's signal is what its command printed, and commands commonly
+        # write their verdict to stdout (a diff, a self-check message) while
+        # stderr carries only tool noise. Show BOTH streams, labelled, so neither
+        # is dropped: the old `stderr or stdout` hid stdout whenever stderr had
+        # anything at all. Safe at every failure-details level here because a run
+        # test has no expected side to redact (only `none` suppresses, above).
+        stdout = cap.get("stdout") or ""
+        stderr = cap.get("stderr") or ""
+        parts = []
+        if stdout.strip():
+            parts.append(f"--- stdout ---\n{_clip(stdout, limit)}")
+        if stderr.strip():
+            parts.append(f"--- stderr ---\n{_clip(stderr, limit)}")
+        return detail + ("\n" + "\n".join(parts) if parts else "")
     if kind == "output":
         comparison = outcome.get("comparison") or ""
         stdout = cap.get("stdout") or ""
