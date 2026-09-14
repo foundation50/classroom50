@@ -57,6 +57,8 @@ Web app:
 
 ```
 cd web
+npm ci
+npx playwright install chromium webkit
 npm run check   # tsc -b + eslint + prettier + vitest
 npm run dev     # local dev server
 ```

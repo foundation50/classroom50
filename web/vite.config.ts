@@ -415,10 +415,10 @@ export default defineConfig(({ mode }) => ({
     },
   },
   test: {
-    // Two projects: the fast node/happy-dom suite (the bulk of the tests) and a
-    // Playwright/Chromium browser suite for the handful of checks that need a real
-    // layout engine (target-size + reflow, *.browser.test.tsx). `vitest run` runs
-    // both; browser tests need `npx playwright install chromium` once locally.
+    // The fast node/happy-dom suite and real-browser layout/pointer guards.
+    // Chromium runs every browser test; WebKit runs the Actions regression.
+    // `vitest run` runs all projects. Install browser binaries once locally:
+    // `npx playwright install chromium webkit`.
     projects: [
       {
         extends: true,
@@ -439,6 +439,19 @@ export default defineConfig(({ mode }) => ({
             provider: playwright(),
             headless: true,
             instances: [{ browser: "chromium" }],
+          },
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "browser-webkit",
+          include: ["src/test/submissionsActionsMenu.browser.test.tsx"],
+          browser: {
+            enabled: true,
+            provider: playwright(),
+            headless: true,
+            instances: [{ browser: "webkit" }],
           },
         },
       },
