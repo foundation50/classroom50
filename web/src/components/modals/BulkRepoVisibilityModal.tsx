@@ -34,6 +34,9 @@ type BulkRepoVisibilityModalProps = {
   // Accepted students; each login is the owner segment of their own repo.
   owners: string[]
   students?: Student[]
+  // Going public stops grading (a public repo can't call the private
+  // classroom50 repo's reusable workflow, issue #995); warn before Apply.
+  autograded?: boolean
 }
 
 // The visibility choice. "keep" (the default) leaves every repo untouched, so
@@ -53,6 +56,7 @@ export function BulkRepoVisibilityModal({
   assignment,
   owners,
   students = [],
+  autograded = false,
 }: BulkRepoVisibilityModalProps) {
   const { t } = useTranslation()
   const setVisibilityMutation = useSetRepoVisibility()
@@ -175,9 +179,16 @@ export function BulkRepoVisibilityModal({
                   view (the issue's required confirmation). */}
               {choice === "public" ? (
                 <Alert tone="warning" className="text-sm">
-                  {t("submissions.bulkVisibility.publicWarning", {
-                    count: total,
-                  })}
+                  <div className="flex flex-col gap-2">
+                    <p>
+                      {t("submissions.bulkVisibility.publicWarning", {
+                        count: total,
+                      })}
+                    </p>
+                    {autograded && (
+                      <p>{t("submissions.bulkVisibility.autograderWarning")}</p>
+                    )}
+                  </div>
                 </Alert>
               ) : (
                 <Alert tone="info" className="text-sm">

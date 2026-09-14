@@ -524,6 +524,7 @@ export const SubmissionActionList = ({
           isPrivate={repoPrivate}
           displayName={displayName || owner}
           noRepo={!hasRepo}
+          autograded={!skipsGrading}
         />
       )}
       {assignmentPages && repoHasPages === false && (
@@ -624,6 +625,7 @@ const ChangeVisibilityButton = ({
   isPrivate,
   displayName,
   noRepo,
+  autograded,
 }: {
   org: string
   repo: string
@@ -632,6 +634,9 @@ const ChangeVisibilityButton = ({
   isPrivate?: boolean
   displayName: string
   noRepo: boolean
+  // Going public stops grading (a public repo can't call the private
+  // classroom50 repo's reusable workflow, issue #995); the confirm says so.
+  autograded: boolean
 }) => {
   const { t } = useTranslation()
   const feedback = useSubmissionFeedback()
@@ -715,7 +720,11 @@ const ChangeVisibilityButton = ({
         confirmLabel={t("submissions.rowVisibility.confirmLabel")}
         cancelLabel={t("common.cancel")}
         tone="warning"
-        warning={t("submissions.rowVisibility.confirmWarning")}
+        warning={
+          autograded
+            ? `${t("submissions.rowVisibility.confirmWarning")} ${t("submissions.rowVisibility.confirmAutograderWarning")}`
+            : t("submissions.rowVisibility.confirmWarning")
+        }
         needsConfirm={false}
         onConfirm={apply}
         onClose={() => setConfirmOpen(false)}

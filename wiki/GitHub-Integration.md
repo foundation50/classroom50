@@ -181,7 +181,10 @@ and `id-token: write` permissions and uses `actions/upload-pages-artifact` and
 - **Plan**: Pages on a private repository is available on GitHub Team,
   Enterprise Cloud, and Enterprise Server. On GitHub Free for organizations,
   only public repositories can have a site, so pair the setting with a
-  **Public** repository visibility.
+  **Public** repository visibility. Public repositories aren't autograded
+  (GitHub blocks them from running the grading workflow in your private
+  `classroom50` repository), so on GitHub Free an assignment gets GitHub
+  Pages or autograding, not both.
 - **Organization policy**: members must be allowed to publish Pages sites.
   `init` turns on **Pages creation** (public) because the `classroom50`
   repository needs it; `gh teacher audit` confirms it.

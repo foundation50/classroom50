@@ -1917,6 +1917,7 @@ const SubmissionsPageContent = () => {
         assignment={assignment}
         owners={acceptedOwners}
         students={students}
+        autograded={assignmentResolved && !skipsGrading}
       />
       {assignmentInfo?.pages && (
         <BulkRepoPagesModal

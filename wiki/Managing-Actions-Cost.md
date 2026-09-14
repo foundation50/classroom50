@@ -10,8 +10,10 @@ when minutes run out.
 - **The organization pays.** GitHub Actions minutes are budgeted per
   organization. Student repositories are private by default, so their
   workflow runs count against the organization's included minutes. (Runs in
-  a public repository are free on GitHub-hosted standard runners, so an
-  assignment whose **Repository visibility** is public doesn't spend them.)
+  a public repository are free on GitHub-hosted standard runners, but public
+  repositories aren't autograded: GitHub blocks them from running the grading
+  workflow in your private `classroom50` repository. **Public** visibility
+  saves minutes only for assignments without the built-in autograder.)
 - **The Team plan includes 3,000 minutes per month.** Usage past that is
   billed, up to the organization's Actions spending limit.
 - **Each run bills at least a minute.** GitHub rounds every job up to the

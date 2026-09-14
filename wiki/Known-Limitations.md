@@ -86,6 +86,15 @@ pulled into accepted repositories. `.gitignore` and `.github/` are the
 exception, re-fetched on every submit. See
 [Updating starter code after students accept](Course-Lifecycle-and-End-of-Term#updating-starter-code-after-students-accept).
 
+**Public student repositories aren't autograded.** Each student repository's
+`autograde.yaml` calls the grading workflow in your private `classroom50`
+repository, and GitHub only lets a public repository call workflows in other
+public repositories. The `classroom50` repository stays private because it
+holds the roster. Keep repositories private while grading. Make them public
+after grading is done (for showcase or portfolio work), or pair **Public**
+with **Do not use the built-in autograder**. See
+[Troubleshooting](Troubleshooting#invalid-workflow-file-with-workflow-was-not-found-after-a-repository-was-made-public).
+
 **Renaming a repository breaks tracking.** Classroom 50 finds student work
 by the repository name (`<classroom>-<assignment>-<username>`). A renamed
 repository disappears from the submissions view. Tell students not to rename

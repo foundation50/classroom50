@@ -301,7 +301,11 @@ section. Most assignments never need them:
   allow students to create public repositories, accept creates the repository
   private instead and tells the student. The setting applies to repositories
   created from then on; to change existing ones, use **Change repository
-  visibility** on the submissions page.
+  visibility** on the submissions page. Public repositories aren't
+  autograded: GitHub blocks them from running the grading workflow in your
+  private `classroom50` repository, so every push fails with "workflow was
+  not found". Keep repositories private while grading, or pair **Public**
+  with **Do not use the built-in autograder**.
 - **GitHub Pages**: publish each student repository as a website, configured
   automatically when the student accepts so students never need admin access
   to their repository. **Off** is the default. **GitHub Actions** deploys
@@ -319,7 +323,8 @@ section. Most assignments never need them:
   the published folder. Pages on private repositories needs a GitHub plan that
   includes it; on GitHub Free for organizations, pair it with a **Public**
   repository visibility or the site isn't created (accept tells the student,
-  and the assignment still works). Not available for an empty repository. The setting
+  and the assignment still works; public repositories aren't autograded). Not
+  available for an empty repository. The setting
   applies to repositories created from then on; to configure existing ones,
   use **Enable GitHub Pages** on the submissions page. Each site lives at
   `https://<org>.github.io/<repo>/` (an organization with a custom Pages
@@ -1127,7 +1132,10 @@ order:
   repository in the assignment public or private in one pass. Repositories
   students accept later use the assignment's **Repository visibility** setting
   instead. A row whose repository is public shows a **Public** badge, and a
-  single repository can be flipped from its row's manage dialog.
+  single repository can be flipped from its row's manage dialog. Autograding
+  stops while a repository is public; make it private again to resume
+  grading. See
+  [Troubleshooting](Troubleshooting#invalid-workflow-file-with-workflow-was-not-found-after-a-repository-was-made-public).
 - **Enable GitHub Pages** (owners): configure the assignment's **GitHub
   Pages** setting on every accepted repository in one pass, for repositories
   accepted before Pages was turned on or whose site couldn't be created at
