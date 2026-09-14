@@ -17,6 +17,19 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.51.0](https://github.com/foundation50/classroom50/compare/cli-v1.50.0...cli-v1.51.0) (2026-09-14)
+
+
+### Features
+
+* add apt-recommends, show-command, and setup output on failures ([#984](https://github.com/foundation50/classroom50/issues/984)) ([b5a9ce9](https://github.com/foundation50/classroom50/commit/b5a9ce9e33f17349ae9194088137937704974766))
+
+
+### Bug Fixes
+
+* **gh-teacher:** show a failing run test's stdout and stderr together ([#981](https://github.com/foundation50/classroom50/issues/981)) ([49372ac](https://github.com/foundation50/classroom50/commit/49372ac46ac8b0c8a8ffddb8dbcbcb8ad1769445))
+* **review:** close v1.51.0 review follow-ups for show-command and autograder ([#993](https://github.com/foundation50/classroom50/issues/993)) ([31628f4](https://github.com/foundation50/classroom50/commit/31628f475e5e727d935fb1ee6765dd8ab8f9792b))
+
 ## [1.50.0](https://github.com/foundation50/classroom50/compare/cli-v1.49.0...cli-v1.50.0) (2026-09-14)
 
 

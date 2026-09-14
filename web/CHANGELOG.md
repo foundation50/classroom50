@@ -17,6 +17,20 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.51.0](https://github.com/foundation50/classroom50/compare/web-v1.50.0...web-v1.51.0) (2026-09-14)
+
+
+### Features
+
+* add apt-recommends, show-command, and setup output on failures ([#984](https://github.com/foundation50/classroom50/issues/984)) ([b5a9ce9](https://github.com/foundation50/classroom50/commit/b5a9ce9e33f17349ae9194088137937704974766))
+
+
+### Bug Fixes
+
+* **review:** close v1.51.0 review follow-ups for show-command and autograder ([#993](https://github.com/foundation50/classroom50/issues/993)) ([31628f4](https://github.com/foundation50/classroom50/commit/31628f475e5e727d935fb1ee6765dd8ab8f9792b))
+* **web:** open dropdown triggers in Safari ([#988](https://github.com/foundation50/classroom50/issues/988)) ([3aff6bd](https://github.com/foundation50/classroom50/commit/3aff6bd95f1ebe502e7ef60209de6cbc004b8aac))
+* **web:** preserve a custom autograder when saving assignment settings ([#989](https://github.com/foundation50/classroom50/issues/989)) ([9bd98d2](https://github.com/foundation50/classroom50/commit/9bd98d20da9b196aa6e69a3ca847b7c5df486cac))
+
 ## [1.50.0](https://github.com/foundation50/classroom50/compare/web-v1.49.0...web-v1.50.0) (2026-09-14)
 
 
