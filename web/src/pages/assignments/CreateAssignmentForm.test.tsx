@@ -394,6 +394,61 @@ describe("assignment slug field", () => {
   })
 })
 
+describe("repository visibility autograder warning", () => {
+  // Issue #995: a public repo can't call the private classroom50 repo's
+  // reusable workflow, so Public + built-in autograder warns; the toggle hint
+  // rides only when the toggle itself renders (Autograded grading).
+  const warning = "assignments.form.repoVisibility.autograderWarning"
+  const hint = "assignments.form.repoVisibility.autograderWarningToggleHint"
+  const renderPublic = async (
+    defaultValues: Partial<CreateAssignmentFormValues>,
+  ) => {
+    const user = userEvent.setup()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={{
+            add_readme: true,
+            repo_visibility: "public",
+            ...defaultValues,
+          }}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+    await openAdvanced(user, "repository")
+  }
+
+  it("warns and names the toggle for a built-in, autograded assignment", async () => {
+    await renderPublic({
+      grading_choice: "auto",
+      autograding_state: "built-in",
+    })
+    expect(
+      screen.getByText("assignments.form.repoVisibility.publicWarning"),
+    ).not.toBeNull()
+    expect(screen.getByText(new RegExp(warning))).not.toBeNull()
+    expect(screen.getByText(new RegExp(hint))).not.toBeNull()
+  })
+
+  it("warns without the toggle hint when grading is manual", async () => {
+    await renderPublic({
+      grading_choice: "manual",
+      autograding_state: "built-in",
+    })
+    expect(screen.getByText(new RegExp(warning))).not.toBeNull()
+    expect(screen.queryByText(new RegExp(hint))).toBeNull()
+  })
+
+  it("keeps only the exposure warning without the built-in autograder", async () => {
+    await renderPublic({ grading_choice: "auto", autograding_state: "none" })
+    expect(
+      screen.getByText("assignments.form.repoVisibility.publicWarning"),
+    ).not.toBeNull()
+    expect(screen.queryByText(new RegExp(warning))).toBeNull()
+  })
+})
+
 describe("submission release files visibility", () => {
   // release_assets is a built-in autograder field, so these render an
   // initialized repo with built-in autograding selected (the default create

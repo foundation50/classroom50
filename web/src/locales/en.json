@@ -1288,7 +1288,7 @@
         "label": "Repository visibility",
         "help": "The visibility each student repository is created with at accept time. Private is the default. Choose Public for peer-review, portfolio, or showcase assignments. Students are warned before accepting.",
         "publicWarning": "Anyone on the internet will be able to see each student's work: code, commits, and name. If the organization doesn't allow students to create public repositories, their repository is created private instead and you can make it public from the submissions page.",
-        "autograderWarning": "Public repositories aren't autograded. GitHub blocks a public repository from running the grading workflow in your private classroom50 repository, so every push fails with \"workflow was not found\". Keep repositories private while grading.",
+        "autograderWarning": "Public repositories aren't autograded. GitHub blocks a public repository from running the grading workflow in your private classroom50 repository, so every grading run fails with \"workflow was not found\". Keep repositories private while grading.",
         "autograderWarningToggleHint": "You can also select \"Do not use the built-in autograder\".",
         "editHelp": "This applies to repositories created from now on; use the submissions page to change the visibility of existing ones.",
         "levels": {
@@ -3411,7 +3411,7 @@
       "info_other": "This changes the visibility of {{count}} students' repositories. Repositories students accept later use the assignment's visibility setting.",
       "publicWarning_one": "This makes {{count}} student's repository visible to anyone on the internet, including all code, commit history, and any names or personal information in it. You can make it private again the same way.",
       "publicWarning_other": "This makes {{count}} students' repositories visible to anyone on the internet, including all code, commit history, and any names or personal information in them. You can make them private again the same way.",
-      "autograderWarning": "Autograding stops while a repository is public. GitHub blocks a public repository from running the grading workflow in your private classroom50 repository, so every push fails with \"workflow was not found\". Make the repositories private again to resume grading.",
+      "autograderWarning": "Autograding stops while a repository is public. GitHub blocks a public repository from running the grading workflow in your private classroom50 repository, so every grading run fails with \"workflow was not found\". Make the repositories private again to resume grading.",
       "apply": "Apply to all",
       "working": "Updating repositories",
       "progress": "Updated {{processed}} of {{total}}",

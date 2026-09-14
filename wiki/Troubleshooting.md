@@ -925,7 +925,9 @@ To resume grading, make the repository private again on the submissions page:
 
 Make repositories public only after grading is done (for example, to showcase
 final projects), or pair **Public** with **Do not use the built-in
-autograder** for assignments graded another way.
+autograder** for assignments graded another way. On GitHub Free for
+organizations, making a repository private also takes its GitHub Pages site
+offline; see [GitHub Pages](GitHub-Integration#5-github-pages).
 
 ### `pytest: not found` or exit code 127 in the grading log
 

@@ -303,8 +303,8 @@ section. Most assignments never need them:
   created from then on; to change existing ones, use **Change repository
   visibility** on the submissions page. Public repositories aren't
   autograded: GitHub blocks them from running the grading workflow in your
-  private `classroom50` repository, so every push fails with "workflow was
-  not found". Keep repositories private while grading, or pair **Public**
+  private `classroom50` repository, so every grading run fails with "workflow
+  was not found". Keep repositories private while grading, or pair **Public**
   with **Do not use the built-in autograder**.
 - **GitHub Pages**: publish each student repository as a website, configured
   automatically when the student accepts so students never need admin access
