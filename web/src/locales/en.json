@@ -1288,7 +1288,8 @@
         "label": "Repository visibility",
         "help": "The visibility each student repository is created with at accept time. Private is the default. Choose Public for peer-review, portfolio, or showcase assignments. Students are warned before accepting.",
         "publicWarning": "Anyone on the internet will be able to see each student's work: code, commits, and name. If the organization doesn't allow students to create public repositories, their repository is created private instead and you can make it public from the submissions page.",
-        "autograderWarning": "Public repositories aren't autograded. GitHub blocks a public repository from running the grading workflow in your private classroom50 repository, so every push fails with \"workflow was not found\". Keep repositories private while grading, or select \"Do not use the built-in autograder\".",
+        "autograderWarning": "Public repositories aren't autograded. GitHub blocks a public repository from running the grading workflow in your private classroom50 repository, so every push fails with \"workflow was not found\". Keep repositories private while grading.",
+        "autograderWarningToggleHint": "You can also select \"Do not use the built-in autograder\".",
         "editHelp": "This applies to repositories created from now on; use the submissions page to change the visibility of existing ones.",
         "levels": {
           "private": "Private",

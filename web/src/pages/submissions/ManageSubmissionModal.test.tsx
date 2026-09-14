@@ -99,6 +99,9 @@ vi.mock("@/hooks/useTriggerRegrade", () => ({
 vi.mock("@/hooks/mutations/useDownloadSubmission", () => ({
   default: () => ({ mutate: downloadMutate, isPending: false }),
 }))
+vi.mock("@/hooks/mutations/useSetRepoVisibility", () => ({
+  default: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}))
 
 const notifyMock = vi.fn()
 // Configurable so tests can drive the download row's onError into the hub
@@ -729,4 +732,53 @@ describe("ManageSubmissionModal — GitHub Pages", () => {
     ).toBeTruthy()
     expect(notifyMock).not.toHaveBeenCalled()
   })
+})
+
+// Per-row Make public confirm (issue #995): the autograder warning follows the
+// resolved-aware `autograded` flag, so a non-autograding or not-yet-resolved
+// assignment never claims grading stops.
+describe("ManageSubmissionModal make-public confirm", () => {
+  const renderPrivateRepoHub = (autograded: boolean | undefined) => {
+    repoData.mockReturnValue({ data: { private: true } })
+    render(
+      <ManageSubmissionModal
+        onClose={vi.fn()}
+        title="Alice"
+        repo="cs101-hw1-alice"
+        repoHref="https://github.com/acme/cs101-hw1-alice"
+        isGroup={false}
+        students={[]}
+        action={{ ...individualAction, canChangeVisibility: true, autograded }}
+      />,
+    )
+  }
+  const openConfirm = async () => {
+    const user = userEvent.setup()
+    await user.click(
+      screen.getByRole("button", {
+        name: "submissions.rowVisibility.makePublicAria:cs101-hw1-alice",
+      }),
+    )
+  }
+  const warningText = () =>
+    screen.getByText(/submissions\.rowVisibility\.confirmWarning/).textContent
+
+  it("appends the autograder warning for an autograded assignment", async () => {
+    renderPrivateRepoHub(true)
+    await openConfirm()
+    expect(warningText()).toContain(
+      "submissions.rowVisibility.confirmAutograderWarning",
+    )
+  })
+
+  it.each([false, undefined])(
+    "omits the autograder warning when autograded is %s",
+    async (autograded) => {
+      renderPrivateRepoHub(autograded)
+      await openConfirm()
+      expect(warningText()).not.toContain(
+        "submissions.rowVisibility.confirmAutograderWarning",
+      )
+    },
+  )
 })

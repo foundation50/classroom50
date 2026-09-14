@@ -61,9 +61,15 @@ describe("BulkRepoVisibilityModal autograder warning", () => {
 
   it("shows no autograder warning for private", () => {
     renderModal(true)
-    fireEvent.change(screen.getByRole("combobox"), {
-      target: { value: "private" },
-    })
+    const select = screen.getByRole("combobox") as HTMLSelectElement
+    fireEvent.change(select, { target: { value: "private" } })
+    // Private is a real choice (Apply enables), unlike the default "keep".
+    expect(select.value).toBe("private")
+    const apply = screen
+      .getByText("submissions.bulkVisibility.apply")
+      .closest("button")!
+    expect(apply.disabled).toBe(false)
+    expect(screen.queryByText(exposure)).toBeNull()
     expect(screen.queryByText(autograder)).toBeNull()
   })
 })

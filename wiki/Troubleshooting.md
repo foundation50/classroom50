@@ -917,6 +917,11 @@ To resume grading, make the repository private again on the submissions page:
   repository private**.
 - For the whole assignment, click **Change repository visibility**, select
   **Private**, then click **Apply to all**.
+- If the assignment's **Repository visibility** is **Public**, students who
+  accept later still get public repositories. Edit the assignment and set
+  **Repository visibility** to **Private** (or re-run
+  `gh teacher assignment add` with `--repo-visibility private`) so their
+  repositories are graded too.
 
 Make repositories public only after grading is done (for example, to showcase
 final projects), or pair **Public** with **Do not use the built-in

@@ -1134,8 +1134,9 @@ order:
   instead. A row whose repository is public shows a **Public** badge, and a
   single repository can be flipped from its row's manage dialog. Autograding
   stops while a repository is public; make it private again to resume
-  grading. See
-  [Troubleshooting](Troubleshooting#invalid-workflow-file-with-workflow-was-not-found-after-a-repository-was-made-public).
+  grading, and set the assignment's **Repository visibility** back to
+  **Private** so later accepts are graded too. See
+  [`Invalid workflow file` with `workflow was not found` after a repository was made public](Troubleshooting#invalid-workflow-file-with-workflow-was-not-found-after-a-repository-was-made-public).
 - **Enable GitHub Pages** (owners): configure the assignment's **GitHub
   Pages** setting on every accepted repository in one pass, for repositories
   accepted before Pages was turned on or whose site couldn't be created at

@@ -524,7 +524,7 @@ export const SubmissionActionList = ({
           isPrivate={repoPrivate}
           displayName={displayName || owner}
           noRepo={!hasRepo}
-          autograded={!skipsGrading}
+          autograded={autograded === true}
         />
       )}
       {assignmentPages && repoHasPages === false && (
