@@ -790,10 +790,10 @@ func TestParseAssignments_TestDefaultsRoundTrip(t *testing.T) {
       "name": "Hello",
       "mode": "individual",
       "autograder": "default",
-      "test_defaults": { "failure-details": "none", "show-output": true },
+      "test_defaults": { "failure-details": "none", "show-output": true, "show-command": true },
       "tests": [
         { "name": "a", "type": "run", "run": "true", "points": 1 },
-        { "name": "b", "type": "run", "run": "true", "points": 1, "failure-details": "full", "show-output": false }
+        { "name": "b", "type": "run", "run": "true", "points": 1, "failure-details": "full", "show-output": false, "show-command": false }
       ]
     }
   ]
@@ -809,11 +809,20 @@ func TestParseAssignments_TestDefaultsRoundTrip(t *testing.T) {
 	if entry.TestDefaults.ShowOutput == nil || !*entry.TestDefaults.ShowOutput {
 		t.Errorf("test_defaults.show-output not parsed: %#v", entry.TestDefaults.ShowOutput)
 	}
+	if entry.TestDefaults.ShowCommand == nil || !*entry.TestDefaults.ShowCommand {
+		t.Errorf("test_defaults.show-command not parsed: %#v", entry.TestDefaults.ShowCommand)
+	}
 	if entry.Tests[1].FailureDetails != "full" {
 		t.Errorf("per-test failure-details not parsed: %#v", entry.Tests[1])
 	}
 	if entry.Tests[1].ShowOutput == nil || *entry.Tests[1].ShowOutput {
 		t.Errorf("explicit per-test show-output:false lost: %#v", entry.Tests[1].ShowOutput)
+	}
+	if entry.Tests[1].ShowCommand == nil || *entry.Tests[1].ShowCommand {
+		t.Errorf("explicit per-test show-command:false lost: %#v", entry.Tests[1].ShowCommand)
+	}
+	if entry.Tests[0].ShowCommand != nil {
+		t.Errorf("absent per-test show-command must stay nil, got %#v", entry.Tests[0].ShowCommand)
 	}
 
 	encoded, err := EncodeAssignments(file)

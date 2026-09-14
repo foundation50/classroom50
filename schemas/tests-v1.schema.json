@@ -68,7 +68,7 @@
         },
         "show-command": {
           "type": "boolean",
-          "description": "Print the test's `setup` and `run` command lines, as written, at the top of its failure details and its show-output block. Off by default because a command can reveal how a test checks the work (a hidden script name, an inline assertion). Suppressed when the effective `failure-details` is `none`; on a setup failure only the setup command is printed. Overrides the assignment's `test_defaults`. On the wire it is collapsed like `show-output`: writers omit the field when false, so readers must treat an absent field as `false`."
+          "description": "Print the test's `setup` and `run` command lines, as written, at the top of its failure details and its show-output block. Off by default because a command can reveal how a test checks the work (a hidden script name, an inline assertion). In the failure details it is suppressed when the effective `failure-details` is `none`, and on a setup failure only the setup command is printed; the show-output block of a passing test shows the commands whenever both options are on. Overrides the assignment's `test_defaults`. On the wire it is collapsed like `show-output`: writers omit the field when false, so readers must treat an absent field as `false`."
         }
       },
       "allOf": [

@@ -1257,6 +1257,26 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(edited.grading).toEqual({ mode: "off" })
   })
 
+  it('writes "default" for a legacy empty autograder instead of preserving it', async () => {
+    // Older entries may store "" (the CLI parser normalizes it to "default").
+    // Preserving the stored name must not echo the empty string, which the
+    // schema's non-empty pattern rejects.
+    const legacyEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "",
+      feedback_pr: true,
+    }
+    const { client, committedContent } = makeBareClient(legacyEntry)
+    await editAssignment(client, editInput({ name: "Homework 1 (renamed)" }))
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.autograder).toBe("default")
+  })
+
   it("rejects turning the built-in autograder off on a custom-autograder assignment", async () => {
     // The schema pins autograder to "default" under no_autograder; the stored
     // custom name now survives the edit, so the combination must fail closed

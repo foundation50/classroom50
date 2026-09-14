@@ -104,7 +104,8 @@ MAX_CAPTURED_CHARS = 2000
 MAX_LOG_CAPTURED_CHARS = 100_000
 
 # Per-test failure-detail levels -- mirror tests.go / tests-v1.schema.json.
-# full: diff (exact) or expected+actual blocks, plus stderr (the default).
+# full: io tests show a diff (exact) or expected+actual blocks plus stderr;
+# run/python tests show the command's combined output (the default).
 # actual-only: the student's own output, never the expected side or a diff.
 # none: just the failure-kind summary line.
 FAILURE_DETAILS_FULL = "full"

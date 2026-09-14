@@ -264,6 +264,9 @@ export async function editAssignment(
     targetAssignment,
     editedAssignment,
   )
+  // A legacy entry may store "" for the built-in shim (the CLI parser reads it
+  // as "default"); write the name the schema accepts instead of echoing it.
+  if (!preservedEntry.autograder) preservedEntry.autograder = "default"
 
   // The schema pins autograder to "default" under no_autograder and init_shim
   // (both describe a repo that never commits a named shim). The stored name is

@@ -234,7 +234,9 @@ debugging an autograder; an explicit `false` on one test opts it out of a
 **`show-command`** set to `true` prints the test's `setup` and `run` command
 lines, as written, at the top of its failure details and its `show-output`
 block. When `setup` itself fails, only the setup command is printed, since the
-run command never ran. Off by default: students can read the report, and a
+run command never ran. A `failure-details` of `none` hides the commands from
+the failure details along with everything else; the `show-output` block of a
+passing test still shows them. Off by default: students can read the report, and a
 command can reveal how a test checks the work (a hidden script name, an inline
 assertion). Turn it on for tests whose command is not a secret, such as
 `make test`, so students can reproduce the run locally.

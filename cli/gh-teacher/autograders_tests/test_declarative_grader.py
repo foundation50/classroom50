@@ -745,6 +745,16 @@ class TestComposeOutput:
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert ag.compose_output(o) == "--- run command ---\ntrue\n(no output captured)"
 
+    def test_show_command_ignores_failure_details_on_a_pass(self, tmp_path):
+        # failure-details governs failure text only; show-output is its own
+        # opt-in for passing tests, so the commands ride along there under none
+        # the same as the output does (documented in the schema descriptions).
+        spec = {"name": "t", "type": "run", "run": "echo ok", "points": 1,
+                "show-output": True, "show-command": True,
+                "failure-details": "none"}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert ag.compose_output(o) == "--- run command ---\necho ok\n--- output ---\nok\n"
+
     def test_silent_pass_notes_no_output(self, tmp_path):
         spec = {"name": "t", "type": "run", "run": "true", "points": 1,
                 "show-output": True}

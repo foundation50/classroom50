@@ -395,7 +395,8 @@ func TestParseAssignments_RuntimeRoundTrips(t *testing.T) {
       "runtime": {
         "runs-on": "ubuntu-latest",
         "python": "3.14",
-        "apt": ["build-essential"]
+        "apt": ["build-essential"],
+        "apt-recommends": true
       }
     }
   ]
@@ -412,11 +413,17 @@ func TestParseAssignments_RuntimeRoundTrips(t *testing.T) {
 	if len(got.RunsOn) != 1 || got.RunsOn[0] != "ubuntu-latest" || got.Python != "3.14" || len(got.Apt) != 1 {
 		t.Errorf("runtime fields not parsed: %#v", got)
 	}
+	if !got.AptRecommends {
+		t.Errorf("runtime.apt-recommends not parsed: %#v", got)
+	}
 
 	// Re-encode and re-parse to confirm round-trip stability.
 	encoded, err := EncodeAssignments(file)
 	if err != nil {
 		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if !strings.Contains(string(encoded), `"apt-recommends": true`) {
+		t.Errorf("apt-recommends must re-emit on the wire, got %s", encoded)
 	}
 	again, err := ParseAssignments(encoded)
 	if err != nil {
@@ -424,6 +431,20 @@ func TestParseAssignments_RuntimeRoundTrips(t *testing.T) {
 	}
 	if again.Assignments[0].Runtime == nil {
 		t.Fatal("runtime block dropped on re-encode")
+	}
+	if !again.Assignments[0].Runtime.AptRecommends {
+		t.Errorf("apt-recommends lost across round-trip: %#v", again.Assignments[0].Runtime)
+	}
+
+	// A false apt-recommends collapses to absent (omitempty), the same wire
+	// shape as the other opt-in booleans.
+	file.Assignments[0].Runtime.AptRecommends = false
+	encoded, err = EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	if strings.Contains(string(encoded), "apt-recommends") {
+		t.Errorf("apt-recommends:false must stay omitted on the wire, got %s", encoded)
 	}
 }
 

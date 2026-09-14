@@ -408,9 +408,10 @@ Each test has:
 - **Report options**: what the submission report shows for this test.
   **Failure details shown to students** (**Full: diff or expected and actual
   output**, **Student output only (never the expected output)**, or **Failure
-  type only (no output)**) and **Output when passing** (**Include output** or
-  **Discard output**). Both start at the assignment's report defaults; pick
-  another value to override it for this test only. See
+  type only (no output)**), **Output when passing** (**Include output** or
+  **Discard output**), and **Command lines** (**Show commands** or **Hide
+  commands**). Each starts at the assignment's report defaults; pick another
+  value to override it for this test only. See
   [Report options](Autograding-Basics#report-options).
 
 The three test types add their own fields:
@@ -427,9 +428,10 @@ The three test types add their own fields:
   template. Points are split across the test cases pytest discovers. No extra
   fields.
 
-Below the tests table, a **Report defaults** panel sets the same two report
-options for every test: **Default failure details** and **Include passing
-test output**. A test's own report options override them.
+Below the tests table, a **Report defaults** panel sets the same report
+options for every test: **Default failure details**, **Include passing test
+output**, and **Show command lines**. A test's own report options override
+them.
 
 Next to **Add test**, **Upload test files** explains where test scripts and
 fixtures that students must not see belong: the assignment's folder in the
