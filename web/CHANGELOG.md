@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.51.1](https://github.com/foundation50/classroom50/compare/web-v1.51.0...web-v1.51.1) (2026-09-14)
+
+
+### Bug Fixes
+
+* **web:** warn that public student repos can't run the autograder ([#996](https://github.com/foundation50/classroom50/issues/996)) ([ef5c2c5](https://github.com/foundation50/classroom50/commit/ef5c2c5e3487490ac90a8d9423db00f2aa19eb27))
+
 ## [1.51.0](https://github.com/foundation50/classroom50/compare/web-v1.50.0...web-v1.51.0) (2026-09-14)
 
 
