@@ -27,11 +27,13 @@ export function ToggleField({
   disabled?: boolean
 }) {
   return (
+    // Mute the text, never the label's opacity: opacity < 1 opens a stacking
+    // context that traps the HelpTooltip bubble under later form controls.
     <label
       htmlFor={id}
       className={cx(
         "flex items-center gap-3",
-        disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
+        disabled ? "cursor-not-allowed" : "cursor-pointer",
       )}
     >
       <Toggle
@@ -41,7 +43,9 @@ export function ToggleField({
         onBlur={onBlur}
         onChange={(e) => onChange(e.target.checked)}
       />
-      <span className={fieldLabelClass}>{label}</span>
+      <span className={cx(fieldLabelClass, disabled && "text-base-content/30")}>
+        {label}
+      </span>
       {help ? <HelpTooltip help={help} /> : null}
     </label>
   )
