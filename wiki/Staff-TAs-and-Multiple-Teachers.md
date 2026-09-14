@@ -98,7 +98,8 @@ assignments, submissions, and scores. The differences:
   repository status, plus a note on who to ask for a new collection.
 - **Access to student repositories arrives with collection.** The
   score-collection workflow grants the staff teams write access to student
-  repositories as it runs. A freshly accepted repository has no staff access
+  repositories as it runs, including the shared repositories of group
+  assignments. A freshly accepted repository has no staff access
   yet, which is expected; it appears after the next collection run. Until then
   that student shows as **Not visible** for staff (they may or may not have
   accepted), while the teacher sees the repository.

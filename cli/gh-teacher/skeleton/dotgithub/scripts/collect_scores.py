@@ -1010,6 +1010,17 @@ def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     return slugs
 
 
+def team_assignment_slugs(assignments: dict[str, Any]) -> set[str]:
+    """The `mode: team` slugs, whose repos are `<classroom>-<slug>-group-<n>`."""
+    return {
+        entry["slug"]
+        for entry in assignments.get("assignments") or []
+        if isinstance(entry.get("slug"), str)
+        and entry["slug"]
+        and normalize_assignment_type(entry.get("mode")) == "team"
+    }
+
+
 def poll_candidate_names(
     classroom_short: str,
     assignments: dict[str, Any],
@@ -1925,7 +1936,7 @@ def team_poll_owners(
     service_token: str,
     repo_index: "RepoIndex | None",
 ) -> tuple[list[str], bool]:
-    """The `group-<n>` owner segments a team assignment polls, sorted by
+    """The `group-<n>` owner segments of a team assignment's repos, sorted by
     counter. Team repos carry no username, so the targets come from the org
     repo listing (already read once per run) or, when that listing is
     unreadable, from enumerating the assignment's group teams. Returns
@@ -2143,7 +2154,8 @@ def grant_classroom_team_access(
     Student-repo targets are the (team member × assignment) product (the same
     set collect_classroom polls), narrowed to the repos that exist when
     `repo_index` can say (thousands of names per classroom, two wasted requests
-    each). A per-repo 404/422 (repo not accepted yet, or template not
+    each); a `mode: team` assignment contributes its `group-<n>` repos instead.
+    A per-repo 404/422 (repo not accepted yet, or template not
     org-owned) is warned-and-skipped; a hard error (401/403/599) propagates so
     main() aborts; a throttle raises GrantThrottled, which main() reports as a
     deferral rather than a failure. The head-TA and TA teams are resolved from
@@ -2215,18 +2227,40 @@ def grant_classroom_team_access(
 
     # Resolved once rather than per staff role. Knowing the full list up front is
     # also what lets a throttled pass say how much is left for the next run.
+    # Team repos carry no username, so their slugs resolve through the same
+    # listing-derived owners collection polls instead of the username product.
+    team_slugs = team_assignment_slugs(assignments)
+    has_team_slug = any(slug in team_slugs for slug in slugs)
     candidates = [
         assignment_repo_name(classroom_short, slug, username)
         for slug in slugs
+        if slug not in team_slugs
         for username in usernames
     ]
     if repo_index is not None and candidates:
+        # A team slug needs the whole listing anyway (team_poll_owners reads
+        # names()), so read it now rather than probe candidates first.
+        if has_team_slug:
+            repo_index.names()
         repo_index.prefetch(candidates)
     student_targets: list[tuple[str, str]] = [
         (org, repo_name)
         for repo_name in candidates
         if repo_index is None or repo_index.contains(repo_name)
     ]
+    for slug in slugs:
+        if slug not in team_slugs:
+            continue
+        group_owners, ok = team_poll_owners(
+            api_url, org, classroom_short, slug, service_token, repo_index
+        )
+        # team_poll_owners already warned; the add-only pass retries next run.
+        if not ok:
+            continue
+        student_targets.extend(
+            (org, assignment_repo_name(classroom_short, slug, owner))
+            for owner in group_owners
+        )
     template_targets = private_template_targets(
         api_url, org, assignments, service_token, repo_index=repo_index,
         assignment_filter=assignment_filter,

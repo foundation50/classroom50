@@ -4359,6 +4359,107 @@ class TestGrantClassroomTeamAccess:
         assert len([g for g in grants if g[2].startswith("cs-")]) == 4
         assert all(team == "classroom50-cs-ta" and perm == "push" for team, _, _, perm in grants)
 
+    TEAM_ASSIGNMENTS = {
+        "schema": cs.ASSIGNMENTS_SCHEMA_V1,
+        "assignments": [
+            {"slug": "hw1", "name": "HW1", "mode": "individual"},
+            {"slug": "proj", "name": "Project", "mode": "team", "max_group_size": 3,
+             "team_formation": "teacher"},
+        ],
+    }
+
+    def test_grants_ta_push_on_team_assignment_group_repos(self, monkeypatch):
+        # A team assignment's repos are `<classroom>-<slug>-group-<n>`, not
+        # per-username: the grant pass must resolve them from the listing like
+        # collection does, or TAs never get access to group work.
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice", "bob"], "classroom50-cs-ta": ["ta1"]}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.TEAM_ASSIGNMENTS, service_token="tok",
+            repo_index=_FakeRepoIndex([
+                "cs-hw1-alice", "cs-proj-group-1", "cs-proj-group-2",
+                "cs-proj-group-01",  # leading zero: not a team repo
+                "cs-other-group-3",  # another assignment
+            ]),
+        )
+        assert sorted(r for _, _, r, _ in grants) == [
+            "cs-hw1-alice", "cs-proj-group-1", "cs-proj-group-2",
+        ]
+        assert all(perm == "push" for _, _, _, perm in grants)
+
+    def test_team_assignment_scoped_grant_targets_only_its_group_repos(self, monkeypatch):
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.TEAM_ASSIGNMENTS, service_token="tok",
+            repo_index=_FakeRepoIndex(["cs-hw1-alice", "cs-proj-group-1"]),
+            assignment_filter="proj",
+        )
+        assert [r for _, _, r, _ in grants] == ["cs-proj-group-1"]
+
+    def test_individual_scoped_grant_leaves_team_repos_alone(self, monkeypatch):
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.TEAM_ASSIGNMENTS, service_token="tok",
+            repo_index=_FakeRepoIndex(["cs-hw1-alice", "cs-proj-group-1"]),
+            assignment_filter="hw1",
+        )
+        assert [r for _, _, r, _ in grants] == ["cs-hw1-alice"]
+
+    def test_group_repos_from_team_enumeration_when_listing_unavailable(self, monkeypatch):
+        # No org listing: the group repos are derived from the assignment's
+        # group teams, the same fallback collection uses.
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+        monkeypatch.setattr(cs, "list_assignment_team_counters", lambda *a, **k: [2, 1])
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.TEAM_ASSIGNMENTS, service_token="tok",
+        )
+        assert sorted(r for _, _, r, _ in grants) == [
+            "cs-hw1-alice", "cs-proj-group-1", "cs-proj-group-2",
+        ]
+
+    def test_unreadable_group_repos_skip_only_that_assignment(self, monkeypatch, capsys):
+        # No listing and the group-team enumeration fails: the team assignment
+        # is skipped (team_poll_owners warns) while individual repos still grant.
+        grants = self._capture_grants(monkeypatch)
+        stub_team_members_by_slug(
+            monkeypatch, {"classroom50-cs": ["alice"], "classroom50-cs-ta": ["ta1"]}
+        )
+
+        def boom(*a, **k):
+            raise cs.urllib.error.HTTPError(url="u", code=404, msg="no", hdrs=None, fp=None)
+
+        monkeypatch.setattr(cs, "list_assignment_team_counters", boom)
+        cs.grant_classroom_team_access(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs",
+            classroom_meta=self.META, assignments=self.TEAM_ASSIGNMENTS, service_token="tok",
+        )
+        assert [r for _, _, r, _ in grants] == ["cs-hw1-alice"]
+        assert "skipping this team assignment" in capsys.readouterr().err
+
+    def test_team_assignment_slugs(self):
+        assert cs.team_assignment_slugs(self.TEAM_ASSIGNMENTS) == {"proj"}
+        # Legacy `group` repos are per-founder-username, so they stay in the
+        # username product; a typo'd mode reads as individual.
+        assert cs.team_assignment_slugs({"assignments": [
+            {"slug": "g", "mode": "group"}, {"slug": "t", "mode": "TEAM"},
+            {"slug": "x", "mode": "teamwork"}, {"mode": "team"}, {"slug": "", "mode": "team"},
+        ]}) == {"t"}
+
     def test_no_teams_block_grants_via_derived_slugs(self, monkeypatch):
         # A legacy classroom.json with no `teams` block: the pass still targets
         # the derived hta/ta teams, so a TA the web put on `classroom50-cs-ta`
