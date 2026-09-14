@@ -1269,13 +1269,21 @@ describe("editAssignment (preserved-entry integration)", () => {
       feedback_pr: true,
     }
     const { client, committedContent } = makeBareClient(customEntry)
-    await expect(
-      editAssignment(client, editInput({ no_autograder: true })),
-    ).rejects.toThrow(/custom autograder "custom-workflow"/)
+    const err = await editAssignment(
+      client,
+      editInput({ no_autograder: true }),
+    ).catch((e: unknown) => e)
+    expect(localizedMessageOf(err)).toEqual({
+      key: "assignments.edit.error.customAutograderNoAutograder",
+      params: { slug: SLUG, name: "custom-workflow", classroom: CLASSROOM },
+    })
     expect(committedContent()).toBe("")
   })
 
-  it("rejects init_shim on a custom-autograder assignment", async () => {
+  it("rejects init_shim on a custom-autograder assignment with its own remedy", async () => {
+    // init_shim is only derived with the built-in toggle already on, so this
+    // branch must point at the repository source (README or template), not at
+    // the toggle.
     const customEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -1284,9 +1292,14 @@ describe("editAssignment (preserved-entry integration)", () => {
       feedback_pr: true,
     }
     const { client, committedContent } = makeBareClient(customEntry)
-    await expect(
-      editAssignment(client, editInput({ init_shim: true })),
-    ).rejects.toThrow(/custom autograder "custom-workflow"/)
+    const err = await editAssignment(
+      client,
+      editInput({ init_shim: true }),
+    ).catch((e: unknown) => e)
+    expect(localizedMessageOf(err)).toEqual({
+      key: "assignments.edit.error.customAutograderInitShim",
+      params: { slug: SLUG, name: "custom-workflow", classroom: CLASSROOM },
+    })
     expect(committedContent()).toBe("")
   })
 

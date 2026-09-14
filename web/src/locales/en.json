@@ -1765,6 +1765,12 @@
         "close": "Close"
       }
     },
+    "edit": {
+      "error": {
+        "customAutograderNoAutograder": "\"{{slug}}\" uses the custom autograder \"{{name}}\", which needs the built-in autograder setting on. Turn the built-in autograder back on, or set \"autograder\" to \"default\" in {{classroom}}/assignments.json first.",
+        "customAutograderInitShim": "\"{{slug}}\" uses the custom autograder \"{{name}}\", which needs starter content to run. Choose a template or turn \"Add a README\" back on, or set \"autograder\" to \"default\" in {{classroom}}/assignments.json first."
+      }
+    },
     "rename": {
       "sectionTitle": "Slug update needed",
       "sectionFinishTitle": "Slug update incomplete",

@@ -71,6 +71,7 @@ import {
 } from "./assignmentsWrite"
 import { resolveSubmissionMode } from "./submissionDetection"
 import { isDefaultAutograder } from "./autograderYaml"
+import { localizedError } from "@/types/localizedMessage"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
   // Set when the assignment saved but the follow-up team read grant on a
@@ -268,14 +269,26 @@ export async function editAssignment(
   // (both describe a repo that never commits a named shim). The stored name is
   // only known after the merge, so this is the one exclusion that can't live in
   // buildAssignmentEntry. Reject rather than write a file the CLI won't parse.
-  if (
-    !isDefaultAutograder(preservedEntry.autograder) &&
-    (preservedEntry.no_autograder || preservedEntry.init_shim)
-  ) {
-    throw new Error(
-      `Assignment "${slug}" uses the custom autograder "${preservedEntry.autograder}", which requires the built-in autograder setting to stay on. ` +
-        `Turn the built-in autograder back on, or set "autograder" to "default" in ${input.classroom}/assignments.json first.`,
-    )
+  // Each cause gets its own remedy: init_shim is only ever derived with the
+  // built-in toggle already on, so "turn it back on" would be a dead end there.
+  if (!isDefaultAutograder(preservedEntry.autograder)) {
+    const params = {
+      slug,
+      name: preservedEntry.autograder,
+      classroom: input.classroom,
+    }
+    if (preservedEntry.no_autograder) {
+      throw localizedError({
+        key: "assignments.edit.error.customAutograderNoAutograder",
+        params,
+      })
+    }
+    if (preservedEntry.init_shim) {
+      throw localizedError({
+        key: "assignments.edit.error.customAutograderInitShim",
+        params,
+      })
+    }
   }
 
   const nextAssignments = {
