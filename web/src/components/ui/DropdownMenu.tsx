@@ -4,8 +4,9 @@ import { Button, type ButtonProps } from "./Button"
 import { cx } from "./cx"
 
 // Single source for the DaisyUI dropdown menu surface so the popover chrome
-// can't drift. Callers own the `dropdown` wrapper and trigger; pass sizing
-// utilities (width, max-height, overflow) via className.
+// can't drift. Callers own the `dropdown` wrapper and render
+// `DropdownMenu.Trigger` inside it; pass sizing utilities (width, max-height,
+// overflow) via className.
 export type DropdownMenuProps = ComponentPropsWithRef<"ul">
 
 // The one popover-surface recipe (chrome only, no layout), shared by
@@ -44,9 +45,10 @@ export type DropdownTriggerProps = Omit<ButtonProps, "tabIndex">
 // The one trigger recipe: a Button that daisyUI's focus-driven dropdown can
 // actually open everywhere. Safari only focuses a button on click when
 // tabindex is set explicitly (#987), so it is fixed here rather than
-// remembered per call site.
+// remembered per call site. The attribute comes after the spread so a
+// spread-in tabIndex cannot displace it.
 function DropdownTrigger(props: DropdownTriggerProps) {
-  return <Button tabIndex={0} {...props} />
+  return <Button {...props} tabIndex={0} />
 }
 DropdownMenu.Trigger = DropdownTrigger
 

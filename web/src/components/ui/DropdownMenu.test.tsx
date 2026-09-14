@@ -2,7 +2,7 @@
 import { afterEach, describe, expect, it } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 
-import { DropdownMenu } from "./DropdownMenu"
+import { DropdownMenu, type DropdownTriggerProps } from "./DropdownMenu"
 
 afterEach(() => cleanup())
 
@@ -31,5 +31,24 @@ describe("DropdownMenu.Trigger", () => {
     const trigger = screen.getByRole("button", { name: /Actions/ })
     expect(trigger.getAttribute("tabindex")).toBe("0")
     expect(trigger.getAttribute("aria-disabled")).toBe("true")
+  })
+
+  it("wins over a tabIndex smuggled in through a spread", () => {
+    // The prop type omits tabIndex, but a spread of a wider object still
+    // compiles; the recipe must apply its value last.
+    const smuggled = { tabIndex: -1 } as DropdownTriggerProps
+    render(<DropdownMenu.Trigger {...smuggled}>Actions</DropdownMenu.Trigger>)
+    expect(
+      screen.getByRole("button", { name: "Actions" }).getAttribute("tabindex"),
+    ).toBe("0")
+  })
+
+  it("rejects tabIndex as a direct prop", () => {
+    // Type-level guard only; never rendered.
+    const rejected = () => (
+      // @ts-expect-error tabIndex is owned by the recipe
+      <DropdownMenu.Trigger tabIndex={-1}>Actions</DropdownMenu.Trigger>
+    )
+    expect(typeof rejected).toBe("function")
   })
 })

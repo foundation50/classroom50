@@ -260,14 +260,14 @@ function HideOrgMenu({
   return (
     <>
       <div className={cx("dropdown dropdown-end", className)}>
-        <Button
+        <DropdownMenu.Trigger
           variant="ghost"
           size="sm"
           shape="square"
           aria-label={t("orgs.card.moreActions", { org: org.login })}
         >
           <KebabHorizontalIcon aria-hidden="true" className="size-4" />
-        </Button>
+        </DropdownMenu.Trigger>
         <DropdownMenu className="w-48">
           {canManageToken && (
             <li>
