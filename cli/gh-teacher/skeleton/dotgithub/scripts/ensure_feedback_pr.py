@@ -61,8 +61,9 @@ import os
 import subprocess
 import sys
 
-# Lockstep with cli/gh-teacher/init_repo.go `feedbackBaseBranch` and the
-# `classroom50-feedback-base-lock` org ruleset (pinned by a Go parity test).
+# Lockstep with cli/shared/contract FeedbackBaseBranch (read by gh-teacher's
+# internal/orgrules) and the `classroom50-feedback-base-lock` org ruleset
+# (pinned by a Go parity test).
 BASE_BRANCH = "feedback"
 
 # Commit-status context, mirroring classroom50/autograde so an agent can poll

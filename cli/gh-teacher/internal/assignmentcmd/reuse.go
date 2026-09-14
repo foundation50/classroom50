@@ -415,6 +415,13 @@ func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, 
 		if !ok {
 			continue // no team recorded (older classroom) — clean skip
 		}
+		// The `teams` block is head-TA-writable, so only the canonical team is
+		// granted, as every other consumer of a recorded staff ref does.
+		if !configrepo.IsCanonicalStaffTeamRef(classroom, role, &team) {
+			_, _ = fmt.Fprintf(errOut, "Warning: classroom.json records %q as the %s staff team, but the canonical team is %s; not granting it read on private template %s/%s. Run `gh teacher staff add` for the role to re-record it.\n",
+				team.Slug, role, configrepo.StaffTeamSlug(classroom, role), tmplOwner, tmplRepo)
+			continue
+		}
 		granted, err := configrepo.GrantTeamRepoRead(client, org, team.Slug, tmplOwner, tmplRepo)
 		if err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: could not grant %s staff team %s read on private template %s/%s (%v); staff get read at the next collect-scores run.\n", role, team.Slug, tmplOwner, tmplRepo, err)

@@ -251,11 +251,12 @@ export type BuildTeamRosterInput = {
   // leaks onto this roster.
   failedInvitations?: GitHubOrgInvitation[]
   // roster.csv rows standing in for a team the viewer could not read, keyed by
-  // the role that team backs. Every classroom team is `secret`, so GitHub 404s
-  // it to a non-owner who isn't on it; the CSV (readable with config-repo
-  // `pull`) is the only student list such a viewer has. Emitted as `enrolled`
-  // rows with that role. A person already emitted from a visible team gets the
-  // role unioned, never a second row. See csvRowsForHiddenTeams.
+  // the role that team backs. The student team is `secret`, so GitHub 404s it
+  // to a non-owner who isn't on it (staff teams are `closed`, so their [] is
+  // genuine); the CSV (readable with config-repo `pull`) is the only student
+  // list such a viewer has. Emitted as `enrolled` rows with that role. A person
+  // already emitted from a visible team gets the role unioned, never a second
+  // row. See csvRowsForHiddenTeams.
   fallbackRows?: Partial<Record<ClassroomRole, Student[]>>
 }
 

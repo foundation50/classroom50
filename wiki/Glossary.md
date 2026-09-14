@@ -161,12 +161,15 @@ access to the `classroom50` repository.
 
 #### Head TA
 
-Write access to the `classroom50` repository, but not
-organization owner.
+Write access to the `classroom50` repository and to student repositories
+(granted by score collection), so they can collect scores and review and
+merge feedback pull requests. Not an organization owner.
 
 #### TA
 
-Read-only access to the `classroom50` repository.
+Read-only access to the `classroom50` repository, and write access to
+student repositories (granted by score collection), so they can review and
+merge feedback pull requests.
 
 #### Student
 

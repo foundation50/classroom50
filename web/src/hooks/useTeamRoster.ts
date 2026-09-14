@@ -155,11 +155,14 @@ export function useTeamRoster(
   const htaMembers = htaMembersQuery.data
 
   // Teams this viewer could not read. listTeamMembers folds a 404 into [], and
-  // for a non-owner that 404 is ambiguous: every classroom team is `secret`, so
-  // GitHub hides one they aren't on exactly like a team that doesn't exist. An
-  // owner sees every team, so their [] is the truth and never falls back. The
-  // decision waits for the org role to resolve (see isLoading) so an owner
-  // never flashes the CSV before their role is known.
+  // for a non-owner that 404 is ambiguous on the `secret` student team: GitHub
+  // hides one they aren't on exactly like a team that doesn't exist. Staff
+  // teams are `closed`, so a non-owner's [] there is genuine, but it is treated
+  // the same way; that only costs a CSV fallback for a role with no members,
+  // and a non-owner's student-team read is hidden regardless. An owner sees
+  // every team, so their [] is the truth and never falls back. The decision
+  // waits for the org role to resolve (see isLoading) so an owner never flashes
+  // the CSV before their role is known.
   const orgRoleResolved = githubOrgRole !== "unresolved"
   const definiteNonOwner = orgRoleResolved && !isOwner
   const roleReads: Record<

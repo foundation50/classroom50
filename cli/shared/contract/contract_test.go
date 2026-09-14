@@ -197,7 +197,7 @@ func TestInviteTeamGCMinAge(t *testing.T) {
 // TestClassroomTeamSlugs pins the team-slug formula and the full enrolled-set
 // enumeration. These are byte-mirrored, with NO compile-time link, in the web
 // GUI (web/src/util/teamSlug.ts classroomTeamSlug / classroomTeamSlugs) and
-// gh-teacher (internal/configrepo/team.go classroomTeamName / staffTeamName).
+// gh-teacher (internal/configrepo/team.go classroomTeamName / StaffTeamSlug).
 // The set is ordered student-first. Update every copy in lockstep on change.
 func TestClassroomTeamSlugs(t *testing.T) {
 	if got := ClassroomStudentTeamSlug("cs101"); got != "classroom50-cs101" {

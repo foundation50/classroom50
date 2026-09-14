@@ -49,6 +49,7 @@ import {
   addRepositoryToTeam,
   removeRepositoryFromTeam,
   isDeletableClassroomTeamRef,
+  isOwnedClassroomTeamRef,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { getRepo } from "@/github-core/repoReads"
@@ -1009,10 +1010,12 @@ async function grantTeamTemplateRead(
     teamSlug = classroomJson.team?.slug
     // Non-owner staff teams (TEMPLATE_READ_STAFF_ROLES) need an explicit read on
     // a private template; the teacher team is omitted (owners have it via
-    // ownership).
-    staffTeamSlugs = TEMPLATE_READ_STAFF_ROLES.map(
-      (role) => classroomJson.teams?.[role]?.slug,
-    ).filter((s): s is string => Boolean(s))
+    // ownership). The `teams` block is head-TA-writable, so only a ref naming
+    // the canonical team is granted, as every other consumer of it does.
+    staffTeamSlugs = TEMPLATE_READ_STAFF_ROLES.flatMap((role) => {
+      const ref = classroomJson.teams?.[role]
+      return isOwnedClassroomTeamRef(classroom, role, ref) ? [ref.slug] : []
+    })
   } catch (err) {
     // 404 = no classroom.json (pre-feature) is a genuine "no team"; fall
     // through. Anything else is transient and must not be misread as "no team".
