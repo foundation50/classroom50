@@ -169,6 +169,82 @@ export function setAssignmentsLockWithConflictRetry(
   return withGitConflictRetry(() => setAssignmentsLock(client, input))
 }
 
+export type BulkClosedResult = {
+  // Slugs whose flag actually changed; one already in the requested state is
+  // skipped, like the single-assignment no-op. Empty means nothing committed.
+  changed: string[]
+  // Selected slugs no longer in assignments.json (deleted elsewhere between
+  // render and submit). Reported, never fatal.
+  missing: string[]
+  newCommitSha: string | null
+}
+
+export type SetAssignmentsClosedInput = {
+  org: string
+  classroom: string
+  slugs: string[]
+  closed: boolean
+}
+
+// Flip `closed` on a selection in one commit. Unlike the lock there is no
+// template reconciliation: closing only ends the submission window. The
+// per-repo collaborator downgrade the "Close submission" action performs lives
+// in the calling modal, as it does for the single-assignment writer — and it
+// runs only after this commit lands, so a throttled fan-out still leaves new
+// accepts blocked.
+export async function setAssignmentsClosed(
+  client: GitHubClient,
+  input: SetAssignmentsClosedInput,
+): Promise<BulkClosedResult> {
+  const { org, classroom, slugs, closed } = input
+  log.info("bulk set assignment closed: started", {
+    org,
+    classroom,
+    count: slugs.length,
+    closed,
+  })
+
+  const ctx = await readAssignmentsForWrite(client, org, classroom)
+  const bySlug = new Map(
+    ctx.current.assignments.map((a) => [a.slug, a] as const),
+  )
+  const missing = slugs.filter((slug) => !bySlug.has(slug))
+  const changed = slugs.filter(
+    (slug) => bySlug.has(slug) && Boolean(bySlug.get(slug)?.closed) !== closed,
+  )
+
+  if (changed.length === 0) return { changed, missing, newCommitSha: null }
+
+  const changing = new Set(changed)
+  const next: AssignmentsFile = {
+    ...ctx.current,
+    assignments: ctx.current.assignments.map((a) => {
+      if (!changing.has(a.slug)) return a
+      const updated: Assignment = { ...a, closed }
+      // Match the CLI's omitempty: reopening drops the key.
+      if (!closed) delete updated.closed
+      return updated
+    }),
+  }
+
+  const { newCommitSha } = await commitAssignments(
+    client,
+    org,
+    ctx,
+    next,
+    `${closed ? "Close" : "Reopen"} ${assignmentCount(changed.length)}: ${classroom}`,
+  )
+
+  return { changed, missing, newCommitSha }
+}
+
+export function setAssignmentsClosedWithConflictRetry(
+  client: GitHubClient,
+  input: SetAssignmentsClosedInput,
+) {
+  return withGitConflictRetry(() => setAssignmentsClosed(client, input))
+}
+
 export type BulkDeleteResult = {
   deleted: string[]
   // Selected slugs already absent from assignments.json.
