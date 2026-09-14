@@ -26,6 +26,9 @@ export type AssignmentTestDraft = {
   points: number
   failureDetails: AssignmentTestFailureDetails | ""
   showOutput: boolean | ""
+  // Plain per-test boolean (no assignment-level default to inherit): merge
+  // stderr into stdout for a run test. Serialized only when true and type=run.
+  combineOutput: boolean
 }
 
 // A setup command is encoded as a leading 0-point `run` test with this reserved
@@ -83,6 +86,7 @@ export const emptyTestDraft = (): AssignmentTestDraft => ({
   points: 10,
   failureDetails: "",
   showOutput: "",
+  combineOutput: false,
 })
 
 export const testToDraft = (test: AssignmentTest): AssignmentTestDraft => ({
@@ -100,6 +104,7 @@ export const testToDraft = (test: AssignmentTest): AssignmentTestDraft => ({
   points: test.points,
   failureDetails: test["failure-details"] ?? "",
   showOutput: test["show-output"] ?? "",
+  combineOutput: test["combine-output"] ?? false,
 })
 
 // draftToTest serializes a draft into the exact v1 wire shape: kebab-case keys,
@@ -133,6 +138,10 @@ export function draftToTest(draft: AssignmentTestDraft): AssignmentTest {
   if (draft.type === "run" && draft.exitCode !== "") {
     test["exit-code"] = draft.exitCode
   }
+
+  // Run-only: merge stderr into stdout. Dropped on io/python (the CLI rejects
+  // it there) and collapsed when false, so absent means "separate streams".
+  if (draft.type === "run" && draft.combineOutput) test["combine-output"] = true
 
   if (draft.failureDetails !== "")
     test["failure-details"] = draft.failureDetails

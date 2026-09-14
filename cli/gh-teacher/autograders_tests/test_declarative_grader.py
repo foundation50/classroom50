@@ -464,6 +464,9 @@ class TestLoadTests:
         {"name": "a", "type": "run", "run": "true", "points": 1, "failure-details": "loud"},
         {"name": "a", "type": "run", "run": "true", "points": 1, "failure-details": 3},
         {"name": "a", "type": "run", "run": "true", "points": 1, "show-output": "yes"},
+        {"name": "a", "type": "run", "run": "true", "points": 1, "combine-output": "yes"},
+        {"name": "a", "type": "io", "run": "echo", "comparison": "exact", "expected": "x", "combine-output": True},
+        {"name": "a", "type": "python", "run": "pytest", "points": 1, "combine-output": True},
     ])
     def test_rejects_wrongly_typed_optional_fields(self, tmp_path, bad_field):
         # These fields aren't checked by the schema sentinel but are
@@ -572,6 +575,20 @@ class TestComposeDetail:
         detail = ag.compose_detail(o)
         assert "--- stdout ---" in detail and "the-diff" in detail
         assert "--- stderr ---" in detail and "tool-noise" in detail
+
+    def test_combine_output_merges_into_one_ordered_block(self, tmp_path):
+        # combine-output (run-only) merges stderr into stdout so a failure shows
+        # one interleaved block, not two. Shell echo is line-flushed, so the
+        # order is deterministic (see _run_command's note on buffering).
+        spec = {"name": "t", "type": "run", "combine-output": True,
+                "run": "echo out1; echo err1 >&2; echo out2; false", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"] and o["failure-kind"] == "exit"
+        assert "combined" in o["capture"] and "stderr" not in o["capture"]
+        detail = ag.compose_detail(o)
+        assert "--- output ---" in detail
+        assert "--- stdout ---" not in detail and "--- stderr ---" not in detail
+        assert detail.index("out1") < detail.index("err1") < detail.index("out2")
 
     def test_surface_limits_clip_independently(self, tmp_path):
         # #612: the same outcome renders clipped for the release body but far

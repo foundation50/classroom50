@@ -182,6 +182,7 @@ on this page, replace `CLASSROOM` with the classroom's short name and
 | `points` | Required, 0 to 1000. A 0-point test does not affect the numeric score; a failure still sets the autograde status to `failure`. |
 | `failure-details` | Optional. How much failure detail students see: `full` (default), `actual-only`, or `none`. See [Report options](#report-options). |
 | `show-output` | Optional. `true` includes the test's captured output in the report even when it passes. See [Report options](#report-options). |
+| `combine-output` | `run` only. `true` merges stderr into stdout (like `2>&1`) so a failure shows both streams interleaved in the order they were printed, instead of two separate blocks. Ordering depends on the command flushing per line. |
 
 At most 100 tests per assignment. Put large fixtures in files
 (`input-file` / `expected-file`) under `CLASSROOM/autograders/ASSIGNMENT/`, not

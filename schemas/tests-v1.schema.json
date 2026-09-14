@@ -64,6 +64,10 @@
         "show-output": {
           "type": "boolean",
           "description": "Include the captured stdout/stderr of this test's setup/run commands in the submission report and Actions log even when the test PASSES, inside a collapsed details block. Overrides the assignment's `test_defaults`. On the wire it is collapsed: writers omit the field when false, so readers must treat an absent field as `false` (passing output discarded)."
+        },
+        "combine-output": {
+          "type": "boolean",
+          "description": "Run tests only: merge this test's stderr into its stdout (like `2>&1`) so the captured output interleaves in the order the command wrote it. Absent or false keeps the two streams separate. Ordering fidelity depends on the command flushing per line, the same as any `2>&1`."
         }
       },
       "allOf": [
@@ -102,6 +106,10 @@
               { "required": ["expected-file"], "properties": { "expected-file": { "minLength": 1 } } }
             ]
           }
+        },
+        {
+          "if": { "required": ["combine-output"], "properties": { "combine-output": { "const": true } } },
+          "then": { "properties": { "type": { "const": "run" } } }
         }
       ]
     }

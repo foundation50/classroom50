@@ -70,3 +70,40 @@ describe("test draft round-trip of the reporting options", () => {
     expect("show-output" in again).toBe(false)
   })
 })
+
+describe("combine-output round-trip (run-only, #910)", () => {
+  it("defaults false on the empty draft and omits the key on the wire", () => {
+    const draft = emptyTestDraft()
+    expect(draft.combineOutput).toBe(false)
+    const test = draftToTest({ ...draft, type: "run", name: "t", run: "true" })
+    expect("combine-output" in test).toBe(false)
+  })
+
+  it("round-trips true on a run test", () => {
+    const test: AssignmentTest = {
+      name: "t",
+      type: "run",
+      run: "make",
+      points: 1,
+      "combine-output": true,
+    }
+    const draft = testToDraft(test)
+    expect(draft.combineOutput).toBe(true)
+    expect(draftToTest(draft)["combine-output"]).toBe(true)
+  })
+
+  it("drops combine-output when the type is not run", () => {
+    // The draft carries it, but a non-run type must never serialize it (the CLI
+    // and schema reject combine-output outside run tests).
+    const draft = {
+      ...emptyTestDraft(),
+      name: "t",
+      type: "io" as const,
+      run: "cat",
+      comparison: "exact" as const,
+      expected: "x",
+      combineOutput: true,
+    }
+    expect("combine-output" in draftToTest(draft)).toBe(false)
+  })
+})

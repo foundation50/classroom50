@@ -508,6 +508,10 @@ export type AssignmentTest = {
   // explicit false overrides a test_defaults show-output=true, so absent and
   // false are distinct on the wire.
   "show-output"?: boolean
+  // Run tests only: merge stderr into stdout so failure output interleaves in
+  // emission order. Absent or false keeps the two streams separate. In lockstep
+  // with the schemas and the Go TestSpec.
+  "combine-output"?: boolean
 }
 
 // Assignment-level defaults for the per-test reporting options; a test's own

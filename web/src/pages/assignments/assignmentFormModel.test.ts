@@ -37,6 +37,7 @@ const draft = (
   points: 10,
   failureDetails: "",
   showOutput: "",
+  combineOutput: false,
   ...over,
 })
 

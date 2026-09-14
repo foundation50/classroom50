@@ -44,6 +44,11 @@ type TestSpec struct {
 	// *bool, not bool: an explicit false must survive the wire so a single
 	// test can opt out of a test_defaults show-output=true.
 	ShowOutput *bool `json:"show-output,omitempty"`
+	// CombineOutput merges stderr into stdout (like 2>&1) so a run test's
+	// output interleaves in emission order. Run tests only: io tests grade by
+	// comparing stdout, so folding stderr in would corrupt the comparison.
+	// *bool so an explicit false round-trips like ShowOutput.
+	CombineOutput *bool `json:"combine-output,omitempty"`
 }
 
 // TestDefaults is an assignment's `test_defaults` block: assignment-level
@@ -183,6 +188,11 @@ func ValidateTestSpec(t TestSpec) error {
 	}
 	if t.FailureDetails != "" && !isValidFailureDetails(t.FailureDetails) {
 		return fmt.Errorf("invalid failure-details %q: must be one of %v", t.FailureDetails, failureDetailsLevels)
+	}
+	// combine-output merges stderr into stdout; it only makes sense for a run
+	// test, since io tests grade by comparing a clean stdout.
+	if t.CombineOutput != nil && *t.CombineOutput && t.Type != testTypeRun {
+		return errors.New(`combine-output is only valid for a run test`)
 	}
 
 	if t.Type == testTypeIO {

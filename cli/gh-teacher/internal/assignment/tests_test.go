@@ -176,6 +176,24 @@ func TestValidateTestSpec(t *testing.T) {
 			spec:    TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, FailureDetails: "loud"},
 			wantErr: "failure-details",
 		},
+		{
+			name: "combine-output accepted on a run test",
+			spec: TestSpec{Name: "t", Type: "run", Run: "x", Points: 1, CombineOutput: boolPtr(true)},
+		},
+		{
+			name: "combine-output false accepted on any type",
+			spec: TestSpec{Name: "t", Type: "io", Run: "x", Comparison: "exact", Expected: "y", CombineOutput: boolPtr(false)},
+		},
+		{
+			name:    "combine-output rejected on an io test",
+			spec:    TestSpec{Name: "t", Type: "io", Run: "x", Comparison: "exact", Expected: "y", CombineOutput: boolPtr(true)},
+			wantErr: "combine-output is only valid for a run test",
+		},
+		{
+			name:    "combine-output rejected on a python test",
+			spec:    TestSpec{Name: "t", Type: "python", Run: "pytest", Points: 1, CombineOutput: boolPtr(true)},
+			wantErr: "combine-output is only valid for a run test",
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

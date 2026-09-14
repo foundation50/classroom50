@@ -1680,16 +1680,28 @@ def _command_env(bundle_dir: pathlib.Path | None) -> dict[str, str]:
 
 def _run_command(command: str, cwd: pathlib.Path, timeout: int,
                  stdin: str = "",
-                 bundle_dir: pathlib.Path | None = None) -> subprocess.CompletedProcess[str]:
+                 bundle_dir: pathlib.Path | None = None,
+                 combine: bool = False) -> subprocess.CompletedProcess[str]:
     """Run a shell command in the student checkout with captured text output
-    and an empty-by-default stdin."""
+    and an empty-by-default stdin.
+
+    When `combine` is set (a run test's opt-in combine-output), stderr is merged
+    into stdout at the OS level (`2>&1`), so the two interleave in the order the
+    command wrote them; the merged text lands in `stdout` and `stderr` is None.
+    Only run tests set it: io tests grade by comparing stdout, so folding stderr
+    in would corrupt the comparison. Ordering fidelity for a child that
+    block-buffers its own stdout is bounded by that buffering, the same as any
+    `2>&1`; forcing it (a PTY) would make the child think it is interactive and
+    change its output, so we deliberately do not."""
+    err_dest = subprocess.STDOUT if combine else subprocess.PIPE
     return subprocess.run(
         command,
         shell=True,
         cwd=str(cwd),
         env=_command_env(bundle_dir),
         input=stdin,
-        capture_output=True,
+        stdout=subprocess.PIPE,
+        stderr=err_dest,
         text=True,
         encoding="utf-8",
         errors="replace",
@@ -1848,14 +1860,24 @@ def _execute_spec(spec: dict[str, Any], *, cwd: pathlib.Path,
     except TestFixtureError as exc:
         return _make_outcome(name, points, False, str(exc))
 
+    # combine-output is a run-only opt-in: merge stderr into stdout so the
+    # failure output interleaves in emission order. Gated on ttype here as
+    # defence in depth even though the validator already rejects it on io/python
+    # (an io test must keep a clean stdout to compare against expected).
+    combine = ttype == TEST_TYPE_RUN and bool(spec.get("combine-output"))
+
     try:
-        rp = _run_command(spec["run"], cwd, timeout, stdin=stdin, bundle_dir=fixtures_dir)
+        rp = _run_command(spec["run"], cwd, timeout, stdin=stdin,
+                          bundle_dir=fixtures_dir, combine=combine)
     except subprocess.TimeoutExpired:
         return _make_outcome(name, points, False, f"timed out after {timeout}s")
     except OSError as exc:
         return _make_outcome(name, points, False, f"failed to start: {exc}")
 
-    capture = {"stdout": rp.stdout, "stderr": rp.stderr}
+    # A combined run keeps the one interleaved stream under `combined` (rp.stderr
+    # is None); everything else keeps the two separate streams.
+    capture = ({"combined": rp.stdout} if combine
+               else {"stdout": rp.stdout, "stderr": rp.stderr})
 
     if ttype == TEST_TYPE_RUN:
         want = spec.get("exit-code")
@@ -1929,6 +1951,13 @@ def _validate_test_spec(t: Any) -> str | None:
     so = t.get("show-output")
     if so is not None and not isinstance(so, bool):
         return "show-output must be a boolean"
+    # combine-output merges stderr into stdout; only meaningful for a run test
+    # (io grades by comparing stdout, so it must never combine).
+    co = t.get("combine-output")
+    if co is not None and not isinstance(co, bool):
+        return "combine-output must be a boolean"
+    if co and t.get("type") != TEST_TYPE_RUN:
+        return "combine-output is only valid for a run test"
     return None
 
 
@@ -2027,6 +2056,12 @@ def compose_detail(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
         # is dropped: the old `stderr or stdout` hid stdout whenever stderr had
         # anything at all. Safe at every failure-details level here because a run
         # test has no expected side to redact (only `none` suppresses, above).
+        combined = cap.get("combined")
+        if combined is not None:
+            # combine-output test: one interleaved stream, shown as a single
+            # block since there is no separate stderr to label.
+            return detail + (f"\n--- output ---\n{_clip(combined, limit)}"
+                             if combined.strip() else "")
         stdout = cap.get("stdout") or ""
         stderr = cap.get("stderr") or ""
         parts = []
@@ -2076,6 +2111,7 @@ def compose_output(outcome: dict[str, Any], *, limit: int = MAX_CAPTURED_CHARS) 
     parts = []
     for key, label in (("setup-stdout", "setup stdout"),
                        ("setup-stderr", "setup stderr"),
+                       ("combined", "output"),
                        ("stdout", "stdout"),
                        ("stderr", "stderr")):
         text = cap.get(key) or ""

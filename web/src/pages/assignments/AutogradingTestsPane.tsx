@@ -352,6 +352,29 @@ const AutogradingTestModal = ({
           </FormField>
         )}
 
+        {draft.type === "run" && (
+          <FormField
+            htmlFor={field("combineOutput")}
+            label={t("assignments.autograder.combineOutput")}
+            hint={t("assignments.autograder.combineOutputHint")}
+          >
+            {({ id }) => (
+              <Select
+                id={id}
+                value={draft.combineOutput ? "on" : "off"}
+                onChange={(e) => set("combineOutput", e.target.value === "on")}
+              >
+                <option value="off">
+                  {t("assignments.autograder.combineOutputOff")}
+                </option>
+                <option value="on">
+                  {t("assignments.autograder.combineOutputOn")}
+                </option>
+              </Select>
+            )}
+          </FormField>
+        )}
+
         {draft.type === "python" && (
           <p className="rounded-box border border-dashed p-3 text-sm opacity-70">
             <Trans

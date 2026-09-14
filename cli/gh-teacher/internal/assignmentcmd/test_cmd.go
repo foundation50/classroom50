@@ -69,6 +69,7 @@ func assignmentTestAddCmd() *cobra.Command {
 		points         int
 		failureDetails string
 		showOutput     bool
+		combineOutput  bool
 	)
 
 	cmd := &cobra.Command{
@@ -147,6 +148,13 @@ func assignmentTestAddCmd() *cobra.Command {
 				so := showOutput
 				spec.ShowOutput = &so
 			}
+			// CombineOutput is a pointer for wire symmetry with the web; set it
+			// only when the flag was passed. ValidateTestSpec rejects it on a
+			// non-run test.
+			if cmd.Flags().Changed("combine-output") {
+				co := combineOutput
+				spec.CombineOutput = &co
+			}
 			if err := assignment.ValidateTestSpec(spec); err != nil {
 				return err
 			}
@@ -173,6 +181,7 @@ func assignmentTestAddCmd() *cobra.Command {
 	cmd.Flags().IntVar(&points, "points", 0, "Points the test is worth")
 	cmd.Flags().StringVar(&failureDetails, "failure-details", "", "How much failure detail students see: full | actual-only | none (empty = the assignment default)")
 	cmd.Flags().BoolVar(&showOutput, "show-output", false, "Include captured setup/run output in the report even when the test passes")
+	cmd.Flags().BoolVar(&combineOutput, "combine-output", false, "run only: merge stderr into stdout so failure output interleaves in the order it was printed")
 	return cmd
 }
 
