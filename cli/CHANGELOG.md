@@ -17,6 +17,23 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.50.0](https://github.com/foundation50/classroom50/compare/cli-v1.49.0...cli-v1.50.0) (2026-09-14)
+
+
+### Features
+
+* **gh-teacher:** re-issue an expired invitation and drop a dead pending row ([#971](https://github.com/foundation50/classroom50/issues/971)) ([9ea12f8](https://github.com/foundation50/classroom50/commit/9ea12f8fc683cd0250a378d804683ab49219aebf))
+* let staff merge the feedback PR without a bypass prompt ([#977](https://github.com/foundation50/classroom50/issues/977)) ([952fe19](https://github.com/foundation50/classroom50/commit/952fe19ff28344e9a6cdc37a8efdcf244e4591da))
+
+
+### Bug Fixes
+
+* **cli:** grant staff teams access to group assignment repos ([#980](https://github.com/foundation50/classroom50/issues/980)) ([78498c0](https://github.com/foundation50/classroom50/commit/78498c089a2f9f5afa0ee2004e2f2781d861efe9))
+* close the remaining staff-team ownership gaps from 1.50.0 ([#983](https://github.com/foundation50/classroom50/issues/983)) ([c026f6d](https://github.com/foundation50/classroom50/commit/c026f6d65e1428a92d4f32d54c671116617fc794))
+* make regrade grade after a submission-mode change ([#976](https://github.com/foundation50/classroom50/issues/976)) ([e49708c](https://github.com/foundation50/classroom50/commit/e49708c3a3dbe50612de565ee4a85067aa6ddb2c))
+* stop autograding students who turned the built-in autograder off ([#972](https://github.com/foundation50/classroom50/issues/972)) ([2b9c272](https://github.com/foundation50/classroom50/commit/2b9c272004c10c0221ca35f5a2cd158beed1bf07))
+* stop treating any team at a classroom's staff slug as staff ([#979](https://github.com/foundation50/classroom50/issues/979)) ([bc3c4ba](https://github.com/foundation50/classroom50/commit/bc3c4bae57ade9d700eff23e07e5b700986bb1e7))
+
 ## [1.49.0](https://github.com/foundation50/classroom50/compare/cli-v1.48.2...cli-v1.49.0) (2026-09-11)
 
 
