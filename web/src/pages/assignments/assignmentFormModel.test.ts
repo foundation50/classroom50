@@ -1095,7 +1095,7 @@ describe("toSubmitValues — runtime field clearing", () => {
   it("round-trips a stored init_shim assignment without flipping the flag", () => {
     // A stored init_shim (no template, empty_repo false) must read back as the
     // no-README + built-in combination so deriveFormShape re-derives init_shim
-    // — NOT as a README repo, which would try to flip the immutable flag.
+    // — NOT as a README repo, which would silently drop the flag on re-save.
     const values = assignmentToFormValues({
       slug: "scratch",
       name: "Scratch",
@@ -1114,10 +1114,10 @@ describe("toSubmitValues — runtime field clearing", () => {
   it("round-trips a stored templated no_autograder assignment without dropping the flag", () => {
     // A stored no_autograder (teacher-supplied CI on a template) must read back
     // as a template source with the built-in autograder off, so deriveFormShape
-    // re-derives no_autograder:true — otherwise a re-save would drop the
-    // immutable flag and editAssignment's guard would reject the edit. Guards
-    // that noAutograder keys off the (template) source + built-in toggle, not
-    // the grading choice (this assignment is graded manually).
+    // re-derives no_autograder:true — otherwise a re-save would silently turn
+    // the built-in autograder back on for repos accepted from then on. Guards
+    // that noAutograder keys off the source + built-in toggle, not the grading
+    // choice (this assignment is graded manually).
     const values = assignmentToFormValues({
       slug: "ci",
       name: "Teacher CI",

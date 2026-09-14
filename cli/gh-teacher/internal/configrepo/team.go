@@ -499,9 +499,10 @@ func SetTeamPrivacy(client githubapi.Client, org, slug, privacy string) error {
 }
 
 // StaffTeamSlugs are the canonical staff team slugs for a classroom, in role
-// order. The slug, not classroom.json, is what identifies a classroom's staff
-// team to GitHub: a team a web role flow created without recording it is still
-// found, and a classroom.json edit can't point at another team.
+// order. The slug, not classroom.json, is where a classroom's staff team is
+// looked up: a team a web role flow created without recording it is still
+// found, and a classroom.json edit can't point at another team. The slug alone
+// proves nothing about ownership, though; see adoptGuard for what does.
 func StaffTeamSlugs(shortName string) []string {
 	slugs := make([]string, 0, len(StaffRoles))
 	for _, role := range StaffRoles {

@@ -376,7 +376,8 @@ graded.
   autograder** (preselected when you switch to Autograded) or **Do not use the
   built-in autograder**. Opting out means accept installs no autograding
   workflow at all: on a templated assignment your template's own CI workflows
-  run instead. The submissions page still shows who submitted (collection
+  run instead, and a README repository simply has no autograder. The
+  submissions page still shows who submitted (collection
   records submitters, but no scores), and the repository actions stay
   available. Your choice sticks: leaving Autograded and coming back won't
   reset it. It can be changed after creation (edits only affect repositories
@@ -995,7 +996,7 @@ The page header shows a submission progress bar (how many students, or groups,
 have submitted; click it to filter to who hasn't), the due date, a **Late**
 count, a **Closed** badge when the submission window is closed, the
 submission type (**Submits on every push** or **Submits by tag**), and the
-grading setup (**Autograded**, **Custom autograding**, or **No autograding**).
+grading setup (**Autograded**, **No built-in autograder**, or **No autograding**).
 
 For larger classrooms, use the toolbar:
 

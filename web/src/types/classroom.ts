@@ -239,8 +239,10 @@ export type Assignment = {
   // Truly bare student repos: accept creates the repo with no initial commit
   // and NO control files (no .classroom50.yaml, no autograde workflow), so the
   // assignment never autogrades and the Feedback PR is off. Mutually exclusive
-  // with template/tests/feedback_pr/allowed_files/pass_threshold and IMMUTABLE
-  // after creation. Omitted when false (CLI omitempty); absent reads as false.
+  // with template/tests/feedback_pr/allowed_files/pass_threshold. Mutable but
+  // never retrofitted: repos are provisioned at accept time, so a change only
+  // affects repos accepted from then on. Omitted when false (CLI omitempty);
+  // absent reads as false.
   empty_repo?: boolean
   // No built-in autograder on an INITIALIZED repo (templated or README): accept
   // commits the .classroom50.yaml marker and the starter content but NO
@@ -258,9 +260,10 @@ export type Assignment = {
   // submit/* releases). UNLIKE empty_repo (bare, no shim, never grades) it
   // commits the shim; it permits the grading-adjacent fields. Mutually
   // exclusive with empty_repo, a template, no_autograder, and a non-default
-  // autograder; requires the default autograder. IMMUTABLE after creation.
-  // Omitted when false (CLI omitempty); absent reads as false. In lockstep with
-  // the CLI's assignments-v1 schema (`init_shim`).
+  // autograder; requires the default autograder. Mutable but never
+  // retrofitted, like empty_repo. Omitted when false (CLI omitempty); absent
+  // reads as false. In lockstep with the CLI's assignments-v1 schema
+  // (`init_shim`).
   init_shim?: boolean
   // Copy ALL of the template's branches (not just the default) when each student
   // repo is generated: accept passes include_all_branches to GitHub's POST

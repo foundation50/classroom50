@@ -80,8 +80,9 @@ you can turn the pipeline off entirely:
 graded retroactively. After resuming, click **Regrade all** in the
 submissions page's **Actions** menu: it triggers one grading run per
 repository instead of one per missed push. Each repository's latest
-submission is re-run, and a never-graded repository is graded at its current
-state. Then click **Collect now** to pull the new scores. See
+submission is re-run, and a never-graded repository is graded at the
+student's latest commit (a repository with nothing pushed since accepting is
+skipped). Then click **Collect now** to pull the new scores. See
 [Grading a specific commit](Autograding-Basics#grading-a-specific-commit)
 for the details of what a regrade re-runs.
 

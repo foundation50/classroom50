@@ -150,10 +150,6 @@ export function orgTeamsQuery(client: GitHubClient, org: string) {
   })
 }
 
-// Teams with access to a repo, across all pages (GET /repos/{owner}/{repo}/teams).
-// Needs only the token's repo scope (not repo-admin), but GitHub returns only
-// teams VISIBLE to the viewer — a non-owner may see a subset. 404 (repo gone /
-// invisible) -> [] so the caller degrades to "no teams listed".
 // The id of the team at `slug`, or null when none exists. Mirrors the CLI's
 // configrepo.LiveTeamID.
 export async function liveTeamId(
@@ -172,6 +168,10 @@ export async function liveTeamId(
   }
 }
 
+// Teams with access to a repo, across all pages (GET /repos/{owner}/{repo}/teams).
+// Needs only the token's repo scope (not repo-admin), but GitHub returns only
+// teams VISIBLE to the viewer — a non-owner may see a subset. 404 (repo gone /
+// invisible) -> [] so the caller degrades to "no teams listed".
 export async function listRepoTeams(
   client: GitHubClient,
   owner: string,
