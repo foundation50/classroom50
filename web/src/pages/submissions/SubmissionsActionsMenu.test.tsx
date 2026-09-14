@@ -102,6 +102,16 @@ describe("SubmissionsActionsMenu — in-flight indicator", () => {
   })
 })
 
+// daisyUI opens the menu on focus, and Safari only focuses a button on click
+// when tabindex is set explicitly (#987). Without it the menu never opens there.
+describe("SubmissionsActionsMenu — Safari trigger focus", () => {
+  it("keeps an explicit tabindex on the trigger", () => {
+    const { container } = render(<SubmissionsActionsMenu {...baseProps} />)
+    const trigger = container.querySelector(".dropdown > button")
+    expect(trigger?.getAttribute("tabindex")).toBe("0")
+  })
+})
+
 describe("SubmissionsActionsMenu — Metrics item", () => {
   it("does not include Share (moved next to the search bar)", () => {
     render(<SubmissionsActionsMenu {...baseProps} />)

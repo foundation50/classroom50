@@ -154,10 +154,11 @@ export function SubmissionsActionsMenu({
       <Button
         variant="primary"
         size="sm"
+        // Safari only focuses a button on click when tabindex is set
+        // explicitly, and daisyUI opens the menu on focus (#987).
+        tabIndex={0}
         loading={regrading}
         loadingLabel={t("submissions.regradeAll.active")}
-        // Safari does not focus buttons on pointer click; daisyUI opens on focus.
-        onClick={(event) => event.currentTarget.focus()}
       >
         {regrading
           ? t("submissions.regradeAll.active")

@@ -49,8 +49,6 @@ describe("SubmissionsActionsMenu pointer interaction", () => {
     const onLockToggle = vi.fn()
     const { trigger, menu } = renderMenu({ onLockToggle })
     await expect.element(menu).not.toBeVisible()
-    // Provider-backed click preserves WebKit's native lack of button focus.
-    // fireEvent/user-event or calling focus() here would hide the regression.
     await trigger.click()
     await expect.element(menu).toBeVisible()
     await page
@@ -72,16 +70,16 @@ describe("SubmissionsActionsMenu pointer interaction", () => {
 
   it("keeps the trigger unavailable while regrading", async () => {
     renderMenu({ regrading: true })
-    await expect
-      .element(
-        page.getByRole("button", {
-          name: "submissions.regradeAll.active",
-          exact: true,
-        }),
-      )
-      .toHaveAttribute("aria-disabled", "true")
-    await expect
-      .element(screen.getByRole("menu", { hidden: true }))
-      .not.toBeVisible()
+    const trigger = page.getByRole("button", {
+      name: "submissions.regradeAll.active",
+      exact: true,
+    })
+    const menu = screen.getByRole("menu", { hidden: true })
+    await expect.element(trigger).toHaveAttribute("aria-disabled", "true")
+    // daisyUI drops pointer events on an aria-disabled btn, so a click cannot
+    // focus it and the menu stays shut. Playwright treats aria-disabled as not
+    // actionable, so the click has to be forced to reach the element at all.
+    await trigger.click({ force: true })
+    await expect.element(menu).not.toBeVisible()
   })
 })

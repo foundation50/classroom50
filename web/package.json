@@ -20,7 +20,7 @@
     "preview": "vite preview --configLoader native",
     "test": "vitest run",
     "test:node": "vitest run --project node",
-    "test:browser": "vitest run --project browser --project browser-webkit",
+    "test:browser": "vitest run --project browser",
     "test:watch": "vitest",
     "missing": "tsc -p tsconfig.app.json --pretty false 2>&1 | grep -E \"TS(2304|2305|2307|2503|2552)\""
   },

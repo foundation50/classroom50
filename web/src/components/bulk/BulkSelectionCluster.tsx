@@ -27,7 +27,9 @@ export function BulkSelectionCluster({
       {/* dropdown-start: the cluster sits at the start of its row, so the
           menu opens inward instead of off the edge. */}
       <div className="dropdown dropdown-start">
-        <Button variant="primary" size="sm">
+        {/* tabIndex: Safari only focuses a button on click when tabindex is
+            set explicitly, and daisyUI opens the menu on focus (#987). */}
+        <Button variant="primary" size="sm" tabIndex={0}>
           {t("common.actions")}
           <TriangleDownIcon aria-hidden="true" className="size-4" />
         </Button>

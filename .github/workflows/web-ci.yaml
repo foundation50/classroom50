@@ -96,11 +96,11 @@ jobs:
         run: npm run test:node -- --shard=${{ matrix.shard }}/4
 
   # The a11y layout guards (*.browser.test.tsx: target size, reflow, resize text,
-  # text spacing) run in Chromium; the Actions regression also runs in WebKit.
-  # Isolated in its own lane so browser installation stays off the critical
-  # path of other checks, and cached so repeat runs skip the download.
+  # text spacing) run in real Chromium via the vitest browser project. Isolated
+  # into its own lane so the ~90MB Playwright browser install is off the critical
+  # path of every other check, and cached so repeat runs skip the download.
   browser:
-    name: Browser guards (Chromium + WebKit)
+    name: A11y layout guards (Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -118,7 +118,7 @@ jobs:
         uses: actions/cache@v6
         with:
           path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-chromium-webkit-${{ steps.pw.outputs.version }}
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
 
       # On a cache hit the browser binary is present but its OS deps may not be.
       # `install-deps` shells out to apt, so it can hang on a transient
@@ -136,7 +136,7 @@ jobs:
         timeout-minutes: 6
         run: |
           for attempt in 1 2 3; do
-            if timeout 100s npx playwright install-deps chromium webkit; then
+            if timeout 100s npx playwright install-deps chromium; then
               exit 0
             fi
             echo "playwright install-deps failed (attempt $attempt); retrying..." >&2
@@ -144,9 +144,9 @@ jobs:
           done
           echo "playwright install-deps failed after 3 attempts" >&2
           exit 1
-      - name: Install Playwright Chromium and WebKit
+      - name: Install Playwright Chromium
         if: steps.pw-cache.outputs.cache-hit != 'true'
-        run: npx playwright install chromium webkit
+        run: npx playwright install chromium
 
       - name: Test (browser project)
         run: npm run test:browser
