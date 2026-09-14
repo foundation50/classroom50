@@ -70,6 +70,7 @@ import {
   type AssignmentsWriteContext,
 } from "./assignmentsWrite"
 import { resolveSubmissionMode } from "./submissionDetection"
+import { isDefaultAutograder } from "./autograderYaml"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
   // Set when the assignment saved but the follow-up team read grant on a
@@ -104,7 +105,12 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   available_from: "classroom50-owned",
   available_from_meta: "classroom50-owned",
   mode: "classroom50-owned",
-  autograder: "classroom50-owned",
+  // The form has no control for the workflow-shim name, so a rebuild can only
+  // ever write "default". Carrying the stored name forward is what keeps a
+  // teacher-authored autograder (`<classroom>/autograders/<name>.yaml`) from
+  // being silently swapped for the built-in shim by an unrelated edit (#986).
+  // Create still writes "default" via buildAssignmentEntry.
+  autograder: "preserved",
   max_group_size: "classroom50-owned",
   team_formation: "classroom50-owned",
   feedback_pr: "classroom50-owned",
@@ -257,6 +263,20 @@ export async function editAssignment(
     targetAssignment,
     editedAssignment,
   )
+
+  // The schema pins autograder to "default" under no_autograder and init_shim
+  // (both describe a repo that never commits a named shim). The stored name is
+  // only known after the merge, so this is the one exclusion that can't live in
+  // buildAssignmentEntry. Reject rather than write a file the CLI won't parse.
+  if (
+    !isDefaultAutograder(preservedEntry.autograder) &&
+    (preservedEntry.no_autograder || preservedEntry.init_shim)
+  ) {
+    throw new Error(
+      `Assignment "${slug}" uses the custom autograder "${preservedEntry.autograder}", which requires the built-in autograder setting to stay on. ` +
+        `Turn the built-in autograder back on, or set "autograder" to "default" in ${input.classroom}/assignments.json first.`,
+    )
+  }
 
   const nextAssignments = {
     ...currentAssignments,

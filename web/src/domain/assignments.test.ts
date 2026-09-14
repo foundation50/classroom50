@@ -566,6 +566,24 @@ describe("preserveUnmanagedAssignmentKeys", () => {
     expect(merged.closed).toBe(true)
     expect(merged.locked).toBeUndefined()
   })
+
+  it("lets the stored autograder name win over the rebuilt default", () => {
+    // The rebuilt entry always says "default" (the form has no autograder
+    // control), so a preserved stored name is the only way a teacher-authored
+    // shim survives an edit (#986).
+    const existing: Assignment = {
+      ...fullSource,
+      autograder: "custom-workflow",
+    }
+    const edited: Assignment = {
+      slug: "hw1",
+      name: "Homework 1 (edited)",
+      mode: "individual",
+      autograder: "default",
+    }
+    const merged = preserveUnmanagedAssignmentKeys(existing, edited)
+    expect(merged.autograder).toBe("custom-workflow")
+  })
 })
 
 describe("nextAvailableSlug", () => {
@@ -1211,6 +1229,65 @@ describe("editAssignment (preserved-entry integration)", () => {
     const edited = written.assignments.find((a) => a.slug === SLUG)!
     // Collapsed to the wire's absent-is-false shape.
     expect(edited.no_autograder).toBeUndefined()
+  })
+
+  it("preserves a custom autograder name across an unrelated edit (#986)", async () => {
+    // The form has no autograder control, so the rebuilt entry says "default";
+    // the stored teacher-authored name must win or an unrelated rename swaps
+    // the assignment onto the built-in shim for every future accept.
+    const customEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "custom-workflow",
+      feedback_pr: true,
+      grading: { mode: "off" },
+    }
+    const { client, committedContent } = makeBareClient(customEntry)
+    await editAssignment(
+      client,
+      editInput({ name: "Homework 1 (renamed)", grading: { mode: "off" } }),
+    )
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.name).toBe("Homework 1 (renamed)")
+    expect(edited.autograder).toBe("custom-workflow")
+    expect(edited.grading).toEqual({ mode: "off" })
+  })
+
+  it("rejects turning the built-in autograder off on a custom-autograder assignment", async () => {
+    // The schema pins autograder to "default" under no_autograder; the stored
+    // custom name now survives the edit, so the combination must fail closed
+    // instead of writing a file the CLI refuses to parse.
+    const customEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "custom-workflow",
+      feedback_pr: true,
+    }
+    const { client, committedContent } = makeBareClient(customEntry)
+    await expect(
+      editAssignment(client, editInput({ no_autograder: true })),
+    ).rejects.toThrow(/custom autograder "custom-workflow"/)
+    expect(committedContent()).toBe("")
+  })
+
+  it("rejects init_shim on a custom-autograder assignment", async () => {
+    const customEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "custom-workflow",
+      feedback_pr: true,
+    }
+    const { client, committedContent } = makeBareClient(customEntry)
+    await expect(
+      editAssignment(client, editInput({ init_shim: true })),
+    ).rejects.toThrow(/custom autograder "custom-workflow"/)
+    expect(committedContent()).toBe("")
   })
 
   it("accepts no_autograder without a template (README repo, no shim)", async () => {

@@ -1197,6 +1197,7 @@
       "repositorySetupSection": "Repository setup",
       "submissionSection": "Submission and grading",
       "submissionSectionHelp": "Define what counts as a submission for this assignment: when the autograder runs and which tags a student can push to submit.",
+      "customAutograderNotice": "This assignment uses the custom autograder \"{{name}}\" from {{path}}. Saving keeps it. To switch to the built-in autograder, set \"autograder\" to \"default\" in assignments.json.",
       "scheduleSection": "Schedule and access",
       "reset": "Reset",
       "resetSection": "Reset this section to its default settings",

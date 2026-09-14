@@ -73,6 +73,11 @@ type CreateAssignmentFormProps = {
   // only show when a change would actually strand existing repos. Absent/false
   // on create and when nobody has accepted.
   hasAcceptedStudents?: boolean
+  // Edit mode: the stored autograder name when it isn't the built-in
+  // "default". The form has no control for it (the save preserves it), so the
+  // grading section shows it read-only rather than passing it off as the
+  // built-in shim.
+  customAutograder?: string
 }
 
 const CreateAssignmentForm = ({
@@ -88,6 +93,7 @@ const CreateAssignmentForm = ({
   takenSlugs,
   reservedSlugs,
   hasAcceptedStudents = false,
+  customAutograder,
 }: CreateAssignmentFormProps) => {
   const { t } = useTranslation()
   const form = useAssignmentForm(defaultValues, onSubmit, t, {
@@ -244,6 +250,7 @@ const CreateAssignmentForm = ({
                   classroom={classroom}
                   slug={slug}
                   hasAcceptedStudents={hasAcceptedStudents}
+                  customAutograder={customAutograder}
                 />
                 <ScheduleSection
                   form={form}

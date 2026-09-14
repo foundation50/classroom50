@@ -49,6 +49,7 @@ export {
 } from "./assignments/copyReuse"
 export {
   createClassroom50Yaml,
+  isDefaultAutograder,
   resolveAutograderWorkflow,
 } from "./assignments/autograderYaml"
 export {

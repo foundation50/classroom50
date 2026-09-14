@@ -10,6 +10,7 @@ import CreateAssignmentForm, {
 import { deriveFormShape } from "./formShape"
 import {
   editImpactSummary,
+  isDefaultAutograder,
   type CreateAssignmentResult,
   type EditImpact,
 } from "@/domain/assignments"
@@ -147,6 +148,11 @@ const EditAssignmentForm = ({
             classroom={classroom}
             slug={assignment}
             hasAcceptedStudents={acceptedCount > 0}
+            customAutograder={
+              isDefaultAutograder(defaultData.autograder)
+                ? undefined
+                : defaultData.autograder
+            }
             onCancel={onCancel}
             defaultValues={assignmentToFormValues(defaultData)}
             onSubmit={async (values) => {

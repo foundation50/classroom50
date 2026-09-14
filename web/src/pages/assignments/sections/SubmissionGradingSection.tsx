@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { FormField, Input, Select } from "@/components/ui"
+import { Alert, FormField, Input, Select } from "@/components/ui"
 import { GRADING_MAX_POINTS_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "../assignmentFormModel"
 import { shouldSeedBuiltInAutograder } from "../assignmentFormModel"
@@ -29,6 +29,7 @@ export function SubmissionGradingSection({
   classroom,
   slug,
   hasAcceptedStudents = false,
+  customAutograder,
 }: {
   form: AssignmentForm
   edit: boolean
@@ -43,6 +44,10 @@ export function SubmissionGradingSection({
   // Edit mode: whether any student has already accepted. Gates the built-in
   // autograder change caveat inside the autograder config.
   hasAcceptedStudents?: boolean
+  // Edit mode: a stored non-default autograder name. Shown read-only under the
+  // grading choice regardless of that choice, since a "Not graded" assignment
+  // otherwise has no trace of the workflow it commits.
+  customAutograder?: string
 }) {
   const { t } = useTranslation()
 
@@ -66,6 +71,14 @@ export function SubmissionGradingSection({
         </form.Subscribe>
         <div className="divider my-0" />
         <GradingChoiceField form={form} />
+        {customAutograder ? (
+          <Alert tone="info" role="status" className="text-sm">
+            {t("assignments.form.customAutograderNotice", {
+              name: customAutograder,
+              path: `${classroom ?? ""}/autograders/${customAutograder}.yaml`,
+            })}
+          </Alert>
+        ) : null}
         {/* Autograder config folded in: shown only when grading is
             "Autograded" (showAutogradingConfig). For Manual / Not graded it
             renders nothing, so the common path stays short. */}
