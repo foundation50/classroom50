@@ -641,8 +641,9 @@ export async function prepareStaffTeams(
 }
 
 // The repair-side input: collect, make visible, return live ids. Resolves to
-// null when the classrooms or the org's teams can't be read, so repairRulesets
-// keeps the bypass list it finds rather than rebuilding a shorter one.
+// null when the classrooms or the config repo's team grants can't be read, so
+// repairRulesets keeps the bypass list it finds rather than rebuilding a
+// shorter one.
 export async function collectBypassStaffTeamIds(
   client: GitHubClient,
   org: string,

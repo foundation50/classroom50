@@ -543,7 +543,7 @@ const RosterMemberModal = ({
     } catch (err) {
       onError(
         key,
-        t("students.changeRoleFailed", { label, error: getErrorMessage(err) }),
+        t("students.changeRoleFailed", { label, error: errorText(t, err) }),
       )
     } finally {
       setChangingRole(false)

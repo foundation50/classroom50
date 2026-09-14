@@ -577,9 +577,9 @@ export function addRepositoryToTeam(
 
 // Remove a team's access to a repo. 404 (never granted, or repo/team gone) is
 // success, so revoking is idempotent. Used when LOCKING a private-template
-// assignment: the classroom STUDENT team's read on the template is dropped so
-// no new student can generate from it. Staff teams are addressed separately and
-// left untouched.
+// assignment (the classroom STUDENT team's read on the template is dropped so
+// no new student can generate from it; staff teams are left untouched) and when
+// adopting a student team, to strip a config-repo grant an older release gave it.
 export async function removeRepositoryFromTeam(
   client: GitHubClient,
   input: {

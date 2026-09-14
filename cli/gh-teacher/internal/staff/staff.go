@@ -266,10 +266,13 @@ func recordStaffTeam(client githubapi.Client, out io.Writer, org, classroom, bra
 		}
 		return map[string]string{path: string(updated)}, nil
 	}
-	if _, err := configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+	sha, err := configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build)
+	if err != nil {
 		return err
 	}
-	_, _ = fmt.Fprintf(out, "%s: recorded %s staff team %s in classroom.json\n", org, role, team.Slug)
+	if sha != "" {
+		_, _ = fmt.Fprintf(out, "%s: recorded %s staff team %s in classroom.json\n", org, role, team.Slug)
+	}
 	return nil
 }
 
@@ -291,6 +294,14 @@ func runStaffRemove(client githubapi.Client, out, errOut io.Writer, org, classro
 	if !ok {
 		return fmt.Errorf("%s: classroom %s has no %s staff team recorded in classroom.json: nothing to remove",
 			org, classroom, role)
+	}
+	// The team at this slug is a sibling classroom's roster: removing from it
+	// would unenroll a student there, not un-staff anyone here.
+	if other, err := configrepo.StudentTeamOwner(client, org, classroom, role); err != nil {
+		return err
+	} else if other != "" {
+		return fmt.Errorf("%s: %s is the student team of classroom %s, so classroom %s has no %s team to remove %s from",
+			org, configrepo.StaffTeamSlug(classroom, role), other, classroom, role, login)
 	}
 	if !canonicalOrWarn(errOut, org, classroom, role, team, "; run `gh teacher staff add` to re-record it") {
 		team = configrepo.TeamRef{Slug: configrepo.StaffTeamSlug(classroom, role)}

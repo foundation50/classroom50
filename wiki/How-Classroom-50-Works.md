@@ -344,7 +344,9 @@ repositories; Classroom 50 warns about it instead of adopting it. One case
 outranks the grant: if a classroom named `<short-name>-<role>` exists, the
 team at that name is its **student** team, whatever access an older release
 gave it, and Classroom 50 removes that access on the next visit. Setup, **Fix
-it**, score collection, and the classroom page all apply the same rules. New
+it**, score collection, and the classroom page's team repair all apply the same
+rules. (The roster page still lists that team's members under the role until a
+later release; they hold no staff access.) New
 classroom short names can't end in a role suffix, and a new classroom can't
 take a name whose staff team name an existing classroom already holds.
 

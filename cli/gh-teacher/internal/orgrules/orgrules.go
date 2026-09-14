@@ -385,7 +385,8 @@ func feedbackBaseActors(client githubapi.Client, org string) (int64, []bypassAct
 
 // Reconcile is init's ruleset step: rebuild the feedback-base bypass list from
 // the live staff teams of every classroom, then Ensure both rulesets. When the
-// classrooms or the org's teams can't be read, the list already on the ruleset
+// classrooms or the config repo's team grants can't be read, the list already
+// on the ruleset
 // is kept instead; when that can't be read either, the feedback-base ruleset is
 // left untouched and only submission-history is reconciled (rebuilding would
 // wipe every staff exemption). Returns whether every ruleset it attempted is

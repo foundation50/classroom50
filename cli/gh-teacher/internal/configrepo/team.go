@@ -793,7 +793,7 @@ func GetTeamMembershipState(client githubapi.Client, org, slug, username string)
 
 // teamHasRepoAccess reports whether the team addressed by `slug` already has
 // any access to <org>/<repo> (204 = yes, 404 = no). Keeps GrantTeamRepoRead
-// idempotent.
+// idempotent, and against the config repo it is adoptGuard's ownership proof.
 func teamHasRepoAccess(client githubapi.Client, org, slug, repoOwner, repo string) (bool, error) {
 	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
 		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(repoOwner), url.PathEscape(repo))
@@ -929,9 +929,10 @@ func grantTeamRepo(client githubapi.Client, org, slug, repoOwner, repo, permissi
 
 // RemoveTeamRepo removes the team's access to <repoOwner>/<repo>. A 404 (the
 // team never had access, or the repo/team is gone) is success, so revoking is
-// idempotent. Used when LOCKING a private-template assignment: the classroom
+// idempotent. Used when LOCKING a private-template assignment (the classroom
 // STUDENT team's read on the template is dropped so no new student can generate
-// a repo from it. Staff teams are addressed separately and left untouched.
+// a repo from it; staff teams are left untouched) and when adopting a student
+// team, to strip a config-repo grant an older release gave it.
 func RemoveTeamRepo(client githubapi.Client, org, slug, repoOwner, repo string) error {
 	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
 		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(repoOwner), url.PathEscape(repo))

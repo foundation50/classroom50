@@ -19,6 +19,7 @@ import {
   ownedClassroomTeamRefs,
   isNonFastForward,
   purgeClassroomInviteTeams,
+  studentTeamOwner,
   type ClassroomTeamRef,
   type GitTreeEntry,
   type GitTreeFileMode,
@@ -28,7 +29,7 @@ import {
   revokeClassroomStaffTeams,
   revokeStaffTeams,
 } from "@/github-core/rulesets"
-import type { StaffRole } from "@/types/classroom"
+import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 
 import { editClassroom, type EditClassroomInput } from "./classrooms/edit"
@@ -361,6 +362,39 @@ export async function deleteClassroom(
     )
     team = undefined
     staffTeams = {}
+  }
+  // An older release could record `ml-ta`'s student team as `ml`'s TA team;
+  // never delete a sibling classroom's roster. Mirrors the CLI's removeClassroom.
+  // Checked before the commit while the sibling's classroom.json is certain to
+  // be readable; a read that fails leaves that role's team alone as well.
+  for (const role of STAFF_ROLES) {
+    if (!staffTeams[role]) continue
+    try {
+      const owner = await studentTeamOwner(client, org, classroom, role)
+      if (owner === null) continue
+      log.warn(
+        "delete classroom: recorded staff team is a sibling's student team, leaving it",
+        {
+          org,
+          classroom,
+          role,
+          teamSlug: staffTeams[role].slug,
+          studentOf: owner,
+          record: true,
+        },
+      )
+    } catch (err) {
+      log.warn(
+        "delete classroom: could not check for a sibling classroom, leaving the staff team",
+        {
+          org,
+          classroom,
+          role,
+          err,
+        },
+      )
+    }
+    staffTeams = { ...staffTeams, [role]: undefined }
   }
 
   const head = await readConfigRepoHeadAt(client, org, branch)
