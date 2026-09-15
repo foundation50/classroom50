@@ -410,10 +410,13 @@ describe("AutogradingTestsPane Enter handling (#1003)", () => {
       screen.getByLabelText("assignments.autograder.comparison"),
       { key: "Enter" },
     )
-    fireEvent.keyDown(
+    // A radio doesn't commit either, but Enter on it must still be prevented:
+    // Firefox would otherwise implicitly submit the enclosing assignment form.
+    const radioEnter = fireEvent.keyDown(
       screen.getByLabelText("assignments.autograder.type.io.label"),
       { key: "Enter" },
     )
+    expect(radioEnter).toBe(false)
     expect(tests()).toHaveLength(0)
   })
 })

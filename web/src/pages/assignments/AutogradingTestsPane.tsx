@@ -136,8 +136,12 @@ type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
 const keepsNativeEnter = (el: HTMLElement) =>
   el.tagName === "TEXTAREA" ||
   el.tagName === "BUTTON" ||
-  el.tagName === "SELECT" ||
-  (el instanceof HTMLInputElement && el.type === "radio")
+  el.tagName === "SELECT"
+
+// A radio has no Enter behaviour of its own, but Firefox implicitly submits the
+// enclosing form on it, and this dialog sits inside the assignment form.
+const isRadio = (el: HTMLElement) =>
+  el instanceof HTMLInputElement && el.type === "radio"
 
 // Editor works on a local copy; nothing reaches the form's `tests` until commit.
 // `mode` routes commit (append vs overwrite at `index`); `baseline` is the
@@ -215,6 +219,7 @@ const AutogradingTestModal = ({
         if (!(e.target instanceof HTMLElement) || keepsNativeEnter(e.target))
           return
         e.preventDefault()
+        if (isRadio(e.target)) return
         if (dirty) handleCommit()
       }}
     >
