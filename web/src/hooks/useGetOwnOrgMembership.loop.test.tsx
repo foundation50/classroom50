@@ -24,6 +24,17 @@ const requestCount = vi.fn()
 // HTTP status the mocked membership read rejects with (per-test).
 let responseStatus = 403
 
+// Real header shape: a 403 with no throttle headers is a definitive forbidden,
+// not a rate limit (a `{}` here would read as Retry-After present).
+const noRateLimit = {
+  limit: null,
+  remaining: null,
+  used: null,
+  reset: null,
+  resource: null,
+  retryAfter: null,
+}
+
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({
     request: (path: string) => {
@@ -34,7 +45,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
           url: `https://api.github.com${path}`,
           message: `HTTP ${responseStatus}`,
           body: null,
-          rateLimit: {} as never,
+          rateLimit: noRateLimit,
         }),
       )
     },

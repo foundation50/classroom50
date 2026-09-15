@@ -329,6 +329,35 @@ describe("isTransientUserError", () => {
     expect(isTransientUserError(new GitHubUserFetchError(403))).toBe(false)
   })
 
+  it("treats a rate-limited 403 as transient (a throttle, not an auth verdict)", () => {
+    const throttled = {
+      limit: 5000,
+      remaining: 0,
+      used: 5000,
+      reset: null,
+      resource: "core",
+      retryAfter: null,
+    }
+    expect(isTransientUserError(new GitHubUserFetchError(403, throttled))).toBe(
+      true,
+    )
+    expect(
+      isTransientUserError(
+        new GitHubUserFetchError(403, {
+          ...throttled,
+          remaining: 10,
+          retryAfter: 30,
+        }),
+      ),
+    ).toBe(true)
+    // Headers present but quota left: a real 403, still definitive.
+    expect(
+      isTransientUserError(
+        new GitHubUserFetchError(403, { ...throttled, remaining: 4999 }),
+      ),
+    ).toBe(false)
+  })
+
   it("does NOT treat a definitive 404 as transient", () => {
     expect(isTransientUserError(new GitHubUserFetchError(404))).toBe(false)
   })
