@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.51.3](https://github.com/foundation50/classroom50/compare/web-v1.51.2...web-v1.51.3) (2026-09-15)
+
+
+### Bug Fixes
+
+* **web:** seed date pickers on toggle and fix audited browser edge cases ([#1000](https://github.com/foundation50/classroom50/issues/1000)) ([51ffc47](https://github.com/foundation50/classroom50/commit/51ffc47d23d3226131886b8cf3568209ea12efdf))
+
 ## [1.51.2](https://github.com/foundation50/classroom50/compare/web-v1.51.1...web-v1.51.2) (2026-09-14)
 
 
