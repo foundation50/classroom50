@@ -215,7 +215,8 @@
   },
   "notFound": {
     "title": "Page not found",
-    "message": "This page doesn't exist, or you don't have access to it."
+    "message": "This page doesn't exist, or you don't have access to it.",
+    "goHome": "Go to home"
   },
   "error": {
     "title": "Something went wrong",

@@ -12,8 +12,6 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as AccessibilityRouteImport } from './routes/accessibility'
 import { Route as AssessRouteImport } from './routes/assess'
-import { Route as AssignmentsRouteImport } from './routes/assignments'
-import { Route as ClassesRouteImport } from './routes/classes'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedOrgRouteRouteImport } from './routes/_authed/$org/route'
@@ -53,16 +51,6 @@ const AccessibilityRoute = AccessibilityRouteImport.update({
 const AssessRoute = AssessRouteImport.update({
   id: '/assess',
   path: '/assess',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const AssignmentsRoute = AssignmentsRouteImport.update({
-  id: '/assignments',
-  path: '/assignments',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClassesRoute = ClassesRouteImport.update({
-  id: '/classes',
-  path: '/classes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -212,8 +200,6 @@ export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/accessibility': typeof AccessibilityRoute
   '/assess': typeof AssessRoute
-  '/assignments': typeof AssignmentsRoute
-  '/classes': typeof ClassesRoute
   '/login': typeof LoginRoute
   '/$org': typeof AuthedOrgRouteRouteWithChildren
   '/auth/': typeof AuthIndexRoute
@@ -243,8 +229,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/accessibility': typeof AccessibilityRoute
   '/assess': typeof AssessRoute
-  '/assignments': typeof AssignmentsRoute
-  '/classes': typeof ClassesRoute
   '/login': typeof LoginRoute
   '/': typeof AuthedIndexRoute
   '/auth': typeof AuthIndexRoute
@@ -275,8 +259,6 @@ export interface FileRoutesById {
   '/_authed': typeof AuthedRouteWithChildren
   '/accessibility': typeof AccessibilityRoute
   '/assess': typeof AssessRoute
-  '/assignments': typeof AssignmentsRoute
-  '/classes': typeof ClassesRoute
   '/login': typeof LoginRoute
   '/_authed/$org': typeof AuthedOrgRouteRouteWithChildren
   '/_authed/': typeof AuthedIndexRoute
@@ -310,8 +292,6 @@ export interface FileRouteTypes {
     | '/'
     | '/accessibility'
     | '/assess'
-    | '/assignments'
-    | '/classes'
     | '/login'
     | '/$org'
     | '/auth/'
@@ -341,8 +321,6 @@ export interface FileRouteTypes {
   to:
     | '/accessibility'
     | '/assess'
-    | '/assignments'
-    | '/classes'
     | '/login'
     | '/'
     | '/auth'
@@ -372,8 +350,6 @@ export interface FileRouteTypes {
     | '/_authed'
     | '/accessibility'
     | '/assess'
-    | '/assignments'
-    | '/classes'
     | '/login'
     | '/_authed/$org'
     | '/_authed/'
@@ -406,8 +382,6 @@ export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   AccessibilityRoute: typeof AccessibilityRoute
   AssessRoute: typeof AssessRoute
-  AssignmentsRoute: typeof AssignmentsRoute
-  ClassesRoute: typeof ClassesRoute
   LoginRoute: typeof LoginRoute
   AuthIndexRoute: typeof AuthIndexRoute
 }
@@ -433,20 +407,6 @@ declare module '@tanstack/react-router' {
       path: '/assess'
       fullPath: '/assess'
       preLoaderRoute: typeof AssessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/assignments': {
-      id: '/assignments'
-      path: '/assignments'
-      fullPath: '/assignments'
-      preLoaderRoute: typeof AssignmentsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/classes': {
-      id: '/classes'
-      path: '/classes'
-      fullPath: '/classes'
-      preLoaderRoute: typeof ClassesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -725,8 +685,6 @@ const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   AccessibilityRoute: AccessibilityRoute,
   AssessRoute: AssessRoute,
-  AssignmentsRoute: AssignmentsRoute,
-  ClassesRoute: ClassesRoute,
   LoginRoute: LoginRoute,
   AuthIndexRoute: AuthIndexRoute,
 }
