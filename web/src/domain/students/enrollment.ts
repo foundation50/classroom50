@@ -19,7 +19,7 @@ import { GitHubAPIError } from "@/github-core/errors"
 import {
   normalizeStudentRow,
   splitName,
-  parseStudentsCsv,
+  parseRosterForRewrite,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
@@ -98,7 +98,9 @@ export async function addStudentToClassroom(
   const ctx = await readRosterForWrite(client, input.org, input.classroom)
 
   const githubUser = await getUser(client, normalizedUsername)
-  const currentStudents = parseStudentsCsv(ctx.currentCsv)
+  const { rows: currentStudents, columns } = parseRosterForRewrite(
+    ctx.currentCsv,
+  )
 
   // A row that already names this account is completed in place (see
   // findRowForAccount). Refused: a row already carrying both cells (a genuine
@@ -175,7 +177,7 @@ export async function addStudentToClassroom(
         index === existing.index ? student : row,
       )
     : [...currentStudents, student]
-  const nextCsv = stringifyStudentsCsv(nextStudents)
+  const nextCsv = stringifyStudentsCsv(nextStudents, columns)
 
   const written = await commitRoster(
     client,

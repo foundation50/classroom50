@@ -3,7 +3,7 @@ import { withGitConflictRetry, type CreateClassroomResult } from "../classrooms"
 import { studentKey } from "@/util/identity"
 import {
   normalizeStudentRow,
-  parseStudentsCsv,
+  parseRosterForRewrite,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
@@ -53,7 +53,9 @@ export async function updateStudent(
   }
 
   const ctx = await readRosterForWrite(client, org, classroom)
-  const currentStudents = parseStudentsCsv(ctx.currentCsv)
+  const { rows: currentStudents, columns } = parseRosterForRewrite(
+    ctx.currentCsv,
+  )
 
   // Stable per-row identity via the shared studentKey (github_id -> username ->
   // email), the same precedence the UI and reconcile use.
@@ -119,7 +121,7 @@ export async function updateStudent(
     : currentStudents.map((row, idx) =>
         idx === targetIndex ? updatedStudent : row,
       )
-  const nextCsv = stringifyStudentsCsv(nextStudents)
+  const nextCsv = stringifyStudentsCsv(nextStudents, columns)
 
   const written = await commitRoster(
     client,

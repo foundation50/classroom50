@@ -96,7 +96,11 @@ export async function withRosterRewrite(
   return withGitConflictRetry(async () => {
     const configBranch = await getConfigRepoBranch(client, org)
     const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
-    const { rows: currentStudents, problems } = parseRosterCsv(ctx.currentCsv)
+    const {
+      rows: currentStudents,
+      problems,
+      columns,
+    } = parseRosterCsv(ctx.currentCsv)
     if (problems.length > 0) {
       throw new RosterCsvMalformedError(formatRosterProblems(problems))
     }
@@ -108,7 +112,7 @@ export async function withRosterRewrite(
       client,
       org,
       ctx,
-      stringifyStudentsCsv(nextStudents),
+      stringifyStudentsCsv(nextStudents, columns),
       message,
     )
     return { changed }

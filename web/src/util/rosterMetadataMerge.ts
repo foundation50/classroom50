@@ -54,7 +54,7 @@ export function mergeStudentMetadata(
 }
 
 // Apply a merge result onto a full stored row, preserving every non-metadata
-// field (username, github_id, role, and any unknown columns) byte-for-byte.
+// field (username, github_id, role, and the row's extra columns) byte-for-byte.
 export function applyMetadataMerge(
   stored: StudentCsvRow,
   next: Record<MetadataField, string>,

@@ -10,7 +10,9 @@ export { splitName, studentKey }
 // Narrow a raw CSV row into a typed Student. Defaulting/trimming is delegated
 // to the canonical normalizeStudentRow (one shared column list with the write
 // path), so this is a thin pass-through.
-export function toStudent(row: Record<string, string>): Student {
+export function toStudent(
+  row: Parameters<typeof normalizeStudentRow>[0],
+): Student {
   return normalizeStudentRow(row)
 }
 

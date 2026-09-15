@@ -6,7 +6,7 @@ import { parseGitHubId, resolveGitHubId } from "@/util/students"
 import { normalizeInviteEmail } from "@/util/inviteTeam"
 import {
   normalizeStudentRow,
-  parseStudentsCsv,
+  parseRosterForRewrite,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
@@ -89,7 +89,9 @@ export async function syncRosterFromTeam(
         getConfigRepoBranch(client, org),
       ])
     const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
-    const currentStudents = parseStudentsCsv(ctx.currentCsv)
+    const { rows: currentStudents, columns } = parseRosterForRewrite(
+      ctx.currentCsv,
+    )
 
     // --- Invite fold: claim each recovered mapping onto its row -------------
     // Match by the invited email first (the row written at invite time), then
@@ -378,7 +380,10 @@ export async function syncRosterFromTeam(
       })
     })
 
-    const nextCsv = stringifyStudentsCsv([...reconciledStudents, ...addedRows])
+    const nextCsv = stringifyStudentsCsv(
+      [...reconciledStudents, ...addedRows],
+      columns,
+    )
 
     await commitRoster(
       client,

@@ -233,6 +233,31 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
     expect(bob?.github_id).toBe("43")
   })
 
+  // Issue #1001: a column the teacher (or the CLI, whose EncodeRoster keeps
+  // RosterRow.Extra) added to roster.csv must survive a web write, for every
+  // existing row; the new row gets "" in it.
+  it("preserves an extra roster.csv column the CLI would keep", async () => {
+    const wideHeader = HEADER.trimEnd() + ",student_id\n"
+    const { client, committed } = makeClient({
+      startingCsv:
+        wideHeader + "alice,Alice,A,alice@x.edu,P1,42,student,S-001\n",
+      membershipState: "active",
+      user: { login: "bob", id: 43 },
+    })
+
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "bob",
+    })
+
+    expect(committed.content).toBe(
+      wideHeader +
+        "alice,Alice,A,alice@x.edu,P1,42,student,S-001\n" +
+        "bob,,,,,43,,\n",
+    )
+  })
+
   it("throws StudentAlreadyEnrolledError when the login is already on the roster", async () => {
     const { client } = makeClient({
       startingCsv: `${HEADER}alice,,,,,42,\n`,

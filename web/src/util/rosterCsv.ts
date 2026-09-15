@@ -2,6 +2,7 @@ import Papa from "papaparse"
 
 import {
   escapeCsvFormulaInjection,
+  hasCsvFormulaLead,
   unescapeCsvFormulaInjection,
 } from "@/util/csv"
 
@@ -21,14 +22,25 @@ export const STUDENT_CSV_FIELDS = [
 ] as const
 type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
-export type StudentCsvRow = Record<StudentCsvField, string>
+// Cells of the header columns beyond the canonical seven, keyed by the verbatim
+// header name. A teacher may widen roster.csv by hand or via the CLI, and
+// every read-modify-write here must round-trip those cells like the CLI's
+// RosterRow.Extra does. Optional so a row built from the seven canonical fields
+// still type-checks; an absent key writes as "".
+export type StudentCsvRow = Record<StudentCsvField, string> & {
+  extra?: Record<string, string>
+}
+
+function isCanonicalColumn(name: string): name is StudentCsvField {
+  return (STUDENT_CSV_FIELDS as readonly string[]).includes(name)
+}
 
 // The keep-rule: which parsed rows survive a read (and a write). A row must
 // identify a student (username, github_id, or email) or at least DESCRIBE one
 // (a name) — a row with only section/role noise, or nothing at all, is
 // dropped. Callers pass normalizeStudentRow output, so every cell is already
-// trimmed. Mirrors the CLI's recordToRow rule; shared cases:
-// cli/shared/testdata/roster_row_cases.json.
+// trimmed. Mirrors the CLI's recordToRow rule (extra cells never count there
+// either); shared cases: cli/shared/testdata/roster_row_cases.json.
 function isKeptRosterRow(row: StudentCsvRow): boolean {
   return Boolean(
     row.username ||
@@ -40,11 +52,13 @@ function isKeptRosterRow(row: StudentCsvRow): boolean {
 }
 
 export function normalizeStudentRow(
-  row: Partial<Record<StudentCsvField, unknown>>,
+  row: Partial<Record<StudentCsvField, unknown>> & {
+    extra?: Record<string, unknown>
+  },
 ): StudentCsvRow {
   const cell = (value: unknown) =>
     unescapeCsvFormulaInjection(String(value ?? "").trim())
-  return {
+  const normalized: StudentCsvRow = {
     username: cell(row.username),
     first_name: cell(row.first_name),
     last_name: cell(row.last_name),
@@ -58,6 +72,17 @@ export function normalizeStudentRow(
     // column, so this coerces to "".
     role: cell(row.role),
   }
+  if (row.extra) {
+    // Undefanged but NOT trimmed: the CLI's recordToRow only undefangs an extra
+    // cell, and these columns belong to the teacher, so they round-trip as-is.
+    normalized.extra = Object.fromEntries(
+      Object.entries(row.extra).map(([name, value]) => [
+        name,
+        unescapeCsvFormulaInjection(String(value ?? "")),
+      ]),
+    )
+  }
+  return normalized
 }
 
 // Split a full name: first token is first_name, the remainder is last_name.
@@ -83,6 +108,9 @@ export type RosterCsvProblem = {
 export type ParsedRosterCsv = {
   rows: StudentCsvRow[]
   problems: RosterCsvProblem[]
+  // The header a rewrite must emit: the canonical columns, then every extra
+  // column in file order. Hand it back to stringifyStudentsCsv.
+  columns: string[]
 }
 
 // Parse roster.csv into normalized rows plus a structured list of problems.
@@ -96,6 +124,8 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
     skipEmptyLines: "greedy",
     transformHeader: (header) => header.trim(),
   })
+  const fields = parsed.meta.fields ?? []
+  const extraColumns = fields.filter((name) => !isCanonicalColumn(name))
 
   // A `TooFewFields` row is tolerated ONLY when it is short by exactly one
   // column — the ambiguous-but-benign "trailing `github_id` omitted" case:
@@ -118,24 +148,69 @@ export function parseRosterCsv(csv: string): ParsedRosterCsv {
       parsed.meta.fields?.length ?? STUDENT_CSV_FIELDS.length,
     )
 
-  const problems: RosterCsvProblem[] = parsed.errors
-    .filter(
-      (error) =>
-        error.type !== "Delimiter" &&
-        !(error.code === "TooFewFields" && shortRowsWithinTolerance),
-    )
-    // Papa's `row` is the 0-based DATA row; the file line is that + 2 (header is
-    // line 1). Fall back to line 1 for a file-level error with no row.
-    .map((error) => ({
-      line: typeof error.row === "number" ? error.row + 2 : 1,
-      message: error.message,
-    }))
+  const problems: RosterCsvProblem[] = [
+    ...extraColumnProblems(extraColumns, parsed.meta.renamedHeaders),
+    ...parsed.errors
+      .filter(
+        (error) =>
+          error.type !== "Delimiter" &&
+          !(error.code === "TooFewFields" && shortRowsWithinTolerance),
+      )
+      // Papa's `row` is the 0-based DATA row; the file line is that + 2 (header is
+      // line 1). Fall back to line 1 for a file-level error with no row.
+      .map((error) => ({
+        line: typeof error.row === "number" ? error.row + 2 : 1,
+        message: error.message,
+      })),
+  ]
 
   const rows = parsed.data
-    .map((row) => normalizeStudentRow(row))
+    .map((row) =>
+      normalizeStudentRow(
+        extraColumns.length === 0
+          ? row
+          : {
+              ...row,
+              extra: Object.fromEntries(
+                extraColumns.map((name) => [name, row[name] ?? ""]),
+              ),
+            },
+      ),
+    )
     .filter(isKeptRosterRow)
 
-  return { rows, problems }
+  return { rows, problems, columns: [...STUDENT_CSV_FIELDS, ...extraColumns] }
+}
+
+// Header-level problems for the extra columns, mirroring the CLI's parseRoster
+// rejections so neither tool writes a file the other refuses: a duplicate name
+// (Papa renames it to `name_1` and records the original in renamedHeaders; the
+// CLI clobbers on read), a name reusing a canonical column, and a name leading
+// with a formula trigger (header names are written verbatim, so it would
+// re-inject a formula). An empty name is accepted, as in the CLI. Header names
+// arrive trimmed (transformHeader), a web-side leniency the CLI doesn't share.
+function extraColumnProblems(
+  extraColumns: string[],
+  renamedHeaders: Record<string, string> | undefined,
+): RosterCsvProblem[] {
+  const problems: RosterCsvProblem[] = []
+  for (const [, original] of Object.entries(renamedHeaders ?? {})) {
+    problems.push({
+      line: 1,
+      message: isCanonicalColumn(original)
+        ? `Extra column "${original}" reuses a reserved column name`
+        : `Duplicate column "${original}"`,
+    })
+  }
+  for (const name of extraColumns) {
+    if (hasCsvFormulaLead(name)) {
+      problems.push({
+        line: 1,
+        message: `Extra column "${name}" begins with a spreadsheet formula trigger`,
+      })
+    }
+  }
+  return problems
 }
 
 // The view uses the structured `problems` instead of this flattened form.
@@ -143,14 +218,25 @@ export function formatRosterProblems(problems: RosterCsvProblem[]): string {
   return problems.map((p) => `line ${p.line}: ${p.message}`).join("; ")
 }
 
-export function parseStudentsCsv(csv: string): StudentCsvRow[] {
-  const { rows, problems } = parseRosterCsv(csv)
+// The strict read every roster rewrite starts from: rows plus the header, so
+// the writer can hand `columns` back to stringifyStudentsCsv and keep the
+// teacher's extra columns. Throws on any problem — a positional re-serialize of
+// a malformed file would corrupt the bad row.
+export function parseRosterForRewrite(csv: string): {
+  rows: StudentCsvRow[]
+  columns: string[]
+} {
+  const { rows, problems, columns } = parseRosterCsv(csv)
   if (problems.length > 0) {
     throw new Error(
       `Could not parse roster.csv: ${formatRosterProblems(problems)}`,
     )
   }
-  return rows
+  return { rows, columns }
+}
+
+export function parseStudentsCsv(csv: string): StudentCsvRow[] {
+  return parseRosterForRewrite(csv).rows
 }
 
 // True when EVERY short data row is short by exactly one column. Re-parses
@@ -198,31 +284,59 @@ export const FORMULA_GUARDED_FIELDS = [
   "role",
 ] as const
 
-export function stringifyStudentsCsv(rows: StudentCsvRow[]) {
+// Serialize rows as roster.csv: the canonical header, then the extra columns
+// (`columns` is the header a parse returned; defaults to canonical only). Extra
+// cells are defanged like the free-text canonical fields, matching the CLI's
+// EncodeRoster, and a row missing an extra key writes "".
+export function stringifyStudentsCsv(
+  rows: StudentCsvRow[],
+  columns: readonly string[] = STUDENT_CSV_FIELDS,
+) {
   const normalizedRows = rows
     .map((row) => normalizeStudentRow(row))
     .filter(isKeptRosterRow)
-    .map((row) => {
-      const guarded = { ...row }
-      for (const field of FORMULA_GUARDED_FIELDS) {
-        guarded[field] = escapeCsvFormulaInjection(guarded[field])
-      }
-      return guarded
-    })
+  const extraColumns = collectExtraColumns(columns, normalizedRows)
+  const header = [...STUDENT_CSV_FIELDS, ...extraColumns]
 
-  // Papa.unparse omits the header for an empty array, so an emptied roster
-  // would commit a header-less file the CLI/skeleton readers reject. Write the
-  // canonical header explicitly instead (keep in lockstep with STUDENT_CSV_FIELDS).
-  if (normalizedRows.length === 0) {
-    return STUDENT_CSV_FIELDS.join(",") + "\n"
-  }
+  const records = normalizedRows.map((row) => [
+    ...STUDENT_CSV_FIELDS.map((field) =>
+      GUARDED_FIELD_SET.has(field)
+        ? escapeCsvFormulaInjection(row[field])
+        : row[field],
+    ),
+    ...extraColumns.map((name) =>
+      escapeCsvFormulaInjection(row.extra?.[name] ?? ""),
+    ),
+  ])
 
-  return (
-    Papa.unparse(normalizedRows, {
-      columns: [...STUDENT_CSV_FIELDS],
-      delimiter: ",",
-      header: true,
-      newline: "\n",
-    }) + "\n"
+  // The `{ fields, data }` form writes the header even for zero rows, so an
+  // emptied roster keeps its header (and its extra columns) rather than
+  // committing a header-less file the CLI/skeleton readers reject. Papa ends
+  // only that header-only output with a newline, hence the conditional.
+  const csv = Papa.unparse(
+    { fields: header, data: records },
+    { delimiter: ",", header: true, newline: "\n" },
   )
+  return csv.endsWith("\n") ? csv : csv + "\n"
+}
+
+const GUARDED_FIELD_SET: ReadonlySet<string> = new Set(FORMULA_GUARDED_FIELDS)
+
+// The extra header: the parsed header's extras in file order, then any extra
+// key a row carries that the header didn't name (first-seen, like the CLI's
+// collectExtraColumns), so a caller that dropped `columns` still loses no cell.
+function collectExtraColumns(
+  columns: readonly string[],
+  rows: StudentCsvRow[],
+): string[] {
+  const ordered: string[] = []
+  const seen = new Set<string>()
+  const add = (name: string) => {
+    if (isCanonicalColumn(name) || seen.has(name)) return
+    seen.add(name)
+    ordered.push(name)
+  }
+  columns.forEach(add)
+  for (const row of rows) Object.keys(row.extra ?? {}).forEach(add)
+  return ordered
 }

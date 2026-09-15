@@ -142,6 +142,7 @@ export {
   normalizeStudentRow,
   splitName,
   parseRosterCsv,
+  parseRosterForRewrite,
   formatRosterProblems,
   parseStudentsCsv,
   stringifyStudentsCsv,

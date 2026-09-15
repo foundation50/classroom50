@@ -10,7 +10,7 @@ import { getUser } from "@/github-core/queries"
 import {
   normalizeStudentRow,
   splitName,
-  parseStudentsCsv,
+  parseRosterForRewrite,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
@@ -118,7 +118,9 @@ export async function addStudentsToClassroom(
     input.classroom,
     configBranch,
   )
-  const currentStudents = parseStudentsCsv(ctx.currentCsv)
+  const { rows: currentStudents, columns } = parseRosterForRewrite(
+    ctx.currentCsv,
+  )
 
   const existingUsernameKeys = new Set(
     currentStudents.map((student) => student.username.toLowerCase()),
@@ -230,7 +232,7 @@ export async function addStudentsToClassroom(
   })
 
   const nextStudents = [...currentStudents, ...addedStudents]
-  const nextCsv = stringifyStudentsCsv(nextStudents)
+  const nextCsv = stringifyStudentsCsv(nextStudents, columns)
 
   const written = await commitRoster(
     client,

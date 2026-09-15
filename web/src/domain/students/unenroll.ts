@@ -9,7 +9,7 @@ import { getAuthenticatedUser } from "@/domain/queries/users"
 import { getConfigRepoBranch } from "@/github-core/configRepoReads"
 import { isSameGitHubUser } from "@/util/students"
 import {
-  parseStudentsCsv,
+  parseRosterForRewrite,
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "@/util/rosterCsv"
@@ -66,7 +66,9 @@ export async function unenrollStudent(
 
   const configBranch = await getConfigRepoBranch(client, org)
   const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
-  const currentStudents = parseStudentsCsv(ctx.currentCsv)
+  const { rows: currentStudents, columns } = parseRosterForRewrite(
+    ctx.currentCsv,
+  )
 
   // Match the target row via the shared roster-row matcher (username/github_id).
   const sameRow = (student: StudentCsvRow) =>
@@ -81,7 +83,7 @@ export async function unenrollStudent(
   }
 
   const nextStudents = currentStudents.filter((student) => !sameRow(student))
-  const nextCsv = stringifyStudentsCsv(nextStudents)
+  const nextCsv = stringifyStudentsCsv(nextStudents, columns)
 
   const written = await commitRoster(
     client,
@@ -243,7 +245,9 @@ export async function bulkUnenrollStudents(
   await withGitConflictRetry(async () => {
     const configBranch = await getConfigRepoBranch(client, org)
     const ctx = await readRosterForWriteAt(client, org, classroom, configBranch)
-    const currentStudents = parseStudentsCsv(ctx.currentCsv)
+    const { rows: currentStudents, columns } = parseRosterForRewrite(
+      ctx.currentCsv,
+    )
 
     removed = targets.filter((target) =>
       currentStudents.some((row) => matchesTarget(row, target)),
@@ -259,7 +263,7 @@ export async function bulkUnenrollStudents(
     const nextStudents = currentStudents.filter(
       (row) => !removed.some((target) => matchesTarget(row, target)),
     )
-    const nextCsv = stringifyStudentsCsv(nextStudents)
+    const nextCsv = stringifyStudentsCsv(nextStudents, columns)
 
     const written = await commitRoster(
       client,

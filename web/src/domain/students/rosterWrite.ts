@@ -13,7 +13,7 @@ import {
 // The read half of every roster.csv write: the config-repo head plus the file
 // as it stands at that head, so no writer reads at one ref and commits
 // against another. The CSV is returned raw because the writers split on how
-// to parse it (lenient parseStudentsCsv vs strict parseRosterCsv).
+// to parse it (throwing parseRosterForRewrite vs problem-listing parseRosterCsv).
 export type RosterWriteContext = ConfigRepoHead & {
   path: string
   currentCsv: string
