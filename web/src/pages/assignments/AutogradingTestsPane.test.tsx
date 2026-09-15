@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, waitFor } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 // Match on stable i18n keys rather than English copy; keep the rest of
@@ -266,6 +272,148 @@ describe("AutogradingTestsPane editor commit gating", () => {
     // Field errors are describedby text, not live regions (Primer) — assert
     // the error copy renders.
     expect(screen.getByText("Run command is required.")).toBeTruthy()
+    expect(tests()).toHaveLength(0)
+  })
+})
+
+describe("AutogradingTestsPane number fields (#1002)", () => {
+  const openEditor = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText("assignments.autograder.addTest"))
+  }
+  const pointsInput = () =>
+    screen.getByLabelText("assignments.autograder.points") as HTMLInputElement
+
+  it("an emptied points field stays empty instead of snapping to 0", async () => {
+    const user = userEvent.setup()
+    renderPane()
+    await openEditor(user)
+
+    const input = pointsInput()
+    expect(input.value).toBe("10")
+    // Select-all + Backspace: the browser reports "" and the model must not
+    // become 0, or React writes "0" back and the next digit renders as "05".
+    fireEvent.change(input, { target: { value: "" } })
+    expect(input.value).toBe("")
+
+    fireEvent.change(input, { target: { value: "5" } })
+    expect(input.value).toBe("5")
+  })
+
+  it("a half-typed entry the browser reports as badInput is left alone", async () => {
+    const user = userEvent.setup()
+    renderPane()
+    await openEditor(user)
+
+    const input = pointsInput()
+    // Firefox lets "12a" through and Chrome lets "1e" through; both read "" with
+    // validity.badInput set. Coercing that to 0 clobbered the user's text.
+    Object.defineProperty(input, "validity", {
+      value: { badInput: true, valid: false },
+      configurable: true,
+    })
+    fireEvent.change(input, { target: { value: "" } })
+    expect(input.value).toBe("")
+  })
+
+  it("a half-typed exit code is kept as invalid rather than dropped as unset", async () => {
+    const user = userEvent.setup()
+    renderPane()
+    await openEditor(user)
+
+    await user.click(
+      screen.getByLabelText("assignments.autograder.type.run.label"),
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.testName"),
+      "Exits",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.runCommand"),
+      "./run",
+    )
+    const exitCode = screen.getByLabelText(
+      "assignments.autograder.exitCode",
+    ) as HTMLInputElement
+    fireEvent.change(exitCode, { target: { value: "1" } })
+    // Chrome: "1e" reads "" with badInput set (a React change fires because
+    // the value moved off "1").
+    Object.defineProperty(exitCode, "validity", {
+      value: { badInput: true, valid: false },
+      configurable: true,
+    })
+    fireEvent.change(exitCode, { target: { value: "" } })
+
+    // Storing "" (unset) would have let the commit through silently; the
+    // partial entry must surface as a validation error instead.
+    const action = document.querySelector("dialog[open] .modal-action")
+    const commit = Array.from(action?.querySelectorAll("button") ?? []).find(
+      (b) => b.textContent === "assignments.autograder.addTest",
+    )
+    if (!commit) throw new Error("commit button not found")
+    await user.click(commit)
+    expect(
+      screen.getByText("Exit code must be a whole number between 0 and 255."),
+    ).toBeTruthy()
+  })
+
+  it("an emptied timeout snaps back to 0 (runner default) on blur", async () => {
+    const user = userEvent.setup()
+    renderPane()
+    await openEditor(user)
+
+    const input = screen.getByLabelText(
+      "assignments.autograder.timeout",
+    ) as HTMLInputElement
+    fireEvent.change(input, { target: { value: "" } })
+    expect(input.value).toBe("")
+    fireEvent.blur(input)
+    expect(input.value).toBe("0")
+  })
+})
+
+describe("AutogradingTestsPane Enter handling (#1003)", () => {
+  const fillValidDraft = async (user: ReturnType<typeof userEvent.setup>) => {
+    await user.click(screen.getByText("assignments.autograder.addTest"))
+    await user.type(
+      screen.getByLabelText("assignments.autograder.testName"),
+      "Prints hello",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.runCommand"),
+      "./hello",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.expectedOutput"),
+      "hello",
+    )
+  }
+
+  it("Enter commits from a text input, but not while an IME is composing", async () => {
+    const user = userEvent.setup()
+    const tests = renderPane()
+    await fillValidDraft(user)
+    const name = screen.getByLabelText("assignments.autograder.testName")
+
+    fireEvent.keyDown(name, { key: "Enter", isComposing: true })
+    expect(tests()).toHaveLength(0)
+
+    fireEvent.keyDown(name, { key: "Enter" })
+    await waitFor(() => expect(tests()).toHaveLength(1))
+  })
+
+  it("Enter on a select or radio keeps its native meaning", async () => {
+    const user = userEvent.setup()
+    const tests = renderPane()
+    await fillValidDraft(user)
+
+    fireEvent.keyDown(
+      screen.getByLabelText("assignments.autograder.comparison"),
+      { key: "Enter" },
+    )
+    fireEvent.keyDown(
+      screen.getByLabelText("assignments.autograder.type.io.label"),
+      { key: "Enter" },
+    )
     expect(tests()).toHaveLength(0)
   })
 })

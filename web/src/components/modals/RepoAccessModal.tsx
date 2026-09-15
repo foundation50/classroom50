@@ -34,6 +34,7 @@ import {
   rejectedItems,
 } from "@/components/modals/collaboratorHelpers"
 import { permissionSatisfies } from "@/domain/assignments/permissions"
+import { isComposingKey } from "@/util/imeComposition"
 import type { RepoPermission, Student } from "@/types/classroom"
 import { REPO_PERMISSIONS } from "@/types/classroom"
 
@@ -568,7 +569,7 @@ export function RepoAccessModal({
                 value={newCollaborator}
                 onChange={(e) => setNewCollaborator(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !isComposingKey(e)) {
                     e.preventDefault()
                     addPending()
                   }

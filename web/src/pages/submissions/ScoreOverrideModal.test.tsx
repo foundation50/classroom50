@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 vi.mock("react-i18next", async (importOriginal) => {
@@ -183,6 +183,16 @@ describe("ScoreOverrideModal", () => {
     await user.clear(input)
     await user.type(input, "30{Enter}{Enter}")
     expect(mutate).toHaveBeenCalledTimes(1)
+  })
+
+  it("ignores the Enter an IME uses to commit a candidate", async () => {
+    const user = userEvent.setup()
+    renderModal()
+    const input = screen.getByRole("spinbutton")
+    await user.clear(input)
+    await user.type(input, "30")
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true })
+    expect(mutate).not.toHaveBeenCalled()
   })
 
   it("prompts for the max on a pending autograded row and blocks save until both are valid", async () => {

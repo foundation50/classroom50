@@ -37,6 +37,7 @@ import { useSyncTeamsSnapshot } from "@/hooks/mutations/useSaveTeamsSnapshot"
 import { resolveMembershipDraft } from "@/domain/teams/membershipDraft"
 import type { GroupTeamPrivacy, GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupDefaultName, groupDisplayName } from "@/util/groupTeam"
+import { isComposingKey } from "@/util/imeComposition"
 
 // The two guardrail 403s named in copy instead of a raw GitHub message: an org
 // that restricts team creation to owners, and a team-sync/IdP-managed team
@@ -373,7 +374,7 @@ export function ManageGroupDialog({
                   placeholder={groupDefaultName(team.n, t)}
                   onChange={(e) => setNameDraft(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !isComposingKey(e)) {
                       e.preventDefault()
                       void saveName()
                     }

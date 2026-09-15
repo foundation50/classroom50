@@ -88,7 +88,8 @@ export type ModalProps = {
   // affordance or must block dismissal while submitting).
   hideCloseButton?: boolean
   // Block dismissal while a submit is in flight: disables the close X + backdrop
-  // close, vetoes Esc (see the onCancel guard below), and holds the dialog open
+  // close, vetoes Esc (see the onCancel guard below), reopens after a close the
+  // veto couldn't stop (see handleNativeClose), and holds the dialog open
   // against a controlled `open=false` transition (see the open-sync effect).
   closeDisabled?: boolean
   // Legacy escape hatches — prefer `title`, which wires labeling automatically.
@@ -161,11 +162,27 @@ export function Modal({
     if (dialog?.open) dialog.close()
   }
 
+  // Every close path is blocked while `closeDisabled` (controls disabled, Esc
+  // vetoed, open-sync held), but Chrome's CloseWatcher lets a second Esc with
+  // no user activation in between close the dialog anyway (#1005). Treat a
+  // close in that state as the veto having failed: reopen and swallow it, so
+  // the parent never learns of a dismissal it was promised couldn't happen.
+  const handleNativeClose = (
+    event: React.SyntheticEvent<HTMLDialogElement>,
+  ) => {
+    if (closeDisabled) {
+      const dialog = event.currentTarget
+      if (!dialog.open) dialog.showModal()
+      return
+    }
+    onClose?.()
+  }
+
   return (
     <dialog
       ref={setRefs}
       className="modal"
-      onClose={() => onClose?.()}
+      onClose={handleNativeClose}
       onKeyDown={onKeyDown}
       onCancel={(event) => {
         // Esc triggers `cancel` before `close`. When dismissal is blocked

@@ -11,6 +11,7 @@ import {
   MonoLtr,
   type ButtonVariant,
 } from "@/components/ui"
+import { isComposingKey } from "@/util/imeComposition"
 
 type ConfirmModalProps = {
   open: boolean
@@ -245,7 +246,7 @@ export function ConfirmModal({
             onChange={(event) => setTypedText(event.target.value)}
             onKeyDown={(event) => {
               // Enter would otherwise implicitly submit an enclosing page form.
-              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+              if (event.key === "Enter" && !isComposingKey(event)) {
                 event.preventDefault()
                 if (matches) void handleSubmit()
               }

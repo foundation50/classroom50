@@ -27,6 +27,7 @@ import {
   fieldControlProps,
   fieldError,
   normalizeOnBlur,
+  numberInputProps,
 } from "./formFieldHelpers"
 import { deriveFormShape } from "./formShape"
 import { CollapsibleAdvanced } from "./sections/CollapsibleAdvanced"
@@ -214,15 +215,17 @@ export const AdvancedSection = ({
                                     min={0}
                                     max={TEST_TIMEOUT_MAX_SECONDS}
                                     step={1}
-                                    value={field.state.value}
+                                    {...numberInputProps(field.state.value)}
                                     disabled={!hasSetupCommand}
-                                    onBlur={field.handleBlur}
+                                    onBlur={() => {
+                                      // A field left blank means "runner
+                                      // default", which the model spells 0.
+                                      if (Number.isNaN(field.state.value))
+                                        field.handleChange(0)
+                                      field.handleBlur()
+                                    }}
                                     onChange={(e) =>
-                                      field.handleChange(
-                                        e.target.value === ""
-                                          ? 0
-                                          : e.target.valueAsNumber,
-                                      )
+                                      field.handleChange(e.target.valueAsNumber)
                                     }
                                     invalid={invalid}
                                     aria-describedby={describedById}
@@ -371,10 +374,10 @@ export const AdvancedSection = ({
                                   aria-describedby={
                                     error ? `${field.name}-error` : undefined
                                   }
-                                  value={field.state.value}
+                                  {...numberInputProps(field.state.value)}
                                   onBlur={field.handleBlur}
                                   onChange={(e) =>
-                                    field.handleChange(Number(e.target.value))
+                                    field.handleChange(e.target.valueAsNumber)
                                   }
                                 />
                                 <span className="text-sm text-base-content/70">

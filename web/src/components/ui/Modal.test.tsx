@@ -138,6 +138,33 @@ describe("Modal", () => {
     expect(cancel.defaultPrevented).toBe(false)
   })
 
+  it("reopens and swallows a close that slipped past the veto while closeDisabled", () => {
+    // Chrome's CloseWatcher makes a second Esc without user activation
+    // non-cancelable (#1005): the dialog closes despite the onCancel veto.
+    const onClose = vi.fn()
+    const { container, rerender } = render(
+      <Modal open closeDisabled onClose={onClose} aria-label="dlg">
+        x
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+    expect(dialog.open).toBe(true)
+
+    dialog.close()
+    expect(dialog.open).toBe(true)
+    expect(onClose).not.toHaveBeenCalled()
+
+    // Once the lock releases, a real dismissal goes through as usual.
+    rerender(
+      <Modal open onClose={onClose} aria-label="dlg">
+        x
+      </Modal>,
+    )
+    dialog.close()
+    expect(dialog.open).toBe(false)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   it("holds the dialog open against open=false while closeDisabled, then closes when the lock releases", () => {
     const { container, rerender } = render(
       <Modal open closeDisabled aria-label="dlg">

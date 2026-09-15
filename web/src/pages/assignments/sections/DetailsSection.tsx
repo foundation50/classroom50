@@ -21,7 +21,11 @@ import { slugBudgetError, type AssignmentForm } from "../assignmentFormModel"
 import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
 import useOrgTeamCreationAllowed from "@/hooks/useOrgTeamCreationAllowed"
-import { fieldControlProps, fieldError } from "../formFieldHelpers"
+import {
+  fieldControlProps,
+  fieldError,
+  numberInputProps,
+} from "../formFieldHelpers"
 
 // Assignment Details (IA overhaul U4): the assignment's identity — name, slug,
 // description, and type. Repository source, autograding, features, and schedule
@@ -387,11 +391,7 @@ export function DetailsSection({
                         min: GROUP_SIZE_MIN,
                         max: GROUP_SIZE_MAX,
                       })}
-                      value={
-                        Number.isFinite(field.state.value)
-                          ? field.state.value
-                          : ""
-                      }
+                      {...numberInputProps(field.state.value)}
                       onBlur={() => {
                         // Snap to a valid whole number on blur so the CLI never
                         // sees a non-integer or out-of-range size.

@@ -33,6 +33,7 @@ import {
 } from "@/components/modals/collaboratorHelpers"
 import type { Student } from "@/types/classroom"
 import { GROUP_SIZE_MIN } from "@/types/classroom"
+import { isComposingKey } from "@/util/imeComposition"
 
 type GroupCollaboratorsModalProps = {
   open: boolean
@@ -577,7 +578,7 @@ export function GroupCollaboratorsModal({
                   value={newCollaborator}
                   onChange={(e) => setNewCollaborator(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
+                    if (e.key === "Enter" && !isComposingKey(e)) {
                       e.preventDefault()
                       addPendingUsername()
                     }

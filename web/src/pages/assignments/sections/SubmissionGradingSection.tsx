@@ -7,7 +7,11 @@ import { deriveFormShape } from "../formShape"
 import { SectionCard } from "./SectionCard"
 import { SubmissionsSubsection } from "./SubmissionsSubsection"
 import { AutograderConfig } from "./AutograderConfig"
-import { fieldControlProps, fieldError } from "../formFieldHelpers"
+import {
+  fieldControlProps,
+  fieldError,
+  numberInputProps,
+} from "../formFieldHelpers"
 
 // Submission and Grading: what counts as a submission (the Submissions
 // subsection — shown first, since grading is downstream of it), how the
@@ -201,12 +205,13 @@ function ManualMaxPointsField({ form }: { form: AssignmentForm }) {
             {({ id, describedById, invalid }) => (
               <Input
                 {...fieldControlProps(field, { id, describedById, invalid })}
+                {...numberInputProps(field.state.value)}
                 type="number"
                 inputMode="numeric"
                 min={GRADING_MAX_POINTS_MIN}
                 step={1}
                 className="w-28"
-                onChange={(e) => field.handleChange(Number(e.target.value))}
+                onChange={(e) => field.handleChange(e.target.valueAsNumber)}
               />
             )}
           </FormField>

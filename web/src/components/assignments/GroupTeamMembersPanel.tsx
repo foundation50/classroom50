@@ -20,6 +20,7 @@ import useLeaveGroupTeam from "@/hooks/mutations/useLeaveGroupTeam"
 import { groupTeamUrl, isGroupOverCapacity } from "@/domain/teams/groupTeams"
 import { errorText } from "@/types/localizedMessage"
 import { normalizeUsername } from "@/components/modals/collaboratorHelpers"
+import { isComposingKey } from "@/util/imeComposition"
 import type { TeamFormation } from "@/types/classroom"
 
 // Member management for a TEAM-mode group: the group is a real GitHub Team, so
@@ -271,7 +272,7 @@ export function GroupTeamMembersPanel({
               value={newMember}
               onChange={(e) => setNewMember(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === "Enter" && !isComposingKey(e)) {
                   e.preventDefault()
                   void handleAdd()
                 }

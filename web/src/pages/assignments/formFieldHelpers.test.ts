@@ -1,7 +1,9 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import type { WheelEvent } from "react"
 import {
   dueDateSeed,
   isDeliberatelyCleared,
+  numberInputProps,
   releaseDateSeed,
   utcIsoToDatetimeLocalValue,
 } from "./formFieldHelpers"
@@ -43,5 +45,22 @@ describe("isDeliberatelyCleared", () => {
     expect(isDeliberatelyCleared(input("", false))).toBe(true)
     expect(isDeliberatelyCleared(input("", true))).toBe(false)
     expect(isDeliberatelyCleared(input("2026-09-22T23:59", false))).toBe(false)
+  })
+})
+
+describe("numberInputProps (#1002)", () => {
+  it("renders a real number as-is and NaN (emptied or half-typed) as empty", () => {
+    expect(numberInputProps(5).value).toBe(5)
+    expect(numberInputProps(0).value).toBe(0)
+    expect(numberInputProps(NaN).value).toBe("")
+    expect(numberInputProps("").value).toBe("")
+  })
+
+  it("blurs the field on wheel so Chrome cannot step it while scrolling", () => {
+    const blur = vi.fn()
+    numberInputProps(5).onWheel({
+      currentTarget: { blur },
+    } as unknown as WheelEvent<HTMLInputElement>)
+    expect(blur).toHaveBeenCalledTimes(1)
   })
 })

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Alert, Button, FormField, Input, Modal } from "@/components/ui"
 import { ScoreBadge } from "@/pages/submissions/ScoreBadge"
 import { useSetScoreOverride } from "@/hooks/mutations/useSetScoreOverride"
+import { isComposingKey } from "@/util/imeComposition"
 
 // The write context an override edit needs, independent of the row's current
 // value. Mirrors the fields editScoreOverride consumes.
@@ -299,7 +300,7 @@ export function ScoreOverrideModal({
                 value={draft}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !isComposingKey(e)) {
                     e.preventDefault()
                     save()
                   }
@@ -336,7 +337,7 @@ export function ScoreOverrideModal({
                 value={maxDraft}
                 onChange={(e) => setMaxDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !isComposingKey(e)) {
                     e.preventDefault()
                     save()
                   }

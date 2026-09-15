@@ -9,8 +9,10 @@ import {
 } from "@/components/ui/icons"
 import { TableEmptyRow } from "@/components/list"
 import { useRevealOnExpand } from "@/hooks/useRevealOnExpand"
+import { isComposingKey } from "@/util/imeComposition"
 import { assignmentBundleUploadUrl } from "@/util/orgUrl"
 import type { AssignmentForm } from "./assignmentFormModel"
+import { isDeliberatelyCleared, numberInputProps } from "./formFieldHelpers"
 import { TeacherFilesModal } from "./TeacherFilesModal"
 
 import {
@@ -130,6 +132,13 @@ type TestReportDefaults = {
 
 type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
 
+// Controls where Enter already has a native meaning the editor must not steal.
+const keepsNativeEnter = (el: HTMLElement) =>
+  el.tagName === "TEXTAREA" ||
+  el.tagName === "BUTTON" ||
+  el.tagName === "SELECT" ||
+  (el instanceof HTMLInputElement && el.type === "radio")
+
 // Editor works on a local copy; nothing reaches the form's `tests` until commit.
 // `mode` routes commit (append vs overwrite at `index`); `baseline` is the
 // opening state the dirty check compares against.
@@ -199,16 +208,14 @@ const AutogradingTestModal = ({
       onKeyDown={(e) => {
         // Enter inside a modal input would implicitly submit the surrounding
         // create-assignment form (this modal renders inside it). Repurpose as
-        // commit; textareas keep Enter for newlines.
-        if (
-          e.key === "Enter" &&
-          e.target instanceof HTMLElement &&
-          e.target.tagName !== "TEXTAREA" &&
-          e.target.tagName !== "BUTTON"
-        ) {
-          e.preventDefault()
-          if (dirty) handleCommit()
-        }
+        // commit; textareas keep Enter for newlines, and a select or radio
+        // keeps it for its own choice. An IME committing a candidate must not
+        // commit the test.
+        if (e.key !== "Enter" || isComposingKey(e)) return
+        if (!(e.target instanceof HTMLElement) || keepsNativeEnter(e.target))
+          return
+        e.preventDefault()
+        if (dirty) handleCommit()
       }}
     >
       <div className="mt-6 space-y-5">
@@ -377,11 +384,15 @@ const AutogradingTestModal = ({
                 min={0}
                 max={255}
                 step={1}
-                value={draft.exitCode}
+                {...numberInputProps(draft.exitCode)}
                 onChange={(e) =>
+                  // "" is "not checked"; a half-typed entry also reads "" but
+                  // must stay NaN so React leaves the user's text in place.
                   set(
                     "exitCode",
-                    e.target.value === "" ? "" : e.target.valueAsNumber,
+                    isDeliberatelyCleared(e.target)
+                      ? ""
+                      : e.target.valueAsNumber,
                   )
                 }
                 placeholder="0"
@@ -416,13 +427,12 @@ const AutogradingTestModal = ({
                 min={0}
                 max={TEST_TIMEOUT_MAX_SECONDS}
                 step={1}
-                value={draft.timeout}
-                onChange={(e) =>
-                  set(
-                    "timeout",
-                    e.target.value === "" ? 0 : e.target.valueAsNumber,
-                  )
-                }
+                {...numberInputProps(draft.timeout)}
+                onBlur={() => {
+                  // Blank means "runner default", which the draft spells 0.
+                  if (Number.isNaN(draft.timeout)) set("timeout", 0)
+                }}
+                onChange={(e) => set("timeout", e.target.valueAsNumber)}
                 invalid={invalid}
                 aria-describedby={describedById}
               />
@@ -442,13 +452,8 @@ const AutogradingTestModal = ({
                 min={0}
                 max={1000}
                 step={1}
-                value={draft.points}
-                onChange={(e) =>
-                  set(
-                    "points",
-                    e.target.value === "" ? 0 : e.target.valueAsNumber,
-                  )
-                }
+                {...numberInputProps(draft.points)}
+                onChange={(e) => set("points", e.target.valueAsNumber)}
                 invalid={invalid}
                 aria-describedby={describedById}
               />

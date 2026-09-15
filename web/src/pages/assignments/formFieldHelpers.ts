@@ -1,6 +1,7 @@
 // Re-exported from the shared hooks location so existing imports here keep
 // working; the canonical definition lives in hooks/useDebouncedValue.
 export { useDebouncedValue } from "@/hooks/useDebouncedValue"
+import type { WheelEvent } from "react"
 import { dueDeadlineInstant } from "@/util/formatDate"
 
 // Minimal subset of a TanStack form field for a string-valued input.
@@ -99,3 +100,14 @@ export const releaseDateSeed = (now = new Date()) => {
 // (#999). Older Safari reports partial input as valid; the seed avoids that.
 export const isDeliberatelyCleared = (input: HTMLInputElement) =>
   input.value === "" && !input.validity?.badInput
+
+// Props for a controlled `type="number"` input whose model is read with
+// `valueAsNumber` (#1002). An emptied or half-typed field ("1e" in Chrome,
+// "12a" in Firefox) reads NaN; rendering that as "" leaves the DOM alone, where
+// a coerced 0 made React write "0" back (select-all+Backspace showed 0, typing
+// 5 showed 05). Blurring on wheel stops Chrome stepping a focused field as the
+// page scrolls under the pointer.
+export const numberInputProps = (value: number | "") => ({
+  value: typeof value === "number" && !Number.isFinite(value) ? "" : value,
+  onWheel: (e: WheelEvent<HTMLInputElement>) => e.currentTarget.blur(),
+})

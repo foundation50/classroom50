@@ -8,6 +8,7 @@ import {
 } from "react"
 
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
+import { isComposingKey } from "@/util/imeComposition"
 import { cx } from "./cx"
 import { popoverPanelClass } from "./DropdownMenu"
 import { Input, type InputProps } from "./Input"
@@ -116,6 +117,9 @@ export function Combobox<T>({
   }
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // While an IME is composing, arrows walk its candidate list and Enter
+    // commits a candidate; the listbox must not swallow either.
+    if (isComposingKey(event)) return
     switch (event.key) {
       case "ArrowDown":
         event.preventDefault()

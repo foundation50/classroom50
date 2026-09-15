@@ -31,6 +31,7 @@ import { snapshotDrift } from "@/domain/teams/teamsFile"
 import type { GroupTeamRef } from "@/domain/teams/groupTeams"
 import { groupRepoName } from "@/util/studentRepo"
 import { groupDisplayName } from "@/util/groupTeam"
+import { isComposingKey } from "@/util/imeComposition"
 import { ManageGroupDialog, describeTeamWriteError } from "./ManageGroupDialog"
 import { CopyGroupsModal } from "./CopyGroupsModal"
 import { GroupRow } from "./GroupRow"
@@ -485,7 +486,7 @@ export function GroupsManager({
                 maxLength={80}
                 onChange={(e) => setDisplayName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  if (e.key === "Enter" && !isComposingKey(e)) {
                     e.preventDefault()
                     void handleCreate()
                   }

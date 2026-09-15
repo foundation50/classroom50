@@ -133,6 +133,21 @@ describe("ConfirmModal — children and confirmDisabled", () => {
     })
     expect(onConfirm).toHaveBeenCalledTimes(1)
   })
+
+  it("ignores the Enter an IME uses to commit a candidate", async () => {
+    const { onConfirm } = renderConfirm({})
+    fireEvent.click(screen.getByText("components.confirmModal.yesContinue"))
+    const input = screen.getByRole("textbox")
+    fireEvent.change(input, { target: { value: "confirm" } })
+
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter", isComposing: true })
+    })
+    await act(async () => {
+      fireEvent.keyDown(input, { key: "Enter", keyCode: 229 })
+    })
+    expect(onConfirm).not.toHaveBeenCalled()
+  })
 })
 
 // The rejection contract every converted feedback flow now relies on
