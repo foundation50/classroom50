@@ -209,9 +209,8 @@ export function mergeLiveRows(
 
 // `late` for a pending live row: submission time strictly after the due date.
 // Undefined (unknown, not "on time") when either side is missing/unparseable.
-// Parses the due through dueDeadlineInstant so a legacy bare YYYY-MM-DD means
-// end of that local day, matching the overdue badge (raw `new Date` would read
-// it as UTC midnight and flag a same-day submission late).
+// dueDeadlineInstant gives a legacy bare YYYY-MM-DD its end-of-day meaning,
+// matching the overdue badge (raw `new Date` reads it as UTC midnight).
 function liveLateness(
   submittedAt: string,
   dueDate: string | null | undefined,

@@ -45,8 +45,8 @@ export function orgFromPathname(
   const segments = rest.split("/").filter(Boolean)
   const first = segments[0]
   if (!first || RESERVED_FIRST_SEGMENTS.has(first)) return undefined
-  // Browsers keep a malformed escape (`/abc%`) verbatim in the pathname, and
-  // this runs in a store snapshot above the router's error boundary.
+  // A malformed escape (`/abc%`) stays in the pathname, and this runs above
+  // the router's error boundary.
   try {
     return decodeURIComponent(first)
   } catch {

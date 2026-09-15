@@ -7,11 +7,9 @@ import {
   setItemOrIgnore,
 } from "@/lib/webStorage"
 
-// Every access goes through the guarded probes: touching `window.localStorage`
-// throws SecurityError when storage is blocked (Safari "Block all cookies", an
-// LMS iframe with third-party cookies off), and this module runs in the auth
-// provider's mount effect, above every error boundary. Without storage the
-// session simply doesn't persist across loads.
+// Guarded probes only: `window.localStorage` throws when storage is blocked
+// (Safari "Block all cookies", an LMS iframe), and this runs above every error
+// boundary. Without storage the session just doesn't persist.
 
 export function getStoredGithubToken() {
   return localStorageOrNull()?.getItem(GITHUB_AUTH_STORAGE.TOKEN) ?? null

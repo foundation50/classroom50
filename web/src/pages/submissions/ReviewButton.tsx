@@ -49,16 +49,13 @@ export const FeedbackPrAction = ({
   // row would be dead DOM weight on large rosters.
   const [modalOpen, setModalOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
-  // The PR the browser refused to open in a new tab: Safari (and Chrome after
-  // its activation window) block window.open once the click's user activation
-  // has lapsed behind the PR lookup, returning null. Rather than silently
-  // doing nothing, surface the PR as a link the teacher can click directly.
+  // The PR the browser refused to open: Safari blocks window.open once the
+  // click's activation has lapsed behind the lookup. Offer it as a link.
   const [blockedPrUrl, setBlockedPrUrl] = useState<string | null>(null)
 
   const openPr = (url: string) => {
-    // No `noopener` in the feature string: the spec makes window.open return
-    // null whenever it is set, which would make every successful open look
-    // blocked. Sever the opener by hand instead.
+    // No `noopener`: with it window.open returns null even on success, so
+    // "blocked" would be undetectable. Sever the opener by hand.
     const tab = window.open(url, "_blank")
     if (tab) {
       tab.opener = null

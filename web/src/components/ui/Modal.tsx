@@ -153,11 +153,9 @@ export function Modal({
     else if (ref) (ref as { current: HTMLDialogElement | null }).current = node
   }
 
-  // The close X and backdrop call dialog.close() directly rather than being
-  // `<form method="dialog">` submit buttons: a Modal often renders inside a
-  // page <form>, and a nested form's submit event bubbles into the outer
-  // form's onSubmit (React relays it), so dismissing the dialog would save the
-  // page. The native close event still fires, so onClose is unaffected.
+  // Not `<form method="dialog">`: a Modal often sits inside a page <form>, and
+  // a nested form's submit bubbles into the page form's onSubmit (React relays
+  // it), so dismissing would save the page. dialog.close() still fires onClose.
   const closeDialog = () => {
     const dialog = dialogRef?.current ?? internalRef.current
     if (dialog?.open) dialog.close()

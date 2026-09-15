@@ -72,9 +72,8 @@ describe("Modal", () => {
   })
 
   it("closing from the X or backdrop never submits an enclosing page form", () => {
-    // A Modal often sits inside a page <form>; a nested <form method="dialog">
-    // would bubble its submit into the page form's onSubmit (React relays it),
-    // saving the page when the user merely dismissed the dialog.
+    // A nested <form method="dialog"> would bubble its submit into the page
+    // form's onSubmit, saving the page on dismiss.
     const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
     const onClose = vi.fn()
     const { container } = render(

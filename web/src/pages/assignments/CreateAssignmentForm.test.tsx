@@ -154,10 +154,8 @@ describe("Set a due date toggle (issue #195)", () => {
     expect(screen.queryByLabelText("assignments.form.dueDate")).toBeNull()
   })
 
-  // #999: an empty datetime-local reports "" until every segment is filled, and
-  // Safari paints today's date into the empty segments, so a teacher editing
-  // only the time never produced a value. Switching the toggle on now seeds a
-  // complete value so any single edit is a valid one.
+  // #999: an empty datetime-local reads "" until every segment is filled (and
+  // Safari paints a placeholder date into it), so the toggle seeds a full value.
   it("switching the due-date toggle on seeds a complete value (#999)", async () => {
     vi.useFakeTimers({ toFake: ["Date"] })
     vi.setSystemTime(new Date(2026, 8, 15, 10, 50))
@@ -207,8 +205,7 @@ describe("Set a due date toggle (issue #195)", () => {
     expect(
       screen.getByLabelText<HTMLInputElement>("assignments.form.dueDate").value,
     ).toBe(stored)
-    // Off clears the value, so on again seeds afresh (the stored value is gone
-    // by design: unchecking is the opt-out).
+    // Off clears the value (unchecking is the opt-out), so on seeds afresh.
     const toggle = container.querySelector("#due_date-enabled")!
     await user.click(toggle)
     await user.click(toggle)
@@ -300,8 +297,7 @@ describe("Set a due date toggle (issue #195)", () => {
     const picker = screen.getByLabelText<HTMLInputElement>(
       "assignments.form.dueDate",
     )
-    // The teacher deleted a segment: the browser sanitizes the value to ""
-    // and flags badInput; the model now holds "" (an edit, so Save is live).
+    // A deleted segment: the browser reports "" with badInput set.
     fireEvent.change(picker, { target: { value: "" } })
     Object.defineProperty(picker, "validity", {
       value: { badInput: true, valid: false },
@@ -317,7 +313,6 @@ describe("Set a due date toggle (issue #195)", () => {
       screen.getByText("assignments.form.validation.scheduleDateIncomplete"),
     ).toBeTruthy()
     expect(picker.getAttribute("aria-invalid")).toBe("true")
-    // The picker stays open with the toggle on so the teacher can finish.
     expect(screen.getByLabelText("assignments.form.dueDate")).toBe(picker)
   })
 })

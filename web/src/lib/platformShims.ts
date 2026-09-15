@@ -1,9 +1,7 @@
-// Small platform shims for APIs newer than the build's browser floor (Vite's
-// default `baseline-widely-available`, currently Safari 16.4 / Chrome 111 /
-// Firefox 114). esbuild transpiles syntax only; it never polyfills.
+// Shims for APIs newer than the build's browser floor (Vite's default
+// baseline: Safari 16.4 / Chrome 111 / Firefox 114). esbuild never polyfills.
 
-// AbortSignal.any (Safari 17.4 / Chrome 116 / Firefox 124): abort when any of
-// the inputs aborts, forwarding the first reason.
+// AbortSignal.any (Safari 17.4 / Chrome 116 / Firefox 124).
 export function anyAbortSignal(signals: AbortSignal[]): AbortSignal {
   const controller = new AbortController()
   for (const signal of signals) {
@@ -19,8 +17,7 @@ export function anyAbortSignal(signals: AbortSignal[]): AbortSignal {
   return controller.signal
 }
 
-// Map.groupBy (Safari 17.4 / Chrome 117 / Firefox 119), preserving first-seen
-// key order like the native.
+// Map.groupBy (Safari 17.4 / Chrome 117 / Firefox 119); first-seen key order.
 export function groupBy<T, K>(
   items: Iterable<T>,
   keyOf: (item: T) => K,

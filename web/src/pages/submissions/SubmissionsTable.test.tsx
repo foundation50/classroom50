@@ -104,8 +104,7 @@ beforeEach(() => {
   collaborators.mockReturnValue({ data: undefined })
   downloadSubmission.mockReset()
   feedbackRefetch.mockReset()
-  // A real successful window.open returns a WindowProxy; the component severs
-  // its opener by hand, so the stub must be assignable.
+  // A successful window.open returns a window whose opener the component nulls.
   vi.stubGlobal(
     "open",
     vi.fn(() => ({ opener: window })),

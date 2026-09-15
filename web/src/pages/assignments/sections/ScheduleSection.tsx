@@ -11,8 +11,7 @@ import {
 import { ReleaseDateAccessNotice } from "./ReleaseDateAccessNotice"
 import { SectionCard } from "./SectionCard"
 
-// The schedule pickers, in render order; the form checks them for a half-edited
-// entry on submit (that state exists only in the DOM, the model sees "").
+// In render order; the form checks these for a half-edited entry on submit.
 export const SCHEDULE_PICKER_FIELDS = [
   "available_from_date",
   "due_date",
@@ -20,9 +19,8 @@ export const SCHEDULE_PICKER_FIELDS = [
 export type SchedulePickerField = (typeof SCHEDULE_PICKER_FIELDS)[number]
 
 // Schedule and access (IA overhaul U8): the opt-in release-date and due-date
-// pickers plus the lock toggle. Picker visibility is derived in the
-// orchestrator (explicitly opened, or a value is present); the setters here only
-// record the explicit open/close.
+// pickers plus the lock toggle. Visibility is derived by the form (opened, or
+// a value is present); the setters only record the explicit open/close.
 export function ScheduleSection({
   form,
   org,
@@ -42,7 +40,6 @@ export function ScheduleSection({
   setDueDateOpened: (opened: boolean) => void
   availableFromEnabled: boolean
   setAvailableFromOpened: (opened: boolean) => void
-  // The picker the last submit found half-edited, if any.
   incompletePicker?: SchedulePickerField | null
 }) {
   const { t } = useTranslation()

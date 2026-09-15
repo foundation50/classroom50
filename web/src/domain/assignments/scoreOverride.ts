@@ -115,9 +115,8 @@ function synthesizeOverrideRecord(
   }
 }
 
-// True when this record is our synthesized manual override (its submission tag
-// starts with the manual sentinel), not a real autograder result. Tolerates a
-// hand-edited record with no `submission` string.
+// Our synthesized manual override (by submission tag), not an autograder
+// result. Tolerates a hand-edited record with no `submission` string.
 export function isSynthesizedManual(record: SubmissionRecord): boolean {
   return (
     typeof record.submission === "string" &&
@@ -165,8 +164,7 @@ export async function editScoreOverride(
       type: input.assignmentType,
       entries: [],
     }
-    // Keep the bucket type in sync with the assignment mode; a hand-edited
-    // bucket may lack `entries`.
+    // Sync the type with the mode; a hand-edited bucket may lack `entries`.
     bucket.type = input.assignmentType
     bucket.entries ??= []
 

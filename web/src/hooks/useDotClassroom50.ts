@@ -3,9 +3,8 @@ import { getClassroom50Yaml, githubKeys } from "@/github-core/queries"
 import { useQuery } from "@tanstack/react-query"
 import { parseClassroom50Yaml, type Classroom50Yaml } from "@/util/yaml"
 
-// A student can edit their own repo's marker file, so a malformed
-// .classroom50.yaml must degrade to "no marker" rather than throw out of a
-// render and take the whole repo list down with it.
+// A student can edit their own marker file; a malformed one must read as "no
+// marker", not throw out of render and take the repo list down.
 const parseTolerantly = (source: string): Partial<Classroom50Yaml> => {
   try {
     return parseClassroom50Yaml(source)

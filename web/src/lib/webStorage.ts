@@ -19,8 +19,8 @@ export function sessionStorageOrNull(): Storage | null {
   return probe("sessionStorage")
 }
 
-// Best-effort persist: setItem throws on quota or read-only storage, and a
-// failed preference write must never abort the action that triggered it.
+// setItem throws on quota or read-only storage; a failed preference write must
+// not abort the action that triggered it.
 export function setItemOrIgnore(
   storage: Storage | null,
   key: string,

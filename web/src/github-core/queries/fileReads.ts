@@ -217,9 +217,8 @@ export function getRawFile(
 
 // The contents-API read behind every config-repo file: base64 body decoded to
 // text, pinned to `ref` when given. A directory at the path is an error, not
-// a file. Files over 1 MB come back with `encoding: "none"` and an empty
-// `content` in the JSON shape (GitHub only inlines up to 1 MB), so those fall
-// back to the raw media type, which streams up to 100 MB.
+// a file. GitHub inlines at most 1 MB in the JSON shape (`encoding: "none"`,
+// empty `content` beyond that), so larger files fall back to the raw media type.
 async function readConfigFileText(
   client: GitHubClient,
   org: string,
@@ -261,9 +260,8 @@ export async function readConfigJson<T>(
   return JSON.parse(text) as T
 }
 
-// The accept-time marker file, read at the repo's default branch: a `main`
-// template generated into a `master`-default org yields a `master` repo, so
-// pinning `main` would 404 on every repo in such an org.
+// Read at the default branch: a `master`-default org yields `master` repos, so
+// pinning `main` would 404 on every one of them.
 export async function getClassroom50Yaml(
   client: GitHubClient,
   org: string,

@@ -43,9 +43,8 @@ export async function deleteAssignment(
   }
 }
 
-// Delete re-reads the ref + assignments.json each call, so like every other
-// assignments.json writer it can retry a non-fast-forward 409 from a
-// concurrent commit (the collector, another teacher).
+// Re-reads the ref and assignments.json each attempt, so a 409 from a
+// concurrent commit is safe to retry (as every other assignments.json writer).
 export function deleteAssignmentWithConflictRetry(
   client: GitHubClient,
   input: DeleteAssignmentInput,

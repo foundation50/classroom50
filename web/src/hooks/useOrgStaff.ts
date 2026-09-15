@@ -52,9 +52,9 @@ export function useOrgStaff(org: string | undefined): UseOrgStaffResult {
 
   // Staff iff owner, or any of the viewer's teams IN THIS ORG parses to a
   // classroom staff slug (classroom50-<classroom>-<teacher|hta|ta>). Cross-org
-  // teams are filtered out by organization.login, case-insensitively: GitHub
-  // logins are case-insensitive and the route param carries whatever casing
-  // the URL had. The student team (no role suffix) parses to null.
+  // teams are filtered out by organization.login, case-insensitively (GitHub
+  // logins are; the route param isn't normalized). The student team (no role
+  // suffix) parses to null.
   const isStaff =
     isOwner ||
     Boolean(

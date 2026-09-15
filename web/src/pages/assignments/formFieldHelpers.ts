@@ -63,9 +63,8 @@ export const toDatetimeLocalValue = (date: Date) => {
 }
 
 // Parse a stored UTC ISO instant into a `datetime-local` value; "" when absent
-// or unparseable. A legacy bare YYYY-MM-DD is that day's end (23:59 local),
-// the deadline every reader gives it; `new Date` alone would read it as UTC
-// midnight and prefill the previous evening for viewers west of Greenwich.
+// or unparseable. A legacy bare YYYY-MM-DD is that day's end (23:59 local), as
+// every reader treats it; `new Date` alone would read it as UTC midnight.
 export const utcIsoToDatetimeLocalValue = (value?: string) => {
   if (!value) return ""
 
@@ -78,12 +77,9 @@ export const utcIsoToDatetimeLocalValue = (value?: string) => {
   return toDatetimeLocalValue(date)
 }
 
-// Seed for a schedule picker the teacher has just switched on. An empty
-// `datetime-local` is a trap: the value stays "" (and `change` never fires)
-// until every segment is filled, and Safari paints today's date into the empty
-// segments as a grey placeholder, so a teacher who edits only the time never
-// produces a value (#999). A real seed fills every segment, so any single edit
-// is a complete, valid value.
+// Seed for a picker just switched on. An empty `datetime-local` reads "" until
+// every segment is filled, and Safari paints a placeholder date into the empty
+// segments, so editing only the time never produced a value (#999).
 export const dueDateSeed = (now = new Date()) => {
   const d = new Date(now)
   d.setDate(d.getDate() + 7)
@@ -91,18 +87,15 @@ export const dueDateSeed = (now = new Date()) => {
   return toDatetimeLocalValue(d)
 }
 
-// Release-date seed: the top of the next hour, so the release sits in the near
-// future and the release-date notice reflects what saving would do.
+// Top of the next hour: near future, so the release-date notice is truthful.
 export const releaseDateSeed = (now = new Date()) => {
   const d = new Date(now)
   d.setHours(d.getHours() + 1, 0, 0, 0)
   return toDatetimeLocalValue(d)
 }
 
-// True when a blurred `datetime-local` has been deliberately emptied, as opposed
-// to left half-edited. A partial entry also reads as "" but sets
-// `validity.badInput`; a picker in that state must stay open, or the blur
-// throws away the teacher's edit (#999). Older Safari reports partial input as
-// valid; the seed above keeps that case from arising.
+// Deliberately emptied, as opposed to half-edited: a partial entry also reads
+// "" but sets `validity.badInput`, and collapsing on it threw away the edit
+// (#999). Older Safari reports partial input as valid; the seed avoids that.
 export const isDeliberatelyCleared = (input: HTMLInputElement) =>
   input.value === "" && !input.validity?.badInput

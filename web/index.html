@@ -46,8 +46,7 @@
       // in src/hooks/useTheme.ts.
       ;(function () {
         try {
-          // Storage can throw (blocked cookies, sandboxed iframe); the OS
-          // preference still applies then, as in resolveInitialTheme.
+          // Blocked storage throws; the OS preference must still apply.
           var stored = null
           try {
             stored = localStorage.getItem("classroom50:theme")

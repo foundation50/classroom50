@@ -906,12 +906,10 @@ function useGithubAuthState() {
       setScreen("config")
       setSessionExpired(expired)
       setSignedOutDeliberately(!expired)
-      // Cancel in-flight requests before evicting them so they don't resolve
-      // into removed cache state after teardown. Evict EVERYTHING, not just
-      // ["github"]: the org list, memberships, org members, and team reads
-      // live under their own roots and none carry the viewer in the key, so
-      // a PAT/device sign-in on the same tab (no page load) would otherwise
-      // show the previous user's data until staleTime lapsed.
+      // Cancel before evicting so in-flight reads can't repopulate the cache.
+      // Clear every root, not just ["github"]: org/membership/team keys don't
+      // carry the viewer, so a same-tab PAT or device sign-in would otherwise
+      // see the previous user's data.
       void queryClient.cancelQueries()
       queryClient.clear()
     },

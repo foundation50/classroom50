@@ -52,8 +52,8 @@ beforeEach(() => {
   refetch.mockReset()
   mutate.mockReset()
   notify.mockReset()
-  // A real successful window.open returns a WindowProxy (never null unless
-  // blocked), and the component nulls its opener; keep the stub honest.
+  // A successful window.open returns a window (null only when blocked) whose
+  // opener the component nulls.
   vi.stubGlobal(
     "open",
     vi.fn(() => ({ opener: window })),
@@ -263,8 +263,7 @@ describe("ReviewButton — opening the PR", () => {
 
   it("offers the PR as a link when the browser blocked the new tab", async () => {
     const user = userEvent.setup()
-    // A popup blocker (or Safari after the click's activation lapsed behind
-    // the await) makes window.open return null.
+    // A popup blocker (or Safari after the await) makes window.open return null.
     vi.stubGlobal(
       "open",
       vi.fn(() => null),

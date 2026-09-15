@@ -32,8 +32,8 @@ const fetchActiveSummaries = async (
   client: GitHubClient,
 ) => {
   const list = await queryClient.fetchQuery(orgMembershipsQuery(client))
-  // Bounded: each summary is 2-3 requests, and a viewer in dozens of orgs
-  // would otherwise fan out past GitHub's secondary-limit concurrency ceiling.
+  // Bounded: a viewer in dozens of orgs would otherwise fan out past GitHub's
+  // secondary-limit concurrency ceiling.
   return mapWithConcurrency(
     list.filter((membership) => membership.state === "active"),
     ORG_SUMMARY_CONCURRENCY,

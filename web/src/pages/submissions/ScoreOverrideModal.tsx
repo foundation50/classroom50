@@ -95,14 +95,12 @@ export function ScoreOverrideModal({
   // A synchronous latch so two submits in the SAME tick (before mutation
   // .isPending flips on the next render) can't both fire mutate.
   const inFlightRef = useRef(false)
-  // Errors render live once the field has content; an empty or browser-rejected
-  // entry (Firefox lets "12a" through as value "") only shows its message after
-  // a Save attempt, so Save is never a silent no-op.
+  // An empty or browser-rejected entry (Firefox reports "12a" as "") shows its
+  // error only after a Save attempt, so Save is never a silent no-op.
   const [attempted, setAttempted] = useState(false)
-  // React's `autoFocus` runs in the layout phase, before Modal's effect calls
-  // showModal(), so it lands on a not-yet-focusable field and showModal() then
-  // focuses the first focusable descendant: the close X (Enter would dismiss).
-  // Child effects run before this one, so the dialog is open by now.
+  // `autoFocus` fires before Modal's showModal(), so focus landed on the close
+  // X instead (Enter would dismiss). Child effects run first: the dialog is
+  // open by now.
   const scoreInputRef = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (open) scoreInputRef.current?.focus()

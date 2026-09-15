@@ -114,8 +114,7 @@ describe("formatRelativeToNow", () => {
   })
 
   it("renders the invalid-date string instead of throwing on an unparseable date", () => {
-    // Intl.RelativeTimeFormat.format(NaN) throws a RangeError, which used to
-    // take down any list rendering a due like "TBD".
+    // RelativeTimeFormat.format(NaN) throws; this used to crash the list.
     expect(formatRelativeToNow(new Date("TBD"))).toBe(
       i18n.t("formatDate.invalidDate"),
     )
@@ -230,15 +229,13 @@ describe("buildDueFields", () => {
   })
 
   it("normalizes a wall-clock inside a DST gap instead of storing it zoneless", () => {
-    // Pin a zone with a 02:00 spring-forward gap: in UTC or a European zone
-    // 02:30 exists and the old rollover check would pass this test anyway.
+    // Pin a zone with a 02:00 gap; in UTC the old code passes this test too.
     // Node re-reads TZ on assignment.
     const previousTz = process.env.TZ
     process.env.TZ = "America/New_York"
     try {
       const { due, due_meta } = buildDueFields("2026-03-08T02:30")
-      // 02:30 does not exist; the instant is 03:30 EDT, like Go's
-      // ParseInLocation, never the bare input.
+      // 02:30 doesn't exist; the instant is 03:30 EDT, never the bare input.
       expect(due).toBe("2026-03-08T07:30:00Z")
       expect(due_meta?.input).toBe("2026-03-08T02:30:00")
       expect(due_meta?.offset).toBe("-04:00")
