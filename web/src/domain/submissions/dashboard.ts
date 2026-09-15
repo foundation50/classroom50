@@ -18,6 +18,7 @@ import type { BadgeTone } from "@/types/badgeTone"
 import type { ClassroomRole, TeamRosterRow } from "@/util/teamRoster"
 import { rowToStudent } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
+import { dueDeadlineInstant } from "@/util/formatDate"
 import {
   compareStudentsByName,
   getName,
@@ -208,14 +209,17 @@ export function mergeLiveRows(
 
 // `late` for a pending live row: submission time strictly after the due date.
 // Undefined (unknown, not "on time") when either side is missing/unparseable.
+// Parses the due through dueDeadlineInstant so a legacy bare YYYY-MM-DD means
+// end of that local day, matching the overdue badge (raw `new Date` would read
+// it as UTC midnight and flag a same-day submission late).
 function liveLateness(
   submittedAt: string,
   dueDate: string | null | undefined,
 ): boolean | undefined {
   if (!dueDate) return undefined
   const submittedMs = new Date(submittedAt).getTime()
-  const dueMs = new Date(dueDate).getTime()
-  if (!Number.isFinite(submittedMs) || !Number.isFinite(dueMs)) return undefined
+  const dueMs = dueDeadlineInstant(dueDate)?.getTime()
+  if (!Number.isFinite(submittedMs) || dueMs === undefined) return undefined
   return submittedMs > dueMs
 }
 

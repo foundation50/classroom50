@@ -151,15 +151,13 @@ export const TemplateAccessModal = ({
               {t("assignments.template.accessModal.ownerOnlyNote")}
             </p>
           )}
-          <form method="dialog">
-            <Button
-              type="submit"
-              variant="ghost"
-              disabled={reconcile.isPending}
-            >
-              {t("assignments.template.accessModal.close")}
-            </Button>
-          </form>
+          <Button
+            variant="ghost"
+            disabled={reconcile.isPending}
+            onClick={onClose}
+          >
+            {t("assignments.template.accessModal.close")}
+          </Button>
           {inOrg && isOwner && (
             <Button
               variant="primary"

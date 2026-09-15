@@ -71,6 +71,34 @@ describe("Modal", () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it("closing from the X or backdrop never submits an enclosing page form", () => {
+    // A Modal often sits inside a page <form>; a nested <form method="dialog">
+    // would bubble its submit into the page form's onSubmit (React relays it),
+    // saving the page when the user merely dismissed the dialog.
+    const onSubmit = vi.fn((e: React.FormEvent) => e.preventDefault())
+    const onClose = vi.fn()
+    const { container } = render(
+      <form onSubmit={onSubmit}>
+        <Modal open onClose={onClose} aria-label="dlg">
+          x
+        </Modal>
+      </form>,
+    )
+    expect(container.querySelectorAll("form")).toHaveLength(1)
+
+    screen.getByRole("button").click()
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(onSubmit).not.toHaveBeenCalled()
+
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+    dialog.open = true
+    ;(
+      container.querySelector(".modal-backdrop button") as HTMLButtonElement
+    ).click()
+    expect(onClose).toHaveBeenCalledTimes(2)
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it("disables the close controls when closeDisabled", () => {
     const { container } = render(
       <Modal open closeDisabled aria-label="dlg">

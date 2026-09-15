@@ -1,38 +1,46 @@
 import { GITHUB_AUTH_SESSION, GITHUB_AUTH_STORAGE } from "./constants"
 import { isSafeReturnTo } from "./returnTo"
 import type { AuthMethod } from "./types"
+import { localStorageOrNull, sessionStorageOrNull } from "@/lib/webStorage"
 
-function canUseBrowserStorage() {
-  return typeof window !== "undefined"
+// Every access goes through the guarded probes: touching `window.localStorage`
+// throws SecurityError when storage is blocked (Safari "Block all cookies", an
+// LMS iframe with third-party cookies off), and this module runs in the auth
+// provider's mount effect, above every error boundary. Without storage the
+// session simply doesn't persist across loads.
+
+// setItem can also throw (quota, or storage that became read-only); a failed
+// persist must not abort the sign-in that just succeeded.
+const trySet = (storage: Storage | null, key: string, value: string) => {
+  try {
+    storage?.setItem(key, value)
+  } catch {
+    // Persistence is best-effort.
+  }
 }
 
 export function getStoredGithubToken() {
-  if (!canUseBrowserStorage()) return null
-  return localStorage.getItem(GITHUB_AUTH_STORAGE.TOKEN)
+  return localStorageOrNull()?.getItem(GITHUB_AUTH_STORAGE.TOKEN) ?? null
 }
 
 export function getStoredGithubClientId() {
-  if (!canUseBrowserStorage()) return ""
-  return localStorage.getItem(GITHUB_AUTH_STORAGE.CLIENT_ID) ?? ""
+  return localStorageOrNull()?.getItem(GITHUB_AUTH_STORAGE.CLIENT_ID) ?? ""
 }
 
 export function getStoredGithubScope() {
-  if (!canUseBrowserStorage()) return ""
-  return localStorage.getItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED) ?? ""
+  return localStorageOrNull()?.getItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED) ?? ""
 }
 
 // How the stored session signed in, or null when unknowable: a session persisted
 // before this key existed, or a value localStorage no longer recognizes (it is
 // user-writable, so an unrecognized string must not be trusted as a method).
 export function getStoredAuthMethod(): AuthMethod | null {
-  if (!canUseBrowserStorage()) return null
-  const stored = localStorage.getItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
+  const stored = localStorageOrNull()?.getItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
   return stored === "oauth" || stored === "pat" ? stored : null
 }
 
 export function persistGithubClientId(clientId: string) {
-  if (!canUseBrowserStorage()) return
-  localStorage.setItem(GITHUB_AUTH_STORAGE.CLIENT_ID, clientId)
+  trySet(localStorageOrNull(), GITHUB_AUTH_STORAGE.CLIENT_ID, clientId)
 }
 
 export function persistGithubToken(
@@ -40,23 +48,25 @@ export function persistGithubToken(
   scope = "",
   authMethod?: AuthMethod,
 ) {
-  if (!canUseBrowserStorage()) return
-  localStorage.setItem(GITHUB_AUTH_STORAGE.TOKEN, token)
-  localStorage.setItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED, scope)
+  const storage = localStorageOrNull()
+  if (!storage) return
+  trySet(storage, GITHUB_AUTH_STORAGE.TOKEN, token)
+  trySet(storage, GITHUB_AUTH_STORAGE.SCOPE_GRANTED, scope)
   // Remove rather than leave a stale value: a caller that doesn't know the
   // method must produce "unknown", not inherit the previous session's.
   if (authMethod) {
-    localStorage.setItem(GITHUB_AUTH_STORAGE.AUTH_METHOD, authMethod)
+    trySet(storage, GITHUB_AUTH_STORAGE.AUTH_METHOD, authMethod)
   } else {
-    localStorage.removeItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
+    storage.removeItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
   }
 }
 
 export function clearGithubToken() {
-  if (!canUseBrowserStorage()) return
-  localStorage.removeItem(GITHUB_AUTH_STORAGE.TOKEN)
-  localStorage.removeItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED)
-  localStorage.removeItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
+  const storage = localStorageOrNull()
+  if (!storage) return
+  storage.removeItem(GITHUB_AUTH_STORAGE.TOKEN)
+  storage.removeItem(GITHUB_AUTH_STORAGE.SCOPE_GRANTED)
+  storage.removeItem(GITHUB_AUTH_STORAGE.AUTH_METHOD)
 }
 
 export function saveOAuthSession(input: {
@@ -70,22 +80,24 @@ export function saveOAuthSession(input: {
   // consume, and the secret is already in the URL the user arrived from.
   returnTo?: string | null
 }) {
-  if (!canUseBrowserStorage()) return
+  const storage = sessionStorageOrNull()
+  if (!storage) return
 
-  sessionStorage.setItem(GITHUB_AUTH_SESSION.VERIFIER, input.verifier)
-  sessionStorage.setItem(GITHUB_AUTH_SESSION.STATE, input.state)
-  sessionStorage.setItem(GITHUB_AUTH_SESSION.CLIENT_ID, input.clientId)
-  sessionStorage.setItem(GITHUB_AUTH_SESSION.SCOPE, input.scope)
+  trySet(storage, GITHUB_AUTH_SESSION.VERIFIER, input.verifier)
+  trySet(storage, GITHUB_AUTH_SESSION.STATE, input.state)
+  trySet(storage, GITHUB_AUTH_SESSION.CLIENT_ID, input.clientId)
+  trySet(storage, GITHUB_AUTH_SESSION.SCOPE, input.scope)
 
   if (isSafeReturnTo(input.returnTo)) {
-    sessionStorage.setItem(GITHUB_AUTH_SESSION.RETURN_TO, input.returnTo)
+    trySet(storage, GITHUB_AUTH_SESSION.RETURN_TO, input.returnTo)
   } else {
-    sessionStorage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
+    storage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
   }
 }
 
 export function consumeOAuthSession() {
-  if (!canUseBrowserStorage()) {
+  const storage = sessionStorageOrNull()
+  if (!storage) {
     return {
       verifier: null,
       expectedState: null,
@@ -95,17 +107,17 @@ export function consumeOAuthSession() {
     }
   }
 
-  const verifier = sessionStorage.getItem(GITHUB_AUTH_SESSION.VERIFIER)
-  const expectedState = sessionStorage.getItem(GITHUB_AUTH_SESSION.STATE)
-  const clientId = sessionStorage.getItem(GITHUB_AUTH_SESSION.CLIENT_ID)
-  const scope = sessionStorage.getItem(GITHUB_AUTH_SESSION.SCOPE)
-  const storedReturnTo = sessionStorage.getItem(GITHUB_AUTH_SESSION.RETURN_TO)
+  const verifier = storage.getItem(GITHUB_AUTH_SESSION.VERIFIER)
+  const expectedState = storage.getItem(GITHUB_AUTH_SESSION.STATE)
+  const clientId = storage.getItem(GITHUB_AUTH_SESSION.CLIENT_ID)
+  const scope = storage.getItem(GITHUB_AUTH_SESSION.SCOPE)
+  const storedReturnTo = storage.getItem(GITHUB_AUTH_SESSION.RETURN_TO)
 
-  sessionStorage.removeItem(GITHUB_AUTH_SESSION.VERIFIER)
-  sessionStorage.removeItem(GITHUB_AUTH_SESSION.STATE)
-  sessionStorage.removeItem(GITHUB_AUTH_SESSION.CLIENT_ID)
-  sessionStorage.removeItem(GITHUB_AUTH_SESSION.SCOPE)
-  sessionStorage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
+  storage.removeItem(GITHUB_AUTH_SESSION.VERIFIER)
+  storage.removeItem(GITHUB_AUTH_SESSION.STATE)
+  storage.removeItem(GITHUB_AUTH_SESSION.CLIENT_ID)
+  storage.removeItem(GITHUB_AUTH_SESSION.SCOPE)
+  storage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
 
   // Re-validate on read: sessionStorage is user-writable.
   const returnTo = isSafeReturnTo(storedReturnTo) ? storedReturnTo : null

@@ -93,7 +93,15 @@ function OrgDetailsModal({
       // the payload rather than sent raw, so the sanitizer isn't defeated.
       const trimmedBlog = value.blog.trim()
       const normalizedBlog = trimmedBlog ? normalizeWebsiteUrl(trimmedBlog) : ""
-      const update: OrgProfileUpdate = { ...value }
+      // Trim every field: GitHub rejects e.g. an email with trailing space.
+      const update: OrgProfileUpdate = {
+        name: value.name.trim(),
+        description: value.description.trim(),
+        blog: trimmedBlog,
+        location: value.location.trim(),
+        email: value.email.trim(),
+        company: value.company.trim(),
+      }
       if (normalizedBlog === undefined) delete update.blog
       else update.blog = normalizedBlog
       try {

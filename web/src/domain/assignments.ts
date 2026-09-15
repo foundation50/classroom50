@@ -54,6 +54,7 @@ export {
 } from "./assignments/autograderYaml"
 export {
   deleteAssignment,
+  deleteAssignmentWithConflictRetry,
   type DeleteAssignmentInput,
 } from "./assignments/deleteAssignment"
 export {

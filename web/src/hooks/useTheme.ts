@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
+import { localStorageOrNull } from "@/lib/webStorage"
 
 // Client-side theme preference. Mirrors the `classroom50:sidebar-collapsed`
 // pattern: one localStorage key, applied by toggling `data-theme` on <html>.
@@ -21,8 +22,8 @@ const DARK: Theme = "sumi-dark"
 // in index.html, which applies the same logic before React mounts.
 export function resolveInitialTheme(): Theme {
   if (typeof window === "undefined") return LIGHT
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
-  if (stored === LIGHT || stored === DARK) return stored
+  const stored = storedTheme()
+  if (stored) return stored
   const prefersDark = window.matchMedia?.(
     "(prefers-color-scheme: dark)",
   )?.matches
@@ -36,8 +37,7 @@ export function resolveInitialThemePref(): ThemePref {
 }
 
 function storedTheme(): Theme | null {
-  if (typeof window === "undefined") return null
-  const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
+  const stored = localStorageOrNull()?.getItem(THEME_STORAGE_KEY)
   return stored === LIGHT || stored === DARK ? stored : null
 }
 
@@ -126,8 +126,10 @@ export function useTheme() {
     applyThemeAnimated(next)
     setThemeState(next)
     setPrefState(next)
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(THEME_STORAGE_KEY, next)
+    try {
+      localStorageOrNull()?.setItem(THEME_STORAGE_KEY, next)
+    } catch {
+      // Persistence is best-effort; the theme still applies for this load.
     }
   }, [])
 
@@ -148,9 +150,7 @@ export function useTheme() {
         return
       }
       setPrefState("system")
-      if (typeof window !== "undefined") {
-        window.localStorage.removeItem(THEME_STORAGE_KEY)
-      }
+      localStorageOrNull()?.removeItem(THEME_STORAGE_KEY)
       const resolved = resolveInitialTheme()
       setThemeState(resolved)
       // Only cross-fade when the resolved theme actually differs — picking

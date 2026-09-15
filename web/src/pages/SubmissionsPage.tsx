@@ -585,9 +585,8 @@ const SubmissionsPageContent = () => {
   // "2 hours ago"). Past due flips the badge to error and the label to overdue.
   const dueDate = assignmentInfo?.due
   const dueOverdue = dueDate ? isPastDue(dueDate) : false
-  const dueRelative = dueDate
-    ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
-    : null
+  const dueDeadline = dueDate ? dueDeadlineInstant(dueDate) : null
+  const dueRelative = dueDeadline ? formatRelativeToNow(dueDeadline) : null
 
   // Both overlays run for every staff viewer: reading a release or a commit
   // needs only repo read, and a repo this viewer can't see 404s into "not

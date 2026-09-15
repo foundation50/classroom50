@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { localStorageOrNull } from "@/lib/webStorage"
 
 const SIDEBAR_COLLAPSED_KEY = "classroom50:sidebar-collapsed"
 export const MOBILE_DRAWER_ID = "app-drawer"
@@ -23,13 +24,15 @@ export const useSidebarCollapse = () => useContext(SidebarCollapseContext)
 
 const Drawer = ({ children }: { children: ReactNode }) => {
   const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === "undefined") return false
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "true"
+    return localStorageOrNull()?.getItem(SIDEBAR_COLLAPSED_KEY) === "true"
   })
 
   useEffect(() => {
-    if (typeof window === "undefined") return
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed))
+    try {
+      localStorageOrNull()?.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed))
+    } catch {
+      // Best-effort preference.
+    }
   }, [collapsed])
 
   return (

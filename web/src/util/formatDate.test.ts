@@ -113,6 +113,15 @@ describe("formatRelativeToNow", () => {
     await i18n.changeLanguage("en")
   })
 
+  it("renders the invalid-date string instead of throwing on an unparseable date", () => {
+    // Intl.RelativeTimeFormat.format(NaN) throws a RangeError, which used to
+    // take down any list rendering a due like "TBD".
+    expect(formatRelativeToNow(new Date("TBD"))).toBe(
+      i18n.t("formatDate.invalidDate"),
+    )
+    expect(formatRelativeToNow(NaN)).toBe(i18n.t("formatDate.invalidDate"))
+  })
+
   it("renders the largest whole unit that fits", () => {
     expect(formatRelativeToNow(new Date("2026-06-23T11:59:30Z"))).toBe(
       "30 seconds ago",
@@ -212,5 +221,20 @@ describe("buildDueFields", () => {
   it("stores a rolled-over (invalid) calendar date verbatim", () => {
     // Feb 30 rolls over in `new Date`, so it is rejected and kept as-is.
     expect(buildDueFields("2026-02-30")).toEqual({ due: "2026-02-30" })
+  })
+
+  it("stores an out-of-range clock time verbatim", () => {
+    expect(buildDueFields("2026-06-23T24:00")).toEqual({
+      due: "2026-06-23T24:00",
+    })
+  })
+
+  it("normalizes a wall-clock inside a DST gap instead of storing it zoneless", () => {
+    // Runs in whatever zone the suite has; in a zone with a spring-forward gap
+    // the hour shifts, elsewhere it doesn't. Either way the result must be a
+    // UTC instant with provenance, never the bare input.
+    const { due, due_meta } = buildDueFields("2026-03-08T02:30")
+    expect(due).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
+    expect(due_meta?.input).toBe("2026-03-08T02:30:00")
   })
 })

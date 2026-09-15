@@ -113,9 +113,15 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 ]
 
 // Relative "x ago" / "in x" in the active UI language via the platform's Intl
-// locale data — sideloaded languages need no per-language bundles.
+// locale data — sideloaded languages need no per-language bundles. An invalid
+// date yields the localized "invalid date" string: RelativeTimeFormat.format
+// throws a RangeError on NaN, which would take down the whole render.
 export const formatRelativeToNow = (date: Date | number): string => {
-  const diffSeconds = Math.round((new Date(date).getTime() - Date.now()) / 1000)
+  const time = new Date(date).getTime()
+  if (Number.isNaN(time)) {
+    return i18n.t("formatDate.invalidDate")
+  }
+  const diffSeconds = Math.round((time - Date.now()) / 1000)
   const abs = Math.abs(diffSeconds)
   const found = RELATIVE_UNITS.find(([, size]) => abs >= size)
   const [unit, size] = found ?? ["second", 1]
@@ -192,15 +198,21 @@ export const buildDueFields = (dueInput: string): DueFields => {
 
   const local = new Date(year, month - 1, day, hour, minute, 0)
   // `new Date` rolls over out-of-range components (Feb 30 -> Mar 2) instead of
-  // NaN; reject anything that didn't round-trip so `due` can't disagree with
-  // due_meta.input.
-  const rolledOver =
-    local.getFullYear() !== year ||
-    local.getMonth() !== month - 1 ||
-    local.getDate() !== day ||
-    local.getHours() !== hour ||
-    local.getMinutes() !== minute
-  if (Number.isNaN(local.getTime()) || rolledOver) {
+  // NaN; reject anything that isn't a real calendar date and clock time so
+  // `due` can't disagree with due_meta.input. The calendar probe uses noon
+  // because a DST spring-forward gap (02:30 doesn't exist) legitimately shifts
+  // the hour; that wall-clock is still a normalizable input (the CLI's
+  // ParseInLocation shifts it the same way rather than rejecting it), and
+  // rejecting it here would store a zoneless string every viewer reads in
+  // their own zone.
+  const calendar = new Date(year, month - 1, day, 12, 0, 0)
+  const invalid =
+    calendar.getFullYear() !== year ||
+    calendar.getMonth() !== month - 1 ||
+    calendar.getDate() !== day ||
+    hour > 23 ||
+    minute > 59
+  if (Number.isNaN(local.getTime()) || invalid) {
     return { due: dueInput }
   }
 

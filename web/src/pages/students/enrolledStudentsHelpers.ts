@@ -1,3 +1,4 @@
+import { groupBy } from "@/lib/platformShims"
 import { NO_SECTION } from "@/pages/students/rosterFilter"
 import { ROLE_RANK, type ClassroomRole } from "@/util/teamRoster"
 
@@ -27,7 +28,7 @@ export function rosterSyncMessageKeys(result: {
 export function groupStudentsBySection<T extends { section?: string }>(
   students: T[],
 ): Array<{ section: string; students: T[] }> {
-  const bySection = Map.groupBy(
+  const bySection = groupBy(
     students,
     (student) => student.section?.trim() || NO_SECTION,
   )
@@ -51,7 +52,7 @@ export function groupStudentsByRole<T extends { roles: ClassroomRole[] }>(
       (top, role) => (ROLE_RANK[role] > ROLE_RANK[top] ? role : top),
       "student",
     )
-  const byRole = Map.groupBy(students, (student) => primary(student.roles))
+  const byRole = groupBy(students, (student) => primary(student.roles))
   return Array.from(byRole.entries())
     .sort(([a], [b]) => ROLE_RANK[b] - ROLE_RANK[a])
     .map(([role, group]) => ({ role, students: group }))

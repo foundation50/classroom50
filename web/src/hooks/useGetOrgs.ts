@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubOrgMembership } from "@/github-core/types"
+import { mapWithConcurrency } from "@/util/concurrency"
 import {
   getClassroom50OrgSummary,
   githubKeys,
@@ -31,12 +32,16 @@ const fetchActiveSummaries = async (
   client: GitHubClient,
 ) => {
   const list = await queryClient.fetchQuery(orgMembershipsQuery(client))
-  return Promise.all(
-    list
-      .filter((membership) => membership.state === "active")
-      .map((membership) => getClassroom50OrgSummary(client, membership)),
+  // Bounded: each summary is 2-3 requests, and a viewer in dozens of orgs
+  // would otherwise fan out past GitHub's secondary-limit concurrency ceiling.
+  return mapWithConcurrency(
+    list.filter((membership) => membership.state === "active"),
+    ORG_SUMMARY_CONCURRENCY,
+    (membership) => getClassroom50OrgSummary(client, membership),
   )
 }
+
+const ORG_SUMMARY_CONCURRENCY = 8
 
 const useGetOrgs = () => {
   const client = useGitHubClient()

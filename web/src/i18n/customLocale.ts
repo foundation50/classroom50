@@ -2,6 +2,7 @@ import i18n from "i18next"
 import { z } from "zod"
 
 import en from "@/locales/en.json"
+import { anyAbortSignal } from "@/lib/platformShims"
 import { localStorageOrNull } from "@/lib/webStorage"
 
 // Sideloadable language packs: English is the bundled base; users install extra
@@ -627,7 +628,7 @@ export async function prepareFromUrl(
   // slow-drip response (bytes trickled under the cap) would stream forever — and
   // an AbortSignal.timeout can't be disarmed early, which is what we want.
   const controller = new AbortController()
-  const signal = AbortSignal.any([
+  const signal = anyAbortSignal([
     controller.signal,
     AbortSignal.timeout(FETCH_TIMEOUT_MS),
   ])
@@ -723,7 +724,7 @@ async function fetchRegistryUncached(
   // Controller for the size-cap aborts, platform deadline for the timeout, which
   // has to cover the streaming read (see prepareFromUrl).
   const controller = new AbortController()
-  const signal = AbortSignal.any([
+  const signal = anyAbortSignal([
     controller.signal,
     AbortSignal.timeout(FETCH_TIMEOUT_MS),
   ])

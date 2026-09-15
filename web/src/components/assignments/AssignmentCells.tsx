@@ -65,9 +65,9 @@ export function DueDateCell({
       </span>
     )
   }
-  const countdown = relative
-    ? ` (${formatRelativeToNow(dueDeadlineInstant(due) ?? new Date(due))})`
-    : ""
+  const deadline = dueDeadlineInstant(due)
+  const countdown =
+    relative && deadline ? ` (${formatRelativeToNow(deadline)})` : ""
   if (highlightOverdue && isPastDue(due)) {
     return (
       <Badge

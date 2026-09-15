@@ -10,6 +10,7 @@ import {
 } from "react"
 import type { ViewAsRole } from "@/authz"
 import { logger } from "@/lib/logger"
+import { sessionStorageOrNull } from "@/lib/webStorage"
 
 const log = logger.scope("context:roleView")
 
@@ -40,10 +41,9 @@ function readStored(
   org: string | undefined,
   classroom: string | undefined,
 ): ViewAsRole | null {
-  if (typeof window === "undefined") return null
   const key = keyFor(org, classroom)
   if (!key) return null
-  const raw = sessionStorage.getItem(key)
+  const raw = sessionStorageOrNull()?.getItem(key)
   return raw === "hta" || raw === "ta" || raw === "student" ? raw : null
 }
 
@@ -86,11 +86,15 @@ export function RoleViewProvider({
         viewAs: next ?? "self",
       })
       setViewAsState(next)
-      if (typeof window === "undefined") return
       const key = keyFor(org, classroom)
-      if (!key) return
-      if (next) sessionStorage.setItem(key, next)
-      else sessionStorage.removeItem(key)
+      const storage = sessionStorageOrNull()
+      if (!key || !storage) return
+      try {
+        if (next) storage.setItem(key, next)
+        else storage.removeItem(key)
+      } catch {
+        // Best-effort: the view-as choice still applies for this page.
+      }
     },
     [org, classroom],
   )

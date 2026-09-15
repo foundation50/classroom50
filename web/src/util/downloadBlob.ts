@@ -7,9 +7,15 @@ export function downloadBlob(blob: Blob, filename: string): void {
 
   link.href = url
   link.download = filename
+  // Firefox/Safari start the download asynchronously, so the anchor has to be
+  // in the document and the URL must outlive the next task: revoking on a 0 ms
+  // timer is a known cause of failed or empty multi-MB downloads there.
+  link.style.display = "none"
+  document.body.appendChild(link)
   link.click()
+  link.remove()
 
-  // Defer revoke: click() downloads async; a sync revoke can cancel a large
-  // download before the blob is latched.
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+  setTimeout(() => URL.revokeObjectURL(url), REVOKE_DELAY_MS)
 }
+
+const REVOKE_DELAY_MS = 60_000

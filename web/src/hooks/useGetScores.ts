@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "@/github-core/queries"
+import { isSynthesizedManual } from "@/domain/assignments/scoreOverride"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { scoresFilePath } from "@/util/configRepoPaths"
 import { logger } from "@/lib/logger"
@@ -106,6 +107,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
     .filter(
       (entry) =>
         entry &&
+        typeof entry.owner === "string" &&
         Array.isArray(entry.submissions) &&
         entry.submissions.length > 0,
     )
@@ -124,9 +126,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
       // entry is overridden; the writer also clamps its datetime to sort first,
       // so this is defense-in-depth for entries written before that clamp.
       const overrideRecord =
-        entry.override === true
-          ? sorted.find((s) => s.submission.startsWith("submit/manual-"))
-          : undefined
+        entry.override === true ? sorted.find(isSynthesizedManual) : undefined
       const latest = overrideRecord ?? sorted[0]
 
       // The autograded value beneath an override: the newest real (non-manual)
@@ -134,7 +134,7 @@ function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
       // to. Undefined when the entry isn't overridden or has no real history.
       const autograded =
         entry.override === true
-          ? sorted.find((s) => !s.submission.startsWith("submit/manual-"))
+          ? sorted.find((s) => !isSynthesizedManual(s))
           : undefined
 
       const usernames =

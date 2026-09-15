@@ -81,7 +81,7 @@ const CreateClassroomForm = ({
     defaultValues: {
       name: defaultValues?.name ?? "",
       slug: defaultValues?.slug ?? "",
-      term: defaultValues?.slug ?? "",
+      term: defaultValues?.term ?? "",
       protectPages: defaultValues?.protectPages ?? false,
       secret: defaultValues?.secret ?? "",
     } satisfies CreateClassroomFormValues,

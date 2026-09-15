@@ -5,6 +5,7 @@ import {
   githubValidationReasons,
 } from "./errors"
 import { logger } from "@/lib/logger"
+import { anyAbortSignal } from "@/lib/platformShims"
 import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 import { countApiCall, publishRateLimit } from "@/lib/diagnostics/rateLimit"
 import { archivePath, assertSafeProxyBase, proxyUrl } from "./workerProxy"
@@ -296,7 +297,7 @@ function composeAbortSignal(
   const ms = timeoutMs ?? defaultMs
   const timeoutSignal = ms > 0 ? AbortSignal.timeout(ms) : undefined
   return callerSignal && timeoutSignal
-    ? AbortSignal.any([callerSignal, timeoutSignal])
+    ? anyAbortSignal([callerSignal, timeoutSignal])
     : (callerSignal ?? timeoutSignal)
 }
 

@@ -2,9 +2,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 
-vi.mock("react-i18next", () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
-}))
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>()
+  return {
+    ...actual,
+    useTranslation: () => ({ t: (key: string) => key }),
+  }
+})
 
 import SubmissionsControls from "./SubmissionsControls"
 import { DEFAULT_FILTERS } from "@/domain/submissions/dashboard"

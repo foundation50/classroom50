@@ -2,6 +2,11 @@ import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui"
 import { ToggleField } from "@/components/ui"
 import type { AssignmentForm } from "../assignmentFormModel"
+import {
+  dueDateSeed,
+  isDeliberatelyCleared,
+  releaseDateSeed,
+} from "../formFieldHelpers"
 import { ReleaseDateAccessNotice } from "./ReleaseDateAccessNotice"
 import { SectionCard } from "./SectionCard"
 
@@ -49,6 +54,8 @@ export function ScheduleSection({
                 onChange={(checked) => {
                   setAvailableFromEnabled(checked)
                   if (!checked) field.handleChange("")
+                  else if (!field.state.value)
+                    field.handleChange(releaseDateSeed())
                 }}
                 label={t("assignments.form.setAvailableFrom")}
                 help={t("assignments.form.setAvailableFromTip")}
@@ -65,9 +72,10 @@ export function ScheduleSection({
                     })}
                     value={field.state.value}
                     onBlur={(e) => {
-                      // Clearing the picker retires the release date: hide it
+                      // Emptying the picker retires the release date: hide it
                       // and uncheck the box (value is already "").
-                      if (!e.target.value) setAvailableFromEnabled(false)
+                      if (isDeliberatelyCleared(e.target))
+                        setAvailableFromEnabled(false)
                       field.handleBlur()
                     }}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -91,6 +99,7 @@ export function ScheduleSection({
                 onChange={(checked) => {
                   setDueDateEnabled(checked)
                   if (!checked) field.handleChange("")
+                  else if (!field.state.value) field.handleChange(dueDateSeed())
                 }}
                 label={t("assignments.form.setDueDate")}
                 help={t("assignments.form.setDueDateTip")}
@@ -105,9 +114,10 @@ export function ScheduleSection({
                     aria-label={t("assignments.form.dueDate", { tz: tzShort })}
                     value={field.state.value}
                     onBlur={(e) => {
-                      // Clearing the picker retires the due date: hide it and
+                      // Emptying the picker retires the due date: hide it and
                       // uncheck the box (value is already "").
-                      if (!e.target.value) setDueDateEnabled(false)
+                      if (isDeliberatelyCleared(e.target))
+                        setDueDateEnabled(false)
                       field.handleBlur()
                     }}
                     onChange={(e) => field.handleChange(e.target.value)}

@@ -41,7 +41,7 @@ vi.mock("@/github-core/mutations", () => ({
 }))
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (params: unknown) => acceptAssignment(params),
-  deleteAssignment: (client: unknown, input: unknown) =>
+  deleteAssignmentWithConflictRetry: (client: unknown, input: unknown) =>
     deleteAssignment(client, input),
 }))
 vi.mock("@/domain/students", () => ({

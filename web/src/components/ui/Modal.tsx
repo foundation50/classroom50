@@ -153,6 +153,16 @@ export function Modal({
     else if (ref) (ref as { current: HTMLDialogElement | null }).current = node
   }
 
+  // The close X and backdrop call dialog.close() directly rather than being
+  // `<form method="dialog">` submit buttons: a Modal often renders inside a
+  // page <form>, and a nested form's submit event bubbles into the outer
+  // form's onSubmit (React relays it), so dismissing the dialog would save the
+  // page. The native close event still fires, so onClose is unaffected.
+  const closeDialog = () => {
+    const dialog = dialogRef?.current ?? internalRef.current
+    if (dialog?.open) dialog.close()
+  }
+
   return (
     <dialog
       ref={setRefs}
@@ -171,20 +181,18 @@ export function Modal({
     >
       <div className={cx("modal-box", SIZE_CLASS[size], boxClassName)}>
         {!hideCloseButton && (
-          <form method="dialog">
-            <Button
-              type="submit"
-              variant="ghost"
-              size="sm"
-              shape="circle"
-              className="absolute end-3 top-3"
-              aria-label={t("common.close")}
-              disabled={closeDisabled}
-              key={closeId}
-            >
-              <XIcon className="size-4" aria-hidden="true" />
-            </Button>
-          </form>
+          <Button
+            variant="ghost"
+            size="sm"
+            shape="circle"
+            className="absolute end-3 top-3"
+            aria-label={t("common.close")}
+            disabled={closeDisabled}
+            onClick={closeDialog}
+            key={closeId}
+          >
+            <XIcon className="size-4" aria-hidden="true" />
+          </Button>
         )}
         {title !== undefined && (
           <div
@@ -232,11 +240,17 @@ export function Modal({
           affordance only — keep it out of the tab order (Esc and the top-right
           close X are the keyboard paths) so focus can't tab onto the backdrop
           "behind" the modal box, which reads as leaving the dialog. */}
-      <form method="dialog" className="modal-backdrop">
-        <button tabIndex={-1} aria-hidden="true" disabled={closeDisabled}>
+      <div className="modal-backdrop">
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-hidden="true"
+          disabled={closeDisabled}
+          onClick={closeDialog}
+        >
           {t("common.close")}
         </button>
-      </form>
+      </div>
     </dialog>
   )
 }

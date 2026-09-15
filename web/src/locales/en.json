@@ -3209,7 +3209,10 @@
       "errorTitle": "Couldn't check for a feedback PR",
       "emptyTitle": "No feedback pull request yet",
       "emptyBody": "No feedback pull request has been opened for <repo>{{repo}}</repo> yet. It opens when the student accepts the assignment, so they may not have accepted yet, the assignment may have it turned off, or opening it was deferred. A deferred open retries on re-accept or on the first graded submission.",
-      "openRepoPrs": "Open repository PRs"
+      "openRepoPrs": "Open repository PRs",
+      "blockedTitle": "Feedback pull request found",
+      "blockedBody": "Your browser blocked opening it in a new tab. Use the button below to open it.",
+      "openPr": "Open feedback PR"
     },
     "repairPr": {
       "hint": "If the student accepted but opening the PR failed (a GitHub outage or transient error), you can open it now.",

@@ -173,6 +173,10 @@ export function useGitHubOperation(config: GitHubOperationConfig) {
     retry: false,
     staleTime: 0,
     gcTime: 0,
+    // The deadline below keeps ticking while the tab is hidden; the poll must
+    // too, or a teacher who tabs away comes back to a false "timed out" for a
+    // run that finished.
+    refetchIntervalInBackground: true,
   })
 
   const run = runQuery.data

@@ -65,8 +65,10 @@ export function useStudentClassrooms(
   // downstream memo).
   const classrooms = useMemo<StudentClassroom[]>(() => {
     const byClassroom = new Map<string, StudentClassroom>()
+    const orgKey = org?.toLowerCase()
     for (const team of teamsQuery.data ?? []) {
-      if (team.organization.login !== org) continue
+      // GitHub logins are case-insensitive; the route param is not normalized.
+      if (team.organization.login.toLowerCase() !== orgKey) continue
       const student = parseStudentClassroomSlug(team.slug)
       const staff = parseClassroomTeamSlug(team.slug)
       // A slug like `classroom50-ml-ta` is ambiguous: the STUDENT team of a

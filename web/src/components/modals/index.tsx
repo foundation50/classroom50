@@ -244,8 +244,11 @@ export function ConfirmModal({
             aria-describedby={confirmHintId}
             onChange={(event) => setTypedText(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && matches) {
-                void handleSubmit()
+              // preventDefault: this input has no form of its own, so Enter
+              // would otherwise implicitly submit an enclosing page form.
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                if (matches) void handleSubmit()
               }
             }}
           />

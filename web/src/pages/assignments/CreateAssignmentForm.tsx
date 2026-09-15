@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { useStore } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
 import { Alert, AnimatedAlert, Button } from "@/components/ui"
 import { DetailsSection } from "./sections/DetailsSection"
@@ -110,16 +111,29 @@ const CreateAssignmentForm = ({
   const [noChangesNotice, setNoChangesNotice] = useState(false)
   // Whether the due-date picker is shown. Seeded from the initial value (Edit of
   // an assignment with a due starts checked); a due date is opt-in otherwise.
-  // Unchecking clears due_date so the write path omits it (#195).
-  const [dueDateEnabled, setDueDateEnabled] = useState(
+  // Unchecking clears due_date so the write path omits it (#195). A present
+  // value always shows the picker: TanStack swaps pristine values when a
+  // refetch changes defaultValues (a co-teacher set a due meanwhile), and a
+  // hidden-but-saved date would be written on the next Save.
+  const [dueDateOpened, setDueDateOpened] = useState(
     Boolean(form.state.values.due_date),
   )
+  const dueValue = useStore(form.store, (state) => state.values.due_date)
+  const dueDateEnabled = dueDateOpened || Boolean(dueValue)
+  const setDueDateEnabled = setDueDateOpened
   // Whether the release-date picker is shown. Seeded from the initial value;
   // a release date is opt-in. Unchecking clears available_from_date so the
   // write path omits it (mirrors the due-date toggle).
-  const [availableFromEnabled, setAvailableFromEnabled] = useState(
+  const [availableFromOpened, setAvailableFromOpened] = useState(
     Boolean(form.state.values.available_from_date),
   )
+  const availableFromValue = useStore(
+    form.store,
+    (state) => state.values.available_from_date,
+  )
+  const availableFromEnabled =
+    availableFromOpened || Boolean(availableFromValue)
+  const setAvailableFromEnabled = setAvailableFromOpened
 
   // Restore one section's fields to their create defaults. Because
   // deriveFormShape is a pure view over values, resetting the owned fields also

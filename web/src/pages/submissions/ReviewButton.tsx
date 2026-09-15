@@ -49,6 +49,25 @@ export const FeedbackPrAction = ({
   // row would be dead DOM weight on large rosters.
   const [modalOpen, setModalOpen] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  // The PR the browser refused to open in a new tab: Safari (and Chrome after
+  // its activation window) block window.open once the click's user activation
+  // has lapsed behind the PR lookup, returning null. Rather than silently
+  // doing nothing, surface the PR as a link the teacher can click directly.
+  const [blockedPrUrl, setBlockedPrUrl] = useState<string | null>(null)
+
+  const openPr = (url: string) => {
+    const tab = window.open(url, "_blank", "noopener,noreferrer")
+    if (tab === null) {
+      setBlockedPrUrl(url)
+      setErrorMsg(null)
+      setModalOpen(true)
+    }
+  }
+
+  const closeModal = () => {
+    setModalOpen(false)
+    setBlockedPrUrl(null)
+  }
   // enabled: false — driven by refetch() on click, never on mount.
   const { refetch } = useGetFeedbackPr(org, repo, false)
   const repair = useRepairFeedbackPr()
@@ -64,7 +83,7 @@ export const FeedbackPrAction = ({
         setErrorMsg(errorText(t, error))
         setModalOpen(true)
       } else if (pr) {
-        window.open(pr.html_url, "_blank", "noopener,noreferrer")
+        openPr(pr.html_url)
       } else {
         setErrorMsg(null)
         setModalOpen(true)
@@ -118,7 +137,7 @@ export const FeedbackPrAction = ({
             setModalOpen(false)
             // The PR now exists (created or adopted): resolve and open it.
             const { data: pr } = await refetch()
-            if (pr) window.open(pr.html_url, "_blank", "noopener,noreferrer")
+            if (pr) openPr(pr.html_url)
             return
           }
           setErrorMsg(repairReasonMessage(result))
@@ -136,12 +155,14 @@ export const FeedbackPrAction = ({
       {modalOpen && (
         <Modal
           open
-          onClose={() => setModalOpen(false)}
+          onClose={closeModal}
           size="md"
           title={
-            errorMsg
-              ? t("submissions.reviewModal.errorTitle")
-              : t("submissions.reviewModal.emptyTitle")
+            blockedPrUrl
+              ? t("submissions.reviewModal.blockedTitle")
+              : errorMsg
+                ? t("submissions.reviewModal.errorTitle")
+                : t("submissions.reviewModal.emptyTitle")
           }
           footer={
             <>
@@ -159,11 +180,24 @@ export const FeedbackPrAction = ({
                 variant="ghost"
                 size="sm"
                 disabled={repair.isPending}
-                onClick={() => setModalOpen(false)}
+                onClick={closeModal}
               >
                 {t("common.close")}
               </Button>
-              {!errorMsg && canRepair && (
+              {blockedPrUrl && (
+                <Button
+                  as="a"
+                  variant="primary"
+                  size="sm"
+                  href={blockedPrUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={closeModal}
+                >
+                  {t("submissions.reviewModal.openPr")}
+                </Button>
+              )}
+              {!errorMsg && !blockedPrUrl && canRepair && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -177,7 +211,11 @@ export const FeedbackPrAction = ({
             </>
           }
         >
-          {errorMsg ? (
+          {blockedPrUrl ? (
+            <p className="mt-2 text-sm leading-6 text-base-content/70">
+              {t("submissions.reviewModal.blockedBody")}
+            </p>
+          ) : errorMsg ? (
             <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
               {errorMsg}
             </p>
