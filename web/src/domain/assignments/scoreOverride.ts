@@ -44,7 +44,7 @@ type AssignmentBucket = {
   [key: string]: unknown
 }
 
-type ScoresFile = {
+export type ScoresFile = {
   schema: "classroom50/scores/v1"
   assignments: Record<string, AssignmentBucket>
 }
@@ -79,6 +79,9 @@ export type SetScoreOverrideInput = {
 
 export type SetScoreOverrideResult = {
   newCommitSha: string
+  // The scores.json that was committed, so the hook can seed the read cache
+  // instead of refetching a file GitHub may still serve stale (#1004).
+  scores: ScoresFile
 }
 
 // A synthesized submission record for a hand-entered/overridden score. It has no
@@ -265,6 +268,6 @@ export async function editScoreOverride(
       message,
     )
 
-    return { newCommitSha }
+    return { newCommitSha, scores }
   })
 }

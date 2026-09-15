@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/github-core/queries"
+import { githubKeys, seedJsonFile } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import {
   editScoreOverride,
@@ -11,9 +11,11 @@ import {
 
 // Set or clear a teacher score override for one repo owner, writing the
 // classroom's scores.json in the config repo (the web's only scores write).
-// Invalidates the scores.json read so the submissions page reflects it. The
-// domain helper wraps the read-modify-write in withGitConflictRetry, so a race
-// with the collect run retries transparently.
+// Seeds the scores.json read with the committed file so the submissions page
+// reflects it at once; a refetch could race GitHub's eventual contents API and
+// show the override snapping back (#1004). The domain helper wraps the
+// read-modify-write in withGitConflictRetry, so a race with the collect run
+// retries transparently.
 export function useSetScoreOverride(opts?: {
   onWrite?: (
     result: SetScoreOverrideResult,
@@ -31,9 +33,11 @@ export function useSetScoreOverride(opts?: {
   >({
     mutationFn: (input) => editScoreOverride(client, input),
     onSuccess: (result, input) => {
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.scoresFile(input.org, input.classroom),
-      })
+      seedJsonFile(
+        queryClient,
+        githubKeys.scoresFile(input.org, input.classroom),
+        result.scores,
+      )
       onWrite?.(result, input)
     },
   })

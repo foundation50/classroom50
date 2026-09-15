@@ -40,6 +40,9 @@ export async function deleteAssignment(
     previousCommitSha: ctx.headSha,
     baseTreeSha: ctx.baseTreeSha,
     ...written,
+    // The committed file, for seeding the read cache instead of a refetch
+    // GitHub may still serve stale (#1004).
+    assignments: nextAssignments,
   }
 }
 

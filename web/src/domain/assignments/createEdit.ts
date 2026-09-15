@@ -76,6 +76,9 @@ import type { LocalizedMessage } from "@/types/localizedMessage"
 import { templateForksNotice } from "./templateWarnings"
 
 export type CreateAssignmentResult = CreateClassroomResult & {
+  // The assignments.json that was committed, so the hook can seed the read
+  // cache instead of refetching a file GitHub may still serve stale (#1004).
+  assignments: AssignmentsFile
   // Set when the assignment saved but the follow-up team read grant on a
   // private in-org template failed — a non-fatal warning the UI surfaces
   // (students can't accept until fixed). Mirrors teamDeleteWarning.
@@ -375,6 +378,7 @@ export async function editAssignment(
     previousCommitSha: ctx.headSha,
     baseTreeSha: ctx.baseTreeSha,
     ...written,
+    assignments: nextAssignments,
     templateGrantWarning,
     templateAccessWarning,
     templateForksNotice: templateForks,
@@ -1281,6 +1285,7 @@ export async function createAssignment(
     previousCommitSha: ctx.headSha,
     baseTreeSha: ctx.baseTreeSha,
     ...written,
+    assignments: nextAssignments,
     templateGrantWarning,
     templateForksNotice: templateForks,
   }
@@ -1320,6 +1325,9 @@ export type SetAssignmentClosedResult = Omit<
   updatedRef?: CreateClassroomResult["updatedRef"]
   // The flag value that landed. Echoed so the caller doesn't reread.
   closed: boolean
+  // The assignments.json now at head (committed, or unchanged on a no-op), for
+  // seeding the read cache without a stale refetch (#1004).
+  assignments: AssignmentsFile
 }
 
 export type SetAssignmentLockResult = Omit<
@@ -1331,6 +1339,9 @@ export type SetAssignmentLockResult = Omit<
   updatedRef?: CreateClassroomResult["updatedRef"]
   // The flag value that landed. Echoed so the caller doesn't reread.
   locked: boolean
+  // The assignments.json now at head (committed, or unchanged on a no-op), for
+  // seeding the read cache without a stale refetch (#1004).
+  assignments: AssignmentsFile
   // Set when the flag flip committed but reconciling the private-template
   // student-team access failed (non-fatal): a locked assignment whose student
   // team still has read, or an unlocked one whose read wasn't restored. The UI
@@ -1478,7 +1489,7 @@ export async function setAssignmentLock(
   log.info("set assignment lock: started", { org, classroom, slug, locked })
 
   const ctx = await readAssignmentsForWrite(client, org, classroom)
-  const { target, result } = await setAssignmentFlag(
+  const { target, next, result } = await setAssignmentFlag(
     client,
     ctx,
     org,
@@ -1501,6 +1512,7 @@ export async function setAssignmentLock(
   return {
     ...result,
     locked,
+    assignments: next,
     templateAccessWarning: accessWarning,
     templateForksNotice: forksNotice,
   }
@@ -1616,7 +1628,7 @@ export async function setAssignmentClosed(
   log.info("set assignment closed: started", { org, classroom, slug, closed })
 
   const ctx = await readAssignmentsForWrite(client, org, classroom)
-  const { result } = await setAssignmentFlag(
+  const { next, result } = await setAssignmentFlag(
     client,
     ctx,
     org,
@@ -1625,7 +1637,7 @@ export async function setAssignmentClosed(
     closed,
     `${closed ? "Close" : "Reopen"} assignment: ${classroom}/${slug}`,
   )
-  return { ...result, closed }
+  return { ...result, closed, assignments: next }
 }
 
 // Same concurrency story as setAssignmentLock: the write hits classroom50's
