@@ -2,14 +2,23 @@ import { TelescopeIcon } from "@/components/ui/icons"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
-import { RouterButton, Heading } from "@/components/ui"
+import { RouterButton, Heading, cx } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
-// Rendered by role/visibility-gated pages when the user can't access a resource.
-// We present a 404 ("not found"), not a 403 ("forbidden"): access is enforced by
-// GitHub, so this is UX-only, and a 404 avoids confirming the resource exists to
-// someone whose role can't see it. Reused across teacher-only pages and TA roles.
-const NotFound = ({ title, message }: { title?: string; message?: string }) => {
+// Rendered by role/visibility-gated pages when the user can't access a resource,
+// and by the root route for URLs that match nothing. We present a 404 ("not
+// found"), not a 403 ("forbidden"): access is enforced by GitHub, so this is
+// UX-only, and a 404 avoids confirming the resource exists to someone whose role
+// can't see it. `fullHeight` is for the root case, which renders without the shell.
+const NotFound = ({
+  title,
+  message,
+  fullHeight = false,
+}: {
+  title?: string
+  message?: string
+  fullHeight?: boolean
+}) => {
   const { t } = useTranslation()
   const resolvedTitle = title ?? t("notFound.title")
   const resolvedMessage = message ?? t("notFound.message")
@@ -24,7 +33,12 @@ const NotFound = ({ title, message }: { title?: string; message?: string }) => {
   }, [])
 
   return (
-    <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 p-10 text-center">
+    <div
+      className={cx(
+        "flex flex-col items-center justify-center gap-4 p-10 text-center",
+        fullHeight ? "min-h-screen" : "min-h-[60vh]",
+      )}
+    >
       <div className="flex size-16 items-center justify-center rounded-box bg-base-200 text-base-content/70">
         <TelescopeIcon className="size-8" aria-hidden="true" />
       </div>

@@ -5,11 +5,12 @@ import {
   type ErrorComponentProps,
 } from "@tanstack/react-router"
 import type { RouterContext } from "@/types/router"
-import { AlertIcon, QuestionIcon } from "@/components/ui/icons"
+import { AlertIcon } from "@/components/ui/icons"
 import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
-import { Button, Heading, RouterButton } from "@/components/ui"
+import { Button, Heading } from "@/components/ui"
+import NotFound from "@/components/NotFound"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_ROUTER } from "@/lib/logScopes"
 
@@ -66,27 +67,7 @@ const RootErrorComponent = ({ error }: ErrorComponentProps) => {
 }
 
 // Unknown URLs land here instead of TanStack's unstyled, untranslated default.
-const RootNotFoundComponent = () => {
-  const { t } = useTranslation()
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-10 text-center">
-      <div className="flex size-16 items-center justify-center rounded-box bg-base-200 text-base-content/70">
-        <QuestionIcon aria-hidden="true" className="size-8" />
-      </div>
-      <div>
-        <Heading as="h1" variant="title-medium">
-          {t("notFound.title")}
-        </Heading>
-        <p className="mt-1 max-w-md text-base-content/70">
-          {t("notFound.message")}
-        </p>
-      </div>
-      <RouterButton to="/" variant="primary" size="sm">
-        {t("notFound.goHome")}
-      </RouterButton>
-    </div>
-  )
-}
+const RootNotFoundComponent = () => <NotFound fullHeight />
 
 export const Route = createRootRouteWithContext<RouterContext>()({
   component: RootComponent,

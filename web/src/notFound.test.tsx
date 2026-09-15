@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import {
   createMemoryHistory,
   createRouter,
@@ -8,6 +8,9 @@ import {
 } from "@tanstack/react-router"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 
+// Real i18n rather than relying on a transitive import: the translated copy is
+// what these assertions check.
+import "@/i18n"
 import { routeTree } from "./routeTree.gen"
 import type { RouterContext } from "./types/router"
 
@@ -27,14 +30,21 @@ const renderAt = (path: string) => {
       <RouterProvider router={router} />
     </QueryClientProvider>,
   )
+  return router
 }
 
 describe("root notFoundComponent", () => {
-  it("renders the translated not-found page with a way home", async () => {
+  it("renders the shared not-found page with a way back", async () => {
     renderAt("/no/such/page")
-    await screen.findByRole("heading", { name: "Page not found" })
+    const heading = await screen.findByRole("heading", {
+      name: "Page not found",
+    })
+    expect(document.title).toBe("Page not found · Classroom 50")
+    expect(document.activeElement).toBe(heading)
     expect(
-      screen.getByRole("link", { name: "Go to home" }).getAttribute("href"),
+      screen
+        .getByRole("link", { name: "Go to dashboard" })
+        .getAttribute("href"),
     ).toBe("/")
   })
 
@@ -48,4 +58,13 @@ describe("root notFoundComponent", () => {
     expect(paths).not.toContain("/classes")
     expect(paths).not.toContain("/assignments")
   })
+
+  it.each(["/classes", "/assignments"])(
+    "%s falls through to the authed guard",
+    async (path) => {
+      const router = renderAt(path)
+      await waitFor(() => expect(router.state.location.pathname).toBe("/login"))
+      expect(router.state.location.search).toEqual({ redirect: path })
+    },
+  )
 })
