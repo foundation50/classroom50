@@ -10,7 +10,7 @@ import {
 } from "react"
 import type { ViewAsRole } from "@/authz"
 import { logger } from "@/lib/logger"
-import { sessionStorageOrNull } from "@/lib/webStorage"
+import { sessionStorageOrNull, setItemOrIgnore } from "@/lib/webStorage"
 
 const log = logger.scope("context:roleView")
 
@@ -89,12 +89,8 @@ export function RoleViewProvider({
       const key = keyFor(org, classroom)
       const storage = sessionStorageOrNull()
       if (!key || !storage) return
-      try {
-        if (next) storage.setItem(key, next)
-        else storage.removeItem(key)
-      } catch {
-        // Best-effort: the view-as choice still applies for this page.
-      }
+      if (next) setItemOrIgnore(storage, key, next)
+      else storage.removeItem(key)
     },
     [org, classroom],
   )

@@ -56,8 +56,13 @@ export const FeedbackPrAction = ({
   const [blockedPrUrl, setBlockedPrUrl] = useState<string | null>(null)
 
   const openPr = (url: string) => {
-    const tab = window.open(url, "_blank", "noopener,noreferrer")
-    if (tab === null) {
+    // No `noopener` in the feature string: the spec makes window.open return
+    // null whenever it is set, which would make every successful open look
+    // blocked. Sever the opener by hand instead.
+    const tab = window.open(url, "_blank")
+    if (tab) {
+      tab.opener = null
+    } else {
       setBlockedPrUrl(url)
       setErrorMsg(null)
       setModalOpen(true)

@@ -1,7 +1,11 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { localStorageOrNull, sessionStorageOrNull } from "./webStorage"
+import {
+  localStorageOrNull,
+  sessionStorageOrNull,
+  setItemOrIgnore,
+} from "./webStorage"
 
 const restores: Array<() => void> = []
 
@@ -84,5 +88,23 @@ describe("sessionStorageOrNull", () => {
       throw new DOMException("denied", "SecurityError")
     })
     expect(sessionStorageOrNull()).toBeNull()
+  })
+})
+
+describe("setItemOrIgnore", () => {
+  it("writes through to a working storage", () => {
+    const setItem = vi.fn()
+    setItemOrIgnore({ setItem } as unknown as Storage, "k", "v")
+    expect(setItem).toHaveBeenCalledWith("k", "v")
+  })
+
+  it("swallows a throwing setItem (quota, read-only) and a null storage", () => {
+    const storage = {
+      setItem: () => {
+        throw new DOMException("quota", "QuotaExceededError")
+      },
+    } as unknown as Storage
+    expect(() => setItemOrIgnore(storage, "k", "v")).not.toThrow()
+    expect(() => setItemOrIgnore(null, "k", "v")).not.toThrow()
   })
 })

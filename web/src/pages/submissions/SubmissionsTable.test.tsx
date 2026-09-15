@@ -104,7 +104,12 @@ beforeEach(() => {
   collaborators.mockReturnValue({ data: undefined })
   downloadSubmission.mockReset()
   feedbackRefetch.mockReset()
-  vi.stubGlobal("open", vi.fn())
+  // A real successful window.open returns a WindowProxy; the component severs
+  // its opener by hand, so the stub must be assignable.
+  vi.stubGlobal(
+    "open",
+    vi.fn(() => ({ opener: window })),
+  )
 })
 
 afterEach(() => {
@@ -232,7 +237,6 @@ describe("SubmissionsTable per-row feedback PR shortcut", () => {
       expect(window.open).toHaveBeenCalledWith(
         "https://github.com/acme/cs101-hw1-alice/pull/1",
         "_blank",
-        "noopener,noreferrer",
       ),
     )
   })

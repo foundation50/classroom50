@@ -46,7 +46,12 @@
       // in src/hooks/useTheme.ts.
       ;(function () {
         try {
-          var stored = localStorage.getItem("classroom50:theme")
+          // Storage can throw (blocked cookies, sandboxed iframe); the OS
+          // preference still applies then, as in resolveInitialTheme.
+          var stored = null
+          try {
+            stored = localStorage.getItem("classroom50:theme")
+          } catch (e) {}
           var theme =
             stored === "sumi" || stored === "sumi-dark"
               ? stored

@@ -1,3 +1,4 @@
+import { useId } from "react"
 import { useTranslation } from "react-i18next"
 import { Input } from "@/components/ui"
 import { ToggleField } from "@/components/ui"
@@ -10,17 +11,27 @@ import {
 import { ReleaseDateAccessNotice } from "./ReleaseDateAccessNotice"
 import { SectionCard } from "./SectionCard"
 
+// The schedule pickers, in render order; the form checks them for a half-edited
+// entry on submit (that state exists only in the DOM, the model sees "").
+export const SCHEDULE_PICKER_FIELDS = [
+  "available_from_date",
+  "due_date",
+] as const
+export type SchedulePickerField = (typeof SCHEDULE_PICKER_FIELDS)[number]
+
 // Schedule and access (IA overhaul U8): the opt-in release-date and due-date
-// pickers plus the lock toggle. The picker toggle state lives in the
-// orchestrator so the pickers stay controlled across the section split.
+// pickers plus the lock toggle. Picker visibility is derived in the
+// orchestrator (explicitly opened, or a value is present); the setters here only
+// record the explicit open/close.
 export function ScheduleSection({
   form,
   org,
   onReset,
   dueDateEnabled,
-  setDueDateEnabled,
+  setDueDateOpened,
   availableFromEnabled,
-  setAvailableFromEnabled,
+  setAvailableFromOpened,
+  incompletePicker = null,
 }: {
   form: AssignmentForm
   // Org slug; the release-date notice uses it to tell a private in-org
@@ -28,16 +39,26 @@ export function ScheduleSection({
   org?: string
   onReset?: () => void
   dueDateEnabled: boolean
-  setDueDateEnabled: (enabled: boolean) => void
+  setDueDateOpened: (opened: boolean) => void
   availableFromEnabled: boolean
-  setAvailableFromEnabled: (enabled: boolean) => void
+  setAvailableFromOpened: (opened: boolean) => void
+  // The picker the last submit found half-edited, if any.
+  incompletePicker?: SchedulePickerField | null
 }) {
   const { t } = useTranslation()
+  const incompleteId = useId()
   const tzShort = new Intl.DateTimeFormat(undefined, {
     timeZoneName: "short",
   })
     .formatToParts(new Date())
     .find((part) => part.type === "timeZoneName")?.value
+
+  const incompleteMessage = (field: SchedulePickerField) =>
+    incompletePicker === field ? (
+      <p id={`${incompleteId}-${field}`} className="mt-1.5 text-sm text-error">
+        {t("assignments.form.validation.scheduleDateIncomplete")}
+      </p>
+    ) : null
 
   return (
     <SectionCard
@@ -52,7 +73,7 @@ export function ScheduleSection({
                 id={`${field.name}-enabled`}
                 checked={availableFromEnabled}
                 onChange={(checked) => {
-                  setAvailableFromEnabled(checked)
+                  setAvailableFromOpened(checked)
                   if (!checked) field.handleChange("")
                   else if (!field.state.value)
                     field.handleChange(releaseDateSeed())
@@ -70,16 +91,23 @@ export function ScheduleSection({
                     aria-label={t("assignments.form.availableFrom", {
                       tz: tzShort,
                     })}
+                    invalid={incompletePicker === field.name}
+                    aria-describedby={
+                      incompletePicker === field.name
+                        ? `${incompleteId}-${field.name}`
+                        : undefined
+                    }
                     value={field.state.value}
                     onBlur={(e) => {
                       // Emptying the picker retires the release date: hide it
                       // and uncheck the box (value is already "").
                       if (isDeliberatelyCleared(e.target))
-                        setAvailableFromEnabled(false)
+                        setAvailableFromOpened(false)
                       field.handleBlur()
                     }}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
+                  {incompleteMessage(field.name)}
                   <p className="mt-1.5 text-sm text-base-content/70">
                     {t("assignments.form.availableFromTz", { tz: tzShort })}
                   </p>
@@ -97,7 +125,7 @@ export function ScheduleSection({
                 id={`${field.name}-enabled`}
                 checked={dueDateEnabled}
                 onChange={(checked) => {
-                  setDueDateEnabled(checked)
+                  setDueDateOpened(checked)
                   if (!checked) field.handleChange("")
                   else if (!field.state.value) field.handleChange(dueDateSeed())
                 }}
@@ -112,16 +140,23 @@ export function ScheduleSection({
                     type="datetime-local"
                     className="w-full sm:max-w-xs"
                     aria-label={t("assignments.form.dueDate", { tz: tzShort })}
+                    invalid={incompletePicker === field.name}
+                    aria-describedby={
+                      incompletePicker === field.name
+                        ? `${incompleteId}-${field.name}`
+                        : undefined
+                    }
                     value={field.state.value}
                     onBlur={(e) => {
                       // Emptying the picker retires the due date: hide it and
                       // uncheck the box (value is already "").
                       if (isDeliberatelyCleared(e.target))
-                        setDueDateEnabled(false)
+                        setDueDateOpened(false)
                       field.handleBlur()
                     }}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
+                  {incompleteMessage(field.name)}
                   <p className="mt-1.5 text-sm text-base-content/70">
                     {t("assignments.form.dueDateTz", { tz: tzShort })}
                   </p>

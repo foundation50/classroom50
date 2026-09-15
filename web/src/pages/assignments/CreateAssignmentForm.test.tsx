@@ -286,6 +286,40 @@ describe("Set a due date toggle (issue #195)", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0][0].due_date).toBe("")
   })
+
+  it("refuses to save while a picker is half-edited, instead of dropping the date", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    renderForm(
+      <CreateAssignmentForm
+        edit
+        defaultValues={assignmentToFormValues(withDue as Assignment)}
+        onSubmit={onSubmit}
+      />,
+    )
+    const picker = screen.getByLabelText<HTMLInputElement>(
+      "assignments.form.dueDate",
+    )
+    // The teacher deleted a segment: the browser sanitizes the value to ""
+    // and flags badInput; the model now holds "" (an edit, so Save is live).
+    fireEvent.change(picker, { target: { value: "" } })
+    Object.defineProperty(picker, "validity", {
+      value: { badInput: true, valid: false },
+      configurable: true,
+    })
+
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.saveChanges" }),
+    )
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(
+      screen.getByText("assignments.form.validation.scheduleDateIncomplete"),
+    ).toBeTruthy()
+    expect(picker.getAttribute("aria-invalid")).toBe("true")
+    // The picker stays open with the toggle on so the teacher can finish.
+    expect(screen.getByLabelText("assignments.form.dueDate")).toBe(picker)
+  })
 })
 
 // The "Lock assignment" toggle rides the same form -> onSubmit boundary as the

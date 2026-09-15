@@ -230,11 +230,20 @@ describe("buildDueFields", () => {
   })
 
   it("normalizes a wall-clock inside a DST gap instead of storing it zoneless", () => {
-    // Runs in whatever zone the suite has; in a zone with a spring-forward gap
-    // the hour shifts, elsewhere it doesn't. Either way the result must be a
-    // UTC instant with provenance, never the bare input.
-    const { due, due_meta } = buildDueFields("2026-03-08T02:30")
-    expect(due).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/)
-    expect(due_meta?.input).toBe("2026-03-08T02:30:00")
+    // Pin a zone with a 02:00 spring-forward gap: in UTC or a European zone
+    // 02:30 exists and the old rollover check would pass this test anyway.
+    // Node re-reads TZ on assignment.
+    const previousTz = process.env.TZ
+    process.env.TZ = "America/New_York"
+    try {
+      const { due, due_meta } = buildDueFields("2026-03-08T02:30")
+      // 02:30 does not exist; the instant is 03:30 EDT, like Go's
+      // ParseInLocation, never the bare input.
+      expect(due).toBe("2026-03-08T07:30:00Z")
+      expect(due_meta?.input).toBe("2026-03-08T02:30:00")
+      expect(due_meta?.offset).toBe("-04:00")
+    } finally {
+      process.env.TZ = previousTz
+    }
   })
 })

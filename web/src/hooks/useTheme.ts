@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { localStorageOrNull } from "@/lib/webStorage"
+import { localStorageOrNull, setItemOrIgnore } from "@/lib/webStorage"
 
 // Client-side theme preference. Mirrors the `classroom50:sidebar-collapsed`
 // pattern: one localStorage key, applied by toggling `data-theme` on <html>.
@@ -126,11 +126,7 @@ export function useTheme() {
     applyThemeAnimated(next)
     setThemeState(next)
     setPrefState(next)
-    try {
-      localStorageOrNull()?.setItem(THEME_STORAGE_KEY, next)
-    } catch {
-      // Persistence is best-effort; the theme still applies for this load.
-    }
+    setItemOrIgnore(localStorageOrNull(), THEME_STORAGE_KEY, next)
   }, [])
 
   const setTheme = persist

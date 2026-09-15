@@ -52,7 +52,12 @@ beforeEach(() => {
   refetch.mockReset()
   mutate.mockReset()
   notify.mockReset()
-  vi.stubGlobal("open", vi.fn())
+  // A real successful window.open returns a WindowProxy (never null unless
+  // blocked), and the component nulls its opener; keep the stub honest.
+  vi.stubGlobal(
+    "open",
+    vi.fn(() => ({ opener: window })),
+  )
 })
 
 afterEach(() => {
@@ -120,7 +125,6 @@ describe("ReviewButton — repair flow", () => {
       expect(window.open).toHaveBeenCalledWith(
         "https://github.com/acme/cs101-hw1-alice/pull/1",
         "_blank",
-        "noopener,noreferrer",
       ),
     )
   })
@@ -227,5 +231,56 @@ describe("ReviewButton — repair flow", () => {
     await user.click(screen.getByText("submissions.repairPr.repair"))
 
     expect(await screen.findByText("network down")).toBeTruthy()
+  })
+})
+
+describe("ReviewButton — opening the PR", () => {
+  const PR_URL = "https://github.com/acme/cs101-hw1-alice/pull/1"
+
+  it("opens the PR in a new tab with the opener severed, and shows no modal", async () => {
+    const user = userEvent.setup()
+    const tab = { opener: window as Window | null }
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => tab),
+    )
+    refetch.mockResolvedValueOnce({ data: { html_url: PR_URL }, error: null })
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
+
+    await user.click(
+      screen.getByRole("button", { name: "submissions.table.reviewAria" }),
+    )
+
+    await waitFor(() =>
+      expect(window.open).toHaveBeenCalledWith(PR_URL, "_blank"),
+    )
+    expect(tab.opener).toBeNull()
+    expect(
+      screen.queryByText("submissions.reviewModal.blockedTitle"),
+    ).toBeNull()
+    expect(screen.queryByText("submissions.reviewModal.emptyTitle")).toBeNull()
+  })
+
+  it("offers the PR as a link when the browser blocked the new tab", async () => {
+    const user = userEvent.setup()
+    // A popup blocker (or Safari after the click's activation lapsed behind
+    // the await) makes window.open return null.
+    vi.stubGlobal(
+      "open",
+      vi.fn(() => null),
+    )
+    refetch.mockResolvedValueOnce({ data: { html_url: PR_URL }, error: null })
+    render(<ReviewButton org={ORG} repo={REPO} mode="individual" autograded />)
+
+    await user.click(
+      screen.getByRole("button", { name: "submissions.table.reviewAria" }),
+    )
+
+    await screen.findByText("submissions.reviewModal.blockedTitle")
+    const link = screen.getByRole("link", {
+      name: "submissions.reviewModal.openPr",
+    })
+    expect(link.getAttribute("href")).toBe(PR_URL)
+    expect(screen.queryByText("submissions.repairPr.repair")).toBeNull()
   })
 })

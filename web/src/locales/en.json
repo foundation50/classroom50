@@ -1455,6 +1455,7 @@
         "runnerContainerError": "\"{{label}}\" is a macOS/Windows runner; a Docker image needs an Ubuntu (or custom/self-hosted) runner."
       },
       "validation": {
+        "scheduleDateIncomplete": "Finish the date and time, or turn the toggle off to remove it.",
         "nameRequired": "Assignment name is required.",
         "slugRequired": "Assignment slug is required.",
         "slugInvalid": "Assignment slug must be {{description}}.",
