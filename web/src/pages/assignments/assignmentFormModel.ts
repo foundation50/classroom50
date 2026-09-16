@@ -179,6 +179,9 @@ export type CreateAssignmentFormValues = {
   // Maps to runtime["apt-recommends"], omitted when false or when no packages.
   runtime_apt_recommends: boolean
   setup_command: string
+  // NaN while the field is blank mid-edit (the input stores valueAsNumber so
+  // React leaves the user's text alone); blank means the runner default, 0.
+  // Validation and toSubmitValues read it through setupTimeoutValue.
   setup_timeout: number
   // Raw textarea text; parsed to string[] on save, joined back on read.
   allowed_files: string
@@ -382,6 +385,12 @@ export type SlugContext = {
 // for the form-model consumers.
 export { slugBudgetError }
 
+// The setup timeout as the form consumes it: a blank field (NaN mid-edit) is
+// the runner default, 0. The blur snap writes the same 0 back into the model,
+// but Enter can submit before that blur fires.
+export const setupTimeoutValue = (timeout: number) =>
+  Number.isNaN(timeout) ? 0 : timeout
+
 // Pure submit-time validation, mirroring gh-teacher's write-time rules so a bad
 // value is caught in the form rather than by a failed commit or an unparseable
 // file. Returns a field->message map ({} when valid) so it's testable without a
@@ -466,7 +475,9 @@ export function validateAssignmentForm(
   Object.assign(errors, validateTestDrafts(value.tests))
 
   if (!value.empty_repo && value.setup_command.trim()) {
-    const setupTimeoutError = validateTestTimeout(value.setup_timeout)
+    const setupTimeoutError = validateTestTimeout(
+      setupTimeoutValue(value.setup_timeout),
+    )
     if (setupTimeoutError) {
       errors.setup_timeout = t(
         "assignments.form.validation.setupTimeoutRange",
@@ -777,7 +788,7 @@ export function toSubmitValues(
       parseAptPackages(value.runtime_apt).length > 0 &&
       value.runtime_apt_recommends,
     setup_command: noBuiltIn ? "" : value.setup_command.trim(),
-    setup_timeout: noBuiltIn ? 0 : value.setup_timeout,
+    setup_timeout: noBuiltIn ? 0 : setupTimeoutValue(value.setup_timeout),
     allowed_files: noBuiltIn ? "" : value.allowed_files,
     release_assets: noBuiltIn ? "" : value.release_assets,
     pass_threshold_enabled: noBuiltIn ? false : value.pass_threshold_enabled,

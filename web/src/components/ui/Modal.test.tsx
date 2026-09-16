@@ -140,7 +140,8 @@ describe("Modal", () => {
 
   it("reopens and swallows a close that slipped past the veto while closeDisabled", () => {
     // Chrome's CloseWatcher makes a second Esc without user activation
-    // non-cancelable (#1005): the dialog closes despite the onCancel veto.
+    // non-cancelable (#1005): `cancel` still fires, but the dialog closes
+    // despite preventDefault.
     const onClose = vi.fn()
     const { container, rerender } = render(
       <Modal open closeDisabled onClose={onClose} aria-label="dlg">
@@ -150,6 +151,7 @@ describe("Modal", () => {
     const dialog = container.querySelector("dialog") as HTMLDialogElement
     expect(dialog.open).toBe(true)
 
+    dialog.dispatchEvent(new Event("cancel", { cancelable: false }))
     dialog.close()
     expect(dialog.open).toBe(true)
     expect(onClose).not.toHaveBeenCalled()
@@ -161,6 +163,56 @@ describe("Modal", () => {
       </Modal>,
     )
     dialog.close()
+    expect(dialog.open).toBe(false)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("lets a programmatic close through while closeDisabled (no vetoed cancel)", () => {
+    // A ref-driven caller may close from a mutation's onSuccess while the
+    // pending flag it feeds `closeDisabled` is still true (TanStack awaits
+    // onSuccess before it settles). No `cancel` fired, so this is not a failed
+    // veto: the close must reach onClose and the dialog must stay closed.
+    const onClose = vi.fn()
+    const dialogRef = createRef<HTMLDialogElement>()
+    render(
+      <Modal
+        dialogRef={dialogRef}
+        closeDisabled
+        onClose={onClose}
+        aria-label="dlg"
+      >
+        x
+      </Modal>,
+    )
+    dialogRef.current?.showModal()
+    expect(dialogRef.current?.open).toBe(true)
+
+    dialogRef.current?.close()
+    expect(dialogRef.current?.open).toBe(false)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it("a vetoed cancel does not swallow a later, unrelated close", () => {
+    // The veto latch is consumed by the close that follows it. A cancel whose
+    // preventDefault held (no close followed) must not swallow the next real
+    // close once the lock has released.
+    const onClose = vi.fn()
+    const { container, rerender } = render(
+      <Modal open closeDisabled onClose={onClose} aria-label="dlg">
+        x
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+    const cancel = new Event("cancel", { cancelable: true })
+    dialog.dispatchEvent(cancel)
+    expect(cancel.defaultPrevented).toBe(true)
+    expect(dialog.open).toBe(true)
+
+    rerender(
+      <Modal open={false} onClose={onClose} aria-label="dlg">
+        x
+      </Modal>,
+    )
     expect(dialog.open).toBe(false)
     expect(onClose).toHaveBeenCalledTimes(1)
   })

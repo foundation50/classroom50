@@ -1,5 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
-import type { WheelEvent } from "react"
+import { describe, expect, it } from "vitest"
 import {
   dueDateSeed,
   isDeliberatelyCleared,
@@ -54,13 +53,5 @@ describe("numberInputProps (#1002)", () => {
     expect(numberInputProps(0).value).toBe(0)
     expect(numberInputProps(NaN).value).toBe("")
     expect(numberInputProps("").value).toBe("")
-  })
-
-  it("blurs the field on wheel so Chrome cannot step it while scrolling", () => {
-    const blur = vi.fn()
-    numberInputProps(5).onWheel({
-      currentTarget: { blur },
-    } as unknown as WheelEvent<HTMLInputElement>)
-    expect(blur).toHaveBeenCalledTimes(1)
   })
 })

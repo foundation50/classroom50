@@ -134,14 +134,20 @@ type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
 
 // Controls where Enter already has a native meaning the editor must not steal.
 const keepsNativeEnter = (el: HTMLElement) =>
-  el.tagName === "TEXTAREA" ||
-  el.tagName === "BUTTON" ||
-  el.tagName === "SELECT"
+  el.tagName === "TEXTAREA" || el.tagName === "BUTTON"
 
-// A radio has no Enter behaviour of its own, but Firefox implicitly submits the
-// enclosing form on it, and this dialog sits inside the assignment form.
-const isRadio = (el: HTMLElement) =>
-  el instanceof HTMLInputElement && el.type === "radio"
+// Enter has no commit meaning on these, but the browser would implicitly
+// submit the enclosing assignment form: Firefox on a radio, Windows/Linux
+// Chromium on a menu-list select (macOS only opens the picker). Swallow it.
+const swallowsEnter = (el: HTMLElement) =>
+  el.tagName === "SELECT" ||
+  (el instanceof HTMLInputElement && el.type === "radio")
+
+// A blank timeout means "runner default", which the draft spells 0. The field
+// holds NaN until blur (so React leaves the user's text alone), and an Enter
+// commit can run before that blur, so normalize at the point of use too.
+const normalizeTimeout = (draft: AssignmentTestDraft): AssignmentTestDraft =>
+  Number.isNaN(draft.timeout) ? { ...draft, timeout: 0 } : draft
 
 // Editor works on a local copy; nothing reaches the form's `tests` until commit.
 // `mode` routes commit (append vs overwrite at `index`); `baseline` is the
@@ -179,12 +185,13 @@ const AutogradingTestModal = ({
     value: AssignmentTestDraft[K],
   ) => setDraft((prev) => ({ ...prev, [key]: value }))
 
-  const dirty = !draftsEqual(draft, editor.baseline)
+  const dirty = !draftsEqual(normalizeTimeout(draft), editor.baseline)
 
   const handleCommit = () => {
-    const found = validateTestDraft(draft, otherNames)
+    const normalized = normalizeTimeout(draft)
+    const found = validateTestDraft(normalized, otherNames)
     setErrors(found)
-    if (Object.keys(found).length === 0) onCommit(draft)
+    if (Object.keys(found).length === 0) onCommit(normalized)
   }
 
   const field = (name: keyof AssignmentTestDraft) => `${fieldId}-${name}`
@@ -213,13 +220,13 @@ const AutogradingTestModal = ({
         // Enter inside a modal input would implicitly submit the surrounding
         // create-assignment form (this modal renders inside it). Repurpose as
         // commit; textareas keep Enter for newlines, and a select or radio
-        // keeps it for its own choice. An IME committing a candidate must not
+        // neither commits nor submits. An IME committing a candidate must not
         // commit the test.
         if (e.key !== "Enter" || isComposingKey(e)) return
         if (!(e.target instanceof HTMLElement) || keepsNativeEnter(e.target))
           return
         e.preventDefault()
-        if (isRadio(e.target)) return
+        if (swallowsEnter(e.target)) return
         if (dirty) handleCommit()
       }}
     >

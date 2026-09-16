@@ -164,13 +164,18 @@ export function Modal({
 
   // Every close path is blocked while `closeDisabled` (controls disabled, Esc
   // vetoed, open-sync held), but Chrome's CloseWatcher lets a second Esc with
-  // no user activation in between close the dialog anyway (#1005). Treat a
-  // close in that state as the veto having failed: reopen and swallow it, so
-  // the parent never learns of a dismissal it was promised couldn't happen.
+  // no user activation in between close the dialog anyway (#1005). Only a
+  // close that follows a vetoed `cancel` is that failed veto; a programmatic
+  // `dialog.close()` never fires `cancel`, and an imperative caller may close
+  // from a mutation's onSuccess while `isPending` is still true, so that close
+  // must still reach onClose. Reopen and swallow only the former.
+  const vetoedCancelRef = useRef(false)
   const handleNativeClose = (
     event: React.SyntheticEvent<HTMLDialogElement>,
   ) => {
-    if (closeDisabled) {
+    const vetoed = vetoedCancelRef.current
+    vetoedCancelRef.current = false
+    if (closeDisabled && vetoed) {
       const dialog = event.currentTarget
       if (!dialog.open) dialog.showModal()
       return
@@ -187,7 +192,10 @@ export function Modal({
       onCancel={(event) => {
         // Esc triggers `cancel` before `close`. When dismissal is blocked
         // (e.g., a submit is in flight), veto it so the dialog stays open.
-        if (closeDisabled) event.preventDefault()
+        if (closeDisabled) {
+          event.preventDefault()
+          vetoedCancelRef.current = true
+        }
       }}
       role={role}
       aria-label={aria["aria-label"]}

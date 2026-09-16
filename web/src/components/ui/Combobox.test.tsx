@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState, type ReactNode } from "react"
 
@@ -128,6 +128,31 @@ describe("Combobox", () => {
     await user.keyboard("{ArrowDown}{ArrowDown}{Enter}")
 
     expect(onSelect).toHaveBeenCalledWith(REPOS[1])
+  })
+
+  it("leaves arrows and Enter to the IME while composing (#1003)", async () => {
+    const user = userEvent.setup()
+    const onSelect = vi.fn()
+    render(<Harness onSelect={onSelect} />)
+
+    await user.click(comboboxInput())
+    await user.keyboard("{ArrowDown}")
+    const active = comboboxInput().getAttribute("aria-activedescendant")
+
+    // While composing, ArrowDown walks the IME candidate list: not prevented,
+    // and the listbox's active option stays put.
+    const arrow = fireEvent.keyDown(comboboxInput(), {
+      key: "ArrowDown",
+      isComposing: true,
+    })
+    expect(arrow).toBe(true)
+    expect(comboboxInput().getAttribute("aria-activedescendant")).toBe(active)
+
+    // Enter that commits a candidate must not pick the highlighted option.
+    fireEvent.keyDown(comboboxInput(), { key: "Enter", isComposing: true })
+    fireEvent.keyDown(comboboxInput(), { key: "Enter", keyCode: 229 })
+    expect(onSelect).not.toHaveBeenCalled()
+    expect(screen.getByRole("listbox")).not.toBeNull()
   })
 
   it("does not select on Enter when no option is active", async () => {

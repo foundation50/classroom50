@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, fireEvent } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { ReactElement } from "react"
@@ -712,6 +718,84 @@ describe("assignment setup timeout", () => {
 
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0][0].setup_timeout).toBe(300)
+  })
+
+  it("an emptied timeout snaps to 0 on blur and submits as 0 (#1002)", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={{
+            name: "Homework",
+            slug: "hw1",
+            add_readme: true,
+            grading_choice: "auto",
+            autograding_state: "built-in",
+          }}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    )
+
+    await openAdvanced(user, "autograder")
+    const command = screen.getByLabelText("assignments.form.setupCommand")
+    const timeout = screen.getByLabelText(
+      "assignments.form.setupTimeout",
+    ) as HTMLInputElement
+    await user.type(command, "make")
+
+    // Select-all + Backspace leaves the field blank rather than snapping to 0
+    // under the cursor; blur is where blank becomes the runner default.
+    fireEvent.change(timeout, { target: { value: "" } })
+    expect(timeout.value).toBe("")
+    fireEvent.blur(timeout)
+    expect(timeout.value).toBe("0")
+
+    await user.click(
+      screen.getByRole("button", {
+        name: "assignments.form.createButton",
+      }),
+    )
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].setup_timeout).toBe(0)
+  })
+
+  it("an emptied timeout submitted with Enter before blur is 0, not an error", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={{
+            name: "Homework",
+            slug: "hw1",
+            add_readme: true,
+            grading_choice: "auto",
+            autograding_state: "built-in",
+          }}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    )
+
+    await openAdvanced(user, "autograder")
+    await user.type(
+      screen.getByLabelText("assignments.form.setupCommand"),
+      "make",
+    )
+    const timeout = screen.getByLabelText(
+      "assignments.form.setupTimeout",
+    ) as HTMLInputElement
+    fireEvent.change(timeout, { target: { value: "" } })
+    // Enter submits the page form on keydown, before the blur snap runs.
+    fireEvent.submit(timeout.closest("form")!)
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0].setup_timeout).toBe(0)
+    expect(
+      screen.queryByText("assignments.form.validation.setupTimeoutRange"),
+    ).toBeNull()
   })
 })
 

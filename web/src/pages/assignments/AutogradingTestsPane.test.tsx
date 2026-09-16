@@ -369,6 +369,34 @@ describe("AutogradingTestsPane number fields (#1002)", () => {
     fireEvent.blur(input)
     expect(input.value).toBe("0")
   })
+
+  it("an emptied timeout committed with Enter before blur is 0, not an error", async () => {
+    const user = userEvent.setup()
+    const tests = renderPane()
+    await openEditor(user)
+    await user.type(
+      screen.getByLabelText("assignments.autograder.testName"),
+      "Prints hello",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.runCommand"),
+      "./hello",
+    )
+    await user.type(
+      screen.getByLabelText("assignments.autograder.expectedOutput"),
+      "hello",
+    )
+    const timeout = screen.getByLabelText(
+      "assignments.autograder.timeout",
+    ) as HTMLInputElement
+    fireEvent.change(timeout, { target: { value: "" } })
+    // Enter runs the commit on keydown, before the blur snap has a chance.
+    fireEvent.keyDown(timeout, { key: "Enter" })
+
+    await waitFor(() => expect(tests()).toHaveLength(1))
+    expect(tests()[0].timeout).toBe(0)
+    expect(screen.queryByText(/Timeout must be/)).toBeNull()
+  })
 })
 
 describe("AutogradingTestsPane Enter handling (#1003)", () => {
@@ -401,17 +429,19 @@ describe("AutogradingTestsPane Enter handling (#1003)", () => {
     await waitFor(() => expect(tests()).toHaveLength(1))
   })
 
-  it("Enter on a select or radio keeps its native meaning", async () => {
+  it("Enter on a select or radio neither commits nor submits the page form", async () => {
     const user = userEvent.setup()
     const tests = renderPane()
     await fillValidDraft(user)
 
-    fireEvent.keyDown(
+    // Neither control commits, but Enter on both must still be prevented:
+    // Windows/Linux Chromium implicitly submits the enclosing assignment form
+    // from a menu-list select, and Firefox does the same from a radio.
+    const selectEnter = fireEvent.keyDown(
       screen.getByLabelText("assignments.autograder.comparison"),
       { key: "Enter" },
     )
-    // A radio doesn't commit either, but Enter on it must still be prevented:
-    // Firefox would otherwise implicitly submit the enclosing assignment form.
+    expect(selectEnter).toBe(false)
     const radioEnter = fireEvent.keyDown(
       screen.getByLabelText("assignments.autograder.type.io.label"),
       { key: "Enter" },

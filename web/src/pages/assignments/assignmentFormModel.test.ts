@@ -335,7 +335,7 @@ describe("setup timeout", () => {
     },
   )
 
-  it.each([Number.NaN, -1, 1.5, 601])(
+  it.each([-1, 1.5, 601])(
     "rejects %s when a setup command is present",
     (setup_timeout) => {
       expect(
@@ -346,6 +346,14 @@ describe("setup timeout", () => {
       ).toBe("assignments.form.validation.setupTimeoutRange")
     },
   )
+
+  it("treats a blank (NaN) timeout as the runner default when a setup command is present", () => {
+    // The number input holds NaN while blank (#1002); Enter can submit before
+    // the blur snap writes 0 back, so the model must read NaN as 0 itself.
+    const value = { ...base, setup_command: "make", setup_timeout: Number.NaN }
+    expect(validateAssignmentForm(value, t).setup_timeout).toBeUndefined()
+    expect(toSubmitValues(value).setup_timeout).toBe(0)
+  })
 
   it("ignores stale timeout values when setup does not apply", () => {
     expect(

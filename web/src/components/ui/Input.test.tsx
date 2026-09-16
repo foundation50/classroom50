@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it, afterEach } from "vitest"
-import { render, screen, cleanup } from "@testing-library/react"
+import { describe, expect, it, afterEach, vi } from "vitest"
+import { render, screen, cleanup, fireEvent } from "@testing-library/react"
 
 import { Input } from "./Input"
 
@@ -56,5 +56,34 @@ describe("Input", () => {
     // Exactly one element owns the border recipe (no double border).
     expect(input.className).not.toContain("input-bordered")
     expect(screen.getByTestId("icon")).not.toBeNull()
+  })
+
+  it("blurs a focused number input on wheel so Chrome cannot step it (#1002)", () => {
+    render(<Input aria-label="n" type="number" defaultValue="5" />)
+    const el = screen.getByLabelText("n")
+    el.focus()
+    expect(document.activeElement).toBe(el)
+    fireEvent.wheel(el)
+    expect(document.activeElement).not.toBe(el)
+  })
+
+  it("leaves a text input focused on wheel and honors a caller's onWheel", () => {
+    const onWheel = vi.fn()
+    render(
+      <>
+        <Input aria-label="t" defaultValue="x" />
+        <Input aria-label="own" type="number" onWheel={onWheel} />
+      </>,
+    )
+    const text = screen.getByLabelText("t")
+    text.focus()
+    fireEvent.wheel(text)
+    expect(document.activeElement).toBe(text)
+
+    const own = screen.getByLabelText("own")
+    own.focus()
+    fireEvent.wheel(own)
+    expect(onWheel).toHaveBeenCalledTimes(1)
+    expect(document.activeElement).toBe(own)
   })
 })

@@ -29,7 +29,7 @@ export type { RadioProps, RadioTone, RadioSize } from "./Radio"
 export { Toggle } from "./Toggle"
 export type { ToggleProps, ToggleTone, ToggleSize } from "./Toggle"
 
-export { Input } from "./Input"
+export { Input, numberInputWheelGuard } from "./Input"
 export type { InputProps, InputSize } from "./Input"
 
 export { Select, SelectSeparatorOption } from "./Select"

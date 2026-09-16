@@ -9,6 +9,7 @@ import {
   HelpTooltip,
   Input,
   Modal,
+  numberInputWheelGuard,
 } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
@@ -322,6 +323,7 @@ function SetTokenModal({
                     max={maxExpiry}
                     value={expiryDays}
                     onChange={(e) => setExpiryDays(e.target.value)}
+                    onWheel={numberInputWheelGuard}
                     className="w-full [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                   />
                   <span className="text-sm text-base-content/60">

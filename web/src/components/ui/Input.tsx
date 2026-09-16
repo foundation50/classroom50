@@ -1,4 +1,9 @@
-import type { ComponentPropsWithoutRef, ReactNode, Ref } from "react"
+import type {
+  ComponentPropsWithoutRef,
+  ReactNode,
+  Ref,
+  WheelEvent,
+} from "react"
 
 import { cx, hasUtility } from "./cx"
 
@@ -41,6 +46,7 @@ export function Input({
   className,
   type,
   ref,
+  onWheel,
   ...props
 }: InputProps) {
   // Only default to full width when the caller hasn't set their own width; a
@@ -48,6 +54,12 @@ export function Input({
   // doesn't merge Tailwind classes, and same-property source order is
   // unspecified).
   const hasWidth = hasUtility("w-", className)
+
+  // Chrome steps a focused number input as the page scrolls under the pointer.
+  // React registers wheel listeners as passive, so the guard blurs instead of
+  // preventing default (#1002). A caller's own onWheel replaces it.
+  const wheelGuard =
+    type === "number" && onWheel === undefined ? numberInputWheelGuard : onWheel
 
   // With a leading icon, the border lives on the wrapping <label> (daisyUI's
   // documented pattern) and the <input> is a bare grower — a single border
@@ -71,6 +83,7 @@ export function Input({
           type={type ?? "text"}
           className="grow"
           aria-invalid={invalid || undefined}
+          onWheel={wheelGuard}
           {...props}
         />
         {trailing}
@@ -90,9 +103,15 @@ export function Input({
         className,
       )}
       aria-invalid={invalid || undefined}
+      onWheel={wheelGuard}
       {...props}
     />
   )
 }
+
+// The wheel guard `Input` applies to every `type="number"`, exported for the
+// rare bare `<input type="number">` a hand-rolled shell still needs.
+export const numberInputWheelGuard = (e: WheelEvent<HTMLInputElement>) =>
+  e.currentTarget.blur()
 
 export default Input
