@@ -5,6 +5,10 @@ import {
   hasCsvFormulaLead,
   unescapeCsvFormulaInjection,
 } from "@/util/csv"
+import {
+  describeLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 
 // The pure roster.csv parse/serialize layer, lifted out of the mutation module
 // so problem detection lives next to the other pure roster helpers (teamRoster)
@@ -97,12 +101,13 @@ export function splitName(name: string | null): {
 }
 
 // A structured problem in a roster.csv file: a 1-based file line (header is
-// line 1) and a human-readable message. Surfaced to the teacher so a
-// malformed roster names exactly what's wrong and where, rather than failing
-// silently or with an opaque blob.
+// line 1) and a message. Surfaced to the teacher so a malformed roster names
+// exactly what's wrong and where, rather than failing silently or with an
+// opaque blob. Our own problems carry a deferred `{ key, params }` for the view
+// to translate; a Papa parse error keeps its library message as a string.
 export type RosterCsvProblem = {
   line: number
-  message: string
+  message: string | LocalizedMessage
 }
 
 export type ParsedRosterCsv = {
@@ -115,8 +120,8 @@ export type ParsedRosterCsv = {
 
 // Parse roster.csv into normalized rows plus a structured list of problems.
 // Never throws on a malformed file — the caller decides whether to refuse
-// (writes) or surface a banner (the view). `parseStudentsCsv` is the throwing
-// wrapper for write paths.
+// (writes) or surface a banner (the view). `parseRosterForRewrite` is the
+// throwing wrapper for write paths.
 export function parseRosterCsv(csv: string): ParsedRosterCsv {
   const parsed = Papa.parse<Record<string, string>>(csv, {
     header: true,
@@ -194,34 +199,41 @@ function extraColumnProblems(
   renamedHeaders: Record<string, string> | undefined,
 ): RosterCsvProblem[] {
   const problems: RosterCsvProblem[] = []
+  const headerProblem = (key: string, name: string) =>
+    problems.push({ line: 1, message: { key, params: { name } } })
   for (const [, original] of Object.entries(renamedHeaders ?? {})) {
-    problems.push({
-      line: 1,
-      message: isCanonicalColumn(original)
-        ? `Extra column "${original}" reuses a reserved column name`
-        : `Duplicate column "${original}"`,
-    })
+    headerProblem(
+      isCanonicalColumn(original)
+        ? "students.rosterProblemReservedColumn"
+        : "students.rosterProblemDuplicateColumn",
+      original,
+    )
   }
   for (const name of extraColumns) {
     if (hasCsvFormulaLead(name)) {
-      problems.push({
-        line: 1,
-        message: `Extra column "${name}" begins with a spreadsheet formula trigger`,
-      })
+      headerProblem("students.rosterProblemFormulaColumn", name)
     }
   }
   return problems
 }
 
-// The view uses the structured `problems` instead of this flattened form.
+// Diagnostic form for thrown errors and logs; the view translates the
+// structured `problems` itself.
 export function formatRosterProblems(problems: RosterCsvProblem[]): string {
-  return problems.map((p) => `line ${p.line}: ${p.message}`).join("; ")
+  return problems
+    .map(
+      (p) =>
+        `line ${p.line}: ${
+          typeof p.message === "string"
+            ? p.message
+            : describeLocalizedMessage(p.message)
+        }`,
+    )
+    .join("; ")
 }
 
-// The strict read every roster rewrite starts from: rows plus the header, so
-// the writer can hand `columns` back to stringifyStudentsCsv and keep the
-// teacher's extra columns. Throws on any problem — a positional re-serialize of
-// a malformed file would corrupt the bad row.
+// The strict read every roster rewrite starts from. Throws on any problem: a
+// positional re-serialize of a malformed file would corrupt the bad row.
 export function parseRosterForRewrite(csv: string): {
   rows: StudentCsvRow[]
   columns: string[]
@@ -284,18 +296,22 @@ export const FORMULA_GUARDED_FIELDS = [
   "role",
 ] as const
 
-// Serialize rows as roster.csv: the canonical header, then the extra columns
-// (`columns` is the header a parse returned; defaults to canonical only). Extra
-// cells are defanged like the free-text canonical fields, matching the CLI's
-// EncodeRoster, and a row missing an extra key writes "".
+const GUARDED_FIELD_SET: ReadonlySet<string> = new Set(FORMULA_GUARDED_FIELDS)
+
+// Serialize rows as roster.csv under the header a parse returned (`columns`),
+// so the teacher's extra columns survive a rewrite. Required rather than
+// defaulted: a writer that forgot it would still pass on a populated roster and
+// only drop the extra columns on an emptied one. Extra cells are defanged like
+// the free-text canonical fields, matching the CLI's EncodeRoster, and a row
+// missing an extra key writes "".
 export function stringifyStudentsCsv(
   rows: StudentCsvRow[],
-  columns: readonly string[] = STUDENT_CSV_FIELDS,
+  columns: readonly string[],
 ) {
   const normalizedRows = rows
     .map((row) => normalizeStudentRow(row))
     .filter(isKeptRosterRow)
-  const extraColumns = collectExtraColumns(columns, normalizedRows)
+  const extraColumns = columns.filter((name) => !isCanonicalColumn(name))
   const header = [...STUDENT_CSV_FIELDS, ...extraColumns]
 
   const records = normalizedRows.map((row) => [
@@ -318,25 +334,4 @@ export function stringifyStudentsCsv(
     { delimiter: ",", header: true, newline: "\n" },
   )
   return csv.endsWith("\n") ? csv : csv + "\n"
-}
-
-const GUARDED_FIELD_SET: ReadonlySet<string> = new Set(FORMULA_GUARDED_FIELDS)
-
-// The extra header: the parsed header's extras in file order, then any extra
-// key a row carries that the header didn't name (first-seen, like the CLI's
-// collectExtraColumns), so a caller that dropped `columns` still loses no cell.
-function collectExtraColumns(
-  columns: readonly string[],
-  rows: StudentCsvRow[],
-): string[] {
-  const ordered: string[] = []
-  const seen = new Set<string>()
-  const add = (name: string) => {
-    if (isCanonicalColumn(name) || seen.has(name)) return
-    seen.add(name)
-    ordered.push(name)
-  }
-  columns.forEach(add)
-  for (const row of rows) Object.keys(row.extra ?? {}).forEach(add)
-  return ordered
 }

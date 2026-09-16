@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Alert, Button, ExternalLink } from "@/components/ui"
 import type { RosterCsvProblem } from "@/domain/students"
+import { resolveLocalizedMessage } from "@/types/localizedMessage"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { rosterPath } from "@/util/configRepoPaths"
 
@@ -30,7 +31,10 @@ export const RosterParseProblems = ({
             <li key={`${p.line}-${i}`}>
               {t("students.rosterParseErrorLine", {
                 line: p.line,
-                message: p.message,
+                message:
+                  typeof p.message === "string"
+                    ? p.message
+                    : resolveLocalizedMessage(t, p.message),
               })}
             </li>
           ))}

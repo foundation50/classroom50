@@ -482,6 +482,31 @@ describe("syncRosterFromTeam — username backfill from the classroom team", () 
     expect(rowsFromCommit()?.map((r) => r.username)).toEqual(["new-ada"])
   })
 
+  // A teacher-added column rides through the sync's rebuild of an existing row
+  // and is "" on the row the sync appends.
+  it("keeps the roster's extra column across a backfill and an append", async () => {
+    const wideHeader = HEADER.trimEnd() + ",cohort\n"
+    getRawFile.mockResolvedValue(
+      wideHeader + ",Ada,Lovelace,,s1,42,student,fall",
+    )
+    listClassroomMembersWithRoles.mockResolvedValue({
+      members: [
+        { id: 42, login: "ada", role: "student" },
+        { id: 7, login: "zed", role: "student" },
+      ],
+      fullyRead: true,
+      pendingRoleKeys: new Set(),
+    })
+
+    await syncRosterFromTeam(client, { ...INPUT, invites: emptyInvites() })
+
+    expect(committed.csv).toBe(
+      wideHeader +
+        "ada,Ada,Lovelace,,s1,42,student,fall\n" +
+        "zed,,,,,7,student,\n",
+    )
+  })
+
   it("leaves the row alone when another row already carries that login", async () => {
     // Two rows answering to one login is a hand-fix, not the sync's guess:
     // the stale row is kept as-is and nothing else forces a commit.

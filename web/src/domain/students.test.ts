@@ -23,6 +23,7 @@ import {
   resolveTeamIdForRoleRead,
   updateStudent,
   updateStudentWithConflictRetry,
+  addStudentsToClassroom,
   parseStudentsCsv,
   parseRosterCsv,
   RosterCsvMalformedError,
@@ -234,13 +235,13 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
   })
 
   // Issue #1001: a column the teacher (or the CLI, whose EncodeRoster keeps
-  // RosterRow.Extra) added to roster.csv must survive a web write, for every
-  // existing row; the new row gets "" in it.
+  // RosterRow.Extra) added to roster.csv must survive a web write. The roster
+  // starts header-only so the extra header can only come from the parsed
+  // `columns` the writer threads through, never from an existing row's cells.
   it("preserves an extra roster.csv column the CLI would keep", async () => {
     const wideHeader = HEADER.trimEnd() + ",student_id\n"
     const { client, committed } = makeClient({
-      startingCsv:
-        wideHeader + "alice,Alice,A,alice@x.edu,P1,42,student,S-001\n",
+      startingCsv: wideHeader,
       membershipState: "active",
       user: { login: "bob", id: 43 },
     })
@@ -251,11 +252,7 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
       username: "bob",
     })
 
-    expect(committed.content).toBe(
-      wideHeader +
-        "alice,Alice,A,alice@x.edu,P1,42,student,S-001\n" +
-        "bob,,,,,43,,\n",
-    )
+    expect(committed.content).toBe(wideHeader + "bob,,,,,43,,\n")
   })
 
   it("throws StudentAlreadyEnrolledError when the login is already on the roster", async () => {
@@ -1587,6 +1584,26 @@ describe("updateClassroomMetadata — merge changed non-empty metadata into exis
     expect(bob?.email).toBe("bob@x.edu")
   })
 
+  // The merge rebuilds the stored row by spread (applyMetadataMerge), so a
+  // teacher-added column must come out the other side untouched.
+  it("keeps the roster's extra column on a merged row", async () => {
+    const wideHeader = HEADER.trimEnd() + ",student_id\n"
+    const { client, committed } = makeClient({
+      startingCsv:
+        wideHeader + "alice,Alice,A,alice@x.edu,Period 1,42,student,S-001\n",
+    })
+
+    await updateClassroomMetadata(client, {
+      org: "acme",
+      classroom: "cs101",
+      updates: [{ username: "alice", github_id: "42", email: "alicia@x.edu" }],
+    })
+
+    expect(committed.content).toBe(
+      wideHeader + "alice,Alice,A,alicia@x.edu,Period 1,42,student,S-001\n",
+    )
+  })
+
   it("never clears a stored value from a blank update field", async () => {
     const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
 
@@ -1693,6 +1710,30 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     // identity preserved verbatim
     expect(alice?.username).toBe("alice")
     expect(alice?.github_id).toBe("42")
+  })
+
+  it("keeps the roster's extra column on the edited row", async () => {
+    const wideHeader = HEADER.trimEnd() + ",student_id\n"
+    const { client, committed } = makeClient({
+      startingCsv:
+        wideHeader + "alice,Alice,A,alice@x.edu,Period 1,42,,S-001\n",
+    })
+
+    await updateStudent(client, {
+      org: "acme",
+      classroom: "cs101",
+      key: "42",
+      patch: {
+        first_name: "Alicia",
+        last_name: "A",
+        email: "alice@x.edu",
+        section: "Period 1",
+      },
+    })
+
+    expect(committed.content).toBe(
+      wideHeader + "alice,Alicia,A,alice@x.edu,Period 1,42,,S-001\n",
+    )
   })
 
   it("throws and does not write when no row matches the key", async () => {
@@ -2622,6 +2663,24 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
   })
 })
 
+describe("addStudentsToClassroom — bulk import appends under the roster's header", () => {
+  it('writes "" in the roster\'s extra column for every imported row', async () => {
+    const wideHeader = HEADER.trimEnd() + ",student_id\n"
+    const { client, committed } = makeClient({
+      startingCsv: wideHeader,
+      user: { login: "alice", id: 42 },
+    })
+
+    await addStudentsToClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      usernames: ["alice"],
+    })
+
+    expect(committed.content).toBe(wideHeader + "alice,,,,,42,,\n")
+  })
+})
+
 describe("bulkUnenrollStudents — single-commit batch removal", () => {
   const rosterWith = (usernames: string[]) =>
     HEADER +
@@ -2661,6 +2720,23 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     expect(survivors).toEqual(["carol"])
     expect(result.removed.map((s) => s.username)).toEqual(["alice", "bob"])
     expect(result.notFound).toHaveLength(0)
+  })
+
+  // Removing the last row is the one write the rows themselves can't help
+  // with: the extra header survives only because the writer threads `columns`.
+  it("keeps the roster's extra header when the last row is removed", async () => {
+    const wideHeader = HEADER.trimEnd() + ",student_id\n"
+    const { client, committed } = makeClient({
+      startingCsv: wideHeader + "alice,,,alice@x.edu,,100,,S-001\n",
+    })
+
+    await bulkUnenrollStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [student("alice", "100")],
+    })
+
+    expect(committed.content).toBe(wideHeader)
   })
 
   it("cancels a sole-classroom pending invite but keeps a multi-classroom one", async () => {

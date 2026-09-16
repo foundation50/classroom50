@@ -1,0 +1,45 @@
+{
+  "comment": "Cross-language golden cases for the roster.csv extra-column header rules. Both readers accept any columns after the canonical seven and round-trip them (Go: parseRoster/EncodeRoster in cli/gh-teacher/internal/configrepo/students_csv.go; TS: parseRosterCsv/stringifyStudentsCsv in web/src/util/rosterCsv.ts), and both must refuse the same malformed headers so neither tool writes a file the other rejects. `extra_columns` are appended to the canonical header; `accept` is whether a file with that header and one valid data row parses without a header problem. Scoping: the web trims header names before applying these rules (Papa transformHeader) and the CLI reads them verbatim, so a name that differs only by surrounding whitespace, or a tab/CR-led name, is a known divergence and is deliberately not a case here. Update both readers in lockstep.",
+  "cases": [
+    {
+      "why": "teacher-added columns after role",
+      "extra_columns": ["student_id", "cohort"],
+      "accept": true
+    },
+    {
+      "why": "an empty header name is accepted",
+      "extra_columns": [""],
+      "accept": true
+    },
+    {
+      "why": "a duplicated extra column would clobber on read",
+      "extra_columns": ["note", "note"],
+      "accept": false
+    },
+    {
+      "why": "an extra column reusing a canonical name",
+      "extra_columns": ["email"],
+      "accept": false
+    },
+    {
+      "why": "formula trigger: =",
+      "extra_columns": ["=HYPERLINK(1)"],
+      "accept": false
+    },
+    {
+      "why": "formula trigger: +",
+      "extra_columns": ["+x"],
+      "accept": false
+    },
+    {
+      "why": "formula trigger: -",
+      "extra_columns": ["-x"],
+      "accept": false
+    },
+    {
+      "why": "formula trigger: @",
+      "extra_columns": ["@x"],
+      "accept": false
+    }
+  ]
+}

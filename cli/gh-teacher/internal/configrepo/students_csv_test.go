@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -1358,6 +1359,51 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "formula trigger") {
 			t.Fatalf("extra column name %q: expected formula-trigger rejection, got %v", name, err)
 		}
+	}
+}
+
+// sharedRosterHeaderCasesPath locates the cross-language golden fixture for the
+// extra-column header rules, also consumed by the TS reader's parity test
+// (web/src/util/rosterCsv.test.ts).
+const sharedRosterHeaderCasesPath = "../../../shared/testdata/roster_header_cases.json"
+
+// TestParseRoster_SharedHeaderRuleParity pins the Go reader's extra-column
+// header acceptance to the shared cases so it can't drift from the web reader:
+// both tools rewrite roster.csv, so a header one side accepts and the other
+// refuses locks that classroom out of the refusing tool.
+func TestParseRoster_SharedHeaderRuleParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Clean(sharedRosterHeaderCasesPath))
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	var doc struct {
+		Cases []struct {
+			Why          string   `json:"why"`
+			ExtraColumns []string `json:"extra_columns"`
+			Accept       bool     `json:"accept"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("unmarshal shared fixture: %v", err)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("shared fixture has no cases")
+	}
+
+	for _, tc := range doc.Cases {
+		t.Run(tc.Why, func(t *testing.T) {
+			header := append(append([]string(nil), RosterColumns...), tc.ExtraColumns...)
+			record := append([]string{"alice", "A", "A", "a@x.edu", "s", "1", "student"},
+				slices.Repeat([]string{"v"}, len(tc.ExtraColumns))...)
+			in := strings.Join(header, ",") + "\n" + strings.Join(record, ",") + "\n"
+			_, err := ParseRoster([]byte(in))
+			if tc.Accept && err != nil {
+				t.Fatalf("ParseRoster rejected a header the shared rules accept: %v\ninput: %q", err, in)
+			}
+			if !tc.Accept && err == nil {
+				t.Fatalf("ParseRoster accepted a header the shared rules reject: %q", in)
+			}
+		})
 	}
 }
 
