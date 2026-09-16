@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.52.0](https://github.com/foundation50/classroom50/compare/cli-v1.51.3...cli-v1.52.0) (2026-09-16)
+
+
+### Bug Fixes
+
+* **web:** preserve extra roster.csv columns the CLI keeps ([#1009](https://github.com/foundation50/classroom50/issues/1009)) ([e4128f2](https://github.com/foundation50/classroom50/commit/e4128f2369a89977b1f8811dbf7416d5aa2a797b))
+
 ## [1.51.3](https://github.com/foundation50/classroom50/compare/cli-v1.51.2...cli-v1.51.3) (2026-09-15)
 
 

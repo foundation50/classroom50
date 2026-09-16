@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.52.0](https://github.com/foundation50/classroom50/compare/web-v1.51.3...web-v1.52.0) (2026-09-16)
+
+
+### Features
+
+* **web:** add a not-found page and drop the shell-less orphan routes ([#1007](https://github.com/foundation50/classroom50/issues/1007)) ([66b850c](https://github.com/foundation50/classroom50/commit/66b850cb6b505e84f71ec700f51c5affd70aef78))
+
+
+### Bug Fixes
+
+* **web:** count team assignments by group, not against the roster ([#1013](https://github.com/foundation50/classroom50/issues/1013)) ([1417420](https://github.com/foundation50/classroom50/commit/1417420156dd168da9cc67523606e190d68035b9))
+* **web:** harden form inputs for empty numbers, IME composition, and vetoed dialog close ([#1008](https://github.com/foundation50/classroom50/issues/1008)) ([4c21d95](https://github.com/foundation50/classroom50/commit/4c21d95313b254a92042e18617b1a30f858c2f15))
+* **web:** label team feedback PRs as Group, matching the runner ([#1015](https://github.com/foundation50/classroom50/issues/1015)) ([88a45c0](https://github.com/foundation50/classroom50/commit/88a45c0e67b8d17adf9eb258a8a2c224afbefb29))
+* **web:** preserve extra roster.csv columns the CLI keeps ([#1009](https://github.com/foundation50/classroom50/issues/1009)) ([e4128f2](https://github.com/foundation50/classroom50/commit/e4128f2369a89977b1f8811dbf7416d5aa2a797b))
+
 ## [1.51.3](https://github.com/foundation50/classroom50/compare/web-v1.51.2...web-v1.51.3) (2026-09-15)
 
 
