@@ -358,9 +358,9 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
     external/private template).
     """
     run_url = f"{server_url}/{repo}/actions/runs/{run_id}"
-    # Static "latest" pointer (set-latest job keeps it current), not a pinned
-    # submit-tag URL: the body is written once at creation, so a tag would go
-    # stale but /releases/latest self-updates. See #262.
+    # Static "latest" pointer (each published submission release claims it),
+    # not a pinned submit-tag URL: the body is written once at creation, so a
+    # tag would go stale but /releases/latest self-updates. See #262.
     release_url = f"{server_url}/{repo}/releases/latest"
 
     head = head_branch(repo)  # GhError here -> main() reports error (no false success)

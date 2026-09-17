@@ -863,9 +863,9 @@ def submit_tags_by_commit(api_url: str, org: str, repo: str, token: str) -> dict
     "tag"), so its object.sha is the tag's own sha; that case is dereferenced
     via git/tags/<sha> to recover the target commit. Resolving both keeps the
     first-grade fallback idempotent even when a prior submit tag was annotated
-    (autograde-runner.yaml's set-latest step shows annotated submit tags
-    occur), so a regrade reuses the existing tag instead of minting a
-    duplicate that yields two releases for one commit."""
+    (autograde-runner.yaml's tag step filters peeled refs because annotated
+    submit tags occur), so a regrade reuses the existing tag instead of
+    minting a duplicate that yields two releases for one commit."""
     url = (
         f"{_repo_url(api_url, org, repo)}/git/matching-refs/"
         f"tags/{urllib.parse.quote(SUBMIT_TAG_PREFIX, safe='')}"

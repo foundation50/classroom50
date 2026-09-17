@@ -16,9 +16,11 @@ when minutes run out.
   saves minutes only for assignments without the built-in autograder.)
 - **The Team plan includes 3,000 minutes per month.** Usage past that is
   billed, up to the organization's Actions spending limit.
-- **Each run bills at least a minute.** GitHub rounds every job up to the
-  next minute, so even a near-empty grading run (a vacuous pass with no
-  tests) bills about a minute.
+- **Each run bills at least two minutes.** GitHub rounds every job up to the
+  next minute, and a grading run is two jobs: a short `setup` job that reads
+  the assignment's runtime settings, then the `grade` job on the runner those
+  settings name. Even a near-empty grading run (a vacuous pass with no tests)
+  bills about two minutes.
 - **In the default submission type, every push grades.** An assignment whose
   **Submission type** is **Every push to the default branch** (`every-push`)
   grades each push to the default branch: five pushes in ten minutes are five

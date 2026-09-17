@@ -514,9 +514,11 @@ read-only probe, so a token missing it passes here and is caught by regrade.
 
 ### `autograde-runner.yaml` (reusable, runs in student repositories)
 
-Jobs: `setup` (create the submit tag, validate configuration), `grade` (run
-`runner.py` and the autograder, post status, publish the Release, maintain the
-feedback pull request), and `set-latest` (serialized latest-pointer update). It
+Jobs: `setup` (create the submit tag, validate configuration) and `grade` (run
+`runner.py` and the autograder, post status, publish the Release as latest,
+maintain the feedback pull request). Two jobs, not one, because `grade` runs
+on the runner and container the manifest's `runtime` block names, and a job's
+`runs-on` must be known before it starts. It
 posts `/repos/{owner}/{repo}/statuses/{sha}`, uses `git tag`, `git push`, and
 `gh release` for tags and Releases, and fetches unauthenticated from Pages:
 

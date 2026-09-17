@@ -7,8 +7,8 @@ name: lint CI
 #   - actionlint  — every GitHub Actions workflow, including the
 #     skeleton workflows scaffolded into a teacher's classroom50 repo
 #     and the inert student shim. actionlint bundles shellcheck, so the
-#     inline `run:` bash (the autograde-runner's tag / Ensure Feedback PR
-#     / set-latest steps, ~300 lines) is shellcheck'd here too.
+#     inline `run:` bash (the autograde-runner's tag / release / Ensure
+#     Feedback PR steps, ~300 lines) is shellcheck'd here too.
 #   - ruff        — lint (NOT format) the shipped Python: the runner
 #     bootstrap, the score collector, the declarative-test materializer,
 #     and the embedded diagnostic autograder.

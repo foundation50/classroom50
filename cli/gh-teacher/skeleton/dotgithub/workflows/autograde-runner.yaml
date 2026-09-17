@@ -26,9 +26,6 @@ permissions:
   pull-requests: write
 
 # cancel-in-progress: false, so every push gets its own release.
-# The set-latest job (further down) serializes the latest-pointer
-# flip so out-of-order completions can't make older submissions
-# look latest.
 concurrency:
   group: classroom50-autograde-${{ github.ref }}
   cancel-in-progress: false
@@ -81,8 +78,9 @@ jobs:
       allowed-files:  ${{ steps.read.outputs.allowed-files }}
       release-assets: ${{ steps.read.outputs.release-assets }}
       # 'true' -> no autograder configured (no declarative tests, no
-      # per-assignment bundle, no classroom-default autograder.py), so grade +
-      # set-latest skip. Fails OPEN: any probe error emits 'false' and grades.
+      # per-assignment bundle, no classroom-default autograder.py), so grade
+      # skips the toolchain installs. Fails OPEN: any probe error emits 'false'
+      # and grades.
       no-autograder:  ${{ steps.read.outputs.no-autograder }}
     steps:
       - name: Check out repository
@@ -726,7 +724,7 @@ jobs:
                   foreign_tag_suppressed = True
 
           # === No-autograder detection ===
-          # Skip grade + set-latest when nothing is configured to grade,
+          # Skip the toolchain installs when nothing is configured to grade,
           # inverting resolve_entrypoint's fall-through: no declarative tests
           # AND no per-assignment bundle AND no classroom-default autograder.py.
           # runner.py's no_autograder() stays the fail-open backstop. FAIL OPEN
@@ -915,8 +913,8 @@ jobs:
   grade:
     needs: setup
     # Skip the acceptance commit, a shim-retrofit commit, a suppressed
-    # tag-mode branch push, and a suppressed foreign tag (set-latest needs
-    # grade, so it skips too). The no-autograder case still runs so the
+    # tag-mode branch push, and a suppressed foreign tag. The no-autograder
+    # case still runs so the
     # submission is RECORDED: runner.py synthesizes a vacuous-pass (0/0
     # success) result and the Release step publishes it, keeping the
     # submission visible on the teacher dashboard (which reads submit/*
@@ -1090,9 +1088,15 @@ jobs:
             -f target_url="$RUN_URL"
 
       # === Publish submit-tag release ===
-      # Created with --latest=false; the set-latest job below owns
-      # the latest-pointer flip (serialized to avoid races between
-      # concurrent grade jobs). Idempotent on workflow re-runs.
+      # Created with --latest=true: latest = the most recent SUBMISSION
+      # EVENT, not the newest commit. Every published submission claims
+      # the badge, so grading an older commit on purpose (a milestone tag
+      # like phase1 re-pointed at earlier work, or a teacher regrade)
+      # makes THAT release latest. This matches the gradebook collector
+      # and the web submission views, which both order by release publish
+      # time: one definition everywhere. Claiming it at creation (GitHub's
+      # own default) instead of in a follow-up job saves a billable
+      # runner-minute per submission (#1019). Idempotent on workflow re-runs.
       - name: Publish submission release
         if: success() && steps.autograde.outputs.status != 'error'
         env:
@@ -1199,7 +1203,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "$TITLE" \
             --notes-file release-body.md \
-            --latest=false
+            --latest=true
 
       # === Ensure the Feedback PR ===
       # Opt-in per assignment (feedback-pr). One long-lived PR per repo:
@@ -1268,46 +1272,3 @@ jobs:
             -f context="classroom50/feedback-pr" \
             -f description="Feedback PR step could not run (could not fetch ensure_feedback_pr.py from Pages)" \
             -f target_url="$RUN_URL" >/dev/null 2>&1 || true
-
-  # === Move the "latest" pointer forward ===
-  # Latest = the most recent SUBMISSION EVENT, not the newest commit:
-  # every published submission release claims the badge, so grading an
-  # older commit on purpose (a milestone tag like phase1 re-pointed at
-  # earlier work, or a teacher regrade) makes THAT release latest. This
-  # matches the gradebook collector and the web submission views, which
-  # both order by release publish time: one definition everywhere.
-  # (An earlier commit-time comparator tried "newest code wins", but it
-  # read the just-published release back as the current latest, compared
-  # it against itself, and never acted. GitHub's default publish-order
-  # badge is what actually shipped, and it is the semantics we want.)
-  # Serialized per-repo so concurrent submissions can't interleave edits.
-  set-latest:
-    needs: [setup, grade]
-    # Advance latest for any recorded submission, including the no-autograder
-    # vacuous pass (status 'success'), so its release becomes the latest the
-    # dashboard surfaces. Explicit suppressed-push / foreign-tag / shim-update
-    # guards, defensive against a future change to grade's result semantics.
-    if: >-
-      needs.setup.outputs.branch-push-suppressed != 'true' &&
-      needs.setup.outputs.foreign-tag-suppressed != 'true' &&
-      needs.setup.outputs.is-shim-update != 'true' &&
-      needs.grade.result == 'success' &&
-      (needs.grade.outputs.status == 'success' || needs.grade.outputs.status == 'failure')
-    runs-on: ubuntu-latest
-    concurrency:
-      group: classroom50-set-latest-${{ github.repository }}
-      cancel-in-progress: false
-    steps:
-      - name: Advance latest release pointer
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.setup.outputs.submission-tag }}
-        run: |
-          set -euo pipefail
-          # Best-effort: the badge is cosmetic and GitHub's own default
-          # (most recently published) already matches this rule, so a
-          # rejected edit must never fail the pipeline. Known rejection:
-          # an org ruleset enforcing immutable releases 422s any edit.
-          if ! gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true; then
-            echo "::warning::could not mark $TAG as the latest release (immutable-release ruleset?); GitHub's default latest (most recently published) matches anyway"
-          fi

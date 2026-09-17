@@ -154,8 +154,8 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	if !ok {
 		t.Fatal("jobs: not a map")
 	}
-	if got := sortedMapKeys(jobs); !reflect.DeepEqual(got, []string{"grade", "set-latest", "setup"}) {
-		t.Errorf("autograde jobs = %v, want setup/grade/set-latest only", got)
+	if got := sortedMapKeys(jobs); !reflect.DeepEqual(got, []string{"grade", "setup"}) {
+		t.Errorf("autograde jobs = %v, want setup/grade only (every job bills a rounded-up minute, #1019)", got)
 	}
 	if got := workflowStepsByUsesPrefix(jobs["grade"], "actions/upload-artifact@"); len(got) != 0 {
 		t.Errorf("grade upload-artifact steps = %d, want zero", len(got))
@@ -275,8 +275,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// every acceptance commit and republish the spurious 0/0 release —
 	// exactly what this guard exists to prevent.
 	//
-	// grade is gated at the job level (set-latest needs grade, so it skips
-	// transitively). The gate carries three skips: the acceptance commit, a
+	// grade is gated at the job level. The gate carries three skips: the acceptance commit, a
 	// teacher-side shim-retrofit commit (is-shim-update, the [skip ci]
 	// backstop), and a suppressed run (branch-push-suppressed /
 	// foreign-tag-suppressed, the stale-shim defenses). The no-autograder
@@ -358,7 +357,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// submission-tag was rewired from the read step to the tag step (which
 	// now runs after read); pin the expression VALUE, not just key presence —
 	// a typo'd expression would silently feed an empty TAG to the release
-	// and set-latest jobs.
+	// step.
 	if got := outputsMap["submission-tag"]; got != "${{ steps.tag.outputs.tag }}" {
 		t.Errorf("setup.outputs.submission-tag = %v, want ${{ steps.tag.outputs.tag }}", got)
 	}
@@ -376,14 +375,6 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	}
 	if !strings.Contains(body, "--detect-acceptance") {
 		t.Errorf("autograde-runner.yaml acceptance step doesn't invoke runner.py --detect-acceptance")
-	}
-
-	// === set-latest job: serialized + submission-event ordering ===
-	if got, _ := nested(doc, "jobs", "set-latest", "concurrency", "group"); got != "classroom50-set-latest-${{ github.repository }}" {
-		t.Errorf("set-latest concurrency group = %v, want per-repo serialization", got)
-	}
-	if got, _ := nested(doc, "jobs", "set-latest", "concurrency", "cancel-in-progress"); got != false {
-		t.Errorf("set-latest cancel-in-progress = %v, want false", got)
 	}
 
 	// === substring checks for content embedded inside run: scripts ===
@@ -652,7 +643,7 @@ esac
 				"release create submit/test result.json " +
 					filepath.Join(assetsDir, "first.pdf") + " " +
 					filepath.Join(assetsDir, "second.pdf") +
-					" --repo example/classroom-assignment-student --title Submission submit/test --notes-file release-body.md --latest=false",
+					" --repo example/classroom-assignment-student --title Submission submit/test --notes-file release-body.md --latest=true",
 			}
 			if !reflect.DeepEqual(gotCalls, wantCalls) {
 				t.Errorf("gh calls = %#v, want %#v", gotCalls, wantCalls)
@@ -1020,21 +1011,21 @@ exit 0
 		})
 	}
 
-	// set-latest: every published submission claims the badge (latest =
-	// most recent SUBMISSION EVENT, matching the collector and the web
-	// views), best-effort — a rejected edit (e.g. an org ruleset enforcing
-	// immutable releases 422s edits) warns and never fails the pipeline.
-	// The old commit-time comparator must stay gone: it read its own
-	// just-published release back as CURRENT, self-compared, and never
-	// acted (dead code confirmed live on 2026-08-05).
-	if !strings.Contains(body, `if ! gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true; then`) {
-		t.Errorf("set-latest job missing the best-effort latest claim")
+	// Latest = most recent SUBMISSION EVENT (matching the collector and the
+	// web views): every published submission claims the badge at creation.
+	// A separate set-latest job used to flip the pointer after the fact and
+	// billed a rounded-up runner-minute per submission for it (#1019); the
+	// old commit-time comparator it once carried must stay gone too (it read
+	// its own just-published release back as CURRENT, self-compared, and
+	// never acted; dead code confirmed live on 2026-08-05).
+	if strings.Contains(body, "--latest=false") {
+		t.Errorf("release step must claim latest at creation, not defer it to a follow-up job")
 	}
-	if !strings.Contains(body, "could not mark $TAG as the latest release") {
-		t.Errorf("set-latest job missing the rejected-edit warning (immutable-release rulesets)")
+	if strings.Contains(body, "gh release edit") {
+		t.Errorf("autograde-runner.yaml still edits the release after publishing (the set-latest job is gone)")
 	}
 	if strings.Contains(body, `commit.committer.date`) {
-		t.Errorf("set-latest job still carries the dead commit-time comparator (self-compares its own release; see 2026-08-05 finding)")
+		t.Errorf("autograde-runner.yaml still carries the dead commit-time comparator (self-compares its own release; see 2026-08-05 finding)")
 	}
 }
 
