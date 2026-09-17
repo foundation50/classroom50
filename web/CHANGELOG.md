@@ -17,6 +17,13 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.52.1](https://github.com/foundation50/classroom50/compare/web-v1.52.0...web-v1.52.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **web:** section-filter unsubmitted group and team rows ([#1021](https://github.com/foundation50/classroom50/issues/1021)) ([3d7164d](https://github.com/foundation50/classroom50/commit/3d7164df7edfd9be38b24775748c98734541d580))
+
 ## [1.52.0](https://github.com/foundation50/classroom50/compare/web-v1.51.3...web-v1.52.0) (2026-09-16)
 
 

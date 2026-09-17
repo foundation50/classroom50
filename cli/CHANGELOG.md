@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.52.1](https://github.com/foundation50/classroom50/compare/cli-v1.52.0...cli-v1.52.1) (2026-09-17)
+
+
+### Bug Fixes
+
+* **cli:** drop the set-latest job from the autograde runner ([#1022](https://github.com/foundation50/classroom50/issues/1022)) ([a45f4e3](https://github.com/foundation50/classroom50/commit/a45f4e32172042dd1708dc15dcd571c9be1c46fd)), closes [#1019](https://github.com/foundation50/classroom50/issues/1019)
+
 ## [1.52.0](https://github.com/foundation50/classroom50/compare/cli-v1.51.3...cli-v1.52.0) (2026-09-16)
 
 
