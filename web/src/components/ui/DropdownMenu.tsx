@@ -106,6 +106,10 @@ export function Dropdown({
   ...props
 }: DropdownProps) {
   const [open, setOpen] = useState(false)
+  // Mirrors `open` so a transition can be decided (and reported) outside the
+  // state updater, which React requires to be pure and double-runs in
+  // StrictMode; notifying from inside it would set a parent's state mid-render.
+  const openRef = useRef(false)
   const rootRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | HTMLAnchorElement | null>(null)
   const menuRef = useRef<HTMLElement | null>(null)
@@ -114,10 +118,10 @@ export function Dropdown({
 
   const setOpenNotify = useCallback(
     (next: boolean) => {
-      setOpen((previous) => {
-        if (previous !== next) onOpenChange?.(next)
-        return next
-      })
+      if (openRef.current === next) return
+      openRef.current = next
+      setOpen(next)
+      onOpenChange?.(next)
     },
     [onOpenChange],
   )
@@ -272,6 +276,11 @@ export function DropdownMenu({
       ref={menuRef}
       id={menuId}
       role="menu"
+      // WebKit does not focus a plain <button> on mousedown and clears focus
+      // when no focusable ancestor exists, which would fire the root focusout
+      // and close the menu before the item's click lands (#987). A
+      // mouse-focusable, non-tabbable menu keeps focus inside the root.
+      tabIndex={-1}
       open={open}
       anchorRef={rootRef}
       align={align}

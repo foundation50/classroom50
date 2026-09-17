@@ -3,7 +3,7 @@ import { InlineSpinner } from "@/components/Spinner"
 import { CheckIcon, GlobeIcon, SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { Dropdown, DropdownMenu, cx } from "@/components/ui"
+import { closeDropdownMenu, Dropdown, DropdownMenu, cx } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
@@ -32,7 +32,7 @@ export function LoginLanguageMenu() {
   // second click can fire before it re-renders. A ref flips immediately.
   const switchingRef = useRef(false)
 
-  // The menu is focus-driven (see closeMenu), so nothing in it may take the
+  // <Dropdown> closes when focus leaves it, so nothing in the menu may take the
   // `disabled` attribute while busy: the browser drops focus from a disabled
   // element, which would close the menu on the very click that started the
   // work. Items go inert via aria-disabled + a click guard instead, with
@@ -42,23 +42,18 @@ export function LoginLanguageMenu() {
   const label = (code: string) =>
     code === BASE_LANG ? t("language.baseName") : languageLabel(code, code)
 
-  const closeMenu = () => {
-    // daisyUI dropdowns are focus-driven; blurring the focused element closes
-    // the menu after a selection.
-    if (document.activeElement instanceof HTMLElement) {
-      document.activeElement.blur()
-    }
-  }
-
   // Guarded switch: the ref-lock + spinner-code bookkeeping is identical for
   // both entry points; only the awaited work differs. `action` returns whether
-  // to close the menu (true on a successful switch/install).
+  // to close the menu (true on a successful switch/install). The menu is
+  // resolved from the focused item before awaiting, since focus may have moved
+  // by the time the work finishes.
   const runSwitch = async (code: string, action: () => Promise<boolean>) => {
     if (switchingRef.current || refreshing) return
     switchingRef.current = true
     setSwitchingCode(code)
+    const menu = document.activeElement?.closest('[role="menu"]') ?? null
     try {
-      if (await action()) closeMenu()
+      if (await action()) closeDropdownMenu({ currentTarget: menu })
     } finally {
       setSwitchingCode(null)
       switchingRef.current = false

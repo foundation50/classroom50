@@ -157,82 +157,93 @@
    overflow ancestor clips it and no z-indexed sibling covers it; the hook sets
    left/top in viewport coordinates, `data-open` while shown, `data-side` (which
    edge faces the anchor), and --overlay-tail (a tail's center along that edge).
-   `data-open` also drives the no-popover fallback, where the UA's
-   `:not(:popover-open) { display: none }` does not exist. */
-.overlay-panel {
-  position: fixed;
-  inset: auto;
-  margin: 0;
-  border: 0;
-  padding: 0;
-  overflow: visible;
-  opacity: 0;
-  transition: opacity var(--duration-base) var(--ease-out-soft);
+
+   The chrome resets live in `components` so they beat the UA popover defaults
+   (border, padding, inset, overflow) but lose to Tailwind and daisyUI utilities
+   in `utilities`: a panel's own `border`, `p-1`, or `overflow-y-auto` must win.
+   The closed-state `display: none` stays unlayered on purpose: daisyUI's
+   `.menu { display: flex }` would otherwise override both it and the UA's
+   `:not(:popover-open)` rule and paint every closed menu. `data-open` also
+   drives the no-popover fallback, where that UA rule does not exist. */
+@layer components {
+  .overlay-panel {
+    position: fixed;
+    inset: auto;
+    margin: 0;
+    border: 0;
+    padding: 0;
+    overflow: visible;
+    opacity: 0;
+    transition: opacity var(--duration-base) var(--ease-out-soft);
+  }
+  .overlay-panel[data-open] {
+    opacity: 1;
+  }
+  @starting-style {
+    .overlay-panel[data-open] {
+      opacity: 0;
+    }
+  }
 }
 .overlay-panel:not([data-open]) {
   display: none;
 }
-.overlay-panel[data-open] {
-  opacity: 1;
-}
-@starting-style {
-  .overlay-panel[data-open] {
-    opacity: 0;
-  }
-}
 
 /* Tooltip bubble (components/ui/Tooltip.tsx). Look mirrors daisyUI's tooltip
    so the swap is invisible; --tooltip-bg/--tooltip-fg let a host recolor it
-   (warning tone, the dark rail). */
-.tooltip-bubble {
-  padding: 0.25rem 0.5rem;
-  width: max-content;
-  max-width: min(20rem, 90vw);
-  border-radius: var(--radius-field);
-  background-color: var(--tooltip-bg, var(--color-neutral));
-  color: var(--tooltip-fg, var(--color-neutral-content));
-  font-size: 0.875rem;
-  font-weight: 400;
-  line-height: 1.25;
-  text-align: start;
-  pointer-events: none;
-}
-.tooltip-bubble::after {
-  content: "";
-  position: absolute;
-  width: 0.625rem;
-  height: 0.25rem;
-  background-color: var(--tooltip-bg, var(--color-neutral));
-  mask-image: url("data:image/svg+xml,%3Csvg width='10' height='4' viewBox='0 0 8 4' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0.500009 1C3.5 1 3.00001 4 5.00001 4C7 4 6.5 1 9.5 1C10 1 10 0.499897 10 0H0C-1.99338e-08 0.5 0 1 0.500009 1Z' fill='black'/%3E%3C/svg%3E%0A");
-  mask-repeat: no-repeat;
-  mask-position: -1px 0;
-}
-/* The tail points at the trigger: down when the bubble sits above it, and so
+   (warning tone, the dark rail). In `components` so a `bubbleClassName`
+   utility can override it. */
+@layer components {
+  .tooltip-bubble {
+    padding: 0.25rem 0.5rem;
+    width: max-content;
+    max-width: min(20rem, 90vw);
+    border-radius: var(--radius-field);
+    background-color: var(--tooltip-bg, var(--color-neutral));
+    color: var(--tooltip-fg, var(--color-neutral-content));
+    font-size: 0.875rem;
+    font-weight: 400;
+    line-height: 1.25;
+    text-align: start;
+    pointer-events: none;
+  }
+  .tooltip-bubble::after {
+    content: "";
+    position: absolute;
+    width: 0.625rem;
+    height: 0.25rem;
+    background-color: var(--tooltip-bg, var(--color-neutral));
+    mask-image: url("data:image/svg+xml,%3Csvg width='10' height='4' viewBox='0 0 8 4' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0.500009 1C3.5 1 3.00001 4 5.00001 4C7 4 6.5 1 9.5 1C10 1 10 0.499897 10 0H0C-1.99338e-08 0.5 0 1 0.500009 1Z' fill='black'/%3E%3C/svg%3E%0A");
+    mask-repeat: no-repeat;
+    mask-position: -1px 0;
+  }
+  /* The tail points at the trigger: down when the bubble sits above it, and so
    on. Placed by its center (translate -50%) so --overlay-tail is a plain
    offset. Rotations are about the center; the 3px offsets keep the rotated
    10x4 tail flush with the bubble's edge. */
-.tooltip-bubble[data-side="top"]::after {
-  top: 100%;
-  left: var(--overlay-tail);
-  translate: -50% 0;
-}
-.tooltip-bubble[data-side="bottom"]::after {
-  bottom: 100%;
-  left: var(--overlay-tail);
-  translate: -50% 0;
-  rotate: 180deg;
-}
-.tooltip-bubble[data-side="left"]::after {
-  left: 100%;
-  top: var(--overlay-tail);
-  translate: -3px -50%;
-  rotate: -90deg;
-}
-.tooltip-bubble[data-side="right"]::after {
-  right: 100%;
-  top: var(--overlay-tail);
-  translate: 3px -50%;
-  rotate: 90deg;
+  .tooltip-bubble[data-side="top"]::after {
+    top: 100%;
+    left: var(--overlay-tail);
+    translate: -50% 0;
+  }
+  .tooltip-bubble[data-side="bottom"]::after {
+    bottom: 100%;
+    left: var(--overlay-tail);
+    translate: -50% 0;
+    rotate: 180deg;
+  }
+  .tooltip-bubble[data-side="left"]::after {
+    left: 100%;
+    top: var(--overlay-tail);
+    translate: -3px -50%;
+    rotate: -90deg;
+  }
+  .tooltip-bubble[data-side="right"]::after {
+    right: 100%;
+    top: var(--overlay-tail);
+    translate: 3px -50%;
+    rotate: 90deg;
+  }
 }
 
 /* Design tokens: typography (Primer primitives) and motion. Motion timing is

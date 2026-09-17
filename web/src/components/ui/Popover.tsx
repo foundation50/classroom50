@@ -15,11 +15,11 @@ import { cx } from "./cx"
 
 // The one popover-surface recipe (chrome only, no layout), shared by
 // DropdownMenu, Combobox, and panel-style popovers that aren't a bare menu.
-export const popoverPanelClass =
+const popoverPanelClass =
   "rounded-box border border-base-300 bg-base-100 text-base-content shadow"
 
 // Offset between an anchor and a menu-style panel (daisyUI's `mt-1`).
-export const POPOVER_GAP = 4
+const POPOVER_GAP = 4
 
 export type PopoverProps = {
   open: boolean

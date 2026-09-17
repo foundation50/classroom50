@@ -1,8 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { StrictMode } from "react"
 
 import {
+  closeDropdownMenu,
   Dropdown,
   DropdownMenu,
   type DropdownTriggerProps,
@@ -120,6 +122,79 @@ describe("Dropdown open state", () => {
     const trigger = screen.getByRole("button", { name: "Actions" })
     fireEvent.click(trigger)
     fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" })
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  // WebKit does not focus a plain <button> on mousedown; the focused item
+  // blurs toward the nearest focusable ancestor. The menu must be that
+  // ancestor, or the root's focusout closes the menu before the click lands.
+  it("keeps the menu mouse-focusable so an item mousedown stays inside the root", () => {
+    renderMenu()
+    fireEvent.click(screen.getByRole("button", { name: "Actions" }))
+    expect(screen.getByRole("menu").getAttribute("tabindex")).toBe("-1")
+  })
+
+  it("stays open when focus moves within the widget, closes when it leaves", () => {
+    render(
+      <>
+        <Dropdown>
+          <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+          <DropdownMenu>
+            <DropdownMenu.Item label="First" onSelect={() => {}} />
+          </DropdownMenu>
+        </Dropdown>
+        <button type="button">Outside</button>
+      </>,
+    )
+    const trigger = screen.getByRole("button", { name: "Actions" })
+    fireEvent.click(trigger)
+    const first = screen.getByRole("button", { name: "First" })
+    fireEvent.focusOut(first, { relatedTarget: screen.getByRole("menu") })
+    expect(trigger.getAttribute("aria-expanded")).toBe("true")
+    fireEvent.focusOut(first, {
+      relatedTarget: screen.getByRole("button", { name: "Outside" }),
+    })
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+  })
+
+  // React double-invokes state updaters in StrictMode; notifying from inside
+  // one would report each transition twice (and set a parent's state
+  // mid-render).
+  it("reports each open-state transition exactly once under StrictMode", () => {
+    const onOpenChange = vi.fn()
+    render(
+      <StrictMode>
+        <Dropdown onOpenChange={onOpenChange}>
+          <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+          <DropdownMenu>
+            <DropdownMenu.Item label="First" onSelect={() => {}} />
+          </DropdownMenu>
+        </Dropdown>
+      </StrictMode>,
+    )
+    const trigger = screen.getByRole("button", { name: "Actions" })
+    fireEvent.click(trigger)
+    fireEvent.click(trigger)
+    expect(onOpenChange.mock.calls).toEqual([[true], [false]])
+  })
+
+  it("closes from a non-Item row through closeDropdownMenu(event)", () => {
+    render(
+      <Dropdown>
+        <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+        <DropdownMenu>
+          <li>
+            <a href="#go" onClick={closeDropdownMenu}>
+              Go somewhere
+            </a>
+          </li>
+        </DropdownMenu>
+      </Dropdown>,
+    )
+    const trigger = screen.getByRole("button", { name: "Actions" })
+    fireEvent.click(trigger)
+    fireEvent.click(screen.getByRole("link", { name: "Go somewhere" }))
     expect(trigger.getAttribute("aria-expanded")).toBe("false")
     expect(document.activeElement).toBe(trigger)
   })

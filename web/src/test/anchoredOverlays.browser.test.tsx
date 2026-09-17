@@ -132,6 +132,115 @@ describe("DropdownMenu stays on screen", () => {
       .element(page.getByRole("button", { name: "After" }))
       .toHaveFocus()
   })
+
+  it("keeps its border, padding, and inner scroll (utilities beat the popover reset)", async () => {
+    render(
+      <div style={{ padding: 40 }}>
+        <Dropdown>
+          <DropdownMenu.Trigger size="sm">Actions</DropdownMenu.Trigger>
+          <DropdownMenu className="max-h-24 w-64 flex-nowrap overflow-y-auto">
+            {Array.from({ length: 12 }, (_, i) => (
+              <DropdownMenu.Item
+                key={i}
+                label={`Action ${i + 1}`}
+                onSelect={() => {}}
+              />
+            ))}
+          </DropdownMenu>
+        </Dropdown>
+      </div>,
+    )
+    await page.getByRole("button", { name: "Actions", exact: true }).click()
+    await expect.poll(openMenu).not.toBeNull()
+    const menu = openMenu()!
+    const style = getComputedStyle(menu)
+    // The UA popover reset is cancelled by `.overlay-panel`, which must not in
+    // turn cancel the panel's own utilities.
+    expect(style.borderTopWidth).toBe("1px")
+    expect(parseFloat(style.paddingTop)).toBeGreaterThan(0)
+    expect(style.overflowY).toBe("auto")
+    expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight)
+  })
+
+  it("follows its content when the panel grows while open", async () => {
+    function GrowingMenu() {
+      const [more, setMore] = useState(false)
+      return (
+        <div style={{ position: "fixed", left: 300, bottom: 0 }}>
+          <Dropdown>
+            <DropdownMenu.Trigger size="sm">Actions</DropdownMenu.Trigger>
+            <DropdownMenu className="w-64">
+              <DropdownMenu.Item
+                label="Show more"
+                onSelect={() => setMore(true)}
+              />
+              {more
+                ? Array.from({ length: 8 }, (_, i) => (
+                    <DropdownMenu.Item
+                      key={i}
+                      label={`Extra ${i + 1}`}
+                      onSelect={() => {}}
+                    />
+                  ))
+                : null}
+            </DropdownMenu>
+          </Dropdown>
+        </div>
+      )
+    }
+    render(<GrowingMenu />)
+    const trigger = page.getByRole("button", { name: "Actions", exact: true })
+    await trigger.click()
+    await expect.poll(openMenu).not.toBeNull()
+    // Opened upward (no room below); growing must move the top edge up, not
+    // spill the bottom edge down over the trigger.
+    expect(openMenu()!.dataset.side).toBe("top")
+    const triggerTop = (
+      trigger.element() as HTMLElement
+    ).getBoundingClientRect().top
+    // Item selection closes the menu; reopen so the grown list is measured.
+    await page.getByRole("button", { name: "Show more" }).click()
+    await trigger.click()
+    await expect.poll(openMenu).not.toBeNull()
+    const menu = openMenu()!
+    // Now grow it while open: the observer, not the open handshake, must place it.
+    const spacer = document.createElement("li")
+    spacer.style.height = "120px"
+    menu.appendChild(spacer)
+    await expect
+      .poll(() => menu.getBoundingClientRect().bottom)
+      .toBeLessThanOrEqual(triggerTop)
+    expect(menu.getBoundingClientRect().top).toBeGreaterThanOrEqual(0)
+  })
+
+  it("end-aligns to the inline end under RTL", async () => {
+    document.documentElement.dir = "rtl"
+    try {
+      render(
+        <div style={{ position: "fixed", left: 600, top: 100 }}>
+          <Dropdown align="end">
+            <DropdownMenu.Trigger size="sm">Actions</DropdownMenu.Trigger>
+            <DropdownMenu className="w-64">
+              <DropdownMenu.Item label="First action" onSelect={() => {}} />
+            </DropdownMenu>
+          </Dropdown>
+        </div>,
+      )
+      const trigger = page.getByRole("button", { name: "Actions", exact: true })
+      await trigger.click()
+      await expect.poll(openMenu).not.toBeNull()
+      const root = (trigger.element() as HTMLElement).closest(
+        "[data-dropdown]",
+      ) as HTMLElement
+      // Inline end is the left edge in RTL, so "end" lines the menu's left
+      // edge up with the root's left edge.
+      expect(Math.round(openMenu()!.getBoundingClientRect().left)).toBe(
+        Math.round(root.getBoundingClientRect().left),
+      )
+    } finally {
+      document.documentElement.dir = ""
+    }
+  })
 })
 
 function FramedCombobox() {

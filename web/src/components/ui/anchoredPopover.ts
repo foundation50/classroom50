@@ -30,10 +30,10 @@ export const overlayArenaProps = { [ARENA_ATTR]: "" } as const
 // Popover support arrived in every evergreen engine in 2024; without it the
 // panel still shows (position: fixed, toggled via data-open) but can be
 // clipped like before.
-export const supportsPopover =
+const supportsPopover =
   typeof HTMLElement !== "undefined" && "showPopover" in HTMLElement.prototype
 
-export function showPanel(panel: HTMLElement) {
+function showPanel(panel: HTMLElement) {
   if (supportsPopover) {
     if (panel.isConnected && !panel.matches(":popover-open")) {
       panel.showPopover()
@@ -42,7 +42,7 @@ export function showPanel(panel: HTMLElement) {
   panel.dataset.open = ""
 }
 
-export function hidePanel(panel: HTMLElement) {
+function hidePanel(panel: HTMLElement) {
   if (supportsPopover && panel.matches(":popover-open")) panel.hidePopover()
   delete panel.dataset.open
 }
@@ -77,7 +77,7 @@ function physicalAlign(
   return align === "start" ? "end" : "start"
 }
 
-export function positionPanel({
+function positionPanel({
   anchor,
   panel,
   side,
@@ -152,9 +152,19 @@ export function useAnchoredPopover({
       passive: true,
     })
     window.addEventListener("resize", reposition)
+    // Content can change size while open (a disclosure inside a menu, async
+    // results arriving in a combobox); a panel placed above its anchor would
+    // otherwise grow down over it. Guarded: happy-dom has no ResizeObserver.
+    const observer =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(reposition)
+    observer?.observe(panel)
+    observer?.observe(anchor)
     return () => {
       window.removeEventListener("scroll", reposition, { capture: true })
       window.removeEventListener("resize", reposition)
+      observer?.disconnect()
       hidePanel(panel)
     }
   }, [

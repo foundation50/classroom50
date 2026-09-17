@@ -48,7 +48,7 @@ describe("LoginLanguageMenu refresh row", () => {
   const refreshButton = () =>
     screen.getByRole("button", { name: /language\.refresh/ })
 
-  it("never takes the disabled attribute while refreshing, so the focus-driven menu stays open", () => {
+  it("never takes the disabled attribute while refreshing, so focus stays in the menu and it does not close", () => {
     const { rerender } = render(<LoginLanguageMenu />)
     const button = refreshButton()
     button.focus()

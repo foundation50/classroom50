@@ -25,7 +25,6 @@ import { Dropdown, DropdownMenu } from "@/components/ui"
 // plus the CSV export and Metrics into one dropdown so the toolbar stays
 // compact and the roster surfaces higher. Share (accept link) is a standalone
 // button next to the search bar (its own prominent affordance), not in here.
-// daisyUI dropdowns are focus-driven; selecting an item blurs to close.
 // Disabled/loading gating mirrors the former inline buttons.
 export function SubmissionsActionsMenu({
   collecting,
