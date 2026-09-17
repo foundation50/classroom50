@@ -284,11 +284,9 @@ export function RosterEditMode({
         </Alert>
       ) : null}
 
-      {/* A scroll container, capped to the viewport: the link pickers' panels
-          paint below their cells INSIDE the frame, so an open panel scrolls
-          with the table instead of pushing the page past its container.
-          Opening a picker centers its row (below) so the panel is visible
-          without hand-scrolling. */}
+      {/* A scroll container capped to the viewport so a long roster does not
+          push the page's actions out of reach. The link pickers' panels are
+          top-layer popovers, so the frame never clips them. */}
       <TableShell animate={false} frameClassName="max-h-[65vh] overflow-y-auto">
         <thead>
           <tr>
@@ -344,17 +342,6 @@ export function RosterEditMode({
                       open={openPickerKey === row.key}
                       onOpenChange={(open) => {
                         setOpenPickerKey(open ? row.key : null)
-                        // Center the row inside the scrollable frame so the
-                        // panel below it is visible without hand-scrolling.
-                        // After the rAF the panel has rendered and extended
-                        // the frame's scroll area. (jsdom has no scrollIntoView.)
-                        if (open) {
-                          requestAnimationFrame(() =>
-                            document
-                              .getElementById(`roster-edit-link-${index}`)
-                              ?.scrollIntoView?.({ block: "center" }),
-                          )
-                        }
                       }}
                       onSelect={(m) => {
                         setDraft(row.key, { link: m })

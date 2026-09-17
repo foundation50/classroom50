@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, DropdownMenu } from "@/components/ui"
+import { Button, Dropdown, DropdownMenu } from "@/components/ui"
 import { TriangleDownIcon, XIcon } from "@/components/ui/icons"
 
 // The selection cluster every multi-select table shows while rows are ticked:
@@ -24,15 +24,15 @@ export function BulkSelectionCluster({
   return (
     <>
       <span className="text-sm font-medium tabular-nums">{countLabel}</span>
-      {/* dropdown-start: the cluster sits at the start of its row, so the
-          menu opens inward instead of off the edge. */}
-      <div className="dropdown dropdown-start">
+      {/* Start-aligned: the cluster sits at the start of its row, so the menu
+          opens inward instead of off the edge. */}
+      <Dropdown align="start">
         <DropdownMenu.Trigger variant="primary" size="sm">
           {t("common.actions")}
           <TriangleDownIcon aria-hidden="true" className="size-4" />
         </DropdownMenu.Trigger>
         <DropdownMenu className={menuClassName}>{children}</DropdownMenu>
-      </div>
+      </Dropdown>
       <Button
         variant="ghost"
         size="sm"

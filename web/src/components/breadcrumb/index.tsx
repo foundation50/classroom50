@@ -17,13 +17,7 @@ import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePoint
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
-import {
-  Button,
-  cx,
-  Input,
-  InlineMessage,
-  popoverPanelClass,
-} from "@/components/ui"
+import { Button, cx, Input, InlineMessage, Popover } from "@/components/ui"
 import { CheckIcon, TriangleDownIcon, SearchIcon } from "@/components/ui/icons"
 import { GitHubAPIError } from "@/github-core/errors"
 
@@ -67,7 +61,14 @@ const CrumbSwitcher = <T,>({
   const [query, setQuery] = useState("")
   const wrapperRef = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement | HTMLAnchorElement | null>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const panelId = useId()
+
+  // Focus moves into the search field once the panel is shown. Not autoFocus:
+  // that fires before the popover is displayed, when focus() is a no-op.
+  useEffect(() => {
+    if (open) searchRef.current?.focus()
+  }, [open])
 
   const close = useCallback(() => setOpen(false), [])
   useDismissOnOutsidePointerDown(wrapperRef, open, close)
@@ -98,7 +99,7 @@ const CrumbSwitcher = <T,>({
     // the current page, not a destination.
     <span className="inline-flex cursor-default items-center gap-1 hover:no-underline">
       {name}
-      <div ref={wrapperRef} className="relative">
+      <div ref={wrapperRef}>
         <Button
           ref={triggerRef}
           variant="ghost"
@@ -115,58 +116,58 @@ const CrumbSwitcher = <T,>({
         >
           <TriangleDownIcon aria-hidden="true" className="size-4" />
         </Button>
-        {open && (
-          <div
-            id={panelId}
-            // A titled popup with focusable content is a dialog; autoFocus on
-            // the search field moves focus in, Escape returns it.
-            role="dialog"
-            aria-label={title}
-            className={cx(
-              "absolute start-0 top-full w-64 whitespace-normal",
-              popoverPanelClass,
-            )}
-          >
-            <div className="border-b border-base-300 px-3 py-2 text-sm font-semibold text-base-content">
-              {title}
-            </div>
-            <div className="border-b border-base-300 p-2">
-              <Input
-                inputSize="sm"
-                autoFocus
-                leadingIcon={
-                  <SearchIcon
-                    aria-hidden="true"
-                    className="size-4 text-base-content/60"
-                  />
-                }
-                placeholder={searchPlaceholder}
-                aria-label={searchPlaceholder}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-            {loadError ? (
-              <InlineMessage tone="error" className="px-3 py-3">
-                {t("components.breadcrumb.loadError")}
-              </InlineMessage>
-            ) : visible.length > 0 ? (
-              // text-base-content: rows are actions, not trail links, so they
-              // opt out of the nav's [&_a] accent-blue. The --menu-active-*
-              // vars tone daisyUI's pressed-item feedback down from the
-              // theme's near-black neutral surface to the same subtle wash as
-              // hover — an inverted flash mid-navigation reads as a glitch
-              // here.
-              <ul className="menu max-h-72 w-full flex-nowrap overflow-y-auto p-1 [--menu-active-fg:var(--color-base-content)] [--menu-active-bg:color-mix(in_oklab,var(--color-base-content)_10%,transparent)] [&_a]:text-base-content">
-                {children(visible, close)}
-              </ul>
-            ) : (
-              <div className="px-3 py-3 text-sm text-base-content/70">
-                {t("components.breadcrumb.noMatches")}
-              </div>
-            )}
+        {/* A titled popup with focusable content is a dialog; focus moves to
+            the search field on open, Escape returns it. The panel is a
+            top-layer popover, so the breadcrumbs' scroll container cannot
+            clip it. */}
+        <Popover
+          id={panelId}
+          role="dialog"
+          aria-label={title}
+          open={open}
+          anchorRef={wrapperRef}
+          align="start"
+          className="w-64 whitespace-normal"
+        >
+          <div className="border-b border-base-300 px-3 py-2 text-sm font-semibold text-base-content">
+            {title}
           </div>
-        )}
+          <div className="border-b border-base-300 p-2">
+            <Input
+              ref={searchRef}
+              inputSize="sm"
+              leadingIcon={
+                <SearchIcon
+                  aria-hidden="true"
+                  className="size-4 text-base-content/60"
+                />
+              }
+              placeholder={searchPlaceholder}
+              aria-label={searchPlaceholder}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </div>
+          {loadError ? (
+            <InlineMessage tone="error" className="px-3 py-3">
+              {t("components.breadcrumb.loadError")}
+            </InlineMessage>
+          ) : visible.length > 0 ? (
+            // text-base-content: rows are actions, not trail links, so they
+            // opt out of the nav's [&_a] accent-blue. The --menu-active-*
+            // vars tone daisyUI's pressed-item feedback down from the
+            // theme's near-black neutral surface to the same subtle wash as
+            // hover — an inverted flash mid-navigation reads as a glitch
+            // here.
+            <ul className="menu max-h-72 w-full flex-nowrap overflow-y-auto p-1 [--menu-active-fg:var(--color-base-content)] [--menu-active-bg:color-mix(in_oklab,var(--color-base-content)_10%,transparent)] [&_a]:text-base-content">
+              {children(visible, close)}
+            </ul>
+          ) : (
+            <div className="px-3 py-3 text-sm text-base-content/70">
+              {t("components.breadcrumb.noMatches")}
+            </div>
+          )}
+        </Popover>
       </div>
     </span>
   )
@@ -231,9 +232,6 @@ const Breadcrumb = ({
       aria-label={t("components.breadcrumb.label")}
       className={cx(
         "breadcrumbs text-sm [&_a]:text-[var(--color-link)]",
-        // The switcher panel paints outside the trail, and daisyUI's
-        // `breadcrumbs` horizontal scroll container would clip it.
-        switcher && "overflow-visible",
         className,
       )}
     >

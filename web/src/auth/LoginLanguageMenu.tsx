@@ -3,7 +3,7 @@ import { InlineSpinner } from "@/components/Spinner"
 import { CheckIcon, GlobeIcon, SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { DropdownMenu, cx } from "@/components/ui"
+import { Dropdown, DropdownMenu, cx } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
@@ -84,7 +84,7 @@ export function LoginLanguageMenu() {
     })
 
   return (
-    <div className="dropdown dropdown-end">
+    <Dropdown align="end">
       <DropdownMenu.Trigger
         variant="ghost"
         size="sm"
@@ -194,7 +194,7 @@ export function LoginLanguageMenu() {
           </li>
         )}
       </DropdownMenu>
-    </div>
+    </Dropdown>
   )
 }
 

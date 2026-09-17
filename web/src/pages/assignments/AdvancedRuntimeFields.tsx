@@ -12,6 +12,8 @@ import {
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import {
+  closeDropdownMenu,
+  Dropdown,
   DropdownMenu,
   fieldLabelClass,
   HelpTooltip,
@@ -100,7 +102,11 @@ export const LanguageVersionField = ({
                 language: meta.label,
               })}
             />
-            <div className="dropdown w-full max-w-xs">
+            <Dropdown
+              align="start"
+              matchTriggerWidth
+              className="w-full max-w-xs"
+            >
               <div className="join w-full">
                 <Input
                   id={field.name}
@@ -131,7 +137,7 @@ export const LanguageVersionField = ({
                 </DropdownMenu.Trigger>
               </div>
               {!disabled && (
-                <DropdownMenu className="w-full">
+                <DropdownMenu>
                   {meta.versions.map((version) => (
                     <li key={version}>
                       <button
@@ -143,11 +149,7 @@ export const LanguageVersionField = ({
                         }
                         onClick={(e) => {
                           field.handleChange(version)
-                          // Close the focus-driven dropdown by blurring the
-                          // clicked item (the focus holder that keeps a DaisyUI
-                          // dropdown open) — scoped to this control so it can't
-                          // steal focus from an unrelated element.
-                          e.currentTarget.blur()
+                          closeDropdownMenu(e)
                         }}
                       >
                         <CheckIcon
@@ -162,7 +164,7 @@ export const LanguageVersionField = ({
                   ))}
                 </DropdownMenu>
               )}
-            </div>
+            </Dropdown>
             {error ? (
               <p
                 id={`${field.name}-error`}

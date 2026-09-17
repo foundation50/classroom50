@@ -1,8 +1,10 @@
 import { ConfirmModal } from "@/components/modals"
 import {
   Badge,
-  Button,
   Card,
+  closeDropdownMenu,
+  Dropdown,
+  DropdownMenu,
   EmphasisLtr,
   Heading,
   RouterButton,
@@ -29,7 +31,7 @@ import {
   PeopleIcon,
   TrashIcon,
 } from "@/components/ui/icons"
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { errorText } from "@/types/localizedMessage"
 
@@ -108,8 +110,8 @@ function CountStat({
 
 // The kebab actions menu: Edit (link), Archive/Unarchive (inline, optimistic +
 // rollback), Delete (type-to-confirm, stays on list, surfaces teamDeleteWarning),
-// View on GitHub. Accessible menu semantics with Escape + outside-click close
-// and focus return to the trigger.
+// View on GitHub. The shared <Dropdown> owns the menu-button semantics
+// (keyboard roving, Escape + outside-click close, focus return).
 function ClassroomMenu({
   summary,
   org,
@@ -121,24 +123,13 @@ function ClassroomMenu({
 }) {
   const { t } = useTranslation()
   const { notify, announce } = useToast()
-  const [open, setOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const triggerRef = useRef<HTMLButtonElement | null>(null)
-  const menuId = useId()
 
   const slug = summary.path
   const name = classroomDisplayName(summary, t("classes.unknownClassName"))
   const archived = summary.archived
-
-  const menuRef = useRef<HTMLUListElement | null>(null)
-
-  // Escape returns focus to the trigger; a plain close does not.
-  const closeMenu = (returnFocus = false) => {
-    setOpen(false)
-    if (returnFocus) triggerRef.current?.focus()
-  }
 
   // Hold the parent's list order frozen while this card is "busy" — the menu is
   // open OR a destructive confirm modal is open — so an async re-sort (e.g., a
@@ -146,170 +137,54 @@ function ClassroomMenu({
   // from under an in-flight Archive/Delete. The menu closes before the modal
   // opens, so gating on the menu alone would release the freeze mid-flow.
   useEffect(() => {
-    onMenuOpenChange?.(open || archiveOpen || deleteOpen)
-  }, [open, archiveOpen, deleteOpen, onMenuOpenChange])
-
-  // On open, move focus into the menu (first item), per the WAI-ARIA menu
-  // button pattern.
-  useEffect(() => {
-    if (!open) return
-    const first =
-      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')
-    first?.focus()
-  }, [open])
-
-  // Escape + outside-click close; Escape returns focus to the trigger.
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeMenu(true)
-    }
-    const onClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
-    }
-    document.addEventListener("keydown", onKey)
-    document.addEventListener("mousedown", onClick)
-    return () => {
-      document.removeEventListener("keydown", onKey)
-      document.removeEventListener("mousedown", onClick)
-    }
-  }, [open])
-
-  // Arrow/Home/End roving between menu items (WAI-ARIA menu keyboard model).
-  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
-    const items = Array.from(
-      menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
-    )
-    if (items.length === 0) return
-    const current = items.indexOf(document.activeElement as HTMLElement)
-    let next: number
-    switch (e.key) {
-      case "ArrowDown":
-        next = current < 0 ? 0 : (current + 1) % items.length
-        break
-      case "ArrowUp":
-        next = current <= 0 ? items.length - 1 : current - 1
-        break
-      case "Home":
-        next = 0
-        break
-      case "End":
-        next = items.length - 1
-        break
-      case "Tab":
-        // Tabbing out closes the menu (focus leaves), matching native menus.
-        setOpen(false)
-        return
-      default:
-        return
-    }
-    e.preventDefault()
-    items[next]?.focus()
-  }
+    onMenuOpenChange?.(menuOpen || archiveOpen || deleteOpen)
+  }, [menuOpen, archiveOpen, deleteOpen, onMenuOpenChange])
 
   const archiveMutation = useArchiveClassroom(org, slug)
   const deleteMutation = useDeleteClassroom(org, slug)
 
-  const menuItem =
-    "flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-base-200"
-
   return (
-    <div ref={containerRef} className="relative">
-      <Button
-        ref={triggerRef}
-        variant="ghost"
-        size="sm"
-        shape="circle"
-        className="text-base-content/70 hover:text-primary"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        aria-controls={menuId}
-        aria-label={t("classes.card.actionsAria", { name })}
-        onClick={(e) => {
-          e.stopPropagation()
-          setOpen(!open)
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-            e.preventDefault()
-            setOpen(true)
-          }
-        }}
-      >
-        <KebabHorizontalIcon aria-hidden="true" className="size-4" />
-      </Button>
-
-      {open && (
-        <ul
-          id={menuId}
-          ref={menuRef}
-          role="menu"
-          onKeyDown={onMenuKeyDown}
-          className="absolute end-0 z-20 mt-1 w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 py-1 shadow-lg"
+    <>
+      <Dropdown align="end" onOpenChange={setMenuOpen}>
+        <DropdownMenu.Trigger
+          variant="ghost"
+          size="sm"
+          shape="circle"
+          className="text-base-content/70 hover:text-primary"
+          aria-label={t("classes.card.actionsAria", { name })}
+          onClick={(e) => e.stopPropagation()}
         >
-          <li role="none">
+          <KebabHorizontalIcon aria-hidden="true" className="size-4" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu className="w-52">
+          <li>
             <Link
-              role="menuitem"
-              tabIndex={-1}
               to="/$org/$classroom/settings"
               params={{ org, classroom: slug }}
-              className={menuItem}
-              onClick={() => closeMenu()}
+              onClick={closeDropdownMenu}
             >
               <PencilIcon aria-hidden="true" className="size-4" />
               {t("classes.card.edit")}
             </Link>
           </li>
-          <li role="none">
-            <button
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              className={menuItem}
-              onClick={() => {
-                closeMenu()
-                setArchiveOpen(true)
-              }}
-            >
-              {archived ? (
-                <ArchiveIcon aria-hidden="true" className="size-4" />
-              ) : (
-                <ArchiveIcon aria-hidden="true" className="size-4" />
-              )}
-              {archived ? t("classes.unarchive") : t("classes.archive")}
-            </button>
-          </li>
-          <li role="none">
-            <a
-              role="menuitem"
-              tabIndex={-1}
-              href={classroomConfigTreeUrl(org, slug)}
-              target="_blank"
-              rel="noreferrer"
-              className={menuItem}
-              onClick={() => closeMenu()}
-            >
-              <LinkExternalIcon aria-hidden="true" className="size-4" />
-              {t("classes.card.viewOnGitHub")}
-            </a>
-          </li>
-          <li role="none">
-            <button
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              className={`${menuItem} text-error`}
-              onClick={() => {
-                closeMenu()
-                setDeleteOpen(true)
-              }}
-            >
-              <TrashIcon aria-hidden="true" className="size-4" />
-              {t("classes.card.delete")}
-            </button>
-          </li>
-        </ul>
-      )}
+          <DropdownMenu.Item
+            icon={ArchiveIcon}
+            label={archived ? t("classes.unarchive") : t("classes.archive")}
+            onSelect={() => setArchiveOpen(true)}
+          />
+          <DropdownMenu.LinkItem
+            icon={LinkExternalIcon}
+            label={t("classes.card.viewOnGitHub")}
+            href={classroomConfigTreeUrl(org, slug)}
+          />
+          <DropdownMenu.Item
+            icon={TrashIcon}
+            label={t("classes.card.delete")}
+            destructive
+            onSelect={() => setDeleteOpen(true)}
+          />
+        </DropdownMenu>
+      </Dropdown>
 
       <ConfirmModal
         open={archiveOpen}
@@ -425,7 +300,7 @@ function ClassroomMenu({
         }}
         onClose={() => setDeleteOpen(false)}
       />
-    </div>
+    </>
   )
 }
 

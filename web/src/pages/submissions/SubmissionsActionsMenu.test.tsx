@@ -66,7 +66,7 @@ describe("SubmissionsActionsMenu — Collect item", () => {
 // meanwhile, with only the workflow items gated.
 describe("SubmissionsActionsMenu — in-flight indicator", () => {
   const trigger = (container: HTMLElement) =>
-    container.querySelector(".dropdown > button") as HTMLButtonElement
+    container.querySelector("[data-dropdown] > button") as HTMLButtonElement
 
   it("keeps the trigger as 'Actions' during a collect, gating the workflow items", () => {
     const { container } = render(
@@ -102,12 +102,12 @@ describe("SubmissionsActionsMenu — in-flight indicator", () => {
   })
 })
 
-// daisyUI opens the menu on focus, and Safari only focuses a button on click
-// when tabindex is set explicitly (#987). Without it the menu never opens there.
+// Safari only focuses a button on click when tabindex is set explicitly (#987);
+// the shared trigger recipe owns that attribute.
 describe("SubmissionsActionsMenu — Safari trigger focus", () => {
   it("keeps an explicit tabindex on the trigger", () => {
     const { container } = render(<SubmissionsActionsMenu {...baseProps} />)
-    const trigger = container.querySelector(".dropdown > button")
+    const trigger = container.querySelector("[data-dropdown] > button")
     expect(trigger?.getAttribute("tabindex")).toBe("0")
   })
 })

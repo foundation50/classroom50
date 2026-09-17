@@ -10,7 +10,7 @@ import {
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { isComposingKey } from "@/util/imeComposition"
 import { cx } from "./cx"
-import { popoverPanelClass } from "./DropdownMenu"
+import { Popover } from "./Popover"
 import { Input, type InputProps } from "./Input"
 
 // The app's only combobox. Data-free on purpose: it owns the ARIA contract,
@@ -21,8 +21,8 @@ import { Input, type InputProps } from "./Input"
 //   - daisyUI's CSS `dropdown` is focus-driven and closes on blur, which fights
 //     a text input living inside the widget. Open state is therefore explicit
 //     React state, not the CSS recipe.
-//   - The panel paints outside the field's box, so nothing here may set
-//     `overflow-hidden` (an ancestor that does will truncate it — see Collapse).
+//   - The panel is a top-layer <Popover>, so the field can live inside a
+//     scrolling table frame or a modal box without the panel being clipped.
 
 export type ComboboxProps<T> = {
   // Stable id for the input; the listbox id derives from it.
@@ -154,7 +154,7 @@ export function Combobox<T>({
   }
 
   return (
-    <div ref={wrapperRef} className={cx("relative", className)}>
+    <div ref={wrapperRef} className={className}>
       <Input
         {...inputProps}
         id={id}
@@ -186,83 +186,86 @@ export function Combobox<T>({
         onKeyDown={onKeyDown}
       />
 
-      {open ? (
-        <div
-          // Pointer-down anywhere in the panel chrome would otherwise blur the
-          // input (firing the field's onBlur mid-interaction). Options call
-          // preventDefault themselves before selecting; the scrollable list is
-          // exempted below so scrollbar drags still work.
-          onPointerDown={(event) => event.preventDefault()}
-          className={cx("absolute inset-x-0 top-full", popoverPanelClass)}
-        >
-          {status ? (
-            <div
-              role="status"
-              className="border-base-300 border-b px-3 py-2 text-sm text-base-content/70"
-            >
-              {status}
-            </div>
-          ) : null}
+      {/* The panel is a top-layer popover sized to the input, so a scrolling
+          table frame or modal box around the field cannot clip it. It stays a
+          DOM descendant of the wrapper for the outside-pointer dismissal. */}
+      <Popover
+        open={open}
+        anchorRef={wrapperRef}
+        matchAnchorWidth
+        // Pointer-down anywhere in the panel chrome would otherwise blur the
+        // input (firing the field's onBlur mid-interaction). Options call
+        // preventDefault themselves before selecting; the scrollable list is
+        // exempted below so scrollbar drags still work.
+        onPointerDown={(event) => event.preventDefault()}
+      >
+        {status ? (
+          <div
+            role="status"
+            className="border-base-300 border-b px-3 py-2 text-sm text-base-content/70"
+          >
+            {status}
+          </div>
+        ) : null}
 
-          {/* The listbox stays mounted while open, even with no options, so the
+        {/* The listbox stays mounted while open, even with no options, so the
               input's `aria-controls` always resolves to a real element. The
               empty-state message is a sibling: an empty `role="listbox"` may
               not contain non-option children. */}
-          <ul
-            id={listboxId}
-            role="listbox"
-            aria-label={label}
-            // Let a scrollbar drag through: the wrapper's preventDefault would
-            // otherwise cancel it.
-            onPointerDown={(event) => event.stopPropagation()}
-            className={cx(
-              "max-h-72 overflow-y-auto",
-              items.length > 0 ? "py-1" : "sr-only",
-            )}
-          >
-            {items.map((item, index) => {
-              const key = getItemKey(item)
-              const active = key === activeKey
-              return (
-                <li
-                  key={key}
-                  id={`${optionIdPrefix}-${index}`}
-                  role="option"
-                  aria-selected={active}
-                  aria-label={getItemLabel(item)}
-                  // Pointer-down beats the input's blur, so the selection
-                  // lands before anything can close the panel.
-                  onPointerDown={(event) => {
-                    event.preventDefault()
-                    onSelect(item)
-                    close()
-                  }}
-                  onMouseEnter={() => setActiveKey(key)}
-                  className={cx(
-                    // min-h keeps the row within the target-size audit's floor.
-                    "flex min-h-11 cursor-pointer flex-col justify-center px-3 py-2 text-start",
-                    active && "bg-base-200",
-                  )}
-                >
-                  {renderItem(item, { active })}
-                </li>
-              )
-            })}
-          </ul>
+        <ul
+          id={listboxId}
+          role="listbox"
+          aria-label={label}
+          // Let a scrollbar drag through: the wrapper's preventDefault would
+          // otherwise cancel it.
+          onPointerDown={(event) => event.stopPropagation()}
+          className={cx(
+            "max-h-72 overflow-y-auto",
+            items.length > 0 ? "py-1" : "sr-only",
+          )}
+        >
+          {items.map((item, index) => {
+            const key = getItemKey(item)
+            const active = key === activeKey
+            return (
+              <li
+                key={key}
+                id={`${optionIdPrefix}-${index}`}
+                role="option"
+                aria-selected={active}
+                aria-label={getItemLabel(item)}
+                // Pointer-down beats the input's blur, so the selection
+                // lands before anything can close the panel.
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  onSelect(item)
+                  close()
+                }}
+                onMouseEnter={() => setActiveKey(key)}
+                className={cx(
+                  // min-h keeps the row within the target-size audit's floor.
+                  "flex min-h-11 cursor-pointer flex-col justify-center px-3 py-2 text-start",
+                  active && "bg-base-200",
+                )}
+              >
+                {renderItem(item, { active })}
+              </li>
+            )
+          })}
+        </ul>
 
-          {items.length === 0 && emptyState ? (
-            <div className="px-3 py-3 text-sm text-base-content/70">
-              {emptyState}
-            </div>
-          ) : null}
+        {items.length === 0 && emptyState ? (
+          <div className="px-3 py-3 text-sm text-base-content/70">
+            {emptyState}
+          </div>
+        ) : null}
 
-          {footer ? (
-            <div className="border-base-300 border-t px-3 py-2 text-xs text-base-content/60">
-              {footer}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
+        {footer ? (
+          <div className="border-base-300 border-t px-3 py-2 text-xs text-base-content/60">
+            {footer}
+          </div>
+        ) : null}
+      </Popover>
     </div>
   )
 }

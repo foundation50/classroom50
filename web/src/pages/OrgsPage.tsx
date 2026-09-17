@@ -45,7 +45,7 @@ import {
   Button,
   Card,
   closeDropdownMenu,
-  cx,
+  Dropdown,
   DropdownMenu,
   Heading,
   InlineMessage,
@@ -259,7 +259,7 @@ function HideOrgMenu({
 
   return (
     <>
-      <div className={cx("dropdown dropdown-end", className)}>
+      <Dropdown align="end" className={className}>
         <DropdownMenu.Trigger
           variant="ghost"
           size="sm"
@@ -293,7 +293,7 @@ function HideOrgMenu({
             onSelect={handleHide}
           />
         </DropdownMenu>
-      </div>
+      </Dropdown>
 
       <OrgDetailsModal
         summary={summary}

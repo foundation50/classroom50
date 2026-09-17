@@ -1,32 +1,291 @@
-import type { ComponentPropsWithRef, ComponentType, ReactNode } from "react"
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentPropsWithoutRef,
+  type ComponentType,
+  type HTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from "react"
 
+import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
+import type { OverlayAlign } from "./anchoredPopover"
 import { Button, type ButtonProps } from "./Button"
 import { cx } from "./cx"
+import { Popover } from "./Popover"
 
-// Single source for the DaisyUI dropdown menu surface so the popover chrome
-// can't drift. Callers own the `dropdown` wrapper and put a `DropdownMenu.Trigger`
-// in it; pass sizing utilities (width, max-height, overflow) via className.
-export type DropdownMenuProps = ComponentPropsWithRef<"ul">
+// The app's dropdown menu, following the WAI-ARIA menu button pattern:
+//
+//   <Dropdown align="end">
+//     <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+//     <DropdownMenu>
+//       <DropdownMenu.Item label="..." onSelect={...} />
+//     </DropdownMenu>
+//   </Dropdown>
+//
+// It replaces daisyUI's focus-driven `dropdown` recipe, whose menu was
+// absolutely positioned inside the trigger's box and so got clipped by any
+// `overflow` ancestor (a modal box, a table frame, the sidebar rail) or covered
+// by a z-indexed sibling, the same class of bug as issue #1026 for tooltips.
+// The menu is a top-layer popover positioned against the Dropdown root (the
+// whole wrapper, like daisyUI: a trigger joined to an input anchors the row).
+//
+// Open state is explicit React state. Click or Enter/Space toggles; ArrowDown
+// opens with the first item focused, ArrowUp with the last; arrows/Home/End
+// rove; Escape closes and returns focus to the trigger; Tab or an outside
+// pointer-down closes. Menu items stay ordinary buttons/links (daisyUI `menu`
+// styling), so tests and assistive tech address them by their labels.
 
-// The one popover-surface recipe (chrome only, no layout), shared by
-// DropdownMenu, Combobox, and panel-style popovers that aren't a bare menu.
-export const popoverPanelClass =
-  "z-10 mt-1 rounded-box border border-base-300 bg-base-100 shadow"
+type FocusEdge = "first" | "last"
+
+type DropdownContextValue = {
+  open: boolean
+  align: OverlayAlign
+  matchTriggerWidth: boolean
+  menuId: string
+  rootRef: RefObject<HTMLDivElement | null>
+  triggerRef: RefObject<HTMLButtonElement | HTMLAnchorElement | null>
+  menuRef: RefObject<HTMLElement | null>
+  toggle: () => void
+  // Opening from the keyboard lands focus on the first or last item.
+  openFocusing: (edge: FocusEdge) => void
+  close: (options?: { returnFocus?: boolean }) => void
+  pendingFocusRef: RefObject<FocusEdge | null>
+}
+
+const DropdownContext = createContext<DropdownContextValue | null>(null)
+
+function useDropdownContext(component: string): DropdownContextValue {
+  const context = useContext(DropdownContext)
+  if (!context) {
+    throw new Error(`${component} must be rendered inside <Dropdown>`)
+  }
+  return context
+}
+
+const MENU_ITEM_SELECTOR =
+  'button:not(:disabled), a[href], [role="menuitem"]:not([aria-disabled="true"])'
+
+// The focusable rows of one menu, excluding anything inside a nested popover.
+function menuItems(menu: HTMLElement | null): HTMLElement[] {
+  return menu
+    ? Array.from(menu.querySelectorAll<HTMLElement>(MENU_ITEM_SELECTOR)).filter(
+        (item) => item.closest("[popover]") === menu,
+      )
+    : []
+}
+
+function focusEdge(menu: HTMLElement | null, edge: FocusEdge) {
+  const items = menuItems(menu)
+  ;(edge === "last" ? items[items.length - 1] : items[0])?.focus()
+}
+
+export type DropdownProps = {
+  // Which edge of the root the menu lines up with (daisyUI dropdown-start /
+  // dropdown-end). Inline-relative: flips under RTL.
+  align?: OverlayAlign
+  // Size the menu to the root's width (a version picker under its input).
+  matchTriggerWidth?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: ReactNode
+} & Omit<ComponentPropsWithoutRef<"div">, "children">
+
+export function Dropdown({
+  align = "start",
+  matchTriggerWidth = false,
+  onOpenChange,
+  className,
+  children,
+  ...props
+}: DropdownProps) {
+  const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement | HTMLAnchorElement | null>(null)
+  const menuRef = useRef<HTMLElement | null>(null)
+  const pendingFocusRef = useRef<FocusEdge | null>(null)
+  const menuId = useId()
+
+  const setOpenNotify = useCallback(
+    (next: boolean) => {
+      setOpen((previous) => {
+        if (previous !== next) onOpenChange?.(next)
+        return next
+      })
+    },
+    [onOpenChange],
+  )
+
+  const close = useCallback(
+    ({ returnFocus = false } = {}) => {
+      setOpenNotify(false)
+      if (returnFocus) triggerRef.current?.focus()
+    },
+    [setOpenNotify],
+  )
+
+  useDismissOnOutsidePointerDown(rootRef, open, close)
+
+  const value = useMemo<DropdownContextValue>(
+    () => ({
+      open,
+      align,
+      matchTriggerWidth,
+      menuId,
+      rootRef,
+      triggerRef,
+      menuRef,
+      pendingFocusRef,
+      toggle: () => {
+        pendingFocusRef.current = open ? null : "first"
+        setOpenNotify(!open)
+      },
+      openFocusing: (edge) => {
+        if (open) {
+          focusEdge(menuRef.current, edge)
+          return
+        }
+        pendingFocusRef.current = edge
+        setOpenNotify(true)
+      },
+      close,
+    }),
+    [open, align, matchTriggerWidth, menuId, setOpenNotify, close],
+  )
+
+  // Escape closes and returns focus; focus leaving the whole widget (Tab out of
+  // the last item, or into another control) closes, matching native menus.
+  // Native listeners on the root rather than JSX handlers: a div with keyboard
+  // handlers reads as a fake interactive element to the a11y lint.
+  useEffect(() => {
+    const root = rootRef.current
+    if (!open || !root) return
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return
+      event.preventDefault()
+      event.stopPropagation()
+      close({ returnFocus: true })
+    }
+    const onFocusOut = (event: FocusEvent) => {
+      const next = event.relatedTarget
+      if (!(next instanceof Node && root.contains(next))) close()
+    }
+    root.addEventListener("keydown", onKeyDown)
+    root.addEventListener("focusout", onFocusOut)
+    return () => {
+      root.removeEventListener("keydown", onKeyDown)
+      root.removeEventListener("focusout", onFocusOut)
+    }
+  }, [open, close])
+
+  return (
+    <DropdownContext.Provider value={value}>
+      <div
+        ref={rootRef}
+        data-dropdown=""
+        className={cx("inline-block", className)}
+        {...props}
+      >
+        {children}
+      </div>
+    </DropdownContext.Provider>
+  )
+}
+
+export type DropdownMenuProps = HTMLAttributes<HTMLElement>
 
 export function DropdownMenu({
   className,
   children,
+  onKeyDown,
   ...props
 }: DropdownMenuProps) {
+  const {
+    open,
+    align,
+    matchTriggerWidth,
+    menuId,
+    rootRef,
+    menuRef,
+    close,
+    pendingFocusRef,
+  } = useDropdownContext("DropdownMenu")
+
+  // Land focus on the requested item once the popover is shown (a hidden
+  // popover cannot take focus, so this has to follow the positioning effect).
+  useEffect(() => {
+    if (!open || !pendingFocusRef.current) return
+    focusEdge(menuRef.current, pendingFocusRef.current)
+    pendingFocusRef.current = null
+  }, [open, pendingFocusRef, menuRef])
+
+  // Items close the menu after acting (see Item); links that aren't Items use
+  // `closeDropdownMenu`, which arrives here as a DOM event.
+  useEffect(() => {
+    const menu = menuRef.current
+    if (!menu) return
+    const onClose = () => close({ returnFocus: true })
+    menu.addEventListener(CLOSE_EVENT, onClose)
+    return () => menu.removeEventListener(CLOSE_EVENT, onClose)
+  }, [close, menuRef])
+
+  const rove = (event: KeyboardEvent<HTMLElement>) => {
+    const items = menuItems(menuRef.current)
+    if (items.length === 0) return
+    const current = items.indexOf(document.activeElement as HTMLElement)
+    let next: number
+    switch (event.key) {
+      case "ArrowDown":
+        next = current < 0 ? 0 : (current + 1) % items.length
+        break
+      case "ArrowUp":
+        next = current <= 0 ? items.length - 1 : current - 1
+        break
+      case "Home":
+        next = 0
+        break
+      case "End":
+        next = items.length - 1
+        break
+      case "Tab":
+        // APG menu button: Tab closes the menu and moves on. Refocusing the
+        // trigger first (without preventDefault) makes the browser's own Tab
+        // continue from there, past the now-hidden menu, in either direction.
+        close({ returnFocus: true })
+        return
+      default:
+        return
+    }
+    event.preventDefault()
+    items[next]?.focus()
+  }
+
   return (
-    <ul
-      tabIndex={0}
+    <Popover
+      as="ul"
+      ref={menuRef}
+      id={menuId}
       role="menu"
-      className={cx("dropdown-content menu p-1", popoverPanelClass, className)}
+      open={open}
+      anchorRef={rootRef}
+      align={align}
+      matchAnchorWidth={matchTriggerWidth}
+      keepMounted
+      className={cx("menu p-1", className)}
+      onKeyDown={(event) => {
+        rove(event)
+        onKeyDown?.(event)
+      }}
       {...props}
     >
       {children}
-    </ul>
+    </Popover>
   )
 }
 
@@ -41,20 +300,53 @@ DropdownMenu.Separator = DropdownMenuSeparator
 
 export type DropdownTriggerProps = Omit<ButtonProps, "tabIndex">
 
-// The one trigger recipe. Safari only focuses a button on click when tabindex
-// is set explicitly (#987), and daisyUI opens the menu on focus. Applied after
-// the spread so a spread-in tabIndex cannot displace it.
-function DropdownTrigger(props: DropdownTriggerProps) {
-  return <Button {...props} tabIndex={0} />
+// The one trigger recipe: wires the menu-button ARIA and keyboard contract.
+// tabIndex is applied after the spread so a spread-in value cannot displace it
+// (Safari only focuses a button on click when it is explicit, #987).
+function DropdownTrigger({
+  onClick,
+  onKeyDown,
+  ...props
+}: DropdownTriggerProps) {
+  const { open, menuId, triggerRef, toggle, openFocusing } = useDropdownContext(
+    "DropdownMenu.Trigger",
+  )
+  return (
+    <Button
+      {...props}
+      ref={triggerRef}
+      aria-haspopup="menu"
+      aria-expanded={open}
+      aria-controls={menuId}
+      onClick={(event) => {
+        toggle()
+        onClick?.(event)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+          event.preventDefault()
+          openFocusing(event.key === "ArrowDown" ? "first" : "last")
+        }
+        onKeyDown?.(event)
+      }}
+      tabIndex={0}
+    />
+  )
 }
 DropdownMenu.Trigger = DropdownTrigger
 
-// daisyUI dropdowns are focus-driven, so "close the menu" is "blur the focused
-// item". The single helper for every menu item's onClick.
-export function closeDropdownMenu(): void {
-  if (document.activeElement instanceof HTMLElement) {
-    document.activeElement.blur()
-  }
+const CLOSE_EVENT = "dropdown:close"
+
+// Close the menu that contains the element an event fired on (a Link inside
+// the menu that isn't a DropdownMenu.Item). Falls back to the focused element.
+export function closeDropdownMenu(event?: {
+  currentTarget: EventTarget | null
+}): void {
+  const origin =
+    event?.currentTarget instanceof Element
+      ? event.currentTarget
+      : document.activeElement
+  origin?.closest('[role="menu"]')?.dispatchEvent(new Event(CLOSE_EVENT))
 }
 
 type MenuIcon = ComponentType<{
@@ -86,6 +378,7 @@ function DropdownMenuItem({
   destructive = false,
   onSelect,
 }: DropdownMenuItemProps) {
+  const { close } = useDropdownContext("DropdownMenu.Item")
   return (
     <li>
       <button
@@ -94,7 +387,7 @@ function DropdownMenuItem({
         disabled={disabled}
         title={title}
         onClick={() => {
-          closeDropdownMenu()
+          close({ returnFocus: true })
           if (disabled) return
           onSelect()
         }}
@@ -117,16 +410,23 @@ export type DropdownMenuLinkItemProps = {
 }
 
 // A menu item that opens an off-site page in a new tab (a run on GitHub). The
-// same row chrome as Item; the browser navigation is what closes the menu.
+// same row chrome as Item; the menu closes as the new tab opens.
 function DropdownMenuLinkItem({
   icon: Icon,
   label,
   href,
   title,
 }: DropdownMenuLinkItemProps) {
+  const { close } = useDropdownContext("DropdownMenu.LinkItem")
   return (
     <li>
-      <a href={href} target="_blank" rel="noreferrer" title={title}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noreferrer"
+        title={title}
+        onClick={() => close({ returnFocus: true })}
+      >
         {Icon ? <Icon aria-hidden="true" className="size-4" /> : null}
         {label}
       </a>

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react"
 
-import { DropdownMenu } from "./DropdownMenu"
+import { Dropdown, DropdownMenu } from "./DropdownMenu"
 import { TriangleDownIcon } from "./icons"
 
 // A primary action with a caret that opens secondary actions beside it. The
@@ -26,7 +26,7 @@ export function SplitButton({
   return (
     <div className="join">
       {primary}
-      <div className="dropdown dropdown-end -ms-px">
+      <Dropdown align="end" className="-ms-px">
         <DropdownMenu.Trigger
           variant="primary"
           size={size}
@@ -37,7 +37,7 @@ export function SplitButton({
           <TriangleDownIcon aria-hidden="true" className="size-4" />
         </DropdownMenu.Trigger>
         <DropdownMenu className="w-max">{children}</DropdownMenu>
-      </div>
+      </Dropdown>
     </div>
   )
 }

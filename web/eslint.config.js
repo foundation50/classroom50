@@ -29,12 +29,14 @@ import {
   radiusClassMessage,
 } from "./src/eslint/radiusClassRule.ts"
 import { tooltipMarkupRule } from "./src/eslint/tooltipMarkupRule.ts"
+import { dropdownMarkupRule } from "./src/eslint/dropdownMarkupRule.ts"
 
 // Repo-local rules that must BLOCK (error), unlike the advisory
 // `no-restricted-syntax` guards below, which share one warn-level rule.
 const local = {
   rules: {
     "no-raw-tooltip": tooltipMarkupRule,
+    "no-raw-dropdown": dropdownMarkupRule,
   },
 }
 
@@ -86,10 +88,12 @@ export default defineConfig([
     files: ["**/*.{ts,tsx}"],
     plugins: { local },
     rules: {
-      // Every hover bubble goes through <Tooltip>: the raw daisyUI markup is
-      // clipped or covered near an edge (#1026) and there is no way to fix
-      // that per site, so this one is an error rather than advisory.
+      // Every hover bubble goes through <Tooltip> and every menu through
+      // <Dropdown>: the raw daisyUI markup is clipped or covered near an edge
+      // (#1026) and there is no way to fix that per site, so these are errors
+      // rather than advisory.
       "local/no-raw-tooltip": "error",
+      "local/no-raw-dropdown": "error",
       "react-refresh/only-export-components": "off",
       // Advisory, not blocking: these flag legitimate patterns here (mount-time
       // init reading localStorage / the OAuth callback, and resetting modal

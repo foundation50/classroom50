@@ -10,7 +10,7 @@ import {
   SignOutIcon,
   SunIcon,
 } from "@/components/ui/icons"
-import { Badge } from "@/components/ui"
+import { Badge, Popover } from "@/components/ui"
 import {
   useParams,
   useMatchRoute,
@@ -371,102 +371,93 @@ const AuthedSidebarFooter = () => {
       ) : null}
       <div
         ref={footerRef}
-        className={`relative border-t border-neutral-content/20 ${collapsed ? "!px-2" : "!px-0"} ${org ? "" : "mt-auto"}`}
+        className={`border-t border-neutral-content/20 ${collapsed ? "!px-2" : "!px-0"} ${org ? "" : "mt-auto"}`}
       >
-        <div
-          className={`
-        absolute bottom-full z-50 mb-3
-        ${collapsed ? "start-2 w-48" : "start-6 end-6"}
-        origin-bottom rounded-box
-        transition-all duration-150 ease-out
-
-        ${
-          menuOpen
-            ? "translate-y-0 scale-100 opacity-100"
-            : "pointer-events-none translate-y-2 scale-95 opacity-0"
-        }
-      `}
+        {/* A top-layer popover: the rail is a clipping scroll container, and
+            on the collapsed rail the menu is wider than the rail itself. */}
+        <Popover
+          as="ul"
+          open={menuOpen}
+          anchorRef={footerRef}
+          side="top"
+          align="center"
+          className="menu w-48 p-2 shadow-xl"
         >
-          <ul className="menu w-full rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl">
-            {canPreviewRoles && (
-              <>
-                <li>
-                  <details key={menuOpen ? "open" : "closed"}>
-                    <summary>
-                      <EyeIcon aria-hidden="true" className="size-4" />
-                      <span className="flex-1">{t("nav.viewAs")}</span>
-                    </summary>
-                    <ul>
-                      {(["self", "hta", "ta", "student"] as const).map(
-                        (option) => {
-                          const active =
-                            option === "self"
-                              ? viewAs === null
-                              : viewAs === option
-                          const label =
-                            option === "self"
-                              ? t("nav.viewAsMyself", {
-                                  role: (() => {
-                                    const key =
-                                      roleLabelKey(actualClassroomRole)
-                                    return key
-                                      ? t(key)
-                                      : t("nav.viewAsMyselfFallback")
-                                  })(),
-                                })
-                              : option === "hta"
-                                ? t("nav.viewAsHeadTa")
-                                : option === "ta"
-                                  ? t("nav.viewAsTA")
-                                  : t("nav.viewAsStudent")
-                          return (
-                            <li key={option}>
-                              <button
-                                type="button"
-                                className={active ? "active font-semibold" : ""}
-                                onClick={() => {
-                                  selectViewAs(
-                                    option === "self" ? null : option,
-                                  )
-                                  setMenuOpen(false)
-                                }}
-                              >
-                                {active ? (
-                                  <CheckIcon
-                                    aria-hidden="true"
-                                    className="size-4"
-                                  />
-                                ) : (
-                                  <span className="size-4" />
-                                )}
-                                {label}
-                              </button>
-                            </li>
-                          )
-                        },
-                      )}
-                    </ul>
-                  </details>
-                </li>
-                <MenuSeparator />
-              </>
-            )}
-            <SidebarInfoControls
-              isDark={isDark}
-              toggleTheme={toggleTheme}
-              onOpenLanguage={() => langDialogRef.current?.showModal()}
-              onOpenAbout={() => aboutDialogRef.current?.showModal()}
-              onActivate={() => setMenuOpen(false)}
-            />
-            <MenuSeparator />
-            <li>
-              <button type="button" className="text-error" onClick={signOut}>
-                <SignOutIcon aria-hidden="true" className="size-4" />
-                {t("nav.signOut")}
-              </button>
-            </li>
-          </ul>
-        </div>
+          {canPreviewRoles && (
+            <>
+              <li>
+                <details key={menuOpen ? "open" : "closed"}>
+                  <summary>
+                    <EyeIcon aria-hidden="true" className="size-4" />
+                    <span className="flex-1">{t("nav.viewAs")}</span>
+                  </summary>
+                  <ul>
+                    {(["self", "hta", "ta", "student"] as const).map(
+                      (option) => {
+                        const active =
+                          option === "self"
+                            ? viewAs === null
+                            : viewAs === option
+                        const label =
+                          option === "self"
+                            ? t("nav.viewAsMyself", {
+                                role: (() => {
+                                  const key = roleLabelKey(actualClassroomRole)
+                                  return key
+                                    ? t(key)
+                                    : t("nav.viewAsMyselfFallback")
+                                })(),
+                              })
+                            : option === "hta"
+                              ? t("nav.viewAsHeadTa")
+                              : option === "ta"
+                                ? t("nav.viewAsTA")
+                                : t("nav.viewAsStudent")
+                        return (
+                          <li key={option}>
+                            <button
+                              type="button"
+                              className={active ? "active font-semibold" : ""}
+                              onClick={() => {
+                                selectViewAs(option === "self" ? null : option)
+                                setMenuOpen(false)
+                              }}
+                            >
+                              {active ? (
+                                <CheckIcon
+                                  aria-hidden="true"
+                                  className="size-4"
+                                />
+                              ) : (
+                                <span className="size-4" />
+                              )}
+                              {label}
+                            </button>
+                          </li>
+                        )
+                      },
+                    )}
+                  </ul>
+                </details>
+              </li>
+              <MenuSeparator />
+            </>
+          )}
+          <SidebarInfoControls
+            isDark={isDark}
+            toggleTheme={toggleTheme}
+            onOpenLanguage={() => langDialogRef.current?.showModal()}
+            onOpenAbout={() => aboutDialogRef.current?.showModal()}
+            onActivate={() => setMenuOpen(false)}
+          />
+          <MenuSeparator />
+          <li>
+            <button type="button" className="text-error" onClick={signOut}>
+              <SignOutIcon aria-hidden="true" className="size-4" />
+              {t("nav.signOut")}
+            </button>
+          </li>
+        </Popover>
 
         <button
           type="button"

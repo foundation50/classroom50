@@ -44,7 +44,7 @@ export type { TextareaProps } from "./Textarea"
 export { FormField, HelpTooltip, fieldLabelClass } from "./FormField"
 export { ToggleField } from "./ToggleField"
 export type { HelpTooltipPosition } from "./FormField"
-export { Tooltip, tooltipArenaProps } from "./Tooltip"
+export { Tooltip } from "./Tooltip"
 export type { TooltipProps, TooltipPosition, TooltipTone } from "./Tooltip"
 export { Heading, headingVariantClass } from "./Heading"
 export type { HeadingProps, HeadingVariant } from "./Heading"
@@ -52,12 +52,16 @@ export type { HeadingProps, HeadingVariant } from "./Heading"
 export { Modal, ModalIcon, ModalFooterPortal } from "./Modal"
 export type { ModalProps, ModalSize, ModalIconTone } from "./Modal"
 
-export {
-  DropdownMenu,
-  closeDropdownMenu,
-  popoverPanelClass,
+export { Dropdown, DropdownMenu, closeDropdownMenu } from "./DropdownMenu"
+export type {
+  DropdownProps,
+  DropdownMenuProps,
+  DropdownTriggerProps,
 } from "./DropdownMenu"
-export type { DropdownMenuProps, DropdownTriggerProps } from "./DropdownMenu"
+export { Popover } from "./Popover"
+export type { PopoverProps } from "./Popover"
+export { overlayArenaProps } from "./anchoredPopover"
+export type { OverlayAlign, OverlaySide } from "./anchoredPopover"
 export { SelectAllCheckbox } from "./SelectAllCheckbox"
 
 export { Alert, ALERT_TONE_ICON, alertToneClass, alertToneRole } from "./Alert"

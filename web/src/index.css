@@ -152,17 +152,39 @@
   background-color: var(--color-neutral);
 }
 
-/* Tooltip bubble (components/ui/Tooltip.tsx). A popover in the top layer, so no
-   overflow ancestor clips it and no z-indexed sibling covers it; the component
-   sets left/top in viewport coordinates, `data-side` (which edge faces the
-   trigger), and --tooltip-tail (the tail's center along that edge). Look mirrors
-   daisyUI's tooltip so the swap is invisible; --tooltip-bg/--tooltip-fg let a
-   host recolor it (warning tone, the dark rail). */
-.tooltip-bubble {
+/* Anchored overlays (components/ui/anchoredPopover.ts): tooltip bubbles,
+   dropdown menus, combobox panels. Each is a popover in the top layer, so no
+   overflow ancestor clips it and no z-indexed sibling covers it; the hook sets
+   left/top in viewport coordinates, `data-open` while shown, `data-side` (which
+   edge faces the anchor), and --overlay-tail (a tail's center along that edge).
+   `data-open` also drives the no-popover fallback, where the UA's
+   `:not(:popover-open) { display: none }` does not exist. */
+.overlay-panel {
   position: fixed;
   inset: auto;
   margin: 0;
   border: 0;
+  padding: 0;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out-soft);
+}
+.overlay-panel:not([data-open]) {
+  display: none;
+}
+.overlay-panel[data-open] {
+  opacity: 1;
+}
+@starting-style {
+  .overlay-panel[data-open] {
+    opacity: 0;
+  }
+}
+
+/* Tooltip bubble (components/ui/Tooltip.tsx). Look mirrors daisyUI's tooltip
+   so the swap is invisible; --tooltip-bg/--tooltip-fg let a host recolor it
+   (warning tone, the dark rail). */
+.tooltip-bubble {
   padding: 0.25rem 0.5rem;
   width: max-content;
   max-width: min(20rem, 90vw);
@@ -173,22 +195,7 @@
   font-weight: 400;
   line-height: 1.25;
   text-align: start;
-  overflow: visible;
   pointer-events: none;
-  opacity: 0;
-  transition: opacity var(--duration-base) var(--ease-out-soft);
-}
-.tooltip-bubble:popover-open {
-  opacity: 1;
-}
-@starting-style {
-  .tooltip-bubble:popover-open {
-    opacity: 0;
-  }
-}
-/* No-popover fallback: shown via the hidden attribute, never faded. */
-.tooltip-bubble:not([popover]):not([hidden]) {
-  opacity: 1;
 }
 .tooltip-bubble::after {
   content: "";
@@ -201,29 +208,29 @@
   mask-position: -1px 0;
 }
 /* The tail points at the trigger: down when the bubble sits above it, and so
-   on. Placed by its center (translate -50%) so --tooltip-tail is a plain
-   offset. Rotations are about the center; the 4px half-height offsets keep the
-   rotated 10x4 tail flush with the bubble's edge. */
+   on. Placed by its center (translate -50%) so --overlay-tail is a plain
+   offset. Rotations are about the center; the 3px offsets keep the rotated
+   10x4 tail flush with the bubble's edge. */
 .tooltip-bubble[data-side="top"]::after {
   top: 100%;
-  left: var(--tooltip-tail);
+  left: var(--overlay-tail);
   translate: -50% 0;
 }
 .tooltip-bubble[data-side="bottom"]::after {
   bottom: 100%;
-  left: var(--tooltip-tail);
+  left: var(--overlay-tail);
   translate: -50% 0;
   rotate: 180deg;
 }
 .tooltip-bubble[data-side="left"]::after {
   left: 100%;
-  top: var(--tooltip-tail);
+  top: var(--overlay-tail);
   translate: -3px -50%;
   rotate: -90deg;
 }
 .tooltip-bubble[data-side="right"]::after {
   right: 100%;
-  top: var(--tooltip-tail);
+  top: var(--overlay-tail);
   translate: 3px -50%;
   rotate: 90deg;
 }

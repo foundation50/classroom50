@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from "vitest"
 import { page, userEvent } from "vitest/browser"
 import { render } from "@testing-library/react"
 
-import { HelpTooltip, Tooltip, tooltipArenaProps } from "@/components/ui"
+import { HelpTooltip, Tooltip, overlayArenaProps } from "@/components/ui"
 import { setupBrowserA11y } from "./browserA11y"
 
 // Tooltip bubbles must stay fully visible wherever the trigger sits. Issue
@@ -65,7 +65,7 @@ describe("Tooltip stays on screen", () => {
             background: "black",
           }}
         />
-        <main style={{ flex: 1, padding: 24 }} {...tooltipArenaProps}>
+        <main style={{ flex: 1, padding: 24 }} {...overlayArenaProps}>
           <span className="label font-bold">
             Grading <HelpTooltip help={LONG_HELP} />
           </span>
