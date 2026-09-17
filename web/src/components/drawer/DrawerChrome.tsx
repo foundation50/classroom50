@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { type ReactNode } from "react"
 import { Outlet, useRouterState } from "@tanstack/react-router"
 import { AnimatePresence, motion } from "motion/react"
-import { Button } from "@/components/ui"
+import { Button, tooltipArenaProps } from "@/components/ui"
 import Drawer, { MOBILE_DRAWER_ID, useSidebarCollapse } from "./collapseContext"
 import {
   SidebarContent,
@@ -95,7 +95,11 @@ export const DrawerContent = ({ children }: { children: ReactNode }) => {
       >
         <ThreeBarsIcon className="size-6" aria-hidden="true" />
       </label>
-      <main id="main-content">{children}</main>
+      {/* Tooltips opened from page content stay inside this column rather than
+          straddling the rail beside it. */}
+      <main id="main-content" {...tooltipArenaProps}>
+        {children}
+      </main>
     </div>
   )
 }

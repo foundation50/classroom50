@@ -9,12 +9,13 @@ import { cx } from "./cx"
 //
 // Why this exists rather than an inline motion.div: animating height REQUIRES
 // `overflow: hidden` (content would otherwise spill out of the shrinking box),
-// but that same rule CLIPS anything a child paints outside the box — tooltip
-// bubbles, dropdown menus, focus rings. Clipping is therefore scoped to the
+// but that same rule CLIPS anything a child paints outside the box — dropdown
+// menus, comboboxes, focus rings. Clipping is therefore scoped to the
 // animation itself: it applies while the height is in motion and is lifted the
 // moment the open animation settles, so an expanded panel never truncates a
-// child's overlay. Getting this wrong is invisible until a tooltip near an edge
-// is cut in half, so it lives in exactly one place.
+// child's overlay. Getting this wrong is invisible until a menu near an edge
+// is cut in half, so it lives in exactly one place. (Tooltips are exempt: the
+// shared <Tooltip> renders its bubble in the top layer.)
 export function Collapse({
   open,
   bodyRef,

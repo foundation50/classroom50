@@ -44,6 +44,8 @@ export type { TextareaProps } from "./Textarea"
 export { FormField, HelpTooltip, fieldLabelClass } from "./FormField"
 export { ToggleField } from "./ToggleField"
 export type { HelpTooltipPosition } from "./FormField"
+export { Tooltip, tooltipArenaProps } from "./Tooltip"
+export type { TooltipProps, TooltipPosition, TooltipTone } from "./Tooltip"
 export { Heading, headingVariantClass } from "./Heading"
 export type { HeadingProps, HeadingVariant } from "./Heading"
 

@@ -7,18 +7,18 @@ import { useId, type ReactNode } from "react"
 
 import { Button } from "./Button"
 import { cx } from "./cx"
+import { Tooltip, type TooltipPosition } from "./Tooltip"
 
-// The side a tooltip bubble opens toward. Exported so wrappers (e.g. FieldLabel)
-// forward the same set instead of re-declaring it and drifting.
-export type HelpTooltipPosition = "top" | "bottom" | "left" | "right"
+// Kept under its historical name for the wrappers that forward it (FieldLabel,
+// AdvancedRuntimeFields); the position is only a preference, since <Tooltip>
+// flips or realigns the bubble when it would not fit.
+export type HelpTooltipPosition = TooltipPosition
 
 // A help/notice affordance: a focusable button carrying detailed guidance as
-// its accessible name, wrapped in a theme-aware DaisyUI tooltip. The single
-// source for the tooltip-icon markup + a11y contract. `position` controls which
-// side the bubble opens on (default bottom); use `right`/`top` inside a narrow
-// container like a modal so the bubble isn't clipped. `icon` defaults to a
-// question mark (QuestionIcon); pass another octicon (e.g. AlertIcon) when
-// the tone is a caveat/heads-up rather than help.
+// its accessible name, inside an auto-placing <Tooltip>. The single source for
+// the tooltip-icon markup + a11y contract. `icon` defaults to a question mark
+// (QuestionIcon); pass another octicon (e.g. AlertIcon) when the tone is a
+// caveat/heads-up rather than help.
 export function HelpTooltip({
   help,
   position = "bottom",
@@ -29,21 +29,7 @@ export function HelpTooltip({
   icon?: OcticonComponent
 }) {
   return (
-    <span
-      className={cx(
-        // before:max-w-[min(20rem,90vw)] keeps a wide bubble from overflowing the
-        // viewport near a container edge, which otherwise grows the page's
-        // horizontal scroll width and shifts the whole layout left.
-        "tooltip align-middle before:max-w-[min(20rem,90vw)] before:whitespace-normal before:text-start",
-        {
-          top: "tooltip-top",
-          bottom: "tooltip-bottom",
-          left: "tooltip-left",
-          right: "tooltip-right",
-        }[position],
-      )}
-      data-tip={help}
-    >
+    <Tooltip tip={help} position={position} className="align-middle">
       <Button
         variant="ghost"
         size="xs"
@@ -53,7 +39,7 @@ export function HelpTooltip({
       >
         <Icon aria-hidden="true" className="size-4" />
       </Button>
-    </span>
+    </Tooltip>
   )
 }
 

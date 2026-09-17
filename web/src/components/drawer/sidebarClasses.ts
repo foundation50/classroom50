@@ -19,12 +19,14 @@ export const navItemClass = (active: boolean, collapsed: boolean) =>
 export const sidebarActivePillClass =
   "absolute inset-0 rounded-field bg-[var(--sidebar-surface)] before:absolute before:-start-2 before:top-1/2 before:h-6 before:w-1 before:-translate-y-1/2 before:rounded-full before:bg-[var(--sidebar-active-accent)] before:content-['']"
 
-// Shared sidebar tooltip tokens (dark rail): bubble + text colors every
-// collapsed-sidebar tooltip uses.
+// Bubble colors for every collapsed-rail tooltip: the rail's own surface with
+// neutral-content text, so it reads as part of the dark rail. Goes on the
+// <Tooltip> host (the bubble inherits the variables).
 export const sidebarTooltip =
-  "tooltip tooltip-right rtl:tooltip-left [--tt-bg:var(--sidebar-surface)] before:text-neutral-content"
+  "[--tooltip-bg:var(--sidebar-surface)] [--tooltip-fg:var(--color-neutral-content)]"
 
-// Interactive icon-button row in the rail (back-links, collapse/expand): tooltip
-// base plus a muted icon that lightens and gains a surface on hover.
+// Interactive icon-button row in the rail (back-links, collapse/expand): a
+// muted icon that lightens and gains a surface on hover. Wrap in a <Tooltip>
+// carrying `sidebarTooltip` for the collapsed-rail label.
 export const sidebarIconButton = (padding: "p-1" | "p-2" = "p-1") =>
-  `${sidebarTooltip} cursor-pointer rounded-selector ${padding} text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content`
+  `inline-flex cursor-pointer rounded-selector ${padding} text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content`

@@ -1,5 +1,11 @@
 import { useTranslation } from "react-i18next"
-import { Badge, Select, SkeletonCell, TableShell } from "@/components/ui"
+import {
+  Badge,
+  Select,
+  SkeletonCell,
+  TableShell,
+  Tooltip,
+} from "@/components/ui"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {
   ROLE_LABEL_KEY,
@@ -39,7 +45,7 @@ export type RowIdentityChanges = Record<string, { declaredUsername: string }>
 const CHANGED_CELL_CLASS =
   "bg-warning/25 font-semibold text-base-content ring-1 ring-inset ring-warning/50"
 const CHANGED_TOOLTIP_CLASS =
-  "tooltip tooltip-warning cursor-help whitespace-pre-line"
+  "cursor-help decoration-warning decoration-dotted underline underline-offset-2"
 
 // The Name column merges first_name + last_name, so a change to EITHER highlights
 // that one cell.
@@ -78,12 +84,15 @@ const PreviewCell = ({
     .join("\n")
   return (
     <td className={CHANGED_CELL_CLASS}>
-      <span
-        className={`${CHANGED_TOOLTIP_CLASS} decoration-warning decoration-dotted underline underline-offset-2`}
-        data-tip={tip}
+      {/* One `stored -> CSV` line per changed field; pre-line keeps them. */}
+      <Tooltip
+        tip={tip}
+        tone="warning"
+        className={CHANGED_TOOLTIP_CLASS}
+        bubbleClassName="whitespace-pre-line"
       >
         {value}
-      </span>
+      </Tooltip>
     </td>
   )
 }

@@ -43,6 +43,9 @@ const rows: ResolvedImportRow[] = [
 const cellFor = (name: string) =>
   screen.getByText(name).closest("td") as HTMLTableCellElement
 
+// The hover bubble <Tooltip> renders beside the cell text.
+const BUBBLE = ".tooltip-bubble"
+
 describe("RosterPreviewTable change highlighting", () => {
   it("renders plainly when there are no changes", () => {
     render(
@@ -55,7 +58,7 @@ describe("RosterPreviewTable change highlighting", () => {
     const emailCell = cellFor("ada@x.edu")
     expect(emailCell.className).not.toContain("bg-warning")
     // No tooltip element on an unchanged cell.
-    expect(emailCell.querySelector("[data-tip]")).toBeNull()
+    expect(emailCell.querySelector(BUBBLE)).toBeNull()
   })
 
   it("highlights a changed cell and exposes a stored->CSV tooltip", () => {
@@ -72,10 +75,10 @@ describe("RosterPreviewTable change highlighting", () => {
     )
     const emailCell = cellFor("ada@x.edu")
     expect(emailCell.className).toContain("bg-warning")
-    const tip = emailCell.querySelector("[data-tip]") as HTMLElement
+    const tip = emailCell.querySelector(BUBBLE) as HTMLElement
     expect(tip).toBeTruthy()
     // Tooltip shows the field label and the from -> to transition.
-    expect(tip.getAttribute("data-tip")).toContain("old@x.edu → ada@x.edu")
+    expect(tip.textContent).toContain("old@x.edu → ada@x.edu")
     // An unchanged sibling cell (section) is not highlighted.
     expect(cellFor("Lab 1").className).not.toContain("bg-warning")
   })
@@ -94,8 +97,8 @@ describe("RosterPreviewTable change highlighting", () => {
     )
     const nameCell = cellFor("Ada Lovelace")
     expect(nameCell.className).toContain("bg-warning")
-    const tip = nameCell.querySelector("[data-tip]") as HTMLElement
-    expect(tip.getAttribute("data-tip")).toContain("L → Lovelace")
+    const tip = nameCell.querySelector(BUBBLE) as HTMLElement
+    expect(tip.textContent).toContain("L → Lovelace")
   })
 
   it("renders the (empty) fallback in the tooltip for a previously-blank value", () => {
@@ -111,10 +114,8 @@ describe("RosterPreviewTable change highlighting", () => {
       />,
     )
     const cell = cellFor("Lab 9")
-    const tip = cell.querySelector("[data-tip]") as HTMLElement
-    expect(tip.getAttribute("data-tip")).toContain(
-      "students.preflightMetadataEmpty → Lab 9",
-    )
+    const tip = cell.querySelector(BUBBLE) as HTMLElement
+    expect(tip.textContent).toContain("students.preflightMetadataEmpty → Lab 9")
   })
 
   it("marks the whole row as changed while leaving unchanged rows plain", () => {
@@ -134,7 +135,9 @@ describe("RosterPreviewTable change highlighting", () => {
       "bg-warning",
     )
     // The tooltip carrier is inside ada's row.
-    expect(adaRow.getByText("ada@x.edu").closest("[data-tip]")).toBeTruthy()
+    expect(
+      adaRow.getByText("ada@x.edu").closest("td")!.querySelector(BUBBLE),
+    ).toBeTruthy()
     // bob's row is untouched.
     expect(
       screen.getByText("bob").closest("tr")!.className ?? "",
@@ -160,7 +163,7 @@ describe("RosterPreviewTable change highlighting", () => {
     // ...with an inline "was <previous role>" hint (no hover tooltip that would
     // overlap the native Select dropdown).
     expect(within(roleCell).getByText(/rolePreviousHint/)).toBeTruthy()
-    expect(roleCell.querySelector("[data-tip]")).toBeNull()
+    expect(roleCell.querySelector(BUBBLE)).toBeNull()
     // ...and the whole row is marked changed even with no metadata change.
     expect(screen.getByText("ada").closest("tr")!.className).toContain(
       "bg-warning",

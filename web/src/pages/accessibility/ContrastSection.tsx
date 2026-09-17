@@ -3,7 +3,7 @@ import { SkeletonRegion } from "@/components/list"
 import { useTranslation } from "react-i18next"
 import { InfoIcon } from "@/components/ui/icons"
 
-import { Alert, Badge, Card, Modal } from "@/components/ui"
+import { Alert, Badge, Card, Modal, Tooltip } from "@/components/ui"
 import { useRovingTabList } from "@/hooks/useRovingTabList"
 
 import {
@@ -61,16 +61,17 @@ function StatusCell({ row }: { row: Row }) {
         {t(`accessibility.status.${row.status}`)}
       </Badge>
       {row.withinMargin && (
-        <span
-          className="tooltip tooltip-left cursor-help text-base-content/60 hover:text-base-content"
-          data-tip={t("accessibility.marginInfo", {
+        <Tooltip
+          position="left"
+          className="cursor-help text-base-content/60 hover:text-base-content"
+          tip={t("accessibility.marginInfo", {
             ratio: row.ratio.toFixed(2),
             floor: row.floor,
             margin: row.margin,
           })}
         >
           <InfoIcon aria-hidden="true" className="size-4" />
-        </span>
+        </Tooltip>
       )}
     </div>
   )
