@@ -17,6 +17,14 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.52.2](https://github.com/foundation50/classroom50/compare/web-v1.52.1...web-v1.52.2) (2026-09-18)
+
+
+### Bug Fixes
+
+* **web:** render menus and popovers in the top layer so they are never clipped ([#1029](https://github.com/foundation50/classroom50/issues/1029)) ([38aeec3](https://github.com/foundation50/classroom50/commit/38aeec3370796dde9c0cf59d2fc449f1c17faa6d))
+* **web:** render tooltips in the top layer so they are never clipped ([#1027](https://github.com/foundation50/classroom50/issues/1027)) ([7dd4614](https://github.com/foundation50/classroom50/commit/7dd46146557c68f97b3eb59795fcbb5cb585146b))
+
 ## [1.52.1](https://github.com/foundation50/classroom50/compare/web-v1.52.0...web-v1.52.1) (2026-09-17)
 
 
