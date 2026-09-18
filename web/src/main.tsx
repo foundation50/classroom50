@@ -26,7 +26,10 @@ import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
 import { recordError } from "./lib/activity/activityStore"
-import { retryTransientGitHubError } from "./github-core/errors"
+import {
+  retryDelayForGitHubError,
+  retryTransientGitHubError,
+} from "./github-core/errors"
 import { recordGitHubFailure, recordGitHubSuccess } from "./lib/githubHealth"
 import { RateLimitOverlay } from "./components/dev/RateLimitOverlay"
 import { useReducedMotion } from "./hooks/useReducedMotion"
@@ -39,11 +42,14 @@ import { useReducedMotion } from "./hooks/useReducedMotion"
 // (each hook sets its own staleTime; nothing wants focus-refetch; fail-closed
 // retry) the enforced baseline. Per-query options still override — polling hooks
 // (useActionActivity) set their own refetchInterval/retry and are unaffected.
+// `retryDelay` makes a rate-limited retry wait out GitHub's Retry-After instead
+// of burning both retries inside the throttle window.
 const client = new QueryClient({
   defaultOptions: {
     queries: {
       refetchOnWindowFocus: false,
       retry: retryTransientGitHubError,
+      retryDelay: retryDelayForGitHubError,
       // A small floor, not a cache: enough to dedupe a burst of mounts without
       // holding stale data. Hooks that want longer freshness set their own.
       staleTime: 30_000,

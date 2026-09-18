@@ -373,7 +373,10 @@ export function invalidateInviteQueries(queryClient: QueryClient, org: string) {
   queryClient.invalidateQueries({ queryKey: githubKeys.orgMembers(org) })
 }
 
-// Refresh a classroom's assignments list after any assignments.json write.
+// Refresh a classroom's assignments list after an assignments.json write whose
+// committed document the caller doesn't hold (bulk actions, rename). A writer
+// that does hold it must use seedAssignments instead, so the read never races
+// GitHub's contents API.
 export function invalidateAssignments(
   queryClient: QueryClient,
   org: string,
@@ -382,4 +385,35 @@ export function invalidateAssignments(
   void queryClient.invalidateQueries({
     queryKey: githubKeys.assignmentsFile(org, classroom),
   })
+}
+
+// Seed one config-file read with the document a write just committed, instead
+// of refetching it. GitHub's contents API is read-after-write eventual: an
+// immediate GET can still return the pre-write body, which jsonFileQuery would
+// then cache for its 10-minute staleTime (#1004). The in-flight read is
+// cancelled first so a slow stale response can't land on top of the seed, and
+// the document is JSON round-tripped so consumers see exactly what parsing the
+// committed file yields (no `undefined` members, same shape as the wire).
+export function seedJsonFile(
+  queryClient: QueryClient,
+  queryKey: readonly unknown[],
+  document: unknown,
+) {
+  void queryClient.cancelQueries({ queryKey })
+  queryClient.setQueryData(queryKey, JSON.parse(JSON.stringify(document)))
+}
+
+// The seed counterpart of invalidateAssignments for writers that hold the
+// assignments.json they committed.
+export function seedAssignments(
+  queryClient: QueryClient,
+  org: string,
+  classroom: string,
+  assignments: unknown,
+) {
+  seedJsonFile(
+    queryClient,
+    githubKeys.assignmentsFile(org, classroom),
+    assignments,
+  )
 }

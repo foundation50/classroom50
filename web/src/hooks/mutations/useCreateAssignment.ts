@@ -4,14 +4,16 @@ import {
   type CreateAssignmentInput,
   type CreateAssignmentResult,
 } from "@/domain/assignments"
-import { invalidateAssignments } from "@/github-core/queries"
+import { seedAssignments } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
 
-// Create an assignment. The hook owns the assignments.json listing invalidate
+// Create an assignment. The hook owns the assignments.json cache reconcile
 // (unmount-safe — the new assignment must appear even if the creator navigates
-// away) and the unmount-safe deploy-tracking `onWrite` follow-up. UI (toasts,
+// away): the committed file is SEEDED rather than refetched, since GitHub's
+// contents API can still serve the pre-write body for a few seconds (#1004).
+// Also owns the unmount-safe deploy-tracking `onWrite` follow-up. UI (toasts,
 // navigate, inline error/warning banners) stays at the call site, including the
 // templateGrantWarning branch, which decides whether to navigate — see
 // ./README.md.
@@ -38,7 +40,7 @@ export function useCreateAssignment(
     mutationFn: (input) =>
       createAssignment(client, { ...input, canGrantTemplateAccess }),
     onSuccess: (result, input) => {
-      invalidateAssignments(queryClient, org, classroom)
+      seedAssignments(queryClient, org, classroom, result.assignments)
       onWrite?.(result, input)
     },
   })

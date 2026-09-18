@@ -3,7 +3,12 @@ import { describe, expect, it } from "vitest"
 
 import { CONFIG_REPO } from "@/util/configRepo"
 
-import { githubKeys, invalidateViewerOrgs } from "./keys"
+import {
+  githubKeys,
+  invalidateViewerOrgs,
+  seedAssignments,
+  seedJsonFile,
+} from "./keys"
 
 const invalidated = (client: QueryClient, key: readonly unknown[]) =>
   client.getQueryState(key)?.isInvalidated ?? false
@@ -40,5 +45,73 @@ describe("invalidateViewerOrgs", () => {
     Object.entries(untouched).forEach(([name, key]) =>
       expect(invalidated(client, key), name).toBe(false),
     )
+  })
+})
+
+describe("seedJsonFile", () => {
+  const key = githubKeys.classroomFile("acme", "cs101")
+
+  it("replaces the cached body with the written document, fresh and not invalidated", () => {
+    const client = new QueryClient()
+    client.setQueryData(key, { short_name: "cs101", name: "old" })
+
+    seedJsonFile(client, key, { short_name: "cs101", name: "new" })
+
+    expect(client.getQueryData(key)).toEqual({
+      short_name: "cs101",
+      name: "new",
+    })
+    expect(invalidated(client, key)).toBe(false)
+    expect(client.getQueryState(key)?.status).toBe("success")
+  })
+
+  it("stores what parsing the committed JSON yields, not the in-memory object", () => {
+    // jsonFileQuery hands consumers JSON.parse output, so a seed must match it:
+    // an `undefined` member is absent on the wire and must be absent here too.
+    const client = new QueryClient()
+    const written = { short_name: "cs101", pages_base_url: undefined }
+
+    seedJsonFile(client, key, written)
+
+    const cached = client.getQueryData(key) as Record<string, unknown>
+    expect("pages_base_url" in cached).toBe(false)
+    expect(cached).not.toBe(written)
+  })
+
+  it("cancels an in-flight read so a late stale response cannot overwrite the seed", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    let resolveRead!: (value: unknown) => void
+    const fetching = client.fetchQuery({
+      queryKey: key,
+      queryFn: () =>
+        new Promise((resolve) => {
+          resolveRead = resolve
+        }),
+    })
+    await Promise.resolve()
+
+    seedJsonFile(client, key, { name: "written" })
+    // The stale pre-write body arrives after the seed.
+    resolveRead({ name: "stale" })
+    await fetching.catch(() => undefined)
+
+    expect(client.getQueryData(key)).toEqual({ name: "written" })
+  })
+})
+
+describe("seedAssignments", () => {
+  it("seeds the same key the assignments read uses", () => {
+    const client = new QueryClient()
+    const written = { schema: "classroom50/assignments/v1", assignments: [] }
+
+    seedAssignments(client, "acme", "cs101", written)
+
+    expect(
+      client.getQueryData(
+        githubKeys.jsonFile("acme", CONFIG_REPO, "cs101/assignments.json"),
+      ),
+    ).toEqual(written)
   })
 })
