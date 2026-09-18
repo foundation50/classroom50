@@ -1,11 +1,21 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { useSyncExternalStore } from "react"
 
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
 
-let refreshing = false
-let refreshed = false
+// The registry mock is a real external store, like the hook it replaces: the
+// menu rows live in a child that owns the hook call, and under the React
+// Compiler a re-render of the root does not reach a child whose props did not
+// change. Only a subscription (as in production) re-renders it.
+let registry = { refreshing: false, refreshed: false }
+const listeners = new Set<() => void>()
+const setRegistry = (next: Partial<typeof registry>) =>
+  act(() => {
+    registry = { ...registry, ...next }
+    listeners.forEach((listener) => listener())
+  })
 const refresh = vi.fn(async () => null)
 
 vi.mock("@/hooks/useLanguage", () => ({
@@ -17,20 +27,25 @@ vi.mock("@/hooks/useLanguage", () => ({
 }))
 
 vi.mock("@/hooks/useLanguageRegistry", () => ({
-  useLanguageRegistry: () => ({
-    offered: [{ code: "ca" }],
-    loading: false,
-    get refreshing() {
-      return refreshing
-    },
-    get refreshed() {
-      return refreshed
-    },
-    error: false,
-    loadRegistry: vi.fn(),
-    refresh,
-    installAndActivate: vi.fn(),
-  }),
+  useLanguageRegistry: () => {
+    const { refreshing, refreshed } = useSyncExternalStore(
+      (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
+      () => registry,
+    )
+    return {
+      offered: [{ code: "ca" }],
+      loading: false,
+      refreshing,
+      refreshed,
+      error: false,
+      loadRegistry: vi.fn(),
+      refresh,
+      installAndActivate: vi.fn(),
+    }
+  },
 }))
 
 vi.mock("react-i18next", () => ({
@@ -40,8 +55,7 @@ vi.mock("react-i18next", () => ({
 describe("LoginLanguageMenu refresh row", () => {
   afterEach(() => {
     cleanup()
-    refreshing = false
-    refreshed = false
+    registry = { refreshing: false, refreshed: false }
     refresh.mockClear()
   })
 
@@ -49,14 +63,13 @@ describe("LoginLanguageMenu refresh row", () => {
     screen.getByRole("button", { name: /language\.refresh/ })
 
   it("never takes the disabled attribute while refreshing, so focus stays in the menu and it does not close", () => {
-    const { rerender } = render(<LoginLanguageMenu />)
+    render(<LoginLanguageMenu />)
     const button = refreshButton()
     button.focus()
     fireEvent.click(button)
     expect(refresh).toHaveBeenCalledTimes(1)
 
-    refreshing = true
-    rerender(<LoginLanguageMenu />)
+    setRegistry({ refreshing: true })
 
     // A disabled element loses focus, which is what closed the menu. The row
     // and the language items go inert via aria-disabled instead.
@@ -70,14 +83,12 @@ describe("LoginLanguageMenu refresh row", () => {
   })
 
   it("ignores clicks while inert and shows the done state afterwards", () => {
-    refreshing = true
-    const { rerender } = render(<LoginLanguageMenu />)
+    registry = { refreshing: true, refreshed: false }
+    render(<LoginLanguageMenu />)
     fireEvent.click(refreshButton())
     expect(refresh).not.toHaveBeenCalled()
 
-    refreshing = false
-    refreshed = true
-    act(() => rerender(<LoginLanguageMenu />))
+    setRegistry({ refreshing: false, refreshed: true })
     expect(
       screen.getByRole("button", { name: "language.refreshDone" }),
     ).toBeTruthy()

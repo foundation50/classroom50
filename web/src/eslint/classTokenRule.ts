@@ -15,8 +15,10 @@ export type ClassTokenScope =
   | "className"
   // Also `const RECIPE = "..."` initializers and any cx() argument, so a recipe
   // parked in a constant and passed as `className={RECIPE}` cannot slip past.
-  // Not every string: prose ("shows the tooltip") lives in call arguments and
-  // object values, which stay out.
+  // Not every string: prose in call arguments, object values, and JSX text
+  // stays out. A bare string constant is matched whatever it holds (a
+  // recipe's name gives nothing to key on), so prose that mentions the token
+  // belongs in a call or object, not a top-level `const`.
   | "classSources"
 
 const CLASS_NAME_ROOT = "JSXAttribute[name.name='className']"

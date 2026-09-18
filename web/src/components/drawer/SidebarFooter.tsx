@@ -326,6 +326,7 @@ const AuthedSidebarFooter = () => {
 
   const [menuOpen, setMenuOpen] = useState(false)
   const footerRef = useRef<HTMLDivElement | null>(null)
+  const triggerRef = useRef<HTMLButtonElement | null>(null)
   const langDialogRef = useRef<HTMLDialogElement | null>(null)
   const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
   const { collapsed } = useSidebarCollapse()
@@ -334,8 +335,13 @@ const AuthedSidebarFooter = () => {
   const closeMenu = useCallback(() => setMenuOpen(false), [])
   useDismissOnOutsidePointerDown(footerRef, menuOpen, closeMenu)
   // Escape from the trigger or from inside the menu (a native <button> handles
-  // Enter/Space; Escape-to-close is not native).
-  useDismissOnEscape(footerRef, menuOpen, closeMenu)
+  // Enter/Space; Escape-to-close is not native). The menu unmounts on close,
+  // so focus is handed back to the trigger rather than dropping to <body>.
+  const closeMenuReturningFocus = useCallback(() => {
+    setMenuOpen(false)
+    triggerRef.current?.focus()
+  }, [])
+  useDismissOnEscape(footerRef, menuOpen, closeMenuReturningFocus)
 
   return (
     <>
@@ -455,6 +461,7 @@ const AuthedSidebarFooter = () => {
         </Popover>
 
         <button
+          ref={triggerRef}
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
           aria-haspopup="menu"

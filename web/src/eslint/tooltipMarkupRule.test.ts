@@ -116,6 +116,15 @@ describe("local/no-raw-tooltip", () => {
     expect(await rawTooltipErrors(source)).toHaveLength(0)
   })
 
+  // The boundary of the const match: a bare string constant is a class source
+  // whatever it holds, since a recipe's name gives the rule nothing to key on.
+  it("flags a bare string constant even when it reads as prose", async () => {
+    const source = `
+      export const label = "the tooltip is open"
+    `
+    expect(await rawTooltipErrors(source)).toHaveLength(1)
+  })
+
   it("does not flag the shared Tooltip primitive or its bubble class", async () => {
     const source = `
       import { Tooltip, HelpTooltip } from "@/components/ui"

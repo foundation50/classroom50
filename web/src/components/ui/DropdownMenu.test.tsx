@@ -10,6 +10,28 @@ import {
   type DropdownTriggerProps,
 } from "./DropdownMenu"
 
+// A plain anchor stands in for the router Link so the menu stays mounted after
+// the click and its close/refocus can be asserted.
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>()
+  return {
+    ...actual,
+    Link: ({
+      to,
+      children,
+      onClick,
+    }: {
+      to: string
+      children: React.ReactNode
+      onClick?: React.MouseEventHandler<HTMLAnchorElement>
+    }) => (
+      <a href={to} onClick={onClick}>
+        {children}
+      </a>
+    ),
+  }
+})
+
 afterEach(() => cleanup())
 
 const renderMenu = (triggerProps: Partial<DropdownTriggerProps> = {}) =>
@@ -236,5 +258,57 @@ describe("Dropdown open state", () => {
     fireEvent.click(other)
     expect(onSelect).toHaveBeenCalledOnce()
     expect(trigger.getAttribute("aria-expanded")).toBe("false")
+  })
+
+  it("closes and refocuses the trigger from a RouterLinkItem", () => {
+    const RouterMenu = DropdownMenu.RouterLinkItem as (props: {
+      label: string
+      to: string
+    }) => React.ReactElement
+    render(
+      <Dropdown>
+        <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+        <DropdownMenu>
+          <RouterMenu label="Edit" to="/settings" />
+        </DropdownMenu>
+      </Dropdown>,
+    )
+    const trigger = screen.getByRole("button", { name: "Actions" })
+    fireEvent.click(trigger)
+    const link = screen.getByRole("link", { name: "Edit" })
+    expect(link.getAttribute("href")).toBe("/settings")
+    fireEvent.click(link)
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
+    expect(document.activeElement).toBe(trigger)
+  })
+
+  // daisyUI draws the divider through `.menu :where(li:empty)`, so the
+  // separator must stay an empty <li> that is a direct child of the menu list.
+  it("renders the separator as an empty list item the arrows skip", () => {
+    render(
+      <Dropdown>
+        <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
+        <DropdownMenu>
+          <DropdownMenu.Item label="First" onSelect={() => {}} />
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item label="Second" onSelect={() => {}} />
+        </DropdownMenu>
+      </Dropdown>,
+    )
+    const trigger = screen.getByRole("button", { name: "Actions" })
+    fireEvent.keyDown(trigger, { key: "ArrowDown" })
+    const menu = screen.getByRole("menu")
+    const separator = menu.querySelector('[role="separator"]')
+    expect(separator?.tagName).toBe("LI")
+    expect(separator?.parentElement).toBe(menu)
+    expect(separator?.childNodes.length).toBe(0)
+
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "First" }),
+    )
+    fireEvent.keyDown(menu, { key: "ArrowDown" })
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Second" }),
+    )
   })
 })

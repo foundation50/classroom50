@@ -31,7 +31,8 @@ import { GitHubAPIError } from "@/github-core/errors"
 // Open state is explicit React state, not daisyUI's focus-driven `dropdown`:
 // a search input inside a blur-to-close popover fights its own focus handling
 // (see Combobox for the same constraint).
-const CrumbSwitcher = <T,>({
+// Exported for the browser test; pages use it through <Breadcrumb>.
+export const CrumbSwitcher = <T,>({
   name,
   title,
   searchPlaceholder,
@@ -113,7 +114,9 @@ const CrumbSwitcher = <T,>({
         {/* A titled popup with focusable content is a dialog; focus moves to
             the search field on open, Escape returns it. The panel is a
             top-layer popover, so the breadcrumbs' scroll container cannot
-            clip it. */}
+            clip it. tabIndex -1 keeps focus inside the wrapper when the
+            title or padding is clicked, so the root-scoped Escape still
+            fires (same rationale as DropdownMenu, #987). */}
         <Popover
           id={panelId}
           role="dialog"
@@ -121,6 +124,7 @@ const CrumbSwitcher = <T,>({
           open={open}
           anchorRef={wrapperRef}
           align="start"
+          tabIndex={-1}
           className="w-64 whitespace-normal"
         >
           <div className="border-b border-base-300 px-3 py-2 text-sm font-semibold text-base-content">

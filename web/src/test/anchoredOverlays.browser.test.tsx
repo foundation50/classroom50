@@ -162,6 +162,34 @@ describe("DropdownMenu stays on screen", () => {
     expect(menu.scrollHeight).toBeGreaterThan(menu.clientHeight)
   })
 
+  it("draws the separator through daisyUI's li:empty divider recipe", async () => {
+    render(
+      <div style={{ padding: 40 }}>
+        <Dropdown>
+          <DropdownMenu.Trigger size="sm">Actions</DropdownMenu.Trigger>
+          <DropdownMenu className="w-64">
+            <DropdownMenu.Item label="First action" onSelect={() => {}} />
+            <DropdownMenu.Separator />
+            <DropdownMenu.Item label="Second action" onSelect={() => {}} />
+          </DropdownMenu>
+        </Dropdown>
+      </div>,
+    )
+    await page.getByRole("button", { name: "Actions", exact: true }).click()
+    await expect.poll(openMenu).not.toBeNull()
+    const menu = openMenu()!
+    const separator = menu.querySelector<HTMLElement>('[role="separator"]')!
+    const style = getComputedStyle(separator)
+    // A 1px rule inset from the menu edges, not a stray dark bar or an empty
+    // row: daisyUI's `.menu :where(li:empty)` is the one source of this look.
+    expect(separator.getBoundingClientRect().height).toBe(1)
+    expect(parseFloat(style.opacity)).toBeCloseTo(0.1, 2)
+    expect(parseFloat(style.marginLeft)).toBeGreaterThan(0)
+    expect(separator.getBoundingClientRect().width).toBeLessThan(
+      menu.clientWidth,
+    )
+  })
+
   it("follows its content when the panel grows while open", async () => {
     function GrowingMenu() {
       const [more, setMore] = useState(false)

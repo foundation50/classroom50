@@ -100,6 +100,15 @@ describe("local/no-raw-dropdown", () => {
     expect(await rawDropdownErrors(source)).toHaveLength(0)
   })
 
+  // The boundary of the const match: a bare string constant is a class source
+  // whatever it holds, since a recipe's name gives the rule nothing to key on.
+  it("flags a bare string constant even when it reads as prose", async () => {
+    const source = `
+      export const label = "the dropdown is open"
+    `
+    expect(await rawDropdownErrors(source)).toHaveLength(1)
+  })
+
   it("does not flag the shared primitives", async () => {
     const source = `
       import { Dropdown, DropdownMenu } from "@/components/ui"

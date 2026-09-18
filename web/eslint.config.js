@@ -86,9 +86,9 @@ export default defineConfig([
   },
   {
     files: ["**/*.{ts,tsx}"],
-    // The rules match every string literal (so a recipe parked in a `const`
-    // is caught); the rule sources and their tests quote the raw tokens on
-    // purpose.
+    // The blocking rules also match `const` initializers and cx() arguments
+    // (so a recipe parked in a constant is caught); the rule sources and their
+    // tests hold the raw tokens in exactly those positions on purpose.
     ignores: ["src/eslint/**"],
     plugins: { local },
     rules: {

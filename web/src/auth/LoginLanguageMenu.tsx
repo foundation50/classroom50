@@ -14,22 +14,18 @@ import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
 // in their own language. Native names (languageLabel(code, code)) keep each
 // entry legible regardless of the current UI language.
 export function LoginLanguageMenu() {
-  const language = useLanguage()
-  const registry = useLanguageRegistry()
   return (
     <Dropdown align="end">
-      <LanguageMenu language={language} registry={registry} />
+      <LanguageMenu />
     </Dropdown>
   )
 }
 
-// Split from the root so the rows can close the menu through useDropdown()
-// once an async switch has finished. The data hooks stay in the root and come
-// in as props: under the React Compiler a prop-less child is memoized and
-// would not see their updates.
-function LanguageMenu({
-  language: { lang, availableLangs, setLang },
-  registry: {
+// Split from the root only so the rows can reach useDropdown() and close the
+// menu once an async switch has finished.
+function LanguageMenu() {
+  const { lang, availableLangs, setLang } = useLanguage()
+  const {
     offered: more,
     loading: loadingRegistry,
     refreshing,
@@ -38,11 +34,7 @@ function LanguageMenu({
     loadRegistry,
     refresh,
     installAndActivate,
-  },
-}: {
-  language: ReturnType<typeof useLanguage>
-  registry: ReturnType<typeof useLanguageRegistry>
-}) {
+  } = useLanguageRegistry()
   const { t } = useTranslation()
   const { close } = useDropdown()
 

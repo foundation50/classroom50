@@ -301,16 +301,13 @@ export function DropdownMenu({
 }
 
 // The one separator recipe for menu groups, so the divider chrome can't drift
-// per caller. An <li> so it is valid inside the menu list; daisyUI's `.divider`
-// is a flex helper with its own min-height and heavy color that renders as a
-// stray dark bar inside a compact `.menu`.
+// per caller. An empty <li> is valid inside the menu list and is daisyUI's own
+// divider hook: `.menu :where(li:empty)` draws the 1px inset rule, so no
+// border or margin classes here (they would fight that recipe). daisyUI's
+// `.divider` is a flex helper with its own min-height and heavy color that
+// renders as a stray dark bar inside a compact `.menu`.
 export function MenuSeparator() {
-  return (
-    <li
-      role="separator"
-      className="pointer-events-none my-1 border-t border-base-content/10"
-    />
-  )
+  return <li role="separator" className="pointer-events-none" />
 }
 DropdownMenu.Separator = MenuSeparator
 
