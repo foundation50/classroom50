@@ -4,6 +4,10 @@ import { useEffect, type RefObject } from "react"
 //
 // Pointer-down rather than click: a click fires after the overlay's own
 // blur/refocus handling, which is late enough to reopen what it just closed.
+//
+// Capture phase: React's stopPropagation also stops the native event at the
+// root container, so a widget that swallows its own pointer-down (a combobox
+// option, a scrollable list) would otherwise keep an unrelated overlay open.
 export function useDismissOnOutsidePointerDown(
   ref: RefObject<HTMLElement | null>,
   open: boolean,
@@ -18,8 +22,9 @@ export function useDismissOnOutsidePointerDown(
       onDismiss()
     }
 
-    document.addEventListener("pointerdown", onPointerDown)
-    return () => document.removeEventListener("pointerdown", onPointerDown)
+    document.addEventListener("pointerdown", onPointerDown, true)
+    return () =>
+      document.removeEventListener("pointerdown", onPointerDown, true)
   }, [ref, open, onDismiss])
 }
 

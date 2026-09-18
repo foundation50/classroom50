@@ -2,7 +2,6 @@ import { ConfirmModal } from "@/components/modals"
 import {
   Badge,
   Card,
-  closeDropdownMenu,
   Dropdown,
   DropdownMenu,
   EmphasisLtr,
@@ -21,7 +20,6 @@ import {
 } from "@/hooks/useClassroomSummaries"
 import { EnterDiv } from "@/lib/motionComponents"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
-import { Link } from "@tanstack/react-router"
 import {
   ArchiveIcon,
   BookIcon,
@@ -157,16 +155,12 @@ function ClassroomMenu({
           <KebabHorizontalIcon aria-hidden="true" className="size-4" />
         </DropdownMenu.Trigger>
         <DropdownMenu className="w-52">
-          <li>
-            <Link
-              to="/$org/$classroom/settings"
-              params={{ org, classroom: slug }}
-              onClick={closeDropdownMenu}
-            >
-              <PencilIcon aria-hidden="true" className="size-4" />
-              {t("classes.card.edit")}
-            </Link>
-          </li>
+          <DropdownMenu.RouterLinkItem
+            icon={PencilIcon}
+            label={t("classes.card.edit")}
+            to="/$org/$classroom/settings"
+            params={{ org, classroom: slug }}
+          />
           <DropdownMenu.Item
             icon={ArchiveIcon}
             label={archived ? t("classes.unarchive") : t("classes.archive")}

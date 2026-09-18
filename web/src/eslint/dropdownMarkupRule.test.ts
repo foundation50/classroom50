@@ -82,6 +82,24 @@ describe("local/no-raw-dropdown", () => {
     expect(dropdownClassTemplateSelector).toContain("TemplateElement")
   })
 
+  it("flags a const recipe outside any className", async () => {
+    const source = `
+      const WRAPPER = "dropdown dropdown-end"
+      export function App() {
+        return <div className={WRAPPER}>x</div>
+      }
+    `
+    expect(await rawDropdownErrors(source)).toHaveLength(1)
+  })
+
+  it("does not flag prose or a test name that mentions a dropdown", async () => {
+    const source = `
+      export const note = { text: "the dropdown opens inward" }
+      it("dropdown closes on Escape", () => {})
+    `
+    expect(await rawDropdownErrors(source)).toHaveLength(0)
+  })
+
   it("does not flag the shared primitives", async () => {
     const source = `
       import { Dropdown, DropdownMenu } from "@/components/ui"

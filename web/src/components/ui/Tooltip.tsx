@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -6,6 +7,8 @@ import {
   type ReactNode,
 } from "react"
 
+import { useDismissOnEscape } from "@/hooks/useDismissOnEscape"
+import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { useAnchoredPopover, type OverlaySide } from "./anchoredPopover"
 import { cx } from "./cx"
 
@@ -57,12 +60,12 @@ export function Tooltip({
   onPointerLeave,
   onFocus,
   onBlur,
-  onKeyDown,
   ...props
 }: TooltipProps) {
   const hostRef = useRef<HTMLDivElement>(null)
   const bubbleRef = useRef<HTMLDivElement>(null)
   const [open, setOpen] = useState(false)
+  const close = useCallback(() => setOpen(false), [])
 
   useAnchoredPopover({
     open,
@@ -70,25 +73,22 @@ export function Tooltip({
     panelRef: bubbleRef,
     side: position,
     gap: TOOLTIP_GAP,
+    followScroll: false,
     contentKey: tip,
   })
 
+  // Only the tooltip goes away on Escape; the dialog or menu behind it stays.
+  useDismissOnEscape(hostRef, open, close)
+  // A tap opens the bubble but fires pointerleave as soon as the finger lifts,
+  // so touch closes on the next tap elsewhere instead.
+  useDismissOnOutsidePointerDown(hostRef, open, close)
+
+  // A scroll while open closes the bubble rather than leaving a stale one.
   useEffect(() => {
     if (!open) return
-    const host = hostRef.current
-    const close = () => setOpen(false)
-    // A tap opens the bubble but fires pointerleave as soon as the finger
-    // lifts, so touch closes on the next tap elsewhere instead.
-    const closeIfOutside = (event: PointerEvent) => {
-      if (!host?.contains(event.target as Node)) close()
-    }
     window.addEventListener("scroll", close, { capture: true, passive: true })
-    document.addEventListener("pointerdown", closeIfOutside, true)
-    return () => {
-      window.removeEventListener("scroll", close, { capture: true })
-      document.removeEventListener("pointerdown", closeIfOutside, true)
-    }
-  }, [open])
+    return () => window.removeEventListener("scroll", close, { capture: true })
+  }, [open, close])
 
   return (
     <Tag
@@ -109,15 +109,6 @@ export function Tooltip({
       onBlur={(event) => {
         setOpen(false)
         onBlur?.(event)
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && open) {
-          // Only the tooltip goes away; the dialog or menu behind it stays.
-          event.preventDefault()
-          event.stopPropagation()
-          setOpen(false)
-        }
-        onKeyDown?.(event)
       }}
       {...props}
     >

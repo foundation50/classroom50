@@ -12,26 +12,47 @@ import { useSidebarCollapse } from "./collapseContext"
 import {
   navItemClass,
   sidebarActivePillClass,
-  sidebarTooltip,
   sidebarIconButton,
 } from "./sidebarClasses"
 import { sidebarPillTransition } from "@/lib/motion"
-import { rtlFlip, Tooltip } from "@/components/ui"
+import { rtlFlip, cx, Tooltip } from "@/components/ui"
 
-// Collapse-only tooltip wrapper, used internally by SidebarNavItem below. Opens
-// toward the page (the rail's inline end); <Tooltip> flips it under RTL.
+// The one label bubble for the collapsed rail: opens toward the page (the
+// rail's inline end; <Tooltip> flips it under RTL) in the rail's own surface
+// color with neutral-content text, so it reads as part of the dark rail. The
+// bubble inherits the variables from the host.
+export const SidebarTooltip = ({
+  tip,
+  as,
+  className,
+  children,
+}: {
+  tip: string
+  as?: "span" | "div"
+  className?: string
+  children: ReactNode
+}) => (
+  <Tooltip
+    as={as}
+    tip={tip}
+    position="right"
+    className={cx(
+      "[--tooltip-bg:var(--sidebar-surface)] [--tooltip-fg:var(--color-neutral-content)]",
+      className,
+    )}
+  >
+    {children}
+  </Tooltip>
+)
+
+// Collapse-only tooltip wrapper, used internally by SidebarNavItem below.
 const Tip = ({ label, children }: { label: string; children: ReactNode }) => {
   const { collapsed } = useSidebarCollapse()
   if (!collapsed) return <>{children}</>
   return (
-    <Tooltip
-      as="div"
-      tip={label}
-      position="right"
-      className={`${sidebarTooltip} w-full`}
-    >
+    <SidebarTooltip as="div" tip={label} className="w-full">
       {children}
-    </Tooltip>
+    </SidebarTooltip>
   )
 }
 
@@ -103,10 +124,9 @@ export const ClassroomLogo = () => {
   if (collapsed) {
     return (
       <div className="flex items-center justify-center px-2 py-6 border-b-1 border-neutral-content/20">
-        <Tooltip
+        <SidebarTooltip
           tip={t("nav.expandSidebar")}
-          position="right"
-          className={`${sidebarTooltip} sidebar-fade-in`}
+          className="sidebar-fade-in"
         >
           <button
             type="button"
@@ -119,7 +139,7 @@ export const ClassroomLogo = () => {
               className="size-8 text-[var(--sidebar-accent)]"
             />
           </button>
-        </Tooltip>
+        </SidebarTooltip>
       </div>
     )
   }
@@ -157,11 +177,7 @@ export const ExpandSidebarButton = () => {
 
   return (
     <div className="sidebar-fade-in flex justify-center py-2">
-      <Tooltip
-        tip={t("nav.expandSidebar")}
-        position="right"
-        className={sidebarTooltip}
-      >
+      <SidebarTooltip tip={t("nav.expandSidebar")}>
         <button
           type="button"
           onClick={toggle}
@@ -173,7 +189,7 @@ export const ExpandSidebarButton = () => {
             className={`size-5 ${rtlFlip}`}
           />
         </button>
-      </Tooltip>
+      </SidebarTooltip>
     </div>
   )
 }
@@ -185,11 +201,7 @@ export const AllClasses = ({ org }: { org: string }) => {
   if (collapsed) {
     return (
       <div className="sidebar-fade-in flex justify-center py-2 text-sm">
-        <Tooltip
-          tip={t("nav.allClasses")}
-          position="right"
-          className={sidebarTooltip}
-        >
+        <SidebarTooltip tip={t("nav.allClasses")}>
           <Link
             to="/$org/classes"
             params={{ org }}
@@ -198,7 +210,7 @@ export const AllClasses = ({ org }: { org: string }) => {
           >
             <ArrowLeftIcon aria-hidden="true" className={`size-5 ${rtlFlip}`} />
           </Link>
-        </Tooltip>
+        </SidebarTooltip>
       </div>
     )
   }

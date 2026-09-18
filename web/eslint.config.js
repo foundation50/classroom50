@@ -86,6 +86,10 @@ export default defineConfig([
   },
   {
     files: ["**/*.{ts,tsx}"],
+    // The rules match every string literal (so a recipe parked in a `const`
+    // is caught); the rule sources and their tests quote the raw tokens on
+    // purpose.
+    ignores: ["src/eslint/**"],
     plugins: { local },
     rules: {
       // Every hover bubble goes through <Tooltip> and every menu through
@@ -94,6 +98,11 @@ export default defineConfig([
       // rather than advisory.
       "local/no-raw-tooltip": "error",
       "local/no-raw-dropdown": "error",
+    },
+  },
+  {
+    files: ["**/*.{ts,tsx}"],
+    rules: {
       "react-refresh/only-export-components": "off",
       // Advisory, not blocking: these flag legitimate patterns here (mount-time
       // init reading localStorage / the OAuth callback, and resetting modal

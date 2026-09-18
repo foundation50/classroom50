@@ -13,6 +13,7 @@ import useClassroomSummaries, {
   classroomDisplayName,
 } from "@/hooks/useClassroomSummaries"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
+import { useDismissOnEscape } from "@/hooks/useDismissOnEscape"
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
@@ -73,20 +74,13 @@ const CrumbSwitcher = <T,>({
   const close = useCallback(() => setOpen(false), [])
   useDismissOnOutsidePointerDown(wrapperRef, open, close)
 
-  // Escape dismisses from anywhere (search field or a focused row) and hands
-  // focus back to the trigger. Document-level because a listener on the panel
-  // div itself would make it a non-interactive element with handlers.
-  useEffect(() => {
-    if (!open) return
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      close()
-      triggerRef.current?.focus()
-    }
-    document.addEventListener("keydown", onKeyDown)
-    return () => document.removeEventListener("keydown", onKeyDown)
-  }, [open, close])
+  // Escape dismisses from the search field or a focused row and hands focus
+  // back to the trigger.
+  const closeReturningFocus = useCallback(() => {
+    close()
+    triggerRef.current?.focus()
+  }, [close])
+  useDismissOnEscape(wrapperRef, open, closeReturningFocus)
 
   const needle = query.trim().toLowerCase()
   const visible = needle

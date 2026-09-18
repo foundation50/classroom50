@@ -4,9 +4,9 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { StrictMode } from "react"
 
 import {
-  closeDropdownMenu,
   Dropdown,
   DropdownMenu,
+  useDropdown,
   type DropdownTriggerProps,
 } from "./DropdownMenu"
 
@@ -179,23 +179,62 @@ describe("Dropdown open state", () => {
     expect(onOpenChange.mock.calls).toEqual([[true], [false]])
   })
 
-  it("closes from a non-Item row through closeDropdownMenu(event)", () => {
+  it("closes from a custom row through useDropdown()", () => {
+    const CustomRow = () => {
+      const { close } = useDropdown()
+      return (
+        <li>
+          <button type="button" onClick={() => close({ returnFocus: true })}>
+            Go somewhere
+          </button>
+        </li>
+      )
+    }
     render(
       <Dropdown>
         <DropdownMenu.Trigger>Actions</DropdownMenu.Trigger>
         <DropdownMenu>
-          <li>
-            <a href="#go" onClick={closeDropdownMenu}>
-              Go somewhere
-            </a>
-          </li>
+          <CustomRow />
         </DropdownMenu>
       </Dropdown>,
     )
     const trigger = screen.getByRole("button", { name: "Actions" })
     fireEvent.click(trigger)
-    fireEvent.click(screen.getByRole("link", { name: "Go somewhere" }))
+    fireEvent.click(screen.getByRole("button", { name: "Go somewhere" }))
     expect(trigger.getAttribute("aria-expanded")).toBe("false")
     expect(document.activeElement).toBe(trigger)
+  })
+
+  it("marks the selected row of a pick-one menu and closes after picking", () => {
+    const onSelect = vi.fn()
+    render(
+      <Dropdown>
+        <DropdownMenu.Trigger>Version</DropdownMenu.Trigger>
+        <DropdownMenu>
+          <DropdownMenu.Item label="3.13" selected onSelect={onSelect} />
+          <DropdownMenu.Item
+            label="3.12"
+            selected={false}
+            onSelect={onSelect}
+          />
+        </DropdownMenu>
+      </Dropdown>,
+    )
+    const trigger = screen.getByRole("button", { name: "Version" })
+    fireEvent.click(trigger)
+    const chosen = screen.getByRole("button", { name: "3.13" })
+    const other = screen.getByRole("button", { name: "3.12" })
+    expect(chosen.className).toContain("active")
+    expect(other.className).not.toContain("active")
+    // Both rows reserve the check slot so their labels line up.
+    expect(chosen.querySelector("svg")?.classList.contains("invisible")).toBe(
+      false,
+    )
+    expect(other.querySelector("svg")?.classList.contains("invisible")).toBe(
+      true,
+    )
+    fireEvent.click(other)
+    expect(onSelect).toHaveBeenCalledOnce()
+    expect(trigger.getAttribute("aria-expanded")).toBe("false")
   })
 })

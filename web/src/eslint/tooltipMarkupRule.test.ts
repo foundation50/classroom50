@@ -91,6 +91,31 @@ describe("local/no-raw-tooltip", () => {
     expect(tooltipClassTemplateSelector).toContain("TemplateElement")
   })
 
+  // A recipe parked in a constant and passed as className={RECIPE} used to
+  // slip past a className-only match (the old sidebar and roster tooltips).
+  it("flags a const recipe and a cx() argument outside any className", async () => {
+    const source = `
+      import { cx } from "@/components/ui"
+      const RECIPE = "tooltip tooltip-warning cursor-help"
+      const other = \`tooltip \${"x"}\`
+      export const merged = cx("btn", "tooltip")
+      export function App() {
+        return <span className={RECIPE}>{other}</span>
+      }
+    `
+    expect(await rawTooltipErrors(source)).toHaveLength(3)
+  })
+
+  it("does not flag prose that merely mentions a tooltip", async () => {
+    const source = `
+      export const steps = [{ text: "focus a tooltip trigger and press Esc" }]
+      export function App() {
+        return <p title="shows the tooltip">{steps[0].text}</p>
+      }
+    `
+    expect(await rawTooltipErrors(source)).toHaveLength(0)
+  })
+
   it("does not flag the shared Tooltip primitive or its bubble class", async () => {
     const source = `
       import { Tooltip, HelpTooltip } from "@/components/ui"

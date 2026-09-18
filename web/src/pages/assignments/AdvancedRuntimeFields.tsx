@@ -4,7 +4,6 @@ import { Trans, useTranslation } from "react-i18next"
 import {
   AlertIcon,
   CheckCircleIcon,
-  CheckIcon,
   TriangleDownIcon,
   QuestionIcon,
   ServerIcon,
@@ -12,7 +11,6 @@ import {
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import {
-  closeDropdownMenu,
   Dropdown,
   DropdownMenu,
   fieldLabelClass,
@@ -139,28 +137,12 @@ export const LanguageVersionField = ({
               {!disabled && (
                 <DropdownMenu>
                   {meta.versions.map((version) => (
-                    <li key={version}>
-                      <button
-                        type="button"
-                        className={
-                          version === current
-                            ? "active font-semibold"
-                            : undefined
-                        }
-                        onClick={(e) => {
-                          field.handleChange(version)
-                          closeDropdownMenu(e)
-                        }}
-                      >
-                        <CheckIcon
-                          aria-hidden="true"
-                          className={`size-4 ${
-                            version === current ? "" : "invisible"
-                          }`}
-                        />
-                        {version}
-                      </button>
-                    </li>
+                    <DropdownMenu.Item
+                      key={version}
+                      label={version}
+                      selected={version === current}
+                      onSelect={() => field.handleChange(version)}
+                    />
                   ))}
                 </DropdownMenu>
               )}

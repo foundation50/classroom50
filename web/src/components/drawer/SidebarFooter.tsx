@@ -10,7 +10,7 @@ import {
   SignOutIcon,
   SunIcon,
 } from "@/components/ui/icons"
-import { Badge, Popover } from "@/components/ui"
+import { Badge, MenuSeparator, Popover } from "@/components/ui"
 import {
   useParams,
   useMatchRoute,
@@ -20,7 +20,8 @@ import {
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { createPortal } from "react-dom"
-import { type MouseEvent, useRef, useState } from "react"
+import { type MouseEvent, useCallback, useRef, useState } from "react"
+import { useDismissOnEscape } from "@/hooks/useDismissOnEscape"
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import duck from "@/assets/duck.png"
@@ -45,16 +46,6 @@ import { DeployEnvBadge } from "./DeployEnvBadge"
 // its knob/track off `input:checked`, which a non-input can't set, so the on/off
 // look is hand-rolled here from `on`. The button owns state via aria-pressed;
 // this is aria-hidden decoration. Exported for a focused unit test.
-
-// A thin, non-interactive rule between menu groups. DaisyUI's `.divider` is a
-// flex helper with its own min-height and heavy color, which renders as a stray
-// dark bar inside a compact `.menu`; a bordered spacer is the clean separator.
-const MenuSeparator = () => (
-  <li
-    aria-hidden="true"
-    className="pointer-events-none my-1 border-t border-base-content/20"
-  />
-)
 
 export const ThemeToggleTrack = ({ on }: { on: boolean }) => (
   <span
@@ -340,7 +331,11 @@ const AuthedSidebarFooter = () => {
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
-  useDismissOnOutsidePointerDown(footerRef, menuOpen, () => setMenuOpen(false))
+  const closeMenu = useCallback(() => setMenuOpen(false), [])
+  useDismissOnOutsidePointerDown(footerRef, menuOpen, closeMenu)
+  // Escape from the trigger or from inside the menu (a native <button> handles
+  // Enter/Space; Escape-to-close is not native).
+  useDismissOnEscape(footerRef, menuOpen, closeMenu)
 
   return (
     <>
@@ -386,7 +381,7 @@ const AuthedSidebarFooter = () => {
           {canPreviewRoles && (
             <>
               <li>
-                <details key={menuOpen ? "open" : "closed"}>
+                <details>
                   <summary>
                     <EyeIcon aria-hidden="true" className="size-4" />
                     <span className="flex-1">{t("nav.viewAs")}</span>
@@ -462,10 +457,6 @@ const AuthedSidebarFooter = () => {
         <button
           type="button"
           onClick={() => setMenuOpen((open) => !open)}
-          onKeyDown={(event) => {
-            // Native <button> handles Enter/Space; Escape-to-close is not native.
-            if (event.key === "Escape") setMenuOpen(false)
-          }}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
           aria-label={t("nav.accountMenu")}

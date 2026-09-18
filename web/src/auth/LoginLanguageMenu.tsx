@@ -3,7 +3,7 @@ import { InlineSpinner } from "@/components/Spinner"
 import { CheckIcon, GlobeIcon, SyncIcon } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
-import { closeDropdownMenu, Dropdown, DropdownMenu, cx } from "@/components/ui"
+import { Dropdown, DropdownMenu, cx, useDropdown } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
@@ -14,9 +14,22 @@ import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
 // in their own language. Native names (languageLabel(code, code)) keep each
 // entry legible regardless of the current UI language.
 export function LoginLanguageMenu() {
-  const { t } = useTranslation()
-  const { lang, availableLangs, setLang } = useLanguage()
-  const {
+  const language = useLanguage()
+  const registry = useLanguageRegistry()
+  return (
+    <Dropdown align="end">
+      <LanguageMenu language={language} registry={registry} />
+    </Dropdown>
+  )
+}
+
+// Split from the root so the rows can close the menu through useDropdown()
+// once an async switch has finished. The data hooks stay in the root and come
+// in as props: under the React Compiler a prop-less child is memoized and
+// would not see their updates.
+function LanguageMenu({
+  language: { lang, availableLangs, setLang },
+  registry: {
     offered: more,
     loading: loadingRegistry,
     refreshing,
@@ -25,7 +38,13 @@ export function LoginLanguageMenu() {
     loadRegistry,
     refresh,
     installAndActivate,
-  } = useLanguageRegistry()
+  },
+}: {
+  language: ReturnType<typeof useLanguage>
+  registry: ReturnType<typeof useLanguageRegistry>
+}) {
+  const { t } = useTranslation()
+  const { close } = useDropdown()
 
   const [switchingCode, setSwitchingCode] = useState<string | null>(null)
   // Synchronous re-entry lock: `switchingCode` is async React state, so a fast
@@ -44,16 +63,13 @@ export function LoginLanguageMenu() {
 
   // Guarded switch: the ref-lock + spinner-code bookkeeping is identical for
   // both entry points; only the awaited work differs. `action` returns whether
-  // to close the menu (true on a successful switch/install). The menu is
-  // resolved from the focused item before awaiting, since focus may have moved
-  // by the time the work finishes.
+  // to close the menu (true on a successful switch/install).
   const runSwitch = async (code: string, action: () => Promise<boolean>) => {
     if (switchingRef.current || refreshing) return
     switchingRef.current = true
     setSwitchingCode(code)
-    const menu = document.activeElement?.closest('[role="menu"]') ?? null
     try {
-      if (await action()) closeDropdownMenu({ currentTarget: menu })
+      if (await action()) close({ returnFocus: true })
     } finally {
       setSwitchingCode(null)
       switchingRef.current = false
@@ -79,7 +95,7 @@ export function LoginLanguageMenu() {
     })
 
   return (
-    <Dropdown align="end">
+    <>
       <DropdownMenu.Trigger
         variant="ghost"
         size="sm"
@@ -189,7 +205,7 @@ export function LoginLanguageMenu() {
           </li>
         )}
       </DropdownMenu>
-    </Dropdown>
+    </>
   )
 }
 

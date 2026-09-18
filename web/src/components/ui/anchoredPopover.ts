@@ -1,4 +1,4 @@
-import { useLayoutEffect, type RefObject } from "react"
+import { useLayoutEffect, useRef, type RefObject } from "react"
 
 import {
   intersectRects,
@@ -93,7 +93,7 @@ function positionPanel({
   matchAnchorWidth: boolean
 }) {
   const anchorRect = anchor.getBoundingClientRect()
-  if (matchAnchorWidth) panel.style.width = `${anchorRect.width}px`
+  panel.style.width = matchAnchorWidth ? `${anchorRect.width}px` : ""
   const size = panel.getBoundingClientRect()
   const placed = placeOverlay({
     anchor: anchorRect,
@@ -118,6 +118,7 @@ export function useAnchoredPopover({
   align = "center",
   gap,
   matchAnchorWidth = false,
+  followScroll = true,
   contentKey,
 }: {
   open: boolean
@@ -128,10 +129,17 @@ export function useAnchoredPopover({
   gap: number
   // Size the panel to the anchor's width (a combobox listbox under its input).
   matchAnchorWidth?: boolean
+  // Reposition on scroll. An overlay that closes on scroll (a tooltip) turns
+  // this off rather than measuring on the way out.
+  followScroll?: boolean
   // Re-measure when this changes (e.g. the tooltip text), since the panel's
   // size may have changed while open.
   contentKey?: unknown
 }) {
+  // The current reposition closure, so a content change can re-measure without
+  // re-running the show/hide effect (which would restart the fade-in).
+  const repositionRef = useRef<(() => void) | null>(null)
+
   useLayoutEffect(() => {
     const anchor = anchorRef.current
     const panel = panelRef.current
@@ -144,13 +152,16 @@ export function useAnchoredPopover({
     showPanel(panel)
     const reposition = () =>
       positionPanel({ anchor, panel, side, align, gap, matchAnchorWidth })
+    repositionRef.current = reposition
     reposition()
     // Capture phase so scrolls inside nested containers (a table frame, a
     // modal box) count too; the anchor moves with them.
-    window.addEventListener("scroll", reposition, {
-      capture: true,
-      passive: true,
-    })
+    if (followScroll) {
+      window.addEventListener("scroll", reposition, {
+        capture: true,
+        passive: true,
+      })
+    }
     window.addEventListener("resize", reposition)
     // Content can change size while open (a disclosure inside a menu, async
     // results arriving in a combobox); a panel placed above its anchor would
@@ -162,7 +173,10 @@ export function useAnchoredPopover({
     observer?.observe(panel)
     observer?.observe(anchor)
     return () => {
-      window.removeEventListener("scroll", reposition, { capture: true })
+      repositionRef.current = null
+      if (followScroll) {
+        window.removeEventListener("scroll", reposition, { capture: true })
+      }
       window.removeEventListener("resize", reposition)
       observer?.disconnect()
       hidePanel(panel)
@@ -175,6 +189,10 @@ export function useAnchoredPopover({
     align,
     gap,
     matchAnchorWidth,
-    contentKey,
+    followScroll,
   ])
+
+  useLayoutEffect(() => {
+    repositionRef.current?.()
+  }, [contentKey])
 }

@@ -1,4 +1,4 @@
-import type { Rule } from "eslint"
+import { classTokenRule, classTokenSelectors } from "./classTokenRule.ts"
 
 // daisyUI's CSS `dropdown` recipe positions its `dropdown-content` inside the
 // trigger's box, so a menu near an edge is cut off by any `overflow` ancestor
@@ -8,38 +8,26 @@ import type { Rule } from "eslint"
 // keep it on screen, so they are the only sanctioned dropdown; this rule makes
 // the raw markup a lint error.
 //
-// Any `dropdown` or `dropdown-*` class token in a className is caught, whether
-// a plain string, a `cx(...)` argument, or a template-literal chunk.
+// Any `dropdown` or `dropdown-*` class token in a className, a `const` recipe,
+// or a cx() argument is caught, so a recipe parked in a constant is caught too.
 
-// Token match: start of string, whitespace, or a variant colon before
-// `dropdown`, then either the end of the token or a modifier suffix.
+// Either the end of the token or a modifier suffix after `dropdown`.
 export const dropdownClassPattern =
   "(?:^|[\\s:])dropdown(?:-[a-z]+)*(?![A-Za-z0-9_-])"
 
-export const dropdownClassLiteralSelector = `JSXAttribute[name.name='className'] Literal[value=/${dropdownClassPattern}/]`
-// Template-literal classNames have no Literal child; their static chunks are
-// TemplateElement nodes.
-export const dropdownClassTemplateSelector = `JSXAttribute[name.name='className'] TemplateElement[value.raw=/${dropdownClassPattern}/]`
+export const dropdownClassTemplateSelector = classTokenSelectors(
+  dropdownClassPattern,
+  "classSources",
+).template
 
 export const dropdownMarkupMessage =
   "Raw daisyUI dropdown markup (`dropdown` / `dropdown-content` classes) is positioned inside its container and gets clipped or covered near an edge (see #1026). Use <Dropdown> with <DropdownMenu> from @/components/ui, or <Popover> for a non-menu panel: they render in the top layer and stay on screen."
 
-export const dropdownMarkupRule: Rule.RuleModule = {
-  meta: {
-    type: "problem",
-    docs: {
-      description:
-        "Disallow raw daisyUI dropdown markup in favor of the shared <Dropdown>",
-    },
-    schema: [],
-    messages: { rawDropdown: dropdownMarkupMessage },
-  },
-  create(context) {
-    const report = (node: Rule.Node) =>
-      context.report({ node, messageId: "rawDropdown" })
-    return {
-      [dropdownClassLiteralSelector]: report,
-      [dropdownClassTemplateSelector]: report,
-    }
-  },
-}
+export const dropdownMarkupRule = classTokenRule({
+  pattern: dropdownClassPattern,
+  scope: "classSources",
+  description:
+    "Disallow raw daisyUI dropdown markup in favor of the shared <Dropdown>",
+  messageId: "rawDropdown",
+  message: dropdownMarkupMessage,
+})

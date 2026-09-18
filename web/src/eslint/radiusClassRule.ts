@@ -1,3 +1,5 @@
+import { classTokenSelectors } from "./classTokenRule.ts"
+
 // Corner radii come from the theme tokens (rounded-box for panels/cards/
 // modals, rounded-field for inputs/buttons, rounded-selector for badges/
 // chips), so the whole product re-tunes from index.css. A raw Tailwind size
@@ -13,11 +15,11 @@ export const radiusClassPattern =
   "(?:^|[\\s:])rounded(?:-(?:s|e|t|b|ss|se|es|ee))?" +
   "-(?:xs|sm|md|lg|xl|2xl|3xl|4xl)(?![A-Za-z0-9_-])"
 
-export const radiusClassLiteralSelector = `JSXAttribute[name.name='className'] > Literal[value=/${radiusClassPattern}/]`
-
-// Template-literal classNames (className={`... ${x}`}) have no Literal child;
-// their static chunks are TemplateElement nodes, matched by raw value.
-export const radiusClassTemplateSelector = `JSXAttribute[name.name='className'] TemplateElement[value.raw=/${radiusClassPattern}/]`
+// Advisory (warn-level, via no-restricted-syntax), so it stays scoped to
+// className attributes rather than every string in the file.
+const selectors = classTokenSelectors(radiusClassPattern, "className")
+export const radiusClassLiteralSelector = selectors.literal
+export const radiusClassTemplateSelector = selectors.template
 
 export const radiusClassMessage =
   "Raw Tailwind radius sizes drift from the theme's radius scale: use the " +

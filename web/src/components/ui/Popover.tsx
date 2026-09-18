@@ -11,12 +11,14 @@ import {
   type OverlayAlign,
   type OverlaySide,
 } from "./anchoredPopover"
-import { cx } from "./cx"
+import { cx, hasUtility } from "./cx"
 
 // The one popover-surface recipe (chrome only, no layout), shared by
 // DropdownMenu, Combobox, and panel-style popovers that aren't a bare menu.
+// The shadow is applied separately so a caller's own `shadow-*` replaces it
+// (cx cannot merge Tailwind utilities).
 const popoverPanelClass =
-  "rounded-box border border-base-300 bg-base-100 text-base-content shadow"
+  "rounded-box border border-base-300 bg-base-100 text-base-content"
 
 // Offset between an anchor and a menu-style panel (daisyUI's `mt-1`).
 const POPOVER_GAP = 4
@@ -71,7 +73,12 @@ export function Popover({
     <Tag
       ref={setRef}
       popover="manual"
-      className={cx("overlay-panel", popoverPanelClass, className)}
+      className={cx(
+        "overlay-panel",
+        popoverPanelClass,
+        !hasUtility("shadow", className) && "shadow",
+        className,
+      )}
       {...props}
     >
       {open || keepMounted ? children : null}

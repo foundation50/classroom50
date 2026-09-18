@@ -15,10 +15,14 @@ import {
   type RefObject,
 } from "react"
 
+import { Link, type LinkComponentProps } from "@tanstack/react-router"
+
+import { useDismissOnEscape } from "@/hooks/useDismissOnEscape"
 import { useDismissOnOutsidePointerDown } from "@/hooks/useDismissOnOutsidePointerDown"
 import type { OverlayAlign } from "./anchoredPopover"
 import { Button, type ButtonProps } from "./Button"
 import { cx } from "./cx"
+import { CheckIcon } from "./icons"
 import { Popover } from "./Popover"
 
 // The app's dropdown menu, following the WAI-ARIA menu button pattern:
@@ -41,7 +45,8 @@ import { Popover } from "./Popover"
 // opens with the first item focused, ArrowUp with the last; arrows/Home/End
 // rove; Escape closes and returns focus to the trigger; Tab or an outside
 // pointer-down closes. Menu items stay ordinary buttons/links (daisyUI `menu`
-// styling), so tests and assistive tech address them by their labels.
+// styling), so tests and assistive tech address them by their labels. Rows
+// that Item / LinkItem / RouterLinkItem don't cover call `useDropdown().close`.
 
 type FocusEdge = "first" | "last"
 
@@ -68,6 +73,17 @@ function useDropdownContext(component: string): DropdownContextValue {
     throw new Error(`${component} must be rendered inside <Dropdown>`)
   }
   return context
+}
+
+// For rows rendered by a component of their own inside a <DropdownMenu> that
+// aren't a stock Item (a row with a spinner, a custom check mark): close the
+// menu directly instead of bridging through a DOM event.
+export function useDropdown(): {
+  open: boolean
+  close: (options?: { returnFocus?: boolean }) => void
+} {
+  const { open, close } = useDropdownContext("useDropdown")
+  return { open, close }
 }
 
 const MENU_ITEM_SELECTOR =
@@ -136,6 +152,12 @@ export function Dropdown({
 
   useDismissOnOutsidePointerDown(rootRef, open, close)
 
+  const closeReturningFocus = useCallback(
+    () => close({ returnFocus: true }),
+    [close],
+  )
+  useDismissOnEscape(rootRef, open, closeReturningFocus)
+
   const value = useMemo<DropdownContextValue>(
     () => ({
       open,
@@ -163,29 +185,19 @@ export function Dropdown({
     [open, align, matchTriggerWidth, menuId, setOpenNotify, close],
   )
 
-  // Escape closes and returns focus; focus leaving the whole widget (Tab out of
-  // the last item, or into another control) closes, matching native menus.
-  // Native listeners on the root rather than JSX handlers: a div with keyboard
-  // handlers reads as a fake interactive element to the a11y lint.
+  // Focus leaving the whole widget (Tab out of the last item, or into another
+  // control) closes, matching native menus. A native listener on the root
+  // rather than a JSX handler: a div with keyboard/focus handlers reads as a
+  // fake interactive element to the a11y lint.
   useEffect(() => {
     const root = rootRef.current
     if (!open || !root) return
-    const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== "Escape") return
-      event.preventDefault()
-      event.stopPropagation()
-      close({ returnFocus: true })
-    }
     const onFocusOut = (event: FocusEvent) => {
       const next = event.relatedTarget
       if (!(next instanceof Node && root.contains(next))) close()
     }
-    root.addEventListener("keydown", onKeyDown)
     root.addEventListener("focusout", onFocusOut)
-    return () => {
-      root.removeEventListener("keydown", onKeyDown)
-      root.removeEventListener("focusout", onFocusOut)
-    }
+    return () => root.removeEventListener("focusout", onFocusOut)
   }, [open, close])
 
   return (
@@ -228,16 +240,6 @@ export function DropdownMenu({
     focusEdge(menuRef.current, pendingFocusRef.current)
     pendingFocusRef.current = null
   }, [open, pendingFocusRef, menuRef])
-
-  // Items close the menu after acting (see Item); links that aren't Items use
-  // `closeDropdownMenu`, which arrives here as a DOM event.
-  useEffect(() => {
-    const menu = menuRef.current
-    if (!menu) return
-    const onClose = () => close({ returnFocus: true })
-    menu.addEventListener(CLOSE_EVENT, onClose)
-    return () => menu.removeEventListener(CLOSE_EVENT, onClose)
-  }, [close, menuRef])
 
   const rove = (event: KeyboardEvent<HTMLElement>) => {
     const items = menuItems(menuRef.current)
@@ -299,13 +301,18 @@ export function DropdownMenu({
 }
 
 // The one separator recipe for menu groups, so the divider chrome can't drift
-// per caller.
-function DropdownMenuSeparator() {
+// per caller. An <li> so it is valid inside the menu list; daisyUI's `.divider`
+// is a flex helper with its own min-height and heavy color that renders as a
+// stray dark bar inside a compact `.menu`.
+export function MenuSeparator() {
   return (
-    <div className="my-1 border-t border-base-content/10" role="separator" />
+    <li
+      role="separator"
+      className="pointer-events-none my-1 border-t border-base-content/10"
+    />
   )
 }
-DropdownMenu.Separator = DropdownMenuSeparator
+DropdownMenu.Separator = MenuSeparator
 
 export type DropdownTriggerProps = Omit<ButtonProps, "tabIndex">
 
@@ -344,20 +351,6 @@ function DropdownTrigger({
 }
 DropdownMenu.Trigger = DropdownTrigger
 
-const CLOSE_EVENT = "dropdown:close"
-
-// Close the menu that contains the element an event fired on (a Link inside
-// the menu that isn't a DropdownMenu.Item). Falls back to the focused element.
-export function closeDropdownMenu(event?: {
-  currentTarget: EventTarget | null
-}): void {
-  const origin =
-    event?.currentTarget instanceof Element
-      ? event.currentTarget
-      : document.activeElement
-  origin?.closest('[role="menu"]')?.dispatchEvent(new Event(CLOSE_EVENT))
-}
-
 type MenuIcon = ComponentType<{
   className?: string
   "aria-hidden"?: boolean | "true" | "false"
@@ -373,6 +366,10 @@ export type DropdownMenuItemProps = {
   disabled?: boolean
   title?: string
   destructive?: boolean
+  // For pick-one menus (a version list): the chosen row is emphasized and
+  // carries a check mark in the icon slot; its siblings reserve the slot so
+  // labels line up.
+  selected?: boolean
   onSelect: () => void
 }
 
@@ -385,6 +382,7 @@ function DropdownMenuItem({
   disabled = false,
   title,
   destructive = false,
+  selected,
   onSelect,
 }: DropdownMenuItemProps) {
   const { close } = useDropdownContext("DropdownMenu.Item")
@@ -392,7 +390,10 @@ function DropdownMenuItem({
     <li>
       <button
         type="button"
-        className={cx(destructive && "text-error")}
+        className={cx(
+          destructive && "text-error",
+          selected && "active font-semibold",
+        )}
         disabled={disabled}
         title={title}
         onClick={() => {
@@ -401,7 +402,12 @@ function DropdownMenuItem({
           onSelect()
         }}
       >
-        {Icon ? (
+        {selected !== undefined ? (
+          <CheckIcon
+            aria-hidden="true"
+            className={cx("size-4", !selected && "invisible")}
+          />
+        ) : Icon ? (
           <Icon aria-hidden="true" className={cx("size-4", iconClassName)} />
         ) : null}
         {label}
@@ -443,5 +449,29 @@ function DropdownMenuLinkItem({
   )
 }
 DropdownMenu.LinkItem = DropdownMenuLinkItem
+
+export type DropdownMenuRouterLinkItemProps = {
+  icon?: MenuIcon
+  label: ReactNode
+} & Omit<LinkComponentProps<"a">, "children" | "onClick">
+
+// A menu item that navigates in-app (Edit, Manage token). The same row chrome
+// as Item; the menu closes as the navigation starts.
+function DropdownMenuRouterLinkItem({
+  icon: Icon,
+  label,
+  ...linkProps
+}: DropdownMenuRouterLinkItemProps) {
+  const { close } = useDropdownContext("DropdownMenu.RouterLinkItem")
+  return (
+    <li>
+      <Link {...linkProps} onClick={() => close({ returnFocus: true })}>
+        {Icon ? <Icon aria-hidden="true" className="size-4" /> : null}
+        {label}
+      </Link>
+    </li>
+  )
+}
+DropdownMenu.RouterLinkItem = DropdownMenuRouterLinkItem
 
 export default DropdownMenu

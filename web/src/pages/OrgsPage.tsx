@@ -21,7 +21,7 @@ import {
   TokenHealthChip,
   tokenChipVisible,
 } from "@/components/status/TokenHealthChip"
-import { Link, useNavigate } from "@tanstack/react-router"
+import { useNavigate } from "@tanstack/react-router"
 import {
   ChevronDownIcon,
   EyeClosedIcon,
@@ -44,7 +44,6 @@ import {
   Badge,
   Button,
   Card,
-  closeDropdownMenu,
   Dropdown,
   DropdownMenu,
   Heading,
@@ -270,17 +269,13 @@ function HideOrgMenu({
         </DropdownMenu.Trigger>
         <DropdownMenu className="w-48">
           {canManageToken && (
-            <li>
-              <Link
-                to="/$org/settings"
-                params={{ org: org.login }}
-                hash="service-token"
-                onClick={closeDropdownMenu}
-              >
-                <KeyIcon aria-hidden="true" className="size-4" />
-                {t("orgs.card.manageToken")}
-              </Link>
-            </li>
+            <DropdownMenu.RouterLinkItem
+              icon={KeyIcon}
+              label={t("orgs.card.manageToken")}
+              to="/$org/settings"
+              params={{ org: org.login }}
+              hash="service-token"
+            />
           )}
           <DropdownMenu.Item
             icon={InfoIcon}

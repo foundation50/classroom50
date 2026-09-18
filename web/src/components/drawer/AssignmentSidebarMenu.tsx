@@ -18,9 +18,9 @@ import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { studentRepoName, GROUP_REPO_SEGMENT } from "@/util/studentRepo"
 import useMyGroupTeam from "@/hooks/useMyGroupTeam"
-import { SidebarItemBody, SidebarNavItem } from "./primitives"
-import { sidebarIconButton, sidebarTooltip } from "./sidebarClasses"
-import { rtlFlip, Tooltip } from "@/components/ui"
+import { SidebarItemBody, SidebarNavItem, SidebarTooltip } from "./primitives"
+import { sidebarIconButton } from "./sidebarClasses"
+import { rtlFlip } from "@/components/ui"
 import { useSidebarCollapse } from "./collapseContext"
 
 export const AssignmentSidebarMenu = ({
@@ -130,11 +130,7 @@ export const AssignmentSidebarMenu = ({
     <>
       {collapsed ? (
         <div className="sidebar-fade-in flex justify-center py-2 text-sm">
-          <Tooltip
-            tip={t("nav.allAssignments")}
-            position="right"
-            className={sidebarTooltip}
-          >
+          <SidebarTooltip tip={t("nav.allAssignments")}>
             <Link
               to="/$org/$classroom/assignments"
               params={{ org, classroom }}
@@ -146,7 +142,7 @@ export const AssignmentSidebarMenu = ({
                 className={`size-5 ${rtlFlip}`}
               />
             </Link>
-          </Tooltip>
+          </SidebarTooltip>
         </div>
       ) : (
         <div className="sidebar-fade-in py-4 text-sm">
