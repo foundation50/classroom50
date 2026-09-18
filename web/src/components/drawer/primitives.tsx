@@ -15,23 +15,16 @@ import {
   sidebarIconButton,
 } from "./sidebarClasses"
 import { sidebarPillTransition } from "@/lib/motion"
-import { rtlFlip, cx, Tooltip } from "@/components/ui"
+import { rtlFlip, cx, Tooltip, type TooltipProps } from "@/components/ui"
 
-// The one label bubble for the collapsed rail: opens toward the page (the
-// rail's inline end; <Tooltip> flips it under RTL) in the rail's own surface
-// color with neutral-content text, so it reads as part of the dark rail. The
-// bubble inherits the variables from the host.
+// The collapsed rail's label bubble, in the rail's own colors so it reads as
+// part of the dark rail. The variables go on the host; the bubble inherits them.
 export const SidebarTooltip = ({
   tip,
   as,
   className,
   children,
-}: {
-  tip: string
-  as?: "span" | "div"
-  className?: string
-  children: ReactNode
-}) => (
+}: Pick<TooltipProps, "tip" | "as" | "className" | "children">) => (
   <Tooltip
     as={as}
     tip={tip}

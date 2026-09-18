@@ -3,11 +3,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { describe, expect, it } from "vitest"
 import { ESLint } from "eslint"
-import {
-  tooltipClassPattern,
-  tooltipClassTemplateSelector,
-  tooltipMarkupMessage,
-} from "./tooltipMarkupRule"
+import { tooltipClassPattern, tooltipMarkupMessage } from "./tooltipMarkupRule"
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -88,7 +84,6 @@ describe("local/no-raw-tooltip", () => {
       }
     `
     expect(await rawTooltipErrors(source)).toHaveLength(1)
-    expect(tooltipClassTemplateSelector).toContain("TemplateElement")
   })
 
   // A recipe parked in a constant and passed as className={RECIPE} used to
@@ -116,8 +111,7 @@ describe("local/no-raw-tooltip", () => {
     expect(await rawTooltipErrors(source)).toHaveLength(0)
   })
 
-  // The boundary of the const match: a bare string constant is a class source
-  // whatever it holds, since a recipe's name gives the rule nothing to key on.
+  // The const match's boundary (see classTokenRule's `classSources`).
   it("flags a bare string constant even when it reads as prose", async () => {
     const source = `
       export const label = "the tooltip is open"

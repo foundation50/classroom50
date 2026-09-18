@@ -75,8 +75,6 @@ export const CrumbSwitcher = <T,>({
   const close = useCallback(() => setOpen(false), [])
   useDismissOnOutsidePointerDown(wrapperRef, open, close)
 
-  // Escape dismisses from the search field or a focused row and hands focus
-  // back to the trigger.
   const closeReturningFocus = useCallback(() => {
     close()
     triggerRef.current?.focus()

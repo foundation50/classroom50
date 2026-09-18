@@ -1,4 +1,4 @@
-import { classTokenRule, classTokenSelectors } from "./classTokenRule.ts"
+import { classTokenRule } from "./classTokenRule.ts"
 
 // daisyUI's CSS `dropdown` recipe positions its `dropdown-content` inside the
 // trigger's box, so a menu near an edge is cut off by any `overflow` ancestor
@@ -8,17 +8,12 @@ import { classTokenRule, classTokenSelectors } from "./classTokenRule.ts"
 // keep it on screen, so they are the only sanctioned dropdown; this rule makes
 // the raw markup a lint error.
 //
-// Any `dropdown` or `dropdown-*` class token in a className, a `const` recipe,
-// or a cx() argument is caught, so a recipe parked in a constant is caught too.
+// Any `dropdown` or `dropdown-*` class token is caught wherever the
+// `classSources` scope looks (see classTokenRule).
 
 // Either the end of the token or a modifier suffix after `dropdown`.
 export const dropdownClassPattern =
   "(?:^|[\\s:])dropdown(?:-[a-z]+)*(?![A-Za-z0-9_-])"
-
-export const dropdownClassTemplateSelector = classTokenSelectors(
-  dropdownClassPattern,
-  "classSources",
-).template
 
 export const dropdownMarkupMessage =
   "Raw daisyUI dropdown markup (`dropdown` / `dropdown-content` classes) is positioned inside its container and gets clipped or covered near an edge (see #1026). Use <Dropdown> with <DropdownMenu> from @/components/ui, or <Popover> for a non-menu panel: they render in the top layer and stay on screen."

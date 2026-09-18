@@ -334,13 +334,12 @@ const AuthedSidebarFooter = () => {
 
   const closeMenu = useCallback(() => setMenuOpen(false), [])
   useDismissOnOutsidePointerDown(footerRef, menuOpen, closeMenu)
-  // Escape from the trigger or from inside the menu (a native <button> handles
-  // Enter/Space; Escape-to-close is not native). The menu unmounts on close,
-  // so focus is handed back to the trigger rather than dropping to <body>.
+  // The menu unmounts on close, so Escape hands focus back to the trigger
+  // rather than letting it drop to <body>.
   const closeMenuReturningFocus = useCallback(() => {
-    setMenuOpen(false)
+    closeMenu()
     triggerRef.current?.focus()
-  }, [])
+  }, [closeMenu])
   useDismissOnEscape(footerRef, menuOpen, closeMenuReturningFocus)
 
   return (

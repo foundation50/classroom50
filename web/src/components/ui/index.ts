@@ -63,6 +63,7 @@ export type {
   DropdownMenuProps,
   DropdownTriggerProps,
   DropdownMenuItemProps,
+  DropdownMenuLinkItemProps,
   DropdownMenuRouterLinkItemProps,
 } from "./DropdownMenu"
 export { Popover } from "./Popover"

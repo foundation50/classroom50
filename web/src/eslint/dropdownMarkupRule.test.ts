@@ -5,7 +5,6 @@ import { describe, expect, it } from "vitest"
 import { ESLint } from "eslint"
 import {
   dropdownClassPattern,
-  dropdownClassTemplateSelector,
   dropdownMarkupMessage,
 } from "./dropdownMarkupRule"
 
@@ -79,7 +78,6 @@ describe("local/no-raw-dropdown", () => {
       }
     `
     expect(await rawDropdownErrors(source)).toHaveLength(1)
-    expect(dropdownClassTemplateSelector).toContain("TemplateElement")
   })
 
   it("flags a const recipe outside any className", async () => {
@@ -100,8 +98,7 @@ describe("local/no-raw-dropdown", () => {
     expect(await rawDropdownErrors(source)).toHaveLength(0)
   })
 
-  // The boundary of the const match: a bare string constant is a class source
-  // whatever it holds, since a recipe's name gives the rule nothing to key on.
+  // The const match's boundary (see classTokenRule's `classSources`).
   it("flags a bare string constant even when it reads as prose", async () => {
     const source = `
       export const label = "the dropdown is open"

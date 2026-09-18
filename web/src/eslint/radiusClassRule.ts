@@ -16,7 +16,8 @@ export const radiusClassPattern =
   "-(?:xs|sm|md|lg|xl|2xl|3xl|4xl)(?![A-Za-z0-9_-])"
 
 // Advisory (warn-level, via no-restricted-syntax), so it stays scoped to
-// className attributes rather than every string in the file.
+// className attributes rather than every string in the file. Any literal under
+// the attribute counts, including a cx() argument or a ternary branch.
 const selectors = classTokenSelectors(radiusClassPattern, "className")
 export const radiusClassLiteralSelector = selectors.literal
 export const radiusClassTemplateSelector = selectors.template

@@ -78,10 +78,7 @@ function useDropdownContext(component: string): DropdownContextValue {
 // For rows rendered by a component of their own inside a <DropdownMenu> that
 // aren't a stock Item (a row with a spinner, a custom check mark): close the
 // menu directly instead of bridging through a DOM event.
-export function useDropdown(): {
-  open: boolean
-  close: (options?: { returnFocus?: boolean }) => void
-} {
+export function useDropdown(): Pick<DropdownContextValue, "open" | "close"> {
   const { open, close } = useDropdownContext("useDropdown")
   return { open, close }
 }
@@ -187,8 +184,8 @@ export function Dropdown({
 
   // Focus leaving the whole widget (Tab out of the last item, or into another
   // control) closes, matching native menus. A native listener on the root
-  // rather than a JSX handler: a div with keyboard/focus handlers reads as a
-  // fake interactive element to the a11y lint.
+  // rather than a JSX handler: a div with a focus handler reads as a fake
+  // interactive element to the a11y lint.
   useEffect(() => {
     const root = rootRef.current
     if (!open || !root) return
@@ -301,13 +298,11 @@ export function DropdownMenu({
 }
 
 // The one separator recipe for menu groups, so the divider chrome can't drift
-// per caller. An empty <li> is valid inside the menu list and is daisyUI's own
-// divider hook: `.menu :where(li:empty)` draws the 1px inset rule, so no
-// border or margin classes here (they would fight that recipe). daisyUI's
-// `.divider` is a flex helper with its own min-height and heavy color that
-// renders as a stray dark bar inside a compact `.menu`.
+// per caller. An empty <li> is daisyUI's own divider hook (`.menu
+// :where(li:empty)` draws the 1px inset rule), so it carries no classes; a
+// `.divider` would render as a stray dark bar inside a compact `.menu`.
 export function MenuSeparator() {
-  return <li role="separator" className="pointer-events-none" />
+  return <li role="separator" />
 }
 DropdownMenu.Separator = MenuSeparator
 

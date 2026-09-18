@@ -48,18 +48,21 @@ describe("overlay dismissal hooks", () => {
     const onDismiss = vi.fn()
     const onDocumentKey = vi.fn()
     document.addEventListener("keydown", onDocumentKey)
-    render(<Overlay open onDismiss={onDismiss} />)
-    fireEvent.keyDown(screen.getByRole("button", { name: "Inside" }), {
-      key: "Escape",
-    })
-    expect(onDismiss).toHaveBeenCalledOnce()
-    // Consumed: a dialog or menu listening further up must stay open.
-    expect(onDocumentKey).not.toHaveBeenCalled()
-    fireEvent.keyDown(screen.getByRole("button", { name: "Outside" }), {
-      key: "Escape",
-    })
-    expect(onDismiss).toHaveBeenCalledOnce()
-    document.removeEventListener("keydown", onDocumentKey)
+    try {
+      render(<Overlay open onDismiss={onDismiss} />)
+      fireEvent.keyDown(screen.getByRole("button", { name: "Inside" }), {
+        key: "Escape",
+      })
+      expect(onDismiss).toHaveBeenCalledOnce()
+      // Consumed: a dialog or menu listening further up must stay open.
+      expect(onDocumentKey).not.toHaveBeenCalled()
+      fireEvent.keyDown(screen.getByRole("button", { name: "Outside" }), {
+        key: "Escape",
+      })
+      expect(onDismiss).toHaveBeenCalledOnce()
+    } finally {
+      document.removeEventListener("keydown", onDocumentKey)
+    }
   })
 
   it("listens only while open", () => {
