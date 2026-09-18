@@ -1322,7 +1322,7 @@
       },
       "autograding": {
         "modeLabel": "Built-in autograder",
-        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup, so you'll need to update the existing repositories yourself.",
+        "editHelp": "Changing the built-in autograder only affects repositories students accept from now on. Repositories already accepted keep their original setup. To turn it on for them, save, then use \"Add autograding workflow\" on the submissions page or gh teacher assignment enable-autograder.",
         "choices": {
           "none": {
             "label": "Do not use the built-in autograder",
@@ -2040,7 +2040,8 @@
       "provisioningIntro_other": "{{count}} students have already accepted. These changes apply only to repositories accepted from now on; the {{count}} existing repositories keep their current setup:",
       "provisioning": {
         "repo_source": "Repository source: existing repositories keep their original starter content.",
-        "autograder": "Built-in autograder: turning it off makes existing repositories' autograde runs fail and drop out of the collected scores.",
+        "autograder_on": "Built-in autograder: existing repositories have no autograding workflow yet. After saving, use \"Add autograding workflow\" on the submissions page to add it to them.",
+        "autograder_off": "Built-in autograder: turning it off makes existing repositories' autograde runs fail and drop out of the collected scores.",
         "grading_mode": "Grading mode: scores recorded under the old mode may read differently.",
         "student_permission": "Student repository access: change existing repositories from the submissions page.",
         "repo_visibility": "Repository visibility: change existing repositories from the submissions page.",
@@ -3461,6 +3462,49 @@
       "warningPoint1": "The commit is marked so it doesn't trigger grading.",
       "warningPoint2": "Repositories whose workflow was hand-edited are reported and left untouched.",
       "warningPoint3": "Students must pull afterward. Clones made before this change will conflict on their next push."
+    },
+    "bulkShim": {
+      "menuLabel": "Add autograding workflow",
+      "menuTitle": "Add the built-in autograding workflow to each student repository that doesn't have one",
+      "titleEmptyRoster": "No students have accepted yet",
+      "title": "Add autograding workflow",
+      "subtitle_one": "Adds the autograding workflow to {{count}} student's repository if it's missing.",
+      "subtitle_other": "Adds the autograding workflow to {{count}} students' repositories where it's missing.",
+      "noRepos": "No students have accepted yet, so there's nothing to add.",
+      "apply": "Add to all",
+      "working": "Adding the workflow",
+      "progress": "Processed {{processed}} of {{total}}",
+      "resultHeadline": "Added the workflow to {{added}} of {{total}} repositories ({{present}} already had it).",
+      "repullReminder": "Tell students to run git pull. Clones made before this change will conflict on their next push.",
+      "regradeReminder": "Work students already pushed isn't graded until their next push. Use \"Regrade all\" to grade it now.",
+      "scopeSection_one": "{{count}} repository needs extra GitHub permission",
+      "scopeSection_other": "{{count}} repositories need extra GitHub permission",
+      "scopeDetail": "Your GitHub authorization can't modify workflow files. Sign out and back in, then re-run.",
+      "failedSection_one": "{{count}} repository couldn't be updated",
+      "failedSection_other": "{{count}} repositories couldn't be updated",
+      "deferredSection_one": "{{count}} repository was not processed",
+      "deferredSection_other": "{{count}} repositories were not processed",
+      "deferredDetail": "Skipped. Re-run to add.",
+      "notAcceptedSection_one": "{{count}} student has not accepted yet",
+      "notAcceptedSection_other": "{{count}} students have not accepted yet",
+      "notAcceptedDetail": "No repository exists. It gets the workflow when the student accepts.",
+      "warningLead_one": "This commits the autograding workflow to {{count}} student's repository.",
+      "warningLead_other": "This commits the autograding workflow to {{count}} students' repositories.",
+      "warningPoint1": "Repositories that already have the workflow are left untouched.",
+      "warningPoint2": "The commit is marked so it doesn't trigger grading. Use \"Regrade all\" afterward to grade work students already pushed.",
+      "warningPoint3": "Students must pull afterward. Clones made before this change will conflict on their next push."
+    },
+    "rowShim": {
+      "title": "Add autograding workflow",
+      "description": "Add the built-in autograding workflow to this repository if it was accepted while the autograder was off.",
+      "aria": "Add the autograding workflow to {{repo}}",
+      "outcome": {
+        "added": "Autograding workflow added. The student must pull before their next push; use Regrade to grade work already pushed.",
+        "present": "This repository already has the autograding workflow.",
+        "notAccepted": "No repository exists yet, so there's nothing to add.",
+        "missingWorkflowScope": "Your GitHub authorization can't modify workflow files. Sign out and back in, then retry.",
+        "failed": "Couldn't add the workflow. Try again."
+      }
     },
     "rowTrigger": {
       "title": "Update autograding trigger",

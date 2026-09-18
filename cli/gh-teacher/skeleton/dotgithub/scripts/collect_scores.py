@@ -3016,14 +3016,16 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
 # a divergence makes the assignments list and the submissions page disagree.
 
 # The commit subjects the tool itself authors onto a student's default branch
-# (accept's Feedback-PR commit and the submission-mode shim retrofit). Neither is
-# student work, so neither counts as a submission. Hand-mirrored with
-# cli/shared/contract's PrefixCommit forms and the web's TOOL_COMMIT_SUBJECTS.
+# (accept's Feedback-PR commit, the submission-mode shim retrofit, and the shim
+# backfill after the built-in autograder is turned on). None is student work, so
+# none counts as a submission. Hand-mirrored with cli/shared/contract's
+# PrefixCommit forms and the web's TOOL_COMMIT_SUBJECTS.
 TOOL_COMMIT_SUBJECTS = frozenset(
     {
         "[Classroom 50] Open Feedback PR (gh student accept)",
         "[Classroom 50] Update autograder trigger to every-push (submission-mode)",
         "[Classroom 50] Update autograder trigger to tag (submission-mode)",
+        "[Classroom 50] Add autograde workflow (enable-autograder)",
     }
 )
 

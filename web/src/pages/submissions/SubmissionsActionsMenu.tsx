@@ -16,6 +16,7 @@ import {
   SyncIcon,
   TrashIcon,
   UnlockIcon,
+  WorkflowIcon,
 } from "@/components/ui/icons"
 import { useTranslation } from "react-i18next"
 
@@ -47,6 +48,7 @@ export function SubmissionsActionsMenu({
   onBulkVisibility,
   onBulkPages,
   onBulkTrigger,
+  onBulkAddShim,
   onBulkPause,
   onBulkResume,
   locked = false,
@@ -103,6 +105,10 @@ export function SubmissionsActionsMenu({
   // each repo's shim to the assignment's submission_mode). Bulk-features gate
   // plus default-autograder only; omitted otherwise.
   onBulkTrigger?: () => void
+  // Opens the whole-assignment "Add autograding workflow" modal (adds the
+  // shim to repos accepted while the built-in autograder was off). Same gate
+  // as onBulkTrigger.
+  onBulkAddShim?: () => void
   // Opens the whole-assignment "Pause autograding" modal (disables the
   // autograde workflow in every accepted repo). Same gate as onBulkTrigger.
   onBulkPause?: () => void
@@ -284,19 +290,34 @@ export function SubmissionsActionsMenu({
         {/* Update autograding triggers: retrofits each repo's shim to the
             assignment's submission_mode. Gated independently of bulk access
             (also requires the default autograder), but same authoring tier. */}
-        {onBulkTrigger && (
+        {(onBulkTrigger || onBulkAddShim) && (
           <>
-            <DropdownMenu.Item
-              icon={GitBranchIcon}
-              label={t("submissions.bulkTrigger.menuLabel")}
-              disabled={disabledActions}
-              title={
-                emptyRoster
-                  ? t("submissions.bulkTrigger.titleEmptyRoster")
-                  : t("submissions.bulkTrigger.menuTitle")
-              }
-              onSelect={onBulkTrigger}
-            />
+            {onBulkTrigger && (
+              <DropdownMenu.Item
+                icon={GitBranchIcon}
+                label={t("submissions.bulkTrigger.menuLabel")}
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkTrigger.titleEmptyRoster")
+                    : t("submissions.bulkTrigger.menuTitle")
+                }
+                onSelect={onBulkTrigger}
+              />
+            )}
+            {onBulkAddShim && (
+              <DropdownMenu.Item
+                icon={WorkflowIcon}
+                label={t("submissions.bulkShim.menuLabel")}
+                disabled={disabledActions}
+                title={
+                  emptyRoster
+                    ? t("submissions.bulkShim.titleEmptyRoster")
+                    : t("submissions.bulkShim.menuTitle")
+                }
+                onSelect={onBulkAddShim}
+              />
+            )}
             <DropdownMenu.Separator />
           </>
         )}

@@ -60,6 +60,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(assignmentListCmd())
 	cmd.AddCommand(assignmentLockCmd())
 	cmd.AddCommand(assignmentSubmissionModeCmd())
+	cmd.AddCommand(assignmentEnableAutograderCmd())
 	cmd.AddCommand(assignmentTestCmd())
 	cmd.AddCommand(feedbackpr.NewCmd())
 	return cmd

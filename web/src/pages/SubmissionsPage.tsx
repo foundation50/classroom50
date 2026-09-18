@@ -43,6 +43,7 @@ import { BulkRepoVisibilityModal } from "@/components/modals/BulkRepoVisibilityM
 import { BulkRepoPagesModal } from "@/components/modals/BulkRepoPagesModal"
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
+import { BulkAutogradeShimModal } from "@/components/modals/BulkAutogradeShimModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import {
@@ -480,6 +481,7 @@ const SubmissionsPageContent = () => {
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false)
   const [bulkPagesOpen, setBulkPagesOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
+  const [bulkAddShimOpen, setBulkAddShimOpen] = useState(false)
   const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
   const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
   const [closeSubmissionOpen, setCloseSubmissionOpen] = useState(false)
@@ -1600,6 +1602,20 @@ const SubmissionsPageContent = () => {
                     ? () => setBulkTriggerOpen(true)
                     : undefined
                 }
+                // Add autograding workflow: backfills the shim into repos accepted
+                // while the built-in autograder was off. Same gate as the trigger
+                // retrofit; skipsGrading is false only once the autograder is on,
+                // so the action appears exactly when the backfill applies.
+                onBulkAddShim={
+                  isOwner &&
+                  !isGroupFlavor &&
+                  !skipsGrading &&
+                  assignmentResolved &&
+                  isDefaultAutograder(assignmentInfo.autograder) &&
+                  acceptedSet.size > 0
+                    ? () => setBulkAddShimOpen(true)
+                    : undefined
+                }
                 // Pause / Resume autograding across every accepted repo — flips each
                 // autograde workflow's Actions state (no file edit). Same gate as
                 // the trigger retrofit (owner + individual + resolved default
@@ -1965,6 +1981,19 @@ const SubmissionsPageContent = () => {
         <BulkSubmissionTriggerModal
           open={bulkTriggerOpen}
           onClose={() => setBulkTriggerOpen(false)}
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          submissionMode={resolveSubmissionMode(assignmentInfo.submission_mode)}
+          submissionTags={assignmentInfo.submission_tags}
+          owners={acceptedOwners}
+          students={students}
+        />
+      )}
+      {assignmentResolved && (
+        <BulkAutogradeShimModal
+          open={bulkAddShimOpen}
+          onClose={() => setBulkAddShimOpen(false)}
           org={org}
           classroom={classroom}
           assignment={assignment}

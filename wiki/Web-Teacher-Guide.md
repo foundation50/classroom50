@@ -346,7 +346,11 @@ section. Most assignments never need them:
 > repositories accepted from then on. Repositories students already accepted
 > aren't retrofitted, so they keep their original starter code and setup. When
 > at least one student has already accepted, the edit form asks you to confirm
-> and warns that you'll need to update the existing repositories yourself. The
+> and warns that you'll need to update the existing repositories yourself. One
+> change does have a follow-up action: after turning **on** the built-in
+> autograder, use **Add autograding workflow** on the submissions page (or
+> [`gh teacher assignment enable-autograder`](gh-teacher#assignment-enable-autograder))
+> to add the workflow to the repositories students already accepted. The
 > **Assignment type** (Individual, Group, or Group (legacy)) is the exception:
 > it stays locked on edit, because switching it would invalidate every existing
 > submission.
@@ -1150,6 +1154,16 @@ order:
 - **Update autograding triggers** (owners): retrofit existing repositories
   after a submission-type change (see
   [Changing the submission type later](#changing-the-submission-type-later)).
+- **Add autograding workflow** (owners): add the built-in `autograde.yaml`
+  workflow to every student repository that doesn't have one. Use it after
+  turning the built-in autograder **on** for an assignment students had
+  already accepted with it off: those repositories never got the workflow, so
+  nothing grades them until it's added. Repositories that already have the
+  workflow are left untouched, the commit doesn't trigger grading, and
+  students must pull before their next push. Work students already pushed
+  isn't graded until then; run **Regrade all** to grade it right away. A
+  single repository can also be updated from its row. The CLI equivalent is
+  [`gh teacher assignment enable-autograder`](gh-teacher#assignment-enable-autograder).
 - **Pause autograding** / **Resume autograding** (owners): disable or
   re-enable the built-in `autograde.yaml` workflow in every student repository
   with GitHub's workflow-disable API. No files are changed, and you can resume

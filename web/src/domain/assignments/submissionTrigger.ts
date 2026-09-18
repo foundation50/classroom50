@@ -206,7 +206,7 @@ export async function updateShimSubmissionMode(params: {
 // Whether the error's X-OAuth-Scopes header is present but missing
 // `workflow`. Mirrors the Go tokenLacksWorkflowScope (configwrite): an absent
 // header (fine-grained PAT) returns false so we don't guess.
-function tokenLacksWorkflowScope(err: GitHubAPIError): boolean {
+export function tokenLacksWorkflowScope(err: GitHubAPIError): boolean {
   const scopes = err.oauthScopes
   if (!scopes) return false
   return !scopes

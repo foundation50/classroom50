@@ -25,14 +25,14 @@ on:
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/**'
       - 'cli/gh-teacher/skeleton/dotgithub/scripts/**'
       - 'cli/gh-teacher/embed/**'
-      - 'cli/gh-student/embed/**'
+      - 'cli/shared/contract/autograde-shim.yaml'
   pull_request:
     paths:
       - '.github/workflows/**'
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/**'
       - 'cli/gh-teacher/skeleton/dotgithub/scripts/**'
       - 'cli/gh-teacher/embed/**'
-      - 'cli/gh-student/embed/**'
+      - 'cli/shared/contract/autograde-shim.yaml'
 
 permissions:
   contents: read
@@ -89,7 +89,7 @@ jobs:
             -ignore 'unexpected key "queue" for "concurrency" section' \
             .github/workflows/*.yaml \
             cli/gh-teacher/skeleton/dotgithub/workflows/*.yaml \
-            cli/gh-student/embed/autograde-shim.yaml
+            cli/shared/contract/autograde-shim.yaml
 
   ruff:
     runs-on: ubuntu-latest

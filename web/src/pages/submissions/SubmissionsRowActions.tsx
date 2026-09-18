@@ -11,6 +11,7 @@ import {
   ShieldCheckIcon,
   SlidersIcon,
   SyncIcon,
+  WorkflowIcon,
 } from "@/components/ui/icons"
 import { createContext, useCallback, useContext, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -33,6 +34,9 @@ import type { ToastTone } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
+import { addAutogradeShim } from "@/domain/assignments/shimBackfill"
+import { resolveConfigRepoDefaultBranch } from "@/domain/assignments/accessPrimitives"
+import { DEFAULT_BRANCH } from "@/util/configRepo"
 import type {
   AssignmentMode,
   AssignmentPages,
@@ -504,13 +508,22 @@ export const SubmissionActionList = ({
             />
           )}
           {submissionMode && (
-            <UpdateTriggerButton
-              org={org}
-              repo={repo}
-              submissionMode={submissionMode}
-              submissionTags={submissionTags}
-              noRepo={!hasRepo}
-            />
+            <>
+              <UpdateTriggerButton
+                org={org}
+                repo={repo}
+                submissionMode={submissionMode}
+                submissionTags={submissionTags}
+                noRepo={!hasRepo}
+              />
+              <AddShimButton
+                org={org}
+                repo={repo}
+                submissionMode={submissionMode}
+                submissionTags={submissionTags}
+                noRepo={!hasRepo}
+              />
+            </>
           )}
           {canPauseAutograding && (
             <PauseAutogradingButton org={org} repo={repo} noRepo={!hasRepo} />
@@ -610,6 +623,75 @@ const UpdateTriggerButton = ({
       onClick={() => void run(handleClick)}
       disabled={noRepo || pending}
       ariaLabel={t("submissions.rowTrigger.aria", { repo })}
+    />
+  )
+}
+
+// Per-row shim backfill: add the built-in autograding workflow to this one
+// repo if it was accepted while the assignment had the autograder off. The
+// single-repo twin of BulkAutogradeShimModal; idempotent, so a repo that
+// already has the workflow just reports so.
+const AddShimButton = ({
+  org,
+  repo,
+  submissionMode,
+  submissionTags,
+  noRepo,
+}: {
+  org: string
+  repo: string
+  submissionMode: SubmissionMode
+  submissionTags?: string[]
+  noRepo: boolean
+}) => {
+  const { t } = useTranslation()
+  const feedback = useSubmissionFeedback()
+  const client = useGitHubClient()
+  const run = useSafeSubmit()
+  const [pending, setPending] = useState(false)
+
+  const handleClick = async () => {
+    if (noRepo) return
+    setPending(true)
+    try {
+      const configBranch = await resolveConfigRepoDefaultBranch(
+        client,
+        org,
+        DEFAULT_BRANCH,
+      )
+      const outcome = await addAutogradeShim({
+        client,
+        org,
+        repo,
+        configBranch,
+        submissionMode,
+        submissionTags,
+      })
+      feedback({
+        tone:
+          outcome.status === "added" || outcome.status === "present"
+            ? "success"
+            : "warning",
+        message: t(`submissions.rowShim.outcome.${outcome.status}`),
+      })
+    } catch (err) {
+      feedback({
+        tone: "error",
+        message: errorText(t, err),
+      })
+    } finally {
+      setPending(false)
+    }
+  }
+
+  return (
+    <ActionListRow
+      icon={WorkflowIcon}
+      title={t("submissions.rowShim.title")}
+      description={t("submissions.rowShim.description")}
+      onClick={() => void run(handleClick)}
+      disabled={noRepo || pending}
+      ariaLabel={t("submissions.rowShim.aria", { repo })}
     />
   )
 }

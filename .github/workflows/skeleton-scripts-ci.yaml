@@ -26,7 +26,7 @@ on:
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/collect-scores.yaml'
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/autograde-runner.yaml'
       - 'cli/gh-teacher/embed/**'
-      - 'cli/gh-student/embed/**'
+      - 'cli/shared/contract/autograde-shim.yaml'
       - 'cli/gh-teacher/skeleton_tests/**'
       - 'cli/gh-teacher/autograders_tests/**'
       # test_assignments_schema.py reads these, so schema/fixture edits
@@ -40,7 +40,7 @@ on:
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/collect-scores.yaml'
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/autograde-runner.yaml'
       - 'cli/gh-teacher/embed/**'
-      - 'cli/gh-student/embed/**'
+      - 'cli/shared/contract/autograde-shim.yaml'
       - 'cli/gh-teacher/skeleton_tests/**'
       - 'cli/gh-teacher/autograders_tests/**'
       - 'schemas/**'
