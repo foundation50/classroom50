@@ -91,12 +91,15 @@ about the rest:
   files published by the workflow's own identity (`github-actions[bot]`) are
   read by collection, `gh teacher download`, and the submissions view. A
   skipped Release is named in the collection run's warnings, so you see who to
-  ask.
-- The workflow file itself (`.github/workflows/autograde.yaml`) lives in the
-  student's repository, and nothing stops a student from rewriting it. A
-  student who does can make the workflow publish any score under that same
-  identity. The commit that changed it is in the repository's history, and
-  the run is in its **Actions** tab, so it's detectable, not prevented.
+  ask. The Release title and notes stay editable and are not evidence; the
+  `result.json` asset is the score of record.
+- Anything that runs during grading can publish under that identity, because
+  grading and publishing share one job in a repository the student can write
+  to: the caller workflow (`.github/workflows/autograde.yaml`), any other
+  workflow file a student adds, and the student's own code that the tests
+  execute. A changed workflow file leaves a commit; a process left behind by
+  student code does not. Every run appears in the repository's **Actions**
+  tab. This is detectable with effort, not prevented.
 - The submission time (and the **late** flag) comes from the graded commit's
   committer date, which the student's Git client sets.
 

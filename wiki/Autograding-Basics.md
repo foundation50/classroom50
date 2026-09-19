@@ -593,11 +593,17 @@ repositories. That shapes what a collected score does and doesn't guarantee:
   Release with any other author, or whose `result.json` someone else uploaded,
   and the collection run's warnings name the repository and tag so you can
   follow up.
-- **The workflow file is the student's to edit.** The caller workflow at
-  `.github/workflows/autograde.yaml` is in the student's repository. A student
-  who rewrites it can make the workflow publish any score under that same
-  identity. The edit is a commit in the repository's history and a run in its
-  **Actions** tab, so you can find it, but nothing prevents it.
+- **Anything that runs during grading can publish under that identity.**
+  Grading and publishing share one job in the student's repository, and
+  students can write to that repository. The caller workflow at
+  `.github/workflows/autograde.yaml`, any other workflow file a student adds
+  next to it, and the student's own code that the tests execute all run with
+  the same token before the Release is published, so any of them can leave a
+  forged `result.json` for the publish step or publish one directly. A
+  changed or added workflow file is a commit in the repository's history; a
+  process left behind by student code is not. Every run appears in the
+  **Actions** tab. Nothing prevents this; the check above only stops what a
+  student does by hand.
 - **Submission time is the commit's committer date**, which the student's
   Git client sets. The **late** flag is advisory. See
   [Due dates mark late; closing enforces](Course-Lifecycle-and-End-of-Term#due-dates-mark-late-closing-enforces).
@@ -616,11 +622,16 @@ a context they never had write access to:
    are already in that repository, so the result reproduces the on-submit
    score when nothing was tampered with, and differs when it was.
 
-To spot-check a single repository instead, open its graded Release and confirm
-the author is `github-actions[bot]`, follow the run from the commit's
-`classroom50/autograde` status into the **Actions** tab, and compare
-`.github/workflows/autograde.yaml` at the graded commit with the one
-`gh student accept` writes.
+To spot-check a single repository instead, treat the `result.json` asset as
+the score of record, not the Release page: a Release's title and notes can be
+edited by anyone with write access while the author stays
+`github-actions[bot]`. Confirm the Release author and the `result.json`
+uploader are both `github-actions[bot]`, follow the run from the commit's
+`classroom50/autograde` status into the **Actions** tab and read its job
+summary, and list `.github/workflows/` at the graded commit: it should hold
+only the `autograde.yaml` that `gh student accept` writes. None of this rules
+out a forged result left behind by student code during the run, which is why
+the re-grade above is the trustworthy path.
 
 ### Latest score versus history
 

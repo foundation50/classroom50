@@ -404,6 +404,14 @@ dot, no `..`, not `result.json` or `release-body.md`), and relative. A separate
 100 MiB file-content budget applies at runtime. Missing, unsafe, oversized, or
 failed uploads warn without changing the score.
 
+These files come from the student's working tree, so treat them as student
+content that happens to be published under the workflow's identity. The runner
+refuses to attach a file that is itself a `classroom50/result/*` document:
+anyone with push access can rename a Release asset after the fact, and a
+student-authored file shaped like `result.json` is the one attachment that
+rename would turn into a forged score. See
+[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
+
 > [!NOTE]
 > Submission publishing doesn't support GitHub immutable releases: a rerun
 > deletes and recreates the Release so the current result and files attach

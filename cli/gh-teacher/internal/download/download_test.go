@@ -1215,10 +1215,12 @@ func TestListAllSubmitReleases(t *testing.T) {
 			delete(noAuthor, "author")
 			replacedAsset := botRelease("submit/2026-06-02T10-00-00Z",
 				map[string]any{"name": "Result.JSON", "url": "u", "uploader": alice})
+			noUploader := botRelease("submit/2026-06-01T20-00-00Z",
+				map[string]any{"name": "result.json", "url": "u"})
 			extraAsset := botRelease("submit/2026-06-01T10-00-00Z",
 				botAsset("result.json", "u"),
 				map[string]any{"name": "screenshot.png", "url": "u", "uploader": alice})
-			_ = json.NewEncoder(w).Encode([]map[string]any{forgedRelease, noAuthor, replacedAsset, extraAsset})
+			_ = json.NewEncoder(w).Encode([]map[string]any{forgedRelease, noAuthor, replacedAsset, noUploader, extraAsset})
 		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
@@ -1236,6 +1238,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 			`o/r: release "submit/2026-06-04T10-00-00Z" was published by "alice"`,
 			`o/r: release "submit/2026-06-03T10-00-00Z" was published by "an unknown account"`,
 			`o/r: release "submit/2026-06-02T10-00-00Z" was result.json uploaded by "alice"`,
+			`o/r: release "submit/2026-06-01T20-00-00Z" was result.json uploaded by "an unknown account"`,
 			"not counted as a submission",
 		} {
 			if !strings.Contains(errOut.String(), want) {

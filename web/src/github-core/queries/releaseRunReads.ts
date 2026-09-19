@@ -23,21 +23,20 @@ import { githubKeys } from "./keys"
 // the release page rather than reading result.json.
 export const SUBMISSION_TAG_PREFIX = "submit/"
 
-// The login GitHub gives a workflow's GITHUB_TOKEN: every release the runner
-// publishes, and the result.json it attaches, carries it. Students have push
-// access to their repos, which lets them create releases and replace assets by
-// hand, so only a release with both marks counts as a submission. Mirrors the
-// shared contract's AutogradeReleaseAuthor and collect_scores.py; keep
-// byte-identical (parity-tested).
+// The login GitHub gives a workflow's GITHUB_TOKEN: the provenance mark every
+// release and result.json the runner publishes carries (see
+// isAutogradePublished). Mirrors the shared contract's AutogradeReleaseAuthor
+// and collect_scores.py; keep byte-identical (parity-tested).
 export const AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
 
 const RESULT_ASSET_NAME = "result.json"
 
 // Whether the autograde workflow published this release and its result.json.
-// The workflow token can't be impersonated, but a student's push access lets
-// them publish a release, or replace its result.json, as themselves; either
-// mark by another login (or none) means the payload didn't come from grading.
-// Mirrors release_provenance_problem in collect_scores.py.
+// Students have push access to their repos, so they can publish a release, or
+// replace its result.json, as themselves; the one thing they can't do is act
+// as the workflow token. So the author and every result.json uploader must both
+// be that login, and a missing one counts as another login. Mirrors
+// release_provenance_problem in collect_scores.py.
 export function isAutogradePublished(release: GitHubRelease): boolean {
   if (release.author?.login !== AUTOGRADE_RELEASE_AUTHOR) return false
   return (release.assets ?? []).every(

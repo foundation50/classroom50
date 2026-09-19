@@ -60,6 +60,11 @@ from typing import Any
 # Schema sentinel. Keep in lockstep with collect_scores.py::validate_result
 # (cli/gh-teacher/skeleton/dotgithub/scripts/collect_scores.py).
 RESULT_SCHEMA_V1 = "classroom50/result/v1"
+# Any version of the sentinel: what a staged release asset must not carry, so a
+# future v2 reader is covered too. Sniffing stops at the collector's own asset
+# ceiling (MAX_RESULT_BYTES there); a larger file is rejected downstream anyway.
+RESULT_SCHEMA_PREFIX = "classroom50/result/"
+RESULT_SNIFF_MAX_BYTES = 10 * 1024 * 1024
 
 # result.json is required; release-body.md optional (synthesized when
 # missing). Lockstep with contract.ResultFilename / contract.ReleaseBodyFilename
@@ -995,6 +1000,27 @@ def _copy_release_asset(
     return copied
 
 
+def _looks_like_result_document(path: pathlib.Path) -> bool:
+    """True when a staged release asset parses as a Classroom 50 result document.
+
+    The readers accept any result.json-named asset the workflow token uploaded,
+    and a student with push access can rename a bot-uploaded asset after the
+    fact. A student-authored file that already carries the result schema is the
+    one thing that rename would turn into a forged score, so the runner never
+    attaches one. Anything that isn't a small JSON object with that sentinel is
+    an ordinary attachment."""
+    try:
+        if path.stat().st_size > RESULT_SNIFF_MAX_BYTES:
+            return False
+        data = json.loads(path.read_bytes().decode("utf-8"))
+    except (OSError, ValueError):
+        return False
+    if not isinstance(data, dict):
+        return False
+    schema = data.get("schema")
+    return isinstance(schema, str) and schema.startswith(RESULT_SCHEMA_PREFIX)
+
+
 def stage_release_assets(
     workspace: pathlib.Path,
     destination: pathlib.Path,
@@ -1035,6 +1061,11 @@ def stage_release_assets(
                 )
             finally:
                 os.close(source_fd)
+            if _looks_like_result_document(target):
+                raise ValueError(
+                    f"{configured_path!r} is a {RESULT_SCHEMA_PREFIX}* document; "
+                    f"only the runner publishes one"
+                )
         except (OSError, ValueError) as exc:
             if copy_attempted:
                 try:

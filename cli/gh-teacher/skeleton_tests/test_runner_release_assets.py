@@ -142,6 +142,44 @@ def test_stage_release_assets_recreates_destination_and_preserves_order(tmp_path
     assert (destination / "chart.png").read_bytes() == b"chart"
 
 
+def test_stage_release_assets_refuses_a_result_document(tmp_path, capsys):
+    # A bot-uploaded extra can be renamed to result.json by anyone with push
+    # access, and the readers accept any bot-uploaded asset by that name. The
+    # only extra that rename turns into a forged score is one already shaped
+    # like a result document, so the runner never attaches such a file. Other
+    # JSON, and a document without the sentinel, stay ordinary attachments.
+    workspace = _workspace(tmp_path)
+    forged = {"schema": "classroom50/result/v1", "score": 100, "max-score": 100}
+    _write_file(workspace, "out/forged.json", json.dumps(forged).encode())
+    _write_file(workspace, "out/future.json", b'{"schema": "classroom50/result/v2"}')
+    _write_file(workspace, "out/report.json", b'{"schema": "other/v1", "score": 1}')
+    _write_file(workspace, "out/data.json", b"[1, 2, 3]")
+    _write_file(workspace, "out/notes.txt", b"schema: classroom50/result/v1")
+    destination = tmp_path / "staged"
+
+    accepted = runner.stage_release_assets(
+        workspace,
+        destination,
+        ["out/forged.json", "out/future.json", "out/report.json", "out/data.json", "out/notes.txt"],
+    )
+
+    assert accepted == ["report.json", "data.json", "notes.txt"]
+    assert not (destination / "forged.json").exists()
+    assert not (destination / "future.json").exists()
+    out = capsys.readouterr().out
+    assert "'out/forged.json' is a classroom50/result/* document" in out
+    assert "'out/future.json' is a classroom50/result/* document" in out
+
+
+def test_looks_like_result_document_ignores_oversized_and_unreadable(tmp_path, monkeypatch):
+    # Above the collector's asset ceiling the file can never be read as a score,
+    # so it isn't parsed; a missing file is simply not a result document.
+    big = _write_file(tmp_path, "big.json", b'{"schema": "classroom50/result/v1"}')
+    monkeypatch.setattr(runner, "RESULT_SNIFF_MAX_BYTES", 4)
+    assert runner._looks_like_result_document(big) is False
+    assert runner._looks_like_result_document(tmp_path / "absent.json") is False
+
+
 def test_stage_release_assets_skips_missing_symlink_and_oversized_files(
     tmp_path, monkeypatch, capsys
 ):

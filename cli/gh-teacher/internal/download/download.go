@@ -1106,9 +1106,8 @@ func provenanceProblem(rel release) string {
 // workflow published for a repo, newest first, walking the full /releases
 // pagination. Non-submit releases (e.g., a student's hand-created tag) are
 // filtered out, and so is a submit/* release provenanceProblem rejects, with a
-// line on errOut naming it: that is a hand-made release or a replaced
-// result.json in a repo the student can write to, and the teacher should know.
-// Mirrors all_submit_releases in collect_scores.py.
+// line on errOut naming it so the teacher can follow up. Mirrors
+// all_submit_releases in collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {

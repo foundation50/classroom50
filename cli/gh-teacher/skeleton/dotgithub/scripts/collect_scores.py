@@ -79,13 +79,10 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
-# The login GitHub gives a workflow's GITHUB_TOKEN. Every submit/* release the
-# runner publishes, and the result.json it attaches, carries it. Students have
-# push access to their repos, which lets them create releases and replace
-# assets by hand, so a release or result.json marked with any other login was
-# hand-made and is not a submission (see release_provenance_problem).
-# Hand-mirrored from Go contract.AutogradeReleaseAuthor (parity-tested); the
-# web and gh teacher download apply the same rule.
+# The login GitHub gives a workflow's GITHUB_TOKEN; the provenance mark every
+# submit/* release and result.json the runner publishes carries (see
+# release_provenance_problem). Hand-mirrored from Go
+# contract.AutogradeReleaseAuthor (parity-tested).
 AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
 
 # Repo permission the collect-time grant gives each staff role's team on every
@@ -429,6 +426,7 @@ def main() -> int:
                 assignment_filter=assignment_filter,
                 repo_index=repo_index,
                 team_members=team_members,
+                prior_scores=scores,
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures on COLLECTION
@@ -1555,6 +1553,7 @@ def collect_classroom(
     assignment_filter: str = "",
     repo_index: RepoIndex | None = None,
     team_members: "TeamMembers | None" = None,
+    prior_scores: dict[str, Any] | None = None,
 ) -> tuple[
     list[dict[str, Any]],
     int,
@@ -1585,6 +1584,10 @@ def collect_classroom(
     `assignment_filter` (an assignment slug, empty for all) narrows the walk to
     one assignment, the web app's per-assignment "Sync now" scope. Sibling
     assignments' buckets in scores.json are untouched (apply_updates upserts).
+
+    `prior_scores` is the scores.json being updated, read only to warn when a
+    repo whose every release was skipped for provenance still has a collected
+    score on file (collection never removes an entry). None disables that check.
     """
     roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
@@ -1788,6 +1791,21 @@ def collect_classroom(
                 # pushed, or pushed without the autograder publishing. Detection
                 # tells the last two apart. Individual misses are quiet; the
                 # per-assignment summary reports the gap.
+                #
+                # Except when every release was skipped for provenance and a
+                # score is already on file: collection never removes an entry,
+                # so the gradebook would keep showing a score no trusted
+                # release backs while the log says nothing was counted.
+                if getattr(releases, "rejected", 0) and has_collected_score(
+                    prior_scores, slug, username
+                ):
+                    emit_warning(
+                        f"{org}/{repo_name}: no release counts for this repository "
+                        f"now, but a score collected earlier for {username} is still "
+                        f"in {classroom_short}/scores.json under {slug!r}. Collection "
+                        f"never removes an entry; check the repository, then delete "
+                        f"that entry or set \"override\": true on it."
+                    )
                 record, read = detector.detect(username, repo_name)
                 if read:
                     detected_visited.add(username.lower())
@@ -2837,6 +2855,26 @@ def entry_from_result(payload: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in payload.items() if k not in ("_assignment", "_type")}
 
 
+def has_collected_score(
+    scores: dict[str, Any] | None, slug: str, owner: str
+) -> bool:
+    """Whether scores.json already holds a collected (not teacher-overridden)
+    entry for this owner in this assignment's bucket."""
+    if not isinstance(scores, dict):
+        return False
+    bucket = (scores.get("assignments") or {}).get(slug)
+    if not isinstance(bucket, dict):
+        return False
+    for entry in bucket.get("entries") or []:
+        if (
+            isinstance(entry, dict)
+            and entry.get("override") is not True
+            and row_key(entry) == owner.lower()
+        ):
+            return True
+    return False
+
+
 def row_key(record: dict[str, Any]) -> str | None:
     """The stable per-bucket key: the repo OWNER login, lowercased.
 
@@ -3374,11 +3412,12 @@ def release_provenance_problem(release: dict[str, Any]) -> str | None:
     """Why a submit/* release did not come from the autograde workflow, or None
     when it did.
 
-    The workflow's GITHUB_TOKEN can't be impersonated, but a student's push
-    access lets them publish a release, or replace its result.json, as
-    themselves. Either mark by another login means the payload didn't come from
-    grading. A missing author or uploader counts as another login: nothing the
-    runner publishes lacks them."""
+    Students have push access to their repos, so they can publish a release, or
+    replace its result.json, as themselves; the one thing they can't do is act
+    as the workflow's GITHUB_TOKEN. So the release author and the uploader of
+    every result.json asset must both be that login. A missing author or
+    uploader counts as another login: nothing the runner publishes lacks them.
+    gh teacher download and the web apply the same rule."""
     author = _login(release.get("author"))
     if author != AUTOGRADE_RELEASE_AUTHOR:
         return f"published by {author or 'an unknown account'!r}, not by the autograde workflow"
@@ -3396,16 +3435,24 @@ def release_provenance_problem(release: dict[str, Any]) -> str | None:
     return None
 
 
+class SubmitReleases(list):
+    """all_submit_releases' return: the trusted releases, plus how many
+    submit/* releases were skipped for provenance. A list subclass so the many
+    callers and test fakes that treat the result as a plain list keep working;
+    `getattr(releases, "rejected", 0)` reads it from either."""
+
+    rejected: int = 0
+
+
 def all_submit_releases(
     api_url: str, owner: str, repo: str, token: str
-) -> list[dict[str, Any]]:
+) -> "SubmitReleases":
     """Every submit-tag release the autograde workflow published for a repo,
     newest first, walking the full /releases pagination: the complete submission
     history (a student who pushed N times has N submit/* releases, all
     returned). Non-submit releases (e.g., a hand-created tag) are filtered out,
     and so is a submit/* release that fails release_provenance_problem, with a
-    warning naming it: that is a hand-made release or a replaced result.json in
-    a repo the student can write to, and the teacher should know. A 404 (no
+    warning naming it (see there for why) and a count in `.rejected`. A 404 (no
     releases, or repo not accepted) yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
@@ -3423,7 +3470,7 @@ def all_submit_releases(
         )
     except urllib.error.HTTPError as exc:
         if exc.code == 404:
-            return []
+            return SubmitReleases()
         raise
     submits = [
         release
@@ -3434,12 +3481,13 @@ def all_submit_releases(
         # assets aren't downloadable anyway, so skip it.
         and release.get("draft") is not True
     ]
-    trusted: list[dict[str, Any]] = []
+    trusted = SubmitReleases()
     for release in submits:
         problem = release_provenance_problem(release)
         if problem is None:
             trusted.append(release)
             continue
+        trusted.rejected += 1
         emit_warning(
             f"{owner}/{repo}: release {release.get('tag_name')!r} was {problem}; "
             f"not counted as a submission. Only releases the workflow publishes "

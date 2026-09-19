@@ -4097,6 +4097,95 @@ def test_autograded_graded_repo_is_visited_but_never_probed(monkeypatch):
     assert visited == {"alice", "bob"}
 
 
+def _prior_scores(slug: str, owner: str, **entry_extra):
+    entry = {"owner": owner, "submissions": [{"score": 10, "max-score": 10}], **entry_extra}
+    return {"schema": cs.SCORES_SCHEMA_V1, "assignments": {slug: {"type": "individual", "entries": [entry]}}}
+
+
+def _collect_with_all_releases_rejected(monkeypatch, prior_scores):
+    # Every submit/* release of alice's repo fails provenance, so the listing
+    # comes back empty but flagged, exactly as all_submit_releases returns it.
+    def fake_all(api_url, org, repo, token):
+        listing = cs.SubmitReleases()
+        listing.rejected = 1
+        return listing
+
+    monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+    monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
+    stub_team_members(monkeypatch, ["alice"])
+    return cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+        prior_scores=prior_scores,
+    )
+
+
+def test_all_releases_rejected_warns_about_a_score_already_on_file(monkeypatch, capsys):
+    # A forged release ingested before the provenance check, or honest releases
+    # a student deleted afterwards, leave an entry collection never removes. The
+    # per-release skip warning alone would read as "not counted" while the
+    # gradebook still shows the old score, so name the stale entry.
+    results, _, _, detected = _collect_with_all_releases_rejected(
+        monkeypatch, _prior_scores("hw1", "alice")
+    )
+    assert results == []
+    assert detected["hw1"][1] == []
+    err = capsys.readouterr().err
+    assert "cs50/cs-principles-hw1-alice: no release counts for this repository now" in err
+    assert "a score collected earlier for alice is still in cs-principles/scores.json under 'hw1'" in err
+    assert 'delete that entry or set "override": true' in err
+
+
+@pytest.mark.parametrize(
+    "prior",
+    [
+        None,
+        {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}},
+        _prior_scores("hw1", "bob"),
+        _prior_scores("hw2", "alice"),
+        _prior_scores("hw1", "alice", override=True),
+    ],
+    ids=["no-scores", "empty", "other-owner", "other-assignment", "teacher-override"],
+)
+def test_all_releases_rejected_is_quiet_without_a_collected_score(monkeypatch, capsys, prior):
+    # Nothing stale to point at: no file, no entry for this owner and slug, or a
+    # teacher override that collection leaves alone by design.
+    _collect_with_all_releases_rejected(monkeypatch, prior)
+    assert "still in" not in capsys.readouterr().err
+
+
+def test_plain_empty_listing_never_warns_about_prior_scores(monkeypatch, capsys):
+    # An honest empty listing (nothing published yet, or a 404) is the ordinary
+    # not-submitted case, not a provenance skip; a prior entry there is the
+    # existing "prior credit preserved" behavior and stays quiet.
+    monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: [])
+    monkeypatch.setattr(cs, "detect_repo_submissions", lambda *a, **k: [])
+    stub_team_members(monkeypatch, ["alice"])
+    cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+        prior_scores=_prior_scores("hw1", "alice"),
+    )
+    assert "still in" not in capsys.readouterr().err
+
+
+def test_all_submit_releases_counts_rejected(monkeypatch):
+    body = json.dumps([
+        bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
+        bot_release("submit/2026-06-02T10-00-00Z"),
+        {"tag_name": "v1.0"},
+    ]).encode("utf-8")
+    monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, _NoHeaders()))
+    releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
+    assert [r["tag_name"] for r in releases] == ["submit/2026-06-02T10-00-00Z"]
+    assert releases.rejected == 1
+    assert isinstance(releases, list)
+
+
 def test_autograded_detection_respects_tag_mode(monkeypatch):
     # A tag-mode assignment probes tags, and (as for no_autograder) a tag's
     # encoded time isn't trusted for lateness.

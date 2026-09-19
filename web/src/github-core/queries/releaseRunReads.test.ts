@@ -355,6 +355,33 @@ describe("latestSubmitReleaseAndCount", () => {
     expect(count).toBe(1)
   })
 
+  it("neither surfaces nor counts a submit/* release the workflow did not publish", async () => {
+    // The live count is the surface a hand-made release would inflate.
+    const client = clientReturning([
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z", {
+        author: { login: "alice" },
+      }),
+      release("submit/2026-02-01T00:00:00Z-bbbb", "2026-02-01T00:00:00Z", {
+        assets: [
+          {
+            id: 1,
+            name: "result.json",
+            browser_download_url: "u",
+            uploader: { login: "alice" },
+          },
+        ],
+      }),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+    ])
+    const { latest, count } = await latestSubmitReleaseAndCount(
+      client,
+      "o",
+      "r",
+    )
+    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
+    expect(count).toBe(1)
+  })
+
   it("resolves { latest: null, count: 0 } on a 404 (repo not accepted)", async () => {
     const client = clientThrowing(apiError(404))
     expect(await latestSubmitReleaseAndCount(client, "o", "r")).toEqual({
