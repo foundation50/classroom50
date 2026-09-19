@@ -20,11 +20,8 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// autogradeShimPath is the shim's path inside every student repo. Hand-
-// mirrored with NO compile-time link from gh-student's
-// classroomcfg.AutogradeWorkflowPath and runner.py's SHIM_UPDATE_COMMIT_PATHS
-// — keep byte-identical.
-const autogradeShimPath = ".github/workflows/autograde.yaml"
+// autogradeShimPath is the shim's path inside every student repo.
+const autogradeShimPath = contract.AutogradeShimPath
 
 // shimTriggerBlock matches the default shim's `on:` block in any mode/tags
 // combination: the optional `branches:` line (group 1) followed by the tags
@@ -145,16 +142,17 @@ type submissionModeParams struct {
 	quiet, verbose       bool
 }
 
-// shimOutcome is one repo's classified retrofit result. updated/current are
-// the happy paths; unrecognized needs the teacher's judgment (never
+// shimOutcome is one repo's classified result from a shim write loop (the
+// submission-mode retrofit or the enable-autograder backfill). updated/current
+// are the happy paths; unrecognized needs the teacher's judgment (never
 // overwritten); notAccepted is a skip; failed is transient (re-run retries).
 type shimOutcome int
 
 const (
-	shimUpdated      shimOutcome = iota // trigger block rewritten
-	shimCurrent                         // already on the target trigger — no commit
+	shimUpdated      shimOutcome = iota // shim written (trigger rewritten, or shim added)
+	shimCurrent                         // already in the target state — no commit
 	shimUnrecognized                    // content doesn't match a known default-shim shape — left untouched
-	shimNotAccepted                     // repo (or shim file) doesn't exist yet
+	shimNotAccepted                     // repo doesn't exist yet
 	shimFailed                          // transient error — re-running retries
 )
 
@@ -209,34 +207,14 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			_, _ = fmt.Fprintf(out, "dry run: would set submission_mode of %s to %s\n", p.slug, p.mode)
 		}
 	} else {
-		build := func(parentSHA string) (map[string]string, error) {
-			file, err := loadAssignments(client, p.org, p.classroom, parentSHA)
-			if err != nil {
-				return nil, err
-			}
-			idx, ok := assignment.FindAssignment(file.Assignments, p.slug)
-			if !ok {
-				return nil, fmt.Errorf("assignment %q disappeared from %s during the update: retry",
-					p.slug, assignmentsFilePath(p.classroom))
-			}
-			entry := file.Assignments[idx]
+		message := contract.PrefixCommit(fmt.Sprintf("assignment: set submission_mode of %s to %s in %s (gh teacher assignment submission-mode)", p.slug, p.mode, p.classroom))
+		commitSHA, err := flipAssignmentField(client, p.org, p.classroom, p.slug, branch, message, func(entry *assignment.AssignmentEntry) bool {
 			if entry.SubmissionMode == wireMode {
-				return nil, nil // already in the desired state — no commit
+				return false
 			}
 			entry.SubmissionMode = wireMode
-			file.Assignments[idx] = entry
-			data, err := assignment.EncodeAssignments(file)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]string{assignmentsFilePath(p.classroom): string(data)}, nil
-		}
-		message := contract.PrefixCommit(fmt.Sprintf("assignment: set submission_mode of %s to %s in %s (gh teacher assignment submission-mode)", p.slug, p.mode, p.classroom))
-		// Report from the commit OUTCOME (did a commit land?), never from
-		// build-attempt state: a rebase retry can no-op after a stale first
-		// attempt, and the pre-write read can lag a just-landed write
-		// (run-2 misreport, observed live 2026-08-05).
-		commitSHA, err := configwrite.CommitTree(client, p.org, configrepo.ConfigRepoName, branch, message, build)
+			return true
+		})
 		if err != nil {
 			return err
 		}
@@ -258,14 +236,18 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 		return nil
 	}
 
-	repos, err := submissionModeTargetRepos(client, p, branch)
+	report := shimReport{
+		out: out, errOut: errOut,
+		slug: p.slug, user: p.user,
+		dryRun: p.dryRun, quiet: p.quiet, verbose: p.verbose,
+		words: submissionModeWords,
+	}
+	repos, err := assignmentTargetRepos(client, p.org, p.classroom, p.slug, p.user, branch)
 	if err != nil {
 		return err
 	}
 	if len(repos) == 0 {
-		if !p.quiet {
-			_, _ = fmt.Fprintf(out, "%s: no repos to process: the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", p.org)
-		}
+		report.noRepos(p.org)
 		return nil
 	}
 
@@ -274,43 +256,66 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 	for _, repo := range repos {
 		res := retrofitShim(client, p.org, repo, p.mode, preEntry.SubmissionTags, p.dryRun)
 		if res.outcome == shimNotAccepted {
-			// Enrolled but not accepted yet. On the explicit --user path the
-			// teacher named this repo, so report it unconditionally; the bulk
-			// summary still counts it so "of N repo(s)" reflects the roster
-			// actually probed (a team full of non-accepters must not read as
-			// "0 repo(s)" — that looks like an enumeration failure).
 			notAccepted++
-			if p.user != "" {
-				_, _ = fmt.Fprintf(out, "%s does not exist: %s has not accepted %s yet\n", repo, p.user, p.slug)
-			} else if p.verbose && !p.quiet {
-				_, _ = fmt.Fprintf(out, "Skipped %s (no repo; not accepted yet?)\n", repo)
-			}
+			report.notAccepted(repo)
 			continue
 		}
 		results = append(results, res)
-		reportShimResult(out, res, p)
+		report.result(res)
 	}
 
-	return summarizeShimResults(out, errOut, p, results, notAccepted)
+	return report.summarize(p.org, results, notAccepted)
 }
 
-// submissionModeTargetRepos resolves the repo names to process: a single
-// --user repo, or the derived repo for every classroom-team member.
-func submissionModeTargetRepos(client githubapi.Client, p submissionModeParams, branch string) ([]string, error) {
-	if p.user != "" {
-		return []string{contract.AssignmentRepoName(p.classroom, p.slug, p.user)}, nil
+// flipAssignmentField rewrites one assignment entry in assignments.json via
+// the rebase-safe CommitTree loop. mutate edits the entry in place and returns
+// false when it is already in the target state, which commits nothing. The
+// returned SHA is empty on a no-op; report from it, never from build-attempt
+// state: a rebase retry can no-op after a stale first attempt, and the
+// pre-write read can lag a just-landed write (run-2 misreport, observed live
+// 2026-08-05).
+func flipAssignmentField(client githubapi.Client, org, classroom, slug, branch, message string, mutate func(*assignment.AssignmentEntry) bool) (string, error) {
+	build := func(parentSHA string) (map[string]string, error) {
+		file, err := loadAssignments(client, org, classroom, parentSHA)
+		if err != nil {
+			return nil, err
+		}
+		idx, ok := assignment.FindAssignment(file.Assignments, slug)
+		if !ok {
+			return nil, fmt.Errorf("assignment %q disappeared from %s during the update: retry",
+				slug, assignmentsFilePath(classroom))
+		}
+		entry := file.Assignments[idx]
+		if !mutate(&entry) {
+			return nil, nil
+		}
+		file.Assignments[idx] = entry
+		data, err := assignment.EncodeAssignments(file)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{assignmentsFilePath(classroom): string(data)}, nil
 	}
-	teamSlug, err := configrepo.ResolveClassroomTeamSlug(client, p.org, p.classroom, branch)
+	return configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build)
+}
+
+// assignmentTargetRepos resolves the student repos to process: a single
+// --user repo, or the derived repo for every classroom-team member.
+func assignmentTargetRepos(client githubapi.Client, org, classroom, slug, user, branch string) ([]string, error) {
+	if user != "" {
+		return []string{contract.AssignmentRepoName(classroom, slug, user)}, nil
+	}
+	teamSlug, err := configrepo.ResolveClassroomTeamSlug(client, org, classroom, branch)
 	if err != nil {
 		return nil, err
 	}
-	logins, err := configrepo.ListTeamMembers(client, p.org, teamSlug)
+	logins, err := configrepo.ListTeamMembers(client, org, teamSlug)
 	if err != nil {
 		return nil, fmt.Errorf("list team %q members: %w", teamSlug, err)
 	}
 	repos := make([]string, 0, len(logins))
 	for _, login := range logins {
-		repos = append(repos, contract.AssignmentRepoName(p.classroom, p.slug, login))
+		repos = append(repos, contract.AssignmentRepoName(classroom, slug, login))
 	}
 	return repos, nil
 }
@@ -453,76 +458,130 @@ func studentRepoDefaultBranch(client githubapi.Client, org, repoName string) (br
 	return repo.DefaultBranch, false, nil
 }
 
-// reportShimResult prints one repo's per-line outcome on the human channel.
-func reportShimResult(out io.Writer, res shimResult, p submissionModeParams) {
-	if p.quiet {
-		return
-	}
-	prefix := ""
-	if p.dryRun {
-		prefix = "dry run: would have "
-	}
-	switch res.outcome {
-	case shimUpdated:
-		if p.dryRun {
-			_, _ = fmt.Fprintf(out, "%supdated the autograde trigger on %s\n", prefix, res.repo)
-		} else {
-			_, _ = fmt.Fprintf(out, "Updated autograde trigger on %s\n", res.repo)
-		}
-	case shimCurrent:
-		if p.verbose {
-			_, _ = fmt.Fprintf(out, "%s already has the target trigger\n", res.repo)
-		}
-	case shimUnrecognized:
-		_, _ = fmt.Fprintf(out, "Skipped %s: %s\n", res.repo, res.reason)
-	case shimFailed:
-		_, _ = fmt.Fprintf(out, "Failed: %s (%s)\n", res.repo, res.reason)
+// shimWords is the per-command wording of a shim write loop's report. The
+// flow (per-repo lines, aggregate counts, skipped/failed lists, exit status) is
+// shared by the submission-mode retrofit and the enable-autograder backfill;
+// only the verbs differ.
+type shimWords struct {
+	done      string // per-repo line on a write, e.g. "Updated autograde trigger on %s"
+	dryDone   string // dry-run form, e.g. "dry run: would have updated the autograde trigger on %s"
+	current   string // verbose per-repo line when nothing changed
+	countDid  string // summary verb, e.g. "updated"
+	countDry  string // dry-run summary verb, e.g. "would update"
+	countSame string // summary noun for the unchanged count, e.g. "already current"
+	atAccept  string // summary tail for enrolled non-accepters, e.g. "the new trigger"
+	// afterUpdated is an extra summary line printed after a real write; empty
+	// for none.
+	afterUpdated string
+}
+
+var submissionModeWords = shimWords{
+	done:      "Updated autograde trigger on %s\n",
+	dryDone:   "dry run: would have updated the autograde trigger on %s\n",
+	current:   "%s already has the target trigger\n",
+	countDid:  "updated",
+	countDry:  "would update",
+	countSame: "already current",
+	atAccept:  "the new trigger",
+}
+
+// shimReport prints a shim write loop's outcomes on the human channel.
+type shimReport struct {
+	out, errOut    io.Writer
+	slug, user     string
+	dryRun         bool
+	quiet, verbose bool
+	words          shimWords
+}
+
+// notAccepted reports an enrolled student whose repo doesn't exist. On the
+// explicit --user path the teacher named this repo, so it's reported
+// unconditionally; in bulk it's a verbose-only line.
+func (r shimReport) notAccepted(repo string) {
+	if r.user != "" {
+		_, _ = fmt.Fprintf(r.out, "%s does not exist: %s has not accepted %s yet\n", repo, r.user, r.slug)
+	} else if r.verbose && !r.quiet {
+		_, _ = fmt.Fprintf(r.out, "Skipped %s (no repo; not accepted yet?)\n", repo)
 	}
 }
 
-// summarizeShimResults prints the aggregate counts plus the skipped/failed
-// detail lists, and returns a non-nil error when any repo failed.
-func summarizeShimResults(out, errOut io.Writer, p submissionModeParams, results []shimResult, notAccepted int) error {
+// noRepos reports an empty enumeration (no classroom-team members).
+func (r shimReport) noRepos(org string) {
+	if !r.quiet {
+		_, _ = fmt.Fprintf(r.out, "%s: no repos to process: the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", org)
+	}
+}
+
+func (r shimReport) result(res shimResult) {
+	if r.quiet {
+		return
+	}
+	switch res.outcome {
+	case shimUpdated:
+		if r.dryRun {
+			_, _ = fmt.Fprintf(r.out, r.words.dryDone, res.repo)
+		} else {
+			_, _ = fmt.Fprintf(r.out, r.words.done, res.repo)
+		}
+	case shimCurrent:
+		if r.verbose {
+			_, _ = fmt.Fprintf(r.out, r.words.current, res.repo)
+		}
+	case shimUnrecognized:
+		_, _ = fmt.Fprintf(r.out, "Skipped %s: %s\n", res.repo, res.reason)
+	case shimFailed:
+		_, _ = fmt.Fprintf(r.out, "Failed: %s (%s)\n", res.repo, res.reason)
+	}
+}
+
+// summarize prints the aggregate counts plus the skipped/failed detail lists,
+// and returns a non-nil error when any repo failed. notAccepted is counted in
+// "of N repo(s)" so a roster of non-accepters doesn't read as an enumeration
+// failure.
+func (r shimReport) summarize(org string, results []shimResult, notAccepted int) error {
 	var updated, current int
 	var unrecognized, failed []shimResult
-	for _, r := range results {
-		switch r.outcome {
+	for _, res := range results {
+		switch res.outcome {
 		case shimUpdated:
 			updated++
 		case shimCurrent:
 			current++
 		case shimUnrecognized:
-			unrecognized = append(unrecognized, r)
+			unrecognized = append(unrecognized, res)
 		case shimFailed:
-			failed = append(failed, r)
+			failed = append(failed, res)
 		}
 	}
 
-	if !p.quiet {
-		verb := "updated"
-		if p.dryRun {
-			verb = "would update"
+	if !r.quiet {
+		verb := r.words.countDid
+		if r.dryRun {
+			verb = r.words.countDry
 		}
-		_, _ = fmt.Fprintf(out, "%s: %d %s, %d already current, %d skipped, %d failed (of %d repo(s))\n",
-			p.org, updated, verb, current, len(unrecognized), len(failed), len(results)+notAccepted)
+		_, _ = fmt.Fprintf(r.out, "%s: %d %s, %d %s, %d skipped, %d failed (of %d repo(s))\n",
+			org, updated, verb, current, r.words.countSame, len(unrecognized), len(failed), len(results)+notAccepted)
 		if notAccepted > 0 {
-			_, _ = fmt.Fprintf(out, "%d enrolled student(s) have not accepted %s yet; their repos will get the new trigger at accept time\n", notAccepted, p.slug)
+			_, _ = fmt.Fprintf(r.out, "%d enrolled student(s) have not accepted %s yet; their repos will get %s at accept time\n", notAccepted, r.slug, r.words.atAccept)
 		}
-		if updated > 0 && !p.dryRun {
-			_, _ = fmt.Fprintln(out, "Tell students to `git pull`: clones made before this change will conflict on their next push.")
+		if updated > 0 && !r.dryRun {
+			_, _ = fmt.Fprintln(r.out, "Tell students to `git pull`: clones made before this change will conflict on their next push.")
+			if r.words.afterUpdated != "" {
+				_, _ = fmt.Fprintln(r.out, r.words.afterUpdated)
+			}
 		}
 	}
 
 	if len(unrecognized) > 0 {
-		_, _ = fmt.Fprintln(errOut, "Skipped (shim content not recognized; review and update by hand if intended):")
-		for _, r := range unrecognized {
-			_, _ = fmt.Fprintf(errOut, "  %s: %s\n", r.repo, r.reason)
+		_, _ = fmt.Fprintln(r.errOut, "Skipped (shim content not recognized; review and update by hand if intended):")
+		for _, res := range unrecognized {
+			_, _ = fmt.Fprintf(r.errOut, "  %s: %s\n", res.repo, res.reason)
 		}
 	}
 	if len(failed) > 0 {
-		_, _ = fmt.Fprintln(errOut, "Failed (re-run to retry just these, or pass --user for one repo):")
-		for _, r := range failed {
-			_, _ = fmt.Fprintf(errOut, "  %s: %s\n", r.repo, r.reason)
+		_, _ = fmt.Fprintln(r.errOut, "Failed (re-run to retry just these, or pass --user for one repo):")
+		for _, res := range failed {
+			_, _ = fmt.Fprintf(r.errOut, "  %s: %s\n", res.repo, res.reason)
 		}
 		return fmt.Errorf("%d of %d repo(s) failed", len(failed), len(results))
 	}

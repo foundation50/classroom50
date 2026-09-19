@@ -5,6 +5,7 @@ import { repoTreeAtRefUrl } from "@/util/orgUrl"
 import {
   commitSubject,
   FEEDBACK_OPEN_COMMIT_MESSAGE,
+  SHIM_BACKFILL_COMMIT_MESSAGE,
   shimUpdateCommitMessage,
 } from "@/util/commit"
 import { SUBMISSION_MODES, type SubmissionMode } from "@/types/classroom"
@@ -60,9 +61,10 @@ export function isGlobPattern(pattern: string): boolean {
 
 // The subjects of the commits the tool authors onto a student repo's DEFAULT
 // BRANCH for its own bookkeeping: the empty commit that opens the Feedback PR
-// at accept time and the submission-mode shim retrofit. Neither can ever be
-// graded, so counting one shows a submission no run, tag or Release can follow.
-// ANY further such writer must be added here.
+// at accept time, the submission-mode shim retrofit, and the shim backfill
+// after the built-in autograder is turned on. None can ever be graded, so
+// counting one shows a submission no run, tag or Release can follow. ANY
+// further such writer must be added here.
 //
 // Deliberately not "anything carrying `[skip ci]`": a student can write that
 // marker too, and their push is still a submission, it just wasn't graded. So
@@ -77,6 +79,7 @@ const TOOL_COMMIT_SUBJECTS: ReadonlySet<string> = new Set(
   [
     FEEDBACK_OPEN_COMMIT_MESSAGE,
     ...SUBMISSION_MODES.map(shimUpdateCommitMessage),
+    SHIM_BACKFILL_COMMIT_MESSAGE,
   ].map(commitSubject),
 )
 

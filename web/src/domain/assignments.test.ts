@@ -5570,12 +5570,12 @@ describe("defaultAutograderWorkflow — milestone submission_tags", () => {
 // on: block for the same inputs — the retrofit rewriters (Go shimTriggerBlock
 // and the TS SHIM_TRIGGER_BLOCK) do line surgery on this exact shape, so a
 // drift on either side would make one client's shims "unrecognized" to the
-// retrofit. The CLI side is pinned against the embed by
-// TestShimTagsTriggerLine_MatchesEmbed / TestShimBranchTriggerLine_MatchesEmbed;
-// this pins the web render against the embed file itself.
-describe("web shim trigger block parity with the CLI embed", () => {
+// retrofit. The CLI side is pinned against the template by
+// TestShimTriggerLines_MatchTemplate (cli/shared/contract); this pins the web
+// render against the template file itself.
+describe("web shim trigger block parity with the CLI template", () => {
   const embedUrl = new URL(
-    "../../../cli/gh-student/embed/autograde-shim.yaml",
+    "../../../cli/shared/contract/autograde-shim.yaml",
     import.meta.url,
   )
   const embed = readFileSync(fileURLToPath(embedUrl), "utf-8")

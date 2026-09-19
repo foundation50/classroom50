@@ -43,6 +43,7 @@ import { BulkRepoVisibilityModal } from "@/components/modals/BulkRepoVisibilityM
 import { BulkRepoPagesModal } from "@/components/modals/BulkRepoPagesModal"
 import { BulkAutogradeStateModal } from "@/components/modals/BulkAutogradeStateModal"
 import { BulkSubmissionTriggerModal } from "@/components/modals/BulkSubmissionTriggerModal"
+import { BulkAutogradeShimModal } from "@/components/modals/BulkAutogradeShimModal"
 import { isDefaultAutograder } from "@/domain/assignments/autograderYaml"
 import { resolveSubmissionMode } from "@/domain/assignments/submissionDetection"
 import {
@@ -480,6 +481,7 @@ const SubmissionsPageContent = () => {
   const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false)
   const [bulkPagesOpen, setBulkPagesOpen] = useState(false)
   const [bulkTriggerOpen, setBulkTriggerOpen] = useState(false)
+  const [bulkAddShimOpen, setBulkAddShimOpen] = useState(false)
   const [bulkPauseOpen, setBulkPauseOpen] = useState(false)
   const [bulkResumeOpen, setBulkResumeOpen] = useState(false)
   const [closeSubmissionOpen, setCloseSubmissionOpen] = useState(false)
@@ -649,6 +651,18 @@ const SubmissionsPageContent = () => {
     [orgRepos, classroom, assignment, students],
   )
   const acceptedAvailable = !isGroupFlavor && orgRepos != null
+  // Gate for the whole-assignment shim actions (update triggers, add
+  // workflow, pause, resume): owner, individual assignment, a resolved entry
+  // on the default autograder (teacher-authored shims are never touched), and
+  // at least one accepted repo. skipsGrading covers no_autograder/empty_repo,
+  // so "Add autograding workflow" appears exactly once the autograder is on.
+  const canBulkShimAction =
+    isOwner &&
+    !isGroupFlavor &&
+    !skipsGrading &&
+    assignmentResolved &&
+    isDefaultAutograder(assignmentInfo.autograder) &&
+    acceptedSet.size > 0
   // The filters actually applied. When acceptance data isn't loaded, neutralize
   // the accepted axis so a transient empty repo list can't flip the visible set.
   const effectiveFilters = useMemo(
@@ -1584,45 +1598,19 @@ const SubmissionsPageContent = () => {
                     ? () => setBulkPagesOpen(true)
                     : undefined
                 }
-                // Bulk retrofit autograding triggers: same gate as bulk features
-                // plus default-autograder only — teacher-authored (custom) shims
-                // are never rewritten, and a no_autograder assignment has no shim
-                // to retrofit (skipsGrading). Reconciles existing repos with the
-                // assignment's submission_mode (baked into shims at accept time).
-                // Requires a resolved entry — see assignmentResolved.
+                // Bulk shim actions (retrofit triggers, add workflow, pause,
+                // resume): see canBulkShimAction.
                 onBulkTrigger={
-                  isOwner &&
-                  !isGroupFlavor &&
-                  !skipsGrading &&
-                  assignmentResolved &&
-                  isDefaultAutograder(assignmentInfo.autograder) &&
-                  acceptedSet.size > 0
-                    ? () => setBulkTriggerOpen(true)
-                    : undefined
+                  canBulkShimAction ? () => setBulkTriggerOpen(true) : undefined
                 }
-                // Pause / Resume autograding across every accepted repo — flips each
-                // autograde workflow's Actions state (no file edit). Same gate as
-                // the trigger retrofit (owner + individual + resolved default
-                // autograder + accepted repos exist).
+                onBulkAddShim={
+                  canBulkShimAction ? () => setBulkAddShimOpen(true) : undefined
+                }
                 onBulkPause={
-                  isOwner &&
-                  !isGroupFlavor &&
-                  !skipsGrading &&
-                  assignmentResolved &&
-                  isDefaultAutograder(assignmentInfo.autograder) &&
-                  acceptedSet.size > 0
-                    ? () => setBulkPauseOpen(true)
-                    : undefined
+                  canBulkShimAction ? () => setBulkPauseOpen(true) : undefined
                 }
                 onBulkResume={
-                  isOwner &&
-                  !isGroupFlavor &&
-                  !skipsGrading &&
-                  assignmentResolved &&
-                  isDefaultAutograder(assignmentInfo.autograder) &&
-                  acceptedSet.size > 0
-                    ? () => setBulkResumeOpen(true)
-                    : undefined
+                  canBulkShimAction ? () => setBulkResumeOpen(true) : undefined
                 }
                 locked={isLockedAssignment}
                 lockPending={setLock.isPending}
@@ -1965,6 +1953,19 @@ const SubmissionsPageContent = () => {
         <BulkSubmissionTriggerModal
           open={bulkTriggerOpen}
           onClose={() => setBulkTriggerOpen(false)}
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          submissionMode={resolveSubmissionMode(assignmentInfo.submission_mode)}
+          submissionTags={assignmentInfo.submission_tags}
+          owners={acceptedOwners}
+          students={students}
+        />
+      )}
+      {assignmentResolved && (
+        <BulkAutogradeShimModal
+          open={bulkAddShimOpen}
+          onClose={() => setBulkAddShimOpen(false)}
           org={org}
           classroom={classroom}
           assignment={assignment}

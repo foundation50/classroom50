@@ -256,9 +256,12 @@ export type Assignment = {
   // template's own .github/ CI runs instead, or nothing does. UNLIKE empty_repo
   // it permits the Feedback PR (an initialized repo has a baseline commit); it
   // excludes the grading-adjacent fields and is mutually exclusive with
-  // empty_repo, init_shim, and a non-default autograder. Mutable but never
-  // retrofitted. Omitted when false (CLI omitempty); absent reads as false. In
-  // lockstep with the CLI's assignments-v1 schema (`no_autograder`).
+  // empty_repo, init_shim, and a non-default autograder. Mutable; not
+  // retrofitted by the edit itself, but clearing it has a follow-up that adds
+  // the shim to already-accepted repos (shimBackfill.ts / `gh teacher
+  // assignment enable-autograder`). Omitted when false (CLI omitempty); absent
+  // reads as false. In lockstep with the CLI's assignments-v1 schema
+  // (`no_autograder`).
   no_autograder?: boolean
   // Built-in autograder on an otherwise-empty repo: a TEMPLATE-LESS assignment
   // whose repo is initialized with ONLY the marker + default autograde shim (no

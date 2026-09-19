@@ -24,15 +24,16 @@ export function commitSubject(message: string): string {
 }
 
 // The two commits the tool authors onto a STUDENT repo's default branch for its
-// own bookkeeping. They live here, next to the prefix, for the same reason Go
-// keeps them in cli/shared/contract rather than in the command packages: the
-// writers and the submissions page (which must not count either as student
-// work) both need them, and neither should import the other.
+// own bookkeeping, plus the shim backfill. They live here, next to the prefix,
+// for the same reason Go keeps them in cli/shared/contract rather than in the
+// command packages: the writers and the submissions page (which must not count
+// any of them as student work) both need them, and neither should import the
+// other.
 //
-// The `[skip ci]` body line is load-bearing on both: it keeps the autograde
-// shim from running on a commit with nothing to grade. Byte-mirrors of
-// contract.FeedbackOpenCommitMessage and contract.ShimUpdateCommitMessage,
-// pinned on the Go side by contract_test.go.
+// The `[skip ci]` body line is load-bearing on all of them: it keeps the
+// autograde shim from running on a commit with nothing to grade. Byte-mirrors
+// of contract.FeedbackOpenCommitMessage, contract.ShimUpdateCommitMessage, and
+// contract.ShimBackfillCommitMessage, pinned on the Go side by their tests.
 export const FEEDBACK_OPEN_COMMIT_MESSAGE = `${prefixCommit(
   "Open Feedback PR (gh student accept)",
 )}\n\n[skip ci]`
@@ -43,3 +44,10 @@ export function shimUpdateCommitMessage(mode: SubmissionMode): string {
     "\n\n[skip ci]"
   )
 }
+
+// The commit that adds the default shim to a repo accepted while the built-in
+// autograder was off. Byte-mirror of contract.ShimBackfillCommitMessage
+// (pinned by its Go test) and collect_scores.py's TOOL_COMMIT_SUBJECTS.
+export const SHIM_BACKFILL_COMMIT_MESSAGE = `${prefixCommit(
+  "Add autograde workflow (enable-autograder)",
+)}\n\n[skip ci]`

@@ -36,7 +36,7 @@ const MetadataPath = contract.MetadataPath
 
 // AutogradeWorkflowPath is the in-repo destination for the autograde shim
 // written at accept time.
-const AutogradeWorkflowPath = ".github/workflows/autograde.yaml"
+const AutogradeWorkflowPath = contract.AutogradeShimPath
 
 // SeededReadmePath is the README GitHub's auto_init seeds at repo creation.
 const SeededReadmePath = "README.md"

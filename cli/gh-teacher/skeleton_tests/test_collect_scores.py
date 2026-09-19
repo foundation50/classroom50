@@ -2638,6 +2638,38 @@ class TestAllSubmitReleases:
             cs.all_submit_releases("https://api.github.com", "o", "r", "token")
 
 
+class TestBranchDetectionSkipsToolCommits:
+    """The tool's own default-branch commits are never student work. The
+    subjects are hand-mirrored from cli/shared/contract and the web's
+    TOOL_COMMIT_SUBJECTS; a drift here would count a bookkeeping commit as a
+    submission the roster then shows as submitted."""
+
+    def _commit(self, sha, message):
+        return {"sha": sha, "commit": {"message": message, "committer": {"date": "2026-09-01T00:00:00Z"}}}
+
+    def test_excludes_every_tool_subject(self):
+        commits = [
+            self._commit("backfill", "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]"),
+            self._commit("work", "Finish problem set"),
+            self._commit("retrofit", "[Classroom 50] Update autograder trigger to tag (submission-mode)\n\n[skip ci]"),
+            self._commit("feedback", "[Classroom 50] Open Feedback PR (gh student accept)\n\n[skip ci]"),
+            self._commit("baseline", "[Classroom 50] Initialize .classroom50.yaml"),
+        ]
+        assert [d["sha"] for d in cs.detect_branch_submissions(commits, "baseline")] == ["work"]
+
+    def test_subjects_match_the_shared_contract_messages(self):
+        # The Go side pins these strings in contract_test.go / shim_test.go;
+        # the body's [skip ci] line is not part of the subject.
+        for subject in (
+            "[Classroom 50] Open Feedback PR (gh student accept)",
+            "[Classroom 50] Update autograder trigger to every-push (submission-mode)",
+            "[Classroom 50] Update autograder trigger to tag (submission-mode)",
+            "[Classroom 50] Add autograde workflow (enable-autograder)",
+        ):
+            assert subject in cs.TOOL_COMMIT_SUBJECTS
+            assert cs.commit_subject(subject + "\n\n[skip ci]") == subject
+
+
 class TestCommitWalkEarlyStop:
     def test_stops_paging_once_the_baseline_page_is_reached(self, monkeypatch):
         # Commits arrive newest-first, so every page past the one carrying the

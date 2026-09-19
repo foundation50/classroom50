@@ -34,10 +34,13 @@ export type ProvisioningFields = {
   pages?: AssignmentPages
 }
 
-// Which setting a provisioning change touched, one per confirm bullet.
+// Which setting a provisioning change touched, one per confirm bullet. The
+// built-in autograder is split by direction: turning it on has a follow-up
+// action (add the workflow to existing repositories), turning it off does not.
 export type ProvisioningField =
   | "repo_source"
-  | "autograder"
+  | "autograder_on"
+  | "autograder_off"
   | "grading_mode"
   | "student_permission"
   | "repo_visibility"
@@ -112,7 +115,9 @@ export function provisioningChanges(
   ) {
     changed.push("repo_source")
   }
-  if (before.no_autograder !== after.no_autograder) changed.push("autograder")
+  if (before.no_autograder !== after.no_autograder) {
+    changed.push(after.no_autograder ? "autograder_off" : "autograder_on")
+  }
   if (before.gradingMode !== after.gradingMode) changed.push("grading_mode")
   if (before.student_permission !== after.student_permission) {
     changed.push("student_permission")

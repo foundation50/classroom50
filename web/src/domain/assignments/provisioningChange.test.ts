@@ -180,12 +180,21 @@ describe("provisioningChanges", () => {
       }),
     ).toEqual([
       "repo_source",
-      "autograder",
+      "autograder_off",
       "grading_mode",
       "student_permission",
       "repo_visibility",
       "pages",
     ])
+  })
+
+  it("reports turning the built-in autograder on by direction", () => {
+    expect(
+      provisioningChanges(
+        { ...base, no_autograder: true },
+        { no_autograder: false },
+      ),
+    ).toEqual(["autograder_on"])
   })
 
   it("collapses empty_repo and init_shim into one repository-source item", () => {

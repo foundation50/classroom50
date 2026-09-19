@@ -34,8 +34,12 @@ Two rules apply across all of them:
 
 - **Shape changes affect future accepts only.** Every shape can be changed
   after creation, but repositories students already accepted keep their
-  original setup; nothing is retrofitted. (**Assignment type**, individual
-  or group, is the exception: it stays locked once set.)
+  original setup; nothing is retrofitted automatically. The one change with a
+  follow-up action is turning the built-in autograder **on**: **Add
+  autograding workflow** on the submissions page, or
+  [`gh teacher assignment enable-autograder`](gh-teacher#assignment-enable-autograder),
+  adds the workflow to the existing repositories. (**Assignment type**,
+  individual or group, is the exception: it stays locked once set.)
 - **A template brings only its default branch** unless the assignment turns
   on **Include all branches** (`include_all_branches: true`), which copies
   every branch into each generated repository. Template-only; it has no
