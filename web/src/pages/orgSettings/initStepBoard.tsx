@@ -26,6 +26,7 @@ import {
   type BadgeTone,
 } from "@/components/ui"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { orgBudgetsUrl } from "@/orgPolicy/budget"
 import {
   resolveLocalizedMessage,
   type LocalizedMessage,
@@ -86,7 +87,7 @@ export const INIT_STEP_META: Record<InitStepId, InitStepMeta> = {
     what: "orgSettings.steps.orgBudget.what",
     why: "orgSettings.steps.orgBudget.why",
     remediation: "orgSettings.steps.orgBudget.remediation",
-    settingsUrl: (org) => `${orgSettingsBase(org)}/billing/budgets`,
+    settingsUrl: orgBudgetsUrl,
   },
   orgPrCreation: {
     what: "orgSettings.steps.orgPrCreation.what",
@@ -196,6 +197,12 @@ export const initialInitSteps: Record<InitStepId, InitStepUpdate> = {
   },
 }
 
+export function stepResultSettingsUrl(data: unknown): string | null {
+  if (typeof data !== "object" || data === null) return null
+  const url = (data as { settingsUrl?: unknown }).settingsUrl
+  return typeof url === "string" && url.length > 0 ? url : null
+}
+
 export function applyStepUpdate(
   steps: Record<InitStepId, InitStepUpdate>,
   update: InitStepUpdate,
@@ -266,7 +273,11 @@ export const InitStep = ({
     prevNeedsAttention.current = needsAttention
   }, [needsAttention])
 
-  const settingsUrl = org ? meta.settingsUrl(org) : null
+  // A step result may name the page it wants the teacher on (e.g. the billing
+  // summary when the budgets page doesn't exist for an enterprise-billed org);
+  // the static meta URL is the fallback.
+  const settingsUrl =
+    stepResultSettingsUrl(data) ?? (org ? meta.settingsUrl(org) : null)
 
   return (
     <div className="rounded-box border border-base-300 bg-base-200">

@@ -40,6 +40,14 @@ export function orgBudgetsUrl(org: string): string {
   return `https://github.com/organizations/${org}/settings/billing/budgets`
 }
 
+// The org billing summary page. Unlike the budgets page, it exists for every
+// org: when billing is enterprise-managed, GitHub renders an explanation there
+// pointing at the enterprise account, so it's the right landing spot whenever
+// the budgets read fails (#1035).
+export function orgBillingSummaryUrl(org: string): string {
+  return `https://github.com/organizations/${org}/settings/billing/summary`
+}
+
 // The org billing-budgets REST endpoint (list + create). Single-sourced so the
 // audit read and the setup create can't drift (mirrors the CLI's orgBudgetsPath).
 export function orgBudgetsApiPath(org: string): string {

@@ -169,10 +169,10 @@ exports[`ensureOrgActionsBudgetCap > warns on non-API error 1`] = `
 
 exports[`ensureOrgActionsBudgetCap > warns when the readback fails 1`] = `
 {
-  "message": "acme: couldn't read org billing budgets (boom). Your token may lack Organization Administration: Read, or the plan may not expose budgets. Set a $0 GitHub Actions budget by hand at https://github.com/organizations/acme/settings/billing/budgets to hard-stop paid Actions minutes.",
+  "message": "acme: couldn't read org billing budgets (boom). Billing may be managed by your enterprise, your token may lack Organization Administration: Read, or the plan may not expose budgets. Check https://github.com/organizations/acme/settings/billing/summary and confirm with your billing admin that a $0 GitHub Actions budget hard-stops paid Actions minutes.",
   "org": "acme",
   "reason": "readback_failed",
-  "settingsUrl": "https://github.com/organizations/acme/settings/billing/budgets",
+  "settingsUrl": "https://github.com/organizations/acme/settings/billing/summary",
   "status": "warning",
 }
 `;

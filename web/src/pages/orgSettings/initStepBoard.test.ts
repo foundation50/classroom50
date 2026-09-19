@@ -6,6 +6,7 @@ import {
   INIT_STEP_ORDER,
   applyStepUpdate,
   initialInitSteps,
+  stepResultSettingsUrl,
 } from "./initStepBoard"
 
 // The board is the single source of truth shared by the org setup wizard and
@@ -48,6 +49,18 @@ describe("init step board metadata", () => {
   it("repo + file creation steps have no single settings page to deep-link", () => {
     expect(INIT_STEP_META.configRepo.settingsUrl("acme-school")).toBeNull()
     expect(INIT_STEP_META.skeleton.settingsUrl("acme-school")).toBeNull()
+  })
+
+  it("prefers the settings page named by the step result over the static one", () => {
+    // The budget step points at the billing summary when the budgets page
+    // doesn't exist (enterprise-managed billing, #1035).
+    const summary =
+      "https://github.com/organizations/acme-school/settings/billing/summary"
+    expect(stepResultSettingsUrl({ settingsUrl: summary })).toBe(summary)
+    // Anything else falls back to the meta URL.
+    expect(stepResultSettingsUrl({ settingsUrl: "" })).toBeNull()
+    expect(stepResultSettingsUrl({ status: "complete" })).toBeNull()
+    expect(stepResultSettingsUrl(undefined)).toBeNull()
   })
 })
 

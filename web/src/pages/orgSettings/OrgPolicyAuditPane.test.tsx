@@ -73,7 +73,7 @@ describe("ConcernRow", () => {
         },
       },
       settingsUrl:
-        "https://github.com/organizations/acme/settings/billing/budgets",
+        "https://github.com/organizations/acme/settings/billing/summary",
     }
     render(
       <ConcernRow concern={unreadable} canFix fixing={false} onFix={noop} />,

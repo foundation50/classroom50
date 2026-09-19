@@ -227,7 +227,21 @@ describe("buildOrgAuditReport", () => {
       // The verdict stays ok: an unreadable budget is the one unreadable concern
       // that doesn't gate (see deriveVerdict).
       expect(report.verdict).toBe("ok")
+      // The budgets page doesn't exist for an enterprise-billed org (#1035), so
+      // "View on GitHub" lands on the billing summary instead.
+      expect(budget?.settingsUrl).toBe(
+        "https://github.com/organizations/acme/settings/billing/summary",
+      )
     }
+  })
+
+  it("links a readable budget to the org budgets page", async () => {
+    const report = await buildOrgAuditReport(makeClient(), "acme", "team")
+    const budget = report.concerns.find((c) => c.id === "orgBudget")
+    expect(budget?.verdict.state).toBe("enforced")
+    expect(budget?.settingsUrl).toBe(
+      "https://github.com/organizations/acme/settings/billing/budgets",
+    )
   })
 
   it("exempts only orgBudget: an unreadable budget alongside another unreadable concern still fails", async () => {
