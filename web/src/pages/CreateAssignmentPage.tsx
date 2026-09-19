@@ -123,6 +123,7 @@ const CreateAssignmentPage = () => {
             // the next failure (if any) replaces the content when it re-shows.
             setErrorShown(false)
             setWarningMessage("")
+            const shape = deriveFormShape(values)
             createAssignmentMutation.mutateAsync(
               {
                 name: values.name,
@@ -138,9 +139,9 @@ const CreateAssignmentPage = () => {
                 team_formation: values.team_formation,
                 feedback_pr: values.feedback_pr,
                 feedback_pr_template: values.feedback_pr_template,
-                empty_repo: values.empty_repo,
-                no_autograder: deriveFormShape(values).noAutograder,
-                init_shim: deriveFormShape(values).initShim,
+                empty_repo: shape.emptyRepo,
+                no_autograder: shape.noAutograder,
+                init_shim: shape.initShim,
                 include_all_branches: values.include_all_branches,
                 copy_about: values.copy_about,
                 copy_topics: values.copy_topics,

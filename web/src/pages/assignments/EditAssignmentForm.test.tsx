@@ -70,7 +70,6 @@ vi.mock("./CreateAssignmentForm", () => ({
             due_date: "",
             max_group_size: 2,
             feedback_pr: true,
-            empty_repo: false,
             repo_source: "none",
             add_readme: true,
             autograding_state: "none",
@@ -116,6 +115,44 @@ beforeEach(() => {
   lastRepoNamesArgs = undefined
 })
 afterEach(cleanup)
+
+it("writes init_shim and drops empty_repo when a stored bare repo picks the built-in autograder", () => {
+  // The submitted values carry only the UI fields toSubmitValues emits (the
+  // wire flags are derived here); no students have accepted, so the write is
+  // direct.
+  acceptedRepoNames = []
+  submittedOverrides = {
+    add_readme: false,
+    autograding_state: "built-in",
+    feedback_pr: false,
+  }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+        feedback_pr: false,
+        empty_repo: true,
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).toHaveBeenCalledTimes(1)
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      empty_repo: false,
+      init_shim: true,
+      no_autograder: false,
+    }),
+    expect.any(Object),
+  )
+})
 
 it("passes grading form fields through the edit boundary", () => {
   render(

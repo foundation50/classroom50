@@ -84,18 +84,16 @@ export type FormShape = {
 // repo_source + add_readme into the three-way above; whether a no-template
 // no-README repo is bare (empty_repo) or shim-initialized (init_shim) depends
 // on the autograding pick. This collapse is the single definition toSubmitValues
-// and the render gates both consume.
+// and the render gates both consume. The wire flags (empty_repo, init_shim,
+// no_autograder) are outputs only; carrying a stored empty_repo in form state
+// once let a stale value veto a later built-in pick on edit.
 export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
-  // A raw empty_repo: true is honored as a hard override so a stored bare-repo
-  // assignment (or a partial defaultValues that sets only empty_repo) still
-  // resolves to "empty" even if the UI discriminator wasn't seeded. Otherwise
-  // the source folds from repo_source + add_readme.
   const repositorySource: RepositorySource =
     value.repo_source === "template"
       ? "template"
-      : value.empty_repo || !value.add_readme
-        ? "empty"
-        : "readme"
+      : value.add_readme
+        ? "readme"
+        : "empty"
 
   // The built-in autograder is the repo-provisioning choice, driven by the
   // autograding_state toggle inside the Autograding section. It is orthogonal
@@ -110,10 +108,9 @@ export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
   const wantsBuiltIn = value.autograding_state === "built-in"
 
   // On a no-template no-README source, built-in autograding means "initialize
-  // with a shim" (init_shim), NOT a bare repo. A stored empty_repo:true is a
-  // hard bare override (no shim), so it never becomes init_shim.
+  // with a shim" (init_shim), NOT a bare repo.
   const noTemplateNoReadme = repositorySource === "empty"
-  const initShim = noTemplateNoReadme && !value.empty_repo && wantsBuiltIn
+  const initShim = noTemplateNoReadme && wantsBuiltIn
   // Truly bare only when it's the empty source AND not the init_shim case.
   const emptyRepo = noTemplateNoReadme && !initShim
 

@@ -54,7 +54,6 @@ const base: CreateAssignmentFormValues = {
   team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
-  empty_repo: false,
   repo_source: "none",
   add_readme: true,
   include_all_branches: false,
@@ -95,6 +94,16 @@ const base: CreateAssignmentFormValues = {
   test_failure_details: "",
   test_show_output: false,
   test_show_command: false,
+}
+
+// A bare repo as the UI expresses it: no template, no README, built-in off.
+// empty_repo itself is an output of the derivation, not an input, so the
+// stored flag alone cannot make a form bare.
+const bare: CreateAssignmentFormValues = {
+  ...base,
+  repo_source: "none",
+  add_readme: false,
+  autograding_state: "none",
 }
 
 describe("validateAssignmentForm — happy paths", () => {
@@ -365,8 +374,52 @@ describe("setup timeout", () => {
     expect(
       validateAssignmentForm(
         {
+          ...bare,
+          setup_command: "make",
+          setup_timeout: 601,
+        },
+        t,
+      ).setup_timeout,
+    ).toBeUndefined()
+  })
+
+  it("validates the timeout on a no-README source once the built-in autograder is picked", () => {
+    expect(
+      validateAssignmentForm(
+        {
           ...base,
-          empty_repo: true,
+          add_readme: false,
+          autograding_state: "built-in",
+          setup_command: "make",
+          setup_timeout: 601,
+        },
+        t,
+      ).setup_timeout,
+    ).toBe("assignments.form.validation.setupTimeoutRange")
+  })
+
+  it("ignores a stale timeout when the built-in autograder is off on an initialized repo", () => {
+    // The field is hidden and toSubmitValues clears it whenever the built-in
+    // autograder is off, so validation must not block Save on a control the
+    // teacher cannot see (README and template sources alike).
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          autograding_state: "none",
+          setup_command: "make",
+          setup_timeout: 601,
+        },
+        t,
+      ).setup_timeout,
+    ).toBeUndefined()
+    expect(
+      validateAssignmentForm(
+        {
+          ...base,
+          repo_source: "template",
+          template_repo: "acme/starter",
+          autograding_state: "none",
           setup_command: "make",
           setup_timeout: 601,
         },
@@ -812,8 +865,7 @@ describe("toSubmitValues — runtime field clearing", () => {
 
   it("clears every grading-adjacent field for an empty repo", () => {
     const out = toSubmitValues({
-      ...base,
-      empty_repo: true,
+      ...bare,
       template_repo: "acme/starter",
       feedback_pr: true,
       setup_command: "make setup",
@@ -825,7 +877,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       release_assets: "report.pdf",
       tests: [{ name: "t", run: "pytest", points: 1 } as never],
     })
-    expect(out.empty_repo).toBe(true)
+    expect(deriveFormShape(out).emptyRepo).toBe(true)
     expect(out.template_repo).toBe("")
     expect(out.feedback_pr).toBe(false)
     expect(out.setup_command).toBe("")
@@ -932,12 +984,19 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.pass_threshold_enabled).toBe(true)
   })
 
-  it("empty_repo forces the autograding state to 'empty' regardless of the picked value", () => {
-    const out = toSubmitValues({
-      ...base,
-      empty_repo: true,
-      autograding_state: "built-in",
-    })
+  it("a stored 'empty' tri-state yields to the built-in pick on submit", () => {
+    // The stored tri-state is the only trace of a bare repo left in form state;
+    // once the teacher picks built-in the derived shape must be init_shim.
+    const out = toSubmitValues({ ...bare, autograding_state: "built-in" })
+    expect(out.autograding_state).toBe("built-in")
+    const shape = deriveFormShape(out)
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.initShim).toBe(true)
+  })
+
+  it("no template + no README + built-in off derives a bare repo", () => {
+    const out = toSubmitValues(bare)
+    expect(deriveFormShape(out).emptyRepo).toBe(true)
     expect(out.autograding_state).toBe("empty")
   })
 
@@ -948,7 +1007,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       add_readme: true,
       template_repo: "acme/starter",
     })
-    expect(out.empty_repo).toBe(false)
+    expect(deriveFormShape(out).emptyRepo).toBe(false)
     expect(out.template_repo).toBe("")
   })
 
@@ -961,7 +1020,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       grading_choice: "manual",
       grading_max_points: 50,
     })
-    expect(out.empty_repo).toBe(true)
+    expect(deriveFormShape(out).emptyRepo).toBe(true)
   })
 
   it("no template + no README + built-in on is NOT bare (init_shim case; empty_repo false)", () => {
@@ -973,7 +1032,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       grading_choice: "auto",
     })
     // Built-in on an empty source commits a shim (init_shim), so it's not bare.
-    expect(out.empty_repo).toBe(false)
+    expect(deriveFormShape(out).emptyRepo).toBe(false)
     expect(out.autograding_state).toBe("built-in")
   })
 
@@ -984,7 +1043,7 @@ describe("toSubmitValues — runtime field clearing", () => {
       add_readme: false,
       template_repo: "acme/starter",
     })
-    expect(out.empty_repo).toBe(false)
+    expect(deriveFormShape(out).emptyRepo).toBe(false)
     expect(out.template_repo).toBe("acme/starter")
   })
 
@@ -1226,6 +1285,82 @@ describe("assignmentToFormValues — autograding tri-state", () => {
     })
     expect(values.autograding_state).toBe("empty")
   })
+
+  // A stored bare entry as the edit form opens it.
+  const storedBare = {
+    slug: "hw1",
+    name: "Homework",
+    mode: "individual",
+    autograder: "default",
+    feedback_pr: false,
+    empty_repo: true,
+  } as const
+
+  it("round-trips an untouched stored bare repo without flipping empty_repo", () => {
+    // The wire flag is not a form field, so staying bare on re-save rests on
+    // the seeded source (add_readme false) and tri-state ("empty") alone.
+    const values = assignmentToFormValues(storedBare)
+    expect(values.repo_source).toBe("none")
+    expect(values.add_readme).toBe(false)
+    expect(values.autograding_state).toBe("empty")
+    const out = toSubmitValues({ ...base, ...values })
+    const shape = deriveFormShape(out)
+    expect(shape.emptyRepo).toBe(true)
+    expect(shape.initShim).toBe(false)
+    expect(shape.noAutograder).toBe(false)
+    expect(out.autograding_state).toBe("empty")
+    expect(out.feedback_pr).toBe(false)
+  })
+
+  it("a stored bare repo can be switched to the built-in autograder on edit", () => {
+    const stored = assignmentToFormValues(storedBare)
+    const edited = toSubmitValues({
+      ...base,
+      ...stored,
+      grading_choice: "auto",
+      autograding_state: "built-in",
+    })
+    expect(edited.autograding_state).toBe("built-in")
+    const shape = deriveFormShape(edited)
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.initShim).toBe(true)
+    expect(shape.noAutograder).toBe(false)
+  })
+
+  it("a stored bare repo can be switched to a README repo on edit", () => {
+    // Toggling Add a README leaves the stored "empty" tri-state in place; the
+    // wire must read it as built-in off on an initialized repo.
+    const stored = assignmentToFormValues(storedBare)
+    const edited = toSubmitValues({ ...base, ...stored, add_readme: true })
+    const shape = deriveFormShape(edited)
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.initShim).toBe(false)
+    expect(shape.noAutograder).toBe(true)
+    expect(edited.autograding_state).toBe("none")
+    expect(edited.feedback_pr).toBe(false)
+  })
+
+  it("switching a stored bare repo's grading to Autograded seeds built-in, which submits as init_shim", () => {
+    // The first-entry seed treats a stored "empty" as un-chosen, so entering
+    // Autograded preselects the built-in autograder; the pick then reaches the
+    // wire as init_shim (the edit form confirms once students have accepted).
+    const stored = assignmentToFormValues(storedBare)
+    expect(
+      shouldSeedBuiltInAutograder({
+        next: "auto",
+        previous: "off",
+        autogradingState: stored.autograding_state!,
+        autogradingTouched: false,
+      }),
+    ).toBe(true)
+    const edited = toSubmitValues({
+      ...base,
+      ...stored,
+      grading_choice: "auto",
+      autograding_state: "built-in",
+    })
+    expect(deriveFormShape(edited).initShim).toBe(true)
+  })
 })
 
 describe("release_assets", () => {
@@ -1267,7 +1402,7 @@ describe("release_assets", () => {
   })
 
   it("ignores and clears a hidden stale value for empty_repo", () => {
-    const value = { ...base, empty_repo: true, release_assets: "../bad.pdf" }
+    const value = { ...bare, release_assets: "../bad.pdf" }
     expect(validateAssignmentForm(value, t).release_assets).toBeUndefined()
     expect(toSubmitValues(value).release_assets).toBe("")
   })
@@ -1321,9 +1456,7 @@ describe("locked (Lock assignment toggle)", () => {
 
   it("passes through on submit regardless of repo shape", () => {
     expect(toSubmitValues({ ...base, locked: true }).locked).toBe(true)
-    expect(
-      toSubmitValues({ ...base, locked: true, empty_repo: true }).locked,
-    ).toBe(true)
+    expect(toSubmitValues({ ...bare, locked: true }).locked).toBe(true)
     expect(toSubmitValues(base).locked).toBe(false)
   })
 })
