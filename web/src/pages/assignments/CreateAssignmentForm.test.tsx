@@ -38,6 +38,7 @@ import CreateAssignmentForm, {
   assignmentToFormValues,
 } from "./CreateAssignmentForm"
 import type { CreateAssignmentFormValues } from "./assignmentFormModel"
+import { deriveFormShape } from "./formShape"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
 import * as formFieldHelpers from "./formFieldHelpers"
 import type { Assignment } from "@/types/classroom"
@@ -678,7 +679,57 @@ describe("assignment setup timeout", () => {
     expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(onSubmit.mock.calls[0][0].setup_timeout).toBe(0)
   })
+})
 
+describe("editing a stored bare repo", () => {
+  // The rendered path the original regression lived in: a stored empty_repo
+  // entry opens with the "none" radio checked; picking built-in and saving must
+  // submit values whose derived shape is init_shim, not bare.
+  const renderEdit = () => {
+    const onSubmit = vi.fn()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          edit
+          defaultValues={assignmentToFormValues({
+            ...baseAssignment,
+            feedback_pr: false,
+            empty_repo: true,
+          })}
+          onSubmit={onSubmit}
+        />
+      </QueryClientProvider>,
+    )
+    return onSubmit
+  }
+  const radio = (option: "built-in" | "none") =>
+    screen.getByRole("radio", {
+      name: new RegExp(`choices\\.${option}\\.label`),
+    }) as HTMLInputElement
+
+  it("opens on the 'none' radio and submits init_shim after picking built-in", async () => {
+    const user = userEvent.setup()
+    const onSubmit = renderEdit()
+    expect(radio("none").checked).toBe(true)
+    expect(radio("built-in").checked).toBe(false)
+
+    await user.click(radio("built-in"))
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.saveChanges" }),
+    )
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    const values = onSubmit.mock.calls[0][0] as CreateAssignmentFormValues
+    expect(values.autograding_state).toBe("built-in")
+    expect(values.add_readme).toBe(false)
+    const shape = deriveFormShape(values)
+    expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.noAutograder).toBe(false)
+  })
+})
+
+describe("assignment setup timeout (create)", () => {
   it("starts at 120 seconds and submits a changed timeout on create", async () => {
     const user = userEvent.setup()
     const onSubmit = vi.fn()

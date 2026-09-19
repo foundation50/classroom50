@@ -16,7 +16,6 @@ const base: CreateAssignmentFormValues = {
   team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
-  empty_repo: false,
   repo_source: "none",
   add_readme: true,
   include_all_branches: false,
@@ -108,33 +107,37 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("a stored empty_repo: true does not veto switching to built-in (edit of a bare repo becomes init_shim)", () => {
-    // The edit form seeds empty_repo from the stored entry and no control ever
-    // changes it, so it must not be an input.
+  it("a stored 'empty' tri-state on a no-README source stays bare", () => {
+    // What the edit form carries for an untouched stored bare repo:
+    // assignmentToFormValues seeds add_readme false and autograding_state
+    // "empty". The wire empty_repo is not a form field, so this is the only
+    // path that keeps the repo bare on re-save.
     const shape = deriveFormShape({
       ...base,
-      empty_repo: true,
       repo_source: "none",
       add_readme: false,
-      autograding_state: "built-in",
+      autograding_state: "empty",
     })
     expect(shape.repositorySource).toBe("empty")
-    expect(shape.initShim).toBe(true)
-    expect(shape.emptyRepo).toBe(false)
-    expect(shape.autogradingState).toBe("built-in")
-    expect(shape.showBuiltInConfig).toBe(true)
+    expect(shape.emptyRepo).toBe(true)
+    expect(shape.initShim).toBe(false)
+    expect(shape.noAutograder).toBe(false)
+    expect(shape.autogradingState).toBe("empty")
   })
 
-  it("a stored empty_repo: true does not override a README source", () => {
+  it("a stored 'empty' tri-state with Add a README switched on becomes a no_autograder README repo", () => {
+    // Bare -> README on edit: the radio still holds the stored "empty" value
+    // (the built-in/none radios never write it back), and that must read as
+    // built-in off, not as a bare repo behind a README pick.
     const shape = deriveFormShape({
       ...base,
-      empty_repo: true,
       repo_source: "none",
       add_readme: true,
-      autograding_state: "none",
+      autograding_state: "empty",
     })
     expect(shape.repositorySource).toBe("readme")
     expect(shape.emptyRepo).toBe(false)
+    expect(shape.initShim).toBe(false)
     expect(shape.noAutograder).toBe(true)
     expect(shape.autogradingState).toBe("none")
   })

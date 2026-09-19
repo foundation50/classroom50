@@ -70,7 +70,6 @@ vi.mock("./CreateAssignmentForm", () => ({
             due_date: "",
             max_group_size: 2,
             feedback_pr: true,
-            empty_repo: false,
             repo_source: "none",
             add_readme: true,
             autograding_state: "none",
@@ -118,10 +117,11 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it("writes init_shim and drops empty_repo when a stored bare repo picks the built-in autograder", () => {
-  // No students have accepted, so the write is direct (no confirm dialog).
+  // The submitted values carry only the UI fields toSubmitValues emits (the
+  // wire flags are derived here); no students have accepted, so the write is
+  // direct.
   acceptedRepoNames = []
   submittedOverrides = {
-    empty_repo: true,
     add_readme: false,
     autograding_state: "built-in",
     feedback_pr: false,

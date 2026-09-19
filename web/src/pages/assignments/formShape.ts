@@ -84,12 +84,9 @@ export type FormShape = {
 // repo_source + add_readme into the three-way above; whether a no-template
 // no-README repo is bare (empty_repo) or shim-initialized (init_shim) depends
 // on the autograding pick. This collapse is the single definition toSubmitValues
-// and the render gates both consume.
-//
-// value.empty_repo is not an input: it is the wire OUTPUT of this derivation
-// (toSubmitValues writes shape.emptyRepo back). On edit it is seeded from the
-// stored entry and no control changes it, so reading it would let a stored
-// bare repo veto a later built-in pick (empty_repo could never become init_shim).
+// and the render gates both consume. The wire flags (empty_repo, init_shim,
+// no_autograder) are outputs only; carrying a stored empty_repo in form state
+// once let a stale value veto a later built-in pick on edit.
 export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
   const repositorySource: RepositorySource =
     value.repo_source === "template"

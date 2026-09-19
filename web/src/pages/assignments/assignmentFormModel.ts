@@ -121,22 +121,24 @@ export type CreateAssignmentFormValues = {
   // a template source; cleared on submit otherwise. Maps to the wire
   // feedback_pr_template. Auto-checked when the form detects a template PR file.
   feedback_pr_template: boolean
-  // Wire empty_repo (truly bare student repos: no starter content, no control
-  // files, autograding and the Feedback PR off). Written by toSubmitValues from
-  // deriveFormShape and never read as an input (see deriveFormShape). Editable,
-  // but a change only affects repos accepted from then on (the edit form
-  // confirms once students have accepted).
-  empty_repo: boolean
+  // The wire empty_repo / init_shim / no_autograder flags are deliberately NOT
+  // form fields: they are derived from repo_source + add_readme +
+  // autograding_state by deriveFormShape at submit time. Carrying the stored
+  // empty_repo in form state once let a stale value veto a teacher's later
+  // built-in-autograder pick on edit.
+  //
   // UI-only repository-source discriminator (never sent verbatim; folds into
-  // empty_repo + template_repo on submit). "template" = start from a template
-  // repo; "none" = no template. Default is "none", mirroring GitHub's own
-  // "create a repository" flow. Derived on read from whether a template is set.
+  // the wire empty_repo + template on submit). "template" = start from a
+  // template repo; "none" = no template. Default is "none", mirroring GitHub's
+  // own "create a repository" flow. Derived on read from whether a template is
+  // set.
   repo_source: RepoSource
   // UI-only, only meaningful when repo_source === "none": whether to initialize
   // the repo with a README (an initial commit). README on maps to empty_repo:
   // false (auto_init — a baseline commit, so branches/PRs/Feedback PR work);
-  // README off maps to empty_repo: true (a bare repo, no commit). Hidden when a
-  // template is chosen (the template provides the initial commit).
+  // README off maps to a bare repo (empty_repo: true) unless the built-in
+  // autograder is picked (init_shim: true). Hidden when a template is chosen
+  // (the template provides the initial commit).
   add_readme: boolean
   // UI-only, only meaningful for a template source: copy ALL of the template's
   // branches (not just the default) when each student repo is generated. Maps
@@ -150,14 +152,14 @@ export type CreateAssignmentFormValues = {
   copy_about: boolean
   copy_topics: boolean
   // UI-only autograding tri-state (never sent verbatim; mapped to wire fields
-  // on submit): "empty" (bare repo — driven by empty_repo), "none" (no built-in
-  // autograder — maps to no_autograder: true on any initialized repo, template
-  // or README), "built-in" (the default-shim path with advanced/tests). It is
-  // the built-in-autograder toggle inside the Autograding section, offered only
-  // when grading_choice is "auto" and default "none". Read from the stored entry
-  // via deriveAutogradingState; on submit the wire no_autograder/init_shim are
-  // derived from deriveFormShape. Mirrors the runtime_env UI-only-discriminator
-  // idiom.
+  // on submit): "empty" (bare repo: no template, no README, built-in off),
+  // "none" (no built-in autograder — maps to no_autograder: true on any
+  // initialized repo, template or README), "built-in" (the default-shim path
+  // with advanced/tests). It is the built-in-autograder toggle inside the
+  // Autograding section, offered only when grading_choice is "auto" and default
+  // "none". Read from the stored entry via deriveAutogradingState; on submit the
+  // wire empty_repo/no_autograder/init_shim are derived from deriveFormShape.
+  // Mirrors the runtime_env UI-only-discriminator idiom.
   autograding_state: AutogradingState
   // UI-only: which runtime environment the teacher is configuring. Selects
   // which fields render and get written; never sent to the wire. "hosted" uses
@@ -473,9 +475,13 @@ export function validateAssignmentForm(
   // form, not by a failed commit or an unparseable file.
   Object.assign(errors, validateTestDrafts(value.tests))
 
-  const isEmptyRepo = deriveFormShape(value).emptyRepo
+  // The built-in-only fields below are hidden and cleared on submit whenever
+  // the built-in autograder is off (bare repo or "none"), so gate validation on
+  // the same predicate toSubmitValues clears on: an error on a control the
+  // teacher cannot see would block Save with no way to fix it.
+  const noBuiltIn = !deriveFormShape(value).showBuiltInConfig
 
-  if (!isEmptyRepo && value.setup_command.trim()) {
+  if (!noBuiltIn && value.setup_command.trim()) {
     const setupTimeoutError = validateTestTimeout(
       setupTimeoutValue(value.setup_timeout),
     )
@@ -495,7 +501,7 @@ export function validateAssignmentForm(
     errors.allowed_files = allowedFilesError
   }
 
-  if (!isEmptyRepo) {
+  if (!noBuiltIn) {
     const releaseAssetsError = validateReleaseAssets(
       parseReleaseAssets(value.release_assets),
     )
@@ -759,7 +765,6 @@ export function toSubmitValues(
       isTemplate && !isEmptyRepo && value.feedback_pr
         ? value.feedback_pr_template
         : false,
-    empty_repo: isEmptyRepo,
     repo_source: value.repo_source,
     add_readme: value.add_readme,
     // Only meaningful for a template source; clear it otherwise so a stale
@@ -865,7 +870,6 @@ export const useAssignmentForm = (
       // a pull_request_template.md is detected. On edit it reflects the saved
       // value (assignmentToFormValues), and the probe respects a saved choice.
       feedback_pr_template: defaultValues?.feedback_pr_template ?? false,
-      empty_repo: defaultValues?.empty_repo ?? false,
       // Default to an uninitialized (empty) repository with no template and no
       // README, mirroring GitHub's "create a repository" defaults. Seeded from
       // the stored wire fields on edit via assignmentToFormValues.
@@ -984,13 +988,13 @@ export const assignmentToFormValues = (
     team_formation: assignment.team_formation ?? "teacher",
     feedback_pr: assignment.feedback_pr ?? true,
     feedback_pr_template: assignment.feedback_pr_template ?? false,
-    empty_repo: assignment.empty_repo ?? false,
     // Fold the stored wire fields back into the UI source discriminator: a
     // template means "template"; otherwise "none". add_readme is true only for
     // a template-less repo that is neither bare (empty_repo) nor shim-only
     // (init_shim) — those two no-README states must round-trip to add_readme
     // false so deriveFormShape re-derives empty_repo/init_shim, not a README
-    // repo (which would silently flip the provisioning flag on re-save).
+    // repo (which would silently flip the provisioning flag on re-save). The
+    // wire flags themselves are not form fields (see CreateAssignmentFormValues).
     repo_source: assignment.template ? "template" : "none",
     add_readme:
       !(assignment.empty_repo ?? false) && !(assignment.init_shim ?? false),

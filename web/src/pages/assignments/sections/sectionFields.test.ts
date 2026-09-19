@@ -20,7 +20,6 @@ const defaults: CreateAssignmentFormValues = {
   team_formation: "teacher",
   feedback_pr: true,
   feedback_pr_template: false,
-  empty_repo: false,
   repo_source: "none",
   add_readme: false,
   include_all_branches: false,
