@@ -71,7 +71,7 @@ const unreadableBudget = {
   id: "orgBudget" as const,
   title: "Actions spending cap",
   verdict: { state: "unreadable" as const },
-  settingsUrl: "https://github.com/organizations/acme/settings/billing/budgets",
+  settingsUrl: "https://github.com/organizations/acme/settings/billing/summary",
 }
 
 describe("OrgPreflightNotice", () => {

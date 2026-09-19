@@ -15,6 +15,7 @@ import {
   BUDGET_SCOPE_ORG,
   BUDGET_TYPE_PRODUCT_PRICING,
   classifyBudget,
+  orgBillingSummaryUrl,
   orgBudgetsApiPath,
   orgBudgetsUrl,
   type BudgetsListResponse,
@@ -1334,15 +1335,19 @@ export async function ensureOrgActionsBudgetCap(
   try {
     budgets = await client.request<BudgetsListResponse>(orgBudgetsApiPath(org))
   } catch (err) {
+    // The budgets page doesn't exist when billing is enterprise-managed (the
+    // usual cause of this failure), so send the teacher to the summary page,
+    // which exists for every org and explains where billing lives.
+    const summaryUrl = orgBillingSummaryUrl(org)
     return {
       status: "warning",
       org,
       reason: "readback_failed",
-      settingsUrl,
+      settingsUrl: summaryUrl,
       message:
         `${org}: couldn't read org billing budgets (${getErrorMessage(err)}). ` +
-        `Your token may lack Organization Administration: Read, or the plan may not expose budgets. ` +
-        `Set a $0 GitHub Actions budget by hand at ${settingsUrl} to hard-stop paid Actions minutes.`,
+        `Billing may be managed by your enterprise, your token may lack Organization Administration: Read, or the plan may not expose budgets. ` +
+        `Check ${summaryUrl} and confirm with your billing admin that a $0 GitHub Actions budget hard-stops paid Actions minutes.`,
     }
   }
 

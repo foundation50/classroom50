@@ -19,6 +19,7 @@ import {
 } from "@/github-core/orgChecks"
 import { auditRulesets } from "@/github-core/rulesets"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { orgBillingSummaryUrl, orgBudgetsUrl } from "./budget"
 import {
   manualHardeningSteps,
   memberPrivilegesUrl,
@@ -109,7 +110,11 @@ const CONCERN_TITLES: Record<ConcernId, string> = {
 // The GitHub settings page each concern maps to, so a teacher can jump straight
 // to where they'd fix it. Org-level concerns point at org settings; repo-level
 // concerns at the classroom50 config repo.
-function concernSettingsUrl(id: ConcernId, org: string): string {
+function concernSettingsUrl(
+  id: ConcernId,
+  org: string,
+  verdict: CheckVerdict,
+): string {
   const orgBase = `https://github.com/organizations/${org}/settings`
   const repoBase = `https://github.com/${org}/${CONFIG_REPO}/settings`
   switch (id) {
@@ -119,7 +124,12 @@ function concernSettingsUrl(id: ConcernId, org: string): string {
     case "orgPrCreation":
       return `${orgBase}/actions`
     case "orgBudget":
-      return `${orgBase}/billing/budgets`
+      // An unreadable budget usually means enterprise-managed billing, where
+      // the org budgets page doesn't exist; the summary page does and explains
+      // where billing lives.
+      return verdict.state === "unreadable"
+        ? orgBillingSummaryUrl(org)
+        : orgBudgetsUrl(org)
     case "rulesets":
       return `${orgBase}/rules`
     case "branchProtection":
@@ -218,7 +228,7 @@ export async function buildOrgAuditReport(
     id,
     title: CONCERN_TITLES[id],
     verdict,
-    settingsUrl: concernSettingsUrl(id, org),
+    settingsUrl: concernSettingsUrl(id, org, verdict),
   }))
   // Sort alphabetically by title for predictable scanning.
   concerns.sort((a, b) => a.title.localeCompare(b.title))
