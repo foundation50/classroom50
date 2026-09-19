@@ -17,6 +17,19 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.53.0](https://github.com/foundation50/classroom50/compare/web-v1.52.2...web-v1.53.0) (2026-09-19)
+
+
+### Features
+
+* backfill the autograde workflow into already-accepted repos ([#1032](https://github.com/foundation50/classroom50/issues/1032)) ([12bef31](https://github.com/foundation50/classroom50/commit/12bef317db9a592766889e4ad7478ada53d54fa7))
+
+
+### Bug Fixes
+
+* **web:** let a bare repo switch to the built-in autograder on edit ([#1034](https://github.com/foundation50/classroom50/issues/1034)) ([5e1f6ad](https://github.com/foundation50/classroom50/commit/5e1f6ada17be9c4c3eb3af466d0239e9f2040502))
+* **web:** link to billing summary when the org budgets page doesn't exist ([#1036](https://github.com/foundation50/classroom50/issues/1036)) ([0b7b8cc](https://github.com/foundation50/classroom50/commit/0b7b8cca4bcf1c25718e54865c6e256b92d48b64))
+
 ## [1.52.2](https://github.com/foundation50/classroom50/compare/web-v1.52.1...web-v1.52.2) (2026-09-18)
 
 
