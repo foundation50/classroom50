@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import {
+  AUTOGRADE_RELEASE_AUTHOR,
   pagesAssignmentUrl,
   classroomsIndexUrl,
   configCommitsQuery,
@@ -345,19 +346,27 @@ describe("releasesQuery", () => {
     await expect(run({ request } as unknown as GitHubClient)).rejects.toThrow()
   })
 
-  it("keeps only submit/* tags, newest first", async () => {
-    const rel = (tag: string, when: string): GitHubRelease =>
+  it("keeps only submit/* tags the workflow published, newest first", async () => {
+    const bot = { login: AUTOGRADE_RELEASE_AUTHOR }
+    const rel = (
+      tag: string,
+      when: string,
+      author: { login: string } = bot,
+    ): GitHubRelease =>
       ({
         id: tag.length,
         tag_name: tag,
         name: tag,
         published_at: when,
         created_at: when,
+        author,
       }) as GitHubRelease
     const request = vi.fn().mockResolvedValue([
       rel("submit/1", "2026-01-01T00:00:00Z"),
       rel("v1.0", "2026-02-01T00:00:00Z"), // non-submission tag, filtered out
       rel("submit/2", "2026-03-01T00:00:00Z"),
+      // hand-made by the student, not a submission
+      rel("submit/3", "2026-04-01T00:00:00Z", { login: "alice" }),
     ])
     const releases = await run({ request } as unknown as GitHubClient)
     expect(releases.map((r) => r.tag_name)).toEqual(["submit/2", "submit/1"])

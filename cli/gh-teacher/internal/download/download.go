@@ -114,7 +114,10 @@ func NewCmd() *cobra.Command {
 			"  - Clones whichever repos exist, and refreshes <repo>/result.json\n" +
 			"    and <repo>/results.json from the repo's submit-tag releases\n" +
 			"    alongside the clone: results.json holds every submission\n" +
-			"    (newest first), result.json the latest.\n" +
+			"    (newest first), result.json the latest. Only releases the\n" +
+			"    autograde workflow published count; a release someone else\n" +
+			"    created, or whose result.json someone else uploaded, is skipped\n" +
+			"    and reported on stderr.\n" +
 			"  - Team members with no repo on the org are reported as\n" +
 			"    `not yet accepted` and don't fail the run.\n" +
 			"  - A scores.csv summary is written at the destination root with\n" +
@@ -307,7 +310,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 			}
 			clonedNew = append(clonedNew, repoName)
 		}
-		if err := refreshResultJSON(client, token, apiBase, org, repoName, target); err != nil {
+		if err := refreshResultJSON(client, errOut, token, apiBase, org, repoName, target); err != nil {
 			_, _ = fmt.Fprintf(errOut, "%s: result.json: %v\n", repoName, err)
 			assetErrs++
 		}
@@ -358,7 +361,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 			continue
 		case existsOnDisk:
 			syncExisting(repoName, target)
-			if err := refreshResultJSON(client, token, apiBase, org, repoName, target); err != nil {
+			if err := refreshResultJSON(client, errOut, token, apiBase, org, repoName, target); err != nil {
 				_, _ = fmt.Fprintf(errOut, "%s: result.json: %v\n", repoName, err)
 				assetErrs++
 			}
@@ -404,7 +407,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		}
 		clonedNew = append(clonedNew, repoName)
 
-		if err := refreshResultJSON(client, token, apiBase, org, repoName, target); err != nil {
+		if err := refreshResultJSON(client, errOut, token, apiBase, org, repoName, target); err != nil {
 			_, _ = fmt.Fprintf(errOut, "%s: result.json: %v\n", repoName, err)
 			assetErrs++
 		}
@@ -954,11 +957,12 @@ func stringifyOverride(v any) string {
 //   - result.json: the latest submission's payload (single-latest back-compat).
 //
 // Silent no-op for no releases / no submit-tag release. Network/5xx/decode
-// failures propagate so the caller can warn. Token and apiBase are resolved
+// failures propagate so the caller can warn; a release skipped for provenance
+// is reported on errOut and otherwise ignored. Token and apiBase are resolved
 // once in downloadByRoster; apiBase lets rewriteAssetURL retarget the asset
 // host on GHES / test setups.
-func refreshResultJSON(client githubapi.Client, token, apiBase, org, repo, target string) error {
-	releases, err := listAllSubmitReleases(client, org, repo)
+func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase, org, repo, target string) error {
+	releases, err := listAllSubmitReleases(client, errOut, org, repo)
 	if err != nil {
 		return err
 	}
@@ -1055,19 +1059,57 @@ type submissionRecord struct {
 // absent so a malformed release doesn't fail decode for a key we don't use.
 type release struct {
 	TagName string         `json:"tag_name"`
+	Author  releaseUser    `json:"author"`
 	Assets  []releaseAsset `json:"assets"`
 }
 
 type releaseAsset struct {
-	Name string `json:"name"`
-	URL  string `json:"url"`
+	Name     string      `json:"name"`
+	URL      string      `json:"url"`
+	Uploader releaseUser `json:"uploader"`
 }
 
-// listAllSubmitReleases returns every submit-tag release for a repo, newest
-// first, walking the full /releases pagination. Non-submit releases (e.g., a
-// student's hand-created tag) are filtered out. Mirrors all_submit_releases in
-// collect_scores.py.
-func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
+type releaseUser struct {
+	Login string `json:"login"`
+}
+
+// provenanceProblem says why a submit/* release did not come from the
+// autograde workflow, or "" when it did. The workflow's GITHUB_TOKEN can't be
+// impersonated, but a student's push access lets them publish a release, or
+// replace its result.json, as themselves; either mark by another login means
+// the payload didn't come from grading. A missing login counts as another
+// login: nothing the runner publishes lacks one. Mirrors
+// release_provenance_problem in collect_scores.py.
+func provenanceProblem(rel release) string {
+	describe := func(login string) string {
+		if login == "" {
+			return "an unknown account"
+		}
+		return login
+	}
+	if rel.Author.Login != contract.AutogradeReleaseAuthor {
+		return fmt.Sprintf("published by %q, not by the autograde workflow", describe(rel.Author.Login))
+	}
+	for _, a := range rel.Assets {
+		if !strings.EqualFold(a.Name, resultAssetName) {
+			continue
+		}
+		if a.Uploader.Login != contract.AutogradeReleaseAuthor {
+			return fmt.Sprintf("%s uploaded by %q, not by the autograde workflow",
+				resultAssetName, describe(a.Uploader.Login))
+		}
+	}
+	return ""
+}
+
+// listAllSubmitReleases returns every submit-tag release the autograde
+// workflow published for a repo, newest first, walking the full /releases
+// pagination. Non-submit releases (e.g., a student's hand-created tag) are
+// filtered out, and so is a submit/* release provenanceProblem rejects, with a
+// line on errOut naming it: that is a hand-made release or a replaced
+// result.json in a repo the student can write to, and the teacher should know.
+// Mirrors all_submit_releases in collect_scores.py.
+func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {
 			return fmt.Sprintf("repos/%s/%s/releases?per_page=%d&page=%d",
@@ -1088,9 +1130,15 @@ func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]relea
 	}
 	submits := make([]release, 0, len(all))
 	for _, rel := range all {
-		if strings.HasPrefix(rel.TagName, submitTagPrefix) {
-			submits = append(submits, rel)
+		if !strings.HasPrefix(rel.TagName, submitTagPrefix) {
+			continue
 		}
+		if problem := provenanceProblem(rel); problem != "" {
+			_, _ = fmt.Fprintf(errOut, "%s/%s: release %q was %s; not counted as a submission. Only releases the workflow publishes count; check the repo's Releases tab and Actions history.\n",
+				owner, repo, rel.TagName, problem)
+			continue
+		}
+		submits = append(submits, rel)
 	}
 	return submits, nil
 }

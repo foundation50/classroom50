@@ -80,6 +80,32 @@ out of the bundle, and use `failure-details` to limit what a failing run
 reveals. See
 [Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
+**Autograded scores come from repositories students can write to.** Grading
+runs as a GitHub Actions workflow inside each student's repository, and the
+score is a Release that workflow publishes there. Students have write access
+to their repositories, so Classroom 50 contains what it can and is honest
+about the rest:
+
+- A Release a student creates by hand, or a `result.json` a student replaces
+  on the workflow's Release, is not counted. Only Releases and `result.json`
+  files published by the workflow's own identity (`github-actions[bot]`) are
+  read by collection, `gh teacher download`, and the submissions view. A
+  skipped Release is named in the collection run's warnings, so you see who to
+  ask.
+- The workflow file itself (`.github/workflows/autograde.yaml`) lives in the
+  student's repository, and nothing stops a student from rewriting it. A
+  student who does can make the workflow publish any score under that same
+  identity. The commit that changed it is in the repository's history, and
+  the run is in its **Actions** tab, so it's detectable, not prevented.
+- The submission time (and the **late** flag) comes from the graded commit's
+  committer date, which the student's Git client sets.
+
+Treat the on-submit score as feedback for students and a first pass for you.
+For a score students can't have influenced, grade after the due date in a
+context they never had write access to: **Close submission**, run
+`gh teacher download`, and run the same tests yourself against the clones.
+See [How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
+
 **Student repositories are not forks.** Accept generates a copy of the
 template; there is no upstream link, so template updates can't be pushed or
 pulled into accepted repositories. `.gitignore` and `.github/` are the

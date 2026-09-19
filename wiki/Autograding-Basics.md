@@ -577,6 +577,51 @@ score with links to the repository, the graded **commit**, the Release
 commit), and the feedback pull request (**View feedback PR** on the row, or
 **Review** in its manage dialog).
 
+### How much to trust a collected score
+
+Grading runs inside the student's repository, and students can write to their
+repositories. That shapes what a collected score does and doesn't guarantee:
+
+- **The tests are the ones you wrote.** Test files, fixtures, and the runner
+  are fetched from your `classroom50` repository's GitHub Pages site on every
+  run and never enter the student's repository, so a student can't edit the
+  tests that ran. See [Teacher-only test files](#teacher-only-test-files).
+- **Hand-made Releases don't count.** Every Release the workflow publishes,
+  and the `result.json` it attaches, carries the workflow's identity
+  (`github-actions[bot]`), which a student can't use. Collection,
+  `gh teacher download`, and the submissions view all skip a `submit/*`
+  Release with any other author, or whose `result.json` someone else uploaded,
+  and the collection run's warnings name the repository and tag so you can
+  follow up.
+- **The workflow file is the student's to edit.** The caller workflow at
+  `.github/workflows/autograde.yaml` is in the student's repository. A student
+  who rewrites it can make the workflow publish any score under that same
+  identity. The edit is a commit in the repository's history and a run in its
+  **Actions** tab, so you can find it, but nothing prevents it.
+- **Submission time is the commit's committer date**, which the student's
+  Git client sets. The **late** flag is advisory. See
+  [Due dates mark late; closing enforces](Course-Lifecycle-and-End-of-Term#due-dates-mark-late-closing-enforces).
+
+For day-to-day feedback and a first pass at marks, the on-submit score is what
+you want. For a final score students can't have influenced, grade once more in
+a context they never had write access to:
+
+1. After the due date, **Close submission** so every repository is read-only
+   and the code is frozen.
+2. Run `gh teacher download ORG CLASSROOM ASSIGNMENT`. It clones every
+   repository and writes each one's `result.json` and `results.json` next to
+   the clone. See [Score exports](#score-exports).
+3. Run the same tests against the clones yourself, locally or in a workflow in
+   your `classroom50` repository. The declarative tests and any `autograder.py`
+   are already in that repository, so the result reproduces the on-submit
+   score when nothing was tampered with, and differs when it was.
+
+To spot-check a single repository instead, open its graded Release and confirm
+the author is `github-actions[bot]`, follow the run from the commit's
+`classroom50/autograde` status into the **Actions** tab, and compare
+`.github/workflows/autograde.yaml` at the graded commit with the one
+`gh student accept` writes.
+
 ### Latest score versus history
 
 The score on a row, and in the web CSV's summary columns, is the **latest

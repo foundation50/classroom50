@@ -10,6 +10,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 import { useLiveSubmissions } from "./useLiveSubmissions"
+import { AUTOGRADE_RELEASE_AUTHOR } from "@/github-core/queries"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 
 const noRateLimit: GitHubRateLimit = {
@@ -39,6 +40,7 @@ const submitRelease = (tag: string, when: string) => ({
   prerelease: false,
   created_at: when,
   published_at: when,
+  author: { login: AUTOGRADE_RELEASE_AUTHOR },
 })
 
 const makeClient = () =>

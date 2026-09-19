@@ -23,16 +23,45 @@ import { githubKeys } from "./keys"
 // the release page rather than reading result.json.
 export const SUBMISSION_TAG_PREFIX = "submit/"
 
+// The login GitHub gives a workflow's GITHUB_TOKEN: every release the runner
+// publishes, and the result.json it attaches, carries it. Students have push
+// access to their repos, which lets them create releases and replace assets by
+// hand, so only a release with both marks counts as a submission. Mirrors the
+// shared contract's AutogradeReleaseAuthor and collect_scores.py; keep
+// byte-identical (parity-tested).
+export const AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
+
+const RESULT_ASSET_NAME = "result.json"
+
+// Whether the autograde workflow published this release and its result.json.
+// The workflow token can't be impersonated, but a student's push access lets
+// them publish a release, or replace its result.json, as themselves; either
+// mark by another login (or none) means the payload didn't come from grading.
+// Mirrors release_provenance_problem in collect_scores.py.
+export function isAutogradePublished(release: GitHubRelease): boolean {
+  if (release.author?.login !== AUTOGRADE_RELEASE_AUTHOR) return false
+  return (release.assets ?? []).every(
+    (asset) =>
+      asset.name.toLowerCase() !== RESULT_ASSET_NAME ||
+      asset.uploader?.login === AUTOGRADE_RELEASE_AUTHOR,
+  )
+}
+
 // published_at is null for a draft; fall back to created_at so ordering holds.
 export function releaseTime(release: GitHubRelease): number {
   return new Date(release.published_at ?? release.created_at).getTime()
 }
 
-// The `submit/*` releases from a repo's release list, newest first — the shared
-// filter+sort both the full-list query and the latest-only read derive from.
+// The workflow-published `submit/*` releases from a repo's release list, newest
+// first — the shared filter+sort both the full-list query and the latest-only
+// read derive from. A hand-made submit/* release is dropped here, so a forged
+// one never shows up as an attempt or inflates the live count.
 function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
   return releases
-    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
+    .filter(
+      (r) =>
+        r.tag_name.startsWith(SUBMISSION_TAG_PREFIX) && isAutogradePublished(r),
+    )
     .sort((a, b) => releaseTime(b) - releaseTime(a))
 }
 

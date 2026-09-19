@@ -2,11 +2,13 @@ import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
+  AUTOGRADE_RELEASE_AUTHOR,
   classifyServiceTokenExpiry,
   getCollectScoresRunAfterId,
   getLastCollectScoresRun,
   getRunAnnotations,
   getServiceTokenStatus,
+  isAutogradePublished,
   latestSubmitReleaseAndCount,
   latestSubmitReleaseWithAssets,
 } from "./releaseRunReads"
@@ -167,6 +169,10 @@ describe("classifyServiceTokenExpiry", () => {
 const clientReturning = (releases: GitHubRelease[]): GitHubClient =>
   ({ request: vi.fn().mockResolvedValue(releases) }) as unknown as GitHubClient
 
+const bot = { login: AUTOGRADE_RELEASE_AUTHOR }
+
+// A submit/* release exactly as the runner publishes it: authored by the
+// workflow token, with a result.json the same token uploaded.
 const release = (
   tag: string,
   when: string,
@@ -180,10 +186,91 @@ const release = (
   prerelease: false,
   created_at: when,
   published_at: when,
+  author: bot,
+  assets: [
+    {
+      id: 1,
+      name: "result.json",
+      browser_download_url: `https://github.com/o/r/releases/download/${tag}/result.json`,
+      uploader: bot,
+    },
+  ],
   ...extra,
 })
 
+describe("isAutogradePublished", () => {
+  const honest = release("submit/1", "2026-01-01T00:00:00Z")
+
+  it("accepts the runner's release", () => {
+    expect(isAutogradePublished(honest)).toBe(true)
+  })
+
+  it("accepts a workflow release with no assets yet", () => {
+    expect(isAutogradePublished({ ...honest, assets: [] })).toBe(true)
+    expect(isAutogradePublished({ ...honest, assets: undefined })).toBe(true)
+  })
+
+  // Students have push access, so `gh release create submit/x result.json`
+  // with a hand-written payload is one command away. The author is the mark
+  // they can't forge: only the workflow token is github-actions[bot].
+  it("rejects a release published by anyone else, or by no one", () => {
+    expect(
+      isAutogradePublished({ ...honest, author: { login: "alice" } }),
+    ).toBe(false)
+    expect(isAutogradePublished({ ...honest, author: null })).toBe(false)
+    expect(isAutogradePublished({ ...honest, author: undefined })).toBe(false)
+  })
+
+  // The other route: keep the workflow's honest release and clobber its
+  // result.json. The author stays the bot; the uploader gives it away.
+  it("rejects a release whose result.json someone else uploaded", () => {
+    const asset = honest.assets![0]
+    expect(
+      isAutogradePublished({
+        ...honest,
+        assets: [
+          { ...asset, name: "Result.JSON", uploader: { login: "alice" } },
+        ],
+      }),
+    ).toBe(false)
+    expect(
+      isAutogradePublished({
+        ...honest,
+        assets: [{ ...asset, uploader: null }],
+      }),
+    ).toBe(false)
+  })
+
+  it("ignores other assets, whoever uploaded them", () => {
+    expect(
+      isAutogradePublished({
+        ...honest,
+        assets: [
+          ...honest.assets!,
+          {
+            id: 2,
+            name: "screenshot.png",
+            browser_download_url: "u",
+            uploader: { login: "alice" },
+          },
+        ],
+      }),
+    ).toBe(true)
+  })
+})
+
 describe("latestSubmitReleaseWithAssets", () => {
+  it("drops a submit/* release the workflow did not publish", async () => {
+    const client = clientReturning([
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z", {
+        author: { login: "alice" },
+      }),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+    ])
+    const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
+    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
+  })
+
   it("returns the newest submit/* release among several", async () => {
     const client = clientReturning([
       release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
@@ -227,6 +314,7 @@ describe("latestSubmitReleaseWithAssets", () => {
             id: 9,
             name: "result.json",
             browser_download_url: "https://github.com/o/r/releases/download/x",
+            uploader: bot,
           },
         ],
       }),

@@ -141,6 +141,9 @@ export type GitHubReleaseAsset = {
   name: string
   browser_download_url: string
   size?: number
+  // Who uploaded it. The runner's result.json is uploaded by the workflow
+  // token; a student's push access lets them replace it as themselves.
+  uploader?: { login: string } | null
 }
 
 export type GitHubRelease = {
@@ -152,6 +155,10 @@ export type GitHubRelease = {
   prerelease: boolean
   created_at: string
   published_at: string | null
+  // Who published it. Optional at the type level because older fixtures and
+  // callers never set it; the submission readers treat absent as "not the
+  // workflow" (see isAutogradePublished).
+  author?: { login: string } | null
   // Present on the list endpoint; absent-tolerant so existing release readers
   // (student submissions list) that ignore assets keep working.
   assets?: GitHubReleaseAsset[]

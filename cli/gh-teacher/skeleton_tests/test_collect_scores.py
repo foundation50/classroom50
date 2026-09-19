@@ -2546,19 +2546,37 @@ class TestCollectAllSubmissions:
         assert cs.apply_updates(scores, results) == 0
 
 
+BOT = {"login": cs.AUTOGRADE_RELEASE_AUTHOR}
+
+
+def bot_release(tag: str, **extra):
+    """A submit/* release exactly as the runner publishes it: authored by the
+    workflow token, with a result.json the same token uploaded."""
+    release = {
+        "tag_name": tag,
+        "author": dict(BOT),
+        "assets": [{"name": "result.json", "url": f"https://api.github.com/a/{tag}", "uploader": dict(BOT)}],
+    }
+    release.update(extra)
+    return release
+
+
+class _NoHeaders:
+    def get(self, name):
+        return None
+
+
 class TestAllSubmitReleases:
+    def _listing(self, monkeypatch, releases):
+        body = json.dumps(releases).encode("utf-8")
+        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, _NoHeaders()))
+
     def test_filters_non_submit_and_keeps_order(self, monkeypatch):
-        body = json.dumps([
-            {"tag_name": "submit/2026-06-03T10-00-00Z"},
-            {"tag_name": "v2.0.0"},
-            {"tag_name": "submit/2026-06-01T10-00-00Z"},
-        ]).encode("utf-8")
-
-        class NoHeaders:
-            def get(self, name):
-                return None
-
-        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, NoHeaders()))
+        self._listing(monkeypatch, [
+            bot_release("submit/2026-06-03T10-00-00Z"),
+            bot_release("v2.0.0"),
+            bot_release("submit/2026-06-01T10-00-00Z"),
+        ])
         releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
         assert [r["tag_name"] for r in releases] == [
             "submit/2026-06-03T10-00-00Z",
@@ -2577,26 +2595,70 @@ class TestAllSubmitReleases:
         # publishes drafts, so a draft submit/* tag is hand-made noise — a
         # draft's assets aren't downloadable via the public asset URL either,
         # so ingesting it would fail downstream. Skip drafts entirely.
-        body = json.dumps([
-            {"tag_name": "submit/2026-06-03T10-00-00Z", "draft": True},
-            {"tag_name": "submit/2026-06-01T10-00-00Z", "draft": False},
-            {"tag_name": "submit/2026-05-01T10-00-00Z"},
-        ]).encode("utf-8")
-
-        class NoHeaders:
-            def get(self, name):
-                return None
-
-        monkeypatch.setattr(cs, "_http_get_with_headers", lambda *a, **k: (body, NoHeaders()))
+        self._listing(monkeypatch, [
+            bot_release("submit/2026-06-03T10-00-00Z", draft=True),
+            bot_release("submit/2026-06-01T10-00-00Z", draft=False),
+            bot_release("submit/2026-05-01T10-00-00Z"),
+        ])
         releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
         assert [r["tag_name"] for r in releases] == [
             "submit/2026-06-01T10-00-00Z",
             "submit/2026-05-01T10-00-00Z",
         ]
 
+    def test_skips_a_release_published_by_someone_else(self, monkeypatch, capsys):
+        # Students have push access, so `gh release create submit/x result.json`
+        # with a hand-written result.json is one command away. The release
+        # author is the one mark they can't forge: only the workflow token is
+        # github-actions[bot]. Skip it and say so; the teacher should know.
+        self._listing(monkeypatch, [
+            bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
+            bot_release("submit/2026-06-02T10-00-00Z", author=None),
+            bot_release("submit/2026-06-01T10-00-00Z"),
+        ])
+        releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
+        assert [r["tag_name"] for r in releases] == ["submit/2026-06-01T10-00-00Z"]
+        err = capsys.readouterr().err
+        assert "'submit/2026-06-03T10-00-00Z' was published by 'alice'" in err
+        assert "'submit/2026-06-02T10-00-00Z' was published by 'an unknown account'" in err
+        assert "not counted as a submission" in err
+
+    def test_skips_a_release_whose_result_json_was_replaced(self, monkeypatch, capsys):
+        # The other route: keep the workflow's honest release and `gh release
+        # upload --clobber` a forged result.json onto it. The author stays the
+        # bot; the asset's uploader gives it away.
+        self._listing(monkeypatch, [
+            bot_release(
+                "submit/2026-06-03T10-00-00Z",
+                assets=[{"name": "result.json", "url": "u", "uploader": {"login": "alice"}}],
+            ),
+            bot_release(
+                "submit/2026-06-02T10-00-00Z",
+                assets=[{"name": "Result.JSON", "url": "u"}],
+            ),
+            bot_release("submit/2026-06-01T10-00-00Z"),
+        ])
+        releases = cs.all_submit_releases("https://api.github.com", "o", "r", "token")
+        assert [r["tag_name"] for r in releases] == ["submit/2026-06-01T10-00-00Z"]
+        err = capsys.readouterr().err
+        assert "result.json uploaded by 'alice'" in err
+        assert "result.json uploaded by 'an unknown account'" in err
+
+    def test_other_assets_by_other_uploaders_do_not_matter(self):
+        # Only result.json feeds the gradebook. A screenshot a student attached
+        # to the workflow's release is noise, not tampering.
+        release = bot_release("submit/2026-06-01T10-00-00Z")
+        release["assets"].append({"name": "screenshot.png", "url": "u", "uploader": {"login": "alice"}})
+        assert cs.release_provenance_problem(release) is None
+
+    def test_a_release_with_no_assets_is_still_the_workflows(self):
+        # A bot release with no result.json (an upload that failed) passes here
+        # and is reported downstream as a missing asset, not as tampering.
+        assert cs.release_provenance_problem(bot_release("submit/x", assets=[])) is None
+
     def test_paginates_via_link_header(self, monkeypatch):
-        page1 = json.dumps([{"tag_name": f"submit/p1-{i}"} for i in range(100)]).encode("utf-8")
-        page2 = json.dumps([{"tag_name": "submit/last"}]).encode("utf-8")
+        page1 = json.dumps([bot_release(f"submit/p1-{i}") for i in range(100)]).encode("utf-8")
+        page2 = json.dumps([bot_release("submit/last")]).encode("utf-8")
 
         class Headers:
             def __init__(self, link):

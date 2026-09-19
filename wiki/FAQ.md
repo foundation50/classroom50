@@ -235,6 +235,20 @@ Your organization's public GitHub Pages site serves the folder, though, so a
 determined student can still read it. See
 [Teacher-only test files](Autograding-Basics#teacher-only-test-files).
 
+### Can a student change the score that gets recorded?
+
+Not by hand, but yes by rewriting the grading workflow. Grading runs inside the
+student's repository, and the score is a Release the workflow publishes there.
+A Release a student creates themselves, or a `result.json` they replace on the
+workflow's Release, is skipped: only the workflow's own identity
+(`github-actions[bot]`) counts, and collection warns about anything else. But
+the workflow file is in the student's repository too, and a student who edits
+it can make the workflow publish any score under that identity. It leaves a
+commit and an Actions run behind, so it's detectable rather than prevented. For
+a final score students can't have influenced, close the assignment, download the
+repositories, and run the tests yourself. See
+[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
+
 ### Can I turn autograding off, or reduce Actions usage?
 
 Yes. Grade only on explicit submits (**Submission type: A tagged commit**),

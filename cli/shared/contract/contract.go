@@ -220,6 +220,16 @@ const (
 	// byte-identical; contract_test.go pins the Go half.
 	SubmitTagPrefix = "submit/"
 
+	// AutogradeReleaseAuthor is the login GitHub gives a workflow's
+	// GITHUB_TOKEN, so every submit/* Release the runner publishes, and the
+	// result.json it attaches, carries it. Students have push access to their
+	// repos, which lets them create Releases and replace assets by hand, so the
+	// readers (collect_scores.py, gh teacher download, the web release list)
+	// count a Release only when both marks are this login. Hand-mirrored with
+	// NO compile-time link (collect_scores.py AUTOGRADE_RELEASE_AUTHOR, the web
+	// AUTOGRADE_RELEASE_AUTHOR); parity-tested.
+	AutogradeReleaseAuthor = "github-actions[bot]"
+
 	// Repo collaborator permission levels, GitHub's low-to-high ladder. Used
 	// for an assignment's optional student_permission (the access the enrolled
 	// student gets on their own repo at accept time) and mirrored in the web

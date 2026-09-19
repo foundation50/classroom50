@@ -65,7 +65,10 @@ submission still gets a score (marked late). When you want an actual cutoff:
 
 Closing doesn't grade anything by itself; collect scores first if you want
 the final state in your export (see
-[Collect submissions](Web-Teacher-Guide#collect-submissions)).
+[Collect submissions](Web-Teacher-Guide#collect-submissions)). Closing also
+freezes the code, which makes it the first step toward a final score students
+can't have influenced; see
+[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
 
 ## Updating starter code after students accept
 

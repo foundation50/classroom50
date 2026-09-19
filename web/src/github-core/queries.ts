@@ -131,6 +131,8 @@ export {
   releasesQuery,
   latestSubmitReleaseWithAssets,
   latestSubmitReleaseAndCount,
+  AUTOGRADE_RELEASE_AUTHOR,
+  isAutogradePublished,
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,

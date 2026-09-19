@@ -79,6 +79,15 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
+# The login GitHub gives a workflow's GITHUB_TOKEN. Every submit/* release the
+# runner publishes, and the result.json it attaches, carries it. Students have
+# push access to their repos, which lets them create releases and replace
+# assets by hand, so a release or result.json marked with any other login was
+# hand-made and is not a submission (see release_provenance_problem).
+# Hand-mirrored from Go contract.AutogradeReleaseAuthor (parity-tested); the
+# web and gh teacher download apply the same rule.
+AUTOGRADE_RELEASE_AUTHOR = "github-actions[bot]"
+
 # Repo permission the collect-time grant gives each staff role's team on every
 # student assignment repo. Hand-mirrored from Go StaffTeamRepoPermissions
 # (source of truth; parity-tested); keep in lockstep. Both non-owner staff teams
@@ -2878,7 +2887,9 @@ def validate_result(
     """Raise ValueError if the payload fails the v1 contract. The
     classroom/assignment/owner checks defend against a hostile result.json
     trying to land in someone else's scores.json: the triple must match the
-    source repo's expected identity.
+    source repo's expected identity. Whether the payload came from the
+    autograde workflow at all is release_provenance_problem's job, upstream in
+    all_submit_releases; this validates the shape of one that did.
 
     `owner` (repo owner, the identity anchor) must equal `expected_username`
     (the roster/repo-name-derived owner; for a team assignment the repo-name
@@ -3352,14 +3363,50 @@ def detected_record(
     return record
 
 
+def _login(user: Any) -> str:
+    """A GitHub user object's login, or "" when the object or login is absent."""
+    if isinstance(user, dict) and isinstance(user.get("login"), str):
+        return user["login"]
+    return ""
+
+
+def release_provenance_problem(release: dict[str, Any]) -> str | None:
+    """Why a submit/* release did not come from the autograde workflow, or None
+    when it did.
+
+    The workflow's GITHUB_TOKEN can't be impersonated, but a student's push
+    access lets them publish a release, or replace its result.json, as
+    themselves. Either mark by another login means the payload didn't come from
+    grading. A missing author or uploader counts as another login: nothing the
+    runner publishes lacks them."""
+    author = _login(release.get("author"))
+    if author != AUTOGRADE_RELEASE_AUTHOR:
+        return f"published by {author or 'an unknown account'!r}, not by the autograde workflow"
+    for asset in release.get("assets") or []:
+        if not isinstance(asset, dict):
+            continue
+        if (asset.get("name") or "").lower() != RESULT_ASSET_NAME:
+            continue
+        uploader = _login(asset.get("uploader"))
+        if uploader != AUTOGRADE_RELEASE_AUTHOR:
+            return (
+                f"{RESULT_ASSET_NAME} uploaded by {uploader or 'an unknown account'!r}, "
+                f"not by the autograde workflow"
+            )
+    return None
+
+
 def all_submit_releases(
     api_url: str, owner: str, repo: str, token: str
 ) -> list[dict[str, Any]]:
-    """Every submit-tag release for a repo, newest first, walking the full
-    /releases pagination: the complete submission history (a student who pushed
-    N times has N submit/* releases, all returned). Non-submit releases (e.g., a
-    hand-created tag) are filtered out. A 404 (no releases, or repo not
-    accepted) yields an empty list.
+    """Every submit-tag release the autograde workflow published for a repo,
+    newest first, walking the full /releases pagination: the complete submission
+    history (a student who pushed N times has N submit/* releases, all
+    returned). Non-submit releases (e.g., a hand-created tag) are filtered out,
+    and so is a submit/* release that fails release_provenance_problem, with a
+    warning naming it: that is a hand-made release or a replaced result.json in
+    a repo the student can write to, and the teacher should know. A 404 (no
+    releases, or repo not accepted) yields an empty list.
 
     Pagination is _paginate_objects', so an incompletable walk (looping Link
     chain or the page cap) raises IncompleteListing rather than returning a
@@ -3378,7 +3425,7 @@ def all_submit_releases(
         if exc.code == 404:
             return []
         raise
-    return [
+    submits = [
         release
         for release in releases
         if (release.get("tag_name") or "").startswith(SUBMIT_TAG_PREFIX)
@@ -3387,6 +3434,18 @@ def all_submit_releases(
         # assets aren't downloadable anyway, so skip it.
         and release.get("draft") is not True
     ]
+    trusted: list[dict[str, Any]] = []
+    for release in submits:
+        problem = release_provenance_problem(release)
+        if problem is None:
+            trusted.append(release)
+            continue
+        emit_warning(
+            f"{owner}/{repo}: release {release.get('tag_name')!r} was {problem}; "
+            f"not counted as a submission. Only releases the workflow publishes "
+            f"count; check the repo's Releases tab and Actions history."
+        )
+    return trusted
 
 
 class IncompleteListing(ValueError):

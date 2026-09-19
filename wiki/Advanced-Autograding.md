@@ -231,9 +231,14 @@ reads `result.json` from the workspace after the autograder exits.
 Collection validates this before merging into `scores.json`. A payload whose
 identity (classroom/assignment/`owner`) doesn't match the source repository is
 rejected, and a mismatched `assignment_type` is warned about and skipped, so a
-hostile payload can't land in another student's collected scores. A submission
-is late when `datetime` is after the assignment's due date; submitting exactly
-at the due date is on time.
+hostile payload can't land in another student's collected scores. Before any of
+that, a `submit/*` Release the workflow didn't publish is skipped with a
+warning: only a Release authored by `github-actions[bot]` whose `result.json`
+that same identity uploaded is read at all, so a student's hand-made Release,
+or a `result.json` they replaced, never reaches validation. A submission is
+late when `datetime` is after the assignment's due date; submitting exactly at
+the due date is on time. For what this does and doesn't guarantee, see
+[How much to trust a collected score](Autograding-Basics#how-much-to-trust-a-collected-score).
 
 <details>
 <summary>scores.json shape</summary>
@@ -440,6 +445,12 @@ workflow you control, so your grading logic runs in place of the runner.
 > Once an assignment uses a custom autograder, `gh teacher assignment
 > submission-mode` never rewrites its caller workflow. Trigger changes are
 > yours to make.
+
+For its results to be collected, your workflow must publish each graded
+submission the way the built-in runner does: a Release on a `submit/*` tag with
+a `result.json` asset, both created with the job's `GITHUB_TOKEN`. Collection
+reads only Releases authored by `github-actions[bot]` and skips the rest, so a
+Release published with a personal access token is ignored.
 
 ### Keeping a GitHub Classroom autograder
 

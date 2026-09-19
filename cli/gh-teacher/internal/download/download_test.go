@@ -26,6 +26,24 @@ import (
 	scoresschema "github.com/foundation50/gh-teacher/internal/scores"
 )
 
+// botUser is the workflow token's identity as GitHub renders it on a release
+// and its assets. Every fixture standing in for a runner-published release
+// carries it, since the reader now rejects releases that don't.
+var botUser = map[string]any{"login": contract.AutogradeReleaseAuthor}
+
+// botAsset is an asset the workflow token uploaded.
+func botAsset(name, url string) map[string]any {
+	return map[string]any{"name": name, "url": url, "uploader": botUser}
+}
+
+// botRelease is a submit/* release exactly as the runner publishes it.
+func botRelease(tag string, assets ...map[string]any) map[string]any {
+	if assets == nil {
+		assets = []map[string]any{}
+	}
+	return map[string]any{"tag_name": tag, "author": botUser, "assets": assets}
+}
+
 func TestAssignmentRepoName(t *testing.T) {
 	cases := []struct {
 		classroom, assignment, username, want string
@@ -829,14 +847,8 @@ func TestRefreshResultJSON(t *testing.T) {
 	// result.json is the latest.
 	mux.HandleFunc("/repos/o/has-result/releases", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{
-			{
-				"tag_name": "submit/2026-06-02T10-00-00Z",
-				"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset-new.json"}},
-			},
-			{
-				"tag_name": "submit/2026-06-01T14-32-05Z",
-				"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset-old.json"}},
-			},
+			botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-new.json")),
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
 		})
 	})
 	// A repo whose releases mix submit-tag and non-submit tags: only
@@ -844,10 +856,7 @@ func TestRefreshResultJSON(t *testing.T) {
 	mux.HandleFunc("/repos/o/mixed/releases", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode([]map[string]any{
 			{"tag_name": "v1.0.0"},
-			{
-				"tag_name": "submit/2026-06-01T14-32-05Z",
-				"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset-old.json"}},
-			},
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
 		})
 	})
 	// No submit-tag release anywhere → silent no-op.
@@ -857,10 +866,9 @@ func TestRefreshResultJSON(t *testing.T) {
 	// A submit-tag release with no result.json asset: it appears in
 	// results.json with a null result, but result.json is not written.
 	mux.HandleFunc("/repos/o/no-asset/releases", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tag_name": "submit/2026-06-01T14-32-05Z",
-			"assets":   []map[string]string{{"name": "other.txt", "url": "ignored"}},
-		}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("other.txt", "ignored")),
+		})
 	})
 	// 404 on the releases walk (no releases / not accepted) → no-op.
 	mux.HandleFunc("/repos/o/no-release/releases", func(w http.ResponseWriter, r *http.Request) {
@@ -882,7 +890,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := refreshResultJSON(client, "test-token", server.URL, "o", "has-result", target); err != nil {
+		if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "has-result", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
 
@@ -921,7 +929,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := refreshResultJSON(client, "test-token", server.URL, "o", "mixed", target); err != nil {
+		if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "mixed", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
 		var history []submissionRecord
@@ -942,7 +950,7 @@ func TestRefreshResultJSON(t *testing.T) {
 		if err := os.MkdirAll(target, 0o755); err != nil {
 			t.Fatalf("mkdir: %v", err)
 		}
-		if err := refreshResultJSON(client, "test-token", server.URL, "o", "no-asset", target); err != nil {
+		if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "no-asset", target); err != nil {
 			t.Fatalf("refreshResultJSON: %v", err)
 		}
 		var history []submissionRecord
@@ -974,7 +982,7 @@ func TestRefreshResultJSON(t *testing.T) {
 			if err := os.MkdirAll(target, 0o755); err != nil {
 				t.Fatalf("mkdir: %v", err)
 			}
-			if err := refreshResultJSON(client, "test-token", server.URL, "o", tc.repo, target); err != nil {
+			if err := refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", tc.repo, target); err != nil {
 				t.Fatalf("refreshResultJSON: %v", err)
 			}
 			if _, err := os.Stat(filepath.Join(target, resultsAssetName)); !os.IsNotExist(err) {
@@ -1019,16 +1027,14 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 	var server *httptest.Server
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/o/has-result/releases", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tag_name": "submit/2026-06-02T10-00-00Z",
-			"assets":   []map[string]string{{"name": "result.json", "url": server.URL + "/asset.json"}},
-		}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset.json")),
+		})
 	})
 	mux.HandleFunc("/repos/o/no-asset/releases", func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode([]map[string]any{{
-			"tag_name": "submit/2026-06-01T14-32-05Z",
-			"assets":   []map[string]string{{"name": "other.txt", "url": "ignored"}},
-		}})
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("other.txt", "ignored")),
+		})
 	})
 	mux.HandleFunc("/asset.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"schema":"classroom50/result/v1","score":99}`))
@@ -1100,7 +1106,7 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 			// call so a blocking FIFO open fails the test instead of the suite.
 			done := make(chan error, 1)
 			go func() {
-				done <- refreshResultJSON(client, "test-token", server.URL, "o", tc.repo, target)
+				done <- refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", tc.repo, target)
 			}()
 			select {
 			case err := <-done:
@@ -1148,7 +1154,7 @@ func TestRefreshResultJSON_SymlinkGuard(t *testing.T) {
 
 		// has-result writes results.json (first) then result.json; both are
 		// symlinks, so neither victim may change regardless of write ordering.
-		_ = refreshResultJSON(client, "test-token", server.URL, "o", "has-result", target)
+		_ = refreshResultJSON(client, io.Discard, "test-token", server.URL, "o", "has-result", target)
 		for _, v := range []string{vA, vB} {
 			got, err := os.ReadFile(v)
 			if err != nil {
@@ -1166,17 +1172,17 @@ func TestListAllSubmitReleases(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
 			_ = json.NewEncoder(w).Encode([]map[string]any{
-				{"tag_name": "submit/2026-06-03T10-00-00Z"},
+				botRelease("submit/2026-06-03T10-00-00Z"),
 				{"tag_name": "v2.0.0"},
-				{"tag_name": "submit/2026-06-02T10-00-00Z"},
-				{"tag_name": "submit/2026-06-01T10-00-00Z"},
+				botRelease("submit/2026-06-02T10-00-00Z"),
+				botRelease("submit/2026-06-01T10-00-00Z"),
 			})
 		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, err := listAllSubmitReleases(client, "o", "r")
+		rels, err := listAllSubmitReleases(client, io.Discard, "o", "r")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
@@ -1194,6 +1200,53 @@ func TestListAllSubmitReleases(t *testing.T) {
 		}
 	})
 
+	// Students have push access, so `gh release create submit/x result.json`
+	// with a hand-written payload, or `gh release upload --clobber` onto the
+	// workflow's honest release, is one command away. The author and the asset
+	// uploader are the marks they can't forge: only the workflow token is
+	// github-actions[bot]. Skip such a release and say so on errOut.
+	t.Run("skips releases not published by the autograde workflow", func(t *testing.T) {
+		alice := map[string]any{"login": "alice"}
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/releases", func(w http.ResponseWriter, r *http.Request) {
+			forgedRelease := botRelease("submit/2026-06-04T10-00-00Z", botAsset("result.json", "u"))
+			forgedRelease["author"] = alice
+			noAuthor := botRelease("submit/2026-06-03T10-00-00Z")
+			delete(noAuthor, "author")
+			replacedAsset := botRelease("submit/2026-06-02T10-00-00Z",
+				map[string]any{"name": "Result.JSON", "url": "u", "uploader": alice})
+			extraAsset := botRelease("submit/2026-06-01T10-00-00Z",
+				botAsset("result.json", "u"),
+				map[string]any{"name": "screenshot.png", "url": "u", "uploader": alice})
+			_ = json.NewEncoder(w).Encode([]map[string]any{forgedRelease, noAuthor, replacedAsset, extraAsset})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var errOut bytes.Buffer
+		rels, err := listAllSubmitReleases(client, &errOut, "o", "r")
+		if err != nil {
+			t.Fatalf("listAllSubmitReleases: %v", err)
+		}
+		if len(rels) != 1 || rels[0].TagName != "submit/2026-06-01T10-00-00Z" {
+			t.Fatalf("kept %+v, want only the workflow's release with a foreign screenshot", rels)
+		}
+		for _, want := range []string{
+			`o/r: release "submit/2026-06-04T10-00-00Z" was published by "alice"`,
+			`o/r: release "submit/2026-06-03T10-00-00Z" was published by "an unknown account"`,
+			`o/r: release "submit/2026-06-02T10-00-00Z" was result.json uploaded by "alice"`,
+			"not counted as a submission",
+		} {
+			if !strings.Contains(errOut.String(), want) {
+				t.Errorf("errOut lacks %q:\n%s", want, errOut.String())
+			}
+		}
+		if strings.Contains(errOut.String(), "submit/2026-06-01T10-00-00Z") {
+			t.Errorf("the kept release was warned about:\n%s", errOut.String())
+		}
+	})
+
 	t.Run("404 → empty, not an error", func(t *testing.T) {
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/o/missing/releases", func(w http.ResponseWriter, r *http.Request) {
@@ -1203,7 +1256,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, err := listAllSubmitReleases(client, "o", "missing")
+		rels, err := listAllSubmitReleases(client, io.Discard, "o", "missing")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
@@ -1217,20 +1270,20 @@ func TestListAllSubmitReleases(t *testing.T) {
 		mux.HandleFunc("/repos/o/many/releases", func(w http.ResponseWriter, r *http.Request) {
 			page := r.URL.Query().Get("page")
 			if page == "1" {
-				batch := make([]map[string]string, allReleasesPerPage)
+				batch := make([]map[string]any, allReleasesPerPage)
 				for i := range batch {
-					batch[i] = map[string]string{"tag_name": fmt.Sprintf("submit/p1-%d", i)}
+					batch[i] = botRelease(fmt.Sprintf("submit/p1-%d", i))
 				}
 				_ = json.NewEncoder(w).Encode(batch)
 				return
 			}
-			_ = json.NewEncoder(w).Encode([]map[string]string{{"tag_name": "submit/last"}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{botRelease("submit/last")})
 		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, err := listAllSubmitReleases(client, "o", "many")
+		rels, err := listAllSubmitReleases(client, io.Discard, "o", "many")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}

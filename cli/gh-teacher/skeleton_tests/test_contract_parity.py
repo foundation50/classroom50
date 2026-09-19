@@ -31,6 +31,9 @@ _TEST_CMD_GO = (
     _REPO_ROOT / "cli" / "gh-teacher" / "internal" / "assignmentcmd" / "test_cmd.go"
 )
 _WEB_CLASSROOM_TS = _REPO_ROOT / "web" / "src" / "types" / "classroom.ts"
+_WEB_RELEASE_READS_TS = (
+    _REPO_ROOT / "web" / "src" / "github-core" / "queries" / "releaseRunReads.ts"
+)
 
 
 def _go_staff_roles() -> list[str]:
@@ -72,6 +75,22 @@ class TestAcceptMarkerPath:
         assert go, "contract.MetadataPath not found in contract.go"
         for module in (runner, cs, rr):
             assert module.ACCEPT_MARKER_PATH == go.group(1), module.__name__
+
+
+class TestAutogradeReleaseAuthor:
+    def test_collector_matches_go_and_web(self):
+        # The provenance mark every submission reader filters on. Three hand
+        # spellings (Go download, the Python collector, the web release list);
+        # a drift would make one reader count a hand-made release the others
+        # reject, or reject every honest one.
+        go = re.search(r'AutogradeReleaseAuthor\s*=\s*"([^"]+)"', _CONTRACT_GO.read_text())
+        assert go, "contract.AutogradeReleaseAuthor not found in contract.go"
+        web = re.search(
+            r'export const AUTOGRADE_RELEASE_AUTHOR\s*=\s*"([^"]+)"',
+            _WEB_RELEASE_READS_TS.read_text(),
+        )
+        assert web, "web AUTOGRADE_RELEASE_AUTHOR not found in releaseRunReads.ts"
+        assert cs.AUTOGRADE_RELEASE_AUTHOR == go.group(1) == web.group(1)
 
 
 class TestStaffTeamSlug:
