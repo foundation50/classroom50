@@ -16,6 +16,7 @@ import {
   commitRepoTree,
   createRepoTree,
   readRepoHead,
+  type RepoHead,
 } from "@/github-core/mutations"
 import { getRepo } from "@/github-core/repoReads"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -98,12 +99,100 @@ export type ShimUpdateOutcome =
   | { status: "notAccepted" }
   | { status: "missingWorkflowScope" }
 
-// Update one repo's shim to `mode`, idempotently. Reads the live default
-// branch (the shim is branch-specific), fetches the current shim, rewrites the
-// trigger block, and commits with [skip ci]. A 404 tree write with the
-// workflow scope absent from X-OAuth-Scopes is GitHub's signature for a token
-// that can't touch .github/workflows/* — surfaced as its own outcome so the
-// UI can show the re-auth remediation once, not per repo.
+// The per-repo primitives both shim writers share (this retrofit and the
+// backfill in shimBackfill.ts). Each pins its reads to one resolved tip SHA:
+// reading at the branch NAME can lag a just-landed write (GitHub
+// read-after-write lag, the misreport the Go retrofitShim fixed, observed live
+// 2026-08-05), which would rewrite from stale content or misreport "current".
+
+// The repo's live default branch, or null when the repo doesn't exist yet
+// (enrolled but not accepted).
+export async function resolveStudentRepoBranch(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<string | null> {
+  try {
+    const live = await getRepo(client, org, repo)
+    return live?.default_branch || null
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) return null
+    throw err
+  }
+}
+
+// The shim's content at `headSha`, or null when no file exists at its path.
+export async function readShimAtHead(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+  headSha: string,
+): Promise<string | null> {
+  try {
+    const resp = await client.request<{ content?: string; encoding?: string }>(
+      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(headSha)}`,
+    )
+    if (!resp?.content || resp.encoding !== "base64") {
+      throw new Error(
+        `${org}/${repo}: unexpected contents response for the shim`,
+      )
+    }
+    return decodeBase64Utf8(resp.content)
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) return null
+    throw err
+  }
+}
+
+// Commit `content` at the shim path on top of `head`. Only the tree POST is
+// classified: it is the call GitHub rejects with a 404 when the token lacks the
+// `workflow` scope needed to touch a workflow file, surfaced as its own outcome
+// so the UI can show the re-auth remediation once, not per repo.
+export async function commitShimFile(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+  head: RepoHead,
+  content: string,
+  message: string,
+): Promise<"committed" | "missingWorkflowScope"> {
+  let tree: { sha: string }
+  try {
+    tree = await createRepoTree(client, {
+      owner: org,
+      repo,
+      baseTreeSha: head.baseTreeSha,
+      tree: [
+        { path: AUTOGRADE_SHIM_PATH, mode: "100644", type: "blob", content },
+      ],
+    })
+  } catch (err) {
+    if (
+      err instanceof GitHubAPIError &&
+      err.status === 404 &&
+      tokenLacksWorkflowScope(err)
+    ) {
+      return "missingWorkflowScope"
+    }
+    throw err
+  }
+  await commitRepoTree(client, { owner: org, repo }, head, tree.sha, message)
+  return "committed"
+}
+
+// Whether `content` is a default autograde shim from either accept client:
+// the known trigger block plus a `uses:` of the org's reusable runner. Mirrors
+// the Go isDefaultShim (enableautograder.go).
+export function isDefaultShim(content: string): boolean {
+  return (
+    SHIM_TRIGGER_BLOCK.test(content) &&
+    content.includes("/classroom50/.github/workflows/autograde-runner.yaml@")
+  )
+}
+
+// Update one repo's shim to `mode`, idempotently: read the live default branch
+// (the shim is branch-specific), fetch the current shim, rewrite the trigger
+// block, and commit with [skip ci].
 export async function updateShimSubmissionMode(params: {
   client: GitHubClient
   org: string
@@ -115,48 +204,19 @@ export async function updateShimSubmissionMode(params: {
 }): Promise<ShimUpdateOutcome> {
   const { client, org, repo, mode, tags } = params
 
-  let branch: string
-  try {
-    const live = await getRepo(client, org, repo)
-    if (!live?.default_branch) return { status: "notAccepted" }
-    branch = live.default_branch
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return { status: "notAccepted" }
-    }
-    throw err
-  }
-
-  // Pin the whole read-rewrite-commit cycle to one resolved tip SHA. Reading
-  // the shim at the branch NAME can lag a just-landed write (GitHub
-  // read-after-write lag — the misreport the Go retrofitShim fixed, observed
-  // live 2026-08-05), which would rewrite from stale content or misreport
-  // "current"; reading at the same SHA the commit builds on keeps the no-op
-  // check and the write consistent.
+  const branch = await resolveStudentRepoBranch(client, org, repo)
+  if (!branch) return { status: "notAccepted" }
   const head = await readRepoHead(client, { owner: org, repo }, branch)
 
-  let current: string
-  try {
-    const resp = await client.request<{ content?: string; encoding?: string }>(
-      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(head.headSha)}`,
-    )
-    if (!resp?.content || resp.encoding !== "base64") {
-      return {
-        status: "unrecognized",
-        reason: "unexpected contents response for the shim",
-      }
+  const current = await readShimAtHead(client, org, repo, head.headSha)
+  if (current === null) {
+    // Repo exists but the shim never landed (mid-flow accept failure, or the
+    // built-in autograder was off at accept); accept's self-heal and the
+    // backfill own that case.
+    return {
+      status: "unrecognized",
+      reason: "no autograde workflow: accept may not have completed",
     }
-    current = decodeBase64Utf8(resp.content)
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      // Repo exists but the shim never landed (mid-flow accept failure);
-      // accept's self-heal owns that case.
-      return {
-        status: "unrecognized",
-        reason: "no autograde workflow — accept may not have completed",
-      }
-    }
-    throw err
   }
 
   const rewrite = rewriteShimTrigger(current, mode, branch, tags ?? [])
@@ -165,41 +225,17 @@ export async function updateShimSubmissionMode(params: {
     return { status: "unrecognized", reason: rewrite.reason }
   }
 
-  // Only the tree POST is classified: it is the call GitHub rejects with a
-  // 404 when the token lacks the `workflow` scope needed to touch a workflow
-  // file.
-  let tree: { sha: string }
-  try {
-    tree = await createRepoTree(client, {
-      owner: org,
-      repo,
-      baseTreeSha: head.baseTreeSha,
-      tree: [
-        {
-          path: AUTOGRADE_SHIM_PATH,
-          mode: "100644",
-          type: "blob",
-          content: rewrite.content,
-        },
-      ],
-    })
-  } catch (err) {
-    if (
-      err instanceof GitHubAPIError &&
-      err.status === 404 &&
-      tokenLacksWorkflowScope(err)
-    ) {
-      return { status: "missingWorkflowScope" }
-    }
-    throw err
-  }
-  await commitRepoTree(
+  const committed = await commitShimFile(
     client,
-    { owner: org, repo },
+    org,
+    repo,
     head,
-    tree.sha,
+    rewrite.content,
     shimUpdateCommitMessage(mode),
   )
+  if (committed === "missingWorkflowScope") {
+    return { status: "missingWorkflowScope" }
+  }
   return { status: "updated" }
 }
 

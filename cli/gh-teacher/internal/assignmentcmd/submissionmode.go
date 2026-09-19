@@ -207,34 +207,14 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 			_, _ = fmt.Fprintf(out, "dry run: would set submission_mode of %s to %s\n", p.slug, p.mode)
 		}
 	} else {
-		build := func(parentSHA string) (map[string]string, error) {
-			file, err := loadAssignments(client, p.org, p.classroom, parentSHA)
-			if err != nil {
-				return nil, err
-			}
-			idx, ok := assignment.FindAssignment(file.Assignments, p.slug)
-			if !ok {
-				return nil, fmt.Errorf("assignment %q disappeared from %s during the update: retry",
-					p.slug, assignmentsFilePath(p.classroom))
-			}
-			entry := file.Assignments[idx]
+		message := contract.PrefixCommit(fmt.Sprintf("assignment: set submission_mode of %s to %s in %s (gh teacher assignment submission-mode)", p.slug, p.mode, p.classroom))
+		commitSHA, err := flipAssignmentField(client, p.org, p.classroom, p.slug, branch, message, func(entry *assignment.AssignmentEntry) bool {
 			if entry.SubmissionMode == wireMode {
-				return nil, nil // already in the desired state — no commit
+				return false
 			}
 			entry.SubmissionMode = wireMode
-			file.Assignments[idx] = entry
-			data, err := assignment.EncodeAssignments(file)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]string{assignmentsFilePath(p.classroom): string(data)}, nil
-		}
-		message := contract.PrefixCommit(fmt.Sprintf("assignment: set submission_mode of %s to %s in %s (gh teacher assignment submission-mode)", p.slug, p.mode, p.classroom))
-		// Report from the commit OUTCOME (did a commit land?), never from
-		// build-attempt state: a rebase retry can no-op after a stale first
-		// attempt, and the pre-write read can lag a just-landed write
-		// (run-2 misreport, observed live 2026-08-05).
-		commitSHA, err := configwrite.CommitTree(client, p.org, configrepo.ConfigRepoName, branch, message, build)
+			return true
+		})
 		if err != nil {
 			return err
 		}
@@ -256,23 +236,21 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 		return nil
 	}
 
-	repos, err := assignmentTargetRepos(client, p.org, p.classroom, p.slug, p.user, branch)
-	if err != nil {
-		return err
-	}
-	if len(repos) == 0 {
-		if !p.quiet {
-			_, _ = fmt.Fprintf(out, "%s: no repos to process: the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", p.org)
-		}
-		return nil
-	}
-
 	report := shimReport{
 		out: out, errOut: errOut,
 		slug: p.slug, user: p.user,
 		dryRun: p.dryRun, quiet: p.quiet, verbose: p.verbose,
 		words: submissionModeWords,
 	}
+	repos, err := assignmentTargetRepos(client, p.org, p.classroom, p.slug, p.user, branch)
+	if err != nil {
+		return err
+	}
+	if len(repos) == 0 {
+		report.noRepos(p.org)
+		return nil
+	}
+
 	var results []shimResult
 	notAccepted := 0
 	for _, repo := range repos {
@@ -287,6 +265,38 @@ func runSubmissionMode(client githubapi.Client, out, errOut io.Writer, p submiss
 	}
 
 	return report.summarize(p.org, results, notAccepted)
+}
+
+// flipAssignmentField rewrites one assignment entry in assignments.json via
+// the rebase-safe CommitTree loop. mutate edits the entry in place and returns
+// false when it is already in the target state, which commits nothing. The
+// returned SHA is empty on a no-op; report from it, never from build-attempt
+// state: a rebase retry can no-op after a stale first attempt, and the
+// pre-write read can lag a just-landed write (run-2 misreport, observed live
+// 2026-08-05).
+func flipAssignmentField(client githubapi.Client, org, classroom, slug, branch, message string, mutate func(*assignment.AssignmentEntry) bool) (string, error) {
+	build := func(parentSHA string) (map[string]string, error) {
+		file, err := loadAssignments(client, org, classroom, parentSHA)
+		if err != nil {
+			return nil, err
+		}
+		idx, ok := assignment.FindAssignment(file.Assignments, slug)
+		if !ok {
+			return nil, fmt.Errorf("assignment %q disappeared from %s during the update: retry",
+				slug, assignmentsFilePath(classroom))
+		}
+		entry := file.Assignments[idx]
+		if !mutate(&entry) {
+			return nil, nil
+		}
+		file.Assignments[idx] = entry
+		data, err := assignment.EncodeAssignments(file)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]string{assignmentsFilePath(classroom): string(data)}, nil
+	}
+	return configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build)
 }
 
 // assignmentTargetRepos resolves the student repos to process: a single
@@ -460,6 +470,9 @@ type shimWords struct {
 	countDry  string // dry-run summary verb, e.g. "would update"
 	countSame string // summary noun for the unchanged count, e.g. "already current"
 	atAccept  string // summary tail for enrolled non-accepters, e.g. "the new trigger"
+	// afterUpdated is an extra summary line printed after a real write; empty
+	// for none.
+	afterUpdated string
 }
 
 var submissionModeWords = shimWords{
@@ -489,6 +502,13 @@ func (r shimReport) notAccepted(repo string) {
 		_, _ = fmt.Fprintf(r.out, "%s does not exist: %s has not accepted %s yet\n", repo, r.user, r.slug)
 	} else if r.verbose && !r.quiet {
 		_, _ = fmt.Fprintf(r.out, "Skipped %s (no repo; not accepted yet?)\n", repo)
+	}
+}
+
+// noRepos reports an empty enumeration (no classroom-team members).
+func (r shimReport) noRepos(org string) {
+	if !r.quiet {
+		_, _ = fmt.Fprintf(r.out, "%s: no repos to process: the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", org)
 	}
 }
 
@@ -546,6 +566,9 @@ func (r shimReport) summarize(org string, results []shimResult, notAccepted int)
 		}
 		if updated > 0 && !r.dryRun {
 			_, _ = fmt.Fprintln(r.out, "Tell students to `git pull`: clones made before this change will conflict on their next push.")
+			if r.words.afterUpdated != "" {
+				_, _ = fmt.Fprintln(r.out, r.words.afterUpdated)
+			}
 		}
 	}
 

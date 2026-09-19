@@ -18,10 +18,10 @@ import {
   addAutogradeShim,
   type ShimBackfillOutcome,
 } from "@/domain/assignments/shimBackfill"
-import { resolveConfigRepoDefaultBranch } from "@/domain/assignments/accessPrimitives"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { REPO_WRITE_CONCURRENCY } from "@/github-core/queries"
-import { DEFAULT_BRANCH } from "@/util/configRepo"
+import { getRepo } from "@/github-core/repoReads"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { studentRepoName } from "@/util/studentRepo"
 import type { Student, SubmissionMode } from "@/types/classroom"
 
@@ -41,7 +41,8 @@ type BulkAutogradeShimModalProps = {
 }
 
 type Outcome =
-  FanOutOutcome | { owner: string; status: ShimBackfillOutcome["status"] }
+  | FanOutOutcome
+  | { owner: string; status: ShimBackfillOutcome["status"]; detail?: string }
 
 // Whole-assignment shim backfill: add the built-in autograding workflow to
 // every accepted student repo that lacks one, in one bounded fan-out. The way
@@ -70,11 +71,23 @@ export function BulkAutogradeShimModal({
     if (total === 0) return
     if (!bulk.begin(total)) return
     // The reusable-workflow ref every shim points at; one read for the run.
-    const configBranch = await resolveConfigRepoDefaultBranch(
-      client,
-      org,
-      DEFAULT_BRANCH,
-    )
+    // Fail closed: a guessed branch would be baked into files that are never
+    // rewritten, so a failed read stops the run before any write.
+    let configBranch: string
+    try {
+      const config = await getRepo(client, org, CONFIG_REPO)
+      configBranch = config?.default_branch || DEFAULT_BRANCH
+    } catch {
+      if (!bulk.isMounted()) return
+      bulk.complete(
+        {
+          headline: t("submissions.bulkShim.configBranchError"),
+          sections: [],
+        },
+        "error",
+      )
+      return
+    }
     if (!bulk.isMounted()) return
     // A confirmed missing workflow scope stops the rest: every remaining repo
     // would fail identically.
@@ -102,13 +115,19 @@ export function BulkAutogradeShimModal({
           submissionTags,
         })
         if (outcome.status === "missingWorkflowScope") missingScope = true
-        return { owner, status: outcome.status }
+        return {
+          owner,
+          status: outcome.status,
+          detail:
+            outcome.status === "unrecognized" ? outcome.reason : undefined,
+        }
       },
     })
     if (!bulk.isMounted()) return
 
     const added = outcomes.filter((o) => o.status === "added")
     const present = outcomes.filter((o) => o.status === "present")
+    const unrecognized = outcomes.filter((o) => o.status === "unrecognized")
     const notAccepted = outcomes.filter((o) => o.status === "notAccepted")
     const deferred = outcomes.filter((o) => o.status === "deferred")
     const scope = outcomes.filter((o) => o.status === "missingWorkflowScope")
@@ -131,6 +150,7 @@ export function BulkAutogradeShimModal({
             t("submissions.bulkShim.scopeDetail"),
           ),
           ...section("submissions.bulkShim.failedSection", failed),
+          ...section("submissions.bulkShim.unrecognizedSection", unrecognized),
           ...section(
             "submissions.bulkShim.deferredSection",
             deferred,

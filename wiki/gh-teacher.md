@@ -888,12 +888,19 @@ Details that matter:
 - The workflow is rendered for the assignment's current **submission type**
   and **submission tags**, exactly as a fresh accept would write it.
 - The commit carries `[skip ci]`, so it **never triggers grading**.
-- **Work students already pushed isn't graded** until their next push. Run
-  **Regrade all** on the submissions page to grade it now.
+- **Work students already pushed is graded on their next push**, not before:
+  GitHub only runs a workflow for commits that contain it, so **Regrade all**
+  cannot reach commits made before the workflow existed (it reports those
+  repositories as failed with this explanation). To grade now, have students
+  push once; an empty commit works (`git commit --allow-empty -m "Grade" &&
+  git push`).
 - The published assignment list can lag a minute behind the change; a push
   that lands before then fails and grades on the next push.
 - **Custom autograders** are refused: the workflow is teacher-authored, so add
   it to the repos yourself.
+- **Group and team assignments** are refused: the command enumerates
+  individual repositories only. Add the workflow from each group repository's
+  row on the submissions page.
 - `empty_repo` assignments are refused: a bare repo has no commit to add the
   workflow to. Change the repository source in the web app; repos accepted
   from then on get the workflow.

@@ -188,6 +188,25 @@ describe("SubmissionsActionsMenu — Update autograding triggers item", () => {
   })
 })
 
+describe("SubmissionsActionsMenu — Add autograding workflow item", () => {
+  it("shows the item only when onBulkAddShim is provided, independent of onBulkTrigger", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.bulkShim.menuLabel")).toBeNull()
+    rerender(<SubmissionsActionsMenu {...baseProps} onBulkAddShim={() => {}} />)
+    expect(screen.queryByText("submissions.bulkShim.menuLabel")).not.toBeNull()
+    expect(screen.queryByText("submissions.bulkTrigger.menuLabel")).toBeNull()
+  })
+
+  it("fires the handler on click", () => {
+    const onBulkAddShim = vi.fn()
+    render(
+      <SubmissionsActionsMenu {...baseProps} onBulkAddShim={onBulkAddShim} />,
+    )
+    screen.getByText("submissions.bulkShim.menuLabel").click()
+    expect(onBulkAddShim).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe("SubmissionsActionsMenu — Lock/Unlock item", () => {
   it("shows the item only when onLockToggle is provided (authoring tier)", () => {
     const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)

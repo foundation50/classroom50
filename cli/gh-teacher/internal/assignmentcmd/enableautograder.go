@@ -47,15 +47,19 @@ func assignmentEnableAutograderCmd() *cobra.Command {
 			"Afterward:\n\n" +
 			"  - Students must `git pull`: clones made before this change will\n" +
 			"    conflict on their next push.\n" +
-			"  - Work students already pushed is not graded until their next push.\n" +
-			"    Run \"Regrade all\" on the submissions page to grade it now.\n" +
+			"  - Work students already pushed is graded on their next push, not\n" +
+			"    before: a workflow only runs for commits that contain it, so\n" +
+			"    \"Regrade all\" cannot reach earlier commits. To grade now, have\n" +
+			"    students push once (an empty commit works).\n" +
 			"  - The published assignment list can lag a minute behind the change;\n" +
 			"    a push that lands before then fails and grades on the next push.\n" +
 			"  - Committing workflow files needs the `workflow` OAuth scope\n" +
 			"    (`gh auth refresh -s workflow` if missing).\n\n" +
 			"Not supported: empty_repo assignments (a bare repo has no commit to\n" +
-			"add the workflow to) and custom autograders (the workflow is\n" +
-			"teacher-authored; add it to the repos yourself).\n\n" +
+			"add the workflow to), custom autograders (the workflow is\n" +
+			"teacher-authored; add it to the repos yourself), and group or team\n" +
+			"assignments (add the workflow from each group repository's row on\n" +
+			"the submissions page).\n\n" +
 			"Pass --user to add the workflow to a single student's repo (one that\n" +
 			"failed on a previous run, say); the field change is idempotent.",
 		Example: "  gh teacher assignment enable-autograder cs50-fall-2026 cs-principles hello\n" +
@@ -114,6 +118,8 @@ var enableAutograderWords = shimWords{
 	countDry:  "would add",
 	countSame: "already had it",
 	atAccept:  "the workflow",
+	afterUpdated: "Work students already pushed is graded on their next push. To grade it now, have them push once " +
+		"(`git commit --allow-empty -m \"Grade\" && git push`).",
 }
 
 // runEnableAutograder clears no_autograder (runSubmissionMode's field-flip
@@ -144,6 +150,11 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 	if preEntry.Autograder != "" && preEntry.Autograder != contract.DefaultAutograderName {
 		return fmt.Errorf("assignment %q uses the custom autograder %q, whose workflow is teacher-authored, and this command only adds the default one. Commit your autograder's workflow to the existing repos yourself", p.slug, preEntry.Autograder)
 	}
+	// Repos are derived per classroom-team member; group and team repos carry
+	// a group segment instead, so every probe would read as "not accepted".
+	if preEntry.Mode != "" && preEntry.Mode != assignment.ModeIndividual {
+		return fmt.Errorf("assignment %q is a %s assignment: this command adds the workflow to individual repos only. Add it from each group repository's row on the submissions page", p.slug, preEntry.Mode)
+	}
 
 	if p.dryRun {
 		if preEntry.NoAutograder {
@@ -152,30 +163,14 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 			_, _ = fmt.Fprintf(out, "dry run: %s already has the built-in autograder on, no field change\n", p.slug)
 		}
 	} else {
-		build := func(parentSHA string) (map[string]string, error) {
-			file, err := loadAssignments(client, p.org, p.classroom, parentSHA)
-			if err != nil {
-				return nil, err
-			}
-			idx, ok := assignment.FindAssignment(file.Assignments, p.slug)
-			if !ok {
-				return nil, fmt.Errorf("assignment %q disappeared from %s during the update: retry",
-					p.slug, assignmentsFilePath(p.classroom))
-			}
-			entry := file.Assignments[idx]
+		message := contract.PrefixCommit(fmt.Sprintf("assignment: turn on the built-in autograder for %s in %s (gh teacher assignment enable-autograder)", p.slug, p.classroom))
+		commitSHA, err := flipAssignmentField(client, p.org, p.classroom, p.slug, branch, message, func(entry *assignment.AssignmentEntry) bool {
 			if !entry.NoAutograder {
-				return nil, nil // already on — no commit
+				return false
 			}
 			entry.NoAutograder = false
-			file.Assignments[idx] = entry
-			data, err := assignment.EncodeAssignments(file)
-			if err != nil {
-				return nil, err
-			}
-			return map[string]string{assignmentsFilePath(p.classroom): string(data)}, nil
-		}
-		message := contract.PrefixCommit(fmt.Sprintf("assignment: turn on the built-in autograder for %s in %s (gh teacher assignment enable-autograder)", p.slug, p.classroom))
-		commitSHA, err := configwrite.CommitTree(client, p.org, configrepo.ConfigRepoName, branch, message, build)
+			return true
+		})
 		if err != nil {
 			return err
 		}
@@ -192,18 +187,7 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 
 	if !p.addShims {
 		if !p.quiet {
-			_, _ = fmt.Fprintln(out, "Workflow backfill skipped (--add-workflows=false); existing repos keep grading off until the workflow is added")
-		}
-		return nil
-	}
-
-	repos, err := assignmentTargetRepos(client, p.org, p.classroom, p.slug, p.user, branch)
-	if err != nil {
-		return err
-	}
-	if len(repos) == 0 {
-		if !p.quiet {
-			_, _ = fmt.Fprintf(out, "%s: no repos to process: the classroom's student team has no members (sync the roster, or target one repo with --user <login>)\n", p.org)
+			_, _ = fmt.Fprintln(out, "Workflow not added to existing repos (--add-workflows=false); they keep grading off until it is added")
 		}
 		return nil
 	}
@@ -214,6 +198,15 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 		dryRun: p.dryRun, quiet: p.quiet, verbose: p.verbose,
 		words: enableAutograderWords,
 	}
+	repos, err := assignmentTargetRepos(client, p.org, p.classroom, p.slug, p.user, branch)
+	if err != nil {
+		return err
+	}
+	if len(repos) == 0 {
+		report.noRepos(p.org)
+		return nil
+	}
+
 	var results []shimResult
 	notAccepted := 0
 	for _, repo := range repos {
@@ -227,25 +220,15 @@ func runEnableAutograder(client githubapi.Client, out, errOut io.Writer, p enabl
 		report.result(res)
 	}
 
-	if err := report.summarize(p.org, results, notAccepted); err != nil {
-		return err
-	}
-	if !p.quiet && !p.dryRun {
-		for _, res := range results {
-			if res.outcome == shimUpdated {
-				_, _ = fmt.Fprintln(out, "Work already pushed is not graded until the next push. Run \"Regrade all\" on the submissions page to grade it now.")
-				break
-			}
-		}
-	}
-	return nil
+	return report.summarize(p.org, results, notAccepted)
 }
 
 // backfillShim adds the default shim to one repo that lacks it. A repo that
-// already has the file is reported current and never rewritten (the
-// submission-mode retrofit owns reconciling an existing shim's trigger). The
-// existence check runs inside the commit build against the parent SHA, like
-// retrofitShim, so it's authoritative and rebase-safe.
+// already carries a default shim is reported current and never rewritten (the
+// submission-mode retrofit owns reconciling its trigger); any other file at
+// the reserved path is reported unrecognized and left alone, since calling it
+// "present" would hide that nothing grades. The check runs inside the commit
+// build against the parent SHA, like retrofitShim, so it's rebase-safe.
 func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMode string, submissionTags []string, dryRun bool) shimResult {
 	branch, notFound, err := studentRepoDefaultBranch(client, org, repo)
 	if err != nil {
@@ -255,12 +238,17 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 		return shimResult{repo: repo, outcome: shimNotAccepted}
 	}
 
+	var unrecognized error
 	build := func(parentSHA string) (map[string]string, error) {
-		_, exists, err := configrepo.ReadFileContents(client, org, repo, autogradeShimPath, parentSHA)
+		unrecognized = nil
+		current, exists, err := configrepo.ReadFileContents(client, org, repo, autogradeShimPath, parentSHA)
 		if err != nil {
 			return nil, err
 		}
 		if exists {
+			if !isDefaultShim(string(current)) {
+				unrecognized = errors.New("a workflow already exists at " + autogradeShimPath + " but is not the default autograde shim; left untouched")
+			}
 			return nil, nil
 		}
 		shim := contract.RenderDefaultShim(org, branch, configBranch, submissionMode, submissionTags)
@@ -272,6 +260,8 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 		switch {
 		case err != nil:
 			return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
+		case unrecognized != nil:
+			return shimResult{repo: repo, outcome: shimUnrecognized, reason: unrecognized.Error()}
 		case files == nil:
 			return shimResult{repo: repo, outcome: shimCurrent}
 		default:
@@ -286,8 +276,19 @@ func backfillShim(client githubapi.Client, org, repo, configBranch, submissionMo
 		}
 		return shimResult{repo: repo, outcome: shimFailed, reason: err.Error()}
 	}
+	if unrecognized != nil {
+		return shimResult{repo: repo, outcome: shimUnrecognized, reason: unrecognized.Error()}
+	}
 	if commitSHA == "" {
 		return shimResult{repo: repo, outcome: shimCurrent}
 	}
 	return shimResult{repo: repo, outcome: shimUpdated}
+}
+
+// isDefaultShim recognizes a default autograde shim from either accept client:
+// the known trigger block plus a `uses:` of the org's reusable runner. Mirrors
+// the web isDefaultShim (shimBackfill.ts).
+func isDefaultShim(content string) bool {
+	return shimTriggerBlock.MatchString(content) &&
+		strings.Contains(content, "/classroom50/.github/workflows/autograde-runner.yaml@")
 }

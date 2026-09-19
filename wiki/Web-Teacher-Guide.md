@@ -1160,9 +1160,11 @@ order:
   already accepted with it off: those repositories never got the workflow, so
   nothing grades them until it's added. Repositories that already have the
   workflow are left untouched, the commit doesn't trigger grading, and
-  students must pull before their next push. Work students already pushed
-  isn't graded until then; run **Regrade all** to grade it right away. A
-  single repository can also be updated from its row. The CLI equivalent is
+  students must pull before their next push. That next push is also what
+  grades work already in the repository: GitHub only runs a workflow for
+  commits that contain it, so **Regrade all** can't reach earlier commits. To
+  grade now, have students push once (an empty commit works). A single
+  repository can also be updated from its row. The CLI equivalent is
   [`gh teacher assignment enable-autograder`](gh-teacher#assignment-enable-autograder).
 - **Pause autograding** / **Resume autograding** (owners): disable or
   re-enable the built-in `autograde.yaml` workflow in every student repository

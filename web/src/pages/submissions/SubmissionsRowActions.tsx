@@ -1,6 +1,5 @@
 import {
   DownloadIcon,
-  GitBranchIcon,
   GitCommitIcon,
   GlobeIcon,
   LockIcon,
@@ -11,9 +10,8 @@ import {
   ShieldCheckIcon,
   SlidersIcon,
   SyncIcon,
-  WorkflowIcon,
 } from "@/components/ui/icons"
-import { createContext, useCallback, useContext, useState } from "react"
+import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import { safeHttpUrl } from "@/util/url"
@@ -29,14 +27,9 @@ import useSetRepoVisibility from "@/hooks/mutations/useSetRepoVisibility"
 import useSetRepoPages, {
   PAGES_REFUSAL_KEYS,
 } from "@/hooks/mutations/useSetRepoPages"
-import { useToast } from "@/context/notifications/NotificationProvider"
-import type { ToastTone } from "@/context/notifications/NotificationProvider"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
-import { updateShimSubmissionMode } from "@/domain/assignments/submissionTrigger"
-import { addAutogradeShim } from "@/domain/assignments/shimBackfill"
-import { resolveConfigRepoDefaultBranch } from "@/domain/assignments/accessPrimitives"
-import { DEFAULT_BRANCH } from "@/util/configRepo"
+import { useSubmissionFeedback } from "./submissionFeedback"
+import { AddShimButton, UpdateTriggerButton } from "./ShimRowActions"
 import type {
   AssignmentMode,
   AssignmentPages,
@@ -44,33 +37,6 @@ import type {
 } from "@/types/classroom"
 import { defaultRepoPagesUrl, pagesCreateBody } from "@/util/repoPages"
 import { errorText } from "@/types/localizedMessage"
-
-// Feedback channel for actions running inside the submission hub: outcomes
-// render as a banner at the top of the hub dialog (Primer: feedback for a
-// dialog action stays in the dialog) rather than as page-corner toasts.
-// Outside a provider the hook falls back to a toast, so the action rows keep
-// working if ever rendered standalone. The hub's sink is itself unmount-safe
-// (falls back to a toast once the hub closes) — see ManageSubmissionModal.
-export type SubmissionHubFeedback = {
-  tone: ToastTone
-  message: string
-}
-
-export const SubmissionHubFeedbackContext = createContext<
-  ((feedback: SubmissionHubFeedback) => void) | null
->(null)
-
-const useSubmissionFeedback = () => {
-  const inHub = useContext(SubmissionHubFeedbackContext)
-  const { notify } = useToast()
-  return useCallback(
-    (feedback: SubmissionHubFeedback) => {
-      if (inHub) inHub(feedback)
-      else notify(feedback)
-    },
-    [inHub, notify],
-  )
-}
 
 // Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
 // useTriggerRegrade (icon shows progress; disabled while any regrade is in
@@ -557,142 +523,6 @@ export const SubmissionActionList = ({
         noRepo={!hasRepo}
       />
     </div>
-  )
-}
-
-// Per-row autograding-trigger retrofit: rewrite this one repo's shim to the
-// assignment's submission_mode — the single-repo twin of the bulk modal (for
-// a repo that was skipped/failed there, or a single late accepter). The
-// domain call is idempotent; the toast reports which outcome happened.
-const UpdateTriggerButton = ({
-  org,
-  repo,
-  submissionMode,
-  submissionTags,
-  noRepo,
-}: {
-  org: string
-  repo: string
-  submissionMode: SubmissionMode
-  submissionTags?: string[]
-  noRepo: boolean
-}) => {
-  const { t } = useTranslation()
-  const feedback = useSubmissionFeedback()
-  const client = useGitHubClient()
-  // `pending` drives the disabled state; the synchronous useSafeSubmit latch is
-  // the real re-entrancy guard (React state updates a render tick late, so two
-  // same-tick clicks would both pass a pending check and race duplicate shim
-  // commits — the loser 422s on the non-force ref update).
-  const run = useSafeSubmit()
-  const [pending, setPending] = useState(false)
-
-  const handleClick = async () => {
-    if (noRepo) return
-    setPending(true)
-    try {
-      const outcome = await updateShimSubmissionMode({
-        client,
-        org,
-        repo,
-        mode: submissionMode,
-        tags: submissionTags,
-      })
-      feedback({
-        tone:
-          outcome.status === "updated" || outcome.status === "current"
-            ? "success"
-            : "warning",
-        message: t(`submissions.rowTrigger.outcome.${outcome.status}`),
-      })
-    } catch (err) {
-      feedback({
-        tone: "error",
-        message: errorText(t, err),
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <ActionListRow
-      icon={GitBranchIcon}
-      title={t("submissions.rowTrigger.title")}
-      description={t("submissions.rowTrigger.description")}
-      onClick={() => void run(handleClick)}
-      disabled={noRepo || pending}
-      ariaLabel={t("submissions.rowTrigger.aria", { repo })}
-    />
-  )
-}
-
-// Per-row shim backfill: add the built-in autograding workflow to this one
-// repo if it was accepted while the assignment had the autograder off. The
-// single-repo twin of BulkAutogradeShimModal; idempotent, so a repo that
-// already has the workflow just reports so.
-const AddShimButton = ({
-  org,
-  repo,
-  submissionMode,
-  submissionTags,
-  noRepo,
-}: {
-  org: string
-  repo: string
-  submissionMode: SubmissionMode
-  submissionTags?: string[]
-  noRepo: boolean
-}) => {
-  const { t } = useTranslation()
-  const feedback = useSubmissionFeedback()
-  const client = useGitHubClient()
-  const run = useSafeSubmit()
-  const [pending, setPending] = useState(false)
-
-  const handleClick = async () => {
-    if (noRepo) return
-    setPending(true)
-    try {
-      const configBranch = await resolveConfigRepoDefaultBranch(
-        client,
-        org,
-        DEFAULT_BRANCH,
-      )
-      const outcome = await addAutogradeShim({
-        client,
-        org,
-        repo,
-        configBranch,
-        submissionMode,
-        submissionTags,
-      })
-      feedback({
-        tone:
-          outcome.status === "added" || outcome.status === "present"
-            ? "success"
-            : "warning",
-        message: t(`submissions.rowShim.outcome.${outcome.status}`),
-      })
-    } catch (err) {
-      feedback({
-        tone: "error",
-        message: errorText(t, err),
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <ActionListRow
-      icon={WorkflowIcon}
-      title={t("submissions.rowShim.title")}
-      description={t("submissions.rowShim.description")}
-      onClick={() => void run(handleClick)}
-      disabled={noRepo || pending}
-      ariaLabel={t("submissions.rowShim.aria", { repo })}
-    />
   )
 }
 

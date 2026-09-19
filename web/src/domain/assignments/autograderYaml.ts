@@ -125,7 +125,7 @@ export function defaultAutograderWorkflow(
   // "every-push", anything unvalidated — renders the identical bytes as
   // before submission_mode existed. Milestone submission_tags widen the tags
   // line to their union with submit/* and are orthogonal to the mode.
-  // Mirrors the CLI's renderEmbeddedShim.
+  // Mirrors the CLI's contract.RenderDefaultShim (cli/shared/contract/shim.go).
   const tagsLine = `    tags: [${shimTagsList(submissionTags)}]`
   const pushTriggers =
     submissionMode === "tag"

@@ -407,12 +407,20 @@ def main() -> int:
 # Per-repo regrade ------------------------------------------------------------
 
 
-# The student-repo autograde workflow filename (the shim gh-student writes at
-# accept time, `name: Autograde`). Re-running its latest run re-fetches the
-# current autograder from Pages and re-grades the same commit. Cross-binary:
-# keep aligned with cli/gh-student/embed/autograde-shim.yaml's filename.
+# The student-repo autograde workflow filename (the shim the accept clients
+# write, `name: Autograde`). Re-running its latest run re-fetches the current
+# autograder from Pages and re-grades the same commit. Cross-binary: keep
+# aligned with cli/shared/contract/autograde-shim.yaml's filename
+# (contract.AutogradeShimPath).
 AUTOGRADE_WORKFLOW = "autograde.yaml"
 AUTOGRADE_SHIM_PATH = f".github/workflows/{AUTOGRADE_WORKFLOW}"
+
+# Subject of the commit that adds the shim to a repo accepted while the
+# built-in autograder was off (`gh teacher assignment enable-autograder` / the
+# gradebook's "Add autograding workflow"). Every commit beneath it predates the
+# workflow, so no tag there can fire. Hand-mirrored with
+# contract.ShimBackfillCommitMessage and the web SHIM_BACKFILL_COMMIT_MESSAGE.
+SHIM_BACKFILL_COMMIT_SUBJECT = "[Classroom 50] Add autograde workflow (enable-autograder)"
 
 
 class _RepoLookups:
@@ -773,7 +781,11 @@ def first_gradeable_commit(
     under them is the same submission. The walk stops at the acceptance commit
     (the one that added .classroom50.yaml): a student who accepted but never
     pushed has no submission, and grading the starter code would publish a
-    zero-score release the roster reads as "submitted"."""
+    zero-score release the roster reads as "submitted".
+
+    Raises _RepoFailed on reaching the shim backfill commit: the commits under
+    it have no autograde workflow at all, so a tag at any of them fires nothing
+    and the student's next push is the only way to grade that work."""
     if lookups is None:
         lookups = _RepoLookups(api_url, org, repo, token)
     branch = lookups.default_branch
@@ -787,10 +799,25 @@ def first_gradeable_commit(
             return None
         meta = commit.get("commit")
         message = meta.get("message") if isinstance(meta, dict) else None
+        if isinstance(message, str) and _commit_subject(message) == SHIM_BACKFILL_COMMIT_SUBJECT:
+            raise _RepoFailed(
+                f"{org}/{repo}: can't grade the work pushed before commit {sha[:7]}: "
+                f"the autograde workflow was added to this repository after it "
+                f"(the built-in autograder was turned on later), so a tag at an "
+                f"earlier commit starts no run. Grading starts on the student's "
+                f"next push. To grade now, have the student push once: "
+                f"`git commit --allow-empty -m \"Grade\" && git push`."
+            )
         if isinstance(message, str) and has_ci_skip_marker(message):
             continue
         return sha, branch
     return None
+
+
+def _commit_subject(message: str) -> str:
+    """A commit message's first line, trimmed (mirrors collect_scores.py)."""
+    newline = message.find("\n")
+    return (message if newline == -1 else message[:newline]).strip()
 
 
 def has_ci_skip_marker(message: str) -> bool:

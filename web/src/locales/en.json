@@ -3476,12 +3476,15 @@
       "progress": "Processed {{processed}} of {{total}}",
       "resultHeadline": "Added the workflow to {{added}} of {{total}} repositories ({{present}} already had it).",
       "repullReminder": "Tell students to run git pull. Clones made before this change will conflict on their next push.",
-      "regradeReminder": "Work students already pushed isn't graded until their next push. Use \"Regrade all\" to grade it now.",
+      "regradeReminder": "Work students already pushed is graded on their next push. A workflow only runs for commits that contain it, so \"Regrade all\" can't reach earlier commits. To grade now, have students push once (an empty commit works).",
+      "configBranchError": "Couldn't read the classroom repository's default branch, so no workflow was added. Try again.",
       "scopeSection_one": "{{count}} repository needs extra GitHub permission",
       "scopeSection_other": "{{count}} repositories need extra GitHub permission",
       "scopeDetail": "Your GitHub authorization can't modify workflow files. Sign out and back in, then re-run.",
       "failedSection_one": "{{count}} repository couldn't be updated",
       "failedSection_other": "{{count}} repositories couldn't be updated",
+      "unrecognizedSection_one": "{{count}} repository was skipped (a different workflow is already at that path)",
+      "unrecognizedSection_other": "{{count}} repositories were skipped (a different workflow is already at that path)",
       "deferredSection_one": "{{count}} repository was not processed",
       "deferredSection_other": "{{count}} repositories were not processed",
       "deferredDetail": "Skipped. Re-run to add.",
@@ -3491,7 +3494,7 @@
       "warningLead_one": "This commits the autograding workflow to {{count}} student's repository.",
       "warningLead_other": "This commits the autograding workflow to {{count}} students' repositories.",
       "warningPoint1": "Repositories that already have the workflow are left untouched.",
-      "warningPoint2": "The commit is marked so it doesn't trigger grading. Use \"Regrade all\" afterward to grade work students already pushed.",
+      "warningPoint2": "The commit is marked so it doesn't trigger grading. Work students already pushed is graded on their next push; \"Regrade all\" can't reach commits made before the workflow existed.",
       "warningPoint3": "Students must pull afterward. Clones made before this change will conflict on their next push."
     },
     "rowShim": {
@@ -3499,8 +3502,9 @@
       "description": "Add the built-in autograding workflow to this repository if it was accepted while the autograder was off.",
       "aria": "Add the autograding workflow to {{repo}}",
       "outcome": {
-        "added": "Autograding workflow added. The student must pull before their next push; use Regrade to grade work already pushed.",
+        "added": "Autograding workflow added. The student must pull before their next push, and that push is what grades work already in the repository.",
         "present": "This repository already has the autograding workflow.",
+        "unrecognized": "Skipped: a different workflow is already at the autograding workflow's path, so nothing was changed.",
         "notAccepted": "No repository exists yet, so there's nothing to add.",
         "missingWorkflowScope": "Your GitHub authorization can't modify workflow files. Sign out and back in, then retry.",
         "failed": "Couldn't add the workflow. Try again."

@@ -287,6 +287,41 @@ def test_first_gradeable_commit_skips_skip_ci_bookkeeping_at_head(monkeypatch):
     assert rr.first_gradeable_commit("https://api", "cs50", "repo", "tok") == ("work", "main")
 
 
+def test_first_gradeable_commit_fails_when_only_pre_backfill_work_exists(monkeypatch):
+    # The built-in autograder was turned on after the student pushed: the
+    # backfill commit at HEAD is [skip ci], and every commit under it has no
+    # workflow, so a tag there fires nothing. Say so instead of tagging.
+    fake_get, _ = _fake_commits_get(
+        commits=[
+            ("backfill", "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]"),
+            ("work", "Finish problem set"),
+            ("accept", "[Classroom 50] Initialize .classroom50.yaml (web accept)"),
+        ],
+        marker_commits=[("accept", "[Classroom 50] Initialize ...")],
+    )
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    with pytest.raises(rr._RepoFailed) as ei:
+        rr.first_gradeable_commit("https://api", "cs50", "repo", "tok")
+    assert "next push" in str(ei.value)
+    assert "cs50/repo" in str(ei.value)
+
+
+def test_first_gradeable_commit_grades_work_pushed_after_backfill(monkeypatch):
+    # A push after the backfill carries the workflow: the walk returns it
+    # before ever reaching the backfill commit.
+    fake_get, _ = _fake_commits_get(
+        commits=[
+            ("after", "Fix tests"),
+            ("backfill", "[Classroom 50] Add autograde workflow (enable-autograder)\n\n[skip ci]"),
+            ("work", "Finish problem set"),
+            ("accept", "[Classroom 50] Initialize .classroom50.yaml (web accept)"),
+        ],
+        marker_commits=[("accept", "[Classroom 50] Initialize ...")],
+    )
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    assert rr.first_gradeable_commit("https://api", "cs50", "repo", "tok") == ("after", "main")
+
+
 def test_first_gradeable_commit_none_when_nothing_pushed_since_accept(monkeypatch):
     # Accepted (Feedback PR opened on top) but never pushed: no submission, and
     # the starter code must NOT be graded into a zero-score release.

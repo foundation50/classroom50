@@ -23,10 +23,12 @@ import {
 } from "@/components/modals/collaboratorHelpers"
 import {
   SubmissionActionList,
-  SubmissionHubFeedbackContext,
   type SubmissionActionListProps,
-  type SubmissionHubFeedback,
 } from "@/pages/submissions/SubmissionsRowActions"
+import {
+  SubmissionHubFeedbackContext,
+  type SubmissionHubFeedback,
+} from "@/pages/submissions/submissionFeedback"
 import { formatSubmissionDateTime as formatDateTime } from "@/util/formatDate"
 import { defaultRepoPagesUrl } from "@/util/repoPages"
 import type { GitHubRepo } from "@/github-core/types"

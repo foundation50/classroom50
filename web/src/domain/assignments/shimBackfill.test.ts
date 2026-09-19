@@ -32,6 +32,9 @@ function apiError(status: number, oauthScopes?: string): GitHubAPIError {
 function fakeClient(opts: {
   repoExists?: boolean
   shimExists?: boolean
+  // Body served at the shim path when shimExists; defaults to a default shim.
+  shimContent?: string
+  contentsStatus?: number
   workflowScope404?: boolean
 }) {
   const calls: Call[] = []
@@ -51,8 +54,14 @@ function fakeClient(opts: {
         return { sha: "head-sha", tree: { sha: "tree-sha" } }
       }
       if (url === `/repos/o/r/contents/${AUTOGRADE_SHIM_PATH}?ref=head-sha`) {
+        if (opts.contentsStatus) throw apiError(opts.contentsStatus)
         if (!opts.shimExists) throw apiError(404)
-        return { content: "", encoding: "base64" }
+        const body =
+          opts.shimContent ?? defaultAutograderWorkflow("o", "main", "main")
+        return {
+          content: Buffer.from(body, "utf-8").toString("base64"),
+          encoding: "base64",
+        }
       }
       if (url === "/repos/o/r/git/trees" && method === "POST") {
         if (opts.workflowScope404) throw apiError(404, "repo, read:org")
@@ -113,6 +122,36 @@ describe("addAutogradeShim", () => {
       submissionMode: "every-push",
     })
     expect(outcome).toEqual({ status: "present" })
+    expect(writes(calls)).toEqual([])
+  })
+
+  it("reports a foreign file at the shim path as unrecognized, untouched", async () => {
+    const { client, calls } = fakeClient({
+      shimExists: true,
+      shimContent: "name: Custom\non:\n  workflow_dispatch: {}\njobs: {}\n",
+    })
+    const outcome = await addAutogradeShim({
+      client,
+      org: "o",
+      repo: "r",
+      configBranch: "main",
+      submissionMode: "every-push",
+    })
+    expect(outcome.status).toBe("unrecognized")
+    expect(writes(calls)).toEqual([])
+  })
+
+  it("rethrows a non-404 contents error instead of guessing", async () => {
+    const { client, calls } = fakeClient({ contentsStatus: 403 })
+    await expect(
+      addAutogradeShim({
+        client,
+        org: "o",
+        repo: "r",
+        configBranch: "main",
+        submissionMode: "every-push",
+      }),
+    ).rejects.toBeInstanceOf(GitHubAPIError)
     expect(writes(calls)).toEqual([])
   })
 

@@ -18,6 +18,7 @@ import {
 } from "./submissionDetection"
 import {
   FEEDBACK_OPEN_COMMIT_MESSAGE,
+  SHIM_BACKFILL_COMMIT_MESSAGE,
   shimUpdateCommitMessage,
 } from "@/util/commit"
 import type { GitHubCommit, GitHubTag } from "@/github-core/types"
@@ -144,6 +145,7 @@ describe("commitAuthor", () => {
       commit("feedback", undefined, FEEDBACK_OPEN_COMMIT_MESSAGE),
       commit("shim-tag", undefined, shimUpdateCommitMessage("tag")),
       commit("shim-push", undefined, shimUpdateCommitMessage("every-push")),
+      commit("shim-backfill", undefined, SHIM_BACKFILL_COMMIT_MESSAGE),
       commit("c1"),
     ]
     const detected = detectBranchSubmissions(commits, null)

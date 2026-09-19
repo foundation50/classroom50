@@ -4,29 +4,28 @@
 // already-accepted repos with no workflow and nothing ever grades them. This is
 // the web twin of `gh teacher assignment enable-autograder`'s per-repo loop.
 //
-// A repo that already has the file is reported and never rewritten: the
-// submission-mode retrofit (submissionTrigger.ts) owns reconciling an existing
-// shim's trigger. Custom (teacher-authored) autograders are gated out by the
+// A repo that already carries a default shim is reported present and never
+// rewritten: the submission-mode retrofit (submissionTrigger.ts) owns
+// reconciling its trigger. Any other file at the reserved path is reported
+// unrecognized and left alone, since calling it present would hide that
+// nothing grades. Custom (teacher-authored) autograders are gated out by the
 // callers, as they are for the retrofit.
 import type { GitHubClient } from "@/github-core/client"
-import {
-  commitRepoTree,
-  createRepoTree,
-  readRepoHead,
-} from "@/github-core/mutations"
-import { getRepo } from "@/github-core/repoReads"
-import { GitHubAPIError } from "@/github-core/errors"
+import { readRepoHead } from "@/github-core/mutations"
 import { SHIM_BACKFILL_COMMIT_MESSAGE } from "@/util/commit"
 import type { SubmissionMode } from "@/types/classroom"
 import { defaultAutograderWorkflow } from "./autograderYaml"
 import {
-  AUTOGRADE_SHIM_PATH,
-  tokenLacksWorkflowScope,
+  commitShimFile,
+  isDefaultShim,
+  readShimAtHead,
+  resolveStudentRepoBranch,
 } from "./submissionTrigger"
 
 export type ShimBackfillOutcome =
   | { status: "added" }
   | { status: "present" }
+  | { status: "unrecognized"; reason: string }
   | { status: "notAccepted" }
   | { status: "missingWorkflowScope" }
 
@@ -35,7 +34,8 @@ export async function addAutogradeShim(params: {
   org: string
   repo: string
   // The config repo's default branch: the reusable-workflow ref the shim
-  // points at. Resolved once by the caller, not per repo.
+  // points at. The caller resolves it once, and fails closed rather than
+  // guessing, because an existing shim is never rewritten.
   configBranch: string
   submissionMode: SubmissionMode
   submissionTags?: string[]
@@ -43,29 +43,18 @@ export async function addAutogradeShim(params: {
   const { client, org, repo, configBranch, submissionMode, submissionTags } =
     params
 
-  let branch: string
-  try {
-    const live = await getRepo(client, org, repo)
-    if (!live?.default_branch) return { status: "notAccepted" }
-    branch = live.default_branch
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return { status: "notAccepted" }
-    }
-    throw err
-  }
-
-  // Pin the existence check and the commit to one resolved tip SHA, for the
-  // same read-after-write reason as updateShimSubmissionMode.
+  const branch = await resolveStudentRepoBranch(client, org, repo)
+  if (!branch) return { status: "notAccepted" }
   const head = await readRepoHead(client, { owner: org, repo }, branch)
 
-  try {
-    await client.request(
-      `/repos/${org}/${repo}/contents/${AUTOGRADE_SHIM_PATH}?ref=${encodeURIComponent(head.headSha)}`,
-    )
-    return { status: "present" }
-  } catch (err) {
-    if (!(err instanceof GitHubAPIError && err.status === 404)) throw err
+  const current = await readShimAtHead(client, org, repo, head.headSha)
+  if (current !== null) {
+    if (isDefaultShim(current)) return { status: "present" }
+    return {
+      status: "unrecognized",
+      reason:
+        "a workflow already exists at the shim path but is not the default autograde shim",
+    }
   }
 
   const content = defaultAutograderWorkflow(
@@ -75,41 +64,16 @@ export async function addAutogradeShim(params: {
     submissionMode,
     submissionTags,
   )
-
-  // Only the tree POST is classified: it is the call GitHub rejects with a
-  // 404 when the token lacks the `workflow` scope needed to touch a workflow
-  // file.
-  let tree: { sha: string }
-  try {
-    tree = await createRepoTree(client, {
-      owner: org,
-      repo,
-      baseTreeSha: head.baseTreeSha,
-      tree: [
-        {
-          path: AUTOGRADE_SHIM_PATH,
-          mode: "100644",
-          type: "blob",
-          content,
-        },
-      ],
-    })
-  } catch (err) {
-    if (
-      err instanceof GitHubAPIError &&
-      err.status === 404 &&
-      tokenLacksWorkflowScope(err)
-    ) {
-      return { status: "missingWorkflowScope" }
-    }
-    throw err
-  }
-  await commitRepoTree(
+  const committed = await commitShimFile(
     client,
-    { owner: org, repo },
+    org,
+    repo,
     head,
-    tree.sha,
+    content,
     SHIM_BACKFILL_COMMIT_MESSAGE,
   )
+  if (committed === "missingWorkflowScope") {
+    return { status: "missingWorkflowScope" }
+  }
   return { status: "added" }
 }

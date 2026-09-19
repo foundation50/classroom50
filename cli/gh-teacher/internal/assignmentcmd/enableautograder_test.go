@@ -80,7 +80,7 @@ func TestRunEnableAutograder_FlipsFieldAndAddsShims(t *testing.T) {
 	if msg := fix.commitMessages["dst-hello-alice"]; msg != contract.ShimBackfillCommitMessage() {
 		t.Errorf("backfill commit message = %q, want %q", msg, contract.ShimBackfillCommitMessage())
 	}
-	for _, want := range []string{"git pull", "Regrade all", "1 added, 1 already had it"} {
+	for _, want := range []string{"git pull", "graded on their next push", "1 added, 1 already had it"} {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("output missing %q:\n%s", want, out.String())
 		}
@@ -134,6 +134,53 @@ func TestRunEnableAutograder_Idempotent(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "already has the built-in autograder on") {
 		t.Errorf("output should report the no-op flip:\n%s", out.String())
+	}
+	if strings.Contains(out.String(), "next push") {
+		t.Errorf("the next-push reminder must only follow a real write:\n%s", out.String())
+	}
+}
+
+func TestRunEnableAutograder_ForeignFileAtShimPathLeftAlone(t *testing.T) {
+	// A hand-added or template-shipped workflow at the reserved path is not
+	// the shim: calling it "present" would hide that nothing grades.
+	custom := "name: Autograde\non:\n  workflow_dispatch: {}\njobs: {}\n"
+	server, fix := newSMServer(t, smServerConfig{
+		assignments: eaAssignmentsBody(true, nil),
+		repos:       map[string]string{"dst-hello-alice": custom},
+	})
+	client := githubtest.NewTestClient(t, server)
+	var out, errOut bytes.Buffer
+	if err := runEnableAutograder(client, &out, &errOut, eaParams()); err != nil {
+		t.Fatalf("an unrecognized file must not fail the command: %v", err)
+	}
+	fix.mu.Lock()
+	defer fix.mu.Unlock()
+	if _, wrote := fix.committedShims["dst-hello-alice"]; wrote {
+		t.Error("a foreign workflow must never be overwritten")
+	}
+	if !strings.Contains(errOut.String(), "not the default autograde shim") {
+		t.Errorf("skip must be reported on stderr:\n%s", errOut.String())
+	}
+	if !strings.Contains(out.String(), "0 added, 0 already had it, 1 skipped") {
+		t.Errorf("summary should count the skip:\n%s", out.String())
+	}
+}
+
+func TestRunEnableAutograder_GroupModeRefused(t *testing.T) {
+	server, fix := newSMServer(t, smServerConfig{
+		assignments: eaAssignmentsBody(true, map[string]any{"mode": "group", "max_group_size": 3}),
+		repos:       map[string]string{"dst-hello-alice": ""},
+	})
+	client := githubtest.NewTestClient(t, server)
+	var out, errOut bytes.Buffer
+	err := runEnableAutograder(client, &out, &errOut, eaParams())
+	if err == nil || !strings.Contains(err.Error(), "group assignment") {
+		t.Fatalf("expected group-mode refusal, got %v", err)
+	}
+	fix.mu.Lock()
+	defer fix.mu.Unlock()
+	if fix.committedAssignments != nil || len(fix.committedShims) != 0 {
+		t.Error("refused command must write nothing")
 	}
 }
 
@@ -235,6 +282,9 @@ func TestRunEnableAutograder_DryRunWritesNothing(t *testing.T) {
 		if !strings.Contains(out.String(), want) {
 			t.Errorf("dry run output missing %q:\n%s", want, out.String())
 		}
+	}
+	if strings.Contains(out.String(), "next push") {
+		t.Errorf("dry run must not print the post-write reminder:\n%s", out.String())
 	}
 }
 
