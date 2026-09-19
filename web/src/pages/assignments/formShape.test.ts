@@ -108,26 +108,38 @@ describe("deriveFormShape — repository source", () => {
     expect(shape.feedbackPrEnabled).toBe(true)
   })
 
-  it("a raw empty_repo: true stays bare even with built-in on (hard override, no init_shim)", () => {
+  it("a stored empty_repo: true does not veto switching to built-in (edit of a bare repo becomes init_shim)", () => {
+    // The edit form seeds empty_repo from the stored entry and no control ever
+    // changes it, so it must not be an input: otherwise a bare-repo assignment
+    // could never move to the built-in autograder from the settings page.
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
-      autograding_state: "built-in",
-    })
-    expect(shape.emptyRepo).toBe(true)
-    expect(shape.initShim).toBe(false)
-    expect(shape.autogradingState).toBe("empty")
-  })
-
-  it("a raw empty_repo: true overrides to 'empty' (stored bare-repo assignment)", () => {
-    const shape = deriveFormShape({
-      ...base,
-      empty_repo: true,
+      repo_source: "none",
+      add_readme: false,
       autograding_state: "built-in",
     })
     expect(shape.repositorySource).toBe("empty")
-    expect(shape.emptyRepo).toBe(true)
-    expect(shape.autogradingState).toBe("empty")
+    expect(shape.initShim).toBe(true)
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.autogradingState).toBe("built-in")
+    expect(shape.showBuiltInConfig).toBe(true)
+  })
+
+  it("a stored empty_repo: true does not override a README source", () => {
+    // Same reason: the source is what the teacher sees and edits, so a stale
+    // wire flag must not silently keep the repo bare behind a README pick.
+    const shape = deriveFormShape({
+      ...base,
+      empty_repo: true,
+      repo_source: "none",
+      add_readme: true,
+      autograding_state: "none",
+    })
+    expect(shape.repositorySource).toBe("readme")
+    expect(shape.emptyRepo).toBe(false)
+    expect(shape.noAutograder).toBe(true)
+    expect(shape.autogradingState).toBe("none")
   })
 
   it("template source, built-in on: template fields shown, README toggle hidden, built-in available", () => {

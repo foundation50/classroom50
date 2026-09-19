@@ -618,9 +618,11 @@ describe("submission release files visibility", () => {
     expect(container.querySelector("#release_assets")).not.toBeNull()
   })
 
-  it("hides the textarea for empty_repo even with stale text", () => {
+  it("hides the textarea for a bare repo even with stale text", () => {
     const { container } = renderForm({
-      empty_repo: true,
+      repo_source: "none",
+      add_readme: false,
+      autograding_state: "none",
       release_assets: "../bad.pdf",
     })
     // A bare repo has no built-in autograder, so there's no advanced pane to

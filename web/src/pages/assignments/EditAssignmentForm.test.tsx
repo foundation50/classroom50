@@ -117,6 +117,47 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
+it("writes init_shim and drops empty_repo when a stored bare repo picks the built-in autograder", () => {
+  // The user-reported case: an assignment created with no template, no README
+  // and no autograder is stored as empty_repo: true. Enabling the built-in
+  // autograder from the settings page must reach the wire as init_shim rather
+  // than being folded back to the stored bare flag. No students have accepted,
+  // so the write is direct.
+  acceptedRepoNames = []
+  submittedOverrides = {
+    empty_repo: true,
+    add_readme: false,
+    autograding_state: "built-in",
+    feedback_pr: false,
+  }
+  render(
+    <EditAssignmentForm
+      org="acme"
+      classroom="cs101"
+      assignment="hw1"
+      defaultData={{
+        slug: "hw1",
+        name: "Homework",
+        mode: "individual",
+        autograder: "default",
+        feedback_pr: false,
+        empty_repo: true,
+      }}
+      onSuccess={vi.fn()}
+    />,
+  )
+  fireEvent.click(screen.getByRole("button", { name: "submit" }))
+  expect(mutateAsync).toHaveBeenCalledTimes(1)
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({
+      empty_repo: false,
+      init_shim: true,
+      no_autograder: false,
+    }),
+    expect.any(Object),
+  )
+})
+
 it("passes grading form fields through the edit boundary", () => {
   render(
     <EditAssignmentForm

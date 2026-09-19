@@ -323,12 +323,13 @@ function RepositoryAdvancedFields({
 
       {/* RepoFeatureControls renders its own heading, refresh, help, and
           override warning; the subscription feeds it the template ref +
-          bare-repo flag. */}
+          bare-repo flag (derived, so a stored bare repo switched to built-in
+          reads as initialized here too). */}
       <div className="pt-1">
         <form.Subscribe
           selector={(state) => ({
             templateRepo: state.values.template_repo.trim(),
-            emptyRepo: state.values.empty_repo,
+            emptyRepo: deriveFormShape(state.values).emptyRepo,
           })}
         >
           {({ templateRepo, emptyRepo }) => (

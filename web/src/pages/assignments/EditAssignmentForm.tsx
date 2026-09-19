@@ -184,7 +184,10 @@ const EditAssignmentForm = ({
                 team_formation: values.team_formation,
                 feedback_pr: values.feedback_pr,
                 feedback_pr_template: values.feedback_pr_template,
-                empty_repo: values.empty_repo,
+                // The three provisioning flags come from one derivation so a
+                // stored bare repo switched to built-in writes init_shim and
+                // drops empty_repo together.
+                empty_repo: shape.emptyRepo,
                 no_autograder: shape.noAutograder,
                 init_shim: shape.initShim,
                 include_all_branches: values.include_all_branches,
@@ -238,7 +241,7 @@ const EditAssignmentForm = ({
               const impact = editImpactSummary(
                 defaultData,
                 {
-                  empty_repo: values.empty_repo,
+                  empty_repo: shape.emptyRepo,
                   no_autograder: shape.noAutograder,
                   init_shim: shape.initShim,
                   gradingMode: values.grading_choice,

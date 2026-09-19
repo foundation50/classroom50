@@ -121,12 +121,14 @@ export type CreateAssignmentFormValues = {
   // a template source; cleared on submit otherwise. Maps to the wire
   // feedback_pr_template. Auto-checked when the form detects a template PR file.
   feedback_pr_template: boolean
-  // Truly bare student repos: no starter content, no control files, autograding
-  // and the Feedback PR off. Editable, but a change only affects repos accepted
-  // from then on (the edit form confirms once students have accepted). While
-  // checked, the template/autograding/advanced grading sections are hidden and
-  // their values cleared on submit, mirroring runtime_env's conditional-clear
-  // idiom.
+  // Wire empty_repo (truly bare student repos: no starter content, no control
+  // files, autograding and the Feedback PR off). Write-only from the form's
+  // point of view: derived by deriveFormShape from repo_source + add_readme +
+  // autograding_state and written back by toSubmitValues. On edit it is seeded
+  // from the stored entry but never read as an input, so a stored bare repo can
+  // still be switched to the built-in autograder (init_shim). Editable, but a
+  // change only affects repos accepted from then on (the edit form confirms
+  // once students have accepted).
   empty_repo: boolean
   // UI-only repository-source discriminator (never sent verbatim; folds into
   // empty_repo + template_repo on submit). "template" = start from a template
@@ -474,7 +476,12 @@ export function validateAssignmentForm(
   // form, not by a failed commit or an unparseable file.
   Object.assign(errors, validateTestDrafts(value.tests))
 
-  if (!value.empty_repo && value.setup_command.trim()) {
+  // The bare-repo gates below read the derived shape, not the raw empty_repo
+  // field, so a stored bare repo that the teacher just switched to built-in
+  // validates the fields that pick now reveals.
+  const isEmptyRepo = deriveFormShape(value).emptyRepo
+
+  if (!isEmptyRepo && value.setup_command.trim()) {
     const setupTimeoutError = validateTestTimeout(
       setupTimeoutValue(value.setup_timeout),
     )
@@ -494,7 +501,7 @@ export function validateAssignmentForm(
     errors.allowed_files = allowedFilesError
   }
 
-  if (!value.empty_repo) {
+  if (!isEmptyRepo) {
     const releaseAssetsError = validateReleaseAssets(
       parseReleaseAssets(value.release_assets),
     )
@@ -726,11 +733,10 @@ export function toSubmitValues(
   value: CreateAssignmentFormValues,
 ): CreateAssignmentFormValues {
   // One derived shape drives every clear below, so the render gates (which read
-  // the same deriveFormShape) and the submit clears can't drift. empty_repo
-  // forces autogradingState "empty" inside deriveFormShape; a bare repo and
-  // teacher-supplied CI ("none") both commit no shim, so both clear the built-
-  // in-only grading fields — but only empty_repo also clears template and
-  // feedback_pr (a templated repo has a baseline commit).
+  // the same deriveFormShape) and the submit clears can't drift. A bare repo
+  // (shape.emptyRepo) and teacher-supplied CI ("none") both commit no shim, so
+  // both clear the built-in-only grading fields — but only the bare repo also
+  // clears template and feedback_pr (a templated repo has a baseline commit).
   const shape = deriveFormShape(value)
   const isContainer = shape.showContainerFields
   const isEmptyRepo = shape.emptyRepo
