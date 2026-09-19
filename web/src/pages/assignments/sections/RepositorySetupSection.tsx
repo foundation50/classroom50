@@ -322,23 +322,16 @@ function RepositoryAdvancedFields({
       <StudentPermissionField form={form} />
 
       {/* RepoFeatureControls renders its own heading, refresh, help, and
-          override warning; the subscription feeds it the template ref +
-          bare-repo flag (derived, so a stored bare repo switched to built-in
-          reads as initialized here too). */}
+          override warning; the subscription feeds it the template ref. */}
       <div className="pt-1">
-        <form.Subscribe
-          selector={(state) => ({
-            templateRepo: state.values.template_repo.trim(),
-            emptyRepo: deriveFormShape(state.values).emptyRepo,
-          })}
-        >
-          {({ templateRepo, emptyRepo }) => (
+        <form.Subscribe selector={(state) => state.values.template_repo.trim()}>
+          {(templateRepo) => (
             <RepoFeatureControls
               form={form}
               edit={edit}
               org={org}
               templateRepo={templateRepo}
-              emptyRepo={emptyRepo}
+              emptyRepo={shape.emptyRepo}
             />
           )}
         </form.Subscribe>

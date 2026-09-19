@@ -118,11 +118,7 @@ beforeEach(() => {
 afterEach(cleanup)
 
 it("writes init_shim and drops empty_repo when a stored bare repo picks the built-in autograder", () => {
-  // The user-reported case: an assignment created with no template, no README
-  // and no autograder is stored as empty_repo: true. Enabling the built-in
-  // autograder from the settings page must reach the wire as init_shim rather
-  // than being folded back to the stored bare flag. No students have accepted,
-  // so the write is direct.
+  // No students have accepted, so the write is direct (no confirm dialog).
   acceptedRepoNames = []
   submittedOverrides = {
     empty_repo: true,

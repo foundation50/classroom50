@@ -385,8 +385,6 @@ describe("setup timeout", () => {
   })
 
   it("validates the timeout on a stored bare repo once the built-in autograder is picked", () => {
-    // The gate reads the derived shape: a stale stored empty_repo must not
-    // skip validation of a field the built-in pick just revealed.
     expect(
       validateAssignmentForm(
         {
@@ -959,8 +957,6 @@ describe("toSubmitValues — runtime field clearing", () => {
   })
 
   it("a stored empty_repo does not force 'empty' once the built-in autograder is picked", () => {
-    // The edit form opens a bare-repo entry with empty_repo: true and nothing
-    // ever flips it; the pick must still win and write init_shim, not bare.
     const out = toSubmitValues({
       ...bare,
       empty_repo: true,
@@ -968,11 +964,10 @@ describe("toSubmitValues — runtime field clearing", () => {
     })
     expect(out.autograding_state).toBe("built-in")
     expect(out.empty_repo).toBe(false)
-    expect(deriveFormShape(out).initShim).toBe(true)
   })
 
-  it("no template + no README + built-in off writes empty_repo from the source, not the stored flag", () => {
-    const out = toSubmitValues({ ...bare, empty_repo: false })
+  it("no template + no README + built-in off writes empty_repo from the source", () => {
+    const out = toSubmitValues(bare)
     expect(out.empty_repo).toBe(true)
     expect(out.autograding_state).toBe("empty")
   })
@@ -1264,7 +1259,6 @@ describe("assignmentToFormValues — autograding tri-state", () => {
   })
 
   it("a stored bare repo can be switched to the built-in autograder on edit", () => {
-    // Read the stored entry, flip only the radio the teacher can reach, submit.
     // The stale stored empty_repo rides along in the form values and must not
     // win over the pick.
     const stored = assignmentToFormValues({

@@ -86,13 +86,10 @@ export type FormShape = {
 // on the autograding pick. This collapse is the single definition toSubmitValues
 // and the render gates both consume.
 //
-// value.empty_repo is deliberately NOT an input here. It is the wire OUTPUT of
-// this derivation (toSubmitValues writes shape.emptyRepo back into it), and on
-// edit it is seeded from the stored entry while no control ever changes it.
-// Reading it would let the stored bare-repo flag veto a teacher's later
-// built-in-autograder pick, so the entry could never move from empty_repo to
-// init_shim. assignmentToFormValues seeds repo_source/add_readme instead so a
-// stored bare repo still opens on the "empty" source.
+// value.empty_repo is not an input: it is the wire OUTPUT of this derivation
+// (toSubmitValues writes shape.emptyRepo back). On edit it is seeded from the
+// stored entry and no control changes it, so reading it would let a stored
+// bare repo veto a later built-in pick (empty_repo could never become init_shim).
 export function deriveFormShape(value: CreateAssignmentFormValues): FormShape {
   const repositorySource: RepositorySource =
     value.repo_source === "template"

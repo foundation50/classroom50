@@ -122,13 +122,10 @@ export type CreateAssignmentFormValues = {
   // feedback_pr_template. Auto-checked when the form detects a template PR file.
   feedback_pr_template: boolean
   // Wire empty_repo (truly bare student repos: no starter content, no control
-  // files, autograding and the Feedback PR off). Write-only from the form's
-  // point of view: derived by deriveFormShape from repo_source + add_readme +
-  // autograding_state and written back by toSubmitValues. On edit it is seeded
-  // from the stored entry but never read as an input, so a stored bare repo can
-  // still be switched to the built-in autograder (init_shim). Editable, but a
-  // change only affects repos accepted from then on (the edit form confirms
-  // once students have accepted).
+  // files, autograding and the Feedback PR off). Written by toSubmitValues from
+  // deriveFormShape and never read as an input (see deriveFormShape). Editable,
+  // but a change only affects repos accepted from then on (the edit form
+  // confirms once students have accepted).
   empty_repo: boolean
   // UI-only repository-source discriminator (never sent verbatim; folds into
   // empty_repo + template_repo on submit). "template" = start from a template
@@ -476,9 +473,6 @@ export function validateAssignmentForm(
   // form, not by a failed commit or an unparseable file.
   Object.assign(errors, validateTestDrafts(value.tests))
 
-  // The bare-repo gates below read the derived shape, not the raw empty_repo
-  // field, so a stored bare repo that the teacher just switched to built-in
-  // validates the fields that pick now reveals.
   const isEmptyRepo = deriveFormShape(value).emptyRepo
 
   if (!isEmptyRepo && value.setup_command.trim()) {

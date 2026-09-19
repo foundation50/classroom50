@@ -110,8 +110,7 @@ describe("deriveFormShape — repository source", () => {
 
   it("a stored empty_repo: true does not veto switching to built-in (edit of a bare repo becomes init_shim)", () => {
     // The edit form seeds empty_repo from the stored entry and no control ever
-    // changes it, so it must not be an input: otherwise a bare-repo assignment
-    // could never move to the built-in autograder from the settings page.
+    // changes it, so it must not be an input.
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
@@ -127,8 +126,6 @@ describe("deriveFormShape — repository source", () => {
   })
 
   it("a stored empty_repo: true does not override a README source", () => {
-    // Same reason: the source is what the teacher sees and edits, so a stale
-    // wire flag must not silently keep the repo bare behind a README pick.
     const shape = deriveFormShape({
       ...base,
       empty_repo: true,
