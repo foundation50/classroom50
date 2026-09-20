@@ -873,6 +873,24 @@ func TestRefreshResultJSON(t *testing.T) {
 	mux.HandleFunc("/repos/o/no-release/releases", func(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 	})
+	// Every submit/* release fails provenance: nothing is written, and files an
+	// earlier download left in the clone are named on errOut.
+	mux.HandleFunc("/repos/o/all-rejected/releases", func(w http.ResponseWriter, r *http.Request) {
+		forged := botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-new.json"))
+		forged["author"] = map[string]any{"login": "alice"}
+		_ = json.NewEncoder(w).Encode([]map[string]any{forged})
+	})
+	// The bot uploaded it, but it isn't a result document: a release_assets
+	// file renamed to result.json. Treated as a missing asset.
+	mux.HandleFunc("/repos/o/renamed-asset/releases", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode([]map[string]any{
+			botRelease("submit/2026-06-02T10-00-00Z", botAsset("result.json", server.URL+"/asset-report.json")),
+			botRelease("submit/2026-06-01T14-32-05Z", botAsset("result.json", server.URL+"/asset-old.json")),
+		})
+	})
+	mux.HandleFunc("/asset-report.json", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"schema":"other/v1","score":100}`))
+	})
 	mux.HandleFunc("/asset-new.json", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte(`{"schema":"classroom50/result/v1","score":25}`))
 	})
@@ -974,6 +992,7 @@ func TestRefreshResultJSON(t *testing.T) {
 	}{
 		{name: "no submit-tag release anywhere → no files", repo: "non-submit-empty"},
 		{name: "404 releases → no files", repo: "no-release"},
+		{name: "every release rejected for provenance → no files", repo: "all-rejected"},
 	}
 	for _, tc := range noOpCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -992,6 +1011,58 @@ func TestRefreshResultJSON(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("every release rejected → files from an earlier download are named, not touched", func(t *testing.T) {
+		target := filepath.Join(dir, "all-rejected-stale")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		const stale = `{"schema":"classroom50/result/v1","score":100}`
+		mustWrite(t, filepath.Join(target, resultAssetName), stale)
+		var errOut bytes.Buffer
+		if err := refreshResultJSON(client, &errOut, "test-token", server.URL, "o", "all-rejected", target); err != nil {
+			t.Fatalf("refreshResultJSON: %v", err)
+		}
+		got, err := os.ReadFile(filepath.Join(target, resultAssetName))
+		if err != nil || string(got) != stale {
+			t.Fatalf("result.json = %q, %v; want the earlier file left in place", got, err)
+		}
+		if !strings.Contains(errOut.String(), "result.json from an earlier download is still in "+target) {
+			t.Errorf("errOut lacks the stale result.json warning:\n%s", errOut.String())
+		}
+		if strings.Contains(errOut.String(), "results.json from an earlier download") {
+			t.Errorf("results.json was never written, yet errOut names it:\n%s", errOut.String())
+		}
+	})
+
+	t.Run("a result.json without the result schema is treated as missing", func(t *testing.T) {
+		target := filepath.Join(dir, "renamed-asset")
+		if err := os.MkdirAll(target, 0o755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		var errOut bytes.Buffer
+		if err := refreshResultJSON(client, &errOut, "test-token", server.URL, "o", "renamed-asset", target); err != nil {
+			t.Fatalf("refreshResultJSON: %v", err)
+		}
+		var history []submissionRecord
+		historyBytes, err := os.ReadFile(filepath.Join(target, resultsAssetName))
+		if err != nil {
+			t.Fatalf("read results.json: %v", err)
+		}
+		if err := json.Unmarshal(historyBytes, &history); err != nil {
+			t.Fatalf("decode results.json: %v", err)
+		}
+		if len(history) != 2 || string(history[0].Result) != "null" || !strings.Contains(string(history[1].Result), `"score": 18`) {
+			t.Fatalf("history = %s, want a null newest payload and the honest older one", historyBytes)
+		}
+		latest, err := os.ReadFile(filepath.Join(target, resultAssetName))
+		if err != nil || !strings.Contains(string(latest), `"score":18`) {
+			t.Errorf("result.json = %q, %v; want the honest payload, not the renamed asset", latest, err)
+		}
+		if !strings.Contains(errOut.String(), `release "submit/2026-06-02T10-00-00Z": result.json is not a classroom50/result/v1 document; treated as missing`) {
+			t.Errorf("errOut lacks the schema warning:\n%s", errOut.String())
+		}
+	})
 }
 
 // mustWrite writes contents to path, failing the test on error.
@@ -1181,7 +1252,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, err := listAllSubmitReleases(client, io.Discard, "o", "r")
+		rels, _, err := listAllSubmitReleases(client, io.Discard, "o", "r")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
@@ -1223,9 +1294,12 @@ func TestListAllSubmitReleases(t *testing.T) {
 		client := githubtest.NewTestClient(t, server)
 
 		var errOut bytes.Buffer
-		rels, err := listAllSubmitReleases(client, &errOut, "o", "r")
+		rels, rejected, err := listAllSubmitReleases(client, &errOut, "o", "r")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
+		}
+		if rejected != 4 {
+			t.Errorf("rejected = %d, want 4", rejected)
 		}
 		if len(rels) != 1 || rels[0].TagName != "submit/2026-06-01T10-00-00Z" {
 			t.Fatalf("kept %+v, want only the workflow's release with a foreign screenshot", rels)
@@ -1255,7 +1329,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, err := listAllSubmitReleases(client, io.Discard, "o", "missing")
+		rels, _, err := listAllSubmitReleases(client, io.Discard, "o", "missing")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}
@@ -1282,7 +1356,7 @@ func TestListAllSubmitReleases(t *testing.T) {
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
-		rels, err := listAllSubmitReleases(client, io.Discard, "o", "many")
+		rels, _, err := listAllSubmitReleases(client, io.Discard, "o", "many")
 		if err != nil {
 			t.Fatalf("listAllSubmitReleases: %v", err)
 		}

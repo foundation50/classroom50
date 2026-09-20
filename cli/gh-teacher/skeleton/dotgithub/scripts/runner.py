@@ -61,8 +61,10 @@ from typing import Any
 # (cli/gh-teacher/skeleton/dotgithub/scripts/collect_scores.py).
 RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # Any version of the sentinel: a staged release asset carrying one is refused
-# (see _looks_like_result_document). Files above the collector's asset ceiling
-# can't be read as a score, so they aren't parsed.
+# (see _looks_like_result_document). Files above the readers' asset ceiling
+# can't be read as a score, so they aren't parsed. Keep in lockstep with
+# collect_scores.py::MAX_RESULT_BYTES and download.go maxResultBytes
+# (test_contract_parity.py pins the sniff at or above the collector's).
 RESULT_SCHEMA_PREFIX = "classroom50/result/"
 RESULT_SNIFF_MAX_BYTES = 10 * 1024 * 1024
 
@@ -1013,6 +1015,11 @@ def _looks_like_result_document(path: pathlib.Path) -> bool:
         data = json.loads(path.read_bytes().decode("utf-8"))
     except (OSError, ValueError):
         return False
+    except RecursionError:
+        # json.loads raises this, not ValueError, on deep nesting. A file too
+        # deep to check can't be cleared, and letting it escape would crash the
+        # runner after grading, so refuse it.
+        raise ValueError("nested too deeply to check for a result document") from None
     if not isinstance(data, dict):
         return False
     schema = data.get("schema")

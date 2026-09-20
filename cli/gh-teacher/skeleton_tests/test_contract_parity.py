@@ -11,6 +11,7 @@ text the three surfaces each phrase themselves.
 
 from __future__ import annotations
 
+import math
 import pathlib
 import re
 
@@ -33,6 +34,9 @@ _TEST_CMD_GO = (
 _WEB_CLASSROOM_TS = _REPO_ROOT / "web" / "src" / "types" / "classroom.ts"
 _WEB_RELEASE_READS_TS = (
     _REPO_ROOT / "web" / "src" / "github-core" / "queries" / "releaseRunReads.ts"
+)
+_DOWNLOAD_GO = (
+    _REPO_ROOT / "cli" / "gh-teacher" / "internal" / "download" / "download.go"
 )
 
 
@@ -88,6 +92,24 @@ class TestAutogradeReleaseAuthor:
         )
         assert web, "web AUTOGRADE_RELEASE_AUTHOR not found in releaseRunReads.ts"
         assert cs.AUTOGRADE_RELEASE_AUTHOR == go.group(1) == web.group(1)
+
+
+class TestResultSniff:
+    def test_sniff_ceiling_covers_every_reader(self):
+        # The runner refuses a release_assets file shaped like a result only up
+        # to RESULT_SNIFF_MAX_BYTES. A reader that accepted a larger result.json
+        # would reopen the rename route for files between the two sizes.
+        go = re.search(r"maxResultBytes\s*=\s*([\d\s*]+)", _DOWNLOAD_GO.read_text())
+        assert go, "maxResultBytes not found in download.go"
+        go_bytes = math.prod(int(factor) for factor in go.group(1).split("*"))
+        assert runner.RESULT_SNIFF_MAX_BYTES >= cs.MAX_RESULT_BYTES
+        assert runner.RESULT_SNIFF_MAX_BYTES >= go_bytes
+
+    def test_sniff_prefix_matches_the_schema_the_readers_accept(self):
+        assert cs.RESULT_SCHEMA_V1.startswith(runner.RESULT_SCHEMA_PREFIX)
+        go = re.search(r'resultSchemaV1\s*=\s*"([^"]+)"', _DOWNLOAD_GO.read_text())
+        assert go, "resultSchemaV1 not found in download.go"
+        assert go.group(1) == cs.RESULT_SCHEMA_V1 == runner.RESULT_SCHEMA_V1
 
 
 class TestStaffTeamSlug:

@@ -176,6 +176,23 @@ def test_looks_like_result_document_ignores_oversized_and_unreadable(tmp_path, m
     assert runner._looks_like_result_document(tmp_path / "absent.json") is False
 
 
+def test_stage_release_assets_refuses_deeply_nested_json_without_crashing(tmp_path, capsys):
+    # json.loads raises RecursionError, not ValueError, here; the runner must
+    # skip the file with a warning rather than die after grading.
+    workspace = _workspace(tmp_path)
+    _write_file(workspace, "out/deep.json", b"[" * 100_000 + b"]" * 100_000)
+    _write_file(workspace, "out/report.json", b'{"ok": true}')
+    destination = tmp_path / "staged"
+
+    accepted = runner.stage_release_assets(
+        workspace, destination, ["out/deep.json", "out/report.json"]
+    )
+
+    assert accepted == ["report.json"]
+    assert not (destination / "deep.json").exists()
+    assert "'out/deep.json' skipped (nested too deeply" in capsys.readouterr().out
+
+
 def test_stage_release_assets_skips_missing_symlink_and_oversized_files(
     tmp_path, monkeypatch, capsys
 ):

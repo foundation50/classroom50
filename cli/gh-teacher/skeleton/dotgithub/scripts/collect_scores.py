@@ -1360,7 +1360,9 @@ def collect_release_history(
                 f"skipping that submission"
             )
             continue
-        except (json.JSONDecodeError, ValueError) as exc:
+        except (json.JSONDecodeError, ValueError, RecursionError) as exc:
+            # RecursionError: json.loads on a deeply nested asset; one hostile
+            # release must skip, not abort the run.
             emit_warning(
                 f"{org}/{repo_name}: result.json malformed for "
                 f"{release.get('tag_name')!r} ({exc}); skipping that submission"
@@ -1789,20 +1791,9 @@ def collect_classroom(
                 # pushed, or pushed without the autograder publishing. Detection
                 # tells the last two apart. Individual misses are quiet; the
                 # per-assignment summary reports the gap.
-                #
-                # A repo whose releases were all skipped for provenance may
-                # still have a score on file. Collection never removes an
-                # entry, so say so; the skip warnings alone read as "not counted".
-                if getattr(releases, "rejected", 0) and has_collected_score(
-                    prior_scores, slug, username
-                ):
-                    emit_warning(
-                        f"{org}/{repo_name}: no release counts for this repository "
-                        f"now, but a score collected earlier for {username} is still "
-                        f"in {classroom_short}/scores.json under {slug!r}. Collection "
-                        f"never removes an entry: check the repository, then delete "
-                        f"that entry or set \"override\": true on it."
-                    )
+                warn_if_stale_score_remains(
+                    releases, prior_scores, org, repo_name, classroom_short, slug, username
+                )
                 record, read = detector.detect(username, repo_name)
                 if read:
                     detected_visited.add(username.lower())
@@ -1829,6 +1820,12 @@ def collect_classroom(
                 # does NOT count here.
                 if validation_rejected:
                     mode_flip_repos.append(repo_name)
+                # A trusted release stripped of its result.json lands here, not
+                # in the empty-listing branch above, so the same stale-score
+                # check applies.
+                warn_if_stale_score_remains(
+                    releases, prior_scores, org, repo_name, classroom_short, slug, username
+                )
                 continue
 
             # A skipped repo keeps its prior entry (see MemberAttribution.skipped).
@@ -2870,6 +2867,35 @@ def has_collected_score(
         ):
             return True
     return False
+
+
+def warn_if_stale_score_remains(
+    releases: Any,
+    prior_scores: dict[str, Any] | None,
+    org: str,
+    repo_name: str,
+    classroom_short: str,
+    slug: str,
+    owner: str,
+) -> None:
+    """Warn when a repo whose listing skipped releases for provenance ends this
+    run with nothing counted while a score for it is still on file.
+
+    Collection never removes an entry, so without this the skip warnings alone
+    read as "not counted" while the gradebook keeps the old score. Called from
+    both paths that end with nothing counted: an empty trusted listing, and a
+    trusted listing whose every release yielded no creditable history (a
+    result.json deleted by hand, for one)."""
+    if getattr(releases, "rejected", 0) and has_collected_score(
+        prior_scores, slug, owner
+    ):
+        emit_warning(
+            f"{org}/{repo_name}: no release counts for this repository "
+            f"now, but a score collected earlier for {owner} is still "
+            f"in {classroom_short}/scores.json under {slug!r}. Collection "
+            f"never removes an entry: check the repository, then delete "
+            f"that entry or set \"override\": true on it."
+        )
 
 
 def row_key(record: dict[str, Any]) -> str | None:

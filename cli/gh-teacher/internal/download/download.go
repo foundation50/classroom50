@@ -50,6 +50,10 @@ const (
 	resultAssetName = "result.json"
 	submitTagPrefix = "submit/"
 	maxResultBytes  = 10 * 1024 * 1024
+	// resultSchemaV1 is the sentinel a downloaded result.json must carry to be
+	// written as a score. Mirrors RESULT_SCHEMA_V1 in collect_scores.py and
+	// runner.py; test_contract_parity.py pins all three.
+	resultSchemaV1 = "classroom50/result/v1"
 )
 
 // resultsAssetName: the per-repo history file written alongside the clone.
@@ -115,7 +119,8 @@ func NewCmd() *cobra.Command {
 			"    and <repo>/results.json from the repo's submit-tag releases\n" +
 			"    alongside the clone: results.json holds every submission\n" +
 			"    (newest first), result.json the latest. A submit/* release the\n" +
-			"    autograde workflow didn't publish is skipped and reported on\n" +
+			"    autograde workflow didn't publish, or a result.json that isn't\n" +
+			"    a classroom50/result/v1 document, is skipped and reported on\n" +
 			"    stderr.\n" +
 			"  - Team members with no repo on the org are reported as\n" +
 			"    `not yet accepted` and don't fail the run.\n" +
@@ -956,16 +961,22 @@ func stringifyOverride(v any) string {
 //   - result.json: the latest submission's payload (single-latest back-compat).
 //
 // Silent no-op for no releases / no submit-tag release. Network/5xx/decode
-// failures propagate so the caller can warn; a release skipped for provenance
-// is reported on errOut and otherwise ignored. Token and apiBase are resolved
-// once in downloadByRoster; apiBase lets rewriteAssetURL retarget the asset
-// host on GHES / test setups.
+// failures propagate so the caller can warn. Reported on errOut and otherwise
+// ignored: a release skipped for provenance, a result.json that isn't a
+// classroom50/result/v1 document (stored as a null payload), and, when every
+// release was skipped, a result.json or results.json an earlier run left in
+// target that nothing here would refresh. Token and apiBase are resolved once
+// in downloadByRoster; apiBase lets rewriteAssetURL retarget the asset host on
+// GHES / test setups.
 func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase, org, repo, target string) error {
-	releases, err := listAllSubmitReleases(client, errOut, org, repo)
+	releases, rejected, err := listAllSubmitReleases(client, errOut, org, repo)
 	if err != nil {
 		return err
 	}
 	if len(releases) == 0 {
+		if rejected > 0 {
+			warnStaleResultFiles(errOut, org, repo, target)
+		}
 		return nil
 	}
 
@@ -983,7 +994,15 @@ func refreshResultJSON(client githubapi.Client, errOut io.Writer, token, apiBase
 			if err != nil {
 				return err
 			}
-			payload = json.RawMessage(body)
+			if isResultDocument(body) {
+				payload = json.RawMessage(body)
+			} else {
+				// A bot-uploaded release_assets file renamed to result.json by
+				// someone with push access passes provenance; the schema is
+				// what tells it apart from the runner's own upload.
+				_, _ = fmt.Fprintf(errOut, "%s/%s: release %q: %s is not a %s document; treated as missing. Check the repository's Releases tab.\n",
+					org, repo, rel.TagName, resultAssetName, resultSchemaV1)
+			}
 		}
 		history = append(history, submissionRecord{
 			SubmissionTag: rel.TagName,
@@ -1100,12 +1119,36 @@ func provenanceProblem(rel release) string {
 	return ""
 }
 
+// isResultDocument reports whether body is a classroom50/result/v1 document by
+// its schema sentinel alone; full validation is the collector's job.
+func isResultDocument(body []byte) bool {
+	var doc struct {
+		Schema string `json:"schema"`
+	}
+	return json.Unmarshal(body, &doc) == nil && doc.Schema == resultSchemaV1
+}
+
+// warnStaleResultFiles names any result.json / results.json already in target
+// when a run counts no release. Nothing rewrites them on that path, so a file
+// from an earlier download (possibly a forged payload collected before the
+// provenance check) would otherwise sit there unremarked, as with the
+// collector's scores.json warning.
+func warnStaleResultFiles(errOut io.Writer, org, repo, target string) {
+	for _, name := range []string{resultAssetName, resultsAssetName} {
+		if _, err := os.Lstat(filepath.Join(target, name)); err != nil {
+			continue
+		}
+		_, _ = fmt.Fprintf(errOut, "%s/%s: no release counts for this repository now, but %s from an earlier download is still in %s and was not refreshed. Check the repository, then delete it.\n",
+			org, repo, name, target)
+	}
+}
+
 // listAllSubmitReleases returns every submit-tag release the autograde workflow
-// published for a repo, newest first, walking the full /releases pagination.
-// Non-submit releases (a student's hand-created tag) and releases
-// provenanceProblem rejects are filtered out; the latter are named on errOut.
-// Mirrors all_submit_releases in collect_scores.py.
-func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, repo string) ([]release, error) {
+// published for a repo, newest first, walking the full /releases pagination,
+// plus how many submit-tag releases provenanceProblem rejected. Non-submit
+// releases (a student's hand-created tag) are filtered out silently; rejected
+// ones are named on errOut. Mirrors all_submit_releases in collect_scores.py.
+func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, repo string) ([]release, int, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {
 			return fmt.Sprintf("repos/%s/%s/releases?per_page=%d&page=%d",
@@ -1119,12 +1162,13 @@ func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, rep
 			return fmt.Errorf("GET %s: %w", path, err)
 		})
 	if errors.Is(err, errNoReleases) {
-		return nil, nil
+		return nil, 0, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	submits := make([]release, 0, len(all))
+	rejected := 0
 	for _, rel := range all {
 		if !strings.HasPrefix(rel.TagName, submitTagPrefix) {
 			continue
@@ -1132,11 +1176,12 @@ func listAllSubmitReleases(client githubapi.Client, errOut io.Writer, owner, rep
 		if problem := provenanceProblem(rel); problem != "" {
 			_, _ = fmt.Fprintf(errOut, "%s/%s: release %q was %s; not counted as a submission. Check the repository's Releases tab and Actions history.\n",
 				owner, repo, rel.TagName, problem)
+			rejected++
 			continue
 		}
 		submits = append(submits, rel)
 	}
-	return submits, nil
+	return submits, rejected, nil
 }
 
 // errNoReleases signals a 404 on the releases walk so listAllSubmitReleases can

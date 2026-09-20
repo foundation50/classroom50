@@ -619,7 +619,10 @@ they never had write access to:
 To spot-check one repository instead, use the `result.json` asset as the score
 of record: a Release's title and notes can be edited by anyone with write
 access while the author stays `github-actions[bot]`. Confirm that the Release
-author and the `result.json` uploader are both `github-actions[bot]`, open the
+author and the `result.json` uploader are both `github-actions[bot]` and that
+the file itself starts with `"schema": "classroom50/result/v1"` (a file the
+runner attached for the student can be renamed to `result.json` but never
+carries that schema), open the
 run from the commit's `classroom50/autograde` status and read its job summary,
 and check that `.github/workflows/` at the graded commit holds only the
 `autograde.yaml` that `gh student accept` writes. A forged result left behind

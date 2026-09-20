@@ -4162,6 +4162,51 @@ def test_plain_empty_listing_never_warns_about_prior_scores(monkeypatch, capsys)
     assert "still in" not in capsys.readouterr().err
 
 
+def test_rejected_plus_trusted_release_without_asset_still_warns_about_prior_score(monkeypatch, capsys):
+    # A trusted release stripped of its result.json is not an empty listing, so
+    # it reaches the empty-history branch; the stale-score check must fire there
+    # too, or deleting one asset would silence it.
+    def fake_all(api_url, org, repo, token):
+        listing = cs.SubmitReleases([bot_release("submit/2026-06-01T10-00-00Z", assets=[])])
+        listing.rejected = 1
+        return listing
+
+    def no_asset(api_url, release, token):
+        raise cs.AssetMissingError("no result.json asset")
+
+    monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+    monkeypatch.setattr(cs, "download_result_asset", no_asset)
+    stub_team_members(monkeypatch, ["alice"])
+    results, _, _, _ = cs.collect_classroom(
+        api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "hw1", "mode": "individual", "tests": []}]},
+        service_token="token",
+        prior_scores=_prior_scores("hw1", "alice"),
+    )
+    assert results == []
+    err = capsys.readouterr().err
+    assert "no result.json asset; skipping that submission" in err
+    assert "a score collected earlier for alice is still in cs-principles/scores.json" in err
+
+
+def test_collect_release_history_skips_a_deeply_nested_result_json(monkeypatch, capsys):
+    # json.loads raises RecursionError, not ValueError; one hostile asset must
+    # skip that submission, not abort the whole collection run.
+    def nested(api_url, release, token):
+        return json.loads("[" * 100_000 + "]" * 100_000)
+
+    monkeypatch.setattr(cs, "download_result_asset", nested)
+    history, rejected = cs.collect_release_history(
+        "https://api.github.com", "cs50", "cs-principles-hw1-alice",
+        [bot_release("submit/2026-06-01T10-00-00Z")], "token",
+        classroom_short="cs-principles", slug="hw1", username="alice",
+        assignment_type="individual", renamed_from=None, due=None,
+    )
+    assert history == [] and rejected == 0
+    assert "result.json malformed for 'submit/2026-06-01T10-00-00Z'" in capsys.readouterr().err
+
+
 def test_all_submit_releases_counts_rejected(monkeypatch):
     body = json.dumps([
         bot_release("submit/2026-06-03T10-00-00Z", author={"login": "alice"}),
